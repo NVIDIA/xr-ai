@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import time
+import tomllib
 from collections.abc import AsyncIterator
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,7 +16,6 @@ from typing import cast
 
 import nemo_relay
 import pytest
-import tomllib
 import yaml
 from xr_ai_hub import FrameData, FrameSignal, FrameUnavailable, PixelFormat, ProcessorEndpoint
 from xr_ai_models import ChatResponse, VLMService

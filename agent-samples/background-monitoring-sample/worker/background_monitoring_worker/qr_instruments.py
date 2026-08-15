@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import asyncio
 import io
+import time
+from pathlib import Path
 
 import nemo_relay
 from loguru import logger
@@ -52,10 +54,14 @@ class QRInstrumentAgent(Agent):
         images: ParticipantImageAgent,
         vlm: VLMService,
         interval_s: float,
+        debug_dir: Path | None = None,
     ) -> None:
         if interval_s <= 0:
             raise ValueError("interval_s must be positive")
         self._images = images
+        self._debug_dir = debug_dir
+        if debug_dir is not None:
+            debug_dir.mkdir(parents=True, exist_ok=True)
         self._query_image = ImageQueryTool(images=images.images, vlm=vlm)
         self._fill_polygon = ImagePolygonFillTool(images=images.images)
         self.read_lab_instruments = Tool(
@@ -115,6 +121,7 @@ class QRInstrumentAgent(Agent):
         self,
         request: ReadLabInstrumentsRequest,
     ) -> LabInstrumentReadResult:
+        scan_path: Path | None = None
         try:
             frame = await self._images.get_current_frame.execute(
                 CurrentFrameRequest(participant_id=request.participant_id)
@@ -122,8 +129,23 @@ class QRInstrumentAgent(Agent):
             source = self._images.images.resolve(frame.image)
             if not isinstance(source, bytes):
                 raise TypeError("current camera image must resolve to bytes")
+            scan_path = await self._record_scan_image(
+                request.participant_id,
+                frame.timestamp_us,
+                frame.sequence,
+                source,
+            )
             with Image.open(io.BytesIO(source)) as opened:
-                codes = await asyncio.to_thread(extract_qr_codes_zxing, opened.convert("RGB"))
+                codes = await asyncio.to_thread(
+                extract_qr_codes_zxing,
+                opened.convert("RGB"),
+            )
+            logger.info(
+                "instrument QR scan pid={!r} image={} codes={}",
+                request.participant_id,
+                scan_path,
+                [code.data for code in codes],
+            )
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -154,6 +176,27 @@ class QRInstrumentAgent(Agent):
                 message="QR codes were found, but their instrument displays could not be read.",
             )
         return LabInstrumentReadResult(readings=readings)
+
+    async def _record_scan_image(
+        self,
+        participant_id: str,
+        frame_timestamp_us: int,
+        sequence: int,
+        image: bytes,
+    ) -> Path | None:
+        if self._debug_dir is None:
+            return None
+        safe_participant = "".join(
+            character if character.isalnum() or character in "-_." else "-"
+            for character in participant_id
+        )
+        invoked_at_us = time.time_ns() // 1_000
+        path = self._debug_dir / (
+            f"{invoked_at_us}-{safe_participant}-"
+            f"frame-{frame_timestamp_us}-seq-{sequence}.jpg"
+        )
+        await asyncio.to_thread(path.write_bytes, image)
+        return path
 
     async def _read_one(
         self,

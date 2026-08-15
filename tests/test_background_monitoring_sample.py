@@ -8,11 +8,11 @@ from __future__ import annotations
 import json
 import sys
 import time
+import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-import tomllib
 import yaml
 from xr_ai_models import ChatResponse, ToolCall
 from xr_ai_runtime import AgentRuntime
@@ -44,15 +44,23 @@ from background_monitoring_worker.file_output import (  # noqa: E402  # pyright:
     MonitoringHistoryRequest,
 )
 from background_monitoring_worker.foreground import (  # noqa: E402  # pyright: ignore[reportMissingImports]
-    CURRENT_FRAME_TOOL,
+    CURRENT_VIEW_TOOL,
     FOREGROUND_TOOL_DEFS,
+    RECENT_VISUAL_HISTORY_TOOL,
+    VISUAL_MONITOR_START_TOOL,
     ForegroundAgent,
+)
+from background_monitoring_worker.images import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    ParticipantImageAgent,
 )
 from background_monitoring_worker.monitor import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     MonitorAgent,
     MonitoringRequest,
     StartMonitoringRequest,
     parse_monitor_response,
+)
+from background_monitoring_worker.qr_instruments import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    QRInstrumentAgent,
 )
 from background_monitoring_worker.transcript import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     TranscriptAgent,
@@ -66,13 +74,27 @@ def _fake_endpoint() -> SimpleNamespace:
     )
 
 
-def _make_monitor(endpoint: SimpleNamespace | None = None) -> MonitorAgent:
-    return MonitorAgent(
+def _make_images(endpoint: SimpleNamespace | None = None) -> ParticipantImageAgent:
+    return ParticipantImageAgent(
         endpoint=endpoint or _fake_endpoint(),  # type: ignore[arg-type]
-        vlm=SimpleNamespace(),  # type: ignore[arg-type]
         frame_max_age_s=2.0,
         frame_timeout_s=5.0,
+    )
+
+
+def _make_monitor(images: ParticipantImageAgent | None = None) -> MonitorAgent:
+    return MonitorAgent(
+        images=images or _make_images(),
+        vlm=SimpleNamespace(),  # type: ignore[arg-type]
         prompt="Observe.",
+        interval_s=5.0,
+    )
+
+
+def _make_qr(images: ParticipantImageAgent | None = None) -> QRInstrumentAgent:
+    return QRInstrumentAgent(
+        images=images or _make_images(),
+        vlm=SimpleNamespace(),  # type: ignore[arg-type]
         interval_s=5.0,
     )
 
@@ -118,38 +140,35 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     assert config.artifacts_dir == _SAMPLE / "artifacts"
     assert config.monitor_interval_s == 5.0
     assert "Previous caption" not in config.monitor_prompt
-    assert "look_at_current_frame" in config.foreground_prompt
+    assert "current_view" in config.foreground_prompt
 
 
-def test_monitor_and_foreground_own_independent_vision_tools(tmp_path: Path) -> None:
-    endpoint = _fake_endpoint()
+def test_monitor_and_foreground_share_participant_image_acquisition(tmp_path: Path) -> None:
+    images = _make_images()
     vlm = SimpleNamespace()
-    monitor = _make_monitor(endpoint)
+    monitor = _make_monitor(images)
+    qr_instruments = _make_qr(images)
     foreground = ForegroundAgent(
         llm=SimpleNamespace(),  # type: ignore[arg-type]
-        endpoint=endpoint,  # type: ignore[arg-type]
+        images=images,
         vlm=vlm,  # type: ignore[arg-type]
-        frame_max_age_s=2.0,
-        frame_timeout_s=5.0,
         files=FileOutputAgent(tmp_path, history_size=2),
         monitor=monitor,
+        qr_instruments=qr_instruments,
         prompt="Answer.",
     )
 
-    assert monitor.images is not foreground.images
-    assert monitor.get_current_frame is not foreground.get_current_frame
+    assert monitor._images is images
+    assert foreground._images is images
+    assert qr_instruments._images is images
     assert monitor.query_image is not foreground.query_image
     assert {tool.name for tool in monitor.tools} == {
-        "get_current_frame",
         "query_image",
         "start_monitoring",
         "stop_monitoring",
         "monitoring_status",
     }
-    assert {tool.name for tool in foreground.tools} == {
-        "get_current_frame",
-        "query_image",
-    }
+    assert {tool.name for tool in foreground.tools} == {"query_image"}
 
 
 @pytest.mark.asyncio
@@ -304,17 +323,17 @@ async def test_foreground_injects_participant_into_current_frame_tool(tmp_path: 
         image_requests.append(request)
         return ImageQueryResult(text="A blue notebook.")
 
+    images = _make_images()
     agent = ForegroundAgent(
         llm=SimpleNamespace(),  # type: ignore[arg-type]
-        endpoint=_fake_endpoint(),  # type: ignore[arg-type]
+        images=images,
         vlm=SimpleNamespace(),  # type: ignore[arg-type]
-        frame_max_age_s=2.0,
-        frame_timeout_s=5.0,
         files=FileOutputAgent(tmp_path, history_size=2),
-        monitor=_make_monitor(),
+        monitor=_make_monitor(images),
+        qr_instruments=_make_qr(images),
         prompt="Answer briefly.",
     )
-    agent.get_current_frame = Tool(
+    images.get_current_frame = Tool(
         "get_current_frame",
         "Select a frame.",
         CurrentFrameRequest,
@@ -329,7 +348,7 @@ async def test_foreground_injects_participant_into_current_frame_tool(tmp_path: 
         query_image,
     )
     result = await handle_tool_call(
-        ToolCall(id="call-1", name=CURRENT_FRAME_TOOL, arguments='{"question":"Color?"}'),
+        ToolCall(id="call-1", name=CURRENT_VIEW_TOOL, arguments='{"question":"Color?"}'),
         agent._participant_tools("participant-7"),
     )
 
@@ -358,7 +377,7 @@ async def test_foreground_background_control_returns_direct(tmp_path: Path) -> N
                 tool_calls=[
                     ToolCall(
                         id="call-start",
-                        name="start_monitoring",
+                        name=VISUAL_MONITOR_START_TOOL,
                         arguments='{"instruction":"the doorway"}',
                     )
                 ],
@@ -367,7 +386,9 @@ async def test_foreground_background_control_returns_direct(tmp_path: Path) -> N
             )
 
     llm = Llm()
-    monitor = _make_monitor()
+    images = _make_images()
+    monitor = _make_monitor(images)
+    qr_instruments = _make_qr(images)
     runtime = AgentRuntime()
     runtime.register("monitor", monitor)
 
@@ -375,12 +396,11 @@ async def test_foreground_background_control_returns_direct(tmp_path: Path) -> N
         monitor.bind_runtime(runtime)
         agent = ForegroundAgent(
             llm=llm,  # type: ignore[arg-type]
-            endpoint=_fake_endpoint(),  # type: ignore[arg-type]
+            images=images,
             vlm=SimpleNamespace(),  # type: ignore[arg-type]
-            frame_max_age_s=2.0,
-            frame_timeout_s=5.0,
             files=FileOutputAgent(tmp_path, history_size=2),
             monitor=monitor,
+            qr_instruments=qr_instruments,
             prompt="Route one request.",
         )
         response, tools = await agent._answer(
@@ -392,7 +412,7 @@ async def test_foreground_background_control_returns_direct(tmp_path: Path) -> N
         )
 
         assert response == "Background monitoring started. Monitoring: the doorway."
-        assert tools == ["start_monitoring"]
+        assert tools == [VISUAL_MONITOR_START_TOOL]
         assert llm.calls == 1
         assert status.active is True
 
@@ -414,7 +434,7 @@ async def test_foreground_tool_loop_returns_model_answer_and_tool_audit(tmp_path
                     tool_calls=[
                         ToolCall(
                             id="call-1",
-                            name="read_monitoring_history",
+                            name=RECENT_VISUAL_HISTORY_TOOL,
                             arguments='{"limit":2}',
                         )
                     ],
@@ -428,14 +448,14 @@ async def test_foreground_tool_loop_returns_model_answer_and_tool_audit(tmp_path
     runtime = AgentRuntime()
     runtime.register("files", files)
     await runtime.start()
+    images = _make_images()
     agent = ForegroundAgent(
         llm=Llm(),  # type: ignore[arg-type]
-        endpoint=_fake_endpoint(),  # type: ignore[arg-type]
+        images=images,
         vlm=SimpleNamespace(),  # type: ignore[arg-type]
-        frame_max_age_s=2.0,
-        frame_timeout_s=5.0,
         files=files,
-        monitor=_make_monitor(),
+        monitor=_make_monitor(images),
+        qr_instruments=_make_qr(images),
         prompt="Answer briefly.",
     )
 
@@ -450,7 +470,7 @@ async def test_foreground_tool_loop_returns_model_answer_and_tool_audit(tmp_path
         await runtime.stop()
 
     assert response == "Nothing material changed."
-    assert tools == ["read_monitoring_history"]
+    assert tools == [RECENT_VISUAL_HISTORY_TOOL]
 
 
 def test_foreground_prompt_has_non_overlapping_routing_eval_cases() -> None:
@@ -464,10 +484,13 @@ def test_foreground_prompt_has_non_overlapping_routing_eval_cases() -> None:
 
     assert {case["expected_tool"] for case in cases} == {
         None,
-        "look_at_current_frame",
-        "read_monitoring_history",
-        "start_monitoring",
-        "stop_monitoring",
+        "current_view",
+        "recent_visual_history",
+        "visual_monitor__start",
+        "visual_monitor__stop",
         "monitoring_status",
+        "lab_instruments__read",
+        "lab_instruments__start",
+        "lab_instruments__stop",
     }
     assert all(case["query"].lower() not in prompt for case in cases)

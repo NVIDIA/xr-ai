@@ -21,6 +21,7 @@ voice STT / typed text ─┬> TranscriptAgent ───────────
                                            ├> current frame → image query
                                            ├> FileOutputAgent history tool
                                            ├> MonitorAgent start/stop/status tools
+                                           ├> QR-labelled instrument reads → VLM
                                            ├> Piper TTS
                                            └> foreground.jsonl
 MonitorAgent while active ──> current frame → image query ──> monitor.jsonl
@@ -35,12 +36,15 @@ It also owns idempotent `start_monitoring`, `stop_monitoring`, and
 current-view tool and calls the monitor's control tools directly, binding the
 participant before every operation.
 
-`FileOutputAgent` remains the only durable application sink and owns the
-bounded recent-history tool.
+`FileOutputAgent` owns structured durable outputs and the bounded recent-history
+tool. `QRInstrumentAgent` separately writes source-frame snapshots used to debug
+QR extraction.
 
 Each foreground turn starts with only the system prompt and current request.
-Its generic native tool loop allows at most four model iterations, matching the
-tea-making sample's agent limit; it carries no conversation across requests.
+Its native tool loop uses the tea-making sample's namespaced route catalog and
+four-iteration limit. Explicit deictic, instrument, and monitoring-state requests
+retry a missing or wrong route instead of accepting an unsupported direct answer.
+It carries no conversation across requests.
 Return-direct monitor controls end the turn immediately.
 
 ## Run
@@ -81,6 +85,8 @@ Each connection writes to a new participant-scoped directory:
 
 ```text
 artifacts/
+├── qr-scans/
+│   └── <invocation>-<participant>-<frame>-<sequence>.jpg
 ├── relay-events.jsonl
 └── <participant>-<utc-session-stamp>/
     ├── monitor.jsonl
@@ -94,7 +100,9 @@ written. Monitor records contain a baseline, observations, unavailable-frame
 notices, or errors. Foreground records include the query, response, and
 model-selected tool names. Relay events contain prompts, responses, participant
 metadata, and tool lifecycles;
-live camera bytes are redacted by the shared vision tool.
+live camera bytes are redacted by the shared vision tool. Every lab-instrument
+invocation saves the exact source JPEG under `qr-scans/`; the worker log records
+that path and the decoded QR identifiers for debugging.
 
 The monitoring cadence, history bound, frame timeouts, prompts, VAD settings,
 and output path live in `yaml/background_monitoring_worker.yaml`. Model

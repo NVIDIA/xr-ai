@@ -6,10 +6,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 
 import yaml
-from background_monitoring_worker.foreground import FOREGROUND_TOOL_DEFS
+from background_monitoring_worker.foreground import (
+    FOREGROUND_TOOL_DEFS,
+    required_foreground_tool,
+)
 from xr_ai_models import ChatMessage, load_models_config, make_llm
 
 _SAMPLE = Path(__file__).resolve().parents[1]
@@ -31,23 +35,74 @@ async def main() -> None:
     failures: list[str] = []
     try:
         for case in cases:
-            response = await llm.chat(
-                [
-                    ChatMessage(role="system", content=prompt),
-                    ChatMessage(role="user", content=case["query"]),
-                ],
-                tools=FOREGROUND_TOOL_DEFS,
-                max_tokens=256,
-                temperature=0.0,
-                enable_thinking=False,
+            messages = [
+                ChatMessage(role="system", content=prompt),
+                ChatMessage(
+                    role="user",
+                    content=json.dumps(
+                        {"request": case["query"]},
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
+                ),
+            ]
+            required_tool = required_foreground_tool(case["query"])
+            for _ in range(4):
+                response = await llm.chat(
+                    messages,
+                    tools=FOREGROUND_TOOL_DEFS,
+                    max_tokens=256,
+                    temperature=0.0,
+                    enable_thinking=False,
+                )
+                calls = response.tool_calls or []
+                call = calls[0] if calls else None
+                if required_tool is None or (call and call.name == required_tool):
+                    break
+                messages.append(
+                    ChatMessage(
+                        role="assistant",
+                        content=response.content or "",
+                        tool_calls=list(calls),
+                    )
+                )
+                for rejected in calls:
+                    messages.append(
+                        ChatMessage(
+                            role="tool",
+                            content=json.dumps(
+                                {
+                                    "error": "wrong_route",
+                                    "required_tool": required_tool,
+                                },
+                                separators=(",", ":"),
+                            ),
+                            tool_call_id=rejected.id,
+                        )
+                    )
+                messages.append(
+                    ChatMessage(
+                        role="user",
+                        content=f"Call {required_tool} for the original request.",
+                    )
+                )
+            else:
+                call = None
+            actual_tool = call.name if call else None
+            actual_target = json.loads(call.arguments).get("target") if call else None
+            expected_tool = case["expected_tool"]
+            expected_target = case.get("expected_target")
+            passed = (actual_tool, actual_target) == (expected_tool, expected_target)
+            label = "PASS" if passed else "FAIL"
+            print(
+                f"{label} {case['name']}: "
+                f"tool={actual_tool!r} target={actual_target!r}"
             )
-            actual = response.tool_calls[0].name if response.tool_calls else None
-            expected = case["expected_tool"]
-            passed = actual == expected
-            print(f"{'PASS' if passed else 'FAIL'} {case['name']}: {actual!r}")
             if not passed:
+                print(f"  content={response.content!r}")
                 failures.append(
-                    f"{case['name']}: expected {expected!r}, received {actual!r}"
+                    f"{case['name']}: expected {(expected_tool, expected_target)!r}, "
+                    f"received {(actual_tool, actual_target)!r}"
                 )
     finally:
         await llm.close()

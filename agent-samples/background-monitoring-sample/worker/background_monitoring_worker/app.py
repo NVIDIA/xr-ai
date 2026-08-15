@@ -119,6 +119,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             images=images,
             vlm=vlm,
             interval_s=config.instrument_monitor_interval_s,
+            debug_dir=config.artifacts_dir / "qr-scans",
         ),
     )
     foreground = runtime.register(

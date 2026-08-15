@@ -3,31 +3,65 @@
 
 - name: current-visible-fact
   query: What color is the notebook on the desk in front of me?
-  expected_tool: look_at_current_frame
+  expected_tool: current_view
 
 - name: current-scene-condition
   query: Is the doorway ahead of me open?
-  expected_tool: look_at_current_frame
+  expected_tool: current_view
 
 - name: recent-change
   query: What changed around me during the last few minutes?
-  expected_tool: read_monitoring_history
+  expected_tool: recent_visual_history
 
 - name: recent-event
   query: Did anyone enter this area recently?
-  expected_tool: read_monitoring_history
+  expected_tool: recent_visual_history
 
 - name: start-background-watch
   query: Keep an eye out for deliveries being left near the doorway.
-  expected_tool: start_monitoring
+  expected_tool: visual_monitor__start
 
 - name: stop-background-watch
   query: You can quit watching the area now.
-  expected_tool: stop_monitoring
+  expected_tool: visual_monitor__stop
 
 - name: background-watch-status
   query: Are you keeping watch in the background right now?
   expected_tool: monitoring_status
+  expected_target: visual
+
+- name: read-visible-text
+  query: Could you read this for me?
+  expected_tool: current_view
+
+- name: read-visible-label
+  query: What does the label in front of me say?
+  expected_tool: current_view
+
+- name: read-instrument-direct
+  query: Can you read what is on the instrument?
+  expected_tool: lab_instruments__read
+
+- name: read-instrument-voice
+  query: Hey agent, read this instrument.
+  expected_tool: lab_instruments__read
+
+- name: read-meter
+  query: Please tell me the meter reading.
+  expected_tool: lab_instruments__read
+
+- name: start-instrument-watch
+  query: Continuously monitor the lab instrument readings.
+  expected_tool: lab_instruments__start
+
+- name: stop-instrument-watch
+  query: Stop monitoring the lab instruments.
+  expected_tool: lab_instruments__stop
+
+- name: instrument-watch-status
+  query: Are you monitoring the instrument readings?
+  expected_tool: monitoring_status
+  expected_target: lab_instruments
 
 - name: general-knowledge
   query: What is the capital of Iceland?

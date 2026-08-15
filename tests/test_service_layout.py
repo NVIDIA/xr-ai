@@ -6,10 +6,10 @@ import ast
 import importlib.util
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
-import tomllib
 import yaml
 
 _ROOT = Path(__file__).resolve().parents[1]

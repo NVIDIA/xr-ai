@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import suppress
+from typing import Literal
 
 import nemo_relay
 from loguru import logger
@@ -51,36 +53,37 @@ from .qr_instruments import (
     ReadLabInstrumentsRequest,
 )
 
-CURRENT_FRAME_TOOL = "look_at_current_frame"
-MONITORING_HISTORY_TOOL = "read_monitoring_history"
-START_MONITORING_TOOL = "start_monitoring"
-STOP_MONITORING_TOOL = "stop_monitoring"
+CURRENT_VIEW_TOOL = "current_view"
+RECENT_VISUAL_HISTORY_TOOL = "recent_visual_history"
+VISUAL_MONITOR_START_TOOL = "visual_monitor__start"
+VISUAL_MONITOR_STOP_TOOL = "visual_monitor__stop"
 MONITORING_STATUS_TOOL = "monitoring_status"
-READ_LAB_INSTRUMENTS_TOOL = "read_lab_instruments"
-START_INSTRUMENT_MONITORING_TOOL = "start_instrument_monitoring"
-STOP_INSTRUMENT_MONITORING_TOOL = "stop_instrument_monitoring"
-INSTRUMENT_MONITORING_STATUS_TOOL = "instrument_monitoring_status"
+LAB_INSTRUMENTS_READ_TOOL = "lab_instruments__read"
+LAB_INSTRUMENTS_START_TOOL = "lab_instruments__start"
+LAB_INSTRUMENTS_STOP_TOOL = "lab_instruments__stop"
 _MAX_TOOL_ROUNDS = 4
 
-_CURRENT_FRAME_DESCRIPTION = (
-    "Inspect the user's current camera view when the answer requires a visible "
-    "fact. Do not use it for recent history or general knowledge."
+_CURRENT_VIEW_DESCRIPTION = (
+    "Access the glasses camera for current or deictic visual requests, including "
+    "reading unspecified visible text. The camera resolves the referent; call instead "
+    "of asking for clarification. Never use for instrument readings."
 )
-_MONITORING_HISTORY_DESCRIPTION = "Read recent visual observations when the user asks what happened or changed."
-_START_MONITORING_DESCRIPTION = (
-    "Start background visual monitoring without changing the foreground. "
-    "Pass the user's requested focus as instruction."
+_RECENT_VISUAL_HISTORY_DESCRIPTION = "Recent background visual observations or changes."
+_VISUAL_MONITOR_START_DESCRIPTION = "Start an ordinary background visual watch for the requested focus."
+_VISUAL_MONITOR_STOP_DESCRIPTION = (
+    "Stop, quit, cancel, or end the ordinary background visual watch. Never use for instruments."
 )
-_STOP_MONITORING_DESCRIPTION = "Stop background visual monitoring."
-_MONITORING_STATUS_DESCRIPTION = "Report whether background visual monitoring is running."
-_READ_LAB_INSTRUMENTS_DESCRIPTION = (
-    "Read all visible lab instrument displays and associate every meter reading with "
-    "the instrument QR-code text. Always use this for instrument, gauge, meter, or "
-    "display readings instead of ordinary visual inspection."
+_MONITORING_STATUS_DESCRIPTION = (
+    "Always call to answer whether ordinary visual or lab-instrument monitoring "
+    "is running."
 )
-_START_INSTRUMENT_MONITORING_DESCRIPTION = "Continuously monitor QR-labelled lab instrument readings in the background."
-_STOP_INSTRUMENT_MONITORING_DESCRIPTION = "Stop lab instrument reading monitoring."
-_INSTRUMENT_MONITORING_STATUS_DESCRIPTION = "Report whether lab instrument reading monitoring is running."
+_LAB_INSTRUMENTS_READ_DESCRIPTION = (
+    "Read current QR-labelled instruments, meters, gauges, readings, or numeric displays."
+)
+_LAB_INSTRUMENTS_START_DESCRIPTION = "Start continuous QR-labelled instrument reading monitoring."
+_LAB_INSTRUMENTS_STOP_DESCRIPTION = (
+    "The only route to stop continuous QR-labelled instrument reading monitoring."
+)
 
 
 class _CurrentFrameArgs(BaseModel):
@@ -117,53 +120,115 @@ class _ControlArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class _MonitoringStatusArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target: Literal["visual", "lab_instruments"] = Field(
+        description="Which background monitor status the user asked for.",
+    )
+
+
 FOREGROUND_TOOL_DEFS = (
     ToolDef(
-        CURRENT_FRAME_TOOL,
-        _CURRENT_FRAME_DESCRIPTION,
+        CURRENT_VIEW_TOOL,
+        _CURRENT_VIEW_DESCRIPTION,
         _CurrentFrameArgs.model_json_schema(),
     ),
     ToolDef(
-        MONITORING_HISTORY_TOOL,
-        _MONITORING_HISTORY_DESCRIPTION,
+        RECENT_VISUAL_HISTORY_TOOL,
+        _RECENT_VISUAL_HISTORY_DESCRIPTION,
         _HistoryArgs.model_json_schema(),
     ),
     ToolDef(
-        START_MONITORING_TOOL,
-        _START_MONITORING_DESCRIPTION,
+        VISUAL_MONITOR_START_TOOL,
+        _VISUAL_MONITOR_START_DESCRIPTION,
         _StartMonitoringArgs.model_json_schema(),
     ),
     ToolDef(
-        STOP_MONITORING_TOOL,
-        _STOP_MONITORING_DESCRIPTION,
+        VISUAL_MONITOR_STOP_TOOL,
+        _VISUAL_MONITOR_STOP_DESCRIPTION,
         _ControlArgs.model_json_schema(),
     ),
     ToolDef(
         MONITORING_STATUS_TOOL,
         _MONITORING_STATUS_DESCRIPTION,
+        _MonitoringStatusArgs.model_json_schema(),
+    ),
+    ToolDef(
+        LAB_INSTRUMENTS_READ_TOOL,
+        _LAB_INSTRUMENTS_READ_DESCRIPTION,
         _ControlArgs.model_json_schema(),
     ),
     ToolDef(
-        READ_LAB_INSTRUMENTS_TOOL,
-        _READ_LAB_INSTRUMENTS_DESCRIPTION,
+        LAB_INSTRUMENTS_START_TOOL,
+        _LAB_INSTRUMENTS_START_DESCRIPTION,
         _ControlArgs.model_json_schema(),
     ),
     ToolDef(
-        START_INSTRUMENT_MONITORING_TOOL,
-        _START_INSTRUMENT_MONITORING_DESCRIPTION,
-        _ControlArgs.model_json_schema(),
-    ),
-    ToolDef(
-        STOP_INSTRUMENT_MONITORING_TOOL,
-        _STOP_INSTRUMENT_MONITORING_DESCRIPTION,
-        _ControlArgs.model_json_schema(),
-    ),
-    ToolDef(
-        INSTRUMENT_MONITORING_STATUS_TOOL,
-        _INSTRUMENT_MONITORING_STATUS_DESCRIPTION,
+        LAB_INSTRUMENTS_STOP_TOOL,
+        _LAB_INSTRUMENTS_STOP_DESCRIPTION,
         _ControlArgs.model_json_schema(),
     ),
 )
+
+
+def required_foreground_tool(query: str) -> str | None:
+    normalized = query.lower().strip().rstrip(".!?")
+    for wake_phrase in ("hey agent", "okay agent", "ok agent"):
+        if normalized.startswith(wake_phrase):
+            normalized = normalized[len(wake_phrase) :].lstrip(" ,")
+            break
+
+    instrument = any(
+        term in normalized
+        for term in ("instrument", "meter", "gauge", "reading", "numeric display")
+    )
+    stopping = any(
+        term in normalized
+        for term in ("stop", "quit", "cancel", "end ")
+    )
+    status = (
+        "status" in normalized
+        or "running" in normalized
+        or "active" in normalized
+        or normalized.startswith(("are you monitoring", "is monitoring"))
+    )
+    starting = (
+        "continuously" in normalized
+        or "start monitoring" in normalized
+        or "keep an eye" in normalized
+        or "watch for" in normalized
+    )
+    if instrument:
+        if status:
+            return MONITORING_STATUS_TOOL
+        if stopping:
+            return LAB_INSTRUMENTS_STOP_TOOL
+        if starting:
+            return LAB_INSTRUMENTS_START_TOOL
+        return LAB_INSTRUMENTS_READ_TOOL
+
+    monitoring = "monitor" in normalized or "watch" in normalized
+    if monitoring:
+        if status:
+            return MONITORING_STATUS_TOOL
+        if stopping:
+            return VISUAL_MONITOR_STOP_TOOL
+        if starting:
+            return VISUAL_MONITOR_START_TOOL
+
+    deictic = any(
+        term in normalized
+        for term in ("this", "that", "here", "in front of me", "looking at")
+    )
+    visual_request = any(
+        term in normalized
+        for term in ("see", "look", "read", "identify", "describe", "what")
+    )
+    bare_read = normalized in {"read", "please read", "read please", "can you read"}
+    if bare_read or (deictic and visual_request):
+        return CURRENT_VIEW_TOOL
+    return None
 
 
 class ForegroundAgent(Agent):
@@ -270,18 +335,69 @@ class ForegroundAgent(Agent):
         definitions = tool_definitions(tools)
         messages = [
             ChatMessage(role="system", content=self._prompt),
-            ChatMessage(role="user", content=query),
+            ChatMessage(
+                role="user",
+                content=json.dumps(
+                    {"request": query},
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+            ),
         ]
         used: list[str] = []
-        for _ in range(_MAX_TOOL_ROUNDS):
+        required_tool = required_foreground_tool(query)
+        for round_index in range(_MAX_TOOL_ROUNDS):
             response = await self._llm.chat(
                 messages,
                 tools=definitions,
-                max_tokens=1024,
+                max_tokens=512,
                 temperature=0.0,
                 enable_thinking=False,
             )
             tool_calls = response.tool_calls or []
+            logger.info(
+                "foreground route pid={!r} round={} tools={}",
+                participant_id,
+                round_index + 1,
+                [call.name for call in tool_calls],
+            )
+            if required_tool is not None and not any(
+                call.name == required_tool for call in tool_calls
+            ):
+                logger.warning(
+                    "foreground correcting route pid={!r} required={} received={}",
+                    participant_id,
+                    required_tool,
+                    [call.name for call in tool_calls],
+                )
+                messages.append(
+                    ChatMessage(
+                        role="assistant",
+                        content=response.content or "",
+                        tool_calls=list(tool_calls),
+                    )
+                )
+                for call in tool_calls:
+                    messages.append(
+                        ChatMessage(
+                            role="tool",
+                            content=json.dumps(
+                                {
+                                    "error": "wrong_route",
+                                    "required_tool": required_tool,
+                                },
+                                separators=(",", ":"),
+                            ),
+                            tool_call_id=call.id,
+                        )
+                    )
+                messages.append(
+                    ChatMessage(
+                        role="user",
+                        content=f"Call {required_tool} for the original request.",
+                    )
+                )
+                continue
             if not tool_calls:
                 return (response.content.strip() or "I don't have an answer."), used
             messages.append(
@@ -302,10 +418,14 @@ class ForegroundAgent(Agent):
     def _participant_tools(self, participant_id: str) -> ToolSet:
         async def inspect_current(request: _CurrentFrameArgs) -> ImageQueryResult:
             try:
-                frame = await self._images.get_current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
+                frame = await self._images.get_current_frame.execute(
+                    CurrentFrameRequest(participant_id=participant_id)
+                )
             except FrameUnavailable as exc:
                 return ImageQueryResult(text=str(exc), available=False)
-            return await self.query_image.execute(ImageQueryRequest(image=frame.image, query=request.question))
+            return await self.query_image.execute(
+                ImageQueryRequest(image=frame.image, query=request.question)
+            )
 
         async def read_history(request: _HistoryArgs) -> MonitoringHistoryResult:
             return await self._files.read_monitoring_history.execute(
@@ -315,7 +435,9 @@ class ForegroundAgent(Agent):
                 )
             )
 
-        async def start_monitoring(request: _StartMonitoringArgs) -> MonitoringState:
+        async def start_visual_monitor(
+            request: _StartMonitoringArgs,
+        ) -> MonitoringState:
             return await self._monitor.start_monitoring.execute(
                 StartMonitoringRequest(
                     participant_id=participant_id,
@@ -323,11 +445,10 @@ class ForegroundAgent(Agent):
                 )
             )
 
-        async def stop_monitoring(_request: _ControlArgs) -> MonitoringState:
-            return await self._monitor.stop_monitoring.execute(MonitoringRequest(participant_id=participant_id))
-
-        async def monitoring_status(_request: _ControlArgs) -> MonitoringState:
-            return await self._monitor.monitoring_status.execute(MonitoringRequest(participant_id=participant_id))
+        async def stop_visual_monitor(_request: _ControlArgs) -> MonitoringState:
+            return await self._monitor.stop_monitoring.execute(
+                MonitoringRequest(participant_id=participant_id)
+            )
 
         async def read_lab_instruments(
             _request: _ControlArgs,
@@ -336,73 +457,77 @@ class ForegroundAgent(Agent):
                 ReadLabInstrumentsRequest(participant_id=participant_id)
             )
 
-        async def start_instrument_monitoring(
-            _request: _ControlArgs,
-        ) -> MonitoringState:
+        async def start_lab_instruments(_request: _ControlArgs) -> MonitoringState:
             return await self._qr_instruments.start_instrument_monitoring.execute(
                 MonitoringRequest(participant_id=participant_id)
             )
 
-        async def stop_instrument_monitoring(
-            _request: _ControlArgs,
-        ) -> MonitoringState:
+        async def stop_lab_instruments(_request: _ControlArgs) -> MonitoringState:
             return await self._qr_instruments.stop_instrument_monitoring.execute(
                 MonitoringRequest(participant_id=participant_id)
             )
 
-        async def instrument_monitoring_status(
-            _request: _ControlArgs,
+        async def monitoring_status(
+            request: _MonitoringStatusArgs,
         ) -> MonitoringState:
-            return await self._qr_instruments.instrument_monitoring_status.execute(
+            operation = (
+                self._qr_instruments.instrument_monitoring_status
+                if request.target == "lab_instruments"
+                else self._monitor.monitoring_status
+            )
+            return await operation.execute(
                 MonitoringRequest(participant_id=participant_id)
             )
+
+        def render_state(result: MonitoringState) -> str:
+            return result.message
 
         return ToolSet(
             (
                 Tool(
-                    CURRENT_FRAME_TOOL,
-                    _CURRENT_FRAME_DESCRIPTION,
+                    CURRENT_VIEW_TOOL,
+                    _CURRENT_VIEW_DESCRIPTION,
                     _CurrentFrameArgs,
                     ImageQueryResult,
                     inspect_current,
                 ),
                 Tool(
-                    MONITORING_HISTORY_TOOL,
-                    _MONITORING_HISTORY_DESCRIPTION,
+                    RECENT_VISUAL_HISTORY_TOOL,
+                    _RECENT_VISUAL_HISTORY_DESCRIPTION,
                     _HistoryArgs,
                     MonitoringHistoryResult,
                     read_history,
                 ),
                 Tool(
-                    START_MONITORING_TOOL,
-                    _START_MONITORING_DESCRIPTION,
+                    VISUAL_MONITOR_START_TOOL,
+                    _VISUAL_MONITOR_START_DESCRIPTION,
                     _StartMonitoringArgs,
                     MonitoringState,
-                    start_monitoring,
+                    start_visual_monitor,
                     return_direct=True,
-                    render_result=lambda result: result.message,
+                    render_result=render_state,
                 ),
                 Tool(
-                    STOP_MONITORING_TOOL,
-                    _STOP_MONITORING_DESCRIPTION,
+                    VISUAL_MONITOR_STOP_TOOL,
+                    _VISUAL_MONITOR_STOP_DESCRIPTION,
                     _ControlArgs,
                     MonitoringState,
-                    stop_monitoring,
+                    stop_visual_monitor,
                     return_direct=True,
-                    render_result=lambda result: result.message,
+                    render_result=render_state,
                 ),
                 Tool(
                     MONITORING_STATUS_TOOL,
                     _MONITORING_STATUS_DESCRIPTION,
-                    _ControlArgs,
+                    _MonitoringStatusArgs,
                     MonitoringState,
                     monitoring_status,
                     return_direct=True,
-                    render_result=lambda result: result.message,
+                    render_result=render_state,
                 ),
                 Tool(
-                    READ_LAB_INSTRUMENTS_TOOL,
-                    _READ_LAB_INSTRUMENTS_DESCRIPTION,
+                    LAB_INSTRUMENTS_READ_TOOL,
+                    _LAB_INSTRUMENTS_READ_DESCRIPTION,
                     _ControlArgs,
                     LabInstrumentReadResult,
                     read_lab_instruments,
@@ -410,31 +535,22 @@ class ForegroundAgent(Agent):
                     render_result=QRInstrumentAgent.render_readings,
                 ),
                 Tool(
-                    START_INSTRUMENT_MONITORING_TOOL,
-                    _START_INSTRUMENT_MONITORING_DESCRIPTION,
+                    LAB_INSTRUMENTS_START_TOOL,
+                    _LAB_INSTRUMENTS_START_DESCRIPTION,
                     _ControlArgs,
                     MonitoringState,
-                    start_instrument_monitoring,
+                    start_lab_instruments,
                     return_direct=True,
-                    render_result=lambda result: result.message,
+                    render_result=render_state,
                 ),
                 Tool(
-                    STOP_INSTRUMENT_MONITORING_TOOL,
-                    _STOP_INSTRUMENT_MONITORING_DESCRIPTION,
+                    LAB_INSTRUMENTS_STOP_TOOL,
+                    _LAB_INSTRUMENTS_STOP_DESCRIPTION,
                     _ControlArgs,
                     MonitoringState,
-                    stop_instrument_monitoring,
+                    stop_lab_instruments,
                     return_direct=True,
-                    render_result=lambda result: result.message,
-                ),
-                Tool(
-                    INSTRUMENT_MONITORING_STATUS_TOOL,
-                    _INSTRUMENT_MONITORING_STATUS_DESCRIPTION,
-                    _ControlArgs,
-                    MonitoringState,
-                    instrument_monitoring_status,
-                    return_direct=True,
-                    render_result=lambda result: result.message,
+                    render_result=render_state,
                 ),
             )
         )
@@ -464,15 +580,15 @@ class ForegroundAgent(Agent):
 
 
 __all__ = [
-    "CURRENT_FRAME_TOOL",
+    "CURRENT_VIEW_TOOL",
     "FOREGROUND_TOOL_DEFS",
-    "MONITORING_HISTORY_TOOL",
     "MONITORING_STATUS_TOOL",
-    "READ_LAB_INSTRUMENTS_TOOL",
-    "START_INSTRUMENT_MONITORING_TOOL",
-    "STOP_INSTRUMENT_MONITORING_TOOL",
-    "INSTRUMENT_MONITORING_STATUS_TOOL",
-    "START_MONITORING_TOOL",
-    "STOP_MONITORING_TOOL",
+    "LAB_INSTRUMENTS_READ_TOOL",
+    "LAB_INSTRUMENTS_START_TOOL",
+    "LAB_INSTRUMENTS_STOP_TOOL",
+    "RECENT_VISUAL_HISTORY_TOOL",
+    "VISUAL_MONITOR_START_TOOL",
+    "VISUAL_MONITOR_STOP_TOOL",
     "ForegroundAgent",
+    "required_foreground_tool",
 ]

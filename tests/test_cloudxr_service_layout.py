@@ -4,9 +4,9 @@
 """Repository contracts for the relocated CloudXR runtime service."""
 import runpy
 import subprocess
+import tomllib
 from pathlib import Path
 
-import tomllib
 import yaml
 
 _ROOT = Path(__file__).resolve().parents[1]
