@@ -22,7 +22,8 @@ exit terminates the whole stack.
 | cloudxr | `services/cloudxr-runtime/` | `cloudxr_runtime` | 48322 (WSS proxy) |
 | stt | `services/stt-server/` | `stt_server` | 8103 |
 | tts | `services/piper-tts/` | `piper_tts_server` | 8105 |
-| omni | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 (shared LLM + VLM) |
+| omni | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 (LLM) |
+| vlm | `services/vlm-server/` | `vlm_server` | 8100 (Cosmos VLM) |
 | video-memory | `services/video-memory-service/` | `video_memory_service` | 8310 (recorded-video typed RPC) |
 | scene | `agent-samples/xr-render-demo/scene/` | `xr_render_scene` | 8320 (typed RPC) |
 | openxr-service | `services/openxr-service/` | `openxr_service` | 8330 (typed RPC) |
@@ -101,10 +102,9 @@ and tool calling from that point on.
 `--reasoning-parser nemotron_v3`. The launcher selects NVFP4 on Blackwell and
 FP8 on Ada, Hopper, or Ampere, with BF16 available as an explicit fallback.
 
-One server backs all three model roles in `yaml/models.yaml`: `agent_llm` runs
-the multi-step tool-calling loop, `llm` serves two cheap, latency-sensitive
-calls, and `vlm` handles image and video queries. Thinking stays off unless a
-call explicitly enables it.
+One server backs both LLM roles in `yaml/models.yaml`: `agent_llm` runs the
+multi-step tool-calling loop and `llm` serves two cheap, latency-sensitive
+calls. Thinking stays off unless a call explicitly enables it.
 
 - **Quick-ack** — awaited before the agentic loop starts, the moment an
   utterance lands. Returns `{"ack": "On it!", "think": false}` — a 3–6 word
@@ -120,9 +120,9 @@ call explicitly enables it.
   position"* on a 10s repeat. Sent to the data channel only — never spoken,
   to avoid stacking up in the TTS queue behind the real response.
 
-## VLM — Nemotron-3 Nano Omni
+## VLM — Cosmos3 Nano Reasoner
 
-Port 8108 (`nemotron_omni_llm_server`), shared with the LLM roles.
+Port 8100 (`vlm_server`).
 
 The render agent first selects a current or recorded frame and passes its
 `ImageReference` to `query_image`. Its native capability set also
@@ -135,7 +135,7 @@ grouped into latest tools, whose windows end at the newest recording, and
 historical tools, whose frame or video window begins at one absolute `start_us`.
 Recorded-frame timestamps are estimates interpolated from chunk metadata.
 
-There is a deliberate startup ordering constraint: `VoiceSession` readiness
+There is a deliberate startup ordering constraint: `VoiceAgent` readiness
 blocks on the VLM's `/health` endpoint, which
 returns 200 only after weights are fully loaded. This ensures model memory has
 settled before LOVR starts its Vulkan device, preventing a transient OOM race.
@@ -145,7 +145,7 @@ settled before LOVR starts its Vulkan device, preventing a transient OOM race.
 Port 8103. NeMo ASR in-process. English-only, ~1.5 GB VRAM.
 
 ```
-LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceSession
+LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceAgent
   → VAD/STT
       pre-roll buffer    last 10 chunks (~320 ms) kept at all times;
                          prepended to the utterance buffer on speech onset
@@ -171,13 +171,13 @@ synthesis runs in a thread pool so the asyncio loop is never blocked.
 
 ```
 voice.output topic (agentic-loop quick-ack or final response)
-  → VoiceAgent → private VoiceSession TTS
+  → VoiceAgent → private media-session TTS
       sentence-batched synthesis
       POST text → tts-server :8105 → WAV bytes
       RETURN_AUDIO IPC → hub → LiveKit → participant's headphones
 ```
 
-`VoiceSession` owns interruption handling. A new utterance while TTS is playing
+`VoiceAgent` owns interruption handling. A new utterance while TTS is playing
 triggers `ReturnAudioFlush`, so the hub clears the LiveKit audio queue for that
 participant. Its interruption callback also cancels the participant's active
 render-agent task without waiting on its cleanup in the media processor. A
@@ -188,10 +188,11 @@ the old stream before the replacement starts.
 ## Agent runtime and voice topology
 
 ```
-VoiceAgent → private VoiceSession → VAD/STT + VoiceGate ─┐
-           → typed hub text ingress ──────────┴→ xr-render.user-query topic
+VoiceAgent → private media session → VAD/STT ─→ voice.transcript topic
+                                  └→ VoiceGate ─┐
+           → typed hub text ingress ────────────┴→ xr-render.user-query topic
   → RenderAgent → SceneModelLoop → voice.output topic
-  → VoiceAgent → private VoiceSession TTS → hub return audio
+  → VoiceAgent → private media-session TTS → hub return audio
 ```
 
 Pipecat is an internal implementation detail of `xr-ai-voice`; application

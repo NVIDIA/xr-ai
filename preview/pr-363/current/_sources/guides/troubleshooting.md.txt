@@ -165,9 +165,9 @@ contains only wrapper messages — nothing from inside the container.
 **Health probe** — confirm vLLM never reached the `/health` endpoint:
 
 ```bash
-curl -fsS http://127.0.0.1:8108/health   # nemotron_omni (default LLM + VLM)
-curl -fsS http://127.0.0.1:8107/health   # nemotron3_nano (legacy stack)
-curl -fsS http://127.0.0.1:8100/health   # vlm_server (legacy stack)
+curl -fsS http://127.0.0.1:8108/health   # nemotron_omni (default LLM)
+curl -fsS http://127.0.0.1:8100/health   # vlm_server (default Cosmos VLM)
+curl -fsS http://127.0.0.1:8107/health   # superseded nemotron3_nano
 ```
 
 **Container post-mortem** — the wrapper streams `docker logs -f` into the
@@ -223,13 +223,13 @@ back to OpenH264, which is royalty-bearing.
 **Cause:** an idle-timeout that auto-cancels the voice pipeline after a stretch
 with no user or bot speech.
 
-**Status:** disabled by default. `VoiceSession` leaves its private Pipecat idle
+**Status:** disabled by default. `VoiceAgent` leaves its private Pipecat idle
 timeout disabled, so a quiet session stays connected indefinitely.
 
 **If you want it:** set `idle_timeout_secs: <seconds>` (e.g. `300` for 5 min)
 in the sample's worker YAML (`simple_vlm_example_worker.yaml` /
 `xr_render_demo_worker.yaml`); `0` or unset keeps it disabled. The knob is
-owned by `xr_ai_voice.VoiceSession`.
+owned by `xr_ai_voice.VoiceAgent`.
 
 ### Browser client connects but no audio or no video
 
