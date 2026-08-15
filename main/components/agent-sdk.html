@@ -487,6 +487,14 @@ agent-created background tasks.</p>
 <p>Agents protect shared mutable state with their own lock or queue. They also
 create, cancel, and await their own tasks. <code class="docutils literal notranslate"><span class="pre">publish()</span></code> waits for all deliveries
 and then propagates subscriber failures.</p>
+<p>Image tools share bounded <code class="docutils literal notranslate"><span class="pre">ImageRegistry</span></code> references so model-visible results
+do not contain raw pixels. Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[image-editing]</span></code> to use
+<code class="docutils literal notranslate"><span class="pre">ImagePolygonFillTool</span></code>, which copies an image, fills the area enclosed by at
+least three ordered pixel coordinates with magenta, and returns a new lossless
+PNG reference. The source reference remains unchanged, and the edited reference
+inherits its owner so lifecycle cleanup releases both images. It can be passed
+directly to the single-image or multi-image VLM query tools. Invalid polygons
+and unavailable source references return recoverable unavailable results.</p>
 <p>Relay records publications, subscriber callbacks, tool calls, and model calls
 as nested scopes. <code class="docutils literal notranslate"><span class="pre">Topic.telemetry</span></code> controls event volume without changing
 delivery: use <code class="docutils literal notranslate"><span class="pre">&quot;full&quot;</span></code> for semantic events and <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> for high-volume
