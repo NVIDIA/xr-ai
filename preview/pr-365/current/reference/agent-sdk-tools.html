@@ -502,6 +502,9 @@ controlled Relay headers and redact every image location from VLM events while
 preserving provider input. Timelines supplied to video inference are described
 as estimates because recorded-frame timestamps are interpolated from chunk
 metadata rather than persisted per-frame presentation timestamps.</p>
+<p>Derived images use <code class="docutils literal notranslate"><span class="pre">ImageRegistry.put_derived(...)</span></code> to inherit the source
+reference’s owner, so participant or workflow cleanup releases the source and
+all derived pixels together.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.current_frame</span><span class="w"> </span><span class="kn">import</span> <span class="n">CurrentFrameRequest</span><span class="p">,</span> <span class="n">CurrentFrameTool</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.image</span><span class="w"> </span><span class="kn">import</span> <span class="n">ImageReference</span><span class="p">,</span> <span class="n">ImageRegistry</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.video_memory</span><span class="w"> </span><span class="kn">import</span> <span class="n">LatestFramesRequest</span>
@@ -551,7 +554,8 @@ standard magenta (<code class="docutils literal notranslate"><span class="pre">#
 and at least three ordered pixel coordinates. It connects the final point to
 the first, validates that the polygon is inside the image and encloses an area,
 and stores a new lossless PNG without changing the source image. The returned
-reference can be passed directly to an image query tool.</p>
+reference inherits the source owner and can be passed directly to an image
+query tool.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.image</span><span class="w"> </span><span class="kn">import</span> <span class="n">ImageRegistry</span>

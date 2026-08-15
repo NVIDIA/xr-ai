@@ -469,7 +469,8 @@ do not contain raw pixels. Install <code class="docutils literal notranslate"><s
 <code class="docutils literal notranslate"><span class="pre">ImagePolygonFillTool</span></code>, which copies an image, fills the area enclosed by at
 least three ordered pixel coordinates with magenta, and returns a new lossless
 PNG reference. The source reference remains unchanged, and the edited reference
-can be passed directly to the single-image or multi-image VLM query tools.</p>
+inherits its owner so lifecycle cleanup releases both images. It can be passed
+directly to the single-image or multi-image VLM query tools.</p>
 <p>Relay records publications, subscriber callbacks, tool calls, and model calls
 as nested scopes. <code class="docutils literal notranslate"><span class="pre">Topic.telemetry</span></code> controls event volume without changing
 delivery: use <code class="docutils literal notranslate"><span class="pre">&quot;full&quot;</span></code> for semantic events and <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> for high-volume
