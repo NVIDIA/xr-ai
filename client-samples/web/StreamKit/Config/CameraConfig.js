@@ -34,9 +34,9 @@ export const CameraFacing = Object.freeze({
 /**
  * Configures camera capture for a {@link StreamSession}.
  *
- * Resolution and frame-rate are intentionally not exposed here: the LiveKit
- * JS SDK and the browser negotiate the best supported format automatically,
- * matching the behaviour of the Swift SDK on iOS and visionOS.
+ * Resolution and frame-rate are intentionally not exposed here: the browser
+ * selects a supported native format without forcing an aspect ratio, matching
+ * the behaviour of the Swift SDK on iOS and visionOS.
  *
  * ## Presets
  * ```js

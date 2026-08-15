@@ -45,16 +45,37 @@ const model = {
 // from the "Received" list.
 const AGENT_REPLY_TOPICS = new Set(['agent.response', 'vlm.response']);
 
-// Local camera preview stream (separate from the LiveKit publish stream).
-let _previewStream = null;
-
-function releasePreviewStream() {
-  if (!_previewStream) return;
-  _previewStream.getTracks().forEach(t => t.stop());
-  _previewStream = null;
+function clearCameraPreview() {
   const videoEl = $('camera-preview');
+  videoEl.onresize = null;
   videoEl.srcObject = null;
   videoEl.style.transform = '';
+  videoEl.closest('.preview-card').style.aspectRatio = '';
+}
+
+function showPublishedCameraPreview() {
+  clearCameraPreview();
+  const track = model.session?.cameraTrack;
+  if (!track) return;
+
+  const videoEl = $('camera-preview');
+  const previewCard = videoEl.closest('.preview-card');
+  videoEl.srcObject = new MediaStream([track]);
+
+  const updateAspectRatio = () => {
+    const settings = track.getSettings();
+    const width = videoEl.videoWidth || settings.width;
+    const height = videoEl.videoHeight || settings.height;
+    if (width && height) {
+      previewCard.style.aspectRatio = `${width} / ${height}`;
+    }
+  };
+  videoEl.onresize = updateAspectRatio;
+  updateAspectRatio();
+
+  const facingMode = track.getSettings().facingMode ?? '';
+  videoEl.style.transform = facingMode === 'user' ? 'scaleX(-1)' : '';
+  console.info('Camera preview uses published track settings', track.getSettings());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -113,36 +134,14 @@ async function stopCamera() {
   try {
     await _stopCamera(model, render, showError);
   } finally {
-    releasePreviewStream();
+    clearCameraPreview();
   }
 }
 
 async function startCamera() {
   await _startCamera(model, { render, showError, enumerateCameras });
   if (model.isCameraActive) {
-    try {
-      releasePreviewStream();
-      // No facingMode default — let the browser pick the same camera LiveKit
-      // picks (both calls use `{video: true}` when no deviceId is selected,
-      // so they converge on the system default). When the user has explicitly
-      // chosen a camera in the dropdown, both pin to that deviceId.
-      const constraints = model.selectedCameraId
-        ? { video: { deviceId: { exact: model.selectedCameraId } } }
-        : { video: true };
-      _previewStream = await navigator.mediaDevices.getUserMedia(constraints);
-      const videoEl = $('camera-preview');
-      videoEl.srcObject = _previewStream;
-
-      // Default: do NOT mirror — XR / glasses / mobile-back-camera capture
-      // should preserve real-world orientation (left = left, right = right).
-      // Only flip when the camera is explicitly user-facing (front mobile cam,
-      // `facingMode === 'user'`). Desktop selfie webcams typically report no
-      // facingMode and stay unmirrored; users who want the FaceTime-style
-      // mirror UX on a desktop webcam can add a manual toggle later.
-      const track = _previewStream.getVideoTracks()[0];
-      const facingMode = track?.getSettings?.()?.facingMode ?? '';
-      videoEl.style.transform = facingMode === 'user' ? 'scaleX(-1)' : '';
-    } catch { /* preview failure is non-fatal */ }
+    showPublishedCameraPreview();
   }
   render();
 }
@@ -150,11 +149,11 @@ async function startCamera() {
 function startAudio()       { return _startAudio(model, render, showError); }
 function stopAudio()        { return _stopAudio(model, render, showError); }
 async function disconnect() {
-  releasePreviewStream();
+  clearCameraPreview();
   try {
     await _disconnect(model, render);
   } finally {
-    releasePreviewStream();
+    clearCameraPreview();
     render();
   }
 }
@@ -180,7 +179,7 @@ function connect()          {
 
 wireBaseEvents(model, { connect, disconnect, startAudio, stopAudio, startCamera, stopCamera, sendPing, sendCustom });
 window.addEventListener('pagehide', () => {
-  releasePreviewStream();
+  clearCameraPreview();
   const pendingDisconnect = model.session?.disconnect();
   if (pendingDisconnect) pendingDisconnect.catch(() => {});
 });

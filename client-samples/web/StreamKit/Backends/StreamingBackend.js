@@ -96,6 +96,13 @@
  */
 
 /**
+ * Browser camera track currently published by this backend, when available.
+ *
+ * @name StreamingBackend#cameraTrack
+ * @type {MediaStreamTrack | null}
+ */
+
+/**
  * Establish a connection using the provided session configuration.
  *
  * Network endpoint details (host, port, token) are supplied at construction

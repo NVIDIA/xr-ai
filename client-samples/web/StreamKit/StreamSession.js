@@ -125,6 +125,15 @@ export class StreamSession {
     return this.#connectionState;
   }
 
+  /**
+   * The browser track currently published as the local camera source.
+   *
+   * @returns {MediaStreamTrack | null}
+   */
+  get cameraTrack() {
+    return this.#backend.cameraTrack ?? null;
+  }
+
   // ── Public API ──────────────────────────────────────────────────────────────
 
   /**
