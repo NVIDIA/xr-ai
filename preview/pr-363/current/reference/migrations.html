@@ -425,6 +425,21 @@ compatibility package. Update out-of-tree code as follows:</p>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_models.config</span></code>, <code class="docutils literal notranslate"><span class="pre">factory</span></code>, <code class="docutils literal notranslate"><span class="pre">openai_compat</span></code>, and <code class="docutils literal notranslate"><span class="pre">protocols</span></code></p></td>
 <td><p>Import public names directly from <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code>. This includes <code class="docutils literal notranslate"><span class="pre">KIND_OPENAI_COMPAT</span></code>, <code class="docutils literal notranslate"><span class="pre">ModelKind</span></code>, <code class="docutils literal notranslate"><span class="pre">Category</span></code>, and <code class="docutils literal notranslate"><span class="pre">Spec</span></code>.</p></td>
 </tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">LiveVisionTool</span></code> and <code class="docutils literal notranslate"><span class="pre">StreamingVisionTool</span></code></p></td>
+<td><p>Select with <code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code>, then pass its <code class="docutils literal notranslate"><span class="pre">ImageReference</span></code> to <code class="docutils literal notranslate"><span class="pre">ImageQueryTool</span></code> or <code class="docutils literal notranslate"><span class="pre">StreamingImageQueryTool</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">HistoricalVisionTool</span></code></p></td>
+<td><p>Select with <code class="docutils literal notranslate"><span class="pre">VideoMemoryTools.get_historical_frame</span></code>, then pass its <code class="docutils literal notranslate"><span class="pre">ImageReference</span></code> to <code class="docutils literal notranslate"><span class="pre">ImageQueryTool</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Recorded <code class="docutils literal notranslate"><span class="pre">query_video(start_us,</span> <span class="pre">end_us)</span></code> RPC</p></td>
+<td><p>Use <code class="docutils literal notranslate"><span class="pre">get_historical_video(start_us,</span> <span class="pre">duration_seconds)</span></code> or <code class="docutils literal notranslate"><span class="pre">get_latest_video(duration_seconds)</span></code>. The new <code class="docutils literal notranslate"><span class="pre">query_video</span></code> name is VLM inference over caller-selected <code class="docutils literal notranslate"><span class="pre">TimedImage</span></code> values.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">get_frame_from_time(reference_time_us,</span> <span class="pre">second_ago)</span></code></p></td>
+<td><p>Subtract the offset in the caller and use <code class="docutils literal notranslate"><span class="pre">get_historical_frame(start_us)</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">HistoricalFrameResult.path</span></code> and <code class="docutils literal notranslate"><span class="pre">SampledVideoFrame.path</span></code></p></td>
+<td><p>Read the canonical exported-frame location from <code class="docutils literal notranslate"><span class="pre">result.image.uri</span></code>.</p></td>
+</tr>
 </tbody>
 </table>
 </div>

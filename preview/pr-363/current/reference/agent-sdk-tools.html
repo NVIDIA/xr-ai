@@ -489,11 +489,19 @@ frames also share the <code class="docutils literal notranslate"><span class="pr
 <code class="docutils literal notranslate"><span class="pre">MultiImageQueryTool</span></code> queries an ordered image collection, and <code class="docutils literal notranslate"><span class="pre">VideoQueryTool</span></code>
 queries chronological <code class="docutils literal notranslate"><span class="pre">TimedImage</span></code> frames with their timestamps and relative
 offsets. <code class="docutils literal notranslate"><span class="pre">StreamingImageQueryTool</span></code> preserves the low-latency single-image path.
-All four tools use one list-based inference implementation. References may
-point to selected frames, local paths, file URIs, or HTTP(S) URLs. In-memory
-bytes use a bounded <code class="docutils literal notranslate"><span class="pre">ImageRegistry</span></code>, whose opaque handles keep tool results and
-telemetry small. Query tools forward controlled Relay headers and redact every
-image location from VLM events while preserving provider input.</p>
+All four tools use one list-based inference implementation. The shipped Cosmos
+deployment accepts at most four images in one <code class="docutils literal notranslate"><span class="pre">query_images</span></code> or <code class="docutils literal notranslate"><span class="pre">query_video</span></code>
+call. This inference limit is separate from the video-memory sampling budget;
+select the relevant subset before querying the VLM.</p>
+<p>In-memory bytes use a bounded <code class="docutils literal notranslate"><span class="pre">ImageRegistry</span></code>, whose opaque handles keep tool
+results and telemetry small. Registries accept only their own opaque references
+by default. Trusted applications may opt into local paths, file URIs, and
+HTTP(S) URLs with <code class="docutils literal notranslate"><span class="pre">ImageRegistry(allow_external=True)</span></code>, but must not expose an
+external-enabled query tool directly to an untrusted model. Query tools forward
+controlled Relay headers and redact every image location from VLM events while
+preserving provider input. Timelines supplied to video inference are described
+as estimates because recorded-frame timestamps are interpolated from chunk
+metadata rather than persisted per-frame presentation timestamps.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.current_frame</span><span class="w"> </span><span class="kn">import</span> <span class="n">CurrentFrameRequest</span><span class="p">,</span> <span class="n">CurrentFrameTool</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.image</span><span class="w"> </span><span class="kn">import</span> <span class="n">ImageReference</span><span class="p">,</span> <span class="n">ImageRegistry</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.video_memory</span><span class="w"> </span><span class="kn">import</span> <span class="n">LatestFramesRequest</span>
@@ -504,7 +512,7 @@ image location from VLM events while preserving provider input.</p>
     <span class="n">VideoQueryTool</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="n">images</span> <span class="o">=</span> <span class="n">ImageRegistry</span><span class="p">()</span>
+<span class="n">images</span> <span class="o">=</span> <span class="n">ImageRegistry</span><span class="p">(</span><span class="n">allow_external</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="n">frames</span> <span class="o">=</span> <span class="n">CurrentFrameTool</span><span class="p">(</span><span class="n">endpoint</span><span class="o">=</span><span class="n">endpoint</span><span class="p">,</span> <span class="n">images</span><span class="o">=</span><span class="n">images</span><span class="p">)</span>
 <span class="n">vision</span> <span class="o">=</span> <span class="n">ImageQueryTool</span><span class="p">(</span><span class="n">images</span><span class="o">=</span><span class="n">images</span><span class="p">,</span> <span class="n">vlm</span><span class="o">=</span><span class="n">vlm</span><span class="p">)</span>
 <span class="n">video</span> <span class="o">=</span> <span class="n">VideoQueryTool</span><span class="p">(</span><span class="n">images</span><span class="o">=</span><span class="n">images</span><span class="p">,</span> <span class="n">vlm</span><span class="o">=</span><span class="n">vlm</span><span class="p">)</span>
@@ -527,7 +535,7 @@ image location from VLM events while preserving provider input.</p>
     <span class="n">LatestFramesRequest</span><span class="p">(</span>
         <span class="n">participant_id</span><span class="o">=</span><span class="s2">&quot;alice&quot;</span><span class="p">,</span>
         <span class="n">duration_seconds</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
-        <span class="n">frame_budget</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+        <span class="n">frame_budget</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
     <span class="p">)</span>
 <span class="p">)</span>
 <span class="n">change</span> <span class="o">=</span> <span class="k">await</span> <span class="n">video</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
