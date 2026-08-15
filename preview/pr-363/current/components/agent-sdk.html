@@ -498,11 +498,22 @@ and deployment configuration.</p>
 </section>
 <section id="voice">
 <h2>Voice<a class="headerlink" href="#voice" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes accepted speech and typed text as <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> events,
-publishes participant and interruption lifecycle events, and consumes
-<code class="docutils literal notranslate"><span class="pre">voice.output</span></code>. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns model readiness, hub transport, voice
-gating, the media pipeline, signal handling, and cleanup. Pipecat remains an
-implementation detail for current samples.</p>
+<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes every incoming microphone chunk on <code class="docutils literal notranslate"><span class="pre">voice.audio</span></code> before
+VAD, STT, or wake-phrase filtering. Agents can subscribe to
+<code class="docutils literal notranslate"><span class="pre">VOICE_AUDIO_TOPIC</span></code> to receive silence and non-wake-phrase speech as
+<code class="docutils literal notranslate"><span class="pre">VoiceAudio</span></code>; the participant is carried in runtime metadata. The topic has
+Relay telemetry disabled because its payload contains raw interleaved float32
+PCM.</p>
+<p>Audio delivery is FIFO within each participant and track, with independent
+streams allowed to progress concurrently. <code class="docutils literal notranslate"><span class="pre">audio_capacity</span></code> defaults to 32 queued
+chunks per stream. A full queue drops its oldest queued chunk to retain the
+newest live audio. Subscriber failures do not stop later chunks, and all audio
+workers are cancelled and awaited during cleanup.</p>
+<p>Accepted speech and typed text are published as <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> events, participant
+and interruption lifecycle events use application-named topics, and voice
+consumes <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns model readiness, hub transport,
+voice gating, the media pipeline, signal handling, and cleanup. Pipecat remains
+an implementation detail for current samples.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">voice</span> <span class="o">=</span> <span class="n">VoiceAgent</span><span class="p">(</span>
     <span class="n">VoiceSession</span><span class="p">(</span>
         <span class="n">stt</span><span class="o">=</span><span class="n">stt</span><span class="p">,</span>

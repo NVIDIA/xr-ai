@@ -384,9 +384,10 @@
 <p>The voice runtime for XR agents. Pipecat implements the media pipeline, but
 applications work with XR concepts rather than Pipecat modules:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes accepted speech, text, participant departure, and
-interruption as voice-owned schemas on application-named topics; it
-subscribes to <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes every raw microphone chunk on <code class="docutils literal notranslate"><span class="pre">voice.audio</span></code>, then
+publishes accepted speech, text, participant departure, and interruption as
+voice-owned schemas on application-named topics; it subscribes to
+<code class="docutils literal notranslate"><span class="pre">voice.output</span></code>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns readiness, hub transport, private pipeline assembly,
 signals, execution, and cleanup behind <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code> is available when an application needs to share one transport explicitly.</p></li>
@@ -448,8 +449,8 @@ signals, execution, and cleanup behind <code class="docutils literal notranslate
 <td><p>Silero VAD speech-probability threshold.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">stop_probe_after_s</span></code></p></td>
-<td class="text-right"><p><code class="docutils literal notranslate"><span class="pre">0.4</span></code></p></td>
-<td><p>Delay before an early wake/STOP transcription probe; set to <code class="docutils literal notranslate"><span class="pre">0</span></code> or less to disable probes.</p></td>
+<td class="text-right"><p><code class="docutils literal notranslate"><span class="pre">0.25</span></code></p></td>
+<td><p>Cadence for up to three early wake/STOP transcription probes; set to <code class="docutils literal notranslate"><span class="pre">0</span></code> or less to disable probes.</p></td>
 </tr>
 </tbody>
 </table>
@@ -458,10 +459,24 @@ signals, execution, and cleanup behind <code class="docutils literal notranslate
 hub data channel. Its default is <code class="docutils literal notranslate"><span class="pre">&quot;agent.response&quot;</span></code>; set it to <code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> when the
 application publishes its own response data so each turn is delivered only
 once. This setting does not disable TTS or Relay telemetry.</p>
-<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes accepted speech, typed text, participant departure, and
-interruption on application-named topics. Application agents subscribe to the
-events they own, perform cleanup in their own subscriber methods, and may
-publish finite or incremental <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code> messages:</p>
+<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes every incoming microphone chunk on <code class="docutils literal notranslate"><span class="pre">voice.audio</span></code> before
+VAD, STT, or wake-phrase filtering. This includes silence and speech that does
+not contain the configured wake phrase, so agents that need the complete input
+stream can subscribe to <code class="docutils literal notranslate"><span class="pre">VOICE_AUDIO_TOPIC</span></code>. <code class="docutils literal notranslate"><span class="pre">VoiceAudio.data</span></code> is the original
+interleaved little-endian float32 PCM from the hub; the payload also carries its
+sample rate, channel and sample counts, capture timestamp, and track ID. The
+participant ID and <code class="docutils literal notranslate"><span class="pre">voice</span></code> source are runtime metadata. The topic disables
+Relay telemetry so raw audio is never recorded in runtime scopes.</p>
+<p>Delivery uses one FIFO worker and bounded queue per participant and track.
+<code class="docutils literal notranslate"><span class="pre">audio_capacity</span></code> defaults to 32 queued chunks for each stream. If a subscriber
+cannot keep up and that queue fills, voice drops the oldest queued chunk and
+keeps the newest live audio; an in-flight chunk is never reordered. Subscriber
+failures are logged without stopping later chunks, and <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> cancels and
+awaits every audio worker during participant cleanup and shutdown.</p>
+<p>Accepted speech, typed text, participant departure, and interruption remain on
+application-named topics. Application agents subscribe to the events they own,
+perform cleanup in their own subscriber methods, and may publish finite or
+incremental <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code> messages:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">VOICE_OUTPUT_TOPIC</span><span class="p">,</span> <span class="n">VoiceOutput</span>
 
 <span class="k">await</span> <span class="n">runtime</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span>
@@ -504,9 +519,13 @@ does not execute application handlers. Typed-text ingress is also internal to
 <code class="docutils literal notranslate"><span class="pre">VoiceSession.endpoint</span></code> is available only after entering the session, so model
 health probes complete before the default hub transport opens its sockets.</p>
 <p>When wake phrases and the listening chime are enabled, the VAD/STT stage probes
-the opening audio while the user is still speaking. A recognized phrase emits
-the chime immediately, while only the final transcript enters the voice gate as
-a query. STOP commands use the same early-probe path for immediate interruption.</p>
+the opening audio on a fixed cadence while the user is still speaking. Probe
+audio includes a short silent tail so offline STT can finalize the wake word. A
+recognized phrase emits the chime immediately, while only the final transcript
+enters the voice gate as a query. An in-flight probe gets a short grace period
+before final STT and is then cancelled, so a slow probe cannot stall the audio
+pipeline. A missed probe never inserts a late chime in front of response speech.
+STOP commands use the same early-probe path for immediate interruption.</p>
 <p>The final transcript accepts a wake phrase at its beginning or after
 sentence-final <code class="docutils literal notranslate"><span class="pre">.</span></code>, <code class="docutils literal notranslate"><span class="pre">?</span></code>, or <code class="docutils literal notranslate"><span class="pre">!</span></code> punctuation followed by whitespace or a closing
 quote. Text before that boundary and the matched phrase are discarded. A phrase

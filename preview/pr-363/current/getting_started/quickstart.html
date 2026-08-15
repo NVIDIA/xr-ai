@@ -398,7 +398,8 @@ pre-warm models:</p>
 </pre></div>
 </div>
 <p>Persisted vLLM processes or containers may otherwise keep serving the previous
-model and image even though the checked-in configuration now selects Cosmos3.</p>
+model and image even though the checked-in configuration now selects
+Nemotron-3 Nano Omni.</p>
 </div>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/model-servers
 uv<span class="w"> </span>sync
@@ -410,12 +411,13 @@ are presets for common configurations; to run on a different GPU, refer to
 <a class="reference internal" href="requirements.html"><span class="doc">Running on other GPUs</span></a>.
 On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.</p>
-<p>The default <code class="docutils literal notranslate"><span class="pre">--vlm-llm-stack</span></code> starts Nemotron-3 Nano (8107), Cosmos (8100),
-STT (8103), and embeddings (8109). Use <code class="docutils literal notranslate"><span class="pre">--omni-stack</span></code> to replace Nano and
-Cosmos with Nemotron-3 Nano Omni (8108); STT and embeddings remain available.
+<p>The default stack starts Nemotron-3 Nano Omni (8108), STT (8103), and
+embeddings (8109). The Omni server backs both LLM and vision requests. Use
+<code class="docutils literal notranslate"><span class="pre">--vlm-llm-stack</span></code> to run the legacy Nemotron-3 Nano (8107) and Cosmos (8100)
+pair instead.
 Switching stacks stops the incompatible persistent models first and aborts if
 they cannot be stopped, avoiding GPU overcommit.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--omni-stack
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--vlm-llm-stack
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default: without it the large first-run download
@@ -448,9 +450,9 @@ uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example
 several minutes). <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default; pass <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code>
 to run without one (refer to the
 <a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a>).</p>
-<p><strong>With model-servers pre-running</strong> — if VLM (port 8100) and STT (port 8103) are
-already up from <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>, the demo detects them at startup and reuses
-them. No extra flags needed. When you exit, those services keep running.</p>
+<p><strong>With model-servers pre-running</strong> — start <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--vlm-llm-stack</span></code> to
+pre-warm VLM (port 8100) and STT (port 8103). The demo detects and reuses them.
+When you exit, those services keep running.</p>
 <section id="step-1-start-the-server">
 <h3>Step 1 — Start the server<a class="headerlink" href="#step-1-start-the-server" title="Link to this heading">#</a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example
@@ -610,8 +612,8 @@ stay local) by setting <strong>one key</strong> in <code class="docutils literal
 <p>The worker loads <code class="docutils literal notranslate"><span class="pre">yaml/models.nim.yaml</span></code> for native model-backed Functions.
 Provide an
 <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> as an <strong>environment variable</strong> (or via the launcher credential
-prompt — not in YAML) and just don’t start the local <code class="docutils literal notranslate"><span class="pre">agent-llm</span></code> / <code class="docutils literal notranslate"><span class="pre">vlm</span></code>
-model-servers. Refer to the AI-services guide.</p>
+prompt — not in YAML) and just don’t start the local <code class="docutils literal notranslate"><span class="pre">omni</span></code> model server.
+Refer to the AI-services guide.</p>
 </section>
 </section>
 <section id="hub-only-standalone">

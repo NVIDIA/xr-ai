@@ -480,6 +480,8 @@ read raw pixels. A slot remains owned until <code class="docutils literal notran
 supports application payload types through <code class="docutils literal notranslate"><span class="pre">register_encoder</span></code> and
 <code class="docutils literal notranslate"><span class="pre">register_decoder</span></code>; choose new type identifiers without changing existing
 wire tags.</p>
+<p><code class="docutils literal notranslate"><span class="pre">on_audio()</span></code> and <code class="docutils literal notranslate"><span class="pre">on_data()</span></code> both return idempotent unsubscribe callbacks for
+owners that need to detach before the endpoint itself stops.</p>
 </section>
 </section>
 
