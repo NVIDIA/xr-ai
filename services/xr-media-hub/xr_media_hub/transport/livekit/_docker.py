@@ -44,7 +44,8 @@ port: {lk_port_ws}
 rtc:
   tcp_port: {lk_port_tcp}
   udp_port: {lk_port_udp}
-  use_external_ip: false
+  use_external_ip: {lk_use_external_ip}
+  skip_external_ip_validation: {lk_skip_external_ip_validation}
 keys:
   {api_key}: {api_secret}
 logging:
@@ -62,6 +63,20 @@ _BANNER = "━" * 56
 _CONTAINER_NAME = "xr-ai-livekit-server"
 
 
+def _render_livekit_config(cfg: LiveKitConnectorConfig) -> str:
+    return _LIVEKIT_YAML.format(
+        lk_port_ws=cfg.lk_port_ws,
+        lk_port_tcp=cfg.lk_port_tcp,
+        lk_port_udp=cfg.lk_port_udp,
+        lk_use_external_ip=str(cfg.lk_use_external_ip).lower(),
+        lk_skip_external_ip_validation=str(
+            cfg.lk_skip_external_ip_validation
+        ).lower(),
+        api_key=cfg.api_key,
+        api_secret=cfg.api_secret,
+    )
+
+
 class LiveKitDocker:
     def __init__(self, cfg: LiveKitConnectorConfig) -> None:
         self._cfg    = cfg
@@ -74,13 +89,7 @@ class LiveKitDocker:
     async def start(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory(prefix="xr_livekit_")
         cfg_path = Path(self._tmpdir.name) / "livekit.yaml"
-        cfg_path.write_text(_LIVEKIT_YAML.format(
-            lk_port_ws  = self._cfg.lk_port_ws,
-            lk_port_tcp = self._cfg.lk_port_tcp,
-            lk_port_udp = self._cfg.lk_port_udp,
-            api_key     = self._cfg.api_key,
-            api_secret  = self._cfg.api_secret,
-        ))
+        cfg_path.write_text(_render_livekit_config(self._cfg))
 
         # Remove any stale container from a previous crashed run.
         subprocess.run(

@@ -20,6 +20,13 @@ lk_port_ws:  7880   # WebSocket signaling
 lk_port_tcp: 7881   # WebRTC TCP fallback
 lk_port_udp: 7882   # WebRTC UDP media
 
+# Cloud VMs commonly have a private interface behind a public NAT. Enable
+# STUN-based public-IP discovery so LiveKit advertises a reachable ICE address.
+lk_use_external_ip: false
+# Enable only when the cloud NAT does not support LiveKit's public-IP self-ping
+# validation. Requires lk_use_external_ip: true.
+lk_skip_external_ip_validation: false
+
 # ── Web client server ─────────────────────────────────────────────────────────
 enable_web_server: true
 web_server_host:   "0.0.0.0"
