@@ -307,11 +307,17 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../reference/changelog.html">Decision changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
@@ -383,7 +389,7 @@ orchestrator pattern that wires servers into a sample, refer to
 can call them with any OpenAI SDK client or plain <code class="docutils literal notranslate"><span class="pre">httpx</span></code> or <code class="docutils literal notranslate"><span class="pre">requests</span></code>.
 Reference services cover vision-language reasoning, speech recognition,
 text-to-speech, embeddings, and large language models. The projects are direct
-children of the <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/537278a0bd94d4abc506f03b336c936766791169/services/README.md">services source index</a>;
+children of the repository’s <code class="docutils literal notranslate"><span class="pre">services/README.md</span></code> source index;
 pick an LLM per sample based on the tool-calling, reasoning, and hardware
 trade-offs documented below.</p>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -500,35 +506,13 @@ match the consumer:</p>
 </pre></div>
 </div>
 </section>
-<section id="migrating-standalone-caches-from-ai-services">
-<h2>Migrating standalone caches from <code class="docutils literal notranslate"><span class="pre">ai-services/</span></code><a class="headerlink" href="#migrating-standalone-caches-from-ai-services" title="Link to this heading">#</a></h2>
-<p>Moving the standalone projects into <code class="docutils literal notranslate"><span class="pre">services/</span></code> also normalizes their reference
-YAMLs to the repository-root <code class="docutils literal notranslate"><span class="pre">models/</span></code> directory. Git does not move ignored
-model weights. Existing standalone caches may therefore remain in these legacy
-locations:</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Services</p></th>
-<th class="head"><p>Legacy cache</p></th>
-<th class="head"><p>Current cache</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>VLM, STT, Nemotron 3 Nano, Nemotron Omni</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ai-services/models/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">models/</span></code></p></td>
-</tr>
-<tr class="row-odd"><td><p>Magpie TTS, Piper TTS</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ai-services/tts/models/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">models/</span></code></p></td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>Stop the model services, then run the following from the repository root before
-starting the relocated services offline. The short options work with GNU and
-macOS <code class="docutils literal notranslate"><span class="pre">cp</span></code>: <code class="docutils literal notranslate"><span class="pre">-l</span></code> hard-links regular files so the migration does not duplicate
-model data, while <code class="docutils literal notranslate"><span class="pre">-n</span></code> preserves entries already present in the current cache.</p>
+<section id="migrating-model-caches-from-ai-services">
+<span id="id1"></span><h2>Migrating model caches from <code class="docutils literal notranslate"><span class="pre">ai-services/</span></code><a class="headerlink" href="#migrating-model-caches-from-ai-services" title="Link to this heading">#</a></h2>
+<p>The service-directory rename does not move ignored model weights. Existing
+installations may still hold VLM, STT, and LLM weights in
+<code class="docutils literal notranslate"><span class="pre">ai-services/models/</span></code>, and TTS weights in <code class="docutils literal notranslate"><span class="pre">ai-services/tts/models/</span></code>; all
+current service profiles resolve to the repository-root <code class="docutils literal notranslate"><span class="pre">models/</span></code> directory.</p>
+<p>Stop model services, then merge the caches from the repository root:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>-p<span class="w"> </span>models
 <span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span>-d<span class="w"> </span>ai-services/models<span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
 <span class="w">  </span>cp<span class="w"> </span>-a<span class="w"> </span>-l<span class="w"> </span>-n<span class="w"> </span>ai-services/models/.<span class="w"> </span>models/
@@ -538,13 +522,11 @@ model data, while <code class="docutils literal notranslate"><span class="pre">-
 <span class="k">fi</span>
 </pre></div>
 </div>
-<p>Hard links require both paths to be on the same filesystem. If <code class="docutils literal notranslate"><span class="pre">models/</span></code> points
-to another filesystem, omit <code class="docutils literal notranslate"><span class="pre">-l</span></code> and make sure free space is at least the size
-of the legacy cache before copying.</p>
-<p>Keep the legacy directories until the relocated services have started
-successfully with network access disabled. Project virtual environments are not
-portable across the move; recreate them with <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> in the corresponding
-<code class="docutils literal notranslate"><span class="pre">services/&lt;project&gt;/</span></code> directory instead of copying <code class="docutils literal notranslate"><span class="pre">.venv</span></code>.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">-l</span></code> option avoids duplicating large weight files and requires both paths
+to use the same filesystem. Omit <code class="docutils literal notranslate"><span class="pre">-l</span></code> when copying across filesystems and
+verify free space first. Keep the old directories until the relocated services
+start successfully without network access. Recreate project environments with
+<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code>; do not copy <code class="docutils literal notranslate"><span class="pre">.venv</span></code> directories across the move.</p>
 </section>
 <section id="adding-a-server-to-a-sample">
 <h2>Adding a server to a sample<a class="headerlink" href="#adding-a-server-to-a-sample" title="Link to this heading">#</a></h2>
@@ -602,7 +584,7 @@ directory and a model profile containing an <code class="docutils literal notran
 <section id="calling-these-from-a-worker">
 <h2>Calling these from a worker<a class="headerlink" href="#calling-these-from-a-worker" title="Link to this heading">#</a></h2>
 <p>Workers do not hand-roll <code class="docutils literal notranslate"><span class="pre">httpx</span></code> clients against these endpoints.  They
-depend on <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/537278a0bd94d4abc506f03b336c936766791169/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models</span></code></a>,
+depend on <a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>,
 load a per-sample model profile, and construct service clients via
 <code class="docutils literal notranslate"><span class="pre">make_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_stt</span></code>, <code class="docutils literal notranslate"><span class="pre">make_tts</span></code>, and <code class="docutils literal notranslate"><span class="pre">make_embedding</span></code>. The SDK encapsulates the
 OpenAI-compatible wire format and the per-model quirks (reasoning-field
@@ -639,7 +621,7 @@ legacy entries and direct role mappings. A profile shared with the stdlib-only
 launcher must use the wrapped nested <code class="docutils literal notranslate"><span class="pre">.json</span></code> contract; non-<code class="docutils literal notranslate"><span class="pre">.json</span></code> profiles are
 rejected before deployment metadata is read. Full protocol surface, the preset
 table, and the profile contract are in
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/537278a0bd94d4abc506f03b336c936766791169/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models/README.md</span></code></a>.</p>
+<a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>.</p>
 </section>
 <section id="hosting-models-on-nvidia-nim">
 <h2>Hosting models on NVIDIA NIM<a class="headerlink" href="#hosting-models-on-nvidia-nim" title="Link to this heading">#</a></h2>
@@ -673,7 +655,7 @@ disables endpoint health probing, and declares external ownership:</p>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">api_key_env:</span> <span class="pre">NGC_API_KEY</span></code></strong> sends the environment value as a bearer
 token. The key is a
 managed credential — <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> injects a saved <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> into every
-subprocess (refer to <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/537278a0bd94d4abc506f03b336c936766791169/docs/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/credentials.md</span></code></a>); or export it.</p></li>
+subprocess (refer to <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>); or export it.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code></strong> is required when the hosted endpoint has no local
 <code class="docutils literal notranslate"><span class="pre">/health</span></code> route.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">ownership:</span> <span class="pre">external</span></code></strong> keeps the launcher from starting or stopping the
@@ -766,7 +748,7 @@ must succeed without <code class="docutils literal notranslate"><span class="pre
 <li><p><strong>NGC pull access</strong> for <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm</span></code>. The wrapper auto-runs
 <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">login</span> <span class="pre">nvcr.io</span></code> if <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is in the environment (loaded by
 <code class="docutils literal notranslate"><span class="pre">load_credentials()</span></code> from <code class="docutils literal notranslate"><span class="pre">~/.config/xr-ai/credentials.json</span></code> per
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/537278a0bd94d4abc506f03b336c936766791169/docs/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/credentials.md</span></code></a>). Otherwise, log in manually once:</p>
+<a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>). Otherwise, log in manually once:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>login<span class="w"> </span>nvcr.io<span class="w"> </span>-u<span class="w"> </span><span class="s1">&#39;$oauthtoken&#39;</span><span class="w"> </span>-p<span class="w"> </span><span class="nv">$NGC_API_KEY</span>
 </pre></div>
 </div>
@@ -823,7 +805,7 @@ wire format (<code class="docutils literal notranslate"><span class="pre">finish
 <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">on&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">off&quot;</span></code> in a system or user
 message; reasoning preamble is <strong>not</strong> stripped server-side. Hosting backend
 is selectable per YAML (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/537278a0bd94d4abc506f03b336c936766791169/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/9f4e6df78c690537b0f9314ea0fdcaf1fdf8f1ff/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
 for the full HTTP contract and tuning knobs.</p></li>
 <li><p><strong>nemotron3-nano-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</span></code> (auto-selected by GPU compute
@@ -834,7 +816,7 @@ FlashInfer FP4 MoE kernels. Requires a Blackwell-class GPU (B200 or RTX PRO
 <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> by default to avoid the silent 3–8 min CUDA graph and
 FlashInfer autotune on cold start. Hosting backend is selectable per YAML
 (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/537278a0bd94d4abc506f03b336c936766791169/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/9f4e6df78c690537b0f9314ea0fdcaf1fdf8f1ff/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
 for the vLLM flags it forwards and Blackwell prerequisites.</p></li>
 <li><p><strong>nemotron-omni-llm</strong> is a vLLM-backed multimodal LLM serving
 <code class="docutils literal notranslate"><span class="pre">Nemotron-3-Nano-Omni-30B-A3B-Reasoning</span></code> (text + video input) at port 8108.
@@ -852,7 +834,15 @@ All inference runs in a thread pool so the asyncio loop is never blocked.</p></l
 <li><p><strong>video-memory-service</strong> owns recorded chunk queries, NVDEC, and PNG output
 behind typed msgpack/ZMQ on port 8310. Set <code class="docutils literal notranslate"><span class="pre">recordings_dir</span></code> in its YAML to
 enable recorded-video operations; the path must match the hub’s
-<code class="docutils literal notranslate"><span class="pre">video_recording.out_dir</span></code>. Current frames stay with the caller’s hub client.</p></li>
+<code class="docutils literal notranslate"><span class="pre">video_recording.out_dir</span></code>. Latest video and sampling windows end at the
+newest recorded timestamp and require only a duration. Historical frame,
+video, and sampling requests share an absolute <code class="docutils literal notranslate"><span class="pre">start_us</span></code>; video windows add
+a duration. Sampling also accepts a hard total frame budget, decodes each
+selected chunk once, skips unavailable or corrupt chunks when other frames
+remain, and can bound exported PNG dimensions. The sampled timestamps are
+estimates interpolated from chunk metadata. The selection budget may be up
+to 256, but the shipped Cosmos VLM accepts no more than four selected images
+per inference request. Current frames stay with the caller’s hub client.</p></li>
 <li><p>Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).</p></li>
 <li><p><strong>Sample YAMLs</strong> for each service ship in their own service directory.
 Copy them to your sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory and set <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> to
@@ -912,7 +902,7 @@ Copy them to your sample’s <code class="docutils literal notranslate"><span cl
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#two-huggingface-cache-roots">Two HuggingFace cache roots</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#migrating-standalone-caches-from-ai-services">Migrating standalone caches from <code class="docutils literal notranslate"><span class="pre">ai-services/</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#migrating-model-caches-from-ai-services">Migrating model caches from <code class="docutils literal notranslate"><span class="pre">ai-services/</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-a-server-to-a-sample">Adding a server to a sample</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#calling-these-from-a-worker">Calling these from a worker</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hosting-models-on-nvidia-nim">Hosting models on NVIDIA NIM</a></li>

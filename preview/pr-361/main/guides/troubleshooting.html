@@ -59,7 +59,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Reference" href="../reference/index.html" />
-    <link rel="prev" title="Contributing and conventions" href="contributing-and-conventions.html" />
+    <link rel="prev" title="SPDX license headers" href="spdx-headers.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -330,11 +330,17 @@
 <li class="toctree-l2"><a class="reference internal" href="adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../reference/changelog.html">Decision changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
@@ -565,8 +571,7 @@ local install.</p>
 <h3>Hub fails immediately with <code class="docutils literal notranslate"><span class="pre">RuntimeError:</span> <span class="pre">missing</span> <span class="pre">libnvcuvid.so</span> <span class="pre">/</span> <span class="pre">libnvidia-encode.so</span></code><a class="headerlink" href="#hub-fails-immediately-with-runtimeerror-missing-libnvcuvid-so-libnvidia-encode-so" title="Link to this heading">#</a></h3>
 <p><strong>Cause:</strong> NVDEC (<code class="docutils literal notranslate"><span class="pre">libnvcuvid.so</span></code>) and NVENC (<code class="docutils literal notranslate"><span class="pre">libnvidia-encode.so</span></code>) are
 required — the XR-Media-Hub refuses to start without them so it never silently falls
-back to OpenH264 (which is royalty-bearing). Refer to the
-<a class="reference internal" href="../reference/changelog.html"><span class="doc">changelog</span></a> entry <strong>2026-04-21 — NVDEC/NVENC required</strong>.</p>
+back to OpenH264, which is royalty-bearing.</p>
 <p><strong>Fix:</strong></p>
 <ul class="simple">
 <li><p><strong>Bare metal:</strong> install or repair the NVIDIA driver. The libraries ship with the
@@ -582,19 +587,17 @@ device nodes) when starting the container.</p></li>
 <h3>Voice session drops or agent goes silent after a few minutes idle<a class="headerlink" href="#voice-session-drops-or-agent-goes-silent-after-a-few-minutes-idle" title="Link to this heading">#</a></h3>
 <p><strong>Cause:</strong> an idle-timeout that auto-cancels the voice pipeline after a stretch
 with no user or bot speech.</p>
-<p><strong>Status:</strong> disabled by default. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> and <code class="docutils literal notranslate"><span class="pre">make_voice_pipeline</span></code> pass
-<code class="docutils literal notranslate"><span class="pre">cancel_on_idle_timeout=False</span></code> (overriding Pipecat’s on-by-default
-<code class="docutils literal notranslate"><span class="pre">IDLE_TIMEOUT_SECS</span></code>), so a quiet session stays connected indefinitely.</p>
+<p><strong>Status:</strong> disabled by default. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> leaves its private Pipecat idle
+timeout disabled, so a quiet session stays connected indefinitely.</p>
 <p><strong>If you want it:</strong> set <code class="docutils literal notranslate"><span class="pre">idle_timeout_secs:</span> <span class="pre">&lt;seconds&gt;</span></code> (e.g. <code class="docutils literal notranslate"><span class="pre">300</span></code> for 5 min)
 in the sample’s worker YAML (<code class="docutils literal notranslate"><span class="pre">simple_vlm_example_worker.yaml</span></code> /
 <code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.yaml</span></code>); <code class="docutils literal notranslate"><span class="pre">0</span></code> or unset keeps it disabled. The knob is
-owned by <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.VoiceSession</span></code> or, for a direct Pipecat consumer,
-<code class="docutils literal notranslate"><span class="pre">xr_ai_pipecat.make_voice_pipeline</span></code>.</p>
+owned by <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.VoiceSession</span></code>.</p>
 </section>
 <section id="browser-client-connects-but-no-audio-or-no-video">
 <h3>Browser client connects but no audio or no video<a class="headerlink" href="#browser-client-connects-but-no-audio-or-no-video" title="Link to this heading">#</a></h3>
 <p><strong>Most common cause:</strong> firewall blocking WebRTC media on UDP 7882 (LiveKit).</p>
-<p><strong>Fix:</strong> open ports per <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/docs/networking.md"><code class="docutils literal notranslate"><span class="pre">docs/networking.md</span></code></a>. The web client
+<p><strong>Fix:</strong> open ports per <a class="reference internal" href="../getting_started/networking.html"><span class="doc">Networking and firewall</span></a>. The web client
 will appear to connect (signaling on 7880 succeeds) but media frames are
 silently dropped without 7882.</p>
 </section>
@@ -692,7 +695,7 @@ flip <code class="docutils literal notranslate"><span class="pre">enforce_eager:
 <p><strong>By design.</strong> The vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>,
 <code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>) survive stack
 restarts so model weights stay loaded across worker crashes and debug
-restarts. See <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/docs/ai-services.md"><code class="docutils literal notranslate"><span class="pre">docs/ai-services.md</span></code></a> → <em>vLLM model
+restarts. See <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> → <em>vLLM model
 persistence</em>.</p>
 <p><strong>Fix:</strong> to fully release VRAM:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>xr-ai/agent-samples/xr-render-demo
@@ -714,7 +717,7 @@ the repository root (gitignored, ~16 GB for Cosmos-Reason1-7B alone).</p>
 ~30–60 s. If the download makes no progress, note that unauthenticated
 downloads (runs started with <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code>) are rate-limited and can
 stall indefinitely; set <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> and restart
-(see <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/docs/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/credentials.md</span></code></a>).</p>
+(see <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>).</p>
 </section>
 </section>
 </section>
@@ -730,12 +733,12 @@ stall indefinitely; set <code class="docutils literal notranslate"><span class="
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="contributing-and-conventions.html"
+       href="spdx-headers.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Contributing and conventions</p>
+        <p class="prev-next-title">SPDX license headers</p>
       </div>
     </a>
     <a class="right-next"

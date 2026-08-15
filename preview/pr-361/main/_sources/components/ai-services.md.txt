@@ -14,7 +14,7 @@ Multiple reusable HTTP servers are available as launchable peers of
 can call them with any OpenAI SDK client or plain `httpx` or `requests`.
 Reference services cover vision-language reasoning, speech recognition,
 text-to-speech, embeddings, and large language models. The projects are direct
-children of the [services source index](https://github.com/NVIDIA/xr-ai/blob/main/services/README.md);
+children of the repository's `services/README.md` source index;
 pick an LLM per sample based on the tool-calling, reasoning, and hardware
 trade-offs documented below.
 
@@ -62,22 +62,16 @@ HF_HOME=models hf download nvidia/Cosmos-Reason1-7B
 HF_HOME=models/huggingface hf download nvidia/parakeet-tdt-0.6b-v3
 ```
 
-## Migrating standalone caches from `ai-services/`
+(migrating-model-caches-from-ai-services)=
 
-Moving the standalone projects into `services/` also normalizes their reference
-YAMLs to the repository-root `models/` directory. Git does not move ignored
-model weights. Existing standalone caches may therefore remain in these legacy
-locations:
+## Migrating model caches from `ai-services/`
 
-| Services | Legacy cache | Current cache |
-|---|---|---|
-| VLM, STT, Nemotron 3 Nano, Nemotron Omni | `ai-services/models/` | `models/` |
-| Magpie TTS, Piper TTS | `ai-services/tts/models/` | `models/` |
+The service-directory rename does not move ignored model weights. Existing
+installations may still hold VLM, STT, and LLM weights in
+`ai-services/models/`, and TTS weights in `ai-services/tts/models/`; all
+current service profiles resolve to the repository-root `models/` directory.
 
-Stop the model services, then run the following from the repository root before
-starting the relocated services offline. The short options work with GNU and
-macOS `cp`: `-l` hard-links regular files so the migration does not duplicate
-model data, while `-n` preserves entries already present in the current cache.
+Stop model services, then merge the caches from the repository root:
 
 ```bash
 mkdir -p models
@@ -89,14 +83,12 @@ if [ -d ai-services/tts/models ]; then
 fi
 ```
 
-Hard links require both paths to be on the same filesystem. If `models/` points
-to another filesystem, omit `-l` and make sure free space is at least the size
-of the legacy cache before copying.
+The `-l` option avoids duplicating large weight files and requires both paths
+to use the same filesystem. Omit `-l` when copying across filesystems and
+verify free space first. Keep the old directories until the relocated services
+start successfully without network access. Recreate project environments with
+`uv sync`; do not copy `.venv` directories across the move.
 
-Keep the legacy directories until the relocated services have started
-successfully with network access disabled. Project virtual environments are not
-portable across the move; recreate them with `uv sync` in the corresponding
-`services/<project>/` directory instead of copying `.venv`.
 
 ## Adding a server to a sample
 
@@ -160,7 +152,7 @@ directory and a model profile containing an `embedding` role.
 ## Calling these from a worker
 
 Workers do not hand-roll `httpx` clients against these endpoints.  They
-depend on [`agent-sdk/xr-ai-models`](https://github.com/NVIDIA/xr-ai/blob/main/agent-sdk/xr-ai-models/README.md),
+depend on {doc}`/reference/agent-sdk-models`,
 load a per-sample model profile, and construct service clients via
 `make_llm`, `make_vlm`, `make_stt`, `make_tts`, and `make_embedding`. The SDK encapsulates the
 OpenAI-compatible wire format and the per-model quirks (reasoning-field
@@ -201,7 +193,7 @@ legacy entries and direct role mappings. A profile shared with the stdlib-only
 launcher must use the wrapped nested `.json` contract; non-`.json` profiles are
 rejected before deployment metadata is read. Full protocol surface, the preset
 table, and the profile contract are in
-[`agent-sdk/xr-ai-models/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/agent-sdk/xr-ai-models/README.md).
+{doc}`/reference/agent-sdk-models`.
 
 ## Hosting models on NVIDIA NIM
 
@@ -237,7 +229,7 @@ disables endpoint health probing, and declares external ownership:
 - **`api_key_env: NGC_API_KEY`** sends the environment value as a bearer
   token. The key is a
   managed credential — `run_stack` injects a saved `NGC_API_KEY` into every
-  subprocess (refer to [`docs/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/credentials.md)); or export it.
+  subprocess (refer to {doc}`/getting_started/credentials`); or export it.
 - **`readiness: none`** is required when the hosted endpoint has no local
   `/health` route.
 - **`ownership: external`** keeps the launcher from starting or stopping the
@@ -322,7 +314,7 @@ another tag, an internal mirror, or a custom build.
 - **NGC pull access** for `nvcr.io/nvidia/vllm`. The wrapper auto-runs
   `docker login nvcr.io` if `NGC_API_KEY` is in the environment (loaded by
   `load_credentials()` from `~/.config/xr-ai/credentials.json` per
-  [`docs/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/credentials.md)). Otherwise, log in manually once:
+  {doc}`/getting_started/credentials`). Otherwise, log in manually once:
 
   ```bash
   docker login nvcr.io -u '$oauthtoken' -p $NGC_API_KEY
@@ -405,7 +397,15 @@ cleanup.
 - **video-memory-service** owns recorded chunk queries, NVDEC, and PNG output
   behind typed msgpack/ZMQ on port 8310. Set `recordings_dir` in its YAML to
   enable recorded-video operations; the path must match the hub's
-  `video_recording.out_dir`. Current frames stay with the caller's hub client.
+  `video_recording.out_dir`. Latest video and sampling windows end at the
+  newest recorded timestamp and require only a duration. Historical frame,
+  video, and sampling requests share an absolute `start_us`; video windows add
+  a duration. Sampling also accepts a hard total frame budget, decodes each
+  selected chunk once, skips unavailable or corrupt chunks when other frames
+  remain, and can bound exported PNG dimensions. The sampled timestamps are
+  estimates interpolated from chunk metadata. The selection budget may be up
+  to 256, but the shipped Cosmos VLM accepts no more than four selected images
+  per inference request. Current frames stay with the caller's hub client.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
 - **Sample YAMLs** for each service ship in their own service directory.
   Copy them to your sample's `yaml/` directory and set `model_cache` to

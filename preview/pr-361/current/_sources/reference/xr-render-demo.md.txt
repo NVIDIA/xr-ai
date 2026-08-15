@@ -5,11 +5,9 @@
 
 # xr-render-demo — architecture
 
-This page describes the architecture of the xr-render-demo sample. For the
-user-facing
-quickstart, refer to the [repository README](https://github.com/NVIDIA/xr-ai/blob/main/README.md#xr-render-demo-voice-driven-sphere-in-cloudxr).
-For inference-server mechanics shared with other samples, refer to
-[`docs/ai-services.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/ai-services.md).
+This page describes the architecture of the xr-render-demo sample. Start with
+{doc}`/getting_started/quickstart` to run it. For inference-server mechanics
+shared with other samples, see {doc}`/components/ai-services`.
 
 ## Process stack
 
@@ -40,6 +38,22 @@ Before starting the stack, the orchestrator runs two setup steps:
 - **LOVR binary** — auto-downloads LOVR v0.18.0 AppImage to `deps/lovr/` if
   not present and sets `$LOVR_BIN`. Resolution order: `$LOVR_BIN` env var →
   `lovr_bin:` in `scene/scene_service.yaml` → cached AppImage → fresh download.
+
+## Selecting the client type (WebRTC vs native)
+
+`NV_DEVICE_PROFILE` selects which XR clients can connect. For the native iOS
+and visionOS apps, set it to `auto-native`:
+
+```bash
+NV_DEVICE_PROFILE=auto-native uv run xr_render_demo
+```
+
+The environment value takes precedence over YAML. The `cloudxr_env` value in
+`yaml/cloudxr_runtime.yaml` supplies the default only when the variable is
+unset; `auto-webrtc` serves WebRTC and web XR clients. Native profiles omit the
+static web page and its npm build but keep `/token`, `/cert`, and `/rtc` on the
+hub, so the Apple Vision Pro app's default
+`https://<host>:8080/token` request continues to work.
 
 ## GPU pinning for the XR side
 
@@ -115,9 +129,16 @@ Port 8100 (`vlm-server`).
 
 Loaded in-process by `vlm-server` via HuggingFace transformers
 (Qwen2.5-VL architecture). `<think>…</think>` blocks are stripped before
-returning. Native vision tools read recorded images or acquire a current
-participant frame, encode it as an image URL, and invoke the shared
-`xr-ai-models` VLM service.
+returning. The render agent selects a current or recorded frame first, then
+passes its `ImageReference` to `query_image`. Its native capability set also
+includes `query_images` for ordered collections and `query_video` for
+timestamped frame sequences; all use the same `xr-ai-models` multi-image VLM
+path, limited to four images by the shipped Cosmos configuration. These raw
+selectors and query tools are internal composition primitives; the reasoning
+model sees only participant-safe perception facades. Recorded selection is
+grouped into latest tools, whose windows end at the newest recording, and
+historical tools, whose frame or video window begins at one absolute `start_us`.
+Recorded-frame timestamps are estimates interpolated from chunk metadata.
 
 There is a deliberate startup ordering constraint: `VoiceSession` readiness
 blocks on the VLM's `/health` endpoint, which
@@ -179,9 +200,8 @@ VoiceAgent → private VoiceSession → VAD/STT + VoiceGate ─┐
   → VoiceAgent → private VoiceSession TTS → hub return audio
 ```
 
-The render worker imports no `xr-ai-pipecat` or `pipecat-ai` API. Pipecat is
-an internal implementation detail of `xr-ai-voice`; application input,
-participant-scoped agent execution, and voice output use public SDK contracts.
+Pipecat is an internal implementation detail of `xr-ai-voice`; application
+input, participant-scoped agent execution, and voice output use public SDK contracts.
 Lifecycle failures publish notices to a sample-local runtime topic instead of
 manufacturing voice-pipeline frames.
 

@@ -16,10 +16,10 @@ utils/              # Shared infra: launcher, logging, vad, vllm, voicegate
 services/           # XR hub, CloudXR, model-serving, and typed XR capability services
 agent-samples/      # End-to-end agent demos
 tests/              # Multi-client / multi-agent integration tests
-docs/               # Design docs and topic deep-dives
+docs/source/        # User and contributor documentation
 ```
 
-## Key design decisions
+## Architecture boundaries
 
 - **One hub, many clients, many agents.** A single hub instance fans the
   inbound stream out to every connected `ProcessorEndpoint` (agent) and
@@ -31,7 +31,7 @@ docs/               # Design docs and topic deep-dives
   participant (`xr-hub-return-{pid}`) with subscribe permissions restricted to
   that participant; return data uses `destination_identities` for the same
   reason. Agents never need to know.
-- **`agent-sdk/xr-ai-hub-client`** contains only the agent-facing IPC layer. Its
+- **`agent-sdk/xr-ai-hub`** contains only the agent-facing IPC layer. Its
   sole runtime dependencies are `pyzmq` and `msgpack` — no LiveKit, FastAPI,
   or uvicorn.
 - **Native agents compose typed tools in process.** Service-backed tools call
@@ -63,10 +63,7 @@ The hub enforces this per participant:
 Because every response is addressed back to the participant it came from, a
 single agent process can serve several participants concurrently without
 cross-talk: it receives each participant's audio, video, and data tagged with
-that participant's id, and addresses its replies to the same id. How richly a
-given sample uses this is up to the sample — the `glasses-agent` and
-`simple-vlm-example` workers are written around one active speaker, while the
-transport and isolation guarantees hold for any number of connected participants.
+that participant's id, and addresses its replies to the same id. A sample may choose a narrower concurrency policy, while the transport and isolation guarantees hold for any number of connected participants.
 
 Refer to the {doc}`Isolation contract </components/server-runtime>` for the
 enforcement details.
