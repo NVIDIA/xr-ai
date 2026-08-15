@@ -446,8 +446,8 @@ inside `SimpleVlmAgent`. Single-image, ordered multi-image, and timestamped
 frame-sequence inference share the same list-based VLM path. Camera bytes stay
 in a bounded in-process registry and image locations are redacted from VLM
 telemetry while the provider receives the original frames.
-`VoiceAgent` privately owns readiness, hub transport, signals, and the Pipecat
-pipeline; it routes `"ping"` and ad-hoc text through the same
+`VoiceAgent` privately owns readiness, signals, and the Pipecat pipeline; it
+routes direct client text through the same
 sample-named `UserQuery` topic as speech and publishes lifecycle events on
 sample-named topics. `SimpleVlmAgent` handles cancellation and frame cleanup
 inside its own subscriber methods. Voice-gate

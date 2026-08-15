@@ -16,6 +16,7 @@ from xr_ai_models import ChatMessage, load_models_config, make_llm, make_stt, ma
 from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.tool_calling import tool_definitions
 from xr_ai_voice import (
+    HubVoiceTransport,
     VadConfig,
     VoiceAgent,
 )
@@ -96,6 +97,7 @@ async def main(
         )
 
     voice_gate_cfg = load_voice_gate_config(pathlib.Path(cfg.voice_gate_yaml))
+    transport = HubVoiceTransport()
     voice = VoiceAgent(
         query_topic=USER_QUERY_TOPIC,
         stt=stt,
@@ -118,16 +120,17 @@ async def main(
         # SceneModelLoop publishes the panel response itself.
         text_topic="",
         idle_timeout_secs=cfg.idle_timeout_secs,
-        text_ignore_topics={"xr.session.started"},
+        transport=transport,
         participant_left_topic=PARTICIPANT_LEFT_TOPIC,
         interrupted_topic=INTERRUPTED_TOPIC,
     )
 
+    voice_run_started = False
     capabilities = NativeCapabilities(
         scene_endpoint=cfg.scene_endpoint,
         openxr_endpoint=cfg.openxr_endpoint,
         video_memory_endpoint=cfg.video_memory_endpoint,
-        frame_endpoint=voice.endpoint,
+        frame_endpoint=transport.endpoint,
         vlm=vlm_service,
         text_memory_dir=cfg.text_memory_dir,
     )
@@ -143,7 +146,7 @@ async def main(
         logger.info("native model tools: {}", [tool.name for tool in model_tools])
 
         scene_loop = SceneModelLoop(
-            transport=voice.transport,
+            transport=transport,
             cfg=cfg,
             tools=capabilities.all,
             release_vision=capabilities.release,
@@ -158,7 +161,7 @@ async def main(
         render = runtime.register("xr-render", RenderAgent(scene_loop))
         # The endpoint retains this bound callback for the worker lifetime.
         XRSessionLifecycle(
-            transport=voice.transport,
+            transport=transport,
             scene_loop=scene_loop,
             start_xr=capabilities.scene.start_xr,
             get_health=capabilities.scene.get_health,
@@ -168,18 +171,22 @@ async def main(
         logger.info("xr_render_demo starting")
         async with runtime:
             try:
+                voice_run_started = True
                 await voice.run(runtime)
             finally:
                 await render.stop()
     finally:
-        await asyncio.gather(
+        cleanup = [
             capabilities.close(),
-            voice.close(),
             llm.close(),
             agent_llm.close(),
             vlm_service.close(),
-            return_exceptions=True,
-        )
+        ]
+        if not voice_run_started:
+            cleanup.extend((stt.close(), tts.close()))
+        await asyncio.gather(*cleanup, return_exceptions=True)
+        if not voice_run_started:
+            transport.shutdown()
     logger.info("xr_render_demo stopped")
 
 

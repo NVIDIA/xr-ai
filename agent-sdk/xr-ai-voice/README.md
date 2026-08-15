@@ -73,6 +73,10 @@ application-named topics. Application agents subscribe to the events they own,
 perform cleanup in their own subscriber methods, and may publish finite or
 incremental `VoiceOutput` messages:
 
+Untopiced client data is normalized by the hub onto a private direct-text
+channel. `VoiceAgent` consumes only that channel when `text_input=True`; named
+application and control messages are never interpreted as user queries.
+
 ```python
 from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceOutput
 
@@ -112,12 +116,12 @@ rate; a nested `voice.stt.result` mark carries the transcript. TTS inputs carry
 the sentence being synthesized. Raw audio is never written to Relay events.
 These scopes measure provider work and downstream handoff, not client playback.
 
-The media session is private to `VoiceAgent`. The agent manages readiness, hub
-transport, VAD/STT, voice gating, TTS, typed-text ingress, signals, and cleanup;
-it does not execute application handlers. `VoiceAgent.endpoint` and
-`VoiceAgent.transport` expose the owned hub boundary when another application
-component needs frames, status publication, or the shared transport. Callers do
-not construct, run, or close a separate session.
+The media session is private to `VoiceAgent`. The agent manages readiness,
+VAD/STT, voice gating, TTS, typed-text ingress, signals, and cleanup; it does not
+execute application handlers. Applications that already need the public
+`HubVoiceTransport` for frames or status publication construct it explicitly
+and pass it to `VoiceAgent`; the agent does not expose its private session or
+transport.
 
 When wake phrases and the listening chime are enabled, the VAD/STT stage probes
 the opening audio on a fixed cadence while the user is still speaking. Probe

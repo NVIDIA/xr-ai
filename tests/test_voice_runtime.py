@@ -6,9 +6,11 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from builtins import ExceptionGroup
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from unittest.mock import patch
 
 import nemo_relay
 import pytest
@@ -239,12 +241,24 @@ async def _running_voice(
             await asyncio.gather(task, return_exceptions=True)
 
 
+def _voice_agent(session: _Session, **kwargs) -> VoiceAgent:
+    with patch.object(voice_runtime_module, "_VoiceSession", return_value=session):
+        return VoiceAgent(
+            query_topic=kwargs.pop("query_topic", QUERY_TOPIC),
+            stt=object(),
+            tts=object(),
+            vad=object(),
+            voice_gate=object(),
+            **kwargs,
+        )  # type: ignore[arg-type]
+
+
 async def test_voice_agent_publishes_to_configured_query_topic() -> None:
     session = _Session()
     recorder = _InputRecorder()
     runtime = AgentRuntime()
     runtime.register("recorder", recorder)
-    voice = VoiceAgent(  # type: ignore[arg-type]
+    voice = _voice_agent(
         session,
         query_topic=QUERY_TOPIC,
         text_input=False,
@@ -279,7 +293,7 @@ async def test_voice_agent_publishes_final_transcript_before_query_gating() -> N
     runtime = AgentRuntime()
     runtime.register("transcripts", transcripts)
     runtime.register("queries", queries)
-    voice = VoiceAgent(  # type: ignore[arg-type]
+    voice = _voice_agent(
         session,
         query_topic=QUERY_TOPIC,
         text_input=False,
@@ -319,7 +333,7 @@ async def test_transcript_subscriber_failure_does_not_block_accepted_query() -> 
     runtime = AgentRuntime()
     runtime.register("failing-transcript", FailingTranscriptAgent())
     runtime.register("queries", queries)
-    voice = VoiceAgent(  # type: ignore[arg-type]
+    voice = _voice_agent(
         session,
         query_topic=QUERY_TOPIC,
         text_input=False,
@@ -346,7 +360,7 @@ async def test_voice_agent_publishes_configured_lifecycle_topics() -> None:
     recorder = _LifecycleRecorder()
     runtime = AgentRuntime()
     runtime.register("recorder", recorder)
-    voice = VoiceAgent(  # type: ignore[arg-type]
+    voice = _voice_agent(
         session,
         query_topic=QUERY_TOPIC,
         participant_left_topic=PARTICIPANT_LEFT_TOPIC,
@@ -371,7 +385,7 @@ async def test_voice_lifecycle_publication_does_not_block_media_callback() -> No
     blocker = _BlockingLifecycle()
     runtime = AgentRuntime()
     runtime.register("blocker", blocker)
-    voice = VoiceAgent(  # type: ignore[arg-type]
+    voice = _voice_agent(
         session,
         query_topic=QUERY_TOPIC,
         interrupted_topic=INTERRUPTED_TOPIC,
@@ -391,7 +405,7 @@ async def test_replacement_query_publishes_interruption_before_query() -> None:
     recorder = _OrderedRecorder()
     runtime = AgentRuntime()
     runtime.register("recorder", recorder)
-    voice = VoiceAgent(  # type: ignore[arg-type]
+    voice = _voice_agent(
         session,
         query_topic=QUERY_TOPIC,
         interrupted_topic=INTERRUPTED_TOPIC,
@@ -417,7 +431,7 @@ async def test_replacement_query_publishes_interruption_before_query() -> None:
 async def test_voice_agent_accepts_output_from_multiple_publishers() -> None:
     session = _Session()
     runtime = AgentRuntime()
-    voice = VoiceAgent(  # type: ignore[arg-type]
+    voice = _voice_agent(
         session,
         query_topic=QUERY_TOPIC,
         text_input=False,
@@ -447,7 +461,7 @@ async def test_voice_agent_accepts_output_from_multiple_publishers() -> None:
 async def test_voice_agent_records_one_summary_for_finite_and_streamed_output() -> None:
     session = _Session()
     runtime = AgentRuntime()
-    voice = VoiceAgent(  # type: ignore[arg-type]
+    voice = _voice_agent(
         session,
         query_topic=QUERY_TOPIC,
         text_input=False,
@@ -512,12 +526,7 @@ async def test_voice_agent_records_one_summary_for_finite_and_streamed_output() 
 async def test_voice_agent_routes_typed_input() -> None:
     session = _Session()
     runtime = AgentRuntime()
-    voice = VoiceAgent(
-        session,  # type: ignore[arg-type]
-        query_topic=QUERY_TOPIC,
-        text_ignore_topics={"control"},
-        text_transform=str.upper,
-    )
+    voice = _voice_agent(session)
     runtime.register("voice", voice)
 
     async with _running_voice(runtime, voice, session):
@@ -532,30 +541,26 @@ async def test_voice_agent_routes_typed_input() -> None:
         await session.transport.endpoint.data_callback(
             DataMessage(
                 participant_id="alice",
-                topic="",
+                topic="_client.text",
                 pts_us=2,
                 data=b"hello",
             )
         )
 
     assert session.transport.target_participant == "alice"
-    assert session.queries == [("alice", "HELLO", 2)]
+    assert session.queries == [("alice", "hello", 2)]
 
 
-async def test_voice_agent_drops_inactive_ignored_and_empty_transformed_text() -> None:
+async def test_voice_agent_drops_inactive_non_client_and_empty_text() -> None:
     session = _Session()
     runtime = AgentRuntime()
-    voice = VoiceAgent(
-        session,  # type: ignore[arg-type]
-        query_topic=QUERY_TOPIC,
-        text_transform=lambda _text: "   ",
-    )
+    voice = _voice_agent(session)
     runtime.register("voice", voice)
     message = DataMessage(
         participant_id="alice",
         topic="request",
         pts_us=3,
-        data=b"hello",
+        data=b"   ",
     )
 
     await voice._on_data(message)  # noqa: SLF001
@@ -563,9 +568,9 @@ async def test_voice_agent_drops_inactive_ignored_and_empty_transformed_text() -
         await session.transport.endpoint.data_callback(
             DataMessage(
                 participant_id="alice",
-                topic=session.text_topic,
+                topic="agent.control",
                 pts_us=4,
-                data=b"ignore output loop",
+                data=b"ignored",
             )
         )
         await session.transport.endpoint.data_callback(message)
@@ -576,7 +581,7 @@ async def test_voice_agent_drops_inactive_ignored_and_empty_transformed_text() -
 async def test_voice_agent_unregisters_typed_input_callback() -> None:
     session = _Session()
     runtime = AgentRuntime()
-    voice = VoiceAgent(session, query_topic=QUERY_TOPIC)  # type: ignore[arg-type]
+    voice = _voice_agent(session)
     runtime.register("voice", voice)
 
     async with _running_voice(runtime, voice, session):
@@ -588,7 +593,7 @@ async def test_voice_agent_unregisters_typed_input_callback() -> None:
 async def test_incremental_responses_are_isolated_by_participant_and_source() -> None:
     session = _Session()
     runtime = AgentRuntime()
-    voice = VoiceAgent(  # type: ignore[arg-type]
+    voice = _voice_agent(
         session,
         query_topic=QUERY_TOPIC,
         text_input=False,
@@ -621,7 +626,7 @@ async def test_incremental_responses_are_isolated_by_participant_and_source() ->
 async def test_cancelled_response_stream_releases_blocked_publishers() -> None:
     session = _Session()
     runtime = AgentRuntime()
-    agent = VoiceAgent(  # type: ignore[arg-type]
+    agent = _voice_agent(
         session,
         query_topic=QUERY_TOPIC,
         response_capacity=1,
@@ -664,7 +669,7 @@ async def test_cancelled_response_stream_releases_blocked_publishers() -> None:
 async def test_voice_output_preserves_originating_query_timestamp() -> None:
     session = _Session()
     runtime = AgentRuntime()
-    voice = VoiceAgent(  # type: ignore[arg-type]
+    voice = _voice_agent(
         session,
         query_topic=QUERY_TOPIC,
         text_input=False,
@@ -708,8 +713,8 @@ async def test_blocked_stream_does_not_block_unrelated_output() -> None:
 
     session = HeldSession()
     runtime = AgentRuntime()
-    voice = VoiceAgent(
-        session,  # type: ignore[arg-type]
+    voice = _voice_agent(
+        session,
         query_topic=QUERY_TOPIC,
         response_capacity=1,
         text_input=False,
@@ -762,7 +767,7 @@ async def test_open_response_streams_are_bounded(monkeypatch) -> None:
     monkeypatch.setattr(voice_runtime_module, "_OPEN_STREAM_CAPACITY", 1)
     session = HeldSession()
     runtime = AgentRuntime()
-    voice = VoiceAgent(session, query_topic=QUERY_TOPIC, text_input=False)  # type: ignore[arg-type]
+    voice = _voice_agent(session, text_input=False)
     runtime.register("voice", voice)
 
     async with _running_voice(runtime, voice, session):
@@ -786,7 +791,7 @@ async def test_failed_stream_enqueue_does_not_register_response() -> None:
 
     session = FailingSession()
     runtime = AgentRuntime()
-    voice = VoiceAgent(session, query_topic=QUERY_TOPIC, text_input=False)  # type: ignore[arg-type]
+    voice = _voice_agent(session, text_input=False)
     runtime.register("voice", voice)
 
     async with _running_voice(runtime, voice, session):
@@ -805,7 +810,7 @@ async def test_failed_stream_enqueue_does_not_register_response() -> None:
 async def test_midstream_interrupt_is_rejected() -> None:
     session = _Session()
     runtime = AgentRuntime()
-    voice = VoiceAgent(session, query_topic=QUERY_TOPIC, text_input=False)  # type: ignore[arg-type]
+    voice = _voice_agent(session, text_input=False)
     runtime.register("voice", voice)
 
     async with _running_voice(runtime, voice, session):
@@ -834,7 +839,7 @@ async def test_midstream_interrupt_is_rejected() -> None:
 async def test_unknown_empty_stream_terminator_is_rejected() -> None:
     session = _Session()
     runtime = AgentRuntime()
-    voice = VoiceAgent(  # type: ignore[arg-type]
+    voice = _voice_agent(
         session,
         query_topic=QUERY_TOPIC,
         text_input=False,
@@ -874,3 +879,13 @@ def test_raw_audio_is_not_part_of_the_voice_runtime_api() -> None:
     assert "VoiceAudio" not in xr_ai_voice.__all__
     assert not hasattr(xr_ai_voice, "VOICE_AUDIO_TOPIC")
     assert not hasattr(xr_ai_voice, "VoiceAudio")
+
+
+def test_voice_agent_does_not_expose_owned_media_internals() -> None:
+    assert not hasattr(VoiceAgent, "endpoint")
+    assert not hasattr(VoiceAgent, "transport")
+    assert not hasattr(VoiceAgent, "close")
+    parameters = inspect.signature(VoiceAgent).parameters
+    assert "_session" not in parameters
+    assert "text_transform" not in parameters
+    assert "text_ignore_topics" not in parameters

@@ -284,7 +284,6 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
     assert 'Never refer to "the user" in the third person.' in prompt
     assert "when the user" not in prompt
     assert "If the user" not in prompt
-    assert config.default_prompt == "Describe what you see."
     assert config.frame_max_age_s == 5.0
     assert config.frame_timeout_s == 5.0
     assert config.idle_timeout_secs is None
@@ -514,12 +513,12 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     monkeypatch.setattr(app, "make_stt", lambda _models, _name: stt)
     monkeypatch.setattr(app, "make_vlm", lambda _models, _name: vlm)
     monkeypatch.setattr(app, "make_tts", lambda _models, _name: tts)
+    monkeypatch.setattr(app, "HubVoiceTransport", lambda: transport)
     monkeypatch.setattr(app, "CurrentFrameTool", _CurrentFrameTool)
     monkeypatch.setattr(app, "StreamingImageQueryTool", _StreamingImageQueryTool)
 
     def make_session(**kwargs):
-        kwargs.pop("transport", None)
-        session = VoiceSession(transport=transport, **kwargs)  # type: ignore[arg-type]
+        session = VoiceSession(**kwargs)  # type: ignore[arg-type]
         sessions.append(session)
 
         async def run(handler, **options) -> None:
@@ -599,8 +598,6 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert all(task.done() for task in response_tasks)
     assert run_options["interrupt_on_supersede"] is True
     assert callable(run_options["on_interrupted"])
-    assert app._text_transform(config.default_prompt)("PING") == config.default_prompt
-    assert app._text_transform(config.default_prompt)("What is this?") == "What is this?"
 
 
 async def test_relay_event_log_excludes_stream_chunks(tmp_path) -> None:
@@ -835,7 +832,7 @@ async def test_current_frame_tool_propagates_conversion_errors(monkeypatch) -> N
         await frames.execute(CurrentFrameRequest(participant_id="alice"))
 
 
-async def test_sample_runtime_streams_vision_through_voice_agent() -> None:
+async def test_sample_runtime_streams_vision_through_voice_agent(monkeypatch) -> None:
     endpoint = _LiveEndpoint()
     vlm = _StreamingVlm()
     images = ImageRegistry()
@@ -885,6 +882,11 @@ async def test_sample_runtime_streams_vision_through_voice_agent() -> None:
             pass
 
     session = Session()
+    monkeypatch.setattr(
+        voice_runtime_module,
+        "_VoiceSession",
+        lambda **_kwargs: session,
+    )
     runtime = AgentRuntime()
     runtime.register(
         "simple-vlm",
@@ -892,11 +894,14 @@ async def test_sample_runtime_streams_vision_through_voice_agent() -> None:
     )
     runtime.register(
         "voice",
-        VoiceAgent(  # type: ignore[arg-type]
-            session,
+        VoiceAgent(
             query_topic=USER_QUERY_TOPIC,
+            stt=object(),
+            tts=object(),
+            vad=object(),
+            voice_gate=object(),
             text_input=False,
-        ),
+        ),  # type: ignore[arg-type]
     )
     assert endpoint.frame_callback is not None
     await endpoint.frame_callback(

@@ -13,9 +13,6 @@ models_config: models.local.json
 # directory). Owns the magic-phrase / follow-up / listening-chime knobs.
 voice_gate_yaml: voice_gate.yaml
 
-# Sent to the VLM whenever the client posts the literal text "ping".
-default_prompt: "Describe what you see."
-
 # The worker uses its packaged prompts/system.txt by default. Set
 # system_prompt or system_prompt_file here only to override it.
 

@@ -16,7 +16,7 @@ from typing import Any
 import nemo_relay
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from xr_ai_hub import DataMessage, ProcessorEndpoint
+from xr_ai_hub import DataMessage
 from xr_ai_models import STTService, TTSService
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_voicegate import VoiceGateConfig
@@ -27,7 +27,7 @@ from ._session import _VoiceSession
 from ._transport import HubVoiceTransport
 from ._types import VoiceQuery
 
-QueryTransform = Callable[[str], str]
+_CLIENT_TEXT_TOPIC = "_client.text"
 
 _OPEN_STREAM_CAPACITY = 1024
 _CLOSED_STREAM_CAPACITY = 1024
@@ -178,13 +178,12 @@ class VoiceAgent(Agent):
 
     def __init__(
         self,
-        _session: _VoiceSession | None = None,
         *,
         query_topic: Topic[UserQuery],
-        stt: STTService | None = None,
-        tts: TTSService | None = None,
-        vad: VadConfig | None = None,
-        voice_gate: VoiceGateConfig | None = None,
+        stt: STTService,
+        tts: TTSService,
+        vad: VadConfig,
+        voice_gate: VoiceGateConfig,
         probes: Mapping[str, ProbeFn] | None = None,
         ready_file: Path | None = None,
         closeables: Iterable[Any] = (),
@@ -193,56 +192,28 @@ class VoiceAgent(Agent):
         transport: HubVoiceTransport | None = None,
         response_capacity: int = 32,
         text_input: bool = True,
-        text_ignore_topics: Iterable[str] | None = None,
-        text_transform: QueryTransform | None = None,
         participant_left_topic: Topic[VoiceParticipantLeft] | None = None,
         interrupted_topic: Topic[VoiceInterrupted] | None = None,
         interrupt_on_supersede: bool = False,
     ) -> None:
         if response_capacity <= 0:
             raise ValueError("voice response capacity must be positive")
-        if _session is None:
-            missing = [
-                name
-                for name, value in (
-                    ("stt", stt),
-                    ("tts", tts),
-                    ("vad", vad),
-                    ("voice_gate", voice_gate),
-                )
-                if value is None
-            ]
-            if missing:
-                raise TypeError(
-                    "VoiceAgent requires " + ", ".join(missing)
-                )
-            assert stt is not None
-            assert tts is not None
-            assert vad is not None
-            assert voice_gate is not None
-            _session = _VoiceSession(
-                stt=stt,
-                tts=tts,
-                vad=vad,
-                voice_gate=voice_gate,
-                probes=probes,
-                ready_file=ready_file,
-                closeables=closeables,
-                text_topic=text_topic,
-                idle_timeout_secs=idle_timeout_secs,
-                transport=transport,
-            )
         super().__init__()
-        self._session = _session
+        self._session = _VoiceSession(
+            stt=stt,
+            tts=tts,
+            vad=vad,
+            voice_gate=voice_gate,
+            probes=probes,
+            ready_file=ready_file,
+            closeables=closeables,
+            text_topic=text_topic,
+            idle_timeout_secs=idle_timeout_secs,
+            transport=transport,
+        )
         self.query_topic = query_topic
         self.response_capacity = response_capacity
         self.text_input = text_input
-        self.text_ignore_topics = (
-            tuple(text_ignore_topics)
-            if text_ignore_topics is not None
-            else (self._session.text_topic,)
-        )
-        self.text_transform = text_transform
         self.participant_left_topic = participant_left_topic
         self.interrupted_topic = interrupted_topic
         self.interrupt_on_supersede = interrupt_on_supersede
@@ -253,18 +224,6 @@ class VoiceAgent(Agent):
         self._response_traces: dict[tuple[str, str, str], _ResponseTrace] = {}
         self._closed_streams: dict[tuple[str, str, str], None] = {}
         self._lifecycle_tasks: set[asyncio.Task[None]] = set()
-
-    @property
-    def endpoint(self) -> ProcessorEndpoint:
-        """Return the hub endpoint owned by this voice agent."""
-
-        return self._session.transport.endpoint
-
-    @property
-    def transport(self) -> HubVoiceTransport:
-        """Return the hub voice transport owned by this agent."""
-
-        return self._session.transport
 
     async def run(self, runtime: AgentRuntime, *, source: str = "voice") -> None:
         """Run the owned voice session and bridge it to a running runtime."""
@@ -310,11 +269,6 @@ class VoiceAgent(Agent):
         finally:
             self._runtime = None
             self._source = "voice"
-
-    async def close(self) -> None:
-        """Close the media resources owned by this voice agent."""
-
-        await self._session.close()
 
     @subscribe(VOICE_OUTPUT_TOPIC)
     async def output(self, output: VoiceOutput, ctx: RuntimeContext) -> None:
@@ -600,25 +554,22 @@ class VoiceAgent(Agent):
             timestamp=started_at,
             end_timestamp=datetime.now(UTC) if started_at is not None else None,
         )
+
     async def _on_data(self, message: DataMessage) -> None:
-        if message.topic in self.text_ignore_topics:
+        if message.topic != _CLIENT_TEXT_TOPIC:
             return
         text = (message.data or b"").decode("utf-8", errors="replace").strip()
         if not text or not self._session.is_running:
             return
         if not self._session.transport.target_participant:
             self._session.transport.set_target_participant(message.participant_id)
-        if self.text_transform is not None:
-            text = self.text_transform(text)
-        text = text.strip()
-        if not text:
-            return
         logger.info("text input pid={!r} {!r}", message.participant_id, text[:80])
         await self._session.enqueue_query(
             message.participant_id,
             text,
             pts_us=message.pts_us,
         )
+
 
 __all__ = [
     "VOICE_OUTPUT_TOPIC",

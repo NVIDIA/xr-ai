@@ -119,6 +119,9 @@ and interruption lifecycle events use application-named topics, and voice
 consumes `voice.output`. `VoiceAgent` privately owns model readiness, hub
 transport, voice gating, the media pipeline, signal handling, and cleanup.
 Pipecat and the media session remain implementation details.
+Untopiced client data is normalized by the hub onto a private direct-text
+channel. Voice consumes only that channel when `text_input=True`; named
+application and control messages are not user queries.
 
 ```python
 voice = VoiceAgent(
@@ -138,12 +141,14 @@ async with runtime:
     await voice.run(runtime)
 ```
 
-The private session opens hub transport only after readiness probes succeed and
-touches the ready file after its receive loop starts. `VoiceAgent.endpoint` and
-`VoiceAgent.transport` expose that owned hub boundary when another component
-needs it. The agent preserves participant routing, cancels superseded or
-interrupted output, and closes transports and model clients. Application agents
-subscribe to lifecycle events and clean up their own participant state.
+The private session opens its hub transport only after readiness probes succeed
+and touches the ready file after its receive loop starts. Applications that
+already need the public `HubVoiceTransport` for frames or status publication
+construct it explicitly and pass it to `VoiceAgent`; the agent does not expose
+its private session or transport. The agent preserves participant routing,
+cancels superseded or interrupted output, and closes transports and model
+clients. Application agents subscribe to lifecycle events and clean up their
+own participant state.
 
 ## Hub IPC
 

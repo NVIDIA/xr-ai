@@ -7,8 +7,7 @@
 
 This sample answers voice and text questions against each participant's latest
 camera frame. Responses stream to both Piper TTS and the `vlm.response` data
-topic. Sending the literal text `ping` uses the configured default question,
-`Describe what you see.`
+topic.
 
 The worker is a package under `worker/simple_vlm_example_worker/`:
 
@@ -43,8 +42,8 @@ uv sync
 uv run simple_vlm_example
 ```
 
-Open the web client shown in the hub banner, connect, and then speak, type a
-question, or send `ping`.
+Open the web client shown in the hub banner, connect, and then speak or type a
+question.
 
 The worker and orchestrator consume the deployment profile selected by
 `models_config` in `yaml/simple_vlm_example_worker.yaml`:
@@ -82,6 +81,6 @@ tail -F /tmp/log_simple-vlm-example_*/relay-events.jsonl
 Voice-gate behavior remains in `yaml/voice_gate.yaml`. Wake phrases match at
 the start of the transcript or after sentence-final `.`, `?`, or `!` followed
 by whitespace or a closing quote; preceding text is discarded before dispatch.
-Worker timing, frame freshness, the default `ping` question, and optional prompt
-overrides are in `yaml/simple_vlm_example_worker.yaml`; the default prompt ships
-inside the worker package.
+Worker timing, frame freshness, and optional prompt overrides are in
+`yaml/simple_vlm_example_worker.yaml`; the default system prompt ships inside
+the worker package.
