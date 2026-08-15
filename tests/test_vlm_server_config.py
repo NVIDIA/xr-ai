@@ -115,7 +115,7 @@ def test_cosmos3_rejects_missing_reasoner_override(monkeypatch, tmp_path) -> Non
         server.run()
 
 
-def test_sample_model_profiles_select_expected_vlm() -> None:
+def test_sample_model_profiles_select_cosmos3_reasoner() -> None:
     simple = _SAMPLES / "simple-vlm-example" / "yaml"
     simple_local = json.loads((simple / "models.local.json").read_text())
     simple_hosted = json.loads((simple / "models.hosted.json").read_text())
@@ -129,12 +129,7 @@ def test_sample_model_profiles_select_expected_vlm() -> None:
     render = _SAMPLES / "xr-render-demo" / "yaml"
     render_local = yaml.safe_load((render / "models.yaml").read_text())
     render_hosted = yaml.safe_load((render / "models.nim.yaml").read_text())
-    assert render_local["vlm"]["kind"] == "openai_compat"
-    assert render_local["vlm"]["model_name"] == "llm"
-    assert render_local["vlm"]["base_url"] == "http://localhost:8108"
-    assert render_local["vlm"]["capabilities"] == {
-        "streaming": True,
-        "vision": True,
-        "video": True,
-    }
-    assert render_hosted["vlm"]["model_name"] == "nvidia/cosmos3-nano-reasoner"
+    assert render_local["vlm"]["kind"] == "preset:cosmos3_nano_reasoner"
+    assert render_hosted["vlm"]["model_name"] == (
+        "nvidia/cosmos3-nano-reasoner"
+    )

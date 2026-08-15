@@ -38,9 +38,9 @@ agent_llm:
     tool_calls: true
     reasoning:  true
 
-# Visual question answering used by native vision tools. This hosted profile
-# keeps Cosmos3 Nano Reasoner as an alternative to the local Omni server; it is
-# not the separate Cosmos3 Generator.
+# Visual question answering used by native vision tools. The hosted model is
+# the Cosmos3 Nano Reasoner, matching the local VLM service; it is not the
+# separate Cosmos3 Generator.
 vlm:
   kind:        openai_compat
   category:    vlm

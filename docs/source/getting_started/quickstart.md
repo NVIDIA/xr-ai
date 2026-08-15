@@ -25,8 +25,8 @@ uv run model_servers --stop
 ```
 
 Persisted vLLM processes or containers may otherwise keep serving the previous
-model and image even though the checked-in configuration now selects
-Nemotron-3 Nano Omni.
+models and images even though the checked-in configuration now selects
+Nemotron-3 Nano Omni and Cosmos3 Nano Reasoner.
 :::
 
 ```bash
@@ -41,16 +41,9 @@ are presets for common configurations; to run on a different GPU, refer to
 On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.
 
-The default stack starts Nemotron-3 Nano Omni (8108), STT (8103), and
-embeddings (8109). The Omni server backs both LLM and vision requests. Use
-`--vlm-llm-stack` to run the legacy Nemotron-3 Nano (8107) and Cosmos (8100)
-pair instead.
-Switching stacks stops the incompatible persistent models first and aborts if
-they cannot be stopped, avoiding GPU overcommit.
-
-```bash
-uv run model_servers --vlm-llm-stack
-```
+The stack starts Nemotron-3 Nano Omni for LLM requests (8108), Cosmos3 Nano
+Reasoner for vision requests (8100), STT (8103), and embeddings (8109).
+Starting it stops the superseded Nano text server on port 8107 first.
 
 `HF_TOKEN` is required by default: without it the large first-run download
 can stall indefinitely. Refer to the
@@ -91,8 +84,8 @@ several minutes). `HF_TOKEN` is required by default; pass `--allow-anonymous`
 to run without one (refer to the
 {doc}`credentials guide </getting_started/credentials>`).
 
-**With model-servers pre-running** — start `model_servers --vlm-llm-stack` to
-pre-warm VLM (port 8100) and STT (port 8103). The demo detects and reuses them.
+**With model-servers pre-running** — start `model_servers` to pre-warm VLM
+(port 8100) and STT (port 8103). The demo detects and reuses them.
 When you exit, those services keep running.
 
 ### Step 1 — Start the server

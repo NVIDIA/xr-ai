@@ -22,7 +22,8 @@ exit terminates the whole stack.
 | cloudxr | `services/cloudxr-runtime/` | `cloudxr_runtime` | 48322 (WSS proxy) |
 | stt | `services/stt-server/` | `stt_server` | 8103 |
 | tts | `services/piper-tts/` | `piper_tts_server` | 8105 |
-| omni | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 (shared LLM + VLM) |
+| omni | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 (LLM) |
+| vlm | `services/vlm-server/` | `vlm_server` | 8100 (Cosmos VLM) |
 | video-memory | `services/video-memory-service/` | `video_memory_service` | 8310 (recorded-video typed RPC) |
 | scene | `agent-samples/xr-render-demo/scene/` | `xr_render_scene` | 8320 (typed RPC) |
 | openxr-service | `services/openxr-service/` | `openxr_service` | 8330 (typed RPC) |
@@ -101,10 +102,9 @@ and tool calling from that point on.
 `--reasoning-parser nemotron_v3`. The launcher selects NVFP4 on Blackwell and
 FP8 on Ada, Hopper, or Ampere, with BF16 available as an explicit fallback.
 
-One server backs all three model roles in `yaml/models.yaml`: `agent_llm` runs
-the multi-step tool-calling loop, `llm` serves two cheap, latency-sensitive
-calls, and `vlm` handles image and video queries. Thinking stays off unless a
-call explicitly enables it.
+One server backs both LLM roles in `yaml/models.yaml`: `agent_llm` runs the
+multi-step tool-calling loop and `llm` serves two cheap, latency-sensitive
+calls. Thinking stays off unless a call explicitly enables it.
 
 - **Quick-ack** — awaited before the agentic loop starts, the moment an
   utterance lands. Returns `{"ack": "On it!", "think": false}` — a 3–6 word
@@ -120,9 +120,9 @@ call explicitly enables it.
   position"* on a 10s repeat. Sent to the data channel only — never spoken,
   to avoid stacking up in the TTS queue behind the real response.
 
-## VLM — Nemotron-3 Nano Omni
+## VLM — Cosmos3 Nano Reasoner
 
-Port 8108 (`nemotron_omni_llm_server`), shared with the LLM roles.
+Port 8100 (`vlm_server`).
 
 The render agent first selects a current or recorded frame and passes its
 `ImageReference` to `query_image`. Its native capability set also

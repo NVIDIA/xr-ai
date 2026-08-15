@@ -88,7 +88,7 @@ def test_models_yaml_loads() -> None:
     assert agent_llm_spec.base_url == "http://localhost:8108"
     assert stt_spec.base_url       == "http://localhost:8103"
     assert tts_spec.base_url       == "http://localhost:8105"
-    assert vlm_spec.base_url       == "http://localhost:8108"
+    assert vlm_spec.base_url       == "http://localhost:8100"
 
     # nemotron_omni preset must set reasoning_field so ChatResponse.reasoning
     # is populated from vLLM's "reasoning_content" field.
@@ -101,9 +101,8 @@ def test_models_yaml_loads() -> None:
     for spec in (llm_spec, agent_llm_spec):
         assert spec.model_name == "llm"
         assert spec.default_extras["chat_template_kwargs"] == {"enable_thinking": False}
-    assert vlm_spec.model_name == "llm"
+    assert vlm_spec.model_name == "vlm"
     assert vlm_spec.capabilities["vision"] is True
-    assert vlm_spec.default_extras["chat_template_kwargs"] == {"enable_thinking": False}
 
 
 def test_worker_config_idle_timeout_disabled_by_default() -> None:
