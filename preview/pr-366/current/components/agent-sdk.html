@@ -498,18 +498,7 @@ and deployment configuration.</p>
 </section>
 <section id="voice">
 <h2>Voice<a class="headerlink" href="#voice" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes every incoming microphone chunk on <code class="docutils literal notranslate"><span class="pre">voice.audio</span></code> before
-VAD, STT, or wake-phrase filtering. Agents can subscribe to
-<code class="docutils literal notranslate"><span class="pre">VOICE_AUDIO_TOPIC</span></code> to receive silence and non-wake-phrase speech as
-<code class="docutils literal notranslate"><span class="pre">VoiceAudio</span></code>; the participant is carried in runtime metadata. The topic has
-Relay telemetry disabled because its payload contains raw interleaved float32
-PCM.</p>
-<p>Audio delivery is FIFO within each participant and track, with independent
-streams allowed to progress concurrently. <code class="docutils literal notranslate"><span class="pre">audio_capacity</span></code> defaults to 32 queued
-chunks per stream. A full queue drops its oldest queued chunk to retain the
-newest live audio. Subscriber failures do not stop later chunks, and all audio
-workers are cancelled and awaited during cleanup.</p>
-<p>Every non-empty final STT result is also published before wake-phrase filtering
+<p>Every non-empty final STT result is published before wake-phrase filtering
 on <code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code> as <code class="docutils literal notranslate"><span class="pre">VoiceTranscript</span></code>. This includes speech that the
 gate rejects because it contains no wake phrase. Early wake/STOP probes remain
 private and are not published as final transcripts. Accepted speech is

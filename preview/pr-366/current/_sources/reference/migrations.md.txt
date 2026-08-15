@@ -21,7 +21,7 @@ compatibility package. Update out-of-tree code as follows:
 | `XRMediaHubTransport` | Use `VoiceAgent.endpoint` or `VoiceAgent.transport` when an application component needs the owned hub boundary. |
 | `SttClient` and `TtsClient` | Construct services through `xr_ai_models.make_stt` and `make_tts`, or use `OpenAICompatSTT` and `OpenAICompatTTS` directly. |
 | `http_probe`, `mcp_probe`, and `wait_for_services` | Pass additional readiness callables through `VoiceAgent(probes=...)`; MCP readiness is no longer part of the voice SDK. |
-| `xr_ai_pipecat.audio` conversion helpers | Let `VoiceAgent` own media conversion. Applications that process raw hub media should subscribe to `VOICE_AUDIO_TOPIC` or use `xr_ai_hub` types and own their format conversion. |
+| `xr_ai_pipecat.audio` conversion helpers | Let `VoiceAgent` own media conversion. Applications that truly need raw hub media should use `xr_ai_hub` types and own their format conversion. |
 | `xr_ai_models.config`, `factory`, `openai_compat`, and `protocols` | Import public names directly from `xr_ai_models`. This includes `KIND_OPENAI_COMPAT`, `ModelKind`, `Category`, and `Spec`. |
 | `LiveVisionTool` and `StreamingVisionTool` | Select with `CurrentFrameTool`, then pass its `ImageReference` to `ImageQueryTool` or `StreamingImageQueryTool`. |
 | `HistoricalVisionTool` | Select with `VideoMemoryTools.get_historical_frame`, then pass its `ImageReference` to `ImageQueryTool`. |
