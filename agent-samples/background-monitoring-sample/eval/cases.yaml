@@ -27,8 +27,7 @@
 
 - name: background-watch-status
   query: Are you keeping watch in the background right now?
-  expected_tool: monitoring_status
-  expected_target: visual
+  expected_tool: visual_monitor__status
 
 - name: read-visible-text
   query: Could you read this for me?
@@ -60,8 +59,7 @@
 
 - name: instrument-watch-status
   query: Are you monitoring the instrument readings?
-  expected_tool: monitoring_status
-  expected_target: lab_instruments
+  expected_tool: lab_instruments__status
 
 - name: general-knowledge
   query: What is the capital of Iceland?

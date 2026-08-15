@@ -7,9 +7,8 @@
 
 This sample writes monitoring output only to files and keeps one visual monitor
 available for every connected participant while a separate foreground agent answers voice or typed queries.
-Monitoring stays dormant until the current request explicitly asks to start it;
-only then does the foreground agent expose the matching participant-scoped
-start tool to the model. The model can also inspect the current frame or
+Monitoring stays dormant until the foreground model calls the matching
+participant-scoped start tool. The model can also inspect the current frame or
 read recent monitor observations. The shared connection web client is served, but there is no monitoring dashboard,
 MCP adapter, NAT compatibility layer, or activity-viewer process.
 
@@ -45,15 +44,15 @@ frame.
 
 Each foreground turn starts with only the system prompt and current request.
 Its native tool loop uses the tea-making sample's namespaced route catalog and
-four-iteration limit. Explicit deictic, instrument, and monitoring-state requests
-retry a missing or wrong route instead of accepting an unsupported direct answer.
-It carries no conversation across requests.
+four-iteration limit. The model selects from one fixed tool catalog; the worker
+does not apply a second lexical router or corrective prompt. It carries no
+conversation across requests.
 Return-direct monitor controls end the turn immediately.
 
 ## Run
 
-The sample reuses the LLM, VLM, and STT services from `model-servers` and
-manages its own lightweight Piper TTS process.
+The sample reuses the default shared Omni LLM/VLM and STT services from
+`model-servers` and manages its own lightweight Piper TTS process.
 
 ```bash
 cd agent-samples/model-servers

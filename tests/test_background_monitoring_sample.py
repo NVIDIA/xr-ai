@@ -46,11 +46,10 @@ from background_monitoring_worker.file_output import (  # noqa: E402  # pyright:
 from background_monitoring_worker.foreground import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     CURRENT_VIEW_TOOL,
     FOREGROUND_TOOL_DEFS,
-    LAB_INSTRUMENTS_START_TOOL,
-    LAB_INSTRUMENTS_STOP_TOOL,
+    LAB_INSTRUMENTS_STATUS_TOOL,
     RECENT_VISUAL_HISTORY_TOOL,
     VISUAL_MONITOR_START_TOOL,
-    VISUAL_MONITOR_STOP_TOOL,
+    VISUAL_MONITOR_STATUS_TOOL,
     ForegroundAgent,
 )
 from background_monitoring_worker.images import (  # noqa: E402  # pyright: ignore[reportMissingImports]
@@ -137,8 +136,14 @@ def test_sample_uses_named_native_agents_and_shared_connection_client() -> None:
 
 def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     config = load_config(_SAMPLE / "yaml" / "background_monitoring_worker.yaml")
+    models = json.loads(config.models_config.read_text())
 
     assert config.models_config == _SAMPLE / "yaml" / "models.local.json"
+    assert models["models"]["llm"]["adapter"]["preset"] == "nemotron_omni"
+    assert models["models"]["llm"]["endpoint"]["base_url"].endswith(":8108")
+    assert models["models"]["vlm"]["endpoint"]["base_url"].endswith(":8108")
+    assert models["models"]["llm"]["deployment"]["service"] == "omni"
+    assert models["models"]["vlm"]["deployment"]["service"] == "omni"
     assert config.voice_gate_yaml == _SAMPLE / "yaml" / "voice_gate.yaml"
     assert config.artifacts_dir == _SAMPLE / "artifacts"
     assert config.monitor_interval_s == 5.0
@@ -423,7 +428,7 @@ async def test_foreground_background_control_returns_direct(tmp_path: Path) -> N
 
 
 @pytest.mark.asyncio
-async def test_foreground_hides_monitor_controls_without_explicit_intent(
+async def test_foreground_uses_one_unfiltered_tool_catalog(
     tmp_path: Path,
 ) -> None:
     class Llm:
@@ -450,14 +455,7 @@ async def test_foreground_hides_monitor_controls_without_explicit_intent(
 
     assert response == "I heard you."
     assert used == []
-    assert llm.tool_names.isdisjoint(
-        {
-            VISUAL_MONITOR_START_TOOL,
-            VISUAL_MONITOR_STOP_TOOL,
-            LAB_INSTRUMENTS_START_TOOL,
-            LAB_INSTRUMENTS_STOP_TOOL,
-        }
-    )
+    assert llm.tool_names == {tool.name for tool in FOREGROUND_TOOL_DEFS}
 
 
 @pytest.mark.asyncio
@@ -529,9 +527,10 @@ def test_foreground_prompt_has_non_overlapping_routing_eval_cases() -> None:
         "recent_visual_history",
         "visual_monitor__start",
         "visual_monitor__stop",
-        "monitoring_status",
+        VISUAL_MONITOR_STATUS_TOOL,
         "lab_instruments__read",
         "lab_instruments__start",
         "lab_instruments__stop",
+        LAB_INSTRUMENTS_STATUS_TOOL,
     }
     assert all(case["query"].lower() not in prompt for case in cases)
