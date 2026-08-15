@@ -712,7 +712,7 @@ to run while the stack is down.</p>
 <p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">simple_vlm_example</span></code> appears to hang at startup the first
 time.</p>
 <p><strong>Cause:</strong> model weights are downloading from HuggingFace into <code class="docutils literal notranslate"><span class="pre">models/</span></code> at
-the repository root (gitignored, ~16 GB for Cosmos-Reason1-7B alone).</p>
+the repository root (gitignored; the Cosmos3 checkpoint alone is tens of GB).</p>
 <p><strong>Fix:</strong> wait. Subsequent runs use the cached weights and start in
 ~30–60 s. If the download makes no progress, note that unauthenticated
 downloads (runs started with <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code>) are rate-limited and can

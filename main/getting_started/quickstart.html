@@ -414,6 +414,15 @@ on startup.</p>
 immediately — the services keep running in the background with weights hot.
 Start this once before running <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>, or whenever you want to
 pre-warm models:</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>After updating, stop any existing model servers before starting this stack:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--stop
+</pre></div>
+</div>
+<p>Persisted vLLM processes or containers may otherwise keep serving the previous
+model and image even though the checked-in configuration now selects Cosmos3.</p>
+</div>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/model-servers
 uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>model_servers
@@ -422,7 +431,7 @@ uv<span class="w"> </span>run<span class="w"> </span>model_servers
 <p>GPU profiles are auto-detected (<code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, <code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>). These
 are presets for common configurations; to run on a different GPU, refer to
 <a class="reference internal" href="requirements.html"><span class="doc">Running on other GPUs</span></a>.
-On first run each model downloads from HuggingFace (~50 GB total; can take
+On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.</p>
 <p>The default <code class="docutils literal notranslate"><span class="pre">--vlm-llm-stack</span></code> starts Nemotron-3 Nano (8107), Cosmos (8100),
 STT (8103), and embeddings (8109). Use <code class="docutils literal notranslate"><span class="pre">--omni-stack</span></code> to replace Nano and
@@ -432,7 +441,7 @@ they cannot be stopped, avoiding GPU overcommit.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--omni-stack
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default: without it the ~50 GB first-run download
+<p><code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default: without it the large first-run download
 can stall indefinitely. Refer to the
 <a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a> for how to set it, or
 pass <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code> to run without one.</p>
@@ -448,7 +457,8 @@ pass <code class="docutils literal notranslate"><span class="pre">--allow-anonym
 channel, or send the literal text <code class="docutils literal notranslate"><span class="pre">&quot;ping&quot;</span></code> — all routes go through the same VLM
 pipeline against the latest video frame. Replies arrive as streaming Piper TTS
 audio plus a <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> text message.</p>
-<p>Uses <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos-Reason1-7B</span></code> (NVIDIA Open Model License + Apache 2.0).</p>
+<p>Uses the text-output Reasoner from <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos3-Nano</span></code> by default. Refer to
+<a class="reference internal" href="../components/ai-services.html"><span class="doc">AI services</span></a> for runtime-selection details.</p>
 <p>There are two ways to run it:</p>
 <p><strong>Standalone</strong> (~23 GB VRAM) — starts its own VLM and STT, owns them for the
 session, and stops them when you exit:</p>
@@ -457,7 +467,7 @@ uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example
 </pre></div>
 </div>
-<p>On the very first run weights download from HuggingFace (~23 GB; can take
+<p>On the very first run weights download from HuggingFace (tens of GB; can take
 several minutes). <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default; pass <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code>
 to run without one (refer to the
 <a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a>).</p>
@@ -498,6 +508,8 @@ automatically. Click <strong>Connect</strong>.</p>
 a moment, and you hear the reply through your speakers.</p>
 <p><strong>Local model</strong> — override the model weights or GPU settings by editing
 <code class="docutils literal notranslate"><span class="pre">vlm_server.yaml</span></code> in the sample directory.</p>
+<p>To use Cosmos-Reason1 instead, set <code class="docutils literal notranslate"><span class="pre">model:</span> <span class="pre">nvidia/Cosmos-Reason1-7B</span></code> in that
+file and select <code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code> as the VLM adapter preset in <code class="docutils literal notranslate"><span class="pre">models.local.json</span></code>.</p>
 <p><strong>Remote model</strong> — copy <code class="docutils literal notranslate"><span class="pre">yaml/models.hosted.json</span></code>, point its VLM endpoint at
 your server, and select it in the worker config:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
