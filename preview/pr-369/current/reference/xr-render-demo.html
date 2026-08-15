@@ -421,24 +421,29 @@ exit terminates the whole stack.</p>
 <tr class="row-even"><td><p>omni</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron-omni-llm/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code></p></td>
-<td><p>8108 (shared LLM + VLM)</p></td>
+<td><p>8108 (LLM)</p></td>
 </tr>
-<tr class="row-odd"><td><p>video-memory</p></td>
+<tr class="row-odd"><td><p>vlm</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">services/vlm-server/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">vlm_server</span></code></p></td>
+<td><p>8100 (Cosmos VLM)</p></td>
+</tr>
+<tr class="row-even"><td><p>video-memory</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">video_memory_service</span></code></p></td>
 <td><p>8310 (recorded-video typed RPC)</p></td>
 </tr>
-<tr class="row-even"><td><p>scene</p></td>
+<tr class="row-odd"><td><p>scene</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/scene/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">xr_render_scene</span></code></p></td>
 <td><p>8320 (typed RPC)</p></td>
 </tr>
-<tr class="row-odd"><td><p>openxr-service</p></td>
+<tr class="row-even"><td><p>openxr-service</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">services/openxr-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">openxr_service</span></code></p></td>
 <td><p>8330 (typed RPC)</p></td>
 </tr>
-<tr class="row-even"><td><p>worker</p></td>
+<tr class="row-odd"><td><p>worker</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/worker/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker</span></code></p></td>
 <td><p>—</p></td>
@@ -514,10 +519,9 @@ and tool calling from that point on.</p>
 <p><code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> uses <code class="docutils literal notranslate"><span class="pre">--tool-call-parser</span> <span class="pre">qwen3_coder</span></code> and
 <code class="docutils literal notranslate"><span class="pre">--reasoning-parser</span> <span class="pre">nemotron_v3</span></code>. The launcher selects NVFP4 on Blackwell and
 FP8 on Ada, Hopper, or Ampere, with BF16 available as an explicit fallback.</p>
-<p>One server backs all three model roles in <code class="docutils literal notranslate"><span class="pre">yaml/models.yaml</span></code>: <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> runs
-the multi-step tool-calling loop, <code class="docutils literal notranslate"><span class="pre">llm</span></code> serves two cheap, latency-sensitive
-calls, and <code class="docutils literal notranslate"><span class="pre">vlm</span></code> handles image and video queries. Thinking stays off unless a
-call explicitly enables it.</p>
+<p>One server backs both LLM roles in <code class="docutils literal notranslate"><span class="pre">yaml/models.yaml</span></code>: <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> runs the
+multi-step tool-calling loop and <code class="docutils literal notranslate"><span class="pre">llm</span></code> serves two cheap, latency-sensitive
+calls. Thinking stays off unless a call explicitly enables it.</p>
 <ul class="simple">
 <li><p><strong>Quick-ack</strong> — awaited before the agentic loop starts, the moment an
 utterance lands. Returns <code class="docutils literal notranslate"><span class="pre">{&quot;ack&quot;:</span> <span class="pre">&quot;On</span> <span class="pre">it!&quot;,</span> <span class="pre">&quot;think&quot;:</span> <span class="pre">false}</span></code> — a 3–6 word
@@ -535,9 +539,9 @@ to avoid stacking up in the TTS queue behind the real response.</p></li>
 </ul>
 </section>
 </section>
-<section id="vlm-nemotron-3-nano-omni">
-<h2>VLM — Nemotron-3 Nano Omni<a class="headerlink" href="#vlm-nemotron-3-nano-omni" title="Link to this heading">#</a></h2>
-<p>Port 8108 (<code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code>), shared with the LLM roles.</p>
+<section id="vlm-cosmos3-nano-reasoner">
+<h2>VLM — Cosmos3 Nano Reasoner<a class="headerlink" href="#vlm-cosmos3-nano-reasoner" title="Link to this heading">#</a></h2>
+<p>Port 8100 (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>).</p>
 <p>The render agent first selects a current or recorded frame and passes its
 <code class="docutils literal notranslate"><span class="pre">ImageReference</span></code> to <code class="docutils literal notranslate"><span class="pre">query_image</span></code>. Its native capability set also
 includes <code class="docutils literal notranslate"><span class="pre">query_images</span></code> for ordered collections and <code class="docutils literal notranslate"><span class="pre">query_video</span></code> for
@@ -746,7 +750,7 @@ a streaming client connects. LOVR cannot start before then.</p>
 It derives schemas from the worker’s native tools and evaluates tool
 effects against deterministic fixtures, so the live LOVR scene is not mutated.
 Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/82588032193fdcc4f5251d80e0c5327407d942fc/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/a7719f1b1be4664fcab9bc03d3455e050ef23861/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
 for the case format and the watch-mode loop. Run with:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo/worker<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>python<span class="w"> </span>agent-samples/xr-render-demo/eval/eval.py
@@ -812,7 +816,7 @@ cases overfitting to the prompt’s worked examples.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemotron-3-nano-omni-30b-a3b-reasoning-port-8108">Nemotron-3-Nano-Omni-30B-A3B-Reasoning — port 8108</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vlm-nemotron-3-nano-omni">VLM — Nemotron-3 Nano Omni</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vlm-cosmos3-nano-reasoner">VLM — Cosmos3 Nano Reasoner</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stt-parakeet-tdt-0-6b-v3">STT — parakeet-tdt-0.6b-v3</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tts-piper">TTS — Piper</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-runtime-and-voice-topology">Agent runtime and voice topology</a></li>

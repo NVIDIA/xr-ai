@@ -165,9 +165,9 @@ contains only wrapper messages — nothing from inside the container.
 **Health probe** — confirm vLLM never reached the `/health` endpoint:
 
 ```bash
-curl -fsS http://127.0.0.1:8108/health   # nemotron_omni (default LLM + VLM)
-curl -fsS http://127.0.0.1:8107/health   # nemotron3_nano (legacy stack)
-curl -fsS http://127.0.0.1:8100/health   # vlm_server (legacy stack)
+curl -fsS http://127.0.0.1:8108/health   # nemotron_omni (default LLM)
+curl -fsS http://127.0.0.1:8100/health   # vlm_server (default Cosmos VLM)
+curl -fsS http://127.0.0.1:8107/health   # superseded nemotron3_nano
 ```
 
 **Container post-mortem** — the wrapper streams `docker logs -f` into the
