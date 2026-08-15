@@ -28,6 +28,11 @@ _MODEL_PROCESSES = {
         "../../services/nemotron-omni-llm",
         "nemotron_omni_llm_server",
     ),
+    "vlm": Process(
+        "vlm",
+        "../../services/vlm-server",
+        "vlm_server",
+    ),
     "tts": Process(
         "tts",
         "../../services/piper-tts",

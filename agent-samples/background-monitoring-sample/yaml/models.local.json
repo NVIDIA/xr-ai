@@ -6,17 +6,9 @@
       "deployment": {"ownership": "reused", "service": "omni"}
     },
     "vlm": {
-      "category": "vlm",
-      "adapter": {
-        "kind": "openai_compat",
-        "model_name": "llm",
-        "capabilities": {"streaming": true, "vision": true, "video": true},
-        "default_extras": {
-          "chat_template_kwargs": {"enable_thinking": false}
-        }
-      },
-      "endpoint": {"base_url": "http://localhost:8108", "readiness": "health"},
-      "deployment": {"ownership": "reused", "service": "omni"}
+      "adapter": {"preset": "cosmos3_nano_reasoner"},
+      "endpoint": {"base_url": "http://localhost:8100", "readiness": "health"},
+      "deployment": {"ownership": "reused", "service": "vlm"}
     },
     "stt": {
       "adapter": {"preset": "parakeet_stt"},

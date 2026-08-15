@@ -51,8 +51,9 @@ Return-direct monitor controls end the turn immediately.
 
 ## Run
 
-The sample reuses the default shared Omni LLM/VLM and STT services from
-`model-servers` and manages its own lightweight Piper TTS process.
+The sample uses Nemotron Omni for foreground tool routing and Cosmos for image
+inference. It reuses those services and STT from `model-servers` and manages its
+own lightweight Piper TTS process.
 
 ```bash
 cd agent-samples/model-servers

@@ -141,9 +141,12 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     assert config.models_config == _SAMPLE / "yaml" / "models.local.json"
     assert models["models"]["llm"]["adapter"]["preset"] == "nemotron_omni"
     assert models["models"]["llm"]["endpoint"]["base_url"].endswith(":8108")
-    assert models["models"]["vlm"]["endpoint"]["base_url"].endswith(":8108")
+    assert models["models"]["vlm"]["adapter"]["preset"] == (
+        "cosmos3_nano_reasoner"
+    )
+    assert models["models"]["vlm"]["endpoint"]["base_url"].endswith(":8100")
     assert models["models"]["llm"]["deployment"]["service"] == "omni"
-    assert models["models"]["vlm"]["deployment"]["service"] == "omni"
+    assert models["models"]["vlm"]["deployment"]["service"] == "vlm"
     assert config.voice_gate_yaml == _SAMPLE / "yaml" / "voice_gate.yaml"
     assert config.artifacts_dir == _SAMPLE / "artifacts"
     assert config.monitor_interval_s == 5.0
