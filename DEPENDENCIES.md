@@ -483,6 +483,9 @@ nemotron3-nano-llm-server (8107, `persistent=True`), and vlm-server (8100,
 are mutually exclusive; `--stop` shuts down every model-server port without
 selecting one.
 GPU profiles: `dual_48G_ada`, `spark`, `96G_blackwell` (auto-detected).
+The dual-Ada default stack starts VLM and embeddings on GPU 0 before STT and
+the 30B agent LLM on GPU 1. Other profiles keep the 30B model ahead of the
+smaller vLLM services; the Omni stack keeps its existing order.
 
 ### xr-render-demo  (agent-samples/xr-render-demo/)
 

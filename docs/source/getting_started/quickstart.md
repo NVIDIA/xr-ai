@@ -37,6 +37,9 @@ uv run model_servers
 GPU profiles are auto-detected (`dual_48G_ada`, `spark`, `96G_blackwell`). These
 are presets for common configurations; to run on a different GPU, refer to
 {doc}`Running on other GPUs </getting_started/requirements>`.
+The dual-Ada default stack starts VLM and embeddings on GPU 0 before STT and
+the 30B agent LLM on GPU 1. Other profiles retain 30B-before-smaller-VLM
+startup, and the independently selected Omni stack keeps its existing order.
 On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.
 

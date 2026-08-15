@@ -52,7 +52,8 @@ _INCOMPATIBLE_STACK_SERVICES = {
 # kernels are cached after the first run (~3-8 min).
 def _build_processes(stack: str = "vlm-llm") -> list[Process]:
     """Return the selected shared model stack for the detected GPU profile."""
-    ai = f"yaml/{detect_gpu_config()}"
+    profile = detect_gpu_config()
+    ai = f"yaml/{profile}"
     embedding_config = f"{ai}/embedding_server_{stack.replace('-', '_')}.yaml"
     if not (_BASE / embedding_config).exists():
         embedding_config = f"{ai}/embedding_server.yaml"
@@ -79,16 +80,20 @@ def _build_processes(stack: str = "vlm-llm") -> list[Process]:
         ]
     if stack != "vlm-llm":
         raise ValueError(f"unknown model stack: {stack}")
-    return [
-        stt,
-        Process("agent-llm", "../../services/nemotron3-nano-llm",  "nemotron3_nano_llm_server",
-                config=f"{ai}/nemotron3_nano_llm_server.yaml",
-                launch_mode="persist", port=8107),
-        Process("vlm",       "../../services/vlm-server",          "vlm_server",
-                config=f"{ai}/vlm_server.yaml",
-                launch_mode="persist", port=8100),
-        embedding,
-    ]
+    agent_llm = Process(
+        "agent-llm", "../../services/nemotron3-nano-llm",
+        "nemotron3_nano_llm_server",
+        config=f"{ai}/nemotron3_nano_llm_server.yaml",
+        launch_mode="persist", port=8107,
+    )
+    vlm = Process(
+        "vlm", "../../services/vlm-server", "vlm_server",
+        config=f"{ai}/vlm_server.yaml",
+        launch_mode="persist", port=8100,
+    )
+    if profile == "dual_48G_ada":
+        return [vlm, embedding, stt, agent_llm]
+    return [stt, agent_llm, vlm, embedding]
 
 
 def _stop_models() -> None:

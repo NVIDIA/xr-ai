@@ -38,13 +38,28 @@ _embedding = importlib.util.module_from_spec(_EMBEDDING_SPEC)
 _EMBEDDING_SPEC.loader.exec_module(_embedding)
 
 
-def test_default_stack_uses_nano_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "spark")
+@pytest.mark.parametrize("profile", ["spark", "96G_blackwell"])
+def test_single_gpu_default_stack_keeps_large_model_first(
+    monkeypatch: pytest.MonkeyPatch,
+    profile: str,
+) -> None:
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: profile)
 
     processes = _model_servers._build_processes()
 
     assert [process.name for process in processes] == ["stt", "agent-llm", "vlm", "embedding"]
     assert [process.port for process in processes] == [8103, 8107, 8100, 8109]
+
+
+def test_dual_ada_default_stack_settles_gpu_zero_first(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
+
+    processes = _model_servers._build_processes()
+
+    assert [process.name for process in processes] == ["vlm", "embedding", "stt", "agent-llm"]
+    assert [process.port for process in processes] == [8100, 8109, 8103, 8107]
 
 
 def test_omni_stack_replaces_nano_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
