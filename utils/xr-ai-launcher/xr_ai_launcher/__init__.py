@@ -43,7 +43,7 @@ from ._credentials import (
 from ._gpu import detect_gpu_config
 from ._models import ModelDeployment, load_model_deployment
 from ._processes import ManagedProcess
-from ._stack import Parallel, Process, run_stack
+from ._stack import EndpointProbe, Parallel, Process, run_stack
 
 __all__ = [
     "XR_RUNTIME_VAR", "load_cloudxr_env",
@@ -53,5 +53,5 @@ __all__ = [
     "detect_gpu_config",
     "ModelDeployment", "load_model_deployment",
     "ManagedProcess",
-    "Parallel", "Process", "run_stack",
+    "EndpointProbe", "Parallel", "Process", "run_stack",
 ]

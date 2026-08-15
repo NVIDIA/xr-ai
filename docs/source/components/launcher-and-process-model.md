@@ -61,6 +61,13 @@ def run() -> None:
 - The worker never imports anything from `xr_media_hub` or `xr_ai_launcher`.
 - Process management lives in `utils/xr-ai-launcher/`, not inside any process it manages.
 - `run_stack` is fail-fast: if any process exits, the rest are terminated.
+- A process declared with `launch_mode="reuse"` and `readiness="health"` must
+  declare either an explicit `health_url` or an HTTP `port` fallback. Remote
+  or otherwise external dependencies can be passed as `EndpointProbe` values.
+  Before spawning anything, `run_stack` requires each endpoint to return a 2xx
+  response and sends a bearer token when `api_key_env` is configured.
+  Profile-driven stacks use the selected model endpoint; `readiness="none"`
+  skips the probe.
 
 ## Serial and parallel items
 
@@ -131,7 +138,8 @@ its IPC receive loop is active.
 - `"reuse"` — the launcher does **not** spawn this process; it is assumed to be
   already running (e.g. started by `model-servers`). The entry in the process
   list documents the dependency; the launcher skips it entirely and does not
-  kill it on shutdown.
+  kill it on shutdown. Its explicit `health_url` or `port` fallback lets the
+  launcher verify readiness before it starts any owned process.
 
 On a clean ready-exit, `persist` and `reuse` processes are left running. On an
 abort during startup (Ctrl-C, or a process exiting before it signals ready)

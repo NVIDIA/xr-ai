@@ -90,14 +90,19 @@ def _model_backend() -> str:
 # agent-llm / vlm model-servers. STT/TTS stay local. See
 # docs/source/components/ai-services.md "Hosting models on NVIDIA NIM".
 def _build_processes() -> list[Process]:
-    return [
+    processes = [
         Process("stt",       "../../services/stt-server",            "stt_server",
-                launch_mode="reuse"),
-        Process("agent-llm", "../../services/nemotron3-nano-llm",    "nemotron3_nano_llm_server",
-                launch_mode="reuse"),
-        Process("vlm",       "../../services/vlm-server",            "vlm_server",
-                launch_mode="reuse"),
-        Process("hub",        "../../services/xr-media-hub",                "xr_media_hub",
+                launch_mode="reuse", port=8103),
+    ]
+    if _model_backend() != "nim":
+        processes.extend([
+            Process("agent-llm", "../../services/nemotron3-nano-llm",
+                    "nemotron3_nano_llm_server", launch_mode="reuse", port=8107),
+            Process("vlm", "../../services/vlm-server", "vlm_server",
+                    launch_mode="reuse", port=8100),
+        ])
+    processes.extend([
+        Process("hub",        "../../services/xr-media-hub",         "xr_media_hub",
                 config="yaml/xr_media_hub.yaml"),
         Process("cloudxr",    "../../services/cloudxr-runtime",      "cloudxr_runtime",
                 config="yaml/cloudxr_runtime.yaml"),
@@ -112,7 +117,8 @@ def _build_processes() -> list[Process]:
                 quiet_native_output=True),
         Process("worker",     "worker",                              "xr_render_demo_worker",
                 config=_WORKER_CONFIG),
-    ]
+    ])
+    return processes
 
 
 # Match an uncommented `lovr_bin:` line with a non-empty value.

@@ -44,6 +44,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence, Union
@@ -52,6 +53,7 @@ from ._credentials import load_credentials
 
 _READY_INTERVAL = 5.0   # seconds between progress lines
 _STOP_TIMEOUT   = 20.0  # seconds before SIGKILL during shutdown
+_HEALTH_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 # launcher/ stays stdlib-only per AGENTS.md, so this module uses
 # ``logging.getLogger`` rather than loguru. The orchestrator's
@@ -74,7 +76,8 @@ class Process:
                            processes that take no config.
     gpu                  — optional CUDA_VISIBLE_DEVICES value (e.g. ``"0"``, ``"0,1"``).
     launch_mode          — controls spawn + shutdown behaviour:
-    port                 — optional service port, used to stop ``persist`` services.
+    port                 — service port, used as a fallback target for ``reuse``
+                           health preflight and to stop ``persist`` services.
     quiet_native_output  — when True, captured subprocess lines that don't look like
                            Python loguru output (no ``HH:MM:SS.SSS`` prefix) are routed
                            through stdlib ``logging`` at DEBUG instead of printed to
@@ -82,6 +85,13 @@ class Process:
                            (e.g. OpenXR loader output) interleaved with their own Python
                            loguru lines. Default ``False`` — every other Process keeps
                            today's unconditional ``print`` behavior verbatim.
+    health_url           — optional explicit health endpoint for ``reuse``
+                           preflight. Profile-driven stacks should use this so
+                           the launcher probes the same endpoint as the worker.
+    readiness            — ``"health"`` (default) probes a reused service before
+                           startup; ``"none"`` skips its readiness probe.
+    api_key_env           — optional environment variable whose value is sent as
+                           a bearer token by the health probe.
 
       ``"own"``     (default) — launcher spawns this process and kills it on shutdown.
       ``"persist"`` — launcher spawns this process but leaves it running on shutdown.
@@ -100,6 +110,20 @@ class Process:
     launch_mode:         str = "own"
     port:                int | None = None
     quiet_native_output: bool = False
+    health_url:          str | None = None
+    readiness:           str = "health"
+    api_key_env:         str | None = None
+
+
+@dataclass(frozen=True)
+class EndpointProbe:
+    """Readiness check for an already-running local or remote dependency."""
+
+    name: str
+    health_url: str | None
+    readiness: str = "health"
+    api_key_env: str | None = None
+    timeout: float = 3.0
 
 
 @dataclass(frozen=True)
@@ -247,6 +271,82 @@ def _spawn(proc: Process, base: Path, ready_file: Path) -> subprocess.Popen:
 
 
 # ── readiness wait ─────────────────────────────────────────────────────────────
+
+def _require_endpoint_ready(probe: EndpointProbe) -> None:
+    """Fail unless an already-running endpoint satisfies its readiness policy."""
+    if probe.readiness == "none":
+        log.info("[%s] endpoint readiness check disabled", probe.name)
+        return
+    if probe.readiness != "health":
+        raise ValueError(
+            f"endpoint {probe.name!r} has unsupported readiness "
+            f"{probe.readiness!r}"
+        )
+    if probe.health_url is None:
+        raise ValueError(
+            f"endpoint {probe.name!r} must declare its health-check URL"
+        )
+
+    headers: dict[str, str] = {}
+    if probe.api_key_env:
+        api_key = os.environ.get(probe.api_key_env)
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+    request = urllib.request.Request(probe.health_url, headers=headers)
+
+    try:
+        with _HEALTH_OPENER.open(request, timeout=probe.timeout) as response:
+            if 200 <= response.status < 300:
+                log.info("[%s] endpoint ready at %s", probe.name, probe.health_url)
+                return
+            failure = f"HTTP {response.status}"
+    except Exception as exc:
+        failure = f"{type(exc).__name__}: {exc}"
+
+    raise SystemExit(
+        f"[{probe.name}] required endpoint is not healthy at {probe.health_url}.\n"
+        f"Last health check: {failure}"
+    )
+
+
+def _reused_probe(proc: Process) -> EndpointProbe:
+    """Build a probe for a reused process, retaining the legacy port fallback."""
+    health_url = proc.health_url
+    if health_url is None:
+        if proc.port is None:
+            if proc.readiness == "health":
+                raise ValueError(
+                    f"reused process {proc.name!r} must declare its health-check "
+                    "URL or port"
+                )
+        else:
+            health_url = f"http://127.0.0.1:{proc.port}/health"
+    return EndpointProbe(
+        name=proc.name,
+        health_url=health_url,
+        readiness=proc.readiness,
+        api_key_env=proc.api_key_env,
+    )
+
+
+def _preflight_dependencies(
+    processes: Sequence[Union[Process, Parallel]],
+    endpoint_probes: Sequence[EndpointProbe] = (),
+) -> None:
+    """Validate reused processes and explicit endpoint dependencies."""
+    for item in processes:
+        members = item.processes if isinstance(item, Parallel) else (item,)
+        for proc in members:
+            if proc.launch_mode == "reuse":
+                _require_endpoint_ready(_reused_probe(proc))
+    for probe in endpoint_probes:
+        _require_endpoint_ready(probe)
+
+
+def _preflight_reused(processes: Sequence[Union[Process, Parallel]]) -> None:
+    """Backward-compatible wrapper for reused-process preflight tests."""
+    _preflight_dependencies(processes)
+
 
 def _wait_ready(name: str, ready_file: Path, proc: subprocess.Popen) -> None:
     """Block until *ready_file* exists. Print a progress line every 5 s."""
@@ -402,6 +502,7 @@ def run_stack(
     processes: Sequence[Union[Process, Parallel]],
     base: Path,
     *,
+    endpoint_probes: Sequence[EndpointProbe] = (),
     exit_after_ready: bool = False,
 ) -> None:
     """
@@ -423,6 +524,10 @@ def run_stack(
     instead — useful for launchers whose processes are all ``launch_mode="persist"``
     and should outlive the orchestrator (e.g. ``model-servers``).
 
+    ``endpoint_probes`` declares already-running dependencies that have no
+    local ``Process`` entry, such as a remote model server. They are checked
+    alongside reused processes before any owned process is spawned.
+
     *base* is the sample root — all relative paths in ``Process.project``
     and ``Process.config`` are resolved against it::
 
@@ -443,6 +548,7 @@ def run_stack(
             run_stack(PROCESSES, _BASE)
     """
     load_credentials()
+    _preflight_dependencies(processes, endpoint_probes)
 
     # "persist" and "reuse" processes are left running on shutdown.
     # "reuse" processes are not spawned at all — assumed already running.

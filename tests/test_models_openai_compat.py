@@ -325,6 +325,19 @@ async def test_llm_health_true_on_200() -> None:
         assert (await llm.health()) is True
 
 
+async def test_llm_health_sends_bearer_when_api_key_env_set(monkeypatch) -> None:
+    monkeypatch.setenv("STUB_API_KEY", "sk-health-123")
+    stub = StubOpenAI()
+    async with OpenAICompatLLM(
+        "http://stub",
+        "llm",
+        api_key_env="STUB_API_KEY",
+        client=stub.client(),
+    ) as llm:
+        assert (await llm.health()) is True
+    assert stub.last_request().headers["Authorization"] == "Bearer sk-health-123"
+
+
 async def test_llm_health_false_on_503() -> None:
     stub = StubOpenAI()
     stub.set_health_status(503)

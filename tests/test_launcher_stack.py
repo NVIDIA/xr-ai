@@ -21,6 +21,9 @@ class TestProcessDataclass:
         assert p.gpu is None
         assert p.launch_mode == "own"
         assert p.port is None
+        assert p.health_url is None
+        assert p.readiness == "health"
+        assert p.api_key_env is None
 
     def test_all_fields(self):
         p = _stack.Process(
@@ -29,11 +32,17 @@ class TestProcessDataclass:
             gpu="0",
             launch_mode="persist",
             port=8100,
+            health_url="http://models.test/health",
+            readiness="none",
+            api_key_env="MODEL_API_KEY",
         )
         assert p.config == "yaml/vlm.yaml"
         assert p.gpu == "0"
         assert p.launch_mode == "persist"
         assert p.port == 8100
+        assert p.health_url == "http://models.test/health"
+        assert p.readiness == "none"
+        assert p.api_key_env == "MODEL_API_KEY"
 
     def test_frozen_immutability(self):
         p = _stack.Process("hub", "../../services/xr-media-hub", "xr_media_hub")
@@ -67,6 +76,113 @@ class TestParallelDataclass:
         group = _stack.Parallel([])
         with pytest.raises((AttributeError, TypeError)):
             group.processes = ()  # type: ignore[misc]
+
+
+class TestReusePreflight:
+    class _Response:
+        def __init__(self, status=200):
+            self.status = status
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+    def test_healthy_service_passes(self, monkeypatch):
+        requested = []
+
+        def healthy(request, timeout):
+            requested.append((request.full_url, timeout))
+            return self._Response(204)
+
+        monkeypatch.setattr(
+            _stack._HEALTH_OPENER,
+            "open",
+            healthy,
+        )
+        process = _stack.Process(
+            "vlm",
+            ".",
+            "vlm_server",
+            launch_mode="reuse",
+            port=8100,
+            health_url="http://localhost:9000/health",
+        )
+
+        _stack._preflight_reused([process])
+
+        assert requested == [("http://localhost:9000/health", 3.0)]
+
+    def test_remote_endpoint_sends_bearer_token(self, monkeypatch):
+        requested = []
+        monkeypatch.setenv("REMOTE_MODEL_KEY", "secret")
+
+        def healthy(request, timeout):
+            requested.append((
+                request.full_url,
+                request.get_header("Authorization"),
+                timeout,
+            ))
+            return self._Response()
+
+        monkeypatch.setattr(_stack._HEALTH_OPENER, "open", healthy)
+        probe = _stack.EndpointProbe(
+            "remote-vlm",
+            "https://models.example.test/health",
+            api_key_env="REMOTE_MODEL_KEY",
+        )
+
+        _stack._preflight_dependencies([], [probe])
+
+        assert requested == [(
+            "https://models.example.test/health",
+            "Bearer secret",
+            3.0,
+        )]
+
+    def test_missing_port_is_rejected(self):
+        process = _stack.Process("vlm", ".", "vlm_server", launch_mode="reuse")
+
+        with pytest.raises(ValueError, match="health-check URL or port"):
+            _stack._preflight_reused([process])
+
+    def test_readiness_none_skips_probe(self, monkeypatch):
+        def unexpected_probe(_url, _timeout):
+            raise AssertionError("readiness=none must not probe")
+
+        monkeypatch.setattr(_stack._HEALTH_OPENER, "open", unexpected_probe)
+        process = _stack.Process(
+            "vlm",
+            ".",
+            "vlm_server",
+            launch_mode="reuse",
+            readiness="none",
+        )
+
+        _stack._preflight_reused([process])
+
+    def test_invalid_readiness_is_rejected(self):
+        process = _stack.Process(
+            "vlm",
+            ".",
+            "vlm_server",
+            launch_mode="reuse",
+            readiness="ready-file",
+        )
+
+        with pytest.raises(ValueError, match="unsupported readiness"):
+            _stack._preflight_reused([process])
+
+    def test_unhealthy_service_stops_before_spawn(self, monkeypatch):
+        def unavailable(_url, timeout):
+            raise OSError("connection refused")
+
+        monkeypatch.setattr(_stack._HEALTH_OPENER, "open", unavailable)
+        process = _stack.Process("vlm", ".", "vlm_server", launch_mode="reuse", port=8100)
+
+        with pytest.raises(SystemExit, match="required endpoint is not healthy"):
+            _stack._preflight_reused([_stack.Parallel([process])])
 
 
 class _FakePopen:
@@ -139,6 +255,41 @@ class TestRunStackShutdownContract:
 
         # Clean exit preserves the persist set so the container outlives us.
         assert stub_stack["no_kill"] == {"vlm"}
+
+    def test_external_endpoint_is_checked_before_spawn(
+        self,
+        stub_stack,
+        tmp_path,
+        monkeypatch,
+    ):
+        calls = []
+
+        def probe(endpoint):
+            calls.append(("probe", endpoint.name))
+
+        def spawn(proc, base, ready_file):
+            calls.append(("spawn", proc.name))
+            return _FakePopen(proc.name)
+
+        monkeypatch.setattr(_stack, "_require_endpoint_ready", probe)
+        monkeypatch.setattr(_stack, "_spawn", spawn)
+        monkeypatch.setattr(_stack, "_wait_ready", lambda name, rf, proc: None)
+
+        _stack.run_stack(
+            [_stack.Process("worker", "worker", "worker")],
+            tmp_path,
+            endpoint_probes=[
+                _stack.EndpointProbe(
+                    "remote-vlm",
+                    "https://models.example.test/health",
+                )
+            ],
+            exit_after_ready=True,
+        )
+
+        assert calls == [("probe", "remote-vlm"), ("spawn", "worker")]
+
+
 class TestStripConflictingCudnn:
     """LD_LIBRARY_PATH sanitization so a host cuDNN can't shadow the venv one."""
 

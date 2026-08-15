@@ -5,13 +5,27 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
 from ._config import read_config_scalar
 
 LaunchMode = Literal["own", "reuse"]
+Readiness = Literal["health", "none"]
+
+
+@dataclass(frozen=True)
+class DeploymentEndpoint:
+    """Profile-selected endpoint and readiness policy for a dependency."""
+
+    base_url: str
+    readiness: Readiness
+    api_key_env: str | None = None
+
+    @property
+    def health_url(self) -> str:
+        return self.base_url.rstrip("/") + "/health"
 
 
 @dataclass(frozen=True)
@@ -21,6 +35,8 @@ class ModelDeployment:
     profile_path: Path
     services: dict[str, LaunchMode]
     required_credentials: tuple[str, ...]
+    reused_endpoints: dict[str, DeploymentEndpoint] = field(default_factory=dict)
+    external_endpoints: dict[str, DeploymentEndpoint] = field(default_factory=dict)
 
     def launch_mode(self, service: str) -> LaunchMode | None:
         return self.services.get(service)
@@ -52,6 +68,8 @@ def load_model_deployment(worker_config: Path) -> ModelDeployment:
         raise ValueError(f"{profile_path}: 'models' must be an object")
 
     services: dict[str, LaunchMode] = {}
+    reused_endpoints: dict[str, DeploymentEndpoint] = {}
+    external_endpoints: dict[str, DeploymentEndpoint] = {}
     credentials: set[str] = set()
     for role, model in models.items():
         if not isinstance(role, str) or not role:
@@ -87,6 +105,16 @@ def load_model_deployment(worker_config: Path) -> ModelDeployment:
 
         ownership = deployment.get("ownership", "external")
         if ownership == "external":
+            base_url = endpoint.get("base_url")
+            if not isinstance(base_url, str) or not base_url:
+                raise ValueError(
+                    f"{profile_path}: external role {role!r} needs endpoint.base_url"
+                )
+            external_endpoints[role] = DeploymentEndpoint(
+                base_url,
+                readiness,
+                credential,
+            )
             continue
         if ownership == "managed":
             launch_mode: LaunchMode = "own"
@@ -107,9 +135,24 @@ def load_model_deployment(worker_config: Path) -> ModelDeployment:
             raise ValueError(
                 f"{profile_path}: conflicting ownership for service {service!r}"
             )
+        if launch_mode == "reuse":
+            base_url = endpoint.get("base_url")
+            if not isinstance(base_url, str) or not base_url:
+                raise ValueError(
+                    f"{profile_path}: reused role {role!r} needs endpoint.base_url"
+                )
+            reused_endpoint = DeploymentEndpoint(base_url, readiness, credential)
+            previous_endpoint = reused_endpoints.setdefault(service, reused_endpoint)
+            if previous_endpoint != reused_endpoint:
+                raise ValueError(
+                    f"{profile_path}: conflicting endpoints for reused service "
+                    f"{service!r}"
+                )
 
     return ModelDeployment(
         profile_path=profile_path,
         services=services,
+        reused_endpoints=reused_endpoints,
+        external_endpoints=external_endpoints,
         required_credentials=tuple(sorted(credentials)),
     )

@@ -3,6 +3,7 @@
 
 """Tests for stdlib-only launcher model deployment reads."""
 
+import importlib.util
 import json
 from pathlib import Path
 
@@ -12,6 +13,14 @@ from xr_ai_models import load_models_config
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SIMPLE_VLM_YAML = _ROOT / "agent-samples" / "simple-vlm-example" / "yaml"
+_SIMPLE_VLM_MAIN = _ROOT / "agent-samples" / "simple-vlm-example" / "main.py"
+_SIMPLE_VLM_SPEC = importlib.util.spec_from_file_location(
+    "simple_vlm_example_main",
+    _SIMPLE_VLM_MAIN,
+)
+assert _SIMPLE_VLM_SPEC and _SIMPLE_VLM_SPEC.loader
+_simple_vlm = importlib.util.module_from_spec(_SIMPLE_VLM_SPEC)
+_SIMPLE_VLM_SPEC.loader.exec_module(_simple_vlm)
 
 
 def _write_profile(path: Path, *, credential: str | None = None) -> None:
@@ -123,6 +132,28 @@ def test_bundled_simple_vlm_profiles_have_launcher_sdk_parity(
 
     assert deployment.services == expected_services
     assert deployment.required_credentials == models.required_credentials
+    expected_reused = {
+        spec.deployment.service: (spec.endpoint.base_url, spec.endpoint.readiness)
+        for spec in models.entries.values()
+        if spec.deployment.ownership == "reused"
+    }
+    assert {
+        service: (endpoint.base_url, endpoint.readiness)
+        for service, endpoint in deployment.reused_endpoints.items()
+    } == expected_reused
+    expected_external = {
+        role: (
+            spec.endpoint.base_url,
+            spec.endpoint.readiness,
+            spec.endpoint.api_key_env,
+        )
+        for role, spec in models.entries.items()
+        if spec.deployment.ownership == "external"
+    }
+    assert {
+        role: (endpoint.base_url, endpoint.readiness, endpoint.api_key_env)
+        for role, endpoint in deployment.external_endpoints.items()
+    } == expected_external
 
 
 def test_launcher_rejects_worker_only_yaml_profile(tmp_path) -> None:
@@ -213,3 +244,107 @@ def test_bundled_worker_selects_local_profile() -> None:
     )
 
     assert deployment.profile_path == _SIMPLE_VLM_YAML / "models.local.json"
+
+
+def _write_reused_omni_profile(path: Path, *, readiness: str) -> None:
+    path.write_text(
+        json.dumps({
+            "models": {
+                "vlm": {
+                    "category": "vlm",
+                    "adapter": {
+                        "kind": "openai_compat",
+                        "model_name": "llm",
+                    },
+                    "endpoint": {
+                        "base_url": "http://localhost:9000",
+                        "readiness": readiness,
+                    },
+                    "deployment": {
+                        "ownership": "reused",
+                        "service": "vlm-omni",
+                    },
+                }
+            }
+        }),
+        encoding="utf-8",
+    )
+
+
+def test_omni_reused_service_uses_profile_health_endpoint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    profile = tmp_path / "models.omni.json"
+    _write_reused_omni_profile(profile, readiness="health")
+    worker_config = tmp_path / "worker.yaml"
+    worker_config.write_text(
+        f'models_config: "{profile}"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(_simple_vlm, "_WORKER_CONFIG", str(worker_config))
+
+    processes, _credentials, _endpoint_probes = _simple_vlm._build_processes()
+    reused = next(process for process in processes if process.launch_mode == "reuse")
+
+    assert reused.name == "vlm-omni"
+    assert reused.health_url == "http://localhost:9000/health"
+    assert reused.readiness == "health"
+
+
+def test_omni_reused_service_honors_disabled_readiness(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    profile = tmp_path / "models.omni.json"
+    _write_reused_omni_profile(profile, readiness="none")
+    worker_config = tmp_path / "worker.yaml"
+    worker_config.write_text(f'models_config: "{profile}"\n', encoding="utf-8")
+    monkeypatch.setattr(_simple_vlm, "_WORKER_CONFIG", str(worker_config))
+
+    processes, _credentials, _endpoint_probes = _simple_vlm._build_processes()
+    reused = next(process for process in processes if process.launch_mode == "reuse")
+
+    assert reused.health_url == "http://localhost:9000/health"
+    assert reused.readiness == "none"
+
+
+def test_external_remote_service_becomes_authenticated_endpoint_probe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    profile = tmp_path / "models.remote.json"
+    profile.write_text(
+        json.dumps({
+            "models": {
+                "vlm": {
+                    "category": "vlm",
+                    "adapter": {
+                        "kind": "openai_compat",
+                        "model_name": "remote-vlm",
+                    },
+                    "endpoint": {
+                        "base_url": "https://models.example.test/api",
+                        "api_key_env": "REMOTE_MODEL_KEY",
+                        "readiness": "health",
+                    },
+                    "deployment": {"ownership": "external"},
+                }
+            }
+        }),
+        encoding="utf-8",
+    )
+    worker_config = tmp_path / "worker.yaml"
+    worker_config.write_text(f'models_config: "{profile}"\n', encoding="utf-8")
+    monkeypatch.setattr(_simple_vlm, "_WORKER_CONFIG", str(worker_config))
+
+    _processes, credentials, endpoint_probes = _simple_vlm._build_processes()
+
+    assert credentials == ("REMOTE_MODEL_KEY",)
+    assert endpoint_probes == (
+        _simple_vlm.EndpointProbe(
+            name="vlm",
+            health_url="https://models.example.test/api/health",
+            api_key_env="REMOTE_MODEL_KEY",
+        ),
+    )

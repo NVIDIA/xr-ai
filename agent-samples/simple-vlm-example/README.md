@@ -54,7 +54,11 @@ The worker and orchestrator consume the deployment profile selected by
 - `models.omni.json` reuses the Nemotron-Omni VLM service on port 8108.
 
 The same profile owns model behavior, endpoints, credentials, readiness, and
-launcher process ownership.
+launcher process ownership. Reused and external endpoints with
+`readiness: "health"` are checked before local processes start; the launcher
+uses the configured API-key environment variable when the health route requires
+authentication. Use `readiness: "none"` only when the provider exposes no
+health route, as in the bundled hosted NIM profile.
 
 ## Relay visibility
 

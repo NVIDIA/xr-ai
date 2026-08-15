@@ -90,13 +90,22 @@ def _request_headers(
     return result
 
 
-async def _http_health(client: httpx.AsyncClient, url: str, enabled: bool) -> bool:
+async def _http_health(
+    client: httpx.AsyncClient,
+    url: str,
+    enabled: bool,
+    api_key: str | None,
+) -> bool:
     # Remote endpoints (hosted NIM) expose no local /health route; the spec
     # sets health_check=false, in which case readiness is assumed.
     if not enabled:
         return True
     try:
-        resp = await client.get(url, timeout=3.0)
+        resp = await client.get(
+            url,
+            headers=_auth_headers(api_key),
+            timeout=3.0,
+        )
         return resp.is_success
     except httpx.HTTPError:
         return False
@@ -397,7 +406,12 @@ class OpenAICompatLLM:
                     yield content
 
     async def health(self) -> bool:
-        return await _http_health(self._client, self.health_url, self._health_check)
+        return await _http_health(
+            self._client,
+            self.health_url,
+            self._health_check,
+            self._api_key,
+        )
 
     async def close(self) -> None:
         if self._owns_client:
@@ -645,7 +659,12 @@ class OpenAICompatSTT:
         return resp.json().get("text", "")
 
     async def health(self) -> bool:
-        return await _http_health(self._client, self.health_url, self._health_check)
+        return await _http_health(
+            self._client,
+            self.health_url,
+            self._health_check,
+            self._api_key,
+        )
 
     async def close(self) -> None:
         if self._owns_client:
@@ -702,7 +721,12 @@ class OpenAICompatTTS:
         return resp.content
 
     async def health(self) -> bool:
-        return await _http_health(self._client, self.health_url, self._health_check)
+        return await _http_health(
+            self._client,
+            self.health_url,
+            self._health_check,
+            self._api_key,
+        )
 
     async def close(self) -> None:
         if self._owns_client:
@@ -765,7 +789,12 @@ class OpenAICompatEmbedding:
         return [[float(value) for value in row["embedding"]] for row in rows]
 
     async def health(self) -> bool:
-        return await _http_health(self._client, self.health_url, self._health_check)
+        return await _http_health(
+            self._client,
+            self.health_url,
+            self._health_check,
+            self._api_key,
+        )
 
     async def close(self) -> None:
         if self._owns_client:

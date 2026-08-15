@@ -29,6 +29,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from xr_ai_launcher import (
+    EndpointProbe,
     Process,
     ensure_credentials,
     load_model_deployment,
@@ -45,24 +46,32 @@ _MODEL_PROCESSES = {
     "vlm": Process(
         "vlm", "../../services/vlm-server", "vlm_server",
         config="yaml/vlm_server.yaml",
+        port=8100,
     ),
     "vlm-omni": Process(
         "vlm-omni",
         "../../services/nemotron-omni-llm",
         "nemotron_omni_llm_server",
+        port=8108,
     ),
     "stt": Process(
         "stt", "../../services/stt-server", "stt_server",
         config="yaml/stt_server.yaml",
+        port=8103,
     ),
     "tts": Process(
         "tts", "../../services/piper-tts", "piper_tts_server",
         config="yaml/piper_tts_server.yaml",
+        port=8105,
     ),
 }
 
 
-def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
+def _build_processes() -> tuple[
+    list[Process],
+    tuple[str, ...],
+    tuple[EndpointProbe, ...],
+]:
     deployment = load_model_deployment(_BASE / _WORKER_CONFIG)
     unknown_services = deployment.services.keys() - _MODEL_PROCESSES.keys()
     if unknown_services:
@@ -76,14 +85,35 @@ def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
     for service, process in _MODEL_PROCESSES.items():
         launch_mode = deployment.launch_mode(service)
         if launch_mode is not None:
-            procs.append(replace(process, launch_mode=launch_mode))
+            if launch_mode == "reuse":
+                endpoint = deployment.reused_endpoints[service]
+                procs.append(
+                    replace(
+                        process,
+                        launch_mode=launch_mode,
+                        health_url=endpoint.health_url,
+                        readiness=endpoint.readiness,
+                        api_key_env=endpoint.api_key_env,
+                    )
+                )
+            else:
+                procs.append(replace(process, launch_mode=launch_mode))
     procs.append(
         Process(
             "worker", "worker", "simple_vlm_example_worker",
             config=_WORKER_CONFIG,
         )
     )
-    return procs, deployment.required_credentials
+    endpoint_probes = tuple(
+        EndpointProbe(
+            name=role,
+            health_url=endpoint.health_url,
+            readiness=endpoint.readiness,
+            api_key_env=endpoint.api_key_env,
+        )
+        for role, endpoint in deployment.external_endpoints.items()
+    )
+    return procs, deployment.required_credentials, endpoint_probes
 
 
 def run() -> None:
@@ -95,13 +125,13 @@ def run() -> None:
                         "downloads may stall indefinitely).")
     ns, _ = p.parse_known_args()
 
-    processes, credentials = _build_processes()
+    processes, credentials, endpoint_probes = _build_processes()
     # A missing HF_TOKEN silently stalls the multi-GB first-run download; see
     # docs/source/getting_started/credentials.md.
     require_credentials("HF_TOKEN", allow_missing=ns.allow_anonymous)
     for credential in credentials:
         ensure_credentials(credential)
-    run_stack(processes, _BASE)
+    run_stack(processes, _BASE, endpoint_probes=endpoint_probes)
 
 
 if __name__ == "__main__":
