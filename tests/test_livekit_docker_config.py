@@ -4,8 +4,14 @@
 """Unit tests for the generated LiveKit server configuration."""
 from __future__ import annotations
 
+import stat
+from pathlib import Path
+
 import yaml
-from xr_media_hub.transport.livekit._docker import _render_livekit_config
+from xr_media_hub.transport.livekit._docker import (
+    _render_livekit_config,
+    _write_livekit_config,
+)
 from xr_media_hub.transport.livekit.config import LiveKitConnectorConfig
 
 
@@ -29,3 +35,11 @@ def test_livekit_nat_options_can_be_enabled() -> None:
 
     assert rtc["use_external_ip"] is True
     assert rtc["skip_external_ip_validation"] is True
+
+
+def test_livekit_config_file_is_owner_only(tmp_path: Path) -> None:
+    cfg_path = tmp_path / "livekit.yaml"
+
+    _write_livekit_config(cfg_path, LiveKitConnectorConfig())
+
+    assert stat.S_IMODE(cfg_path.stat().st_mode) == 0o600

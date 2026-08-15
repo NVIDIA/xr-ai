@@ -77,6 +77,12 @@ def _render_livekit_config(cfg: LiveKitConnectorConfig) -> str:
     )
 
 
+def _write_livekit_config(path: Path, cfg: LiveKitConnectorConfig) -> None:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as cfg_file:
+        cfg_file.write(_render_livekit_config(cfg))
+
+
 class LiveKitDocker:
     def __init__(self, cfg: LiveKitConnectorConfig) -> None:
         self._cfg    = cfg
@@ -89,7 +95,7 @@ class LiveKitDocker:
     async def start(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory(prefix="xr_livekit_")
         cfg_path = Path(self._tmpdir.name) / "livekit.yaml"
-        cfg_path.write_text(_render_livekit_config(self._cfg))
+        _write_livekit_config(cfg_path, self._cfg)
 
         # Remove any stale container from a previous crashed run.
         subprocess.run(
