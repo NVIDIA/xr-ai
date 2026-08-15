@@ -74,7 +74,7 @@ export class LiveKitConfig {
   /**
    * Identity of the server-side hub participant that the agent publishes
    * through (the LiveKit connector — `xr-hub-connector` by default, see
-   * `server-runtime/.../transport/livekit/config.py`). Outbound data is
+   * `services/xr-media-hub/.../transport/livekit/config.py`). Outbound data is
    * addressed only to this identity so it is never delivered to peer
    * participants in the same room. Set to `null` to broadcast to the whole
    * room (the pre-isolation behaviour).

@@ -7,8 +7,8 @@ import asyncio
 from typing import Any, Protocol
 
 from pydantic import ValidationError
-from xr_ai_nat.functions._service.rpc import RPCError
-from xr_ai_nat.functions.xr_tracking._client import HeadPoseRequest, OpenXRHealthRequest
+from xr_ai_tools.rpc import RPCError
+from xr_ai_tools.types import EmptyRequest
 
 
 class PoseSource(Protocol):
@@ -27,16 +27,16 @@ class OpenXRService:
 
     async def dispatch(self, operation: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if operation == "get_head_pose":
-            self._validate(HeadPoseRequest, arguments)
+            self._validate(arguments)
             return await asyncio.to_thread(self._source.get_pose)
         if operation == "get_health":
-            self._validate(OpenXRHealthRequest, arguments)
+            self._validate(arguments)
             return self._source.health()
         raise RPCError(f"unknown operation: {operation}", code="unknown_operation")
 
     @staticmethod
-    def _validate(request_type: type[HeadPoseRequest] | type[OpenXRHealthRequest], arguments: dict[str, Any]) -> None:
+    def _validate(arguments: dict[str, Any]) -> None:
         try:
-            request_type.model_validate(arguments)
+            EmptyRequest.model_validate(arguments)
         except ValidationError as exc:
             raise RPCError("unexpected OpenXR service arguments", code="invalid_request") from exc

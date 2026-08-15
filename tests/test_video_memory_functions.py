@@ -1,24 +1,26 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""CPU-only tests for video-memory storage, service, and NAT functions."""
+"""CPU-only tests for video-memory storage, service and native tools."""
 
 import asyncio
 import contextlib
-import importlib
 import json
 import time
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 import video_memory_service.__main__ as video_memory_main
-from fastmcp import Client as McpClient
-from nat.builder.workflow_builder import WorkflowBuilder
-from video_mcp_server import __main__ as video_mcp_main
-from video_mcp_server.live import _frame_to_rgb
-from video_memory_service.service import VideoMemoryService, select_decoded_frame
+from PIL import Image
+from video_memory_service.frames import save_png
+from video_memory_service.service import (
+    VideoMemoryService,
+    sample_target_timestamps,
+    select_decoded_frame,
+)
 from video_memory_service.store import ChunkStore
 from xr_ai_hub import (
     FrameData,
@@ -27,54 +29,18 @@ from xr_ai_hub import (
     ParticipantEvent,
     PixelFormat,
 )
-from xr_ai_nat.functions._service.rpc import RPCError, RPCServer
-from xr_ai_nat.functions.video_memory import (
+from xr_ai_tools.rpc import RPCError, RPCServer
+from xr_ai_tools.types import EmptyRequest
+from xr_ai_tools.video_memory import (
     HistoricalFrameRequest,
-    ParticipantsResult,
-    VideoMemoryFunctionsConfig,
-)
-from xr_ai_nat.functions.video_memory._client import (
-    ListRecordedParticipantsRequest,
-    ListRecordedParticipantsResult,
-    VideoHealthResult,
-    VideoMemoryClient,
+    HistoricalFramesRequest,
+    HistoricalVideoRequest,
+    LatestFramesRequest,
+    LatestVideoRequest,
+    VideoMemoryTools,
     VideoStatsRequest,
 )
-
-
-class _LiveFrames:
-    def participants(self) -> list[str]:
-        return ["connected-user"]
-
-    async def get_latest(self, participant_id: str) -> dict:
-        return {
-            "path": f"/tmp/{participant_id}.png",
-            "width": 1,
-            "height": 1,
-            "timestamp_us": 1,
-        }
-
-
-class _BrokenLiveFrames:
-    def participants(self) -> list[str]:
-        return []
-
-    async def get_latest(self, _participant_id: str) -> dict:
-        raise OSError("cannot write live PNG")
-
-
-class _UnusedClient:
-    pass
-
-
-class _UnavailableRecordedClient:
-    async def list_recorded_participants(self, _request=None):
-        raise RPCError("video service unavailable", code="connection_error")
-
-
-class _UnavailableStartupClient:
-    async def get_health(self):
-        raise RPCError("video service unavailable", code="connection_error")
+from xr_ai_tools.vision import VideoQueryRequest
 
 
 class _FrameEndpoint:
@@ -121,6 +87,28 @@ def _recording(root: Path, participant_id: str) -> None:
         )
 
 
+def _sample_recording(root: Path, participant_id: str) -> None:
+    directory = root / "sample-user"
+    directory.mkdir(parents=True)
+    (directory / ".identity").write_text(participant_id, encoding="utf-8")
+    for start_us, end_us in ((1_000_000, 4_000_000), (5_000_000, 8_000_000)):
+        payload = str(start_us).encode()
+        (directory / f"{start_us}.264").write_bytes(payload)
+        (directory / f"{start_us}.json").write_text(
+            json.dumps(
+                {
+                    "start_us": start_us,
+                    "end_us": end_us,
+                    "num_frames": 4,
+                    "width": 4,
+                    "height": 2,
+                    "size_bytes": len(payload),
+                }
+            ),
+            encoding="utf-8",
+        )
+
+
 @contextlib.asynccontextmanager
 async def _running_server(endpoint: str, dispatch):
     server = RPCServer(endpoint, dispatch)
@@ -147,6 +135,66 @@ def test_chunk_store_preserves_identities_and_windows(tmp_path: Path) -> None:
     assert store.stats("user/name")["total_bytes"] == len(b"firstsecond")
     assert store.query("user/name", 1_100_000, 2_100_000) == b"firstsecond"
     assert store.frame_chunk("user/name", 2_200_000)[0].name == "2000000.264"
+    assert [
+        path.name
+        for path, _metadata in store.overlapping_chunks("user/name", 1_500_000, 2_000_000)
+    ] == ["1000000.264", "2000000.264"]
+
+
+def test_chunk_store_skips_chunk_pruned_during_metadata_enumeration(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _recording(tmp_path, "user/name")
+    store = ChunkStore(tmp_path)
+    original_metadata = store._metadata
+
+    def metadata(path: Path) -> dict | None:
+        if path.name == "1000000.264":
+            path.unlink()
+            path.with_suffix(".json").unlink()
+        return original_metadata(path)
+
+    monkeypatch.setattr(store, "_metadata", metadata)
+
+    assert [
+        path.name
+        for path, _metadata in store.overlapping_chunks(
+            "user/name",
+            1_000_000,
+            3_000_000,
+        )
+    ] == ["2000000.264"]
+
+    (tmp_path / "safe-user" / "2000000.264").unlink()
+    (tmp_path / "safe-user" / "2000000.json").unlink()
+    with pytest.raises(RPCError) as unavailable:
+        store.overlapping_chunks("user/name", 1_000_000, 3_000_000)
+    assert unavailable.value.code == "not_found"
+
+
+def test_chunk_store_stats_uses_the_enumerated_size(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = ChunkStore(tmp_path)
+    missing = tmp_path / "pruned.264"
+    monkeypatch.setattr(
+        store,
+        "chunks",
+        lambda _participant_id: [
+            (
+                missing,
+                {
+                    "start_us": 1_000_000,
+                    "end_us": 2_000_000,
+                    "size_bytes": 7,
+                },
+            )
+        ],
+    )
+
+    assert store.stats("user/name")["total_bytes"] == 7
 
 
 def test_chunk_store_path_escape_has_a_stable_rpc_error(tmp_path: Path) -> None:
@@ -183,116 +231,62 @@ def test_chunk_store_does_not_follow_identity_or_directory_symlinks(tmp_path: Pa
 
 
 @pytest.mark.asyncio
-async def test_video_mcp_preserves_conditional_tool_sets() -> None:
-    live_only = video_mcp_main.build_mcp(
-        _UnusedClient(), _LiveFrames(), recording_enabled=False
-    )
-    recorded = video_mcp_main.build_mcp(
-        _UnusedClient(), _LiveFrames(), recording_enabled=True
-    )
-
-    async with McpClient(live_only) as client:
-        live_names = {tool.name for tool in await client.list_tools()}
-    async with McpClient(recorded) as client:
-        recorded_names = {tool.name for tool in await client.list_tools()}
-
-    assert live_names == {
-        "get_frame_from_time",
-        "get_latest_frame",
-        "list_live_participants",
-    }
-    assert recorded_names == {
-        "get_frame_from_time",
-        "get_video_stats",
-        "list_live_participants",
-        "list_recorded_participants",
-        "query_video",
-    }
-
-
-@pytest.mark.asyncio
-async def test_video_mcp_recorded_discovery_reports_service_failures() -> None:
-    mcp = video_mcp_main.build_mcp(
-        _UnavailableRecordedClient(), _LiveFrames(), recording_enabled=True
-    )
-
-    async with McpClient(mcp) as client:
-        result = await client.call_tool("list_recorded_participants", {})
-
-    assert result.data == {"error": "video service unavailable"}
-
-
-@pytest.mark.asyncio
-async def test_video_mcp_lists_recorded_participants_over_a_real_client() -> None:
-    def dispatch(operation: str, arguments: dict) -> dict:
-        if operation == "list_recorded_participants":
-            return {"participants": ["recorded-user"]}
-        raise RPCError("unknown operation", code="unknown_operation")
-
-    endpoint = f"ipc:///tmp/video-mcp-{uuid.uuid4().hex}"
-    client = VideoMemoryClient(endpoint)
-    try:
-        async with _running_server(endpoint, dispatch):
-            # The compatibility no-argument client call (client builds the typed
-            # request internally, like get_health).
-            direct = await client.list_recorded_participants()
-            assert direct.participants == ["recorded-user"]
-            mcp = video_mcp_main.build_mcp(client, _LiveFrames(), recording_enabled=True)
-            async with McpClient(mcp) as mcp_client:
-                result = await mcp_client.call_tool("list_recorded_participants", {})
-    finally:
-        await client.close()
-
-    assert result.data == ["recorded-user"]
-
-
-@pytest.mark.asyncio
 async def test_list_recorded_participants_tool_schema_is_strict_empty() -> None:
-    """The native tool must expose a strict empty-object input, not the client's
-    optional/nullable `request` compatibility parameter."""
-    async with WorkflowBuilder() as builder:
-        await builder.add_function_group(
-            "video", VideoMemoryFunctionsConfig(endpoint="ipc:///tmp/unused")
-        )
-        functions = await (await builder.get_function_group("video")).get_all_functions()
-        schema = functions["video__list_recorded_participants"].input_schema.model_json_schema()
+    video = VideoMemoryTools("ipc:///tmp/unused")
+    try:
+        schema = video.list_recorded_participants.request_model.model_json_schema()
+    finally:
+        await video.close()
 
-    # No leaked `request` wrapper; the empty request flattens to no properties.
     assert schema.get("properties", {}) == {}
-    assert "request" not in schema.get("properties", {})
+    assert schema.get("additionalProperties") is False
 
 
 @pytest.mark.asyncio
-async def test_video_mcp_starts_live_only_when_recorded_service_is_unavailable() -> None:
-    assert await video_mcp_main._recording_enabled(_UnavailableStartupClient()) is False
+async def test_video_memory_tools_group_latest_and_historical_selection() -> None:
+    video = VideoMemoryTools("ipc:///tmp/unused")
+    try:
+        assert [tool.name for tool in video.latest_tools] == [
+            "get_latest_video",
+            "get_latest_frames",
+        ]
+        assert [tool.name for tool in video.historical_tools] == [
+            "get_historical_frame",
+            "get_historical_frames",
+            "get_historical_video",
+        ]
+    finally:
+        await video.close()
 
 
-@pytest.mark.asyncio
-async def test_video_mcp_returns_live_export_failures_as_data() -> None:
-    mcp = video_mcp_main.build_mcp(
-        _UnusedClient(), _BrokenLiveFrames(), recording_enabled=False
-    )
+def test_video_and_sampling_requests_share_timing_fields() -> None:
+    latest_video = LatestVideoRequest.model_json_schema()["properties"]
+    latest_frames = LatestFramesRequest.model_json_schema()["properties"]
+    historical_video = HistoricalVideoRequest.model_json_schema()["properties"]
+    historical_frames = HistoricalFramesRequest.model_json_schema()["properties"]
 
-    async with McpClient(mcp) as client:
-        frame_from_time = await client.call_tool(
-            "get_frame_from_time", {"participant_id": "live-user"}
-        )
-        latest = await client.call_tool("get_latest_frame", {"participant_id": "live-user"})
+    assert set(latest_video) == {"participant_id", "duration_seconds"}
+    assert {name: latest_frames[name] for name in latest_video} == latest_video
+    assert set(historical_video) == {
+        "participant_id",
+        "duration_seconds",
+        "start_us",
+    }
+    assert {
+        name: historical_frames[name]
+        for name in historical_video
+    } == historical_video
 
-    assert frame_from_time.data == {"error": "cannot write live PNG"}
-    assert latest.data == {"error": "cannot write live PNG"}
 
-
-@pytest.mark.parametrize("entrypoint", [video_mcp_main, video_memory_main])
 def test_video_entrypoints_use_defaults_when_packaged_config_is_absent(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, entrypoint
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     missing = tmp_path / "missing.yaml"
-    monkeypatch.setattr(entrypoint, "_DEFAULT_CONFIG", missing)
+    monkeypatch.setattr(video_memory_main, "_DEFAULT_CONFIG", missing)
 
-    assert entrypoint._load_config(None) == {}
+    assert video_memory_main._load_config(None) == {}
     with pytest.raises(SystemExit, match="config file not found"):
-        entrypoint._load_config(missing)
+        video_memory_main._load_config(missing)
 
 
 @pytest.mark.asyncio
@@ -386,21 +380,6 @@ async def test_live_frame_source_releases_departed_participants() -> None:
     assert source._events == {}
 
 
-def test_live_png_export_converts_nv12_planes() -> None:
-    frame = FrameData(
-        seq=1,
-        pts_us=1,
-        width=2,
-        height=2,
-        fmt=PixelFormat.NV12,
-        data=bytes([16, 16, 16, 16, 128, 128]),
-    )
-
-    rgb = _frame_to_rgb(frame)
-
-    assert rgb.shape == (2, 2, 3)
-
-
 @pytest.mark.asyncio
 async def test_video_memory_functions_call_typed_service(tmp_path: Path) -> None:
     recordings = tmp_path / "recordings"
@@ -412,26 +391,326 @@ async def test_video_memory_functions_call_typed_service(tmp_path: Path) -> None
     )
     endpoint = f"ipc:///tmp/video-{uuid.uuid4().hex}"
 
-    async with _running_server(endpoint, service.dispatch), WorkflowBuilder() as builder:
-        await builder.add_function_group(
-            "video",
-            VideoMemoryFunctionsConfig(endpoint=endpoint),
-        )
-        group = await builder.get_function_group("video")
-        functions = await group.get_all_functions()
-        recorded = await functions["video__list_recorded_participants"].ainvoke({})
-        stats = await functions["video__get_video_stats"].ainvoke(
-            {"participant_id": "user/name"}
-        )
-        clip = await functions["video__query_video"].ainvoke(
-            {"participant_id": "user/name", "start_us": 1_100_000, "end_us": 2_100_000}
-        )
+    async with _running_server(endpoint, service.dispatch):
+        video = VideoMemoryTools(endpoint)
+        try:
+            recorded = await video.list_recorded_participants.execute(EmptyRequest())
+            stats = await video.get_video_stats.execute(
+                VideoStatsRequest(participant_id="user/name")
+            )
+            latest_clip = await video.get_latest_video.execute(
+                LatestVideoRequest(
+                    participant_id="user/name",
+                    duration_seconds=1,
+                )
+            )
+            historical_clip = await video.get_historical_video.execute(
+                HistoricalVideoRequest(
+                    participant_id="user/name",
+                    start_us=1_100_000,
+                    duration_seconds=1,
+                )
+            )
+            health = await video.get_health()
+        finally:
+            await video.close()
 
     assert recorded.participants == ["user/name"]
     assert stats.num_chunks == 2
-    assert Path(clip.path).read_bytes() == b"firstsecond"
+    assert Path(latest_clip.path).read_bytes() == b"firstsecond"
+    assert (latest_clip.start_us, latest_clip.end_us) == (1_500_000, 2_500_000)
+    assert Path(historical_clip.path).read_bytes() == b"firstsecond"
+    assert (historical_clip.start_us, historical_clip.end_us) == (
+        1_100_000,
+        2_100_000,
+    )
+    assert health.ready is True
     with pytest.raises(RPCError, match="unknown operation"):
         await service.dispatch("list_live_participants", {})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool_name", "selection_request"),
+    [
+        (
+            "get_latest_frames",
+            LatestFramesRequest(
+                participant_id="sample/user",
+                duration_seconds=7,
+                frame_budget=4,
+                max_width=2,
+                max_height=2,
+            ),
+        ),
+        (
+            "get_historical_frames",
+            HistoricalFramesRequest(
+                participant_id="sample/user",
+                start_us=1_000_000,
+                duration_seconds=7,
+                frame_budget=4,
+                max_width=2,
+                max_height=2,
+            ),
+        ),
+    ],
+)
+async def test_latest_and_historical_sampling_share_window_semantics(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tool_name: str,
+    selection_request: LatestFramesRequest | HistoricalFramesRequest,
+) -> None:
+    recordings = tmp_path / "recordings"
+    _sample_recording(recordings, "sample/user")
+    decoded_chunks: list[bytes] = []
+    nv12 = np.array(
+        [[16, 16, 16, 16], [16, 16, 16, 16], [128, 128, 128, 128]],
+        dtype=np.uint8,
+    )
+
+    def decode(data: bytes, _gpu_id: int) -> list[np.ndarray]:
+        decoded_chunks.append(data)
+        return [nv12.copy() for _ in range(4)]
+
+    monkeypatch.setattr("video_memory_service.service.decode_h264", decode)
+    service = VideoMemoryService(
+        store=ChunkStore(recordings),
+        out_dir=tmp_path / "output",
+        gpu_id=0,
+    )
+    endpoint = f"ipc:///tmp/video-{uuid.uuid4().hex}"
+
+    async with _running_server(endpoint, service.dispatch):
+        video = VideoMemoryTools(endpoint)
+        try:
+            result = await getattr(video, tool_name).execute(selection_request)
+        finally:
+            await video.close()
+
+    assert decoded_chunks == [b"1000000", b"5000000"]
+    assert [frame.timestamp_us for frame in result.frames] == [
+        1_000_000,
+        3_000_000,
+        6_000_000,
+        8_000_000,
+    ]
+    assert len(result.frames) == result.frame_budget == 4
+    assert result.start_us == 1_000_000
+    assert result.end_us == 8_000_000
+    assert result.max_width == result.max_height == 2
+    query = VideoQueryRequest(frames=result.frames, query="What changed?")
+    assert [frame.timestamp_us for frame in query.frames] == [
+        1_000_000,
+        3_000_000,
+        6_000_000,
+        8_000_000,
+    ]
+    for frame in result.frames:
+        assert (frame.width, frame.height) == (2, 1)
+        assert "path" not in frame.model_dump()
+        with Image.open(frame.image.uri) as image:
+            assert image.size == (2, 1)
+
+
+@pytest.mark.parametrize("failure", ["pruned", "corrupt", "zero_frames"])
+async def test_frame_sampling_skips_unusable_chunks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    recordings = tmp_path / "recordings"
+    _sample_recording(recordings, "sample/user")
+    original_read_bytes = Path.read_bytes
+    nv12 = np.array(
+        [[16, 16, 16, 16], [16, 16, 16, 16], [128, 128, 128, 128]],
+        dtype=np.uint8,
+    )
+
+    def read_bytes(path: Path) -> bytes:
+        if failure == "pruned" and path.name == "1000000.264":
+            raise FileNotFoundError(path)
+        return original_read_bytes(path)
+
+    def decode(data: bytes, _gpu_id: int) -> list[np.ndarray]:
+        if data == b"1000000":
+            if failure == "corrupt":
+                raise RuntimeError("corrupt chunk")
+            if failure == "zero_frames":
+                return []
+        return [nv12.copy() for _ in range(4)]
+
+    monkeypatch.setattr(Path, "read_bytes", read_bytes)
+    monkeypatch.setattr("video_memory_service.service.decode_h264", decode)
+    service = VideoMemoryService(
+        store=ChunkStore(recordings),
+        out_dir=tmp_path / "output",
+        gpu_id=0,
+    )
+
+    result = await service._sample_frames(  # noqa: SLF001
+        HistoricalFramesRequest(
+            participant_id="sample/user",
+            start_us=1_000_000,
+            duration_seconds=7,
+            frame_budget=4,
+        ),
+        1_000_000,
+        8_000_000,
+    )
+
+    assert [frame["timestamp_us"] for frame in result["frames"]] == [
+        6_000_000,
+        8_000_000,
+    ]
+
+
+def test_sampled_png_fits_target_without_upscaling(tmp_path: Path) -> None:
+    rgb = np.zeros((2, 4, 3), dtype=np.uint8)
+
+    assert save_png(
+        rgb, tmp_path / "small.png", max_width=2, max_height=2
+    ) == (2, 1)
+    assert save_png(
+        rgb, tmp_path / "native.png", max_width=8, max_height=8
+    ) == (4, 2)
+
+
+@pytest.mark.parametrize(
+    ("request_model", "extra"),
+    [
+        (LatestFramesRequest, {}),
+        (HistoricalFramesRequest, {"start_us": 1_000_000}),
+    ],
+)
+def test_sample_frames_schema_bounds_work(request_model, extra: dict) -> None:
+    with pytest.raises(ValueError, match="less than or equal to 256"):
+        request_model(
+            participant_id="user",
+            duration_seconds=1,
+            frame_budget=257,
+            **extra,
+        )
+    with pytest.raises(ValueError, match="less than or equal to 300"):
+        request_model(
+            participant_id="user",
+            duration_seconds=301,
+            frame_budget=1,
+            **extra,
+        )
+
+    with pytest.raises(ValueError, match="must be provided together"):
+        request_model(
+            participant_id="user",
+            duration_seconds=1,
+            frame_budget=1,
+            max_width=640,
+            **extra,
+        )
+
+    schema = request_model.model_json_schema()
+    assert schema["properties"]["duration_seconds"]["maximum"] == 300
+    assert schema["properties"]["frame_budget"]["maximum"] == 256
+    assert schema["properties"]["max_width"]["anyOf"][0]["exclusiveMinimum"] == 0
+    assert schema["properties"]["max_height"]["anyOf"][0]["exclusiveMinimum"] == 0
+
+
+@pytest.mark.asyncio
+async def test_video_memory_service_validation_and_disabled_mode(
+    tmp_path: Path,
+) -> None:
+    service = VideoMemoryService(store=None, out_dir=tmp_path / "output", gpu_id=0)
+
+    assert await service.dispatch("get_health", {}) == {
+        "ready": True,
+        "recording_enabled": False,
+    }
+    with pytest.raises(RPCError) as invalid:
+        await service.dispatch("get_health", {"unexpected": True})
+    with pytest.raises(RPCError) as disabled:
+        await service.dispatch("get_video_stats", {"participant_id": "alice"})
+
+    assert invalid.value.code == "invalid_request"
+    assert disabled.value.code == "recording_disabled"
+
+
+@pytest.mark.asyncio
+async def test_recorded_frame_decodes_and_exports_png_through_native_rpc(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chunk = tmp_path / "chunk.264"
+    chunk.write_bytes(b"h264")
+    store = ChunkStore(tmp_path / "recordings")
+    monkeypatch.setattr(
+        store,
+        "frame_chunk",
+        lambda _participant_id, _target_us: (
+            chunk,
+            {
+                "start_us": 1_000_000,
+                "end_us": 1_000_000,
+                "num_frames": 1,
+                "width": 2,
+                "height": 2,
+            },
+        ),
+    )
+    nv12 = np.array([[16, 16], [16, 16], [128, 128]], dtype=np.uint8)
+    monkeypatch.setattr(
+        "video_memory_service.service.decode_h264",
+        lambda _data, _gpu_id: [nv12],
+    )
+    service = VideoMemoryService(store=store, out_dir=tmp_path / "output", gpu_id=0)
+    endpoint = f"ipc:///tmp/video-{uuid.uuid4().hex}"
+
+    async with _running_server(endpoint, service.dispatch):
+        video = VideoMemoryTools(endpoint)
+        try:
+            result = await video.get_historical_frame.execute(
+                HistoricalFrameRequest(
+                    participant_id="alice",
+                    start_us=1_000_000,
+                )
+            )
+        finally:
+            await video.close()
+
+    with Image.open(result.image.uri) as image:
+        assert image.format == "PNG"
+        assert image.size == (2, 2)
+    assert result.timestamp_us == 1_000_000
+    assert "path" not in result.model_dump()
+
+
+@pytest.mark.asyncio
+async def test_video_memory_process_touches_ready_file_after_rpc_bind(
+    tmp_path: Path,
+) -> None:
+    endpoint = f"ipc://{tmp_path / (uuid.uuid4().hex + '.sock')}"
+    ready_file = tmp_path / "video.ready"
+    task = asyncio.create_task(
+        video_memory_main._serve(
+            {"endpoint": endpoint, "out_dir": str(tmp_path / "output")},
+            ready_file,
+        )
+    )
+    try:
+        for _ in range(100):
+            if ready_file.exists():
+                break
+            await asyncio.sleep(0.01)
+        assert ready_file.exists()
+        video = VideoMemoryTools(endpoint)
+        try:
+            health = await video.get_health()
+        finally:
+            await video.close()
+        assert health.ready is True
+        assert health.recording_enabled is False
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
 
 
 @pytest.mark.asyncio
@@ -465,36 +744,25 @@ async def test_recorded_frame_reports_frame_export_errors(tmp_path: Path, monkey
 
     with pytest.raises(RPCError) as error:
         await service.dispatch(
-            "get_frame_from_time",
-            {"participant_id": "user", "reference_time_us": 1},
+            "get_historical_frame",
+            {"participant_id": "user", "start_us": 1},
         )
 
     assert error.value.code == "frame_export_error"
 
-
-def test_video_memory_schemas_alias_forwards_and_warns() -> None:
-    import xr_ai_nat.functions.video_memory.schemas as schemas_module
-
-    with pytest.warns(DeprecationWarning):
-        importlib.reload(schemas_module)
-
-    # Unchanged names re-exported.
-    assert schemas_module.VideoStatsRequest is VideoStatsRequest
-    # Renamed models are kept as deprecated aliases (same data contracts).
-    assert schemas_module.ParticipantsResult is ListRecordedParticipantsResult
-    assert schemas_module.VideoMemoryHealth is VideoHealthResult
-    assert schemas_module.EmptyRequest is ListRecordedParticipantsRequest
-    # The pre-rename package-level export is preserved too.
-    assert ParticipantsResult is ListRecordedParticipantsResult
-
-
-def test_historical_frame_schema_requires_an_absolute_reference() -> None:
+def test_historical_requests_share_an_absolute_start() -> None:
     with pytest.raises(ValueError, match="greater than 0"):
-        HistoricalFrameRequest(participant_id="user", reference_time_us=0)
+        HistoricalFrameRequest(participant_id="user", start_us=0)
 
-    schema = HistoricalFrameRequest.model_json_schema()
-    assert "Unix-epoch timestamp" in schema["properties"]["reference_time_us"]["description"]
-    assert "Whole seconds" in schema["properties"]["second_ago"]["description"]
+    frame_schema = HistoricalFrameRequest.model_json_schema()
+    video_schema = HistoricalVideoRequest.model_json_schema()
+    frames_schema = HistoricalFramesRequest.model_json_schema()
+    for schema in (frame_schema, video_schema, frames_schema):
+        assert "Unix-epoch timestamp" in schema["properties"]["start_us"]["description"]
+    assert set(frame_schema["required"]) == {"participant_id", "start_us"}
+    assert {"participant_id", "start_us", "duration_seconds"} <= set(
+        video_schema["required"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -519,3 +787,17 @@ def test_select_decoded_frame_clamps_to_recorded_boundaries(
         decoded_frames=decoded_frames,
         target_us=target_us,
     ) == expected
+
+
+@pytest.mark.parametrize(
+    ("start_us", "end_us", "frame_budget", "expected"),
+    [
+        (1, 10, 1, [10]),
+        (1, 10, 2, [1, 10]),
+        (1, 10, 4, [1, 4, 7, 10]),
+    ],
+)
+def test_sample_target_timestamps_span_the_requested_window(
+    start_us: int, end_us: int, frame_budget: int, expected: list[int]
+) -> None:
+    assert sample_target_timestamps(start_us, end_us, frame_budget) == expected

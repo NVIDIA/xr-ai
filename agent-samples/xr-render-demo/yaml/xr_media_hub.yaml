@@ -3,7 +3,7 @@
 
 # XR Media Hub configuration for the xr-render-demo sample.
 # Paths are relative to this file's directory.
-# See server-runtime/xr_media_hub.yaml for all available options.
+# See services/xr-media-hub/xr_media_hub.yaml for all available options.
 
 # ── LiveKit server ────────────────────────────────────────────────────────────
 api_key:    devkey
@@ -13,6 +13,11 @@ room_name:  xr-room
 lk_port_ws:  7880
 lk_port_tcp: 7881
 lk_port_udp: 7882
+
+# Cloud VMs behind NAT may need STUN-based public-IP discovery. Also skip
+# validation when the NAT does not support LiveKit's public-IP self-ping.
+# lk_use_external_ip: true
+# lk_skip_external_ip_validation: true
 
 # ── Web client server ─────────────────────────────────────────────────────────
 # The page serves both stacks: LiveKit (agent audio/data over the WSS proxy on
@@ -26,7 +31,7 @@ web_client_dir:    ../../../client-samples/web-xr
 # ── Optional: token server ────────────────────────────────────────────────────
 enable_token_server: true
 # Change if another service holds port 8000 (e.g. iphlpsvc under WSL2 mirrored
-# networking; see the note in server-runtime/xr_media_hub.yaml).
+# networking; see the note in services/xr-media-hub/xr_media_hub.yaml).
 # token_server_port: 8000
 
 # ── Video recording ──────────────────────────────────────────────────────────

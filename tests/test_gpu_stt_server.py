@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""GPU smoke test for ai-services/stt-server.
+"""GPU smoke test for services/stt-server.
 
 Boots the real NeMo ASR server (parakeet-tdt-0.6b-v3) as a subprocess via
 ``uv run``, POSTs a short sine-wave WAV to ``/v1/audio/transcriptions``, and
@@ -35,8 +35,8 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_STT_DIR   = _REPO_ROOT / "ai-services" / "stt-server"
-_REPO_CACHE = _REPO_ROOT / "ai-services" / "models"
+_STT_DIR   = _REPO_ROOT / "services" / "stt-server"
+_REPO_CACHE = _REPO_ROOT / "models"
 # Honor HF_HOME so callers with a non-default cache (e.g. a shared NAS or
 # a CI bind-mount) don't trigger a cold redownload.
 _HF_CACHE   = Path(os.environ.get("HF_HOME", "~/.cache/huggingface")).expanduser()
@@ -79,7 +79,7 @@ def _make_sine_wav(seconds: float = 1.0, sample_rate: int = 16_000,
 def _resolve_cached_cache_root() -> Path | None:
     """Return the first cache root containing parakeet weights, or None.
 
-    Checks both the repo-local model cache (``ai-services/models``, the
+    Checks the repository-local model cache (``models/``, the
     canonical location wired into the stt-server YAML) and the standard
     Hugging Face cache (``~/.cache/huggingface``) so weights downloaded by
     any other tool are reused without a redundant fetch.

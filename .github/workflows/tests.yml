@@ -40,8 +40,8 @@ jobs:
           cache-dependency-glob: |
             tests/pyproject.toml
             tests/uv.lock
-            agent-sdk/xr-ai-hub-client/pyproject.toml
-            server-runtime/pyproject.toml
+            agent-sdk/xr-ai-hub/pyproject.toml
+            services/xr-media-hub/pyproject.toml
 
       - name: Install Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}

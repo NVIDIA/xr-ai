@@ -11,7 +11,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEFAULT_PROMPT="$HERE/../worker/prompts/system.txt"
+DEFAULT_PROMPT="$HERE/../worker/xr_render_demo_worker/prompts/system.txt"
 
 PROMPT="${1:-$DEFAULT_PROMPT}"
 LOG=/tmp/eval_loop.log
@@ -82,8 +82,8 @@ trigger() {
         echo "  $(date "$TIME_FMT")  prompt=$PROMPT"
         echo "═══════════════════════════════════════════════════════════════"
     } >> "$LOG"
-    # Reuse the worker environment so schema discovery imports the exact NAT
-    # function packages used by the live sample.
+    # Reuse the worker environment so schema discovery imports the exact
+    # native tool packages used by the live sample.
     setsid uv run --project "$WORKER" python "$EVAL" \
         --verbose --prompt "$PROMPT" >> "$LOG" 2>&1 &
     running_pid=$!

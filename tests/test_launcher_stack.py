@@ -13,9 +13,9 @@ import xr_ai_launcher._stack as _stack
 
 class TestProcessDataclass:
     def test_defaults(self):
-        p = _stack.Process("hub", "../../server-runtime", "xr_media_hub")
+        p = _stack.Process("hub", "../../services/xr-media-hub", "xr_media_hub")
         assert p.name == "hub"
-        assert p.project == "../../server-runtime"
+        assert p.project == "../../services/xr-media-hub"
         assert p.command == "xr_media_hub"
         assert p.config is None
         assert p.gpu is None
@@ -24,7 +24,7 @@ class TestProcessDataclass:
 
     def test_all_fields(self):
         p = _stack.Process(
-            "vlm", "../../ai-services/vlm-server", "vlm_server",
+            "vlm", "../../services/vlm-server", "vlm_server",
             config="yaml/vlm.yaml",
             gpu="0",
             launch_mode="persist",
@@ -36,26 +36,26 @@ class TestProcessDataclass:
         assert p.port == 8100
 
     def test_frozen_immutability(self):
-        p = _stack.Process("hub", "../../server-runtime", "xr_media_hub")
+        p = _stack.Process("hub", "../../services/xr-media-hub", "xr_media_hub")
         with pytest.raises((AttributeError, TypeError)):
             p.name = "other"  # type: ignore[misc]
 
     def test_reuse_launch_mode(self):
-        p = _stack.Process("stt", "../../ai-services/stt-server", "stt_server",
+        p = _stack.Process("stt", "../../services/stt-server", "stt_server",
                     launch_mode="reuse")
         assert p.launch_mode == "reuse"
 
 
 class TestParallelDataclass:
     def test_stores_processes_as_tuple(self):
-        p1 = _stack.Process("stt", "../../ai-services/stt-server", "stt_server")
-        p2 = _stack.Process("tts", "../../ai-services/tts/piper", "piper_tts_server")
+        p1 = _stack.Process("stt", "../../services/stt-server", "stt_server")
+        p2 = _stack.Process("tts", "../../services/piper-tts", "piper_tts_server")
         group = _stack.Parallel([p1, p2])
         assert isinstance(group.processes, tuple)
         assert group.processes == (p1, p2)
 
     def test_accepts_single_process(self):
-        p = _stack.Process("stt", "../../ai-services/stt-server", "stt_server")
+        p = _stack.Process("stt", "../../services/stt-server", "stt_server")
         group = _stack.Parallel([p])
         assert len(group.processes) == 1
 

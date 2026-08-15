@@ -1,26 +1,35 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Public voice-session API for XR agents.
+"""Public voice runtime for XR agents.
 
 Pipecat, audio framing, and pipeline processors are implementation details.
-Applications create a :class:`VoiceSession` and supply an async
-:class:`VoiceHandler` callable.
+Applications register :class:`VoiceAgent`; :class:`VoiceSession` owns its media
+pipeline and service lifecycle.
 """
 
-from ._handler import VoiceHandler, VoiceQuery, VoiceResponse, VoiceTurn
 from ._processors import VadConfig
+from ._runtime import (
+    VOICE_OUTPUT_TOPIC,
+    UserQuery,
+    VoiceAgent,
+    VoiceInterrupted,
+    VoiceOutput,
+    VoiceParticipantLeft,
+    VoiceStreamClosedError,
+)
 from ._session import VoiceSession
-from ._text_input import TextMessageInput
 from ._transport import HubVoiceTransport
 
 __all__ = [
     "HubVoiceTransport",
-    "TextMessageInput",
     "VadConfig",
-    "VoiceHandler",
-    "VoiceQuery",
-    "VoiceResponse",
+    "VOICE_OUTPUT_TOPIC",
+    "UserQuery",
+    "VoiceAgent",
+    "VoiceInterrupted",
+    "VoiceOutput",
+    "VoiceParticipantLeft",
+    "VoiceStreamClosedError",
     "VoiceSession",
-    "VoiceTurn",
 ]

@@ -64,7 +64,7 @@ myst_enable_extensions = [
 ]
 myst_heading_anchors = 3
 
-# Don't choke the build on the bundled long-form changelog or build output.
+# Exclude generated documentation output.
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 # Keep release documentation immutable and publish main as development docs.
@@ -81,6 +81,7 @@ html_show_sphinx = False
 html_title = "XR AI"
 templates_path = ["_templates"]
 html_static_path = ["_static"]
+html_extra_path = ["_redirects"]
 html_css_files = ["css/custom.css"]
 
 # Named ``versioning.html`` so it does not shadow the theme's own

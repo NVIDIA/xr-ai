@@ -5,7 +5,7 @@
 Shared loguru setup for the xr-ai monorepo.
 
 Every process in a sample run (orchestrator, worker, hub, AI services,
-MCP servers, cloudxr) calls :func:`setup_logging` once at startup. The
+typed services, cloudxr) calls :func:`setup_logging` once at startup. The
 result is a single, unified logging stack:
 
 * **stderr sink** — level controlled by ``XR_AI_VERBOSE`` (DEBUG when
@@ -20,7 +20,7 @@ result is a single, unified logging stack:
 * **stdlib bridge** — a :class:`logging.Handler` (``_InterceptHandler``)
   routes any record emitted via ``logging.getLogger(...)`` into loguru.
   This is how ``utils/xr-ai-launcher/`` (stdlib-only by contract) and
-  ``agent-sdk/xr-ai-hub-client/`` (pyzmq+msgpack-only by contract) end up in
+  ``agent-sdk/xr-ai-hub/`` (pyzmq+msgpack-only by contract) end up in
   the same file/stderr sinks even though they cannot import loguru.
 
 Subprocess coordination

@@ -33,6 +33,7 @@ on:
     tags: ["v*"]
     paths:
       - "docs/**"
+      - "agent-sdk/*/README.md"
       - ".github/workflows/docs.yaml"
       - ".github/scripts/select_latest_docs_release.py"
       - ".github/scripts/publish_docs.sh"
@@ -42,6 +43,7 @@ on:
     types: [opened, synchronize, reopened]
     paths:
       - "docs/**"
+      - "agent-sdk/*/README.md"
       - ".github/workflows/docs.yaml"
       - ".github/scripts/select_latest_docs_release.py"
       - ".github/scripts/publish_docs.sh"
@@ -118,6 +120,7 @@ jobs:
       contents: write
       pages: write
       id-token: write
+      pull-requests: write
     environment: github-pages
     concurrency:
       # Every publisher pushes the same branch. Serialize them all — including
@@ -188,6 +191,39 @@ jobs:
       - name: Deploy the site
         if: github.event_name == 'push' || steps.before.outputs.state == 'open'
         uses: ./.github/actions/deploy-docs-site
+      - name: Add the preview link to the pull request
+        if: >-
+          github.event_name == 'pull_request'
+          && steps.before.outputs.state == 'open'
+          && steps.after.outputs.removed != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          marker="<!-- xr-ai-docs-preview -->"
+          url="https://nvidia.github.io/xr-ai/preview/pr-${PR_NUMBER}/"
+          body="${marker}
+          Documentation preview: [Open preview](${url})
+
+          Updated for commit \`${HEAD_SHA:0:7}\`."
+
+          comment_id="$(gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("<!-- xr-ai-docs-preview -->")) | .id' \
+            | sed -n '1p')"
+
+          if [[ -n "$comment_id" ]]; then
+            gh api --method PATCH \
+              "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" \
+              -f body="$body" >/dev/null
+          else
+            gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+              -f body="$body" >/dev/null
+          fi
       - name: Summarize
         if: >-
           (github.event_name == 'push' || steps.before.outputs.state == 'open')

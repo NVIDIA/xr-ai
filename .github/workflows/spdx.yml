@@ -3,7 +3,7 @@
 
 name: spdx
 
-# Backstop for the SPDX header convention from AGENTS.md § License headers.
+# Backstop for the convention in docs/source/guides/spdx-headers.md.
 # The same check runs locally as a pre-commit hook (see
 # `.pre-commit-config.yaml`); this workflow catches contributors who haven't
 # installed the hook.

@@ -20,7 +20,7 @@ import asyncio
 
 import pytest
 
-from xr_ai_hub import DataMessage
+from xr_ai_hub import AGENT_STATUS_TOPIC, DataMessage
 
 pytestmark = pytest.mark.asyncio
 
@@ -44,8 +44,12 @@ async def test_return_data_only_reaches_target_connector(hub, make_connector, ma
     alice_received: list[DataMessage] = []
     bob_received:   list[DataMessage] = []
 
-    async def cb_alice(msg): alice_received.append(msg)
-    async def cb_bob(msg):   bob_received.append(msg)
+    async def cb_alice(msg):
+        if msg.topic != AGENT_STATUS_TOPIC:
+            alice_received.append(msg)
+    async def cb_bob(msg):
+        if msg.topic != AGENT_STATUS_TOPIC:
+            bob_received.append(msg)
 
     alice_conn.on_return_data(cb_alice)
     bob_conn  .on_return_data(cb_bob)

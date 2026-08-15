@@ -11,17 +11,11 @@ model layer. Worker code depends on the typed protocols `LLMService`,
 concrete clients from a model deployment profile — no hand-rolled httpx calls
 in callers, no model quirks leaking out of this package.
 
-## Why
+## Contract
 
-Before this package, every consumer (vlm-mcp, simple-vlm-example worker,
-xr-render-demo worker, xr-ai-pipecat) rolled its own httpx wrappers and
-hard-coded model quirks (`chat_template_kwargs`, served-model-name strings,
-the `reasoning` vs `reasoning_content` field difference between
-nano_v3 and nemotron_v3 parsers).  Swapping an LLM meant editing N files.
-
-After: one selected profile per sample names the logical models the worker
-needs; `make_llm(config, "agent_llm")` returns something that satisfies
-`LLMService` regardless of which backend or quirks are involved.
+Model profiles name logical roles and keep endpoint and model-specific behavior
+inside this package. Callers depend on the typed protocol and can change models
+through configuration.
 
 ## Quickstart
 
@@ -57,7 +51,8 @@ Built-in presets — see `xr_ai_models/presets/`:
 
 | Preset | Service it targets | Notes |
 |---|---|---|
-| `cosmos_vlm`     | vlm-server               | image + video; `enable_thinking=false` by default. Video requires vlm-server's `max_videos_per_prompt >= 1` |
+| `cosmos3_nano_reasoner` | vlm-server          | default; Cosmos3 Nano text-output Reasoner, image + video; video requires `max_videos_per_prompt >= 1` |
+| `cosmos_vlm`     | vlm-server               | Cosmos-Reason1 compatibility option; image + video; `enable_thinking=false` by default; video requires `max_videos_per_prompt >= 1` |
 | `llama_nemotron` | llama-nemotron-llm-server | OpenAI tool calling via llama3_json (server-side) |
 | `nemotron3_nano` | nemotron3-nano-llm-server | reasoning field: `reasoning` |
 | `nemotron_omni`  | nemotron-omni-llm-server  | reasoning field: `reasoning_content`, vision + video |
@@ -140,7 +135,8 @@ class LLMService(Protocol):
     capabilities: Capabilities
     async def chat(self, messages, *, tools=None, max_tokens=None,
                    temperature=None, enable_thinking=False,
-                   thinking_budget=None, timeout=None) -> ChatResponse: ...
+                   thinking_budget=None, timeout=None,
+                   headers=None) -> ChatResponse: ...
     def stream(self, messages, *, ...) -> AsyncIterator[str]: ...
     async def health(self) -> bool: ...
     async def close(self) -> None: ...
@@ -149,10 +145,19 @@ class VLMService(Protocol):
     capabilities: Capabilities
     async def ask_image(self, image, question, *, system_prompt="",
                         max_tokens=None, temperature=None,
-                        timeout=None) -> ChatResponse: ...
+                        timeout=None, headers=None) -> ChatResponse: ...
+    async def ask_images(self, images, question, *, system_prompt="",
+                         max_tokens=None, temperature=None,
+                         timeout=None, headers=None) -> ChatResponse: ...
     async def ask_video(self, video, question, *, system_prompt="",
                         max_tokens=None, temperature=None,
-                        timeout=None) -> ChatResponse: ...
+                        timeout=None, headers=None) -> ChatResponse: ...
+    def stream(self, image, question, *, system_prompt="",
+               max_tokens=None, temperature=None,
+               timeout=None, headers=None) -> AsyncIterator[str]: ...
+    def stream_images(self, images, question, *, system_prompt="",
+                      max_tokens=None, temperature=None,
+                      timeout=None, headers=None) -> AsyncIterator[str]: ...
     async def health(self) -> bool: ...
 
 class STTService(Protocol):
@@ -174,6 +179,15 @@ class EmbeddingService(Protocol):
 `reasoning_field` knob normalizes `reasoning_content` (nemotron_v3 parser)
 into the same surface.
 
+`LLMService` and `VLMService` request methods accept optional string-valued
+per-call headers for execution context such as Relay session lineage. The model
+profile remains the authority for credentials: callers cannot supply an
+`Authorization` header.
+
+`ask_image()` and `stream()` are one-image wrappers over `ask_images()` and
+`stream_images()`. Multi-image calls preserve caller order and place every
+image in one OpenAI-compatible user message before the question.
+
 ## Remote / hosted-NIM endpoints
 
 Cloud / remote endpoints (e.g. hosted [NVIDIA NIM](https://build.nvidia.com))
@@ -186,7 +200,7 @@ are a profile change:
       "category": "vlm",
       "adapter": {
         "kind": "openai_compat",
-        "model_name": "nvidia/cosmos-reason1-7b"
+        "model_name": "nvidia/cosmos3-nano-reasoner"
       },
       "endpoint": {
         "base_url": "https://integrate.api.nvidia.com",
@@ -203,10 +217,7 @@ are a profile change:
 without that route use `readiness: none`, which makes
 `health()` return `True` without a request — otherwise a worker's readiness
 gate would block forever. See
-[`docs/ai-services.md`](../../docs/ai-services.md#hosting-models-on-nvidia-nim).
-
-Future non-OpenAI-compat backends (LiteLLM, vendor SDKs) plug in as new
-`kind`s in `_factory.py::make_*`; the protocols and callers do not change.
+`docs/source/components/ai-services.md` for hosted endpoint operation.
 
 ## Tests
 

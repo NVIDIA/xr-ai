@@ -26,6 +26,6 @@ echo "" >&2
 echo "  Or add to your git config so every commit signs off automatically:" >&2
 echo "    git config --global alias.c 'commit -s'" >&2
 echo "" >&2
-echo "  See https://developercertificate.org/ and AGENTS.md § DCO sign-off." >&2
+echo "  See CONTRIBUTING.md#developer-certificate-of-origin." >&2
 echo "" >&2
 exit 1

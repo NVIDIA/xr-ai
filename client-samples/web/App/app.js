@@ -40,7 +40,7 @@ const model = {
 };
 
 // Topics carrying the agent's final text reply. Different samples publish on
-// different topics (e.g. simple-vlm-example uses `vlm.response`, glasses-agent-nat
+// different topics (e.g. simple-vlm-example uses `vlm.response`, xr-render-demo
 // uses `agent.response`); both route into the Agent panel and are suppressed
 // from the "Received" list.
 const AGENT_REPLY_TOPICS = new Set(['agent.response', 'vlm.response']);

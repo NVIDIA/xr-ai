@@ -12,7 +12,7 @@ description = "Recorded-video memory service for XR AI."
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "xr-ai-logging",
-    "xr-ai-nat[services]",
+    "xr-ai-tools[services]",
     "numpy>=1.24",
     "Pillow>=10.0",
     "PyNvVideoCodec>=2.2",
@@ -21,7 +21,7 @@ dependencies = [
 
 [tool.uv.sources]
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
-xr-ai-nat = { path = "../../agent-sdk/xr-ai-nat", editable = true }
+xr-ai-tools = { path = "../../agent-sdk/xr-ai-tools", editable = true }
 
 [project.scripts]
 video_memory_service = "video_memory_service.__main__:run"

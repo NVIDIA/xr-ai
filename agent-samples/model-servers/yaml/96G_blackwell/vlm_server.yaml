@@ -5,22 +5,29 @@
 #
 # vlm is SECOND in load order: agent-llm → vlm.
 # free_at_startup ≈ 96 − 34 (agent-llm) − 2 (STT) ≈ 60 GiB.
-# 0.20 × 96 = 19.2 GiB cap: ~16 GiB Cosmos-7B weights + ~3 GiB KV.
+# 0.23 × 96 = 22.1 GiB cap: 16.8 GiB measured Reasoner weights plus
+# multimodal encoder profiling, runtime overhead, and KV cache.
+# hf_overrides selects the Reasoner runtime; details are documented in
+# docs/source/components/ai-services.md#per-server-notes.
 
-model: nvidia/Cosmos-Reason1-7B
+model: nvidia/Cosmos3-Nano
+hf_overrides:
+  architectures:
+    - Cosmos3ForConditionalGeneration
 hf_token: ""
 port: 8100
 host: "0.0.0.0"
 model_cache: ../../../../models
-gpu_memory_utilization: 0.20
+gpu_memory_utilization: 0.23
 max_num_seqs: 4
 enforce_eager: true
+async_scheduling: true
+mm_encoder_tp_mode: data
 max_videos_per_prompt: 0
-# 4 fits within the default max_model_len=8192 (each Qwen2.5-VL image is
-# ~1.5k tokens). Raise both together if multi-image turns get larger.
+# Raise max_model_len too if multi-image turns outgrow the context window.
 max_images_per_prompt: 4
 
 # vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).
-# See ai-services/vlm-server/vlm_server.yaml for the full toggle docs.
+# See services/vlm-server/vlm_server.yaml for the full toggle docs.
 vllm_backend: docker
-vllm_image:   nvcr.io/nvidia/vllm:26.04-py3
+vllm_image:   nvcr.io/nvidia/vllm:26.07-py3

@@ -30,6 +30,7 @@ import asyncio
 import re
 from typing import TYPE_CHECKING
 
+import nemo_relay
 from loguru import logger
 from pipecat.frames.frames import (
     CancelFrame,
@@ -234,10 +235,20 @@ class StreamingTtsProcessor(FrameProcessor):
         st = self._state(pid)
         st.synth_seq += 1
         task  = asyncio.create_task(
-            self._tts.synthesize(sentence),
+            self._synthesize(sentence, pid=pid),
             name=f"tts-synth-{pid}-{st.synth_seq}",
+            context=nemo_relay.fork_asyncio_context(),
         )
         await queue.put((task, pid))
+
+    async def _synthesize(self, text: str, *, pid: str) -> bytes:
+        with nemo_relay.scope.scope(
+            "voice.tts",
+            nemo_relay.ScopeType.Function,
+            input={"text": text},
+            metadata={"participant_id": pid or None},
+        ):
+            return await self._tts.synthesize(text)
 
     async def _sender_loop(self, queue: asyncio.Queue) -> None:
         """Await each synth task in FIFO order, observe the WAV, and push the

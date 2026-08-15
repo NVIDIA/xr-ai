@@ -120,7 +120,7 @@ def warn_if_missing(*names: str) -> None:
             how = ("`export HF_TOKEN=...` or `huggingface-cli login`"
                    if name == "HF_TOKEN" else f"`export {name}=...`")
             print(f"  To enable it: get one at {url}, then {how}.", file=sys.stderr)
-        print("  See docs/credentials.md.", file=sys.stderr)
+        print("  See docs/source/getting_started/credentials.md.", file=sys.stderr)
 
 
 def require_credentials(*names: str, allow_missing: bool = False) -> None:
@@ -147,7 +147,7 @@ def require_credentials(*names: str, allow_missing: bool = False) -> None:
                    if name == "HF_TOKEN" else f"`export {name}=...`")
             print(f"  Get one at {url}, then {how}.", file=sys.stderr)
         print("  Or pass --allow-anonymous to start without it. "
-              "See docs/credentials.md.", file=sys.stderr)
+              "See docs/source/getting_started/credentials.md.", file=sys.stderr)
     sys.exit(2)
 
 

@@ -5,7 +5,7 @@
 
 One call composes:
 
-    input → VadStt → VoiceGate → handler → StreamingTts → output
+    input → VadStt → VoiceGate → runtime I/O → StreamingTts → output
 
 and returns the assembled :class:`Pipeline` plus a :class:`PipelineWorker`
 ready for :meth:`WorkerRunner.run`. :class:`VoiceSession` owns this private
@@ -19,7 +19,7 @@ from pipecat.pipeline.worker import PipelineWorker
 from xr_ai_models import STTService, TTSService
 from xr_ai_voicegate import VoiceGateConfig
 
-from ._processors.handler import _VoiceHandlerProcessor
+from ._processors.io import _VoiceIOProcessor
 from ._processors.streaming_tts import StreamingTtsProcessor
 from ._processors.vad_stt import VadConfig, VadSttProcessor
 from ._processors.voice_gate import VoiceGateProcessor
@@ -31,7 +31,7 @@ def _build_voice_pipeline(
     transport: HubVoiceTransport,
     stt: STTService,
     tts: TTSService,
-    handler_processor: _VoiceHandlerProcessor,
+    io_processor: _VoiceIOProcessor,
     vad_cfg: VadConfig,
     voice_gate_cfg: VoiceGateConfig,
     text_topic: str = "agent.response",
@@ -81,7 +81,7 @@ def _build_voice_pipeline(
         transport.input(),
         vad_stt,
         voice_gate_proc,
-        handler_processor,
+        io_processor,
         streaming_tts,
         transport.output(),
     ])

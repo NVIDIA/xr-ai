@@ -23,5 +23,5 @@ tts:
   base_url: http://localhost:8105
 
 vlm:
-  kind: preset:cosmos_vlm
+  kind: preset:cosmos3_nano_reasoner
   base_url: http://localhost:8100

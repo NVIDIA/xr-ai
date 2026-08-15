@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xr-ai-agent-runtime"
+version = "0.1.0"
+description = "Typed pub/sub runtime for XR AI agents."
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "nemo-relay>=0.7.2,<0.8",
+    "pydantic>=2.10",
+    "xr-ai-tools",
+]
+
+[tool.uv.sources]
+xr-ai-tools = { path = "../xr-ai-tools", editable = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["xr_ai_runtime"]

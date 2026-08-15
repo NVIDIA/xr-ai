@@ -24,6 +24,7 @@ import time
 from dataclasses import dataclass
 from typing import Awaitable, Callable
 
+import nemo_relay
 from loguru import logger
 from pipecat.frames.frames import (
     CancelFrame,
@@ -44,9 +45,8 @@ from xr_ai_voicegate._phrases import STOP_RE
 from .._frames import ParticipantLeftFrame
 
 
-# True acknowledges, False requests another bounded probe, and None rejects
-# the prefix so ordinary ambient speech does not consume all probe attempts.
-PartialTranscriptHandler = Callable[[str, str], Awaitable[bool | None]]
+# True acknowledges and False requests another bounded probe.
+PartialTranscriptHandler = Callable[[str, str], Awaitable[bool]]
 _MAX_PARTIAL_PROBES = 3
 _PARTIAL_PROBE_TAIL_S = 0.12
 _PARTIAL_PROBE_FINISH_GRACE_S = 0.15
@@ -223,7 +223,12 @@ class VadSttProcessor(FrameProcessor):
             f.transport_source = pid
             await self.push_frame(f)
             try:
-                text = await self._stt.transcribe(audio_bytes, sample_rate=sample_rate)
+                text = await self._transcribe(
+                    audio_bytes,
+                    sample_rate=sample_rate,
+                    participant_id=pid,
+                    mode="final",
+                )
             except Exception:
                 logger.exception("stt transcribe failed pid={!r}", pid)
                 return
@@ -308,7 +313,13 @@ class VadSttProcessor(FrameProcessor):
             self._probe_inflight.add(pid)
             try:
                 try:
-                    text = await self._stt.transcribe(audio, sample_rate=sr)
+                    text = await self._transcribe(
+                        audio,
+                        sample_rate=sr,
+                        participant_id=pid,
+                        mode="partial-probe",
+                        attempt=attempt,
+                    )
                 except asyncio.CancelledError:
                     return
                 except Exception:
@@ -317,10 +328,9 @@ class VadSttProcessor(FrameProcessor):
 
                 stop_matched = bool(text and STOP_RE.match(text))
                 logger.info(
-                    "early transcript probe fired pid={!r} attempt={} latency_ms={} "
-                    "stop_matched={} text={!r}",
+                    "early transcript probe fired pid={!r} attempt={} latency_ms={} stop_matched={}",
                     pid, attempt, round((time.monotonic() - before) * 1000),
-                    stop_matched, text,
+                    stop_matched,
                 )
                 if stop_matched:
                     await self._emit_early_stop(pid, text)
@@ -337,12 +347,46 @@ class VadSttProcessor(FrameProcessor):
                     if decision is True:
                         logger.info("early wake phrase acknowledged pid={!r}", pid)
                         return
-                    if decision is None:
-                        return
             finally:
                 self._probe_inflight.discard(pid)
             if pid not in self._probe_buffer:
                 return
+
+    async def _transcribe(
+        self,
+        audio: bytes,
+        *,
+        sample_rate: int,
+        participant_id: str,
+        mode: str,
+        attempt: int | None = None,
+    ) -> str:
+        metadata: dict[str, object] = {
+            "participant_id": participant_id,
+            "mode": mode,
+        }
+        if attempt is not None:
+            metadata["attempt"] = attempt
+        with nemo_relay.scope.scope(
+            "voice.stt",
+            nemo_relay.ScopeType.Function,
+            input={
+                "audio_bytes": len(audio),
+                "audio_duration_ms": round(
+                    (len(audio) // 2) * 1_000 / max(sample_rate, 1),
+                    3,
+                ),
+                "sample_rate": sample_rate,
+            },
+            metadata=metadata,
+        ):
+            text = await self._stt.transcribe(audio, sample_rate=sample_rate)
+            nemo_relay.scope.event(
+                "voice.stt.result",
+                data={"text": text},
+                metadata={"status": "completed" if text else "empty"},
+            )
+            return text
 
     async def _emit_early_stop(self, pid: str, text: str) -> None:
         """Emit the interrupt sequence for a STOP matched by a partial probe."""

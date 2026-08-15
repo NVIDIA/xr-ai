@@ -12,7 +12,7 @@ from pathlib import Path
 
 from loguru import logger
 from xr_ai_logging import setup_logging
-from xr_ai_nat.functions._service.rpc import RPCServer
+from xr_ai_tools.rpc import RPCServer
 
 from .engine import (
     SceneDispatcher,

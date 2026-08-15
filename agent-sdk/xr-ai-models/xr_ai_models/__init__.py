@@ -4,10 +4,8 @@
 """Unified service protocols and OpenAI-compatible clients for XR AI models.
 
 Repository code talks to the typed ``*Service`` protocols. The concrete
-``OpenAICompat*`` clients cover every in-tree backend (vLLM, in-process
-NeMo/Piper) and any external OpenAI-compatible endpoint.  Additional backend
-kinds (LiteLLM, vendor SDKs) slot in as new ``kind``s in the private factory
-implementation without changing the protocols or callers.
+``OpenAICompat*`` clients cover every in-tree backend and external
+OpenAI-compatible endpoints.
 """
 from ._protocols import (
     Capabilities,
@@ -36,11 +34,15 @@ from ._openai_compat import (
 )
 from ._config import (
     AdapterSpec,
+    Category,
     DeploymentSpec,
     EmbeddingSpec,
     EndpointSpec,
+    KIND_OPENAI_COMPAT,
     LLMSpec,
+    ModelKind,
     ModelsConfig,
+    Spec,
     STTSpec,
     TTSSpec,
     VLMSpec,
@@ -72,11 +74,15 @@ __all__ = [
     "OpenAICompatTTS",
     "OpenAICompatVLM",
     "AdapterSpec",
+    "Category",
     "DeploymentSpec",
     "EmbeddingSpec",
     "EndpointSpec",
+    "KIND_OPENAI_COMPAT",
     "LLMSpec",
+    "ModelKind",
     "ModelsConfig",
+    "Spec",
     "STTSpec",
     "TTSSpec",
     "VLMSpec",

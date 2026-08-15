@@ -12,10 +12,10 @@ description = "Multi-client / multi-agent integration tests for xr-ai."
 requires-python = ">=3.11,<3.13"
 dependencies = [
     # Pulled in via editable installs of the workspace packages.
+    "xr-ai-agent-runtime",
     "xr-ai-hub-client",
     "xr-ai-models",
-    "xr-ai-nat[agents,services,vision]",
-    "xr-ai-pipecat",
+    "xr-ai-tools[frames,image-editing,qr-code,services,vision]",
     "xr-ai-voice",
     "xr-media-hub",
     "xr-ai-launcher",
@@ -23,45 +23,34 @@ dependencies = [
     "xr-ai-vad",
     "xr-ai-voicegate",
     "xr-ai-vllm",
-    # MCP servers exercised by subprocess tests (fastmcp pulled in transitively).
-    "transcript-mcp-server",
-    "vlm-mcp-server",
-    "render-mcp",
     "xr-render-scene",
-    "video-mcp-server",
     "xr-video-memory-service",
     "xr-rag-service",
-    "vec-mcp-server",
     # Test runner.
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "numpy>=1.24",
-    # Direct test deps used across CPU MCP/vision/service tests and GPU coverage.
-    "fastmcp>=3.4,<4",
+    # Direct test deps used across CPU native vision/service tests and GPU coverage.
     "Pillow>=10.0",
+    "python-multipart>=0.0.9",
     "pyyaml>=6.0",
 ]
 
 [tool.uv.sources]
-xr-ai-hub-client           = { path = "../agent-sdk/xr-ai-hub-client",                        editable = true }
+xr-ai-agent-runtime      = { path = "../agent-sdk/xr-ai-runtime",       editable = true }
+xr-ai-hub-client           = { path = "../agent-sdk/xr-ai-hub",                        editable = true }
 xr-ai-models          = { path = "../agent-sdk/xr-ai-models",           editable = true }
-xr-ai-nat             = { path = "../agent-sdk/xr-ai-nat",              editable = true }
-xr-ai-pipecat         = { path = "../agent-sdk/xr-ai-pipecat",          editable = true }
+xr-ai-tools           = { path = "../agent-sdk/xr-ai-tools",            editable = true }
 xr-ai-voice           = { path = "../agent-sdk/xr-ai-voice",            editable = true }
-xr-media-hub          = { path = "../server-runtime",                   editable = true }
+xr-media-hub          = { path = "../services/xr-media-hub",             editable = true }
 xr-ai-launcher        = { path = "../utils/xr-ai-launcher",             editable = true }
 xr-ai-logging         = { path = "../utils/xr-ai-logging",              editable = true }
 xr-ai-vad             = { path = "../utils/xr-ai-vad",                  editable = true }
 xr-ai-voicegate       = { path = "../utils/xr-ai-voicegate",            editable = true }
 xr-ai-vllm            = { path = "../utils/xr-ai-vllm",                 editable = true }
-transcript-mcp-server = { path = "../agent-mcp-servers/transcript-mcp", editable = true }
-vlm-mcp-server        = { path = "../agent-mcp-servers/vlm-mcp",        editable = true }
-render-mcp            = { path = "../agent-mcp-servers/render-mcp",     editable = true }
 xr-render-scene       = { path = "../agent-samples/xr-render-demo/scene", editable = true }
-video-mcp-server      = { path = "../agent-mcp-servers/video-mcp",      editable = true }
 xr-video-memory-service = { path = "../services/video-memory-service", editable = true }
 xr-rag-service          = { path = "../services/rag-service", editable = true }
-vec-mcp-server        = { path = "../agent-mcp-servers/vec-mcp",        editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["xr_ai_tests"]
@@ -71,7 +60,7 @@ asyncio_mode = "auto"
 testpaths    = ["."]
 # stt-server is on pythonpath (not a dependency) so the endpoint tests can
 # import its FastAPI app without pulling the NeMo dependency tree.
-pythonpath   = ["../services/openxr-service", "../ai-services/stt-server"]
+pythonpath   = ["../services/openxr-service", "../services/stt-server"]
 markers = [
     "gpu: requires local GPU / Docker / NVENC; skipped in CI",
     "integration: spawns a real server subprocess (CPU-only); runs in CI",

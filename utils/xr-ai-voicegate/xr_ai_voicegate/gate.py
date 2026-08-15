@@ -157,12 +157,12 @@ class VoiceGate:
         return self._chime_enabled
 
     def matches_magic_phrase(self, text: str) -> bool:
-        """Return whether *text* begins with a configured magic phrase."""
+        """Return whether *text* has a phrase at a sentence boundary."""
         return self._magic_re is not None and strip_magic(self._magic_re, text) is not None
 
     def could_match_magic_phrase(self, text: str) -> bool:
-        """Return whether a growing partial transcript can become a match."""
-        candidate = _normalize_phrase(text)
+        """Return whether the current partial sentence can become a match."""
+        candidate = _normalize_phrase(_current_sentence(text))
         return bool(candidate) and any(
             phrase.startswith(candidate) for phrase in self._magic_prefixes
         )
@@ -370,3 +370,8 @@ class VoiceGate:
 
 def _normalize_phrase(text: str) -> str:
     return " ".join(re.findall(r"\w+", text.casefold()))
+
+
+def _current_sentence(text: str) -> str:
+    boundary = max(text.rfind(mark) for mark in ".!?")
+    return text[boundary + 1:] if boundary >= 0 else text

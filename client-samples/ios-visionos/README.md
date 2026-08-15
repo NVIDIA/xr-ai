@@ -322,7 +322,7 @@ other feature (agent, mic, camera, data) without an XR path.
 The two are independent: connecting/disconnecting CloudXR never drops
 the LiveKit room. When the CloudXR session reaches `.connected` the app
 publishes an empty data message on the `xr.session.started` LiveKit
-topic. `render-mcp` gates the LOVR launch on that signal exactly the
+topic. The render worker gates the LOVR launch on that signal exactly the
 same way it does for the web client.
 
 ### Server prerequisite: change `NV_DEVICE_PROFILE` to `auto-native`
@@ -369,7 +369,7 @@ Developer Program. The entitlement is committed in
    camera work as before.
 2. Tap **Launch XR**. The CloudXR session connects directly to the
    Connection host; once it reaches `Streaming` the agent worker
-   receives the `xr.session.started` signal and `render-mcp` launches
+   receives the `xr.session.started` signal and the render worker launches
    LOVR.
 3. Tap **Stop** to disconnect CloudXR while leaving the LiveKit room
    running.

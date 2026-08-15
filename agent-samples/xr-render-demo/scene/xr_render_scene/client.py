@@ -3,7 +3,7 @@
 
 """Typed client for the sample-local scene process."""
 
-from xr_ai_nat.functions._service.rpc import RPCClient
+from xr_ai_tools.rpc import RPCClient
 
 from .schemas import (
     AddPrimitiveRequest,

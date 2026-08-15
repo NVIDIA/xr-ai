@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 _STOP_TIMEOUT = 20.0  # seconds before SIGKILL (docker compose down can take ~10 s)
 
-# Lines emitted by a custom ``lovr.log`` callback (see render-mcp's main.lua)
+# Lines emitted by a custom ``lovr.log`` callback in the render scene
 # carry an authoritative severity from LOVR's official level vocabulary
 # (debug | info | warn | error per https://lovr.org/docs/lovr.log).
 _LOVR_LOG_PREFIX = re.compile(r"^LOVR_LOG\t(?P<level>\w+)\t(?P<tag>[^\t]*)\t(?P<msg>.*)$")

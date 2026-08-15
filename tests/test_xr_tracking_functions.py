@@ -11,12 +11,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from nat.builder.workflow_builder import WorkflowBuilder
 from openxr_service.pose import from_native_pose
 from openxr_service.service import OpenXRService
-from xr_ai_nat.functions._service.rpc import RPCClient, RPCError, RPCServer
-from xr_ai_nat.functions.spatial_math import SpatialFrame, Vector3
-from xr_ai_nat.functions.xr_tracking import HeadPose, OpenXRHealth, XRTrackingFunctionsConfig
+from xr_ai_tools.rpc import RPCClient, RPCError, RPCServer
+from xr_ai_tools.tracking import HeadPose, OpenXRHealth, TrackingTools
+from xr_ai_tools.types import EmptyRequest, SpatialFrame, Vector3
 
 
 def _endpoint(_tmp_path: Path) -> str:
@@ -88,18 +87,17 @@ async def test_tracking_function_returns_typed_user_frame(tmp_path: Path) -> Non
         raise AssertionError(operation)
 
     endpoint = _endpoint(tmp_path)
-    async with _running_server(endpoint, dispatch), WorkflowBuilder() as builder:
-        await builder.add_function_group(
-            "tracking",
-            XRTrackingFunctionsConfig(endpoint=endpoint),
-        )
-        group = await builder.get_function_group("tracking")
-        functions = await group.get_all_functions()
-        function = functions["tracking__get_user_frame"]
-        result = await function.ainvoke({}, to_type=SpatialFrame)
+    async with _running_server(endpoint, dispatch):
+        tracking = TrackingTools(endpoint)
+        try:
+            result = await tracking.get_user_frame.execute(EmptyRequest())
+            health = await tracking.get_health()
+        finally:
+            await tracking.close()
 
     assert result.origin == Vector3(x=1.0, y=1.7, z=2.0)
-    assert function.single_output_schema is SpatialFrame
+    assert health.session_open is True
+    assert tracking.get_user_frame.result_model is SpatialFrame
 
 
 @pytest.mark.asyncio

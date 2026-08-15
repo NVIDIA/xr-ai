@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cloudxr-runtime"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "isaacteleop[cloudxr]",
+    "pyyaml",
+    "xr-ai-launcher",
+    "xr-ai-logging",
+]
+
+[project.scripts]
+cloudxr_runtime = "cloudxr_runtime.__main__:run"
+
+[tool.uv.sources]
+xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
+xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["cloudxr_runtime"]

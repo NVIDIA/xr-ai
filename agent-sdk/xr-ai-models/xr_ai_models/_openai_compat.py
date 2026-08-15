@@ -16,7 +16,7 @@ import json
 import os
 import wave
 from pathlib import Path
-from typing import Any, AsyncIterator, Sequence
+from typing import Any, AsyncIterator, Mapping, Sequence
 from urllib.parse import urlparse
 
 import httpx
@@ -72,6 +72,22 @@ def _warn_if_cleartext_key(base_url: str, api_key: str | None) -> None:
 
 def _auth_headers(api_key: str | None) -> dict[str, str]:
     return {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
+
+def _request_headers(
+    api_key: str | None,
+    headers: Mapping[str, str] | None,
+) -> dict[str, str]:
+    """Merge per-call context while keeping model credentials configuration-owned."""
+    result: dict[str, str] = {}
+    for name, value in (headers or {}).items():
+        if not isinstance(name, str) or not isinstance(value, str):
+            raise TypeError("LLM request headers must be strings")
+        if name.lower() == "authorization":
+            raise ValueError("LLM request headers cannot override Authorization")
+        result[name] = value
+    result.update(_auth_headers(api_key))
+    return result
 
 
 async def _http_health(client: httpx.AsyncClient, url: str, enabled: bool) -> bool:
@@ -322,6 +338,7 @@ class OpenAICompatLLM:
         enable_thinking: bool = False,
         thinking_budget: int | None = None,
         timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> ChatResponse:
         payload = self._build_payload(
             messages,
@@ -329,7 +346,7 @@ class OpenAICompatLLM:
             enable_thinking=enable_thinking, thinking_budget=thinking_budget,
             stream=False,
         )
-        kwargs: dict[str, Any] = {"json": payload, "headers": _auth_headers(self._api_key)}
+        kwargs: dict[str, Any] = {"json": payload, "headers": _request_headers(self._api_key, headers)}
         if timeout is not None:
             kwargs["timeout"] = timeout
         resp = await self._client.post(self._chat_url, **kwargs)
@@ -348,6 +365,7 @@ class OpenAICompatLLM:
         enable_thinking: bool = False,
         thinking_budget: int | None = None,
         timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> AsyncIterator[str]:
         payload = self._build_payload(
             messages,
@@ -355,7 +373,7 @@ class OpenAICompatLLM:
             enable_thinking=enable_thinking, thinking_budget=thinking_budget,
             stream=True,
         )
-        kwargs: dict[str, Any] = {"json": payload, "headers": _auth_headers(self._api_key)}
+        kwargs: dict[str, Any] = {"json": payload, "headers": _request_headers(self._api_key, headers)}
         if timeout is not None:
             kwargs["timeout"] = timeout
         async with self._client.stream("POST", self._chat_url, **kwargs) as resp:
@@ -429,17 +447,24 @@ class OpenAICompatVLM:
     def health_url(self) -> str:
         return self._llm.health_url
 
-    def _build_messages(
-        self, image: ImageInput, question: str, system_prompt: str
+    def _build_image_messages(
+        self,
+        images: Sequence[ImageInput],
+        question: str,
+        system_prompt: str,
     ) -> list[ChatMessage]:
-        url = _normalize_image(image)
+        if not images:
+            raise ValueError("at least one image is required")
         msgs: list[ChatMessage] = []
         if system_prompt:
             msgs.append(ChatMessage(role="system", content=system_prompt))
         msgs.append(
             ChatMessage(
                 role="user",
-                content=[ImagePart(url=url), TextPart(text=question)],
+                content=[
+                    *(ImagePart(url=_normalize_image(image)) for image in images),
+                    TextPart(text=question),
+                ],
             )
         )
         return msgs
@@ -453,10 +478,33 @@ class OpenAICompatVLM:
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> ChatResponse:
+        return await self.ask_images(
+            [image],
+            question,
+            system_prompt=system_prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            timeout=timeout,
+            headers=headers,
+        )
+
+    async def ask_images(
+        self,
+        images: Sequence[ImageInput],
+        question: str,
+        *,
+        system_prompt: str = "",
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> ChatResponse:
         return await self._llm.chat(
-            self._build_messages(image, question, system_prompt),
+            self._build_image_messages(images, question, system_prompt),
             max_tokens=max_tokens, temperature=temperature, timeout=timeout,
+            headers=headers,
         )
 
     def _build_video_messages(
@@ -483,6 +531,7 @@ class OpenAICompatVLM:
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> ChatResponse:
         if not self.capabilities.video:
             raise ValueError(
@@ -493,6 +542,7 @@ class OpenAICompatVLM:
         return await self._llm.chat(
             self._build_video_messages(video, question, system_prompt),
             max_tokens=max_tokens, temperature=temperature, timeout=timeout,
+            headers=headers,
         )
 
     async def stream(
@@ -504,10 +554,34 @@ class OpenAICompatVLM:
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> AsyncIterator[str]:
+        async for chunk in self.stream_images(
+            [image],
+            question,
+            system_prompt=system_prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            timeout=timeout,
+            headers=headers,
+        ):
+            yield chunk
+
+    async def stream_images(
+        self,
+        images: Sequence[ImageInput],
+        question: str,
+        *,
+        system_prompt: str = "",
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> AsyncIterator[str]:
         async for chunk in self._llm.stream(
-            self._build_messages(image, question, system_prompt),
+            self._build_image_messages(images, question, system_prompt),
             max_tokens=max_tokens, temperature=temperature, timeout=timeout,
+            headers=headers,
         ):
             yield chunk
 

@@ -4,6 +4,10 @@
 """RPC dispatch for document retrieval."""
 
 from loguru import logger
+from pydantic import ValidationError
+from xr_ai_tools.rag import RetrieveRequest
+from xr_ai_tools.rpc import RPCError
+from xr_ai_tools.types import EmptyRequest
 
 from .index import DenseIndex
 
@@ -14,13 +18,11 @@ class RAGService:
 
     async def dispatch(self, method: str, arguments: dict) -> dict:
         if method == "retrieve":
-            query = arguments.get("query")
-            top_k = arguments.get("top_k", 4)
-            if not isinstance(query, str) or not query.strip():
-                raise ValueError("query must be a non-empty string")
-            if not isinstance(top_k, int) or not 1 <= top_k <= 20:
-                raise ValueError("top_k must be between 1 and 20")
-            results = await self._index.retrieve(query, top_k=top_k)
+            try:
+                request = RetrieveRequest.model_validate(arguments)
+            except ValidationError as exc:
+                raise RPCError(str(exc), code="invalid_request") from exc
+            results = await self._index.retrieve(request.query, top_k=request.top_k)
             logger.info(
                 "rag retrieval results={}",
                 [
@@ -30,11 +32,20 @@ class RAGService:
             )
             return {"results": results}
         if method == "list_documents":
+            self._validate_empty(arguments)
             return {"documents": self._index.documents}
         if method == "get_health":
+            self._validate_empty(arguments)
             return {
                 "ready": await self._index.health(),
                 "document_count": len(self._index.documents),
                 "chunk_count": len(self._index.chunks),
             }
-        raise ValueError(f"unknown method: {method}")
+        raise RPCError(f"unknown operation: {method}", code="unknown_operation")
+
+    @staticmethod
+    def _validate_empty(arguments: dict) -> None:
+        try:
+            EmptyRequest.model_validate(arguments)
+        except ValidationError as exc:
+            raise RPCError(str(exc), code="invalid_request") from exc

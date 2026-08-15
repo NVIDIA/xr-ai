@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 from loguru import logger
-from xr_ai_nat.functions._service.rpc import RPCError
+from xr_ai_tools.rpc import RPCError
 
 
 def safe_name(value: str) -> str:
@@ -62,18 +62,25 @@ class ChunkStore:
             participants.append(self._identity(directory) or directory.name)
         return participants
 
-    def _metadata(self, chunk: Path) -> dict:
+    def _metadata(self, chunk: Path) -> dict | None:
+        try:
+            size_bytes = chunk.stat().st_size
+        except FileNotFoundError:
+            logger.debug("Ignoring video chunk pruned during enumeration: {}", chunk)
+            return None
         sidecar = self._check(chunk.with_suffix(".json"))
         if sidecar.exists():
             try:
-                return json.loads(sidecar.read_text(encoding="utf-8"))
+                metadata = json.loads(sidecar.read_text(encoding="utf-8"))
+                metadata.setdefault("size_bytes", size_bytes)
+                return metadata
             except (OSError, json.JSONDecodeError) as error:
                 logger.warning("Ignoring corrupt video metadata {}: {}", sidecar, error)
         timestamp = int(chunk.stem)
         return {
             "start_us": timestamp,
             "end_us": timestamp,
-            "size_bytes": chunk.stat().st_size,
+            "size_bytes": size_bytes,
         }
 
     def chunks(self, participant_id: str) -> list[tuple[Path, dict]]:
@@ -89,16 +96,18 @@ class ChunkStore:
                 logger.warning("Ignoring video chunk without a timestamp filename: {}", checked)
                 continue
             paths.append((checked, timestamp))
-        return [
-            (path, self._metadata(path))
-            for path, _timestamp in sorted(paths, key=lambda item: item[1])
-        ]
+        chunks: list[tuple[Path, dict]] = []
+        for path, _timestamp in sorted(paths, key=lambda item: item[1]):
+            metadata = self._metadata(path)
+            if metadata is not None:
+                chunks.append((path, metadata))
+        return chunks
 
     def stats(self, participant_id: str) -> dict:
         chunks = self.chunks(participant_id)
         if not chunks:
             raise RPCError(f"No video chunks for {participant_id!r}", code="not_found")
-        total = sum(int(meta.get("size_bytes", path.stat().st_size)) for path, meta in chunks)
+        total = sum(int(meta["size_bytes"]) for _path, meta in chunks)
         return {
             "participant_id": participant_id,
             "num_chunks": len(chunks),
@@ -107,6 +116,22 @@ class ChunkStore:
             "earliest_us": int(chunks[0][1].get("start_us", chunks[0][0].stem)),
             "latest_us": int(chunks[-1][1].get("end_us", chunks[-1][0].stem)),
         }
+
+    def overlapping_chunks(
+        self,
+        participant_id: str,
+        start_us: int,
+        end_us: int,
+    ) -> list[tuple[Path, dict]]:
+        selected = [
+            (path, metadata)
+            for path, metadata in self.chunks(participant_id)
+            if int(metadata.get("start_us", path.stem)) <= end_us
+            and int(metadata.get("end_us", metadata.get("start_us", path.stem))) >= start_us
+        ]
+        if not selected:
+            raise RPCError("No video in requested time window", code="not_found")
+        return selected
 
     def query(self, participant_id: str, start_us: int, end_us: int) -> bytes:
         selected: list[Path] = []

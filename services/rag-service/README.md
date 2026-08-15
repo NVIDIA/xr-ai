@@ -6,8 +6,8 @@
 # RAG service
 
 Indexes Markdown and text documents and exposes dense retrieval over private
-msgpack/ZMQ. Applications access it through the native `xr_rag` NAT function
-group; the service transport is not an agent-facing API.
+msgpack/ZMQ. Applications construct `xr_ai_tools.rag.RAGTools` with the
+private endpoint; the transport itself is not an agent-facing API.
 
 The checked-in `rag_service.yaml` is a reference configuration. Copy it into
 the consuming application's `yaml/` directory, set `documents_dir` and
@@ -40,6 +40,5 @@ remote endpoint changes its backing model without changing the profile.
 `min_score` filters unrelated passages before results reach an agent.
 
 Launch the embedding service first, this service second, and the consuming
-worker last. Register `RAGFunctionsConfig` in the worker and give the NAT agent
-a `FunctionGroupRef` for that group; application code should not construct the
-private service transport client.
+worker last. Construct `RAGTools` in the worker and expose its finite tools to
+the agent; application code should not call the private transport directly.

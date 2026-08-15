@@ -7,8 +7,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from xr_ai_hub import DataMessage
-from xr_ai_voice import TextMessageInput, VadConfig, VoiceSession
+from xr_ai_voice import VadConfig, VoiceSession
 from xr_ai_voice import _session as session_module
 from xr_ai_voicegate import VoiceGateConfig
 
@@ -23,6 +22,9 @@ class _Endpoint:
 
     async def set_status(self, status: str) -> None:
         self.statuses.append(status)
+
+    async def mark_ready(self) -> None:
+        await self.set_status("ready")
 
     async def republish_statuses(self) -> None:
         self.republish_calls += 1
@@ -45,21 +47,19 @@ class _Transport:
         self.shutdown_called = True
 
 
-class _Session:
+class _HandlerProcessor:
     def __init__(self) -> None:
-        self.transport = _Transport()
-        self.queries: list[tuple[str, str, bool, int | None]] = []
-        self.is_running = True
+        self.responses: list[tuple[str, object, bool, int | None]] = []
 
-    async def enqueue_query(
+    async def enqueue_response(
         self,
         participant_id: str,
-        text: str,
+        response: object,
         *,
-        fresh_match: bool = False,
+        interrupt: bool = False,
         pts_us: int | None = None,
     ) -> None:
-        self.queries.append((participant_id, text, fresh_match, pts_us))
+        self.responses.append((participant_id, response, interrupt, pts_us))
 
 
 class _Service:
@@ -73,46 +73,40 @@ class _Service:
         self.closed += 1
 
 
-async def test_data_query_adapter_routes_text_and_ignores_control_topics() -> None:
-    session = _Session()
-    TextMessageInput(
-        session=session,  # type: ignore[arg-type]
-        ignore_topics={"control"},
-        transform=str.upper,
-        fresh_match=True,
+class _PipelineTask:
+    def __init__(self, on_cancel=None) -> None:
+        self.cancel_calls = 0
+        self._on_cancel = on_cancel
+
+    async def cancel(self) -> None:
+        self.cancel_calls += 1
+        if self._on_cancel is not None:
+            self._on_cancel()
+
+
+async def _ignore_query(_query) -> None:
+    pass
+
+
+async def test_voice_session_queues_external_responses_through_active_processor() -> None:
+    service = _Service()
+    session = VoiceSession(
+        stt=service,  # type: ignore[arg-type]
+        tts=service,  # type: ignore[arg-type]
+        vad=VadConfig(),
+        voice_gate=VoiceGateConfig(),
+    )
+    processor = _HandlerProcessor()
+    session._io_processor = processor  # type: ignore[assignment]  # noqa: SLF001
+
+    await session.enqueue_response(
+        "alice",
+        "Careful.",
+        interrupt=True,
+        pts_us=12,
     )
 
-    await session.transport.endpoint.callback(DataMessage(
-        participant_id="alice",
-        topic="control",
-        pts_us=1,
-        data=b"ignored",
-    ))
-    await session.transport.endpoint.callback(DataMessage(
-        participant_id="alice",
-        topic="",
-        pts_us=2,
-        data=b"hello",
-    ))
-
-    assert session.transport.target_participant == "alice"
-    assert session.queries == [("alice", "HELLO", True, 2)]
-
-
-async def test_data_query_adapter_drops_text_while_session_is_stopped() -> None:
-    session = _Session()
-    session.is_running = False
-    TextMessageInput(session=session)  # type: ignore[arg-type]
-
-    await session.transport.endpoint.callback(DataMessage(
-        participant_id="alice",
-        topic="",
-        pts_us=2,
-        data=b"hello",
-    ))
-
-    assert session.transport.target_participant == ""
-    assert session.queries == []
+    assert processor.responses == [("alice", "Careful.", True, 12)]
 
 
 async def test_voice_session_owns_readiness_ready_file_and_cleanup(
@@ -154,12 +148,12 @@ async def test_voice_session_owns_readiness_ready_file_and_cleanup(
         transport=transport,  # type: ignore[arg-type]
     )
 
-    async def handler(_query) -> str:
-        return "unused"
+    async def input_sink(_query) -> None:
+        pass
 
     async with session:
         assert not ready_file.exists()
-        run_task = asyncio.create_task(session.run(handler))
+        run_task = asyncio.create_task(session.run(input_sink))
         await runner_started.wait()
         await asyncio.sleep(0)
         assert not ready_file.exists()
@@ -169,7 +163,7 @@ async def test_voice_session_owns_readiness_ready_file_and_cleanup(
             await asyncio.sleep(0)
 
         assert ready_file.exists()
-        assert transport.endpoint.statuses == ["idle"]
+        assert transport.endpoint.statuses == ["ready"]
 
         runner_finished.set()
         assert await run_task is None
@@ -178,6 +172,154 @@ async def test_voice_session_owns_readiness_ready_file_and_cleanup(
     assert stt.closed == 1
     assert tts.closed == 1
     assert extra.closed == 1
+
+
+async def test_voice_session_reannounces_current_status(monkeypatch) -> None:
+    runner_started = asyncio.Event()
+    runner_finished = asyncio.Event()
+
+    class _Runner:
+        async def run(self, _worker) -> None:
+            runner_started.set()
+            await runner_finished.wait()
+
+    worker = _PipelineTask(on_cancel=runner_finished.set)
+    monkeypatch.setattr(
+        session_module,
+        "_build_voice_pipeline",
+        lambda **_kwargs: (object(), worker),
+    )
+    monkeypatch.setattr(session_module, "PipelineRunner", _Runner)
+    monkeypatch.setattr(session_module, "_STATUS_REANNOUNCE_INTERVAL_S", 0.01)
+
+    service = _Service()
+    transport = _Transport()
+    session = VoiceSession(
+        stt=service,  # type: ignore[arg-type]
+        tts=service,  # type: ignore[arg-type]
+        vad=VadConfig(),
+        voice_gate=VoiceGateConfig(),
+        transport=transport,  # type: ignore[arg-type]
+    )
+
+    async with session:
+        run_task = asyncio.create_task(session.run(_ignore_query))
+        await runner_started.wait()
+        transport.started.set()
+        for _ in range(20):
+            if transport.endpoint.republish_calls:
+                break
+            await asyncio.sleep(0.01)
+
+        assert transport.endpoint.statuses == ["ready"]
+        assert transport.endpoint.republish_calls > 0
+
+        runner_finished.set()
+        assert await run_task is None
+
+
+async def test_voice_session_allows_early_clean_pipeline_exit(monkeypatch) -> None:
+    class _Runner:
+        async def run(self, _worker) -> None:
+            return
+
+    worker = _PipelineTask()
+    monkeypatch.setattr(
+        session_module,
+        "_build_voice_pipeline",
+        lambda **_kwargs: (object(), worker),
+    )
+    monkeypatch.setattr(session_module, "PipelineRunner", _Runner)
+
+    service = _Service()
+    transport = _Transport()
+    session = VoiceSession(
+        stt=service,  # type: ignore[arg-type]
+        tts=service,  # type: ignore[arg-type]
+        vad=VadConfig(),
+        voice_gate=VoiceGateConfig(),
+        transport=transport,  # type: ignore[arg-type]
+    )
+
+    async with session:
+        assert await session.run(_ignore_query) is None
+
+    assert worker.cancel_calls == 0
+    assert transport.endpoint.statuses == []
+
+
+async def test_voice_session_propagates_pipeline_runner_error(monkeypatch) -> None:
+    class _Runner:
+        async def run(self, _worker) -> None:
+            raise ValueError("runner failure")
+
+    worker = _PipelineTask()
+    monkeypatch.setattr(
+        session_module,
+        "_build_voice_pipeline",
+        lambda **_kwargs: (object(), worker),
+    )
+    monkeypatch.setattr(session_module, "PipelineRunner", _Runner)
+
+    service = _Service()
+    session = VoiceSession(
+        stt=service,  # type: ignore[arg-type]
+        tts=service,  # type: ignore[arg-type]
+        vad=VadConfig(),
+        voice_gate=VoiceGateConfig(),
+        transport=_Transport(),  # type: ignore[arg-type]
+    )
+
+    async with session:
+        with pytest.raises(ValueError, match="runner failure"):
+            await session.run(_ignore_query)
+
+    assert worker.cancel_calls == 0
+
+
+async def test_voice_session_cancels_pipeline_when_ready_file_touch_fails(
+    monkeypatch,
+) -> None:
+    runner_started = asyncio.Event()
+    runner_finished = asyncio.Event()
+
+    class _Runner:
+        async def run(self, _worker) -> None:
+            runner_started.set()
+            await runner_finished.wait()
+
+    class _FailingReadyFile:
+        def touch(self) -> None:
+            raise OSError("ready file unavailable")
+
+    worker = _PipelineTask(on_cancel=runner_finished.set)
+    monkeypatch.setattr(
+        session_module,
+        "_build_voice_pipeline",
+        lambda **_kwargs: (object(), worker),
+    )
+    monkeypatch.setattr(session_module, "PipelineRunner", _Runner)
+
+    service = _Service()
+    transport = _Transport()
+    session = VoiceSession(
+        stt=service,  # type: ignore[arg-type]
+        tts=service,  # type: ignore[arg-type]
+        vad=VadConfig(),
+        voice_gate=VoiceGateConfig(),
+        ready_file=_FailingReadyFile(),  # type: ignore[arg-type]
+        transport=transport,  # type: ignore[arg-type]
+    )
+
+    async with session:
+        run_task = asyncio.create_task(session.run(_ignore_query))
+        await runner_started.wait()
+        transport.started.set()
+        with pytest.raises(OSError, match="ready file unavailable"):
+            await run_task
+
+    assert worker.cancel_calls == 1
+    assert transport.endpoint.statuses == []
 
 
 async def test_voice_session_defers_default_transport_until_services_are_ready(
@@ -204,6 +346,8 @@ async def test_voice_session_defers_default_transport_until_services_are_ready(
     )
 
     assert transports == []
+    with pytest.raises(RuntimeError, match="not ready"):
+        _ = session.endpoint
     async with session:
         assert session.transport is transports[0]
 
@@ -233,6 +377,7 @@ async def test_voice_session_cleans_up_when_readiness_fails(monkeypatch) -> None
     with pytest.raises(RuntimeError, match="unavailable"):
         async with session:
             pass
+    await session.close()
 
     assert transports == []
     assert stt.closed == 1

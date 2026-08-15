@@ -71,6 +71,20 @@ async def test_stop_clears_endpoint_running_barrier(make_processor):
     await asyncio.gather(running_wait, return_exceptions=True)
 
 
+
+async def test_data_callback_registration_can_be_removed(make_processor):
+    agent = make_processor(auto_subscribe=False)
+
+    async def callback(_message) -> None:
+        return None
+
+    unsubscribe = agent.on_data(callback)
+    assert callback in agent._data_cbs  # noqa: SLF001
+
+    unsubscribe()
+    unsubscribe()
+    assert callback not in agent._data_cbs  # noqa: SLF001
+
 # ── auto_subscribe=False ────────────────────────────────────────────────────
 
 
@@ -400,22 +414,23 @@ async def test_status_republishes_current_state_to_connected_clients(
     hub, make_connector, make_processor, settle,
 ):
     """Status is stored as state so a later publish can repair a missed update."""
-    agent = make_processor()
+    agent = make_processor(announces_readiness=True)
     await settle()
     await agent.set_status("idle")
 
     alice = await setup_client(make_connector, "alice")
     try:
-        await wait_for(lambda: bool(alice.return_data))
-        assert alice.return_data[-1].topic == "_agent.status"
-        assert alice.return_data[-1].data == b'{"status": "idle"}'
+        # The hub reports "loading" until it has heard from every agent.
+        await wait_for(lambda: alice.statuses == ["loading", "idle"])
 
         await agent.set_status("processing", "alice")
-        await wait_for(lambda: alice.return_data[-1].data == b'{"status": "processing"}')
+        await wait_for(lambda: alice.statuses[-1:] == ["processing"])
 
+        # Re-announcing an unchanged state is absorbed by the hub rather than
+        # replayed to the client.
         await agent.republish_statuses()
-        await wait_for(lambda: len(alice.return_data) >= 3)
-        assert alice.return_data[-1].data == b'{"status": "processing"}'
+        await settle()
+        assert alice.statuses == ["loading", "idle", "processing"]
     finally:
         await teardown_clients([alice])
 

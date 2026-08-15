@@ -1,12 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Scene operations shared by native functions and the MCP adapter."""
+"""Typed scene operations served to the xr-render worker."""
 
 import asyncio
 
 from loguru import logger
-from xr_ai_nat.functions._service.rpc import RPCError
+from xr_ai_tools.rpc import RPCError
 
 from .engine import SceneDispatcher
 from .schemas import (

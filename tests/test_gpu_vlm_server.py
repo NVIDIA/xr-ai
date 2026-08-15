@@ -1,19 +1,19 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""GPU smoke test for ai-services/vlm-server.
+"""GPU smoke test for services/vlm-server.
 
 Spawns the real ``vlm_server`` subprocess against a generated temp YAML, waits
 for the HTTP port to open, issues one chat-completions request with a tiny
-embedded PNG, and checks for a non-empty content string.
+embedded PNG, and checks for a non-empty final answer without reasoning markup.
 
-Skipped automatically when ``uv`` is missing or no Cosmos-Reason1-7B weights
-are present on disk.
+Skipped automatically when ``uv`` is missing.
 """
 from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import os
 import shutil
 import signal
@@ -34,11 +34,11 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 
 
 _REPO_ROOT       = Path(__file__).resolve().parent.parent
-_VLM_SERVER_DIR  = _REPO_ROOT / "ai-services" / "vlm-server"
-_DEFAULT_WEIGHTS = Path("~/.cache/huggingface/hub/models--nvidia--Cosmos-Reason1-7B").expanduser()
+_VLM_SERVER_DIR  = _REPO_ROOT / "services" / "vlm-server"
+_DEFAULT_WEIGHTS = Path("~/.cache/huggingface/hub/models--nvidia--Cosmos3-Nano").expanduser()
 
-# 30 min — enough for a cold first-time weights download (~15 GB) plus
-# vLLM compilation. Cached runs complete in ~60 s.
+# 30 min — enough for a cold first-time weights download plus vLLM compilation.
+# Cached runs complete in ~60 s.
 _STARTUP_TIMEOUT_S   = 1800.0
 _SHUTDOWN_TIMEOUT_S  = 30.0
 
@@ -128,7 +128,7 @@ async def test_vlm_server_chat_completions_smoke():
         cfg_yaml = td_path / "vlm_server.yaml"
         ready_file = td_path / "ready"
         cfg = {
-            "model": "nvidia/Cosmos-Reason1-7B",
+            "model": "nvidia/Cosmos3-Nano",
             "host": "127.0.0.1",
             "port": port,
             "served_model_name": "vlm",
@@ -138,10 +138,16 @@ async def test_vlm_server_chat_completions_smoke():
             "max_model_len": 4096,
             "gpu_memory_utilization": 0.80,
             "enforce_eager": True,  # skip CUDA graph capture for faster smoke
+            "async_scheduling": True,
+            "hf_overrides": {
+                "architectures": ["Cosmos3ForConditionalGeneration"],
+            },
+            "mm_encoder_tp_mode": "data",
             "max_images_per_prompt": 1,
             "max_videos_per_prompt": 0,
             # docker backend: nvcc + flashinfer are pre-built in the NGC image.
             "vllm_backend": "docker",
+            "vllm_image": "nvcr.io/nvidia/vllm:26.07-py3",
         }
         cfg_yaml.write_text(yaml.safe_dump(cfg))
 
@@ -172,16 +178,39 @@ async def test_vlm_server_chat_completions_smoke():
                 }],
                 "max_tokens": 20,
                 "temperature": 0,
+                "stream": True,
             }
+            content_chunks: list[str] = []
+            saw_done = False
             async with httpx.AsyncClient(timeout=60.0) as client:
-                r = await client.post(
+                async with client.stream(
+                    "POST",
                     f"http://127.0.0.1:{port}/v1/chat/completions",
                     json=payload,
-                )
-            assert r.status_code == 200, f"HTTP {r.status_code}: {r.text[:500]}"
-            data = r.json()
-            content = data["choices"][0]["message"]["content"]
-            assert isinstance(content, str) and content.strip(), f"empty content: {data!r}"
+                ) as response:
+                    if response.status_code != 200:
+                        await response.aread()
+                    assert response.status_code == 200, (
+                        f"HTTP {response.status_code}: {response.text[:500]}"
+                    )
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data:"):
+                            continue
+                        event = line.removeprefix("data:").strip()
+                        if event == "[DONE]":
+                            saw_done = True
+                            break
+                        data = json.loads(event)
+                        delta = data["choices"][0]["delta"]
+                        if isinstance(delta.get("content"), str):
+                            content_chunks.append(delta["content"])
+
+            assert saw_done, "stream ended without the OpenAI [DONE] event"
+            content = "".join(content_chunks).strip()
+            assert content, "stream returned no content"
+            assert "<think>" not in content.casefold(), (
+                "Cosmos3 Reasoner leaked reasoning markup into streamed content"
+            )
         finally:
             await _terminate(proc)
             kill_orphan_vllm(port)

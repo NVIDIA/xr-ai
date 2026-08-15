@@ -4,13 +4,13 @@
 """Private FrameProcessors that compose the unified voice pipeline."""
 from __future__ import annotations
 
-from .handler import _VoiceHandlerProcessor
+from .io import _VoiceIOProcessor
 from .streaming_tts import StreamingTtsProcessor
 from .vad_stt import VadConfig, VadSttProcessor
 from .voice_gate import VoiceGateProcessor
 
 __all__ = [
-    "_VoiceHandlerProcessor",
+    "_VoiceIOProcessor",
     "StreamingTtsProcessor",
     "VadConfig",
     "VadSttProcessor",
