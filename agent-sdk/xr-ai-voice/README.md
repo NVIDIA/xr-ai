@@ -75,6 +75,13 @@ sample rate, channel and sample counts, capture timestamp, and track ID. The
 participant ID and `voice` source are runtime metadata. The topic disables
 Relay telemetry so raw audio is never recorded in runtime scopes.
 
+Delivery uses one FIFO worker and bounded queue per participant and track.
+`audio_capacity` defaults to 32 queued chunks for each stream. If a subscriber
+cannot keep up and that queue fills, voice drops the oldest queued chunk and
+keeps the newest live audio; an in-flight chunk is never reordered. Subscriber
+failures are logged without stopping later chunks, and `VoiceAgent` cancels and
+awaits every audio worker during participant cleanup and shutdown.
+
 Accepted speech, typed text, participant departure, and interruption remain on
 application-named topics. Application agents subscribe to the events they own,
 perform cleanup in their own subscriber methods, and may publish finite or

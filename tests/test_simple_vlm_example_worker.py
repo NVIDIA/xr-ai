@@ -537,7 +537,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
                 is None
             )
             await asyncio.wait_for(response_complete.wait(), 1.0)
-            options["on_participant_left"]("alice")
+            await options["on_participant_left"]("alice")
 
             async def wait_until_released() -> None:
                 while not _CurrentFrameTool.instances[0].released:

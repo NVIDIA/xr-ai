@@ -102,5 +102,7 @@ head-of-line blocking on unrelated or streaming tools.
 
 Domain controls such as `start_monitoring`, `stop_monitoring`, and `status` are
 ordinary tools. Agent lifetime itself is not a model tool. Model loops,
-planning, memory, and model clients remain agent implementations. Raw audio and
-video stay on the XR-Media-Hub path.
+planning, memory, and model clients remain agent implementations. Raw video
+stays on the XR-Media-Hub path. `VoiceAgent` additionally mirrors inbound raw
+audio onto its bounded, telemetry-disabled `voice.audio` runtime topic for
+explicit subscribers.
