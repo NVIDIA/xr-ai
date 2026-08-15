@@ -1,0 +1,187 @@
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+# Agent SDK
+
+The SDK is split by dependency boundary. Directory names match the Python
+imports developers use; distribution names remain stable for package
+installation.
+
+| Directory | Import | Responsibility |
+|---|---|---|
+| `xr-ai-hub` | `xr_ai_hub` | Minimal msgpack/ZMQ IPC with XR-Media-Hub |
+| `xr-ai-models` | `xr_ai_models` | Typed model protocols, profiles, and OpenAI-compatible clients |
+| `xr-ai-runtime` | `xr_ai_runtime` | Agent registration and typed participant-scoped fan-out |
+| `xr-ai-tools` | `xr_ai_tools` | Relay-managed tools and model tool-call helpers |
+| `xr-ai-voice` | `xr_ai_voice` | Voice agent, session, transport, and pipeline |
+
+The complete package references are versioned with this site:
+{doc}`/reference/agent-sdk-hub`, {doc}`/reference/agent-sdk-models`,
+{doc}`/reference/agent-sdk-runtime`, {doc}`/reference/agent-sdk-tools`, and
+{doc}`/reference/agent-sdk-voice`.
+
+## Runtime and tools
+
+An `Agent` owns state and exposes ordinary `Tool` or `AsyncTool` instances.
+Direct callers use `execute()` or `stream()`; model loops expose the same
+tools through `ToolSet` and `handle_tool_call()`. `AgentRuntime` registers
+agents and publishes typed messages to participant-scoped subscribers. It does
+not own model loops, planning, memory, raw media, agent resources, or
+agent-created background tasks.
+
+```python
+from pydantic import BaseModel
+from xr_ai_runtime import Agent, AgentRuntime, Topic
+from xr_ai_tools import Tool
+
+
+class EchoRequest(BaseModel):
+    text: str
+
+
+class EchoResponse(BaseModel):
+    text: str
+
+
+class EchoAgent(Agent):
+    def __init__(self) -> None:
+        self.echo = Tool(
+            "echo",
+            "Echo text.",
+            EchoRequest,
+            EchoResponse,
+            self._echo,
+        )
+        super().__init__((self.echo,))
+
+    async def _echo(self, request: EchoRequest) -> EchoResponse:
+        return EchoResponse(text=request.text)
+
+
+runtime = AgentRuntime()
+agent = runtime.register("echo", EchoAgent())
+async with runtime:
+    result = await agent.echo.execute(EchoRequest(text="hello"))
+```
+
+Agents protect shared mutable state with their own lock or queue. They also
+create, cancel, and await their own tasks. `publish()` waits for all deliveries
+and then propagates subscriber failures.
+
+Image tools share bounded `ImageRegistry` references so model-visible results
+do not contain raw pixels. Install `xr-ai-tools[image-editing]` to use
+`ImagePolygonFillTool`, which copies an image, fills the area enclosed by at
+least three ordered pixel coordinates with magenta, and returns a new lossless
+PNG reference. The source reference remains unchanged, and the edited reference
+inherits its owner so lifecycle cleanup releases both images. It can be passed
+directly to the single-image or multi-image VLM query tools. Invalid polygons
+and unavailable source references return recoverable unavailable results.
+
+Relay records publications, subscriber callbacks, tool calls, and model calls
+as nested scopes. `Topic.telemetry` controls event volume without changing
+delivery: use `"full"` for semantic events and `"none"` for high-volume
+fragments that a consumer summarizes into one operation. Voice uses this model
+to record one response per completed output, separate STT scopes, and
+sentence-level TTS scopes without storing audio payloads.
+
+## Models
+
+Workers construct clients from a model profile with `make_llm`, `make_vlm`,
+`make_stt`, `make_tts`, or `make_embedding`. Callers depend on the
+corresponding service protocol, so endpoint and model-specific behavior stays
+inside `xr_ai_models`.
+
+```python
+from xr_ai_models import ChatMessage, load_models_config, make_llm
+
+config = load_models_config("yaml/models.local.json")
+async with make_llm(config, "agent_llm") as llm:
+    response = await llm.chat([ChatMessage(role="user", content="hello")])
+```
+
+A structured profile separates adapter behavior, endpoint connectivity, and
+deployment ownership. See {doc}`ai-services` for supported services, presets,
+and deployment configuration.
+
+## Voice
+
+`VoiceAgent` publishes every incoming microphone chunk on `voice.audio` before
+VAD, STT, or wake-phrase filtering. Agents can subscribe to
+`VOICE_AUDIO_TOPIC` to receive silence and non-wake-phrase speech as
+`VoiceAudio`; the participant is carried in runtime metadata. The topic has
+Relay telemetry disabled because its payload contains raw interleaved float32
+PCM.
+
+Accepted speech and typed text are published as `UserQuery` events, participant
+and interruption lifecycle events use application-named topics, and voice
+consumes `voice.output`. `VoiceSession` owns model readiness, hub transport,
+voice gating, the media pipeline, signal handling, and cleanup. Pipecat remains
+an implementation detail for current samples.
+
+```python
+voice = VoiceAgent(
+    VoiceSession(
+        stt=stt,
+        tts=tts,
+        vad=VadConfig(),
+        voice_gate=voice_gate_config,
+        probes={"vlm": vlm.health},
+        ready_file=ready_file,
+        closeables=(vlm,),
+    ),
+    query_topic=queries,
+    participant_left_topic=participant_left,
+)
+runtime.register("voice", voice)
+
+async with runtime:
+    await voice.run(runtime)
+```
+
+The session opens hub transport only after readiness probes succeed and touches
+the ready file after its receive loop starts. It preserves participant routing,
+cancels superseded or interrupted output, and closes transports and model
+clients. Application agents subscribe to lifecycle events and clean up their
+own participant state.
+
+## Hub IPC
+
+`ProcessorEndpoint` receives data, audio, frame signals, and participant
+events through hub PUB IPC and sends participant-routed return data and audio
+through PUSH IPC. The `xr-ai-hub-client` distribution depends only on
+`pyzmq` and `msgpack`; server, model, and voice dependencies stay out.
+
+```python
+from xr_ai_hub import DataMessage, ProcessorEndpoint, Subscribe
+
+endpoint = ProcessorEndpoint(
+    sub_addr="ipc:///tmp/xr_hub_pub",
+    push_addr="ipc:///tmp/xr_hub_in",
+    filter=Subscribe.DATA | Subscribe.VIDEO,
+)
+
+async def on_data(message: DataMessage) -> None:
+    print(message.participant_id, message.topic)
+
+endpoint.on_data(on_data)
+await endpoint.run()
+```
+
+Video pixels are pulled on demand with `request_frame()` or
+`LiveFrameSource`; frame signals do not copy pixels. Readiness participation
+is opt-in and scoped to subscribed participants. The hub aggregates each
+responsible agent's status and gates readiness on confirmed subscriptions.
+
+## QR-code extraction
+
+`xr_ai_tools.qr_code.QRCodeTool` is an optional ZXing-C++-backed finite tool.
+It acquires a participant's current frame, decodes all readable QR payloads off
+the event loop, and returns every QR code in the frame as a separate payload
+with its four image-space corners. Install `xr-ai-tools[qr-code]` to use it.
+
+ZXing-C++ is the default extractor. Applications can inject any sync or async
+callable that accepts an RGB PIL image and returns the same typed payload
+contract, including a model-backed implementation that does not provide corner
+coordinates.
