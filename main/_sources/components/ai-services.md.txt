@@ -397,7 +397,15 @@ cleanup.
 - **video-memory-service** owns recorded chunk queries, NVDEC, and PNG output
   behind typed msgpack/ZMQ on port 8310. Set `recordings_dir` in its YAML to
   enable recorded-video operations; the path must match the hub's
-  `video_recording.out_dir`. Current frames stay with the caller's hub client.
+  `video_recording.out_dir`. Latest video and sampling windows end at the
+  newest recorded timestamp and require only a duration. Historical frame,
+  video, and sampling requests share an absolute `start_us`; video windows add
+  a duration. Sampling also accepts a hard total frame budget, decodes each
+  selected chunk once, skips unavailable or corrupt chunks when other frames
+  remain, and can bound exported PNG dimensions. The sampled timestamps are
+  estimates interpolated from chunk metadata. The selection budget may be up
+  to 256, but the shipped Cosmos VLM accepts no more than four selected images
+  per inference request. Current frames stay with the caller's hub client.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
 - **Sample YAMLs** for each service ship in their own service directory.
   Copy them to your sample's `yaml/` directory and set `model_cache` to
