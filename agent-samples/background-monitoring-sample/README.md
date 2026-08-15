@@ -16,7 +16,7 @@ The worker composes peer agents through typed runtime topics:
 
 ```text
 hub participant join ──────────────────────────────────> file session
-final voice STT ─────────> TranscriptAgent ─────────────> transcript.jsonl
+final voice STT ─────────> FileOutputAgent ─────────────> transcript.jsonl
 accepted STT / typed text ─> ForegroundAgent ─┬> direct answer
                                            ├> current frame → image query
                                            ├> FileOutputAgent history tool

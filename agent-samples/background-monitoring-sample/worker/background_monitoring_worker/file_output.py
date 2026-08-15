@@ -16,7 +16,11 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_runtime import Agent, RuntimeContext, subscribe
 from xr_ai_tools import Tool
-from xr_ai_voice import VoiceParticipantLeft
+from xr_ai_voice import (
+    VOICE_TRANSCRIPT_TOPIC,
+    VoiceParticipantLeft,
+    VoiceTranscript,
+)
 
 from .events import (
     FOREGROUND_RECORD_TOPIC,
@@ -24,12 +28,10 @@ from .events import (
     MONITOR_RECORD_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
-    TRANSCRIPT_RECORD_TOPIC,
     ForegroundRecord,
     InstrumentReading,
     MonitorRecord,
     ParticipantJoined,
-    TranscriptRecord,
 )
 
 _SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
@@ -132,10 +134,10 @@ class FileOutputAgent(Agent):
                     record.model_dump(mode="json"),
                 )
 
-    @subscribe(TRANSCRIPT_RECORD_TOPIC)
+    @subscribe(VOICE_TRANSCRIPT_TOPIC)
     async def write_transcript(
         self,
-        record: TranscriptRecord,
+        record: VoiceTranscript,
         ctx: RuntimeContext,
     ) -> None:
         state = await self._state(self._participant(ctx))

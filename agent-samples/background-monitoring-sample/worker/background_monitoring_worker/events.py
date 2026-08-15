@@ -41,13 +41,6 @@ class InstrumentReading(BaseModel):
     meter_reading: str = Field(min_length=1)
 
 
-class TranscriptRecord(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    timestamp_us: int = Field(ge=0)
-    text: str = Field(min_length=1)
-
-
 class ForegroundRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -75,10 +68,6 @@ INSTRUMENT_READING_TOPIC = Topic(
     "background-monitoring.instrument-reading",
     InstrumentReading,
 )
-TRANSCRIPT_RECORD_TOPIC = Topic(
-    "background-monitoring.transcript-record",
-    TranscriptRecord,
-)
 FOREGROUND_RECORD_TOPIC = Topic(
     "background-monitoring.foreground-record",
     ForegroundRecord,
@@ -92,11 +81,9 @@ __all__ = [
     "MONITOR_RECORD_TOPIC",
     "PARTICIPANT_JOINED_TOPIC",
     "PARTICIPANT_LEFT_TOPIC",
-    "TRANSCRIPT_RECORD_TOPIC",
     "USER_QUERY_TOPIC",
     "ForegroundRecord",
     "InstrumentReading",
     "MonitorRecord",
     "ParticipantJoined",
-    "TranscriptRecord",
 ]

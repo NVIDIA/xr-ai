@@ -67,9 +67,6 @@ from background_monitoring_worker.monitor import (  # noqa: E402  # pyright: ign
 from background_monitoring_worker.qr_instruments import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     QRInstrumentAgent,
 )
-from background_monitoring_worker.transcript import (  # noqa: E402  # pyright: ignore[reportMissingImports]
-    TranscriptAgent,
-)
 
 
 def _fake_endpoint() -> SimpleNamespace:
@@ -120,7 +117,6 @@ def test_sample_uses_named_native_agents_and_shared_connection_client() -> None:
         "images.py",
         "monitor.py",
         "qr_instruments.py",
-        "transcript.py",
     } <= {path.name for path in package.glob("*.py")}
     assert "xr-ai-agent-runtime" in dependencies
     assert "xr-ai-tools[frames,image-editing,qr-code,vision]" in dependencies
@@ -254,7 +250,6 @@ async def test_file_output_records_transcript_monitor_and_foreground(tmp_path: P
     files = FileOutputAgent(tmp_path, history_size=2)
     runtime = AgentRuntime()
     runtime.register("files", files)
-    runtime.register("transcript", TranscriptAgent())
     now = time.time_ns() // 1_000
 
     async with runtime:
