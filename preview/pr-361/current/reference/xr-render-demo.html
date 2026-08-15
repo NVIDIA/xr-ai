@@ -542,13 +542,13 @@ to avoid stacking up in the TTS queue behind the real response.</p></li>
 </ul>
 </section>
 </section>
-<section id="vlm-cosmos-reason1-7b">
-<h2>VLM — Cosmos-Reason1-7B<a class="headerlink" href="#vlm-cosmos-reason1-7b" title="Link to this heading">#</a></h2>
+<section id="vlm-cosmos3-nano-reasoner">
+<h2>VLM — Cosmos3 Nano Reasoner<a class="headerlink" href="#vlm-cosmos3-nano-reasoner" title="Link to this heading">#</a></h2>
 <p>Port 8100 (<code class="docutils literal notranslate"><span class="pre">vlm-server</span></code>).</p>
-<p>Loaded in-process by <code class="docutils literal notranslate"><span class="pre">vlm-server</span></code> via HuggingFace transformers
-(Qwen2.5-VL architecture). <code class="docutils literal notranslate"><span class="pre">&lt;think&gt;…&lt;/think&gt;</span></code> blocks are stripped before
-returning. The render agent selects a current or recorded frame first, then
-passes its <code class="docutils literal notranslate"><span class="pre">ImageReference</span></code> to <code class="docutils literal notranslate"><span class="pre">query_image</span></code>. Its native capability set also
+<p>Served by vLLM from <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos3-Nano</span></code> as described in
+<a class="reference internal" href="../components/ai-services.html"><span class="doc">AI services</span></a>. The render agent first selects a
+current or recorded frame and passes its <code class="docutils literal notranslate"><span class="pre">ImageReference</span></code> to <code class="docutils literal notranslate"><span class="pre">query_image</span></code>.
+Its native capability set also
 includes <code class="docutils literal notranslate"><span class="pre">query_images</span></code> for ordered collections and <code class="docutils literal notranslate"><span class="pre">query_video</span></code> for
 timestamped frame sequences; all use the same <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> multi-image VLM
 path, limited to four images by the shipped Cosmos configuration. These raw
@@ -756,7 +756,7 @@ a streaming client connects. LOVR cannot start before then.</p>
 It derives schemas from the worker’s native tools and evaluates tool
 effects against deterministic fixtures, so the live LOVR scene is not mutated.
 Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/9f4e6df78c690537b0f9314ea0fdcaf1fdf8f1ff/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/78395ee863d8b6a964def8ec1499c00c46db0491/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
 for the case format and the watch-mode loop. Run with:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo/worker<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>python<span class="w"> </span>agent-samples/xr-render-demo/eval/eval.py
@@ -822,7 +822,7 @@ cases overfitting to the prompt’s worked examples.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvidia-nemotron-3-nano-30b-a3b-nvfp4-port-8107">NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 — port 8107</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vlm-cosmos-reason1-7b">VLM — Cosmos-Reason1-7B</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vlm-cosmos3-nano-reasoner">VLM — Cosmos3 Nano Reasoner</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stt-parakeet-tdt-0-6b-v3">STT — parakeet-tdt-0.6b-v3</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tts-piper">TTS — Piper</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-runtime-and-voice-topology">Agent runtime and voice topology</a></li>

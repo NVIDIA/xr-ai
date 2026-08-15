@@ -405,7 +405,7 @@ trade-offs documented below.</p>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/vlm-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">vlm_server</span></code></p></td>
 <td><p>8100</p></td>
-<td><p>Cosmos-Reason1-7B</p></td>
+<td><p>Cosmos3 Nano Reasoner</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/stt-server/</span></code></p></td>
@@ -499,7 +499,7 @@ Both the model-servers profiles and the standalone service YAMLs resolve it to
 match the consumer:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># vLLM-served model, launched via a model-servers profile</span>
 <span class="c1"># (model_cache resolves to models/ at the repository root):</span>
-<span class="nv">HF_HOME</span><span class="o">=</span>models<span class="w"> </span>hf<span class="w"> </span>download<span class="w"> </span>nvidia/Cosmos-Reason1-7B
+<span class="nv">HF_HOME</span><span class="o">=</span>models<span class="w"> </span>hf<span class="w"> </span>download<span class="w"> </span>nvidia/Cosmos3-Nano
 
 <span class="c1"># NeMo STT server launched from its standalone YAML:</span>
 <span class="nv">HF_HOME</span><span class="o">=</span>models/huggingface<span class="w"> </span>hf<span class="w"> </span>download<span class="w"> </span>nvidia/parakeet-tdt-0.6b-v3
@@ -637,7 +637,7 @@ disables endpoint health probing, and declares external ownership:</p>
 <span class="w">      </span><span class="nt">&quot;category&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;vlm&quot;</span><span class="p">,</span>
 <span class="w">      </span><span class="nt">&quot;adapter&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">        </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openai_compat&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;model_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nvidia/cosmos-reason1-7b&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;model_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nvidia/cosmos3-nano-reasoner&quot;</span><span class="p">,</span>
 <span class="w">        </span><span class="nt">&quot;capabilities&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;vision&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;streaming&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">}</span>
 <span class="w">      </span><span class="p">},</span>
 <span class="w">      </span><span class="nt">&quot;endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
@@ -732,12 +732,15 @@ sending a signal; absent servers are silently skipped.</p>
 </div>
 <p>Both modes honor identical configuration keys — same model, same port, same vLLM
 flags. The dispatcher lives in <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-vllm/</span></code>. Switching is one YAML edit:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.04-py3</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># vlm-server (Cosmos3)</span>
+<span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
+<span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.07-py3</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">vllm_image:</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.04-py3</span></code>; override to pin
-another tag, an internal mirror, or a custom build.</p>
+<p><code class="docutils literal notranslate"><span class="pre">vllm_image:</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.07-py3</span></code> for vlm-server,
+whose Cosmos3 support requires vLLM 0.23 or newer. The other wrappers retain
+their <code class="docutils literal notranslate"><span class="pre">26.04-py3</span></code> default. Override either to pin another tag, an internal
+mirror, or a custom build.</p>
 <section id="docker-mode-prerequisites">
 <h3>docker mode — prerequisites<a class="headerlink" href="#docker-mode-prerequisites" title="Link to this heading">#</a></h3>
 <ul>
@@ -793,10 +796,18 @@ cleanup.</p>
 <section id="per-server-notes">
 <h2>Per-server notes<a class="headerlink" href="#per-server-notes" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><strong>vlm-server</strong> is a thin launcher around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for Cosmos-Reason1-7B
-(or any Qwen2.5-VL-compatible VLM). vLLM handles weight loading, image
-decoding, and the OpenAI-compatible HTTP API. Hosting backend is selectable
-per YAML — refer to <em>Choosing the vLLM runtime</em> above.</p></li>
+<li><p><strong>vlm-server</strong> defaults to the Cosmos3 Nano Reasoner. Hugging Face publishes
+Reasoner and Generator weights in the unified <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos3-Nano</span></code>
+checkpoint. The required <code class="docutils literal notranslate"><span class="pre">Cosmos3ForConditionalGeneration</span></code> architecture
+override selects vLLM’s native Reasoner loader: despite its generic class
+name, it maps only the understanding tower and vision encoder and drops the
+Generator weights. The Generator requires vLLM’s separate <code class="docutils literal notranslate"><span class="pre">--omni</span></code> path,
+which xr-ai intentionally does not enable. The checkpoint’s official chat
+template emits the assistant answer directly and has no <code class="docutils literal notranslate"><span class="pre">enable_thinking</span></code>
+branch or <code class="docutils literal notranslate"><span class="pre">&lt;think&gt;</span></code> delimiters, so the client preset needs no reasoning-field
+mapping. Cosmos-Reason1 remains available by pairing
+<code class="docutils literal notranslate"><span class="pre">model:</span> <span class="pre">nvidia/Cosmos-Reason1-7B</span></code> with the <code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code> client preset. Hosting
+backend is selectable per YAML — refer to <em>Choosing the vLLM runtime</em> above.</p></li>
 <li><p><strong>llama-nemotron-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">Llama-3.1-Nemotron-Nano-8B-v1</span></code>. vLLM handles native Llama-3.1 tool calling
 via the <code class="docutils literal notranslate"><span class="pre">llama3_json</span></code> parser — <code class="docutils literal notranslate"><span class="pre">tools=[...]</span></code> in the request is rendered via
@@ -805,7 +816,7 @@ wire format (<code class="docutils literal notranslate"><span class="pre">finish
 <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">on&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">off&quot;</span></code> in a system or user
 message; reasoning preamble is <strong>not</strong> stripped server-side. Hosting backend
 is selectable per YAML (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/9f4e6df78c690537b0f9314ea0fdcaf1fdf8f1ff/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/78395ee863d8b6a964def8ec1499c00c46db0491/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
 for the full HTTP contract and tuning knobs.</p></li>
 <li><p><strong>nemotron3-nano-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</span></code> (auto-selected by GPU compute
@@ -816,7 +827,7 @@ FlashInfer FP4 MoE kernels. Requires a Blackwell-class GPU (B200 or RTX PRO
 <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> by default to avoid the silent 3–8 min CUDA graph and
 FlashInfer autotune on cold start. Hosting backend is selectable per YAML
 (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/9f4e6df78c690537b0f9314ea0fdcaf1fdf8f1ff/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/78395ee863d8b6a964def8ec1499c00c46db0491/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
 for the vLLM flags it forwards and Blackwell prerequisites.</p></li>
 <li><p><strong>nemotron-omni-llm</strong> is a vLLM-backed multimodal LLM serving
 <code class="docutils literal notranslate"><span class="pre">Nemotron-3-Nano-Omni-30B-A3B-Reasoning</span></code> (text + video input) at port 8108.
