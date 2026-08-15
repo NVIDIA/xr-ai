@@ -140,7 +140,7 @@ grouped into latest tools, whose windows end at the newest recording, and
 historical tools, whose frame or video window begins at one absolute `start_us`.
 Recorded-frame timestamps are estimates interpolated from chunk metadata.
 
-There is a deliberate startup ordering constraint: `VoiceSession` readiness
+There is a deliberate startup ordering constraint: `VoiceAgent` readiness
 blocks on the VLM's `/health` endpoint, which
 returns 200 only after weights are fully loaded. This ensures GPU 0 memory
 has settled before LOVR starts its Vulkan device, preventing a transient
@@ -151,7 +151,7 @@ OOM race.
 Port 8103. NeMo ASR in-process. English-only, ~1.5 GB VRAM.
 
 ```
-LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceSession
+LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceAgent
   → VAD/STT
       pre-roll buffer    last 10 chunks (~320 ms) kept at all times;
                          prepended to the utterance buffer on speech onset
@@ -177,13 +177,13 @@ synthesis runs in a thread pool so the asyncio loop is never blocked.
 
 ```
 voice.output topic (agentic-loop quick-ack or final response)
-  → VoiceAgent → private VoiceSession TTS
+  → VoiceAgent → private media-session TTS
       sentence-batched synthesis
       POST text → tts-server :8105 → WAV bytes
       RETURN_AUDIO IPC → hub → LiveKit → participant's headphones
 ```
 
-`VoiceSession` owns interruption handling. A new utterance while TTS is playing
+`VoiceAgent` owns interruption handling. A new utterance while TTS is playing
 triggers `ReturnAudioFlush`, so the hub clears the LiveKit audio queue for that
 participant. Its interruption callback also cancels the participant's active
 render-agent task without waiting on its cleanup in the media processor. A
@@ -194,10 +194,11 @@ the old stream before the replacement starts.
 ## Agent runtime and voice topology
 
 ```
-VoiceAgent → private VoiceSession → VAD/STT + VoiceGate ─┐
-           → typed hub text ingress ──────────┴→ xr-render.user-query topic
+VoiceAgent → private media session → VAD/STT ─→ voice.transcript topic
+                                  └→ VoiceGate ─┐
+           → typed hub text ingress ────────────┴→ xr-render.user-query topic
   → RenderAgent → SceneModelLoop → voice.output topic
-  → VoiceAgent → private VoiceSession TTS → hub return audio
+  → VoiceAgent → private media-session TTS → hub return audio
 ```
 
 Pipecat is an internal implementation detail of `xr-ai-voice`; application

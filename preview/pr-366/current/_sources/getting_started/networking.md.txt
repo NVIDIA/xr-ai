@@ -30,6 +30,30 @@ sudo ufw reload
 mobile clients reach LiveKit through the same-origin `wss://<host>:8080/rtc`
 proxy, not directly.
 
+## Cloud VMs behind NAT
+
+The signaling proxy on port 8080 does not proxy WebRTC media. LiveKit still
+needs to advertise an ICE address that clients can reach on ports 7881 and
+7882. On a cloud VM whose network interface has only a private address, enable
+STUN-based public-IP discovery in the sample's `xr_media_hub.yaml`:
+
+```yaml
+lk_use_external_ip: true
+```
+
+LiveKit validates the discovered address with a self-ping before advertising
+it. If the provider's NAT does not support that hairpin path, also skip the
+validation:
+
+```yaml
+lk_use_external_ip: true
+lk_skip_external_ip_validation: true
+```
+
+Skipping validation does not make a closed port reachable. Ensure the VM's
+cloud firewall and host firewall allow 7881/TCP and 7882/UDP. Keep both options
+disabled for local and private-network deployments.
+
 ## RHEL, Fedora, or CentOS (`firewall-cmd`)
 
 ```bash

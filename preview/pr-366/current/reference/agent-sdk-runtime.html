@@ -468,8 +468,9 @@ head-of-line blocking on unrelated or streaming tools.</p>
 ordinary tools. Agent lifetime itself is not a model tool. Model loops,
 planning, memory, and model clients remain agent implementations. Raw video
 stays on the XR-Media-Hub path. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> additionally mirrors inbound raw
-audio onto its bounded, telemetry-disabled <code class="docutils literal notranslate"><span class="pre">voice.audio</span></code> runtime topic for
-explicit subscribers.</p>
+audio onto its bounded, telemetry-disabled <code class="docutils literal notranslate"><span class="pre">voice.audio</span></code> topic and publishes
+final pre-gate STT results on <code class="docutils literal notranslate"><span class="pre">voice.transcript</span></code> for explicit subscribers. Its
+media session is private.</p>
 </section>
 
 

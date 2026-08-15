@@ -682,15 +682,30 @@ exposes <code class="docutils literal notranslate"><span class="pre">/v1/health<
 <strong>survive stack restarts by design</strong>. Each persistent wrapper script checks its
 health endpoint before spawning vLLM:</p>
 <ul class="simple">
-<li><p><strong>Already running</strong> → touch the ready file immediately, then idle. Stack is
-ready in seconds; no model reload.</p></li>
-<li><p><strong>Not running</strong> → spawn vLLM normally, wait for <code class="docutils literal notranslate"><span class="pre">/health</span></code>, touch ready file.</p></li>
+<li><p><strong>Already running with a matching launch fingerprint</strong> → touch the ready
+file immediately, then idle. Stack is ready in seconds; no model reload.</p></li>
+<li><p><strong>Matching container still starting</strong> → attach to its lifecycle and keep
+waiting for <code class="docutils literal notranslate"><span class="pre">/health</span></code> instead of issuing a conflicting second <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span></code>.</p></li>
+<li><p><strong>Already running with changed or legacy configuration</strong> → stop, remove, and
+recreate the repository-owned container from the current YAML.</p></li>
+<li><p><strong>Healthy endpoint without the expected running container</strong> → fail without
+stopping the unowned listener.</p></li>
+<li><p><strong>Stopped Docker container with matching launch fingerprint</strong> → restart it,
+wait for <code class="docutils literal notranslate"><span class="pre">/health</span></code>, then touch the ready file.</p></li>
+<li><p><strong>Stopped Docker container with changed or legacy configuration</strong> → remove
+and recreate it from the current YAML before waiting for <code class="docutils literal notranslate"><span class="pre">/health</span></code>.</p></li>
+<li><p><strong>Not running</strong> → spawn vLLM normally, wait for <code class="docutils literal notranslate"><span class="pre">/health</span></code>, then touch the
+ready file.</p></li>
 </ul>
 <p>In pip mode, vLLM is spawned with <code class="docutils literal notranslate"><span class="pre">start_new_session=True</span></code> so the launcher’s
-<code class="docutils literal notranslate"><span class="pre">killpg()</span></code> does not reach it on shutdown. In docker mode, the container is
-launched detached (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span> <span class="pre">-d</span> <span class="pre">--name</span> <span class="pre">xr-ai-vllm-&lt;service&gt;</span></code>) so it
-similarly outlives the wrapper. Either way the wrapper exits cleanly and
-vLLM keeps running.</p>
+<code class="docutils literal notranslate"><span class="pre">killpg()</span></code> does not reach it on shutdown. In docker mode, Docker owns the
+container while the foreground <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span></code> client uses its own session.
+Either way vLLM keeps running after the orchestrator exits.</p>
+<p>Docker containers carry a fingerprint of their image, GPU assignment, model
+cache, environment, bootstrap packages, complete vLLM command, and a versioned
+launcher-controlled Docker contract. This prevents a failed container created
+by one sample profile—or by older launcher behavior—from being restarted later
+with stale memory limits, entrypoint, setup commands, or model arguments.</p>
 <p><strong>Stopping the persisted servers</strong> — run from the sample directory:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo<span class="w"> </span>--stop
 </pre></div>
@@ -816,7 +831,7 @@ wire format (<code class="docutils literal notranslate"><span class="pre">finish
 <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">on&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">off&quot;</span></code> in a system or user
 message; reasoning preamble is <strong>not</strong> stripped server-side. Hosting backend
 is selectable per YAML (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/cf8d18d71a686fd2be8848dfd117639b50de57eb/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/260ce337e06ae4252a099eb1586dcf43a35cbeae/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
 for the full HTTP contract and tuning knobs.</p></li>
 <li><p><strong>nemotron3-nano-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</span></code> (auto-selected by GPU compute
@@ -827,7 +842,7 @@ FlashInfer FP4 MoE kernels. Requires a Blackwell-class GPU (B200 or RTX PRO
 <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> by default to avoid the silent 3–8 min CUDA graph and
 FlashInfer autotune on cold start. Hosting backend is selectable per YAML
 (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/cf8d18d71a686fd2be8848dfd117639b50de57eb/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/260ce337e06ae4252a099eb1586dcf43a35cbeae/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
 for the vLLM flags it forwards and Blackwell prerequisites.</p></li>
 <li><p><strong>nemotron-omni-llm</strong> is a vLLM-backed multimodal LLM serving
 <code class="docutils literal notranslate"><span class="pre">Nemotron-3-Nano-Omni-30B-A3B-Reasoning</span></code> (text + video input) at port 8108.

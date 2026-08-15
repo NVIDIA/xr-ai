@@ -564,12 +564,12 @@ device nodes) when starting the container.</p></li>
 <h3>Voice session drops or agent goes silent after a few minutes idle<a class="headerlink" href="#voice-session-drops-or-agent-goes-silent-after-a-few-minutes-idle" title="Link to this heading">#</a></h3>
 <p><strong>Cause:</strong> an idle-timeout that auto-cancels the voice pipeline after a stretch
 with no user or bot speech.</p>
-<p><strong>Status:</strong> disabled by default. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> leaves its private Pipecat idle
+<p><strong>Status:</strong> disabled by default. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> leaves its private Pipecat idle
 timeout disabled, so a quiet session stays connected indefinitely.</p>
 <p><strong>If you want it:</strong> set <code class="docutils literal notranslate"><span class="pre">idle_timeout_secs:</span> <span class="pre">&lt;seconds&gt;</span></code> (e.g. <code class="docutils literal notranslate"><span class="pre">300</span></code> for 5 min)
 in the sample’s worker YAML (<code class="docutils literal notranslate"><span class="pre">simple_vlm_example_worker.yaml</span></code> /
 <code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.yaml</span></code>); <code class="docutils literal notranslate"><span class="pre">0</span></code> or unset keeps it disabled. The knob is
-owned by <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.VoiceSession</span></code>.</p>
+owned by <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.VoiceAgent</span></code>.</p>
 </section>
 <section id="browser-client-connects-but-no-audio-or-no-video">
 <h3>Browser client connects but no audio or no video<a class="headerlink" href="#browser-client-connects-but-no-audio-or-no-video" title="Link to this heading">#</a></h3>
