@@ -33,6 +33,14 @@ class MonitorRecord(BaseModel):
     error: str = ""
 
 
+class InstrumentReading(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    timestamp_us: int = Field(ge=0)
+    qr_text: str = Field(min_length=1)
+    meter_reading: str = Field(min_length=1)
+
+
 class TranscriptRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -63,6 +71,10 @@ INTERRUPTED_TOPIC = Topic(
     VoiceInterrupted,
 )
 MONITOR_RECORD_TOPIC = Topic("background-monitoring.monitor-record", MonitorRecord)
+INSTRUMENT_READING_TOPIC = Topic(
+    "background-monitoring.instrument-reading",
+    InstrumentReading,
+)
 TRANSCRIPT_RECORD_TOPIC = Topic(
     "background-monitoring.transcript-record",
     TranscriptRecord,
@@ -76,12 +88,14 @@ FOREGROUND_RECORD_TOPIC = Topic(
 __all__ = [
     "FOREGROUND_RECORD_TOPIC",
     "INTERRUPTED_TOPIC",
+    "INSTRUMENT_READING_TOPIC",
     "MONITOR_RECORD_TOPIC",
     "PARTICIPANT_JOINED_TOPIC",
     "PARTICIPANT_LEFT_TOPIC",
     "TRANSCRIPT_RECORD_TOPIC",
     "USER_QUERY_TOPIC",
     "ForegroundRecord",
+    "InstrumentReading",
     "MonitorRecord",
     "ParticipantJoined",
     "TranscriptRecord",

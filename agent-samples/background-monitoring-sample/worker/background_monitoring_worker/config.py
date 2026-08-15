@@ -22,6 +22,7 @@ class WorkerConfig:
     foreground_prompt: str
     monitor_prompt: str
     monitor_interval_s: float
+    instrument_monitor_interval_s: float
     monitor_history_size: int
     frame_max_age_s: float
     frame_timeout_s: float
@@ -57,11 +58,7 @@ def _prompt(
     if inline is not None:
         return str(inline)
     configured = data.get(f"{name}_file")
-    path = (
-        _resolve(config_path, str(configured))
-        if configured is not None
-        else _PACKAGE / "prompts" / f"{name}.txt"
-    )
+    path = _resolve(config_path, str(configured)) if configured is not None else _PACKAGE / "prompts" / f"{name}.txt"
     return path.read_text(encoding="utf-8").strip()
 
 
@@ -83,6 +80,7 @@ def load_config(path: Path | None) -> WorkerConfig:
         foreground_prompt=_prompt(data, path, "foreground_prompt"),
         monitor_prompt=_prompt(data, path, "monitor_prompt"),
         monitor_interval_s=interval,
+        instrument_monitor_interval_s=float(data.get("instrument_monitor_interval_s", interval)),
         monitor_history_size=history_size,
         frame_max_age_s=float(data.get("frame_max_age_s", 5.0)),
         frame_timeout_s=float(data.get("frame_timeout_s", 5.0)),

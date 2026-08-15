@@ -11,12 +11,11 @@ from contextlib import suppress
 import nemo_relay
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
-from xr_ai_hub import FrameUnavailable, ProcessorEndpoint
+from xr_ai_hub import FrameUnavailable
 from xr_ai_models import ChatMessage, LLMService, ToolDef, VLMService
 from xr_ai_runtime import Agent, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
-from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
-from xr_ai_tools.image import ImageRegistry
+from xr_ai_tools.current_frame import CurrentFrameRequest
 from xr_ai_tools.tool_calling import handle_tool_call, tool_definitions
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult, ImageQueryTool
 from xr_ai_voice import (
@@ -39,11 +38,17 @@ from .file_output import (
     MonitoringHistoryRequest,
     MonitoringHistoryResult,
 )
+from .images import ParticipantImageAgent
 from .monitor import (
     MonitorAgent,
     MonitoringRequest,
     MonitoringState,
     StartMonitoringRequest,
+)
+from .qr_instruments import (
+    LabInstrumentReadResult,
+    QRInstrumentAgent,
+    ReadLabInstrumentsRequest,
 )
 
 CURRENT_FRAME_TOOL = "look_at_current_frame"
@@ -51,21 +56,31 @@ MONITORING_HISTORY_TOOL = "read_monitoring_history"
 START_MONITORING_TOOL = "start_monitoring"
 STOP_MONITORING_TOOL = "stop_monitoring"
 MONITORING_STATUS_TOOL = "monitoring_status"
+READ_LAB_INSTRUMENTS_TOOL = "read_lab_instruments"
+START_INSTRUMENT_MONITORING_TOOL = "start_instrument_monitoring"
+STOP_INSTRUMENT_MONITORING_TOOL = "stop_instrument_monitoring"
+INSTRUMENT_MONITORING_STATUS_TOOL = "instrument_monitoring_status"
 _MAX_TOOL_ROUNDS = 4
 
 _CURRENT_FRAME_DESCRIPTION = (
     "Inspect the user's current camera view when the answer requires a visible "
     "fact. Do not use it for recent history or general knowledge."
 )
-_MONITORING_HISTORY_DESCRIPTION = (
-    "Read recent visual observations when the user asks what happened or changed."
-)
+_MONITORING_HISTORY_DESCRIPTION = "Read recent visual observations when the user asks what happened or changed."
 _START_MONITORING_DESCRIPTION = (
     "Start background visual monitoring without changing the foreground. "
     "Pass the user's requested focus as instruction."
 )
 _STOP_MONITORING_DESCRIPTION = "Stop background visual monitoring."
 _MONITORING_STATUS_DESCRIPTION = "Report whether background visual monitoring is running."
+_READ_LAB_INSTRUMENTS_DESCRIPTION = (
+    "Read all visible lab instrument displays and associate every meter reading with "
+    "the instrument QR-code text. Always use this for instrument, gauge, meter, or "
+    "display readings instead of ordinary visual inspection."
+)
+_START_INSTRUMENT_MONITORING_DESCRIPTION = "Continuously monitor QR-labelled lab instrument readings in the background."
+_STOP_INSTRUMENT_MONITORING_DESCRIPTION = "Stop lab instrument reading monitoring."
+_INSTRUMENT_MONITORING_STATUS_DESCRIPTION = "Report whether lab instrument reading monitoring is running."
 
 
 class _CurrentFrameArgs(BaseModel):
@@ -127,7 +142,27 @@ FOREGROUND_TOOL_DEFS = (
         MONITORING_STATUS_TOOL,
         _MONITORING_STATUS_DESCRIPTION,
         _ControlArgs.model_json_schema(),
-    )
+    ),
+    ToolDef(
+        READ_LAB_INSTRUMENTS_TOOL,
+        _READ_LAB_INSTRUMENTS_DESCRIPTION,
+        _ControlArgs.model_json_schema(),
+    ),
+    ToolDef(
+        START_INSTRUMENT_MONITORING_TOOL,
+        _START_INSTRUMENT_MONITORING_DESCRIPTION,
+        _ControlArgs.model_json_schema(),
+    ),
+    ToolDef(
+        STOP_INSTRUMENT_MONITORING_TOOL,
+        _STOP_INSTRUMENT_MONITORING_DESCRIPTION,
+        _ControlArgs.model_json_schema(),
+    ),
+    ToolDef(
+        INSTRUMENT_MONITORING_STATUS_TOOL,
+        _INSTRUMENT_MONITORING_STATUS_DESCRIPTION,
+        _ControlArgs.model_json_schema(),
+    ),
 )
 
 
@@ -138,26 +173,20 @@ class ForegroundAgent(Agent):
         self,
         *,
         llm: LLMService,
-        endpoint: ProcessorEndpoint,
+        images: ParticipantImageAgent,
         vlm: VLMService,
-        frame_max_age_s: float,
-        frame_timeout_s: float,
         files: FileOutputAgent,
         monitor: MonitorAgent,
+        qr_instruments: QRInstrumentAgent,
         prompt: str,
     ) -> None:
-        self.images = ImageRegistry()
-        self.get_current_frame = CurrentFrameTool(
-            endpoint=endpoint,
-            images=self.images,
-            frame_max_age_s=frame_max_age_s,
-            frame_timeout_s=frame_timeout_s,
-        )
-        self.query_image = ImageQueryTool(images=self.images, vlm=vlm)
-        super().__init__((self.get_current_frame, self.query_image))
+        self._images = images
+        self.query_image = ImageQueryTool(images=images.images, vlm=vlm)
+        super().__init__((self.query_image,))
         self._llm = llm
         self._files = files
         self._monitor = monitor
+        self._qr_instruments = qr_instruments
         self._prompt = prompt.strip()
         self._tasks: dict[str, asyncio.Task[None]] = {}
 
@@ -171,9 +200,7 @@ class ForegroundAgent(Agent):
             context=nemo_relay.fork_asyncio_context(),
         )
         self._tasks[participant_id] = task
-        task.add_done_callback(
-            lambda completed, pid=participant_id: self._discard(pid, completed)
-        )
+        task.add_done_callback(lambda completed, pid=participant_id: self._discard(pid, completed))
 
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
@@ -183,7 +210,6 @@ class ForegroundAgent(Agent):
     ) -> None:
         participant_id = self._participant(ctx)
         await self._cancel(participant_id)
-        self.get_current_frame.release(participant_id)
 
     @subscribe(INTERRUPTED_TOPIC)
     async def interrupted(
@@ -206,7 +232,6 @@ class ForegroundAgent(Agent):
             task.cancel()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
-        self.images.clear()
 
     async def _run_turn(self, query: UserQuery, ctx: RuntimeContext) -> None:
         participant_id = self._participant(ctx)
@@ -216,9 +241,7 @@ class ForegroundAgent(Agent):
             except asyncio.CancelledError:
                 raise
             except Exception:
-                logger.opt(exception=True).error(
-                    "foreground query failed pid={!r}", participant_id
-                )
+                logger.opt(exception=True).error("foreground query failed pid={!r}", participant_id)
                 response = "I couldn't complete that request. Please try again."
                 tools = []
             try:
@@ -279,14 +302,10 @@ class ForegroundAgent(Agent):
     def _participant_tools(self, participant_id: str) -> ToolSet:
         async def inspect_current(request: _CurrentFrameArgs) -> ImageQueryResult:
             try:
-                frame = await self.get_current_frame.execute(
-                    CurrentFrameRequest(participant_id=participant_id)
-                )
+                frame = await self._images.get_current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
             except FrameUnavailable as exc:
                 return ImageQueryResult(text=str(exc), available=False)
-            return await self.query_image.execute(
-                ImageQueryRequest(image=frame.image, query=request.question)
-            )
+            return await self.query_image.execute(ImageQueryRequest(image=frame.image, query=request.question))
 
         async def read_history(request: _HistoryArgs) -> MonitoringHistoryResult:
             return await self._files.read_monitoring_history.execute(
@@ -305,12 +324,36 @@ class ForegroundAgent(Agent):
             )
 
         async def stop_monitoring(_request: _ControlArgs) -> MonitoringState:
-            return await self._monitor.stop_monitoring.execute(
+            return await self._monitor.stop_monitoring.execute(MonitoringRequest(participant_id=participant_id))
+
+        async def monitoring_status(_request: _ControlArgs) -> MonitoringState:
+            return await self._monitor.monitoring_status.execute(MonitoringRequest(participant_id=participant_id))
+
+        async def read_lab_instruments(
+            _request: _ControlArgs,
+        ) -> LabInstrumentReadResult:
+            return await self._qr_instruments.read_lab_instruments.execute(
+                ReadLabInstrumentsRequest(participant_id=participant_id)
+            )
+
+        async def start_instrument_monitoring(
+            _request: _ControlArgs,
+        ) -> MonitoringState:
+            return await self._qr_instruments.start_instrument_monitoring.execute(
                 MonitoringRequest(participant_id=participant_id)
             )
 
-        async def monitoring_status(_request: _ControlArgs) -> MonitoringState:
-            return await self._monitor.monitoring_status.execute(
+        async def stop_instrument_monitoring(
+            _request: _ControlArgs,
+        ) -> MonitoringState:
+            return await self._qr_instruments.stop_instrument_monitoring.execute(
+                MonitoringRequest(participant_id=participant_id)
+            )
+
+        async def instrument_monitoring_status(
+            _request: _ControlArgs,
+        ) -> MonitoringState:
+            return await self._qr_instruments.instrument_monitoring_status.execute(
                 MonitoringRequest(participant_id=participant_id)
             )
 
@@ -357,6 +400,42 @@ class ForegroundAgent(Agent):
                     return_direct=True,
                     render_result=lambda result: result.message,
                 ),
+                Tool(
+                    READ_LAB_INSTRUMENTS_TOOL,
+                    _READ_LAB_INSTRUMENTS_DESCRIPTION,
+                    _ControlArgs,
+                    LabInstrumentReadResult,
+                    read_lab_instruments,
+                    return_direct=True,
+                    render_result=QRInstrumentAgent.render_readings,
+                ),
+                Tool(
+                    START_INSTRUMENT_MONITORING_TOOL,
+                    _START_INSTRUMENT_MONITORING_DESCRIPTION,
+                    _ControlArgs,
+                    MonitoringState,
+                    start_instrument_monitoring,
+                    return_direct=True,
+                    render_result=lambda result: result.message,
+                ),
+                Tool(
+                    STOP_INSTRUMENT_MONITORING_TOOL,
+                    _STOP_INSTRUMENT_MONITORING_DESCRIPTION,
+                    _ControlArgs,
+                    MonitoringState,
+                    stop_instrument_monitoring,
+                    return_direct=True,
+                    render_result=lambda result: result.message,
+                ),
+                Tool(
+                    INSTRUMENT_MONITORING_STATUS_TOOL,
+                    _INSTRUMENT_MONITORING_STATUS_DESCRIPTION,
+                    _ControlArgs,
+                    MonitoringState,
+                    instrument_monitoring_status,
+                    return_direct=True,
+                    render_result=lambda result: result.message,
+                ),
             )
         )
 
@@ -389,6 +468,10 @@ __all__ = [
     "FOREGROUND_TOOL_DEFS",
     "MONITORING_HISTORY_TOOL",
     "MONITORING_STATUS_TOOL",
+    "READ_LAB_INSTRUMENTS_TOOL",
+    "START_INSTRUMENT_MONITORING_TOOL",
+    "STOP_INSTRUMENT_MONITORING_TOOL",
+    "INSTRUMENT_MONITORING_STATUS_TOOL",
     "START_MONITORING_TOOL",
     "STOP_MONITORING_TOOL",
     "ForegroundAgent",

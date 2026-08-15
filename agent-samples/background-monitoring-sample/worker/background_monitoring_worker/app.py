@@ -29,7 +29,9 @@ from .events import (
 )
 from .file_output import FileOutputAgent
 from .foreground import ForegroundAgent
+from .images import ParticipantImageAgent
 from .monitor import MonitorAgent
+from .qr_instruments import QRInstrumentAgent
 from .transcript import TranscriptAgent
 
 
@@ -94,27 +96,40 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             history_size=config.monitor_history_size,
         ),
     )
+    images = runtime.register(
+        "images",
+        ParticipantImageAgent(
+            endpoint=session.transport.endpoint,
+            frame_max_age_s=config.frame_max_age_s,
+            frame_timeout_s=config.frame_timeout_s,
+        ),
+    )
     monitor = runtime.register(
         "monitor",
         MonitorAgent(
-            endpoint=session.transport.endpoint,
+            images=images,
             vlm=vlm,
-            frame_max_age_s=config.frame_max_age_s,
-            frame_timeout_s=config.frame_timeout_s,
             prompt=config.monitor_prompt,
             interval_s=config.monitor_interval_s,
+        ),
+    )
+    qr_instruments = runtime.register(
+        "qr-instruments",
+        QRInstrumentAgent(
+            images=images,
+            vlm=vlm,
+            interval_s=config.instrument_monitor_interval_s,
         ),
     )
     foreground = runtime.register(
         "foreground",
         ForegroundAgent(
             llm=llm,
-            endpoint=session.transport.endpoint,
+            images=images,
             vlm=vlm,
-            frame_max_age_s=config.frame_max_age_s,
-            frame_timeout_s=config.frame_timeout_s,
             files=files,
             monitor=monitor,
+            qr_instruments=qr_instruments,
             prompt=config.foreground_prompt,
         ),
     )
@@ -150,11 +165,14 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     async with _relay_event_log(config.artifacts_dir):
         async with runtime:
             monitor.bind_runtime(runtime)
+            qr_instruments.bind_runtime(runtime)
             try:
                 await voice.run(runtime)
             finally:
                 await foreground.stop()
+                await qr_instruments.stop()
                 await monitor.stop()
+                await images.stop()
     logger.info("background-monitoring-sample stopped")
 
 

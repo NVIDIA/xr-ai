@@ -13,12 +13,11 @@ from typing import Any
 import nemo_relay
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from xr_ai_hub import FrameUnavailable, ProcessorEndpoint
+from xr_ai_hub import FrameUnavailable
 from xr_ai_models import VLMService
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools import Tool
-from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
-from xr_ai_tools.image import ImageRegistry
+from xr_ai_tools.current_frame import CurrentFrameRequest
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 from xr_ai_voice import VoiceParticipantLeft
 
@@ -27,6 +26,7 @@ from .events import (
     PARTICIPANT_LEFT_TOPIC,
     MonitorRecord,
 )
+from .images import ParticipantImageAgent
 
 _DEFAULT_FOCUS = "important visual changes"
 
@@ -91,23 +91,15 @@ class MonitorAgent(Agent):
     def __init__(
         self,
         *,
-        endpoint: ProcessorEndpoint,
+        images: ParticipantImageAgent,
         vlm: VLMService,
-        frame_max_age_s: float,
-        frame_timeout_s: float,
         prompt: str,
         interval_s: float,
     ) -> None:
         if interval_s <= 0:
             raise ValueError("interval_s must be positive")
-        self.images = ImageRegistry()
-        self.get_current_frame = CurrentFrameTool(
-            endpoint=endpoint,
-            images=self.images,
-            frame_max_age_s=frame_max_age_s,
-            frame_timeout_s=frame_timeout_s,
-        )
-        self.query_image = ImageQueryTool(images=self.images, vlm=vlm)
+        self._images = images
+        self.query_image = ImageQueryTool(images=images.images, vlm=vlm)
         self.start_monitoring = Tool(
             "start_monitoring",
             "Start background visual monitoring for one participant.",
@@ -137,7 +129,6 @@ class MonitorAgent(Agent):
         )
         super().__init__(
             (
-                self.get_current_frame,
                 self.query_image,
                 self.start_monitoring,
                 self.stop_monitoring,
@@ -188,9 +179,7 @@ class MonitorAgent(Agent):
             context=nemo_relay.fork_asyncio_context(),
         )
         self._tasks[participant_id] = task
-        task.add_done_callback(
-            lambda completed, pid=participant_id: self._discard(pid, completed)
-        )
+        task.add_done_callback(lambda completed, pid=participant_id: self._discard(pid, completed))
         return MonitoringState(
             active=True,
             instruction=instruction,
@@ -203,7 +192,6 @@ class MonitorAgent(Agent):
         active = await self._cancel(participant_id)
         self._previous.pop(participant_id, None)
         self._instructions.pop(participant_id, None)
-        self.get_current_frame.release(participant_id)
         if not active:
             return MonitoringState(
                 active=False,
@@ -240,7 +228,6 @@ class MonitorAgent(Agent):
         await self._cancel(participant_id)
         self._previous.pop(participant_id, None)
         self._instructions.pop(participant_id, None)
-        self.get_current_frame.release(participant_id)
 
     async def stop(self) -> None:
         """Cancel every monitoring task before the runtime closes."""
@@ -254,7 +241,6 @@ class MonitorAgent(Agent):
             await asyncio.gather(*tasks, return_exceptions=True)
         self._previous.clear()
         self._instructions.clear()
-        self.images.clear()
         self._runtime = None
 
     async def _monitor(self, participant_id: str) -> None:
@@ -277,17 +263,10 @@ class MonitorAgent(Agent):
         previous = self._previous.get(participant_id)
         instruction = self._instructions.get(participant_id, _DEFAULT_FOCUS)
         previous_text = json.dumps(previous, ensure_ascii=False) if previous else "null"
-        query = (
-            f"{self._prompt}\nMonitoring focus: {instruction}\n"
-            f"Previous caption: {previous_text}"
-        )
+        query = f"{self._prompt}\nMonitoring focus: {instruction}\nPrevious caption: {previous_text}"
         try:
-            frame = await self.get_current_frame.execute(
-                CurrentFrameRequest(participant_id=participant_id)
-            )
-            result = await self.query_image.execute(
-                ImageQueryRequest(image=frame.image, query=query)
-            )
+            frame = await self._images.get_current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
+            result = await self.query_image.execute(ImageQueryRequest(image=frame.image, query=query))
         except asyncio.CancelledError:
             raise
         except FrameUnavailable as exc:
@@ -343,7 +322,6 @@ class MonitorAgent(Agent):
             self._tasks.pop(participant_id, None)
             self._previous.pop(participant_id, None)
             self._instructions.pop(participant_id, None)
-            self.get_current_frame.release(participant_id)
         if task.cancelled():
             return
         if error := task.exception():

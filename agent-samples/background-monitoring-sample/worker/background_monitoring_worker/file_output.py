@@ -20,11 +20,13 @@ from xr_ai_voice import VoiceParticipantLeft
 
 from .events import (
     FOREGROUND_RECORD_TOPIC,
+    INSTRUMENT_READING_TOPIC,
     MONITOR_RECORD_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     TRANSCRIPT_RECORD_TOPIC,
     ForegroundRecord,
+    InstrumentReading,
     MonitorRecord,
     ParticipantJoined,
     TranscriptRecord,
@@ -113,6 +115,23 @@ class FileOutputAgent(Agent):
             await self._append(state, "monitor.jsonl", record.model_dump(mode="json"))
             state.monitor.append(record.model_copy(deep=True))
 
+    @subscribe(INSTRUMENT_READING_TOPIC)
+    async def write_instrument_reading(
+        self,
+        record: InstrumentReading,
+        ctx: RuntimeContext,
+    ) -> None:
+        state = await self._state(self._participant(ctx))
+        if state is None:
+            return
+        async with state.lock:
+            if state.active:
+                await self._append(
+                    state,
+                    "instrument-readings.jsonl",
+                    record.model_dump(mode="json"),
+                )
+
     @subscribe(TRANSCRIPT_RECORD_TOPIC)
     async def write_transcript(
         self,
@@ -181,10 +200,7 @@ class FileOutputAgent(Agent):
             return MonitoringHistoryResult(observations=[])
         async with state.lock:
             return MonitoringHistoryResult(
-                observations=[
-                    item.model_copy(deep=True)
-                    for item in tuple(state.monitor)[-request.limit :]
-                ]
+                observations=[item.model_copy(deep=True) for item in tuple(state.monitor)[-request.limit :]]
             )
 
     async def _state(self, participant_id: str) -> _SessionFiles | None:
@@ -194,9 +210,7 @@ class FileOutputAgent(Agent):
                 return existing
             if participant_id not in self._active:
                 return None
-            directory = self.output_dir / (
-                f"{_safe_participant(participant_id)}-{_session_stamp()}"
-            )
+            directory = self.output_dir / (f"{_safe_participant(participant_id)}-{_session_stamp()}")
             await asyncio.to_thread(directory.mkdir, parents=True, exist_ok=False)
             state = _SessionFiles(
                 participant_id=participant_id,
