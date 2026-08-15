@@ -565,6 +565,11 @@ predefined dictionary. Install <code class="docutils literal notranslate"><span 
 <p>QR and ArUco are enabled by default. Initialization may select either family
 and choose the ArUco dictionary without changing the model-visible
 <code class="docutils literal notranslate"><span class="pre">track_markers</span></code> request or result schema.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code> package also includes
+<code class="docutils literal notranslate"><span class="pre">xr_ai_tools/utilities/generate_marker.py</span></code>, a standalone <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span></code> utility for
+generating QR and ArUco PNGs for testing. The script declares its own inline
+dependencies, supports OpenCV predefined ArUco dictionaries, and does not add
+an agent-facing API.</p>
 </section>
 </section>
 

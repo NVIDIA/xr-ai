@@ -579,6 +579,17 @@ initializing the tool; requests and results do not change. ArUco detection uses
 <span class="p">)</span>
 </pre></div>
 </div>
+<p>Generate sample QR and ArUco marker PNGs with the standalone utility beside the
+tool. Its inline dependency metadata lets <code class="docutils literal notranslate"><span class="pre">uv</span></code> create an isolated environment
+without modifying the project environment:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>xr_ai_tools/utilities/generate_marker.py<span class="w"> </span>qr<span class="w"> </span><span class="s2">&quot;XR AI&quot;</span><span class="w"> </span>--output<span class="w"> </span>qr.png
+uv<span class="w"> </span>run<span class="w"> </span>xr_ai_tools/utilities/generate_marker.py<span class="w"> </span>aruco<span class="w"> </span><span class="m">23</span><span class="w"> </span>--output<span class="w"> </span>aruco.png
+uv<span class="w"> </span>run<span class="w"> </span>xr_ai_tools/utilities/generate_marker.py<span class="w"> </span>aruco<span class="w"> </span><span class="m">42</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--dictionary<span class="w"> </span>DICT_6X6_250<span class="w"> </span>--output<span class="w"> </span>aruco-42.png
+</pre></div>
+</div>
+<p>Run these commands from <code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-tools/</span></code>. Both commands produce square
+512-pixel PNGs by default; use <code class="docutils literal notranslate"><span class="pre">--help</span></code> to see sizing and border options.</p>
 <p>Call <code class="docutils literal notranslate"><span class="pre">release(participant_id)</span></code> when a participant disconnects. Applications
 that expose the tool to a model should inject the active participant identity
 at their workflow boundary, as they do for other participant-scoped tools.</p>
