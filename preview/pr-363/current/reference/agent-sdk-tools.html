@@ -553,8 +553,10 @@ all derived pixels together.</p>
 <code class="docutils literal notranslate"><span class="pre">read_qr_codes</span></code> tool acquires a participant’s current camera frame and uses
 ZXing-C++ by default. Its typed result distinguishes an unavailable frame from
 a valid frame with no readable code, and returns every decoded UTF-8 payload
-with optional source-image corner coordinates. When one frame contains
-multiple QR codes, <code class="docutils literal notranslate"><span class="pre">result.codes</span></code> contains one entry for each code.</p>
+with optional source-image corner coordinates. The default extractor scans the
+full frame plus overlapping original-size and upscaled tiles, then deduplicates
+localized results. When one frame contains multiple QR codes, <code class="docutils literal notranslate"><span class="pre">result.codes</span></code>
+contains one entry for each code.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.qr_code</span><span class="w"> </span><span class="kn">import</span> <span class="n">QRCodeRequest</span><span class="p">,</span> <span class="n">QRCodeTool</span>
 
 <span class="n">qr_codes</span> <span class="o">=</span> <span class="n">QRCodeTool</span><span class="p">(</span><span class="n">endpoint</span><span class="o">=</span><span class="n">processor_endpoint</span><span class="p">)</span>
