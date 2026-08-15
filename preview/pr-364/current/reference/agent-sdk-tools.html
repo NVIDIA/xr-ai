@@ -502,6 +502,9 @@ controlled Relay headers and redact every image location from VLM events while
 preserving provider input. Timelines supplied to video inference are described
 as estimates because recorded-frame timestamps are interpolated from chunk
 metadata rather than persisted per-frame presentation timestamps.</p>
+<p>Derived images use <code class="docutils literal notranslate"><span class="pre">ImageRegistry.put_derived(...)</span></code> to inherit the source
+reference’s owner, so participant or workflow cleanup releases the source and
+all derived pixels together.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.current_frame</span><span class="w"> </span><span class="kn">import</span> <span class="n">CurrentFrameRequest</span><span class="p">,</span> <span class="n">CurrentFrameTool</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.image</span><span class="w"> </span><span class="kn">import</span> <span class="n">ImageReference</span><span class="p">,</span> <span class="n">ImageRegistry</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.video_memory</span><span class="w"> </span><span class="kn">import</span> <span class="n">LatestFramesRequest</span>
@@ -579,6 +582,44 @@ backends that decode without localization.</p>
 that expose the tool to a model should inject the active participant identity
 at their workflow boundary, as they do for other participant-scoped tools.</p>
 </section>
+<section id="magenta-polygon-image-editing">
+<h2>Magenta polygon image editing<a class="headerlink" href="#magenta-polygon-image-editing" title="Link to this heading">#</a></h2>
+<p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[image-editing]</span></code> to fill an image-space polygon with
+standard magenta (<code class="docutils literal notranslate"><span class="pre">#FF00FF</span></code>). <code class="docutils literal notranslate"><span class="pre">ImagePolygonFillTool</span></code> accepts an image reference
+and at least three ordered pixel coordinates. It connects the final point to
+the first, validates that the polygon is inside the image and encloses an area,
+and stores a new lossless PNG without changing the source image. The returned
+reference inherits the source owner and can be passed directly to an image
+query tool. Stale image references and invalid polygons return
+<code class="docutils literal notranslate"><span class="pre">available=False</span></code> with a recoverable message instead of raising an internal
+tool error.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.image</span><span class="w"> </span><span class="kn">import</span> <span class="n">ImageRegistry</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.image_polygon</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ImagePoint</span><span class="p">,</span>
+    <span class="n">ImagePolygonFillRequest</span><span class="p">,</span>
+    <span class="n">ImagePolygonFillTool</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">images</span> <span class="o">=</span> <span class="n">ImageRegistry</span><span class="p">()</span>
+<span class="n">source</span> <span class="o">=</span> <span class="n">images</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;measurement.png&quot;</span><span class="p">))</span>
+<span class="n">fill_polygon</span> <span class="o">=</span> <span class="n">ImagePolygonFillTool</span><span class="p">(</span><span class="n">images</span><span class="o">=</span><span class="n">images</span><span class="p">)</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">fill_polygon</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+    <span class="n">ImagePolygonFillRequest</span><span class="p">(</span>
+        <span class="n">image</span><span class="o">=</span><span class="n">source</span><span class="p">,</span>
+        <span class="n">coordinates</span><span class="o">=</span><span class="p">[</span>
+            <span class="n">ImagePoint</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">30</span><span class="p">),</span>
+            <span class="n">ImagePoint</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">140</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">30</span><span class="p">),</span>
+            <span class="n">ImagePoint</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">140</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">130</span><span class="p">),</span>
+            <span class="n">ImagePoint</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">130</span><span class="p">),</span>
+        <span class="p">],</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
 </section>
 
 
@@ -634,6 +675,7 @@ at their workflow boundary, as they do for other participant-scoped tools.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#typed-capability-services">Typed capability services</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#image-selection-and-vlm-query-tools">Image selection and VLM query tools</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#qr-code-reading-and-extraction">QR-code reading and extraction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#magenta-polygon-image-editing">Magenta polygon image editing</a></li>
 </ul>
   </nav></div>
 

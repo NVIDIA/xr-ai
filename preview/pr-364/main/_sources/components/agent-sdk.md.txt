@@ -70,6 +70,15 @@ Agents protect shared mutable state with their own lock or queue. They also
 create, cancel, and await their own tasks. `publish()` waits for all deliveries
 and then propagates subscriber failures.
 
+Image tools share bounded `ImageRegistry` references so model-visible results
+do not contain raw pixels. Install `xr-ai-tools[image-editing]` to use
+`ImagePolygonFillTool`, which copies an image, fills the area enclosed by at
+least three ordered pixel coordinates with magenta, and returns a new lossless
+PNG reference. The source reference remains unchanged, and the edited reference
+inherits its owner so lifecycle cleanup releases both images. It can be passed
+directly to the single-image or multi-image VLM query tools. Invalid polygons
+and unavailable source references return recoverable unavailable results.
+
 Relay records publications, subscriber callbacks, tool calls, and model calls
 as nested scopes. `Topic.telemetry` controls event volume without changing
 delivery: use `"full"` for semantic events and `"none"` for high-volume

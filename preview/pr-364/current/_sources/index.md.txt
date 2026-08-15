@@ -9,9 +9,13 @@ Build AI agents that see and hear what your users experience in XR, and respond
 in real time.
 
 :::{tip}
-Using a coding agent? Point it at the
-[xr-ai skill bank](https://github.com/NVIDIA/xr-ai/tree/main/skills) to set it
-up for building on xr-ai.
+Using a coding agent? Paste this to it:
+
+```text
+Set up xr-ai for me: fetch
+https://raw.githubusercontent.com/NVIDIA/xr-ai/main/skills/getting-started/SKILL.md,
+install it as a skill (or just follow it), and walk me through the setup.
+```
 :::
 
 XR AI is an open-source stack that connects web, iOS/visionOS, AR-glasses, and
