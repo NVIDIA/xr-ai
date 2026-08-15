@@ -220,6 +220,20 @@ aruco_only = MarkerTrackingTool(
 )
 ```
 
+Generate sample QR and ArUco marker PNGs with the standalone utility beside the
+tool. Its inline dependency metadata lets `uv` create an isolated environment
+without modifying the project environment:
+
+```bash
+uv run xr_ai_tools/utilities/generate_marker.py qr "XR AI" --output qr.png
+uv run xr_ai_tools/utilities/generate_marker.py aruco 23 --output aruco.png
+uv run xr_ai_tools/utilities/generate_marker.py aruco 42 \
+  --dictionary DICT_6X6_250 --output aruco-42.png
+```
+
+Run these commands from `agent-sdk/xr-ai-tools/`. Both commands produce square
+512-pixel PNGs by default; use `--help` to see sizing and border options.
+
 Call `release(participant_id)` when a participant disconnects. Applications
 that expose the tool to a model should inject the active participant identity
 at their workflow boundary, as they do for other participant-scoped tools.

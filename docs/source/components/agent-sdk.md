@@ -179,3 +179,9 @@ predefined dictionary. Install `xr-ai-tools[marker-tracking]` to use it.
 QR and ArUco are enabled by default. Initialization may select either family
 and choose the ArUco dictionary without changing the model-visible
 `track_markers` request or result schema.
+
+The `xr-ai-tools` package also includes
+`xr_ai_tools/utilities/generate_marker.py`, a standalone `uv run` utility for
+generating QR and ArUco PNGs for testing. The script declares its own inline
+dependencies, supports OpenCV predefined ArUco dictionaries, and does not add
+an agent-facing API.
