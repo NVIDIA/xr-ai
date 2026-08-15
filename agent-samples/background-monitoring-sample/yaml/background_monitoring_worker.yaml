@@ -6,6 +6,9 @@ voice_gate_yaml: voice_gate.yaml
 artifacts_dir: ../artifacts
 
 monitor_interval_s: 5.0
+instrument_monitor_interval_s: 5.0
+instrument_state_interval_s: 10.0
+instrument_lost_after_s: 30.0
 monitor_history_size: 20
 frame_max_age_s: 5.0
 frame_timeout_s: 5.0

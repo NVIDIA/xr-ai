@@ -41,6 +41,46 @@ class InstrumentReading(BaseModel):
     meter_reading: str = Field(min_length=1)
 
 
+class InstrumentState(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    qr_text: str = Field(min_length=1)
+    meter_reading: str = Field(min_length=1)
+    first_seen_us: int = Field(ge=0)
+    last_seen_us: int = Field(ge=0)
+    tracking: bool = True
+
+
+class InstrumentChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_type: Literal["change"] = "change"
+    timestamp_us: int = Field(ge=0)
+    change_type: Literal["discovered", "reading_changed"]
+    qr_text: str = Field(min_length=1)
+    previous_reading: str | None = None
+    meter_reading: str = Field(min_length=1)
+    last_seen_us: int = Field(ge=0)
+
+
+class InstrumentLost(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_type: Literal["lost"] = "lost"
+    timestamp_us: int = Field(ge=0)
+    qr_text: str = Field(min_length=1)
+    meter_reading: str = Field(min_length=1)
+    last_seen_us: int = Field(ge=0)
+
+
+class InstrumentStateSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_type: Literal["state"] = "state"
+    timestamp_us: int = Field(ge=0)
+    instruments: list[InstrumentState] = Field(default_factory=list)
+
+
 class ForegroundRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -64,9 +104,17 @@ INTERRUPTED_TOPIC = Topic(
     VoiceInterrupted,
 )
 MONITOR_RECORD_TOPIC = Topic("background-monitoring.monitor-record", MonitorRecord)
-INSTRUMENT_READING_TOPIC = Topic(
-    "background-monitoring.instrument-reading",
-    InstrumentReading,
+INSTRUMENT_CHANGE_TOPIC = Topic(
+    "background-monitoring.instrument-change",
+    InstrumentChange,
+)
+INSTRUMENT_LOST_TOPIC = Topic(
+    "background-monitoring.instrument-lost",
+    InstrumentLost,
+)
+INSTRUMENT_STATE_TOPIC = Topic(
+    "background-monitoring.instrument-state",
+    InstrumentStateSnapshot,
 )
 FOREGROUND_RECORD_TOPIC = Topic(
     "background-monitoring.foreground-record",
@@ -77,13 +125,19 @@ FOREGROUND_RECORD_TOPIC = Topic(
 __all__ = [
     "FOREGROUND_RECORD_TOPIC",
     "INTERRUPTED_TOPIC",
-    "INSTRUMENT_READING_TOPIC",
+    "INSTRUMENT_CHANGE_TOPIC",
+    "INSTRUMENT_LOST_TOPIC",
+    "INSTRUMENT_STATE_TOPIC",
     "MONITOR_RECORD_TOPIC",
     "PARTICIPANT_JOINED_TOPIC",
     "PARTICIPANT_LEFT_TOPIC",
     "USER_QUERY_TOPIC",
     "ForegroundRecord",
+    "InstrumentChange",
+    "InstrumentLost",
     "InstrumentReading",
+    "InstrumentState",
+    "InstrumentStateSnapshot",
     "MonitorRecord",
     "ParticipantJoined",
 ]

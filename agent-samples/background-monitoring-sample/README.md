@@ -21,10 +21,14 @@ accepted STT / typed text ─> ForegroundAgent ─┬> direct answer
                                            ├> current frame → image query
                                            ├> FileOutputAgent history tool
                                            ├> MonitorAgent start/stop/status tools
-                                           ├> QR-labelled instrument reads → VLM
+                                           ├> one-shot QR-labelled reads → VLM
+                                           ├> InstrumentMonitorAgent controls
                                            ├> Piper TTS
                                            └> foreground.jsonl
 MonitorAgent while active ──> current frame → image query ──> monitor.jsonl
+InstrumentMonitorAgent ──> QRInstrumentAgent ──> change/lost/state topics
+ change/lost topics ──> InstrumentAlertAgent ──> participant voice note
+ change/lost/state topics ──> FileOutputAgent ──> instrument-monitoring.jsonl
 ```
 
 `ParticipantImageAgent` owns the shared image registry, `CurrentFrameTool`, and
@@ -37,10 +41,19 @@ current-view tool and calls the monitor's control tools directly, binding the
 participant before every operation.
 
 `FileOutputAgent` owns structured durable outputs and the bounded recent-history
-tool. `QRInstrumentAgent` separately writes source-frame snapshots used to debug
-QR extraction. The shared QR decoder scans the whole frame at native resolution
-and at one enlarged resolution, then maps every decoded corner back to the source
-frame.
+tool. `QRInstrumentAgent` performs reusable one-frame QR-associated reads and
+writes source-frame snapshots used to debug QR extraction. The shared QR decoder
+scans the whole frame at native resolution and at one enlarged resolution, then
+maps every decoded corner back to the source frame.
+
+`InstrumentMonitorAgent` owns all participant-scoped instrument state. It
+normalizes numeric readings, retains a known unit when a later VLM result omits
+it, and emits an event only when a device is first discovered or its numeric
+reading changes. A device can leave and re-enter view without another alert when
+its value is unchanged. Once a device has not been seen for the configured loss
+timeout, the agent emits one lost-device event. It also emits the full tracked
+state every 10 seconds. `InstrumentAlertAgent` converts change and lost-device
+topics into voice notes; state snapshots are persisted without being spoken.
 
 Each foreground turn starts with only the system prompt and current request.
 Its native tool loop uses the tea-making sample's namespaced route catalog and
@@ -93,6 +106,7 @@ artifacts/
 ├── relay-events.jsonl
 └── <participant>-<utc-session-stamp>/
     ├── monitor.jsonl
+    ├── instrument-monitoring.jsonl
     ├── transcript.jsonl
     └── foreground.jsonl
 ```
@@ -105,10 +119,13 @@ model-selected tool names. Relay events contain prompts, responses, participant
 metadata, and tool lifecycles;
 live camera bytes are redacted by the shared vision tool. Every lab-instrument
 invocation saves the exact source JPEG under `qr-scans/`; the worker log records
-that path and the decoded QR identifiers for debugging.
+that path and the decoded QR identifiers for debugging. Instrument monitoring
+records contain discrete changes, one-time tracking-loss events, and complete
+state snapshots.
 
-The monitoring cadence, history bound, frame timeouts, prompts, VAD settings,
-and output path live in `yaml/background_monitoring_worker.yaml`. Model
+The visual and instrument monitoring cadences, 10-second instrument-state
+interval, device-loss timeout, history bound, frame timeouts, prompts, VAD
+settings, and output path live in `yaml/background_monitoring_worker.yaml`. Model
 adapters, endpoints, readiness, and deployment ownership live in
 `yaml/models.local.json`.
 

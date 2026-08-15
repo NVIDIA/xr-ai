@@ -30,6 +30,8 @@ from .events import (
 from .file_output import FileOutputAgent
 from .foreground import ForegroundAgent
 from .images import ParticipantImageAgent
+from .instrument_alerts import InstrumentAlertAgent
+from .instrument_monitor import InstrumentMonitorAgent
 from .monitor import MonitorAgent
 from .qr_instruments import QRInstrumentAgent
 
@@ -123,10 +125,19 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         QRInstrumentAgent(
             images=images,
             vlm=vlm,
-            interval_s=config.instrument_monitor_interval_s,
             debug_dir=config.artifacts_dir / "qr-scans",
         ),
     )
+    instrument_monitor = runtime.register(
+        "instrument-monitor",
+        InstrumentMonitorAgent(
+            reader=qr_instruments,
+            interval_s=config.instrument_monitor_interval_s,
+            snapshot_interval_s=config.instrument_state_interval_s,
+            lost_after_s=config.instrument_lost_after_s,
+        ),
+    )
+    runtime.register("instrument-alerts", InstrumentAlertAgent())
     foreground = runtime.register(
         "foreground",
         ForegroundAgent(
@@ -136,6 +147,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             files=files,
             monitor=monitor,
             qr_instruments=qr_instruments,
+            instrument_monitor=instrument_monitor,
             prompt=config.foreground_prompt,
         ),
     )
@@ -161,12 +173,12 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     async with _relay_event_log(config.artifacts_dir):
         async with runtime:
             monitor.bind_runtime(runtime)
-            qr_instruments.bind_runtime(runtime)
+            instrument_monitor.bind_runtime(runtime)
             try:
                 await voice.run(runtime)
             finally:
                 await foreground.stop()
-                await qr_instruments.stop()
+                await instrument_monitor.stop()
                 await monitor.stop()
                 await images.stop()
     logger.info("background-monitoring-sample stopped")

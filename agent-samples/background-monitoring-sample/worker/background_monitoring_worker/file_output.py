@@ -24,12 +24,16 @@ from xr_ai_voice import (
 
 from .events import (
     FOREGROUND_RECORD_TOPIC,
-    INSTRUMENT_READING_TOPIC,
+    INSTRUMENT_CHANGE_TOPIC,
+    INSTRUMENT_LOST_TOPIC,
+    INSTRUMENT_STATE_TOPIC,
     MONITOR_RECORD_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     ForegroundRecord,
-    InstrumentReading,
+    InstrumentChange,
+    InstrumentLost,
+    InstrumentStateSnapshot,
     MonitorRecord,
     ParticipantJoined,
 )
@@ -117,22 +121,29 @@ class FileOutputAgent(Agent):
             await self._append(state, "monitor.jsonl", record.model_dump(mode="json"))
             state.monitor.append(record.model_copy(deep=True))
 
-    @subscribe(INSTRUMENT_READING_TOPIC)
-    async def write_instrument_reading(
+    @subscribe(INSTRUMENT_CHANGE_TOPIC)
+    async def write_instrument_change(
         self,
-        record: InstrumentReading,
+        record: InstrumentChange,
         ctx: RuntimeContext,
     ) -> None:
-        state = await self._state(self._participant(ctx))
-        if state is None:
-            return
-        async with state.lock:
-            if state.active:
-                await self._append(
-                    state,
-                    "instrument-readings.jsonl",
-                    record.model_dump(mode="json"),
-                )
+        await self._write_instrument_event(record, ctx)
+
+    @subscribe(INSTRUMENT_LOST_TOPIC)
+    async def write_instrument_lost(
+        self,
+        record: InstrumentLost,
+        ctx: RuntimeContext,
+    ) -> None:
+        await self._write_instrument_event(record, ctx)
+
+    @subscribe(INSTRUMENT_STATE_TOPIC)
+    async def write_instrument_state(
+        self,
+        record: InstrumentStateSnapshot,
+        ctx: RuntimeContext,
+    ) -> None:
+        await self._write_instrument_event(record, ctx)
 
     @subscribe(VOICE_TRANSCRIPT_TOPIC)
     async def write_transcript(
@@ -204,6 +215,22 @@ class FileOutputAgent(Agent):
             return MonitoringHistoryResult(
                 observations=[item.model_copy(deep=True) for item in tuple(state.monitor)[-request.limit :]]
             )
+
+    async def _write_instrument_event(
+        self,
+        record: InstrumentChange | InstrumentLost | InstrumentStateSnapshot,
+        ctx: RuntimeContext,
+    ) -> None:
+        state = await self._state(self._participant(ctx))
+        if state is None:
+            return
+        async with state.lock:
+            if state.active:
+                await self._append(
+                    state,
+                    "instrument-monitoring.jsonl",
+                    record.model_dump(mode="json"),
+                )
 
     async def _state(self, participant_id: str) -> _SessionFiles | None:
         async with self._sessions_lock:

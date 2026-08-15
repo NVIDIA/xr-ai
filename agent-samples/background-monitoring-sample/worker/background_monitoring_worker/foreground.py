@@ -39,6 +39,7 @@ from .file_output import (
     MonitoringHistoryResult,
 )
 from .images import ParticipantImageAgent
+from .instrument_monitor import InstrumentMonitorAgent
 from .monitor import (
     MonitorAgent,
     MonitoringRequest,
@@ -180,6 +181,7 @@ class ForegroundAgent(Agent):
         files: FileOutputAgent,
         monitor: MonitorAgent,
         qr_instruments: QRInstrumentAgent,
+        instrument_monitor: InstrumentMonitorAgent,
         prompt: str,
     ) -> None:
         self._images = images
@@ -189,6 +191,7 @@ class ForegroundAgent(Agent):
         self._files = files
         self._monitor = monitor
         self._qr_instruments = qr_instruments
+        self._instrument_monitor = instrument_monitor
         self._prompt = prompt.strip()
         self._tasks: dict[str, asyncio.Task[None]] = {}
 
@@ -355,17 +358,17 @@ class ForegroundAgent(Agent):
             )
 
         async def start_lab_instruments(_request: _ControlArgs) -> MonitoringState:
-            return await self._qr_instruments.start_instrument_monitoring.execute(
+            return await self._instrument_monitor.start_instrument_monitoring.execute(
                 MonitoringRequest(participant_id=participant_id)
             )
 
         async def stop_lab_instruments(_request: _ControlArgs) -> MonitoringState:
-            return await self._qr_instruments.stop_instrument_monitoring.execute(
+            return await self._instrument_monitor.stop_instrument_monitoring.execute(
                 MonitoringRequest(participant_id=participant_id)
             )
 
         async def lab_instruments_status(_request: _ControlArgs) -> MonitoringState:
-            return await self._qr_instruments.instrument_monitoring_status.execute(
+            return await self._instrument_monitor.instrument_monitoring_status.execute(
                 MonitoringRequest(participant_id=participant_id)
             )
 

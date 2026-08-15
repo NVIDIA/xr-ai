@@ -23,6 +23,8 @@ class WorkerConfig:
     monitor_prompt: str
     monitor_interval_s: float
     instrument_monitor_interval_s: float
+    instrument_state_interval_s: float
+    instrument_lost_after_s: float
     monitor_history_size: int
     frame_max_age_s: float
     frame_timeout_s: float
@@ -67,9 +69,18 @@ def load_config(path: Path | None) -> WorkerConfig:
 
     data = _read_config(path)
     interval = float(data.get("monitor_interval_s", 5.0))
+    instrument_interval = float(data.get("instrument_monitor_interval_s", interval))
+    instrument_state_interval = float(data.get("instrument_state_interval_s", 10.0))
+    instrument_lost_after = float(data.get("instrument_lost_after_s", 30.0))
     history_size = int(data.get("monitor_history_size", 20))
     if interval <= 0:
         raise ValueError("monitor_interval_s must be positive")
+    if instrument_interval <= 0:
+        raise ValueError("instrument_monitor_interval_s must be positive")
+    if instrument_state_interval <= 0:
+        raise ValueError("instrument_state_interval_s must be positive")
+    if instrument_lost_after <= 0:
+        raise ValueError("instrument_lost_after_s must be positive")
     if history_size <= 0:
         raise ValueError("monitor_history_size must be positive")
     idle_timeout = float(data.get("idle_timeout_secs", 0.0))
@@ -80,7 +91,9 @@ def load_config(path: Path | None) -> WorkerConfig:
         foreground_prompt=_prompt(data, path, "foreground_prompt"),
         monitor_prompt=_prompt(data, path, "monitor_prompt"),
         monitor_interval_s=interval,
-        instrument_monitor_interval_s=float(data.get("instrument_monitor_interval_s", interval)),
+        instrument_monitor_interval_s=instrument_interval,
+        instrument_state_interval_s=instrument_state_interval,
+        instrument_lost_after_s=instrument_lost_after,
         monitor_history_size=history_size,
         frame_max_age_s=float(data.get("frame_max_age_s", 5.0)),
         frame_timeout_s=float(data.get("frame_timeout_s", 5.0)),

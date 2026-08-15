@@ -5,24 +5,28 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 import time
 import tomllib
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 import yaml
 from xr_ai_models import ChatResponse, ToolCall
-from xr_ai_runtime import AgentRuntime
+from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools import Tool
 from xr_ai_tools.current_frame import CurrentFrameRequest, ImageFrame
 from xr_ai_tools.image import ImageReference
 from xr_ai_tools.tool_calling import handle_tool_call, tool_definitions
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult
 from xr_ai_voice import (
+    VOICE_OUTPUT_TOPIC,
     VOICE_TRANSCRIPT_TOPIC,
+    VoiceOutput,
     VoiceParticipantLeft,
     VoiceTranscript,
 )
@@ -35,10 +39,17 @@ sys.path.insert(0, str(_WORKER))
 from background_monitoring_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
 from background_monitoring_worker.events import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     FOREGROUND_RECORD_TOPIC,
+    INSTRUMENT_CHANGE_TOPIC,
+    INSTRUMENT_LOST_TOPIC,
+    INSTRUMENT_STATE_TOPIC,
     MONITOR_RECORD_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     ForegroundRecord,
+    InstrumentChange,
+    InstrumentLost,
+    InstrumentReading,
+    InstrumentStateSnapshot,
     MonitorRecord,
     ParticipantJoined,
 )
@@ -58,6 +69,13 @@ from background_monitoring_worker.foreground import (  # noqa: E402  # pyright: 
 from background_monitoring_worker.images import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     ParticipantImageAgent,
 )
+from background_monitoring_worker.instrument_alerts import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    InstrumentAlertAgent,
+)
+from background_monitoring_worker.instrument_monitor import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    InstrumentMonitorAgent,
+    normalize_meter_reading,
+)
 from background_monitoring_worker.monitor import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     MonitorAgent,
     MonitoringRequest,
@@ -65,8 +83,35 @@ from background_monitoring_worker.monitor import (  # noqa: E402  # pyright: ign
     parse_monitor_response,
 )
 from background_monitoring_worker.qr_instruments import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    LabInstrumentReadResult,
     QRInstrumentAgent,
+    ReadLabInstrumentsRequest,
 )
+
+
+class _InstrumentEventCollector(Agent):
+    def __init__(self) -> None:
+        super().__init__()
+        self.changes: list[InstrumentChange] = []
+        self.lost: list[InstrumentLost] = []
+        self.snapshots: list[InstrumentStateSnapshot] = []
+        self.voice: list[VoiceOutput] = []
+
+    @subscribe(INSTRUMENT_CHANGE_TOPIC)
+    async def changed(self, event: InstrumentChange, _ctx: RuntimeContext) -> None:
+        self.changes.append(event)
+
+    @subscribe(INSTRUMENT_LOST_TOPIC)
+    async def tracking_lost(self, event: InstrumentLost, _ctx: RuntimeContext) -> None:
+        self.lost.append(event)
+
+    @subscribe(INSTRUMENT_STATE_TOPIC)
+    async def state(self, event: InstrumentStateSnapshot, _ctx: RuntimeContext) -> None:
+        self.snapshots.append(event)
+
+    @subscribe(VOICE_OUTPUT_TOPIC)
+    async def voice_output(self, event: VoiceOutput, _ctx: RuntimeContext) -> None:
+        self.voice.append(event)
 
 
 def _fake_endpoint() -> SimpleNamespace:
@@ -97,8 +142,13 @@ def _make_qr(images: ParticipantImageAgent | None = None) -> QRInstrumentAgent:
     return QRInstrumentAgent(
         images=images or _make_images(),
         vlm=SimpleNamespace(),  # type: ignore[arg-type]
-        interval_s=5.0,
     )
+
+
+def _make_instrument_monitor(
+    reader: QRInstrumentAgent | None = None,
+) -> InstrumentMonitorAgent:
+    return InstrumentMonitorAgent(reader=reader or _make_qr(), interval_s=5.0)
 
 
 def test_sample_uses_named_native_agents_and_shared_connection_client() -> None:
@@ -115,6 +165,8 @@ def test_sample_uses_named_native_agents_and_shared_connection_client() -> None:
         "file_output.py",
         "foreground.py",
         "images.py",
+        "instrument_alerts.py",
+        "instrument_monitor.py",
         "monitor.py",
         "qr_instruments.py",
     } <= {path.name for path in package.glob("*.py")}
@@ -149,6 +201,8 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     assert config.voice_gate_yaml == _SAMPLE / "yaml" / "voice_gate.yaml"
     assert config.artifacts_dir == _SAMPLE / "artifacts"
     assert config.monitor_interval_s == 5.0
+    assert config.instrument_state_interval_s == 10.0
+    assert config.instrument_lost_after_s == 30.0
     assert "Previous caption" not in config.monitor_prompt
     assert "current_view" in config.foreground_prompt
 
@@ -158,6 +212,7 @@ def test_monitor_and_foreground_share_participant_image_acquisition(tmp_path: Pa
     vlm = SimpleNamespace()
     monitor = _make_monitor(images)
     qr_instruments = _make_qr(images)
+    instrument_monitor = _make_instrument_monitor(qr_instruments)
     foreground = ForegroundAgent(
         llm=SimpleNamespace(),  # type: ignore[arg-type]
         images=images,
@@ -165,6 +220,7 @@ def test_monitor_and_foreground_share_participant_image_acquisition(tmp_path: Pa
         files=FileOutputAgent(tmp_path, history_size=2),
         monitor=monitor,
         qr_instruments=qr_instruments,
+        instrument_monitor=instrument_monitor,
         prompt="Answer.",
     )
 
@@ -178,7 +234,107 @@ def test_monitor_and_foreground_share_participant_image_acquisition(tmp_path: Pa
         "stop_monitoring",
         "monitoring_status",
     }
+    assert {tool.name for tool in qr_instruments.tools} == {"read_lab_instruments"}
+    assert {tool.name for tool in instrument_monitor.tools} == {
+        "start_instrument_monitoring",
+        "stop_instrument_monitoring",
+        "instrument_monitoring_status",
+    }
     assert {tool.name for tool in foreground.tools} == {"query_image"}
+
+
+def test_instrument_reading_normalization_retains_units() -> None:
+    assert normalize_meter_reading("Reading: 12.00 volts") == (
+        Decimal("12.00"),
+        "V",
+        "12 V",
+    )
+    assert normalize_meter_reading("12", previous_unit="V") == (
+        Decimal("12"),
+        "V",
+        "12 V",
+    )
+    assert normalize_meter_reading("UNKNOWN", previous_unit="V") is None
+
+
+@pytest.mark.asyncio
+async def test_instrument_monitor_emits_only_changes_lost_once_and_full_state() -> None:
+    read_started = asyncio.Event()
+    blocked = asyncio.Event()
+
+    async def read_instruments(
+        _request: ReadLabInstrumentsRequest,
+    ) -> LabInstrumentReadResult:
+        read_started.set()
+        await blocked.wait()
+        return LabInstrumentReadResult()
+
+    reader = SimpleNamespace(
+        read_lab_instruments=Tool(
+            "read_lab_instruments",
+            "Read instruments.",
+            ReadLabInstrumentsRequest,
+            LabInstrumentReadResult,
+            read_instruments,
+        )
+    )
+    monitor = InstrumentMonitorAgent(
+        reader=reader,  # type: ignore[arg-type]
+        interval_s=60.0,
+        snapshot_interval_s=10.0,
+        lost_after_s=10.0,
+    )
+    collector = _InstrumentEventCollector()
+    runtime = AgentRuntime()
+    runtime.register("instrument-monitor", monitor)
+    runtime.register("instrument-alerts", InstrumentAlertAgent())
+    runtime.register("collector", collector)
+
+    async with runtime:
+        monitor.bind_runtime(runtime)
+        await monitor.start_instrument_monitoring.execute(
+            MonitoringRequest(participant_id="participant-1")
+        )
+        await asyncio.wait_for(read_started.wait(), timeout=1.0)
+        await monitor._observe(
+            "participant-1",
+            [InstrumentReading(timestamp_us=1, qr_text="meter-a", meter_reading="12 V")],
+            observed_at=100.0,
+        )
+        await monitor._observe(
+            "participant-1",
+            [InstrumentReading(timestamp_us=2, qr_text="meter-a", meter_reading="12.0")],
+            observed_at=101.0,
+        )
+        await monitor._publish_lost("participant-1", 111.0)
+        await monitor._publish_lost("participant-1", 112.0)
+        await monitor._observe(
+            "participant-1",
+            [InstrumentReading(timestamp_us=3, qr_text="meter-a", meter_reading="12")],
+            observed_at=113.0,
+        )
+        await monitor._observe(
+            "participant-1",
+            [InstrumentReading(timestamp_us=4, qr_text="meter-a", meter_reading="13")],
+            observed_at=114.0,
+        )
+        await monitor._publish_snapshot("participant-1")
+        await monitor.stop()
+
+    assert [event.change_type for event in collector.changes] == [
+        "discovered",
+        "reading_changed",
+    ]
+    assert collector.changes[-1].previous_reading == "12 V"
+    assert collector.changes[-1].meter_reading == "13 V"
+    assert len(collector.lost) == 1
+    assert collector.snapshots[-1].instruments[0].meter_reading == "13 V"
+    assert collector.snapshots[-1].instruments[0].tracking is True
+    assert [output.text for output in collector.voice] == [
+        "Now tracking meter-a at 12 V.",
+        "I am no longer tracking meter-a. Its last reading was 12 V.",
+        "meter-a changed from 12 V to 13 V.",
+    ]
 
 
 @pytest.mark.asyncio
@@ -246,7 +402,7 @@ def test_monitor_response_is_strict_and_normalizes_baselines() -> None:
 
 
 @pytest.mark.asyncio
-async def test_file_output_records_transcript_monitor_and_foreground(tmp_path: Path) -> None:
+async def test_file_output_records_transcript_monitor_instruments_and_foreground(tmp_path: Path) -> None:
     files = FileOutputAgent(tmp_path, history_size=2)
     runtime = AgentRuntime()
     runtime.register("files", files)
@@ -283,6 +439,22 @@ async def test_file_output_records_transcript_monitor_and_foreground(tmp_path: P
             ),
             participant_id="glasses/user",
         )
+        await runtime.publish(
+            INSTRUMENT_CHANGE_TOPIC,
+            InstrumentChange(
+                timestamp_us=now,
+                change_type="discovered",
+                qr_text="meter-a",
+                meter_reading="12 V",
+                last_seen_us=now,
+            ),
+            participant_id="glasses/user",
+        )
+        await runtime.publish(
+            INSTRUMENT_STATE_TOPIC,
+            InstrumentStateSnapshot(timestamp_us=now),
+            participant_id="glasses/user",
+        )
         history = await files.read_monitoring_history.execute(
             MonitoringHistoryRequest(participant_id="glasses/user", limit=20)
         )
@@ -304,12 +476,20 @@ async def test_file_output_records_transcript_monitor_and_foreground(tmp_path: P
     assert [item.caption for item in history.observations] == ["scene 1", "scene 2"]
     sessions = [path for path in tmp_path.iterdir() if path.is_dir()]
     assert len(sessions) == 1
-    for name in ("monitor.jsonl", "transcript.jsonl", "foreground.jsonl"):
+    for name in (
+        "monitor.jsonl",
+        "instrument-monitoring.jsonl",
+        "transcript.jsonl",
+        "foreground.jsonl",
+    ):
         records = [json.loads(line) for line in (sessions[0] / name).read_text().splitlines()]
         assert records[0]["type"] == "session"
         assert records[-1]["type"] == "session_end"
     transcript = (sessions[0] / "transcript.jsonl").read_text()
     assert "What changed?" in transcript
+    instruments = (sessions[0] / "instrument-monitoring.jsonl").read_text()
+    assert '"event_type":"change"' in instruments
+    assert '"event_type":"state"' in instruments
 
 
 @pytest.mark.asyncio
@@ -340,6 +520,7 @@ async def test_foreground_injects_participant_into_current_frame_tool(tmp_path: 
         files=FileOutputAgent(tmp_path, history_size=2),
         monitor=_make_monitor(images),
         qr_instruments=_make_qr(images),
+        instrument_monitor=_make_instrument_monitor(),
         prompt="Answer briefly.",
     )
     images.get_current_frame = Tool(
@@ -398,6 +579,7 @@ async def test_foreground_background_control_returns_direct(tmp_path: Path) -> N
     images = _make_images()
     monitor = _make_monitor(images)
     qr_instruments = _make_qr(images)
+    instrument_monitor = _make_instrument_monitor(qr_instruments)
     runtime = AgentRuntime()
     runtime.register("monitor", monitor)
 
@@ -410,6 +592,7 @@ async def test_foreground_background_control_returns_direct(tmp_path: Path) -> N
             files=FileOutputAgent(tmp_path, history_size=2),
             monitor=monitor,
             qr_instruments=qr_instruments,
+            instrument_monitor=instrument_monitor,
             prompt="Route one request.",
         )
         response, tools = await agent._answer(
@@ -449,6 +632,7 @@ async def test_foreground_uses_one_unfiltered_tool_catalog(
         files=FileOutputAgent(tmp_path, history_size=2),
         monitor=_make_monitor(images),
         qr_instruments=_make_qr(images),
+        instrument_monitor=_make_instrument_monitor(),
         prompt="Route one request.",
     )
 
@@ -496,6 +680,7 @@ async def test_foreground_tool_loop_returns_model_answer_and_tool_audit(tmp_path
         files=files,
         monitor=_make_monitor(images),
         qr_instruments=_make_qr(images),
+        instrument_monitor=_make_instrument_monitor(),
         prompt="Answer briefly.",
     )
 
