@@ -8,10 +8,9 @@
 The voice runtime for XR agents. Pipecat implements the media pipeline, but
 applications work with XR concepts rather than Pipecat modules:
 
-- `VoiceAgent` publishes every raw microphone chunk on `voice.audio`, every
-  final pre-gate STT result on `voice.transcript`, and accepted speech, text,
-  participant departure, and interruption on typed topics; it subscribes to
-  `voice.output`.
+- `VoiceAgent` publishes every final pre-gate STT result on `voice.transcript`
+  and accepted speech, text, participant departure, and interruption on typed
+  topics; it subscribes to `voice.output`.
 - `VoiceAgent` privately owns readiness, hub transport, pipeline assembly,
   signals, execution, and cleanup.
 - `HubVoiceTransport` is available when an application needs to share one transport explicitly.
@@ -62,28 +61,12 @@ hub data channel. Its default is `"agent.response"`; set it to `""` when the
 application publishes its own response data so each turn is delivered only
 once. This setting does not disable TTS or Relay telemetry.
 
-`VoiceAgent` publishes every incoming microphone chunk on `voice.audio` before
-VAD, STT, or wake-phrase filtering. This includes silence and speech that does
-not contain the configured wake phrase, so agents that need the complete input
-stream can subscribe to `VOICE_AUDIO_TOPIC`. `VoiceAudio.data` is the original
-interleaved little-endian float32 PCM from the hub; the payload also carries its
-sample rate, channel and sample counts, capture timestamp, and track ID. The
-participant ID and `voice` source are runtime metadata. The topic disables
-Relay telemetry so raw audio is never recorded in runtime scopes.
-
 Each non-empty final STT result is published on `VOICE_TRANSCRIPT_TOPIC` as a
 `VoiceTranscript` before wake-phrase filtering. It therefore includes speech
 that the gate later rejects. The participant ID and `voice` source are runtime
 metadata. Early wake/STOP probes are internal and are not published as final
 transcripts. Accepted speech continues separately as `UserQuery`, with any
 matched wake phrase and preceding background speech removed by the gate.
-
-Delivery uses one FIFO worker and bounded queue per participant and track.
-`audio_capacity` defaults to 32 queued chunks for each stream. If a subscriber
-cannot keep up and that queue fills, voice drops the oldest queued chunk and
-keeps the newest live audio; an in-flight chunk is never reordered. Subscriber
-failures are logged without stopping later chunks, and `VoiceAgent` cancels and
-awaits every audio worker during participant cleanup and shutdown.
 
 Accepted speech, typed text, participant departure, and interruption remain on
 application-named topics. Application agents subscribe to the events they own,

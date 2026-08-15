@@ -66,7 +66,7 @@ xr-ai-voice  (agent-sdk/xr-ai-voice/)
     └── numpy >=1.24
     └── scipy >=1.11
     Native voice runtime used by simple-vlm-example. Exposes ``VoiceAgent``,
-    its raw-audio, pre-gate transcript, ``UserQuery``, ``VoiceOutput``, and
+    its pre-gate transcript, ``UserQuery``, ``VoiceOutput``, and
     participant-lifecycle schemas, plus ``HubVoiceTransport`` and ``VadConfig``.
     The media session is private to ``VoiceAgent``. Voice lifecycle events enter application-named topics so
     application agents own their cleanup. Pipecat, audio framing, and pipeline

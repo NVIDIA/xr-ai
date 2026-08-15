@@ -16,7 +16,7 @@ from typing import Any
 import nemo_relay
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from xr_ai_hub import AudioChunk, DataMessage, ProcessorEndpoint
+from xr_ai_hub import DataMessage, ProcessorEndpoint
 from xr_ai_models import STTService, TTSService
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_voicegate import VoiceGateConfig
@@ -55,19 +55,6 @@ class VoiceTranscript(BaseModel):
     timestamp_us: int = Field(ge=0)
 
 
-class VoiceAudio(BaseModel):
-    """One unprocessed microphone chunk received from the media hub."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    data: bytes
-    sample_rate: int = Field(gt=0)
-    channels: int = Field(gt=0)
-    samples: int = Field(ge=0)
-    timestamp_us: int = Field(ge=0)
-    track_id: str
-
-
 class VoiceParticipantLeft(BaseModel):
     """Notification that one participant left the voice transport."""
 
@@ -104,7 +91,6 @@ class VoiceOutput(BaseModel):
         return self
 
 
-VOICE_AUDIO_TOPIC = Topic("voice.audio", VoiceAudio, telemetry="none")
 VOICE_TRANSCRIPT_TOPIC = Topic("voice.transcript", VoiceTranscript)
 VOICE_OUTPUT_TOPIC = Topic("voice.output", VoiceOutput, telemetry="none")
 
@@ -206,7 +192,6 @@ class VoiceAgent(Agent):
         idle_timeout_secs: float | None = None,
         transport: HubVoiceTransport | None = None,
         response_capacity: int = 32,
-        audio_capacity: int = 32,
         text_input: bool = True,
         text_ignore_topics: Iterable[str] | None = None,
         text_transform: QueryTransform | None = None,
@@ -216,8 +201,6 @@ class VoiceAgent(Agent):
     ) -> None:
         if response_capacity <= 0:
             raise ValueError("voice response capacity must be positive")
-        if audio_capacity <= 0:
-            raise ValueError("voice audio capacity must be positive")
         if _session is None:
             missing = [
                 name
@@ -253,7 +236,6 @@ class VoiceAgent(Agent):
         self._session = _session
         self.query_topic = query_topic
         self.response_capacity = response_capacity
-        self.audio_capacity = audio_capacity
         self.text_input = text_input
         self.text_ignore_topics = (
             tuple(text_ignore_topics)
@@ -271,12 +253,6 @@ class VoiceAgent(Agent):
         self._response_traces: dict[tuple[str, str, str], _ResponseTrace] = {}
         self._closed_streams: dict[tuple[str, str, str], None] = {}
         self._lifecycle_tasks: set[asyncio.Task[None]] = set()
-        self._audio_queues: dict[tuple[str, str], asyncio.Queue[VoiceAudio]] = {}
-        self._audio_tasks: dict[tuple[str, str], asyncio.Task[None]] = {}
-        self._audio_owned_tasks: set[asyncio.Task[None]] = set()
-        self._audio_overflow_warned: set[tuple[str, str]] = set()
-        self._audio_failure_warned: set[tuple[str, str]] = set()
-        self._accepting_audio = False
 
     @property
     def endpoint(self) -> ProcessorEndpoint:
@@ -305,8 +281,6 @@ class VoiceAgent(Agent):
         try:
             await self._session.__aenter__()
             try:
-                self._session.endpoint.on_audio(self._publish_audio)
-                self._accepting_audio = True
                 if self.text_input:
                     unsubscribe_data = self._session.endpoint.on_data(self._on_data)
                 await self._session.run(
@@ -321,10 +295,8 @@ class VoiceAgent(Agent):
                     interrupt_on_supersede=self.interrupt_on_supersede,
                 )
             finally:
-                self._accepting_audio = False
                 if unsubscribe_data is not None:
                     unsubscribe_data()
-                await self._stop_audio_tasks()
                 tasks = tuple(self._lifecycle_tasks)
                 for task in tasks:
                     task.cancel()
@@ -342,8 +314,6 @@ class VoiceAgent(Agent):
     async def close(self) -> None:
         """Close the media resources owned by this voice agent."""
 
-        self._accepting_audio = False
-        await self._stop_audio_tasks()
         await self._session.close()
 
     @subscribe(VOICE_OUTPUT_TOPIC)
@@ -503,161 +473,7 @@ class VoiceAgent(Agent):
                     error,
                 )
 
-    async def _publish_audio(self, chunk: AudioChunk) -> None:
-        runtime = self._runtime
-        if not self._accepting_audio or runtime is None:
-            return
-
-        key = (chunk.participant_id, chunk.track_id)
-        queue = self._audio_queues.get(key)
-        if queue is None:
-            queue = asyncio.Queue(maxsize=self.audio_capacity)
-            self._audio_queues[key] = queue
-        if queue.full():
-            _ = queue.get_nowait()
-            queue.task_done()
-            if key not in self._audio_overflow_warned:
-                logger.warning(
-                    "voice audio backlog full; dropping oldest chunk "
-                    "pid={!r} track={!r} capacity={}",
-                    *key,
-                    self.audio_capacity,
-                )
-                self._audio_overflow_warned.add(key)
-        queue.put_nowait(
-            VoiceAudio(
-                data=chunk.data,
-                sample_rate=chunk.sample_rate,
-                channels=chunk.channels,
-                samples=chunk.samples,
-                timestamp_us=chunk.pts_us,
-                track_id=chunk.track_id,
-            )
-        )
-
-        task = self._audio_tasks.get(key)
-        if task is None or task.done():
-            task = asyncio.create_task(
-                self._run_audio_queue(key, queue),
-                name=f"voice-audio:{key[0]}:{key[1]}",
-                context=nemo_relay.fork_asyncio_context(),
-            )
-            self._audio_tasks[key] = task
-            self._audio_owned_tasks.add(task)
-            task.add_done_callback(
-                lambda done, audio_key=key: self._audio_task_done(audio_key, done)
-            )
-
-    async def _run_audio_queue(
-        self,
-        key: tuple[str, str],
-        queue: asyncio.Queue[VoiceAudio],
-    ) -> None:
-        participant_id, track_id = key
-        while True:
-            audio = await queue.get()
-            runtime = self._runtime
-            try:
-                if runtime is None or not runtime.running:
-                    return
-                await runtime.publish(
-                    VOICE_AUDIO_TOPIC,
-                    audio,
-                    participant_id=participant_id,
-                    source=self._source,
-                )
-                self._audio_failure_warned.discard(key)
-            except asyncio.CancelledError:
-                raise
-            except BaseExceptionGroup as error:
-                if runtime.running:
-                    self._log_audio_failure(key, error)
-                else:
-                    return
-            except Exception as error:
-                if runtime.running:
-                    self._log_audio_failure(key, error)
-                else:
-                    return
-            finally:
-                queue.task_done()
-                if queue.qsize() < self.audio_capacity:
-                    self._audio_overflow_warned.discard(key)
-
-    def _log_audio_failure(
-        self,
-        key: tuple[str, str],
-        error: BaseException,
-    ) -> None:
-        if key in self._audio_failure_warned:
-            return
-        logger.error(
-            "voice audio publication failed; later chunks will continue "
-            "pid={!r} track={!r}: {}",
-            *key,
-            error,
-        )
-        self._audio_failure_warned.add(key)
-
-    def _audio_task_done(
-        self,
-        key: tuple[str, str],
-        task: asyncio.Task[None],
-    ) -> None:
-        self._audio_owned_tasks.discard(task)
-        if self._audio_tasks.get(key) is task:
-            self._audio_tasks.pop(key, None)
-            self._audio_queues.pop(key, None)
-            self._audio_overflow_warned.discard(key)
-            self._audio_failure_warned.discard(key)
-        if task.cancelled():
-            return
-        if error := task.exception():
-            logger.error(
-                "voice audio worker failed pid={!r} track={!r}: {}",
-                *key,
-                error,
-            )
-
-    def _cancel_audio_key(self, key: tuple[str, str]) -> None:
-        self._audio_queues.pop(key, None)
-        self._audio_overflow_warned.discard(key)
-        self._audio_failure_warned.discard(key)
-        task = self._audio_tasks.pop(key, None)
-        if task is not None and not task.done():
-            task.cancel()
-
-    async def _stop_audio_participant(self, participant_id: str) -> None:
-        keys = {
-            key
-            for key in set(self._audio_queues) | set(self._audio_tasks)
-            if key[0] == participant_id
-        }
-        tasks = tuple(
-            task
-            for key in keys
-            if (task := self._audio_tasks.get(key)) is not None
-        )
-        for key in keys:
-            self._cancel_audio_key(key)
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-
-    async def _stop_audio_tasks(self) -> None:
-        tasks = tuple(self._audio_owned_tasks)
-        for task in tasks:
-            task.cancel()
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-        self._audio_queues.clear()
-        self._audio_tasks.clear()
-        self._audio_owned_tasks.clear()
-        self._audio_overflow_warned.clear()
-        self._audio_failure_warned.clear()
-
     async def _participant_left(self, participant_id: str) -> None:
-        await self._stop_audio_participant(participant_id)
-
         topic = self.participant_left_topic
         if topic is None:
             return
@@ -805,12 +621,10 @@ class VoiceAgent(Agent):
         )
 
 __all__ = [
-    "VOICE_AUDIO_TOPIC",
     "VOICE_OUTPUT_TOPIC",
     "VOICE_TRANSCRIPT_TOPIC",
     "UserQuery",
     "VoiceAgent",
-    "VoiceAudio",
     "VoiceInterrupted",
     "VoiceOutput",
     "VoiceParticipantLeft",

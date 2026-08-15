@@ -107,20 +107,7 @@ and deployment configuration.
 
 ## Voice
 
-`VoiceAgent` publishes every incoming microphone chunk on `voice.audio` before
-VAD, STT, or wake-phrase filtering. Agents can subscribe to
-`VOICE_AUDIO_TOPIC` to receive silence and non-wake-phrase speech as
-`VoiceAudio`; the participant is carried in runtime metadata. The topic has
-Relay telemetry disabled because its payload contains raw interleaved float32
-PCM.
-
-Audio delivery is FIFO within each participant and track, with independent
-streams allowed to progress concurrently. `audio_capacity` defaults to 32 queued
-chunks per stream. A full queue drops its oldest queued chunk to retain the
-newest live audio. Subscriber failures do not stop later chunks, and all audio
-workers are cancelled and awaited during cleanup.
-
-Every non-empty final STT result is also published before wake-phrase filtering
+Every non-empty final STT result is published before wake-phrase filtering
 on `VOICE_TRANSCRIPT_TOPIC` as `VoiceTranscript`. This includes speech that the
 gate rejects because it contains no wake phrase. Early wake/STOP probes remain
 private and are not published as final transcripts. Accepted speech is

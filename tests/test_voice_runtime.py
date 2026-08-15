@@ -14,15 +14,13 @@ import nemo_relay
 import pytest
 import xr_ai_voice
 from pydantic import ValidationError
-from xr_ai_hub import AudioChunk, DataMessage, MsgType
+from xr_ai_hub import DataMessage
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_voice import (
-    VOICE_AUDIO_TOPIC,
     VOICE_OUTPUT_TOPIC,
     VOICE_TRANSCRIPT_TOPIC,
     UserQuery,
     VoiceAgent,
-    VoiceAudio,
     VoiceInterrupted,
     VoiceOutput,
     VoiceParticipantLeft,
@@ -35,19 +33,6 @@ from xr_ai_voice._types import VoiceQuery
 QUERY_TOPIC = Topic("test.user-query", UserQuery)
 PARTICIPANT_LEFT_TOPIC = Topic("test.participant-left", VoiceParticipantLeft)
 INTERRUPTED_TOPIC = Topic("test.interrupted", VoiceInterrupted)
-
-def _audio_chunk(
-    timestamp_us: int,
-    *,
-    participant_id: str = "alice",
-    track_id: str = "microphone-1",
-) -> AudioChunk:
-    return AudioChunk(
-        pts_us=timestamp_us, sample_rate=48_000, channels=2, samples=480,
-        data=f"pcm-{timestamp_us}".encode(), participant_id=participant_id,
-        track_id=track_id,
-    )
-
 
 class _Endpoint:
     def on_audio(self, callback):
@@ -158,23 +143,6 @@ class _InputRecorder(Agent):
         self.changed.set()
 
 
-class _AudioRecorder(Agent):
-    def __init__(self) -> None:
-        super().__init__()
-        self.messages: list[tuple[str | None, str, VoiceAudio]] = []
-        self.changed = asyncio.Event()
-
-    @subscribe(VOICE_AUDIO_TOPIC)
-    async def record(self, audio: VoiceAudio, ctx: RuntimeContext) -> None:
-        self.messages.append((ctx.metadata.participant_id, ctx.metadata.source, audio))
-        self.changed.set()
-
-    async def wait_for(self, count: int) -> None:
-        while len(self.messages) < count:
-            self.changed.clear()
-            await self.changed.wait()
-
-
 class _TranscriptRecorder(Agent):
     def __init__(self) -> None:
         super().__init__()
@@ -187,57 +155,6 @@ class _TranscriptRecorder(Agent):
             (ctx.metadata.participant_id, ctx.metadata.source, transcript)
         )
         self.changed.set()
-
-
-class _BlockingAudioRecorder(Agent):
-    def __init__(self) -> None:
-        super().__init__()
-        self.messages: list[VoiceAudio] = []
-        self.active = 0
-        self.max_active = 0
-        self.started = asyncio.Event()
-        self.release = asyncio.Event()
-        self.changed = asyncio.Event()
-        self.cancelled = asyncio.Event()
-
-    @subscribe(VOICE_AUDIO_TOPIC)
-    async def record(self, audio: VoiceAudio, _ctx: RuntimeContext) -> None:
-        self.active += 1
-        self.max_active = max(self.max_active, self.active)
-        self.messages.append(audio)
-        self.started.set()
-        self.changed.set()
-        try:
-            if audio.timestamp_us == 0:
-                await self.release.wait()
-        except asyncio.CancelledError:
-            self.cancelled.set()
-            raise
-        finally:
-            self.active -= 1
-
-    async def wait_for(self, count: int) -> None:
-        while len(self.messages) < count:
-            self.changed.clear()
-            await self.changed.wait()
-
-
-class _FailingAudioRecorder(Agent):
-    def __init__(self) -> None:
-        super().__init__()
-        self.calls = 0
-        self.changed = asyncio.Event()
-
-    @subscribe(VOICE_AUDIO_TOPIC)
-    async def record(self, _audio: VoiceAudio, _ctx: RuntimeContext) -> None:
-        self.calls += 1
-        self.changed.set()
-        raise RuntimeError("broken audio subscriber")
-
-    async def wait_for(self, count: int) -> None:
-        while self.calls < count:
-            self.changed.clear()
-            await self.changed.wait()
 
 
 class _LifecycleRecorder(Agent):
@@ -422,201 +339,6 @@ async def test_transcript_subscriber_failure_does_not_block_accepted_query() -> 
         await asyncio.wait_for(queries.changed.wait(), 1.0)
 
     assert [query.text for _pid, _source, query in queries.messages] == ["listen"]
-
-
-async def test_voice_agent_publishes_every_raw_audio_chunk_before_query_gating(
-    make_processor,
-) -> None:
-    endpoint = make_processor()
-    session = _Session()
-    session.transport.endpoint = endpoint
-    recorder = _AudioRecorder()
-    runtime = AgentRuntime()
-    runtime.register("recorder", recorder)
-    voice = VoiceAgent(  # type: ignore[arg-type]
-        session,
-        query_topic=QUERY_TOPIC,
-        text_input=False,
-    )
-    runtime.register("voice", voice)
-
-    async with _running_voice(runtime, voice, session):
-        await endpoint._dispatch(MsgType.AUDIO_CHUNK, _audio_chunk(7))  # noqa: SLF001
-        await asyncio.wait_for(recorder.wait_for(1), 1.0)
-        assert session.handler is not None
-
-    assert recorder.messages == [
-        (
-            "alice",
-            "voice",
-            VoiceAudio(
-                data=b"pcm-7",
-                sample_rate=48_000,
-                channels=2,
-                samples=480,
-                timestamp_us=7,
-                track_id="microphone-1",
-            ),
-        )
-    ]
-    assert VOICE_AUDIO_TOPIC.telemetry == "none"
-    assert voice._audio_owned_tasks == set()  # noqa: SLF001
-
-
-async def test_voice_audio_delivery_is_bounded_and_ordered_per_track(
-    make_processor,
-) -> None:
-    endpoint = make_processor()
-    session = _Session()
-    session.transport.endpoint = endpoint
-    recorder = _BlockingAudioRecorder()
-    runtime = AgentRuntime()
-    runtime.register("recorder", recorder)
-    voice = VoiceAgent(  # type: ignore[arg-type]
-        session,
-        query_topic=QUERY_TOPIC,
-        audio_capacity=2,
-        text_input=False,
-    )
-    runtime.register("voice", voice)
-
-    async with _running_voice(runtime, voice, session):
-        await endpoint._dispatch(MsgType.AUDIO_CHUNK, _audio_chunk(0))  # noqa: SLF001
-        await asyncio.wait_for(recorder.started.wait(), 1.0)
-        for timestamp_us in range(1, 5):
-            await endpoint._dispatch(  # noqa: SLF001
-                MsgType.AUDIO_CHUNK,
-                _audio_chunk(timestamp_us),
-            )
-        await asyncio.sleep(0)
-
-        key = ("alice", "microphone-1")
-        assert voice._audio_queues[key].qsize() == 2  # noqa: SLF001
-        assert len(voice._audio_owned_tasks) == 1  # noqa: SLF001
-        recorder.release.set()
-        await asyncio.wait_for(recorder.wait_for(3), 1.0)
-
-    assert [audio.timestamp_us for audio in recorder.messages] == [0, 3, 4]
-    assert recorder.max_active == 1
-    assert voice._audio_queues == {}  # noqa: SLF001
-    assert voice._audio_owned_tasks == set()  # noqa: SLF001
-
-
-async def test_voice_audio_tracks_do_not_head_of_line_block_each_other(
-    make_processor,
-) -> None:
-    endpoint = make_processor()
-    session = _Session()
-    session.transport.endpoint = endpoint
-    recorder = _BlockingAudioRecorder()
-    runtime = AgentRuntime()
-    runtime.register("recorder", recorder)
-    voice = VoiceAgent(  # type: ignore[arg-type]
-        session,
-        query_topic=QUERY_TOPIC,
-        text_input=False,
-    )
-    runtime.register("voice", voice)
-
-    async with _running_voice(runtime, voice, session):
-        await endpoint._dispatch(MsgType.AUDIO_CHUNK, _audio_chunk(0))  # noqa: SLF001
-        await asyncio.wait_for(recorder.started.wait(), 1.0)
-        await endpoint._dispatch(  # noqa: SLF001
-            MsgType.AUDIO_CHUNK,
-            _audio_chunk(1, track_id="microphone-2"),
-        )
-        await asyncio.wait_for(recorder.wait_for(2), 1.0)
-        assert recorder.max_active == 2
-        recorder.release.set()
-
-    assert [(audio.track_id, audio.timestamp_us) for audio in recorder.messages] == [
-        ("microphone-1", 0),
-        ("microphone-2", 1),
-    ]
-
-
-async def test_voice_audio_subscriber_failure_does_not_stop_later_chunks(
-    make_processor,
-) -> None:
-    endpoint = make_processor()
-    session = _Session()
-    session.transport.endpoint = endpoint
-    recorder = _AudioRecorder()
-    failing = _FailingAudioRecorder()
-    runtime = AgentRuntime()
-    runtime.register("recorder", recorder)
-    runtime.register("failing", failing)
-    voice = VoiceAgent(  # type: ignore[arg-type]
-        session,
-        query_topic=QUERY_TOPIC,
-        text_input=False,
-    )
-    runtime.register("voice", voice)
-
-    async with _running_voice(runtime, voice, session):
-        for timestamp_us in (1, 2):
-            await endpoint._dispatch(  # noqa: SLF001
-                MsgType.AUDIO_CHUNK,
-                _audio_chunk(timestamp_us),
-            )
-        await asyncio.wait_for(
-            asyncio.gather(recorder.wait_for(2), failing.wait_for(2)),
-            1.0,
-        )
-        assert session.handler is not None
-
-    assert [message[2].timestamp_us for message in recorder.messages] == [1, 2]
-    assert failing.calls == 2
-    assert voice._audio_owned_tasks == set()  # noqa: SLF001
-
-
-async def test_voice_agent_cancels_inflight_audio_publication_on_shutdown(
-    make_processor,
-) -> None:
-    endpoint = make_processor()
-    session = _Session()
-    session.transport.endpoint = endpoint
-    recorder = _BlockingAudioRecorder()
-    runtime = AgentRuntime()
-    runtime.register("recorder", recorder)
-    voice = VoiceAgent(  # type: ignore[arg-type]
-        session,
-        query_topic=QUERY_TOPIC,
-        text_input=False,
-    )
-    runtime.register("voice", voice)
-
-    async with _running_voice(runtime, voice, session):
-        await endpoint._dispatch(MsgType.AUDIO_CHUNK, _audio_chunk(0))  # noqa: SLF001
-        await asyncio.wait_for(recorder.started.wait(), 1.0)
-
-    assert recorder.cancelled.is_set()
-    assert voice._audio_queues == {}  # noqa: SLF001
-    assert voice._audio_owned_tasks == set()  # noqa: SLF001
-
-
-async def test_participant_left_awaits_audio_worker_cleanup(make_processor) -> None:
-    endpoint = make_processor()
-    session = _Session()
-    session.transport.endpoint = endpoint
-    recorder = _BlockingAudioRecorder()
-    runtime = AgentRuntime()
-    runtime.register("recorder", recorder)
-    voice = VoiceAgent(  # type: ignore[arg-type]
-        session,
-        query_topic=QUERY_TOPIC,
-        text_input=False,
-    )
-    runtime.register("voice", voice)
-
-    async with _running_voice(runtime, voice, session):
-        await endpoint._dispatch(MsgType.AUDIO_CHUNK, _audio_chunk(0))  # noqa: SLF001
-        await asyncio.wait_for(recorder.started.wait(), 1.0)
-        await session.run_options["on_participant_left"]("alice")
-
-        assert recorder.cancelled.is_set()
-        assert voice._audio_queues == {}  # noqa: SLF001
-        assert voice._audio_owned_tasks == set()  # noqa: SLF001
 
 
 async def test_voice_agent_publishes_configured_lifecycle_topics() -> None:
@@ -1142,15 +864,13 @@ def test_voice_output_rejects_ambiguous_empty_messages() -> None:
         VoiceOutput(response_id="turn", interrupt=True)
 
 
-def test_voice_agent_rejects_nonpositive_audio_capacity() -> None:
-    with pytest.raises(ValueError, match="audio capacity"):
-        VoiceAgent(  # type: ignore[arg-type]
-            _Session(),
-            query_topic=QUERY_TOPIC,
-            audio_capacity=0,
-        )
-
-
 def test_voice_session_is_not_part_of_the_public_api() -> None:
     assert "VoiceSession" not in xr_ai_voice.__all__
     assert not hasattr(xr_ai_voice, "VoiceSession")
+
+
+def test_raw_audio_is_not_part_of_the_voice_runtime_api() -> None:
+    assert "VOICE_AUDIO_TOPIC" not in xr_ai_voice.__all__
+    assert "VoiceAudio" not in xr_ai_voice.__all__
+    assert not hasattr(xr_ai_voice, "VOICE_AUDIO_TOPIC")
+    assert not hasattr(xr_ai_voice, "VoiceAudio")
