@@ -559,7 +559,10 @@ responsible agent’s status and gates readiness on confirmed subscriptions.</p>
 <p><code class="docutils literal notranslate"><span class="pre">xr_ai_tools.qr_code.QRCodeTool</span></code> is an optional ZXing-C++-backed finite tool.
 It acquires a participant’s current frame, decodes all readable QR payloads off
 the event loop, and returns every QR code in the frame as a separate payload
-with its four image-space corners. Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[qr-code]</span></code> to use it.</p>
+with its four image-space corners. Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[qr-code]</span></code> to use it.
+The default decoder scans the complete frame at native resolution and at one
+bounded enlarged resolution for small or downsampled codes; returned corners
+always use source-frame coordinates.</p>
 <p>ZXing-C++ is the default extractor. Applications can inject any sync or async
 callable that accepts an RGB PIL image and returns the same typed payload
 contract, including a model-backed implementation that does not provide corner
