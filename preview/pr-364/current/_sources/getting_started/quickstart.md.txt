@@ -5,6 +5,19 @@
 
 # Quickstart
 
+## Set up with a coding agent
+
+The fastest path: paste this to your agent and it does the rest, including
+walking you through the choices below. See {doc}`skills` for how it works.
+
+```text
+Set up xr-ai for me: fetch
+https://raw.githubusercontent.com/NVIDIA/xr-ai/main/skills/getting-started/SKILL.md,
+install it as a skill (or just follow it), and walk me through the setup.
+```
+
+The rest of this page is the manual path.
+
 Every sample follows the same pattern: **start the server, then connect a
 client.** Once it is ready, any supported client — web browser, Android app,
 iOS/visionOS app, or AR glasses — can join the session using the token printed

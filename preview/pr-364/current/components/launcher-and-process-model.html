@@ -290,6 +290,7 @@
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../getting_started/index.html">Getting Started</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
@@ -418,13 +419,13 @@ sample’s <code class="docutils literal notranslate"><span class="pre">yaml/mod
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">_BASE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span>   <span class="c1"># sample root</span>
 
 <span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;hub&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/xr-media-hub&quot;</span><span class="p">,</span> <span class="s2">&quot;xr_media_hub&quot;</span><span class="p">,</span>
-            <span class="n">config</span><span class="o">=</span><span class="s2">&quot;yaml/xr_media_hub.yaml&quot;</span><span class="p">),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;worker&quot;</span><span class="p">,</span> <span class="s2">&quot;worker&quot;</span><span class="p">,</span>               <span class="s2">&quot;my_agent_worker&quot;</span><span class="p">,</span>
-            <span class="n">config</span><span class="o">=</span><span class="s2">&quot;yaml/my_agent_worker.yaml&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/xr-media-hub"</span><span class="p">,</span> <span class="s2">"xr_media_hub"</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/xr_media_hub.yaml"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span>               <span class="s2">"my_agent_worker"</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/my_agent_worker.yaml"</span><span class="p">),</span>
     <span class="c1"># Optional shared components — add as needed:</span>
-    <span class="c1"># Process(&quot;cloudxr&quot;, &quot;../../services/cloudxr-runtime&quot;, &quot;cloudxr_runtime&quot;,</span>
-    <span class="c1">#         config=&quot;yaml/cloudxr_runtime.yaml&quot;),</span>
+    <span class="c1"># Process("cloudxr", "../../services/cloudxr-runtime", "cloudxr_runtime",</span>
+    <span class="c1">#         config="yaml/cloudxr_runtime.yaml"),</span>
 <span class="p">]</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -460,12 +461,12 @@ in the sequence begins. If any member exits before signaling ready, the
 launcher shuts everything down, just as it would for a serial process.</p></li>
 </ul>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;hub&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/xr-media-hub&quot;</span><span class="p">,</span> <span class="s2">&quot;xr_media_hub&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/xr-media-hub"</span><span class="p">,</span> <span class="s2">"xr_media_hub"</span><span class="p">),</span>
     <span class="n">Parallel</span><span class="p">([</span>
-        <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;stt&quot;</span><span class="p">,</span> <span class="s2">&quot;../../services/stt-server&quot;</span><span class="p">,</span> <span class="s2">&quot;stt_server&quot;</span><span class="p">),</span>
-        <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;tts&quot;</span><span class="p">,</span> <span class="s2">&quot;../../services/piper-tts&quot;</span><span class="p">,</span>  <span class="s2">&quot;piper_tts_server&quot;</span><span class="p">),</span>
+        <span class="n">Process</span><span class="p">(</span><span class="s2">"stt"</span><span class="p">,</span> <span class="s2">"../../services/stt-server"</span><span class="p">,</span> <span class="s2">"stt_server"</span><span class="p">),</span>
+        <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span> <span class="s2">"../../services/piper-tts"</span><span class="p">,</span>  <span class="s2">"piper_tts_server"</span><span class="p">),</span>
     <span class="p">]),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;worker&quot;</span><span class="p">,</span> <span class="s2">&quot;worker&quot;</span><span class="p">,</span> <span class="s2">&quot;my_agent_worker&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"my_agent_worker"</span><span class="p">),</span>
 <span class="p">]</span>
 </pre></div>
 </div>

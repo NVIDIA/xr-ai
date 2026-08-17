@@ -290,6 +290,7 @@
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../getting_started/index.html">Getting Started</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
@@ -443,8 +444,8 @@ agent-created background tasks.</p>
 <span class="k">class</span><span class="w"> </span><span class="nc">EchoAgent</span><span class="p">(</span><span class="n">Agent</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">echo</span> <span class="o">=</span> <span class="n">Tool</span><span class="p">(</span>
-            <span class="s2">&quot;echo&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;Echo text.&quot;</span><span class="p">,</span>
+            <span class="s2">"echo"</span><span class="p">,</span>
+            <span class="s2">"Echo text."</span><span class="p">,</span>
             <span class="n">EchoRequest</span><span class="p">,</span>
             <span class="n">EchoResponse</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_echo</span><span class="p">,</span>
@@ -456,9 +457,9 @@ agent-created background tasks.</p>
 
 
 <span class="n">runtime</span> <span class="o">=</span> <span class="n">AgentRuntime</span><span class="p">()</span>
-<span class="n">agent</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;echo&quot;</span><span class="p">,</span> <span class="n">EchoAgent</span><span class="p">())</span>
+<span class="n">agent</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"echo"</span><span class="p">,</span> <span class="n">EchoAgent</span><span class="p">())</span>
 <span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">agent</span><span class="o">.</span><span class="n">echo</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">EchoRequest</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;hello&quot;</span><span class="p">))</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">agent</span><span class="o">.</span><span class="n">echo</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">EchoRequest</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"hello"</span><span class="p">))</span>
 </pre></div>
 </div>
 <p>Agents protect shared mutable state with their own lock or queue. They also
@@ -487,9 +488,9 @@ corresponding service protocol, so endpoint and model-specific behavior stays
 inside <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code>.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatMessage</span><span class="p">,</span> <span class="n">load_models_config</span><span class="p">,</span> <span class="n">make_llm</span>
 
-<span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">&quot;yaml/models.local.json&quot;</span><span class="p">)</span>
-<span class="k">async</span> <span class="k">with</span> <span class="n">make_llm</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">&quot;agent_llm&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">llm</span><span class="p">:</span>
-    <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">chat</span><span class="p">([</span><span class="n">ChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">&quot;hello&quot;</span><span class="p">)])</span>
+<span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">"yaml/models.local.json"</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">with</span> <span class="n">make_llm</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">"agent_llm"</span><span class="p">)</span> <span class="k">as</span> <span class="n">llm</span><span class="p">:</span>
+    <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">chat</span><span class="p">([</span><span class="n">ChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">"user"</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">"hello"</span><span class="p">)])</span>
 </pre></div>
 </div>
 <p>A structured profile separates adapter behavior, endpoint connectivity, and
@@ -509,14 +510,14 @@ implementation detail for current samples.</p>
         <span class="n">tts</span><span class="o">=</span><span class="n">tts</span><span class="p">,</span>
         <span class="n">vad</span><span class="o">=</span><span class="n">VadConfig</span><span class="p">(),</span>
         <span class="n">voice_gate</span><span class="o">=</span><span class="n">voice_gate_config</span><span class="p">,</span>
-        <span class="n">probes</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;vlm&quot;</span><span class="p">:</span> <span class="n">vlm</span><span class="o">.</span><span class="n">health</span><span class="p">},</span>
+        <span class="n">probes</span><span class="o">=</span><span class="p">{</span><span class="s2">"vlm"</span><span class="p">:</span> <span class="n">vlm</span><span class="o">.</span><span class="n">health</span><span class="p">},</span>
         <span class="n">ready_file</span><span class="o">=</span><span class="n">ready_file</span><span class="p">,</span>
         <span class="n">closeables</span><span class="o">=</span><span class="p">(</span><span class="n">vlm</span><span class="p">,),</span>
     <span class="p">),</span>
     <span class="n">query_topic</span><span class="o">=</span><span class="n">queries</span><span class="p">,</span>
     <span class="n">participant_left_topic</span><span class="o">=</span><span class="n">participant_left</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;voice&quot;</span><span class="p">,</span> <span class="n">voice</span><span class="p">)</span>
+<span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"voice"</span><span class="p">,</span> <span class="n">voice</span><span class="p">)</span>
 
 <span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
     <span class="k">await</span> <span class="n">voice</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runtime</span><span class="p">)</span>
@@ -537,8 +538,8 @@ through PUSH IPC. The <code class="docutils literal notranslate"><span class="pr
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_hub</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataMessage</span><span class="p">,</span> <span class="n">ProcessorEndpoint</span><span class="p">,</span> <span class="n">Subscribe</span>
 
 <span class="n">endpoint</span> <span class="o">=</span> <span class="n">ProcessorEndpoint</span><span class="p">(</span>
-    <span class="n">sub_addr</span><span class="o">=</span><span class="s2">&quot;ipc:///tmp/xr_hub_pub&quot;</span><span class="p">,</span>
-    <span class="n">push_addr</span><span class="o">=</span><span class="s2">&quot;ipc:///tmp/xr_hub_in&quot;</span><span class="p">,</span>
+    <span class="n">sub_addr</span><span class="o">=</span><span class="s2">"ipc:///tmp/xr_hub_pub"</span><span class="p">,</span>
+    <span class="n">push_addr</span><span class="o">=</span><span class="s2">"ipc:///tmp/xr_hub_in"</span><span class="p">,</span>
     <span class="nb">filter</span><span class="o">=</span><span class="n">Subscribe</span><span class="o">.</span><span class="n">DATA</span> <span class="o">|</span> <span class="n">Subscribe</span><span class="o">.</span><span class="n">VIDEO</span><span class="p">,</span>
 <span class="p">)</span>
 

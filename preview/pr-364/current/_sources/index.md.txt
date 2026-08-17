@@ -42,6 +42,13 @@ It is especially useful when you need to:
 ::::{grid} 1 1 2 2
 :gutter: 3
 
+:::{grid-item-card} 🤖 Set up with your agent
+:link: getting_started/skills
+:link-type: doc
+The primary path: one pasted prompt sets a coding agent up with the xr-ai
+skills, and it does the rest.
+:::
+
 :::{grid-item-card} 🚀 Get started
 :link: getting_started/quickstart
 :link-type: doc

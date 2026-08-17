@@ -286,6 +286,7 @@
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../getting_started/index.html">Getting Started</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
@@ -405,15 +406,15 @@ buffering the complete result.</p>
 <span class="k">class</span><span class="w"> </span><span class="nc">TextAgent</span><span class="p">(</span><span class="n">Agent</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">echo</span> <span class="o">=</span> <span class="n">Tool</span><span class="p">(</span>
-            <span class="s2">&quot;echo&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;Echo the supplied text.&quot;</span><span class="p">,</span>
+            <span class="s2">"echo"</span><span class="p">,</span>
+            <span class="s2">"Echo the supplied text."</span><span class="p">,</span>
             <span class="n">TextRequest</span><span class="p">,</span>
             <span class="n">TextResponse</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_echo</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">uppercase</span> <span class="o">=</span> <span class="n">Tool</span><span class="p">(</span>
-            <span class="s2">&quot;uppercase&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;Uppercase the supplied text.&quot;</span><span class="p">,</span>
+            <span class="s2">"uppercase"</span><span class="p">,</span>
+            <span class="s2">"Uppercase the supplied text."</span><span class="p">,</span>
             <span class="n">TextRequest</span><span class="p">,</span>
             <span class="n">TextResponse</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_uppercase</span><span class="p">,</span>
@@ -428,10 +429,10 @@ buffering the complete result.</p>
 
 
 <span class="n">runtime</span> <span class="o">=</span> <span class="n">AgentRuntime</span><span class="p">()</span>
-<span class="n">text</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="n">TextAgent</span><span class="p">())</span>
+<span class="n">text</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"text"</span><span class="p">,</span> <span class="n">TextAgent</span><span class="p">())</span>
 
 <span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">text</span><span class="o">.</span><span class="n">uppercase</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">TextRequest</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;hello&quot;</span><span class="p">))</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">text</span><span class="o">.</span><span class="n">uppercase</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">TextRequest</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"hello"</span><span class="p">))</span>
 </pre></div>
 </div>
 <p>Another agent receives the concrete tools it needs and calls them normally.

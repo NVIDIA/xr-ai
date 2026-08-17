@@ -58,7 +58,7 @@
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Requirements" href="requirements.html" />
+    <link rel="next" title="Skills" href="skills.html" />
     <link rel="prev" title="Getting Started" href="index.html" />
 
 
@@ -290,6 +290,7 @@
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Getting Started</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="requirements.html">Requirements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="clients.html">Connecting Clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="networking.html">Networking and firewall</a></li>
@@ -381,10 +382,21 @@
 -->
 <section id="quickstart">
 <h1>Quickstart<a class="headerlink" href="#quickstart" title="Link to this heading">#</a></h1>
+<section id="set-up-with-a-coding-agent">
+<h2>Set up with a coding agent<a class="headerlink" href="#set-up-with-a-coding-agent" title="Link to this heading">#</a></h2>
+<p>The fastest path: paste this to your agent and it does the rest, including
+walking you through the choices below. See <a class="reference internal" href="skills.html"><span class="doc">Skills</span></a> for how it works.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set up xr-ai for me: fetch
+https://raw.githubusercontent.com/NVIDIA/xr-ai/main/skills/getting-started/SKILL.md,
+install it as a skill (or just follow it), and walk me through the setup.
+</pre></div>
+</div>
+<p>The rest of this page is the manual path.</p>
 <p>Every sample follows the same pattern: <strong>start the server, then connect a
 client.</strong> Once it is ready, any supported client — web browser, Android app,
 iOS/visionOS app, or AR glasses — can join the session using the token printed
 on startup.</p>
+</section>
 <section id="model-servers-shared-ai-services">
 <h2>Model servers (shared AI services)<a class="headerlink" href="#model-servers-shared-ai-services" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">model-servers</span></code> starts the shared inference services used across demos and exits
@@ -496,8 +508,8 @@ file and select <code class="docutils literal notranslate"><span class="pre">cos
 <p><strong>Remote model</strong> — copy <code class="docutils literal notranslate"><span class="pre">yaml/models.hosted.json</span></code>, point its VLM endpoint at
 your server, and select it in the worker config:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;base_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://your-remote-vlm.example.com&quot;</span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;ownership&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;external&quot;</span><span class="p">}</span>
+<span class="w">  </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://your-remote-vlm.example.com"</span><span class="p">},</span>
+<span class="w">  </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"external"</span><span class="p">}</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -590,7 +602,7 @@ uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w
 <p><strong>Hosted NVIDIA NIM</strong> — run the LLMs and VLM on hosted NIM
 (<a class="reference external" href="https://build.nvidia.com">build.nvidia.com</a>) instead of local vLLM (STT/TTS
 stay local) by setting <strong>one key</strong> in <code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.yaml</span></code>:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">model_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nim</span><span class="w">     </span><span class="c1"># default is &quot;local&quot;</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">model_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nim</span><span class="w">     </span><span class="c1"># default is "local"</span>
 </pre></div>
 </div>
 <p>The worker loads <code class="docutils literal notranslate"><span class="pre">yaml/models.nim.yaml</span></code> for native model-backed Functions.
@@ -632,11 +644,11 @@ XR-Media-Hub auto-discovers <code class="docutils literal notranslate"><span cla
       </div>
     </a>
     <a class="right-next"
-       href="requirements.html"
+       href="skills.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Requirements</p>
+        <p class="prev-next-title">Skills</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -661,6 +673,7 @@ XR-Media-Hub auto-discovers <code class="docutils literal notranslate"><span cla
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#set-up-with-a-coding-agent">Set up with a coding agent</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#model-servers-shared-ai-services">Model servers (shared AI services)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simple-vlm-example-vision-q-a-over-voice-text">Simple VLM example (vision Q&amp;A over voice + text)</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-start-the-server">Step 1 — Start the server</a></li>

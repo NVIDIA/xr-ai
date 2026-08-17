@@ -290,6 +290,7 @@
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../getting_started/index.html">Getting Started</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
@@ -387,8 +388,8 @@ pipeline code.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_hub</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataMessage</span><span class="p">,</span> <span class="n">ProcessorEndpoint</span>
 
 <span class="n">endpoint</span> <span class="o">=</span> <span class="n">ProcessorEndpoint</span><span class="p">(</span>
-    <span class="n">sub_addr</span><span class="o">=</span><span class="s2">&quot;ipc:///tmp/xr_hub_pub&quot;</span><span class="p">,</span>
-    <span class="n">push_addr</span><span class="o">=</span><span class="s2">&quot;ipc:///tmp/xr_hub_in&quot;</span><span class="p">,</span>
+    <span class="n">sub_addr</span><span class="o">=</span><span class="s2">"ipc:///tmp/xr_hub_pub"</span><span class="p">,</span>
+    <span class="n">push_addr</span><span class="o">=</span><span class="s2">"ipc:///tmp/xr_hub_in"</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">on_data</span><span class="p">(</span><span class="n">message</span><span class="p">:</span> <span class="n">DataMessage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>

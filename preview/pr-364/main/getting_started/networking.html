@@ -450,6 +450,26 @@ sudo<span class="w"> </span>ufw<span class="w"> </span>reload
 mobile clients reach LiveKit through the same-origin <code class="docutils literal notranslate"><span class="pre">wss://&lt;host&gt;:8080/rtc</span></code>
 proxy, not directly.</p>
 </section>
+<section id="cloud-vms-behind-nat">
+<h2>Cloud VMs behind NAT<a class="headerlink" href="#cloud-vms-behind-nat" title="Link to this heading">#</a></h2>
+<p>The signaling proxy on port 8080 does not proxy WebRTC media. LiveKit still
+needs to advertise an ICE address that clients can reach on ports 7881 and
+7882. On a cloud VM whose network interface has only a private address, enable
+STUN-based public-IP discovery in the sample’s <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">lk_use_external_ip</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+<p>LiveKit validates the discovered address with a self-ping before advertising
+it. If the provider’s NAT does not support that hairpin path, also skip the
+validation:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">lk_use_external_ip</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">lk_skip_external_ip_validation</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+<p>Skipping validation does not make a closed port reachable. Ensure the VM’s
+cloud firewall and host firewall allow 7881/TCP and 7882/UDP. Keep both options
+disabled for local and private-network deployments.</p>
+</section>
 <section id="rhel-fedora-or-centos-firewall-cmd">
 <h2>RHEL, Fedora, or CentOS (<code class="docutils literal notranslate"><span class="pre">firewall-cmd</span></code>)<a class="headerlink" href="#rhel-fedora-or-centos-firewall-cmd" title="Link to this heading">#</a></h2>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>firewall-cmd<span class="w"> </span>--permanent<span class="w"> </span>--add-port<span class="o">=</span><span class="m">7881</span>/tcp
@@ -556,6 +576,7 @@ certificate with one from a public CA via <code class="docutils literal notransl
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ubuntu-or-debian-ufw">Ubuntu or Debian (<code class="docutils literal notranslate"><span class="pre">ufw</span></code>)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cloud-vms-behind-nat">Cloud VMs behind NAT</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rhel-fedora-or-centos-firewall-cmd">RHEL, Fedora, or CentOS (<code class="docutils literal notranslate"><span class="pre">firewall-cmd</span></code>)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tls-for-the-web-client">TLS for the web client</a></li>
 </ul>

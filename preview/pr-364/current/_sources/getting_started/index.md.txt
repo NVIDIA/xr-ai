@@ -5,20 +5,15 @@
 
 # Getting Started
 
-**Using a coding agent?** Paste this to it and skip the manual path:
-
-```text
-Set up xr-ai for me: fetch
-https://raw.githubusercontent.com/NVIDIA/xr-ai/main/skills/getting-started/SKILL.md,
-install it as a skill (or just follow it), and walk me through the setup.
-```
-
-The quickstart paths, requirements, connecting clients, networking, and credentials.
+Using a coding agent? Start at {doc}`skills`. The rest of this section is the
+manual path: quickstarts, requirements, connecting clients, networking, and
+credentials.
 
 ```{toctree}
 :maxdepth: 1
 
 quickstart
+skills
 requirements
 clients
 networking

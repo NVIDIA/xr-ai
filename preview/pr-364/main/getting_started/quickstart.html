@@ -513,8 +513,8 @@ file and select <code class="docutils literal notranslate"><span class="pre">cos
 <p><strong>Remote model</strong> — copy <code class="docutils literal notranslate"><span class="pre">yaml/models.hosted.json</span></code>, point its VLM endpoint at
 your server, and select it in the worker config:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;base_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://your-remote-vlm.example.com&quot;</span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;ownership&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;external&quot;</span><span class="p">}</span>
+<span class="w">  </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://your-remote-vlm.example.com"</span><span class="p">},</span>
+<span class="w">  </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"external"</span><span class="p">}</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -607,7 +607,7 @@ uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w
 <p><strong>Hosted NVIDIA NIM</strong> — run the LLMs and VLM on hosted NIM
 (<a class="reference external" href="https://build.nvidia.com">build.nvidia.com</a>) instead of local vLLM (STT/TTS
 stay local) by setting <strong>one key</strong> in <code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.yaml</span></code>:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">model_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nim</span><span class="w">     </span><span class="c1"># default is &quot;local&quot;</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">model_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nim</span><span class="w">     </span><span class="c1"># default is "local"</span>
 </pre></div>
 </div>
 <p>The worker loads <code class="docutils literal notranslate"><span class="pre">yaml/models.nim.yaml</span></code> for native model-backed Functions.
