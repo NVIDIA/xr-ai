@@ -10,6 +10,7 @@ import time
 import cv2
 import numpy as np
 import pytest
+from PIL import Image
 from pydantic import ValidationError
 from xr_ai_hub import FrameData, FrameSignal, PixelFormat
 from xr_ai_tools.marker_tracking import (
@@ -202,6 +203,7 @@ async def test_marker_tool_returns_every_qr_marker_in_frame() -> None:
     second_x = 60 + first.shape[1]
     canvas[20 : 20 + second.shape[0], second_x : second_x + second.shape[1]] = second
     endpoint = _Endpoint(canvas)
+
     tool = MarkerTrackingTool(
         endpoint=endpoint,
         marker_types=(MarkerType.QR_CODE,),
@@ -215,6 +217,40 @@ async def test_marker_tool_returns_every_qr_marker_in_frame() -> None:
         (MarkerType.QR_CODE, "second QR payload"),
     }
     assert len(result.markers) == 2
+
+
+@pytest.mark.asyncio
+async def test_marker_tool_recovers_multiple_small_qr_codes() -> None:
+    first = _qr_image()
+    second = _qr_image(_SECOND_QR_MODULES)
+    source = np.full((3840, 2880), 220, dtype=np.uint8)
+    source[2100 : 2100 + first.shape[0], 120 : 120 + first.shape[1]] = first
+    source[
+        2200 : 2200 + second.shape[0],
+        2100 : 2100 + second.shape[1],
+    ] = second
+    frame = np.asarray(
+        Image.fromarray(source).resize((480, 640), Image.Resampling.LANCZOS)
+    )
+    endpoint = _Endpoint(frame)
+    tool = MarkerTrackingTool(
+        endpoint=endpoint,
+        marker_types=(MarkerType.QR_CODE,),
+    )
+    await endpoint.seed()
+
+    result = await tool.execute(MarkerTrackingRequest(participant_id="alice"))
+
+    assert {marker.value for marker in result.markers} == {
+        "XR AI QR tool",
+        "second QR payload",
+    }
+    assert len(result.markers) == 2
+    assert all(
+        0 <= point.x < frame.shape[1] and 0 <= point.y < frame.shape[0]
+        for marker in result.markers
+        for point in marker.corners
+    )
 
 
 @pytest.mark.asyncio
