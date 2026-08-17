@@ -1,0 +1,380 @@
+xr_ai_tools.video_memory
+========================
+
+.. py:module:: xr_ai_tools.video_memory
+
+.. autoapi-nested-parse::
+
+   Native tools backed by the typed video-memory service.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_tools.video_memory.ListRecordedParticipantsResult
+   xr_ai_tools.video_memory.VideoStatsRequest
+   xr_ai_tools.video_memory.VideoStatsResult
+   xr_ai_tools.video_memory.LatestVideoRequest
+   xr_ai_tools.video_memory.HistoricalVideoRequest
+   xr_ai_tools.video_memory.RecordedVideoResult
+   xr_ai_tools.video_memory.LatestFramesRequest
+   xr_ai_tools.video_memory.HistoricalFramesRequest
+   xr_ai_tools.video_memory.SampledVideoFrame
+   xr_ai_tools.video_memory.SampleFramesResult
+   xr_ai_tools.video_memory.HistoricalFrameRequest
+   xr_ai_tools.video_memory.HistoricalFrameResult
+   xr_ai_tools.video_memory.VideoHealthResult
+   xr_ai_tools.video_memory.VideoMemoryTools
+
+
+Module Contents
+---------------
+
+.. py:class:: ListRecordedParticipantsResult
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Participants with camera recordings available in video memory.
+
+
+   .. py:attribute:: participants
+      :type:  list[str]
+
+      Exact recorded participant identifiers.
+
+
+
+.. py:class:: VideoStatsRequest
+
+   Bases: :py:obj:`xr_ai_tools.types.StrictRequest`
+
+
+   Select one participant's recording statistics.
+
+
+   .. py:attribute:: participant_id
+      :type:  str
+
+      Participant whose camera recording should be inspected.
+
+
+
+.. py:class:: VideoStatsResult
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Storage and time-range statistics for one participant's recording.
+
+
+   .. py:attribute:: participant_id
+      :type:  str
+
+      Participant whose recording was inspected.
+
+
+
+   .. py:attribute:: num_chunks
+      :type:  int
+
+      Number of persisted video chunks.
+
+
+
+   .. py:attribute:: total_bytes
+      :type:  int
+
+      Total encoded size of all chunks in bytes.
+
+
+
+   .. py:attribute:: avg_chunk_bytes
+      :type:  int
+
+      Average encoded chunk size in bytes.
+
+
+
+   .. py:attribute:: earliest_us
+      :type:  int
+
+      Earliest recorded Unix timestamp in microseconds.
+
+
+
+   .. py:attribute:: latest_us
+      :type:  int
+
+      Latest recorded Unix timestamp in microseconds.
+
+
+
+.. py:class:: LatestVideoRequest
+
+   Bases: :py:obj:`_DurationRequest`
+
+
+   Select the newest recorded video window.
+
+
+.. py:class:: HistoricalVideoRequest
+
+   Bases: :py:obj:`_DurationRequest`
+
+
+   Select a recorded video window beginning at an absolute timestamp.
+
+
+   .. py:attribute:: start_us
+      :type:  int
+
+      Unix timestamp in microseconds at the start of the window.
+
+
+
+.. py:class:: RecordedVideoResult
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   A recorded H.264 file and its covered time range.
+
+
+   .. py:attribute:: path
+      :type:  str
+
+      Local path to the exported H.264 file.
+
+
+
+   .. py:attribute:: size
+      :type:  int
+
+      Encoded file size in bytes.
+
+
+
+   .. py:attribute:: start_us
+      :type:  int
+
+      Beginning of the returned window in Unix microseconds.
+
+
+
+   .. py:attribute:: end_us
+      :type:  int
+
+      End of the returned window in Unix microseconds.
+
+
+
+.. py:class:: LatestFramesRequest
+
+   Bases: :py:obj:`_FrameSamplingRequest`
+
+
+   Sample the newest recorded frame window.
+
+
+.. py:class:: HistoricalFramesRequest
+
+   Bases: :py:obj:`_FrameSamplingRequest`
+
+
+   Sample a recorded frame window beginning at an absolute timestamp.
+
+
+   .. py:attribute:: start_us
+      :type:  int
+
+      Unix timestamp in microseconds at the start of the window.
+
+
+
+.. py:class:: SampledVideoFrame
+
+   Bases: :py:obj:`xr_ai_tools.image.TimedImage`
+
+
+   One image sampled from a recorded video window.
+
+
+   .. py:attribute:: timestamp_us
+      :type:  int
+
+      Estimated Unix timestamp interpolated from recording chunk metadata.
+
+
+
+   .. py:attribute:: width
+      :type:  int
+
+      Frame width in pixels.
+
+
+
+   .. py:attribute:: height
+      :type:  int
+
+      Frame height in pixels.
+
+
+
+.. py:class:: SampleFramesResult
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Bounded image samples and metadata for a recorded video window.
+
+
+   .. py:attribute:: frames
+      :type:  list[SampledVideoFrame]
+
+      Sampled frames in chronological order.
+
+
+
+   .. py:attribute:: start_us
+      :type:  int
+
+      Beginning of the sampled window in Unix microseconds.
+
+
+
+   .. py:attribute:: end_us
+      :type:  int
+
+      End of the sampled window in Unix microseconds.
+
+
+
+   .. py:attribute:: duration_seconds
+      :type:  int
+
+      Requested duration of the sampled window in whole seconds.
+
+
+
+   .. py:attribute:: frame_budget
+      :type:  int
+
+      Requested maximum number of returned frames.
+
+
+
+   .. py:attribute:: max_width
+      :type:  int | None
+
+      Requested maximum frame width, if resizing was enabled.
+
+
+
+   .. py:attribute:: max_height
+      :type:  int | None
+
+      Requested maximum frame height, if resizing was enabled.
+
+
+
+.. py:class:: HistoricalFrameRequest
+
+   Bases: :py:obj:`_ParticipantRequest`
+
+
+   Select the recorded frame nearest an absolute timestamp.
+
+
+   .. py:attribute:: start_us
+      :type:  int
+
+      Unix timestamp in microseconds of the requested frame.
+
+
+
+.. py:class:: HistoricalFrameResult
+
+   Bases: :py:obj:`xr_ai_tools.image.TimedImage`
+
+
+   The recorded image nearest a requested absolute timestamp.
+
+
+   .. py:attribute:: timestamp_us
+      :type:  int
+
+      Estimated Unix timestamp interpolated from recording chunk metadata.
+
+
+
+   .. py:attribute:: width
+      :type:  int
+
+      Frame width in pixels.
+
+
+
+   .. py:attribute:: height
+      :type:  int
+
+      Frame height in pixels.
+
+
+
+.. py:class:: VideoHealthResult
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Readiness and recording state reported by video memory.
+
+
+   .. py:attribute:: ready
+      :type:  bool
+      :value: True
+
+
+      Whether the service is ready for queries.
+
+
+
+   .. py:attribute:: recording_enabled
+      :type:  bool
+
+      Whether the service is currently persisting camera video.
+
+
+
+.. py:class:: VideoMemoryTools(endpoint: str, *, timeout_s: float = 30.0)
+
+   Own a video-memory service client and its finite tools.
+
+
+   .. py:method:: get_health() -> VideoHealthResult
+      :async:
+
+
+      Return detailed video-memory readiness and recording state.
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Return whether the video-memory service is reachable and ready.
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Close the underlying service connection.
+
+
+
