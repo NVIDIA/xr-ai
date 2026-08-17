@@ -68,14 +68,20 @@ metadata. Early wake/STOP probes are internal and are not published as final
 transcripts. Accepted speech continues separately as `UserQuery`, with any
 matched wake phrase and preceding background speech removed by the gate.
 
+Transcript publication uses one private bounded FIFO owned by `VoiceAgent`, so
+a slow runtime subscriber cannot delay STT, voice gating, or accepted queries.
+The queue preserves order and drops its oldest pending transcript when full;
+shutdown cancels the active delivery and discards pending transcripts. Runtime
+subscribers should enqueue long-running work internally and return promptly.
+
 Accepted speech, typed text, participant departure, and interruption remain on
 application-named topics. Application agents subscribe to the events they own,
 perform cleanup in their own subscriber methods, and may publish finite or
 incremental `VoiceOutput` messages:
 
-Untopiced client data is normalized by the hub onto a private direct-text
-channel. `VoiceAgent` consumes only that channel when `text_input=True`; named
-application and control messages are never interpreted as user queries.
+`VoiceAgent` consumes only untopiced client data when `text_input=True`; named
+application and control messages are never interpreted as user queries. The
+hub preserves the original data-channel topic for every processor.
 
 ```python
 from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceOutput

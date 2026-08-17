@@ -13,6 +13,7 @@ compatibility package. Update out-of-tree code as follows:
 | `xr_ai_agent` | Import `ProcessorEndpoint` and IPC types from `xr_ai_hub`. |
 | `BrainProcessor` and `make_voice_pipeline` | Put application behavior in an `xr_ai_runtime.Agent` subscriber and let `xr_ai_voice.VoiceAgent` own the voice pipeline. |
 | `run_voice_pipeline` | Configure `VoiceAgent` directly and run it with `await VoiceAgent.run(runtime)`; its media session is private. |
+| `VoiceSession` | Configure `VoiceAgent` with STT, TTS, VAD, gating, readiness probes, and closeables, then run it with the shared `AgentRuntime`. The lower-level media session is no longer public. |
 | `VadConfig` | Import the unchanged tuning model from `xr_ai_voice`. |
 | `GatedQueryFrame` | Subscribe to the application query topic carrying `xr_ai_voice.UserQuery`. |
 | `ParticipantLeftFrame` and `InterruptionFrame` | Subscribe to application topics carrying `VoiceParticipantLeft` and `VoiceInterrupted`. Participant joins and voice-gate greetings remain session-owned. |
@@ -22,7 +23,7 @@ compatibility package. Update out-of-tree code as follows:
 | `SttClient` and `TtsClient` | Construct services through `xr_ai_models.make_stt` and `make_tts`, or use `OpenAICompatSTT` and `OpenAICompatTTS` directly. |
 | `http_probe`, `mcp_probe`, and `wait_for_services` | Pass additional readiness callables through `VoiceAgent(probes=...)`; MCP readiness is no longer part of the voice SDK. |
 | `xr_ai_pipecat.audio` conversion helpers | Let `VoiceAgent` own media conversion. Applications that truly need raw hub media should use `xr_ai_hub` types and own their format conversion. |
-| `VoiceAgent.text_transform` and `text_ignore_topics` | Direct client text uses the hub's private text channel. Use `text_input=False` to disable it; transform application queries in their subscribing agent. |
+| `VoiceAgent.text_transform` and `text_ignore_topics` | `VoiceAgent` treats only untopiced client data as direct text. Use `text_input=False` to disable it; transform application queries in their subscribing agent. |
 | `xr_ai_models.config`, `factory`, `openai_compat`, and `protocols` | Import public names directly from `xr_ai_models`. This includes `KIND_OPENAI_COMPAT`, `ModelKind`, `Category`, and `Spec`. |
 | `LiveVisionTool` and `StreamingVisionTool` | Select with `CurrentFrameTool`, then pass its `ImageReference` to `ImageQueryTool` or `StreamingImageQueryTool`. |
 | `HistoricalVisionTool` | Select with `VideoMemoryTools.get_historical_frame`, then pass its `ImageReference` to `ImageQueryTool`. |

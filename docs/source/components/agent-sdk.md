@@ -15,7 +15,7 @@ installation.
 | `xr-ai-models` | `xr_ai_models` | Typed model protocols, profiles, and OpenAI-compatible clients |
 | `xr-ai-runtime` | `xr_ai_runtime` | Agent registration and typed participant-scoped fan-out |
 | `xr-ai-tools` | `xr_ai_tools` | Relay-managed tools and model tool-call helpers |
-| `xr-ai-voice` | `xr_ai_voice` | Voice agent, session, transport, and pipeline |
+| `xr-ai-voice` | `xr_ai_voice` | Voice agent, transport, and private media pipeline |
 
 The complete package references are versioned with this site:
 {doc}`/reference/agent-sdk-hub`, {doc}`/reference/agent-sdk-models`,
@@ -114,14 +114,20 @@ private and are not published as final transcripts. Accepted speech is
 published separately as `UserQuery` after the gate removes the wake phrase and
 any preceding background speech.
 
+`VoiceAgent` publishes transcripts through a private bounded FIFO so slow
+runtime subscribers cannot delay STT, voice gating, or accepted queries. The
+queue preserves order, drops the oldest pending transcript when full, and is
+cancelled with pending entries discarded during shutdown. Subscribers should
+hand off lengthy work to their own bounded queues and return promptly.
+
 Accepted speech and typed text are published as `UserQuery` events, participant
 and interruption lifecycle events use application-named topics, and voice
 consumes `voice.output`. `VoiceAgent` privately owns model readiness, hub
 transport, voice gating, the media pipeline, signal handling, and cleanup.
 Pipecat and the media session remain implementation details.
-Untopiced client data is normalized by the hub onto a private direct-text
-channel. Voice consumes only that channel when `text_input=True`; named
-application and control messages are not user queries.
+Voice consumes only untopiced client data when `text_input=True`; named
+application and control messages are not user queries. The hub preserves the
+original data-channel topic for all processors.
 
 ```python
 voice = VoiceAgent(

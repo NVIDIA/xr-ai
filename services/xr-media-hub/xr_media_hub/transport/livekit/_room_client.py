@@ -33,15 +33,9 @@ from xr_media_hub.ipc import (
 from ._token import make_client_token
 from .config import LiveKitConnectorConfig
 
-_CLIENT_TEXT_TOPIC = "_client.text"
-
 
 def _now_us() -> int:
     return time.time_ns() // 1_000
-
-
-def _normalize_client_topic(topic: str | None) -> str:
-    return topic or _CLIENT_TEXT_TOPIC
 
 
 class _ReturnAudioPipe:
@@ -161,9 +155,7 @@ class RoomClient:
                 self._ep.push_data(
                     DataMessage(
                         participant_id=packet.participant.identity,
-                        # Untopiced client data is the direct-text input channel.
-                        # Named topics remain application/control messages.
-                        topic=_normalize_client_topic(packet.topic),
+                        topic=packet.topic or "",
                         pts_us=_now_us(),
                         data=packet.data,
                     )

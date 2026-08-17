@@ -27,10 +27,9 @@ from ._session import _VoiceSession
 from ._transport import HubVoiceTransport
 from ._types import VoiceQuery
 
-_CLIENT_TEXT_TOPIC = "_client.text"
-
 _OPEN_STREAM_CAPACITY = 1024
 _CLOSED_STREAM_CAPACITY = 1024
+_TRANSCRIPT_CAPACITY = 32
 
 
 class VoiceStreamClosedError(ValueError):
@@ -224,6 +223,10 @@ class VoiceAgent(Agent):
         self._response_traces: dict[tuple[str, str, str], _ResponseTrace] = {}
         self._closed_streams: dict[tuple[str, str, str], None] = {}
         self._lifecycle_tasks: set[asyncio.Task[None]] = set()
+        self._transcript_queue: asyncio.Queue[
+            tuple[str, VoiceTranscript]
+        ] | None = None
+        self._transcript_task: asyncio.Task[None] | None = None
 
     async def run(self, runtime: AgentRuntime, *, source: str = "voice") -> None:
         """Run the owned voice session and bridge it to a running runtime."""
@@ -239,6 +242,11 @@ class VoiceAgent(Agent):
         unsubscribe_data: Callable[[], None] | None = None
         try:
             await self._session.__aenter__()
+            self._transcript_queue = asyncio.Queue(maxsize=_TRANSCRIPT_CAPACITY)
+            self._transcript_task = asyncio.create_task(
+                self._deliver_transcripts(runtime),
+                name="voice-transcript-delivery",
+            )
             try:
                 if self.text_input:
                     unsubscribe_data = self._session.endpoint.on_data(self._on_data)
@@ -256,6 +264,7 @@ class VoiceAgent(Agent):
             finally:
                 if unsubscribe_data is not None:
                     unsubscribe_data()
+                await self._stop_transcript_delivery()
                 tasks = tuple(self._lifecycle_tasks)
                 for task in tasks:
                     task.cancel()
@@ -398,34 +407,75 @@ class VoiceAgent(Agent):
         text: str,
         timestamp_us: int,
     ) -> None:
-        """Publish one final STT result without affecting command gating."""
+        """Queue one final STT result without waiting for runtime subscribers."""
 
-        runtime = self._running_runtime()
-        try:
-            await runtime.publish(
-                VOICE_TRANSCRIPT_TOPIC,
+        queue = self._transcript_queue
+        if queue is None:
+            return
+        if queue.full():
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+            else:
+                queue.task_done()
+                logger.warning(
+                    "voice transcript queue full; dropped oldest transcript"
+                )
+        queue.put_nowait(
+            (
+                participant_id,
                 VoiceTranscript(text=text, timestamp_us=timestamp_us),
-                participant_id=participant_id,
-                source=self._source,
             )
-        except asyncio.CancelledError:
-            raise
-        except BaseExceptionGroup as error:
-            if runtime.running:
-                logger.error(
-                    "voice transcript publication failed; query gating will continue "
-                    "pid={!r}: {}",
-                    participant_id,
-                    error,
+        )
+
+    async def _deliver_transcripts(self, runtime: AgentRuntime) -> None:
+        queue = self._transcript_queue
+        assert queue is not None
+        while True:
+            participant_id, transcript = await queue.get()
+            try:
+                await runtime.publish(
+                    VOICE_TRANSCRIPT_TOPIC,
+                    transcript,
+                    participant_id=participant_id,
+                    source=self._source,
                 )
-        except Exception as error:
-            if runtime.running:
-                logger.error(
-                    "voice transcript publication failed; query gating will continue "
-                    "pid={!r}: {}",
-                    participant_id,
-                    error,
-                )
+            except asyncio.CancelledError:
+                raise
+            except BaseExceptionGroup as error:
+                if runtime.running:
+                    logger.error(
+                        "voice transcript publication failed pid={!r}: {}",
+                        participant_id,
+                        error,
+                    )
+            except Exception as error:
+                if runtime.running:
+                    logger.error(
+                        "voice transcript publication failed pid={!r}: {}",
+                        participant_id,
+                        error,
+                    )
+            finally:
+                queue.task_done()
+
+    async def _stop_transcript_delivery(self) -> None:
+        task = self._transcript_task
+        self._transcript_task = None
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        queue = self._transcript_queue
+        self._transcript_queue = None
+        if queue is None:
+            return
+        while True:
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+            queue.task_done()
 
     async def _participant_left(self, participant_id: str) -> None:
         topic = self.participant_left_topic
@@ -556,7 +606,7 @@ class VoiceAgent(Agent):
         )
 
     async def _on_data(self, message: DataMessage) -> None:
-        if message.topic != _CLIENT_TEXT_TOPIC:
+        if message.topic:
             return
         text = (message.data or b"").decode("utf-8", errors="replace").strip()
         if not text or not self._session.is_running:
