@@ -60,10 +60,9 @@ uv run model_servers --stop
 
 ## Simple VLM example (vision Q&A over voice + text)
 
-End-to-end voice + vision sample. Speak into the mic, type into the data
-channel, or send the literal text `"ping"` — all routes go through the same VLM
-pipeline against the latest video frame. Replies arrive as streaming Piper TTS
-audio plus a `vlm.response` text message.
+End-to-end voice + vision sample. Speak into the mic or type into the data
+channel; both routes use the same VLM pipeline against the latest video frame.
+Replies arrive as streaming Piper TTS audio plus a `vlm.response` text message.
 
 Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. Refer to
 {doc}`AI services </components/ai-services>` for runtime-selection details.
@@ -118,7 +117,6 @@ automatically. Click **Connect**.
 
 You are now live in the XR session. To test the agent:
 
-- Type `ping` in the data channel → the agent describes what the camera sees.
 - Type any question → sent verbatim to the VLM.
 - Speak into your mic → speech is transcribed and sent as a query.
 

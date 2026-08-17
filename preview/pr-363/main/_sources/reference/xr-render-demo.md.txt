@@ -22,8 +22,8 @@ exit terminates the whole stack.
 | cloudxr | `services/cloudxr-runtime/` | `cloudxr_runtime` | 48322 (WSS proxy) |
 | stt | `services/stt-server/` | `stt_server` | 8103 |
 | tts | `services/piper-tts/` | `piper_tts_server` | 8105 |
-| vlm | `services/vlm-server/` | `vlm_server` | 8100 |
-| agent-llm | `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 |
+| omni | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 (LLM) |
+| vlm | `services/vlm-server/` | `vlm_server` | 8100 (Cosmos VLM) |
 | video-memory | `services/video-memory-service/` | `video_memory_service` | 8310 (recorded-video typed RPC) |
 | scene | `agent-samples/xr-render-demo/scene/` | `xr_render_scene` | 8320 (typed RPC) |
 | openxr-service | `services/openxr-service/` | `openxr_service` | 8330 (typed RPC) |
@@ -91,23 +91,20 @@ The worker reads two YAML files:
 
 ## The LLM server
 
-### NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 — port 8107
+### Nemotron-3-Nano-Omni-30B-A3B-Reasoning — port 8108
 
 A vLLM `execvp` shim — a small Python wrapper that reads YAML configuration,
 sets `HF_HOME` and token environment variables, then `os.execvp`s into `vllm serve`. The
 Python process is replaced by vLLM; vLLM owns the HTTP API, weight loading,
 and tool calling from that point on.
 
-`vllm serve` with `--tool-call-parser qwen3_coder` and
-`--reasoning-parser nano_v3` (plugin auto-fetched from the model card into
-`model_cache`). `enforce_eager` defaults to `true` — CUDA graph capture +
-FlashInfer FP4 MoE autotune silently takes 3–8 minutes on cold start without
-it. Requires a Blackwell GPU (B200, RTX PRO 6000, or Jetson Thor) for native
-FP4; swap to the BF16 variant for Hopper or Ampere.
+`vllm serve` uses `--tool-call-parser qwen3_coder` and
+`--reasoning-parser nemotron_v3`. The launcher selects NVFP4 on Blackwell and
+FP8 on Ada, Hopper, or Ampere, with BF16 available as an explicit fallback.
 
-One server backs both logical models in `yaml/models.yaml`: `agent_llm` runs
-the multi-step tool-calling loop, and `llm` serves two cheap, latency-sensitive
-calls (thinking stays off):
+One server backs both LLM roles in `yaml/models.yaml`: `agent_llm` runs the
+multi-step tool-calling loop and `llm` serves two cheap, latency-sensitive
+calls. Thinking stays off unless a call explicitly enables it.
 
 - **Quick-ack** — awaited before the agentic loop starts, the moment an
   utterance lands. Returns `{"ack": "On it!", "think": false}` — a 3–6 word
@@ -125,33 +122,30 @@ calls (thinking stays off):
 
 ## VLM — Cosmos3 Nano Reasoner
 
-Port 8100 (`vlm-server`).
+Port 8100 (`vlm_server`).
 
-Served by vLLM from `nvidia/Cosmos3-Nano` as described in
-{doc}`AI services </components/ai-services>`. The render agent first selects a
-current or recorded frame and passes its `ImageReference` to `query_image`.
-Its native capability set also
+The render agent first selects a current or recorded frame and passes its
+`ImageReference` to `query_image`. Its native capability set also
 includes `query_images` for ordered collections and `query_video` for
 timestamped frame sequences; all use the same `xr-ai-models` multi-image VLM
-path, limited to four images by the shipped Cosmos configuration. These raw
+path. These raw
 selectors and query tools are internal composition primitives; the reasoning
 model sees only participant-safe perception facades. Recorded selection is
 grouped into latest tools, whose windows end at the newest recording, and
 historical tools, whose frame or video window begins at one absolute `start_us`.
 Recorded-frame timestamps are estimates interpolated from chunk metadata.
 
-There is a deliberate startup ordering constraint: `VoiceSession` readiness
+There is a deliberate startup ordering constraint: `VoiceAgent` readiness
 blocks on the VLM's `/health` endpoint, which
-returns 200 only after weights are fully loaded. This ensures GPU 0 memory
-has settled before LOVR starts its Vulkan device, preventing a transient
-OOM race.
+returns 200 only after weights are fully loaded. This ensures model memory has
+settled before LOVR starts its Vulkan device, preventing a transient OOM race.
 
 ## STT — parakeet-tdt-0.6b-v3
 
 Port 8103. NeMo ASR in-process. English-only, ~1.5 GB VRAM.
 
 ```
-LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceSession
+LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceAgent
   → VAD/STT
       pre-roll buffer    last 10 chunks (~320 ms) kept at all times;
                          prepended to the utterance buffer on speech onset
@@ -177,13 +171,13 @@ synthesis runs in a thread pool so the asyncio loop is never blocked.
 
 ```
 voice.output topic (agentic-loop quick-ack or final response)
-  → VoiceAgent → private VoiceSession TTS
+  → VoiceAgent → private media-session TTS
       sentence-batched synthesis
       POST text → tts-server :8105 → WAV bytes
       RETURN_AUDIO IPC → hub → LiveKit → participant's headphones
 ```
 
-`VoiceSession` owns interruption handling. A new utterance while TTS is playing
+`VoiceAgent` owns interruption handling. A new utterance while TTS is playing
 triggers `ReturnAudioFlush`, so the hub clears the LiveKit audio queue for that
 participant. Its interruption callback also cancels the participant's active
 render-agent task without waiting on its cleanup in the media processor. A
@@ -194,10 +188,11 @@ the old stream before the replacement starts.
 ## Agent runtime and voice topology
 
 ```
-VoiceAgent → private VoiceSession → VAD/STT + VoiceGate ─┐
-           → typed hub text ingress ──────────┴→ xr-render.user-query topic
+VoiceAgent → private media session → VAD/STT ─→ voice.transcript topic
+                                  └→ VoiceGate ─┐
+           → typed hub text ingress ────────────┴→ xr-render.user-query topic
   → RenderAgent → SceneModelLoop → voice.output topic
-  → VoiceAgent → private VoiceSession TTS → hub return audio
+  → VoiceAgent → private media-session TTS → hub return audio
 ```
 
 Pipecat is an internal implementation detail of `xr-ai-voice`; application
@@ -215,13 +210,13 @@ remain worker-managed lifecycle operations.
 
 On each accepted `xr-render.user-query` event or lifecycle notice:
 
-1. **Quick-ack** runs first (`llm` :8107, awaited before the loop).
+1. **Quick-ack** runs first (`llm` :8108, awaited before the loop).
 2. **Still-working timer** starts (fires at 5s, repeats every 10s, data
    channel only).
 3. **Pre-fetch** (concurrent): `get_scene_state` + `get_head_pose` +
    `position_ahead(1.5)` — results injected into the user message so the
    model skips those tool calls and goes straight to the operation.
-4. **Nemotron-30B :8107** runs with `tools=[…]`, up to 10 iterations:
+4. **Nemotron-Omni :8108** runs with `tools=[…]`, up to 10 iterations:
    - Model emits `tool_calls` → `handle_tool_call(...)` validates and invokes
      the matching native tool → its tool-role message is appended → next iteration.
    - Service-backed tools call scene, OpenXR, and video-memory typed services.

@@ -426,10 +426,9 @@ pass <code class="docutils literal notranslate"><span class="pre">--allow-anonym
 </section>
 <section id="simple-vlm-example-vision-q-a-over-voice-text">
 <h2>Simple VLM example (vision Q&amp;A over voice + text)<a class="headerlink" href="#simple-vlm-example-vision-q-a-over-voice-text" title="Link to this heading">#</a></h2>
-<p>End-to-end voice + vision sample. Speak into the mic, type into the data
-channel, or send the literal text <code class="docutils literal notranslate"><span class="pre">&quot;ping&quot;</span></code> — all routes go through the same VLM
-pipeline against the latest video frame. Replies arrive as streaming Piper TTS
-audio plus a <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> text message.</p>
+<p>End-to-end voice + vision sample. Speak into the mic or type into the data
+channel; both routes use the same VLM pipeline against the latest video frame.
+Replies arrive as streaming Piper TTS audio plus a <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> text message.</p>
 <p>Uses the text-output Reasoner from <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos3-Nano</span></code> by default. Refer to
 <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI services</span></a> for runtime-selection details.</p>
 <p>There are two ways to run it:</p>
@@ -473,7 +472,6 @@ trusting the certificate permanently or running over plain HTTP instead.</p>
 automatically. Click <strong>Connect</strong>.</p>
 <p>You are now live in the XR session. To test the agent:</p>
 <ul class="simple">
-<li><p>Type <code class="docutils literal notranslate"><span class="pre">ping</span></code> in the data channel → the agent describes what the camera sees.</p></li>
 <li><p>Type any question → sent verbatim to the VLM.</p></li>
 <li><p>Speak into your mic → speech is transcribed and sent as a query.</p></li>
 </ul>

@@ -410,7 +410,7 @@ installation.</p>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_voice</span></code></p></td>
-<td><p>Voice agent, session, transport, and pipeline</p></td>
+<td><p>Voice agent, transport, and private media pipeline</p></td>
 </tr>
 </tbody>
 </table>
@@ -504,14 +504,19 @@ gate rejects because it contains no wake phrase. Early wake/STOP probes remain
 private and are not published as final transcripts. Accepted speech is
 published separately as <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> after the gate removes the wake phrase and
 any preceding background speech.</p>
+<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes transcripts through a private bounded FIFO so slow
+runtime subscribers cannot delay STT, voice gating, or accepted queries. The
+queue preserves order, drops the oldest pending transcript when full, and is
+cancelled with pending entries discarded during shutdown. Subscribers should
+hand off lengthy work to their own bounded queues and return promptly.</p>
 <p>Accepted speech and typed text are published as <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> events, participant
 and interruption lifecycle events use application-named topics, and voice
 consumes <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> privately owns model readiness, hub
 transport, voice gating, the media pipeline, signal handling, and cleanup.
 Pipecat and the media session remain implementation details.
-Untopiced client data is normalized by the hub onto a private direct-text
-channel. Voice consumes only that channel when <code class="docutils literal notranslate"><span class="pre">text_input=True</span></code>; named
-application and control messages are not user queries.</p>
+Voice consumes only untopiced client data when <code class="docutils literal notranslate"><span class="pre">text_input=True</span></code>; named
+application and control messages are not user queries. The hub preserves the
+original data-channel topic for all processors.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">voice</span> <span class="o">=</span> <span class="n">VoiceAgent</span><span class="p">(</span>
     <span class="n">query_topic</span><span class="o">=</span><span class="n">queries</span><span class="p">,</span>
     <span class="n">stt</span><span class="o">=</span><span class="n">stt</span><span class="p">,</span>
