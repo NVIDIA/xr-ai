@@ -570,14 +570,14 @@ OOM race.</p>
   → VAD/STT
       pre-roll buffer    last 10 chunks (~320 ms) kept at all times;
                          prepended to the utterance buffer on speech onset
-                         so the first word&#39;s attack isn&#39;t clipped
+                         so the first word's attack isn't clipped
       VAD                Silero (ONNX, 512-sample / 32 ms windows,
                          probability threshold) via shared xr-ai-vad util
       accumulates        audio while speaking
       finalizes when     silence ≥ 0.8s AND speech ≥ 0.15s
                          OR max utterance length (30s) hit
       filler filter      drops single- and multi-word filler utterances
-                         (&quot;um&quot;, &quot;uh&quot;, &quot;yeah&quot;, &quot;okay&quot;, &quot;mm-hmm&quot;, etc.)
+                         ("um", "uh", "yeah", "okay", "mm-hmm", etc.)
       STT call           POST multipart/form-data WAV → stt-server :8103
   → accepted participant query
 </pre></div>
@@ -593,7 +593,7 @@ synthesis runs in a thread pool so the asyncio loop is never blocked.</p>
   → VoiceAgent → private VoiceSession TTS
       sentence-batched synthesis
       POST text → tts-server :8105 → WAV bytes
-      RETURN_AUDIO IPC → hub → LiveKit → participant&#39;s headphones
+      RETURN_AUDIO IPC → hub → LiveKit → participant's headphones
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns interruption handling. A new utterance while TTS is playing
@@ -737,13 +737,13 @@ hammered: every move emits one math-tool call followed by exactly one
 <p>CloudXR returns <code class="docutils literal notranslate"><span class="pre">XR_ERROR_FORM_FACTOR_UNAVAILABLE</span></code> from <code class="docutils literal notranslate"><span class="pre">xrGetSystem</span></code> until
 a streaming client connects. LOVR cannot start before then.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>1. User opens https://&lt;host&gt;:8080, grants mic + XR permissions
-2. User clicks &quot;Launch XR&quot;
+2. User clicks "Launch XR"
 3. Client sends `xr.session.started` data message → hub IPC → worker
 4. Worker invokes native `start_xr`
    → scene process spawns LOVR + waits for CloudXR in a background task
 5. Worker polls `get_health` every 500 ms (up to 120s)
    lovr_started: true  → send `render.ready` to client → XR session unlocked
-   spawn_error: &quot;...&quot;  → log + abort
+   spawn_error: "..."  → log + abort
 6. On reconnect / refresh: `xr.session.started` arrives again
    → `_xr_started` is already True → skip spawn, send `render.ready`
    immediately
@@ -756,7 +756,7 @@ a streaming client connects. LOVR cannot start before then.</p>
 It derives schemas from the worker’s native tools and evaluates tool
 effects against deterministic fixtures, so the live LOVR scene is not mutated.
 Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/74be43916f84dbe2cebbcd0d1b51eee916ae2365/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/e45207a79664ed12ce61223332d50fdfafcf6518/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
 for the case format and the watch-mode loop. Run with:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo/worker<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>python<span class="w"> </span>agent-samples/xr-render-demo/eval/eval.py

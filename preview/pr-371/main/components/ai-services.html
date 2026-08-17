@@ -555,22 +555,22 @@ start successfully without network access. Recreate project environments with
 <h2>Adding a server to a sample<a class="headerlink" href="#adding-a-server-to-a-sample" title="Link to this heading">#</a></h2>
 <p><strong>1 — Add the process to the orchestrator:</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;hub&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/xr-media-hub&quot;</span><span class="p">,</span>                    <span class="s2">&quot;xr_media_hub&quot;</span><span class="p">),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;vlm&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/vlm-server&quot;</span><span class="p">,</span>               <span class="s2">&quot;vlm_server&quot;</span><span class="p">),</span>   <span class="c1"># ← add as needed</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/xr-media-hub"</span><span class="p">,</span>                    <span class="s2">"xr_media_hub"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"vlm"</span><span class="p">,</span>    <span class="s2">"../../services/vlm-server"</span><span class="p">,</span>               <span class="s2">"vlm_server"</span><span class="p">),</span>   <span class="c1"># ← add as needed</span>
     <span class="c1"># Pick ONE LLM backend per sample — they bind different default ports</span>
     <span class="c1"># (8106 / 8107) so running more than one at once is allowed but</span>
     <span class="c1"># usually unnecessary.</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;llm&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/llama-nemotron-llm&quot;</span><span class="p">,</span>       <span class="s2">&quot;llama_nemotron_llm_server&quot;</span><span class="p">),</span>
-    <span class="c1"># Process(&quot;llm&quot;,  &quot;../../services/nemotron3-nano-llm&quot;,       &quot;nemotron3_nano_llm_server&quot;),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;stt&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/stt-server&quot;</span><span class="p">,</span>               <span class="s2">&quot;stt_server&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"llm"</span><span class="p">,</span>    <span class="s2">"../../services/llama-nemotron-llm"</span><span class="p">,</span>       <span class="s2">"llama_nemotron_llm_server"</span><span class="p">),</span>
+    <span class="c1"># Process("llm",  "../../services/nemotron3-nano-llm",       "nemotron3_nano_llm_server"),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"stt"</span><span class="p">,</span>    <span class="s2">"../../services/stt-server"</span><span class="p">,</span>               <span class="s2">"stt_server"</span><span class="p">),</span>
     <span class="c1"># Add these together when the application uses native document retrieval.</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;embedding&quot;</span><span class="p">,</span> <span class="s2">&quot;../../services/embedding-server&quot;</span><span class="p">,</span>      <span class="s2">&quot;embedding_server&quot;</span><span class="p">),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;rag&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/rag-service&quot;</span><span class="p">,</span>               <span class="s2">&quot;rag_service&quot;</span><span class="p">,</span>
-            <span class="n">config</span><span class="o">=</span><span class="s2">&quot;yaml/rag_service.yaml&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"embedding"</span><span class="p">,</span> <span class="s2">"../../services/embedding-server"</span><span class="p">,</span>      <span class="s2">"embedding_server"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"rag"</span><span class="p">,</span>    <span class="s2">"../../services/rag-service"</span><span class="p">,</span>               <span class="s2">"rag_service"</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/rag_service.yaml"</span><span class="p">),</span>
     <span class="c1"># Pick one TTS server</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;tts&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/piper-tts&quot;</span><span class="p">,</span>                 <span class="s2">&quot;piper_tts_server&quot;</span><span class="p">),</span>
-    <span class="c1"># Process(&quot;tts&quot;,  &quot;../../services/magpie-tts&quot;,                &quot;magpie_tts_server&quot;),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;worker&quot;</span><span class="p">,</span> <span class="s2">&quot;worker&quot;</span><span class="p">,</span>                                   <span class="s2">&quot;my_agent_worker&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span>    <span class="s2">"../../services/piper-tts"</span><span class="p">,</span>                 <span class="s2">"piper_tts_server"</span><span class="p">),</span>
+    <span class="c1"># Process("tts",  "../../services/magpie-tts",                "magpie_tts_server"),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span>                                   <span class="s2">"my_agent_worker"</span><span class="p">),</span>
 <span class="p">]</span>
 </pre></div>
 </div>
@@ -615,10 +615,10 @@ aliasing, <code class="docutils literal notranslate"><span class="pre">chat_temp
 never branch on backend.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_models_config</span><span class="p">,</span> <span class="n">make_llm</span><span class="p">,</span> <span class="n">ChatMessage</span>
 
-<span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">&quot;yaml/models.local.json&quot;</span><span class="p">)</span>
-<span class="k">async</span> <span class="k">with</span> <span class="n">make_llm</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">&quot;agent_llm&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">llm</span><span class="p">:</span>
+<span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">"yaml/models.local.json"</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">with</span> <span class="n">make_llm</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">"agent_llm"</span><span class="p">)</span> <span class="k">as</span> <span class="n">llm</span><span class="p">:</span>
     <span class="n">resp</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span>
-        <span class="p">[</span><span class="n">ChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">&quot;hello&quot;</span><span class="p">)],</span>
+        <span class="p">[</span><span class="n">ChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">"user"</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">"hello"</span><span class="p">)],</span>
         <span class="n">max_tokens</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span>
         <span class="n">enable_thinking</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span>
@@ -628,12 +628,12 @@ never branch on backend.</p>
 <p>A model profile separates adapter behavior, endpoint connectivity, and
 deployment ownership:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;models&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;agent_llm&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;category&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;llm&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;adapter&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;preset&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nemotron3_nano&quot;</span><span class="p">},</span>
-<span class="w">      </span><span class="nt">&quot;endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;base_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8107&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;readiness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;health&quot;</span><span class="p">},</span>
-<span class="w">      </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;ownership&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;reused&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;service&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;agent-llm&quot;</span><span class="p">}</span>
+<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"agent_llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron3_nano"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8107"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"agent-llm"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
@@ -655,20 +655,20 @@ stay local: hosted NIM speech (Riva) is not OpenAI <code class="docutils literal
 <p>A hosted entry uses an environment-variable reference for its credential,
 disables endpoint health probing, and declares external ownership:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;models&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;vlm&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;category&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;vlm&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;adapter&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openai_compat&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;model_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nvidia/cosmos3-nano-reasoner&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;capabilities&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;vision&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;streaming&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">}</span>
+<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvidia/cosmos3-nano-reasoner"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"vision"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"streaming"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">}</span>
 <span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">&quot;endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;base_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://integrate.api.nvidia.com&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;api_key_env&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;NGC_API_KEY&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;readiness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;none&quot;</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://integrate.api.nvidia.com"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"none"</span>
 <span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;ownership&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;external&quot;</span><span class="p">}</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"external"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
@@ -790,7 +790,7 @@ must succeed without <code class="docutils literal notranslate"><span class="pre
 <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">login</span> <span class="pre">nvcr.io</span></code> if <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is in the environment (loaded by
 <code class="docutils literal notranslate"><span class="pre">load_credentials()</span></code> from <code class="docutils literal notranslate"><span class="pre">~/.config/xr-ai/credentials.json</span></code> per
 <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>). Otherwise, log in manually once:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>login<span class="w"> </span>nvcr.io<span class="w"> </span>-u<span class="w"> </span><span class="s1">&#39;$oauthtoken&#39;</span><span class="w"> </span>-p<span class="w"> </span><span class="nv">$NGC_API_KEY</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>login<span class="w"> </span>nvcr.io<span class="w"> </span>-u<span class="w"> </span><span class="s1">'$oauthtoken'</span><span class="w"> </span>-p<span class="w"> </span><span class="nv">$NGC_API_KEY</span>
 </pre></div>
 </div>
 </li>

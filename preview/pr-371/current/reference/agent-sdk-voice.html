@@ -410,14 +410,14 @@ signals, execution, and cleanup behind <code class="docutils literal notranslate
     <span class="n">vad</span><span class="o">=</span><span class="n">VadConfig</span><span class="p">(),</span>
     <span class="n">voice_gate</span><span class="o">=</span><span class="n">VoiceGateConfig</span><span class="p">(),</span>
 <span class="p">)</span>
-<span class="n">queries</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">&quot;my-sample.user-query&quot;</span><span class="p">,</span> <span class="n">UserQuery</span><span class="p">)</span>
-<span class="n">interruptions</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">&quot;my-sample.interrupted&quot;</span><span class="p">,</span> <span class="n">VoiceInterrupted</span><span class="p">)</span>
+<span class="n">queries</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"my-sample.user-query"</span><span class="p">,</span> <span class="n">UserQuery</span><span class="p">)</span>
+<span class="n">interruptions</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"my-sample.interrupted"</span><span class="p">,</span> <span class="n">VoiceInterrupted</span><span class="p">)</span>
 <span class="n">voice</span> <span class="o">=</span> <span class="n">VoiceAgent</span><span class="p">(</span>
     <span class="n">session</span><span class="p">,</span>
     <span class="n">query_topic</span><span class="o">=</span><span class="n">queries</span><span class="p">,</span>
     <span class="n">interrupted_topic</span><span class="o">=</span><span class="n">interruptions</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;voice&quot;</span><span class="p">,</span> <span class="n">voice</span><span class="p">)</span>
+<span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"voice"</span><span class="p">,</span> <span class="n">voice</span><span class="p">)</span>
 
 <span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
     <span class="k">await</span> <span class="n">voice</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runtime</span><span class="p">)</span>
@@ -466,9 +466,9 @@ publish finite or incremental <code class="docutils literal notranslate"><span c
 
 <span class="k">await</span> <span class="n">runtime</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span>
     <span class="n">VOICE_OUTPUT_TOPIC</span><span class="p">,</span>
-    <span class="n">VoiceOutput</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;Move your hand away.&quot;</span><span class="p">,</span> <span class="n">interrupt</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
-    <span class="n">participant_id</span><span class="o">=</span><span class="s2">&quot;alice&quot;</span><span class="p">,</span>
-    <span class="n">source</span><span class="o">=</span><span class="s2">&quot;safety-monitor&quot;</span><span class="p">,</span>
+    <span class="n">VoiceOutput</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"Move your hand away."</span><span class="p">,</span> <span class="n">interrupt</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+    <span class="n">participant_id</span><span class="o">=</span><span class="s2">"alice"</span><span class="p">,</span>
+    <span class="n">source</span><span class="o">=</span><span class="s2">"safety-monitor"</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
