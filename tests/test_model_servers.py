@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for the shared model-server stack selector."""
+"""Unit tests for the shared model-server topology."""
 from __future__ import annotations
 
 import importlib.util
@@ -137,6 +137,22 @@ def test_cli_starts_single_default_stack(monkeypatch: pytest.MonkeyPatch) -> Non
     _model_servers.run()
 
     assert calls == ["stop", "build", "run"]
+
+
+@pytest.mark.parametrize("removed_arg", ["--vlm-llm-stack", "--omni-stack"])
+def test_cli_rejects_removed_stack_arguments(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    removed_arg: str,
+) -> None:
+    monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(sys, "argv", ["model_servers", removed_arg])
+
+    with pytest.raises(SystemExit) as exc_info:
+        _model_servers.run()
+
+    assert exc_info.value.code == 2
+    assert f"unrecognized arguments: {removed_arg}" in capsys.readouterr().err
 
 
 def test_cli_stops_nano_before_starting(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -85,12 +85,12 @@ def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument(
         "--stop", action="store_true",
-        help="Stop every persisted model-server stack and exit.",
+        help="Stop every persisted model service and exit.",
     )
     p.add_argument("--allow-anonymous", action="store_true",
                    help="Start without HF_TOKEN (unauthenticated downloads "
                         "of the multi-GB checkpoints may stall indefinitely).")
-    ns, _ = p.parse_known_args()
+    ns = p.parse_args()
 
     if ns.stop:
         _stop_models()

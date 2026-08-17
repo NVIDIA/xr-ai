@@ -193,7 +193,7 @@ To stop all model servers when done:
 uv run model_servers --stop
 ```
 
-`--stop` always stops both stack variants, so it takes no stack-selection flag.
+`--stop` stops every persisted model service in the shared topology.
 
 ### Simple VLM example (vision Q&A over voice + text)
 
@@ -408,10 +408,19 @@ model_backend: nim     # default is "local"
 ```
 
 The worker loads `yaml/models.nim.yaml` for the native model-backed functions —
-no `main.py` edits. Provide
-an `NGC_API_KEY` as an **environment variable** (or via the launcher
-credential prompt — not in YAML) and just don't start the local `omni` model
-server. See
+no `main.py` edits. Provide an `NGC_API_KEY` as an **environment variable** (or
+via the launcher credential prompt — not in YAML). Do not run `model_servers`,
+because its single topology starts both local `omni` and `vlm`. Start STT by
+itself from the repository root, setting `GPU_PROFILE` to `dual_48G_ada`,
+`spark`, or `96G_blackwell`:
+
+```bash
+GPU_PROFILE=dual_48G_ada
+uv run --project services/stt-server stt_server \
+  --config "agent-samples/model-servers/yaml/${GPU_PROFILE}/stt_server.yaml"
+```
+
+Then start `xr_render_demo` in another terminal. See
 [`docs/source/components/ai-services.md`](docs/source/components/ai-services.md#hosting-models-on-nvidia-nim).
 
 ---
