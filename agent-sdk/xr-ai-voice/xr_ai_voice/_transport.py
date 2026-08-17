@@ -394,13 +394,19 @@ class HubVoiceTransport(BaseTransport):
         self._output = XRMediaHubOutputTransport(self._ep, params, name=self._output_name)
 
     def input(self) -> XRMediaHubInputTransport:
+        """Return the Pipecat input transport backed by the media hub."""
+
         return self._input
 
     def output(self) -> XRMediaHubOutputTransport:
+        """Return the Pipecat output transport backed by the media hub."""
+
         return self._output
 
     @property
     def endpoint(self) -> ProcessorEndpoint:
+        """Return the owned hub processor endpoint."""
+
         return self._ep
 
     async def wait_until_started(self) -> None:
@@ -408,19 +414,29 @@ class HubVoiceTransport(BaseTransport):
         await self._input_started.wait()
 
     async def send_return_data(self, msg: DataMessage) -> None:
+        """Send participant-routed data through the hub."""
+
         await self._ep.send_return_data(msg)
 
     @property
     def target_participant(self) -> str:
+        """Return the participant currently selected for output."""
+
         return self._output.target_participant
 
     def set_target_participant(self, pid: str) -> None:
+        """Select the participant that receives subsequent output."""
+
         self._output.set_target_participant(pid)
 
     def cleanup_participant(self, pid: str) -> None:
+        """Clear output routing when the selected participant leaves."""
+
         if self._output.target_participant == pid:
             self._output.set_target_participant("")
 
     def shutdown(self) -> None:
+        """Stop and close the owned hub endpoint."""
+
         self._ep.stop()
         self._ep.close()

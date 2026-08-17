@@ -42,7 +42,10 @@ class UserQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     text: str = Field(min_length=1)
+    """Gate-accepted speech or direct typed text."""
+
     timestamp_us: int = Field(ge=0)
+    """Input presentation time as Unix microseconds."""
 
 
 class VoiceTranscript(BaseModel):
@@ -51,7 +54,10 @@ class VoiceTranscript(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     text: str = Field(min_length=1)
+    """Final text returned by STT before voice-gate filtering."""
+
     timestamp_us: int = Field(ge=0)
+    """Speech presentation time as Unix microseconds."""
 
 
 class VoiceParticipantLeft(BaseModel):
@@ -72,10 +78,19 @@ class VoiceOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     text: str = ""
+    """Complete response text or one incremental fragment."""
+
     response_id: str | None = Field(default=None, min_length=1)
+    """Stable identifier shared by chunks of an incremental response."""
+
     final: bool = True
+    """Whether this message completes the response."""
+
     interrupt: bool = False
+    """Whether the first response message supersedes active voice output."""
+
     timestamp_us: int | None = Field(default=None, ge=0)
+    """Optional originating input timestamp propagated to TTS."""
 
     @model_validator(mode="after")
     def validate_boundary(self) -> VoiceOutput:
@@ -91,7 +106,10 @@ class VoiceOutput(BaseModel):
 
 
 VOICE_TRANSCRIPT_TOPIC = Topic("voice.transcript", VoiceTranscript)
+"""All final STT results, published before voice-gate filtering."""
+
 VOICE_OUTPUT_TOPIC = Topic("voice.output", VoiceOutput, telemetry="none")
+"""Finite or incremental responses consumed by :class:`VoiceAgent`."""
 
 
 @dataclass(slots=True)

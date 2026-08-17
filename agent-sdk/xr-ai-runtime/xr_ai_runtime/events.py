@@ -19,8 +19,13 @@ class Topic(Generic[MessageT]):
     """A stable publish/subscribe name paired with its payload model."""
 
     name: str
+    """Stable name shared by every publisher and subscriber."""
+
     message_type: type[MessageT]
+    """Pydantic model used to validate each publication."""
+
     telemetry: Literal["full", "none"] = "full"
+    """Whether Relay records publication and subscriber-delivery scopes."""
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -41,11 +46,22 @@ class MessageMetadata:
     """Routing and trace context for one published event."""
 
     message_id: str
+    """Unique identifier for this publication."""
+
     correlation_id: str
+    """Identifier shared by publications in one logical operation."""
+
     participant_id: str | None
+    """Participant routing key, or ``None`` for a global event."""
+
     source: str
+    """Runtime-local name of the publisher."""
+
     parent_message_id: str | None
+    """Identifier of the publication that caused this event, when present."""
+
     timestamp_us: int
+    """Publication time as Unix microseconds."""
 
 
 def subscribe(
