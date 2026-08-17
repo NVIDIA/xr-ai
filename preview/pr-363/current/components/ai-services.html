@@ -667,8 +667,17 @@ YAML. This wrapped JSON profile is consumed by both the worker and orchestrator,
 so the local VLM process is omitted and <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is requested
 automatically. Select <code class="docutils literal notranslate"><span class="pre">models.local.json</span></code> to switch back.</p>
 <p><code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code> retains its <code class="docutils literal notranslate"><span class="pre">model_backend:</span> <span class="pre">nim</span></code> selector and
-<code class="docutils literal notranslate"><span class="pre">models.nim.yaml</span></code> overlay. Run it without the local <code class="docutils literal notranslate"><span class="pre">omni</span></code> model server and
-provide <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">models.nim.yaml</span></code> overlay. Provide <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> and do not run
+<code class="docutils literal notranslate"><span class="pre">model_servers</span></code>, whose single topology starts both local <code class="docutils literal notranslate"><span class="pre">omni</span></code> and <code class="docutils literal notranslate"><span class="pre">vlm</span></code>.
+Instead, start only the local STT service from the repository root, setting
+<code class="docutils literal notranslate"><span class="pre">GPU_PROFILE</span></code> to <code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, or <code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">GPU_PROFILE</span><span class="o">=</span>dual_48G_ada
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/stt-server<span class="w"> </span>stt_server<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--config<span class="w"> </span><span class="s2">"agent-samples/model-servers/yaml/</span><span class="si">${</span><span class="nv">GPU_PROFILE</span><span class="si">}</span><span class="s2">/stt_server.yaml"</span>
+</pre></div>
+</div>
+<p>Then start <code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code> in another terminal. Its orchestrator reuses STT,
+routes LLM and VLM requests to hosted NIM, and starts local TTS itself.</p>
 <p><strong>Self-hosted NIM containers</strong> work the same way: point <code class="docutils literal notranslate"><span class="pre">base_url</span></code> at the
 container (e.g. <code class="docutils literal notranslate"><span class="pre">http://localhost:8000</span></code>), set <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">health</span></code>, and choose
 <code class="docutils literal notranslate"><span class="pre">managed</span></code> or <code class="docutils literal notranslate"><span class="pre">reused</span></code> ownership if the launcher owns that service. Legacy flat
@@ -831,7 +840,7 @@ wire format (<code class="docutils literal notranslate"><span class="pre">finish
 <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">on&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">off&quot;</span></code> in a system or user
 message; reasoning preamble is <strong>not</strong> stripped server-side. Hosting backend
 is selectable per YAML (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/da6eb1997e4e352523968eb301db06b51559248c/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/3628ccded4894ee0c0df6d0bde0f7505beeb0945/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
 for the full HTTP contract and tuning knobs.</p></li>
 <li><p><strong>nemotron3-nano-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</span></code> (auto-selected by GPU compute
@@ -842,7 +851,7 @@ FlashInfer FP4 MoE kernels. Requires a Blackwell-class GPU (B200 or RTX PRO
 <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> by default to avoid the silent 3–8 min CUDA graph and
 FlashInfer autotune on cold start. Hosting backend is selectable per YAML
 (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/da6eb1997e4e352523968eb301db06b51559248c/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/3628ccded4894ee0c0df6d0bde0f7505beeb0945/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
 for the vLLM flags it forwards and Blackwell prerequisites.</p></li>
 <li><p><strong>nemotron-omni-llm</strong> is a vLLM-backed multimodal LLM serving
 <code class="docutils literal notranslate"><span class="pre">Nemotron-3-Nano-Omni-30B-A3B-Reasoning</span></code> (text + video input) at port 8108.

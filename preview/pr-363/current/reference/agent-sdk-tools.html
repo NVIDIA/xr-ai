@@ -555,8 +555,8 @@ QR codes with ZXing-C++ and ArUco markers with OpenCV. Its typed result
 distinguishes an unavailable frame from a valid frame with no marker. Every
 marker has the same <code class="docutils literal notranslate"><span class="pre">marker_type</span></code>, <code class="docutils literal notranslate"><span class="pre">value</span></code>, and four-corner contract: <code class="docutils literal notranslate"><span class="pre">value</span></code>
 is decoded text for QR codes and the decimal marker ID for ArUco markers.
-QR detection scans the complete frame at native resolution and at one bounded
-enlarged resolution so small codes remain readable without discarding context.
+Both detectors scan the complete frame at native resolution and at one bounded
+enlarged resolution so small markers remain readable without discarding context.
 Results from both scans are deduplicated and use source-frame coordinates.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.marker_tracking</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">MarkerTrackingRequest</span><span class="p">,</span>

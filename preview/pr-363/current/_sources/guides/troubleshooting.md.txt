@@ -338,10 +338,12 @@ but the server then sits silent for several minutes before becoming healthy.
 **Cause:** CUDA graph capture + FlashInfer FP4 MoE autotune happen on first
 run after weight load. They are silent.
 
-**Fix:** the shipped YAMLs default to `enforce_eager: true` which avoids both.
-Eager mode is 10–20% slower per token but starts in ~5 s after weight load —
-imperceptible at <250 tokens/turn where STT+VAD+TTS dominate latency. Don't
-flip `enforce_eager: false` unless you have a measured reason.
+**Fix:** the default Omni profiles set `enforce_eager: false` to enable CUDA
+graph capture and maximize steady-state throughput, so this startup delay is
+expected. For development, set `enforce_eager: true` in the active model YAML
+to skip CUDA graph capture. Eager mode starts faster but can reduce per-token
+throughput; keep the default when steady-state performance matters more than
+cold-start time.
 
 ### `xr_render_demo` exits but VRAM is still pinned
 

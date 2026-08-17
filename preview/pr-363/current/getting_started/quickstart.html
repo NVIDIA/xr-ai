@@ -422,7 +422,7 @@ pass <code class="docutils literal notranslate"><span class="pre">--allow-anonym
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">--stop</span></code> always stops both stack variants, so it takes no stack-selection flag.</p>
+<p><code class="docutils literal notranslate"><span class="pre">--stop</span></code> stops every persisted model service in the shared topology.</p>
 </section>
 <section id="simple-vlm-example-vision-q-a-over-voice-text">
 <h2>Simple VLM example (vision Q&amp;A over voice + text)<a class="headerlink" href="#simple-vlm-example-vision-q-a-over-voice-text" title="Link to this heading">#</a></h2>
@@ -514,8 +514,8 @@ full details (and self-hosted NIM containers).</p>
 <code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/xr_media_hub.yaml</span></code> for the full option list.</p>
 </section>
 </section>
-<section id="background-monitoring-sample-file-only-ambient-vision-foreground-voice">
-<h2>Background monitoring sample (file-only ambient vision + foreground voice)<a class="headerlink" href="#background-monitoring-sample-file-only-ambient-vision-foreground-voice" title="Link to this heading">#</a></h2>
+<section id="lab-instrument-monitoring-marker-associated-readings-foreground-voice">
+<h2>Lab instrument monitoring (marker-associated readings + foreground voice)<a class="headerlink" href="#lab-instrument-monitoring-marker-associated-readings-foreground-voice" title="Link to this heading">#</a></h2>
 <p>This sample offers one on-demand background visual observation task per
 participant while a separate generic tool-calling agent answers voice or typed
 queries and controls that task. A separate QR instrument monitor tracks readings,
@@ -524,10 +524,10 @@ speaks only discovered, changed, or long-missing device updates, and persists
 accepted-transcript, foreground-turn, and Relay JSONL files under <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code>
 and intentionally serves no sample-specific monitoring web UI.</p>
 <p>Start <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>, then run:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/background-monitoring-sample
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/lab-instrument-monitoring
 uv<span class="w"> </span>sync
 uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>worker
-uv<span class="w"> </span>run<span class="w"> </span>background_monitoring_sample
+uv<span class="w"> </span>run<span class="w"> </span>lab_instrument_monitoring
 </pre></div>
 </div>
 <p>Connect an existing glasses or platform client using the authenticated URL,
@@ -606,10 +606,18 @@ stay local) by setting <strong>one key</strong> in <code class="docutils literal
 </pre></div>
 </div>
 <p>The worker loads <code class="docutils literal notranslate"><span class="pre">yaml/models.nim.yaml</span></code> for native model-backed Functions.
-Provide an
-<code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> as an <strong>environment variable</strong> (or via the launcher credential
-prompt — not in YAML) and just don’t start the local <code class="docutils literal notranslate"><span class="pre">omni</span></code> model server.
-Refer to the AI-services guide.</p>
+Provide an <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> as an <strong>environment variable</strong> (or via the launcher
+credential prompt — not in YAML). Do not run <code class="docutils literal notranslate"><span class="pre">model_servers</span></code>, because its
+single topology starts both local <code class="docutils literal notranslate"><span class="pre">omni</span></code> and <code class="docutils literal notranslate"><span class="pre">vlm</span></code>. Start STT by itself from
+the repository root, setting <code class="docutils literal notranslate"><span class="pre">GPU_PROFILE</span></code> to <code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">GPU_PROFILE</span><span class="o">=</span>dual_48G_ada
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/stt-server<span class="w"> </span>stt_server<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--config<span class="w"> </span><span class="s2">"agent-samples/model-servers/yaml/</span><span class="si">${</span><span class="nv">GPU_PROFILE</span><span class="si">}</span><span class="s2">/stt_server.yaml"</span>
+</pre></div>
+</div>
+<p>Then start <code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code> in another terminal. Refer to the AI-services
+guide.</p>
 </section>
 </section>
 <section id="hub-only-standalone">
@@ -679,7 +687,7 @@ XR-Media-Hub auto-discovers <code class="docutils literal notranslate"><span cla
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-connect-a-client">Step 2 — Connect a client</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#background-monitoring-sample-file-only-ambient-vision-foreground-voice">Background monitoring sample (file-only ambient vision + foreground voice)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lab-instrument-monitoring-marker-associated-readings-foreground-voice">Lab instrument monitoring (marker-associated readings + foreground voice)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-render-demo-voice-driven-sphere-in-cloudxr">XR render demo (voice-driven sphere in CloudXR)</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-start-model-servers-once">Step 1 — Start model servers (once)</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-start-the-demo">Step 2 — Start the demo</a></li>

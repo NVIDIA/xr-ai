@@ -186,7 +186,7 @@ detectors off the event loop, and returns every marker through one
 `marker_type`, `value`, and four-corner contract. QR values are ZXing-C++
 decoded text; ArUco values are decimal IDs detected with a configured OpenCV
 predefined dictionary. Install `xr-ai-tools[marker-tracking]` to use it.
-QR detection scans the complete frame at native resolution and once at a
+Both detectors scan the complete frame at native resolution and once at a
 bounded enlarged resolution. Duplicate detections are removed, and all returned
 corners remain in source-frame coordinates.
 

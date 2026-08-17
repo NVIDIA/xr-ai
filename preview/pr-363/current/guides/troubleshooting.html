@@ -663,10 +663,12 @@ the IWER emulator built into the web client itself for desktop dev.</p>
 but the server then sits silent for several minutes before becoming healthy.</p>
 <p><strong>Cause:</strong> CUDA graph capture + FlashInfer FP4 MoE autotune happen on first
 run after weight load. They are silent.</p>
-<p><strong>Fix:</strong> the shipped YAMLs default to <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> which avoids both.
-Eager mode is 10–20% slower per token but starts in ~5 s after weight load —
-imperceptible at &lt;250 tokens/turn where STT+VAD+TTS dominate latency. Don’t
-flip <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">false</span></code> unless you have a measured reason.</p>
+<p><strong>Fix:</strong> the default Omni profiles set <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">false</span></code> to enable CUDA
+graph capture and maximize steady-state throughput, so this startup delay is
+expected. For development, set <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> in the active model YAML
+to skip CUDA graph capture. Eager mode starts faster but can reduce per-token
+throughput; keep the default when steady-state performance matters more than
+cold-start time.</p>
 </section>
 <section id="xr-render-demo-exits-but-vram-is-still-pinned">
 <h3><code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code> exits but VRAM is still pinned<a class="headerlink" href="#xr-render-demo-exits-but-vram-is-still-pinned" title="Link to this heading">#</a></h3>
