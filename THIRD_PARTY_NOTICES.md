@@ -46,9 +46,28 @@ Used by `client-samples/ios-visionos/`. Resolved via Swift Package Manager.
 | `livekit/livekit-uniffi-xcframework`                    | 0.0.5        | Apache-2.0   | https://github.com/livekit/livekit-uniffi-xcframework |
 | `swift-protobuf` (`apple/swift-protobuf`)               | 1.36.1       | Apache-2.0   | https://github.com/apple/swift-protobuf |
 
+## Android build toolchain (`client-samples/android/`)
+
+Building the Android sample with the Android Gradle Plugin (declared in
+`client-samples/android/gradle/libs.versions.toml`) places dual-licensed
+artifacts on the build classpath, including the following, for which `xr-ai`
+records a license election:
+
+| Package | Version | Dual license | Elected | Upstream |
+|---|---|---|---|---|
+| Java Native Access (`net.java.dev.jna:jna`, `jna-platform`) | 5.6.0 | LGPL-2.1-or-later OR Apache-2.0 | Apache-2.0 | https://github.com/java-native-access/jna |
+| `javax.annotation:javax.annotation-api`                 | 1.3.2 | CDDL-1.1 OR GPL-2.0-with-classpath-exception | CDDL-1.1 | https://github.com/eclipse-ee4j/common-annotations-api |
+
+Neither artifact is bundled into the APK produced by the current build
+configuration (verified against the resolved `releaseRuntimeClasspath`), and
+`xr-ai` does not redistribute them; the election records the terms under
+which each artifact is used at build time.
+
 ## License texts
 
-The full text of each SPDX license identifier referenced above is available at:
+The full text of each SPDX license identifier that applies to `xr-ai`'s use
+of the software above (for dual-licensed artifacts, the elected license) is
+available at:
 
 - **Apache-2.0**: https://www.apache.org/licenses/LICENSE-2.0 — also bundled
   with this repository as [`LICENSE`](LICENSE).
@@ -56,6 +75,7 @@ The full text of each SPDX license identifier referenced above is available at:
 - **BSD-2-Clause**: https://opensource.org/license/bsd-2-clause
 - **HPND**: https://opensource.org/license/historical-ntu-disclaimer
 - **MIT**: https://opensource.org/license/mit
+- **CDDL-1.1**: https://spdx.org/licenses/CDDL-1.1.html
 
 Each upstream project repository linked above includes its own canonical
 license file (typically `LICENSE`, `LICENSE.txt`, or `COPYING`).
