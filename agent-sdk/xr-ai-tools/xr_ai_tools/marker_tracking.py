@@ -22,6 +22,8 @@ from .tools import Tool
 from .types import StrictRequest
 
 _LOGGER = logging.getLogger(__name__)
+_QR_SCAN_LONG_EDGE = 3840
+_QR_SCAN_MAX_SCALE = 6
 
 
 class MarkerType(StrEnum):
@@ -94,26 +96,68 @@ def _corners(points: np.ndarray) -> tuple[MarkerPoint, MarkerPoint, MarkerPoint,
 
 
 def _extract_qr_markers(pixels: np.ndarray) -> list[TrackedMarker]:
-    barcodes = zxingcpp.read_barcodes(
-        pixels,
-        formats=zxingcpp.BarcodeFormat.QRCode,
+    height, width = pixels.shape[:2]
+    grayscale = Image.fromarray(pixels).convert("L")
+    scans = [(np.asarray(grayscale), 1)]
+    scale = min(
+        _QR_SCAN_MAX_SCALE,
+        max(
+            1,
+            (_QR_SCAN_LONG_EDGE + max(width, height) - 1)
+            // max(width, height),
+        ),
     )
-    return [
-        TrackedMarker(
-            marker_type=MarkerType.QR_CODE,
-            value=barcode.text,
-            corners=tuple(
-                MarkerPoint(x=float(point.x), y=float(point.y))
-                for point in (
-                    barcode.position.top_left,
-                    barcode.position.top_right,
-                    barcode.position.bottom_right,
-                    barcode.position.bottom_left,
-                )
-            ),
+    if scale > 1:
+        enlarged = grayscale.resize(
+            (width * scale, height * scale),
+            Image.Resampling.LANCZOS,
         )
-        for barcode in barcodes
-    ]
+        scans.append((np.asarray(enlarged), scale))
+
+    markers: list[TrackedMarker] = []
+    for scan, scan_scale in scans:
+        barcodes = zxingcpp.read_barcodes(
+            np.ascontiguousarray(scan),
+            formats=zxingcpp.BarcodeFormat.QRCode,
+        )
+        for barcode in barcodes:
+            marker = TrackedMarker(
+                marker_type=MarkerType.QR_CODE,
+                value=barcode.text,
+                corners=tuple(
+                    MarkerPoint(
+                        x=float(point.x / scan_scale),
+                        y=float(point.y / scan_scale),
+                    )
+                    for point in (
+                        barcode.position.top_left,
+                        barcode.position.top_right,
+                        barcode.position.bottom_right,
+                        barcode.position.bottom_left,
+                    )
+                ),
+            )
+            if not any(_same_marker(marker, existing) for existing in markers):
+                markers.append(marker)
+    return markers
+
+
+def _same_marker(first: TrackedMarker, second: TrackedMarker) -> bool:
+    if first.marker_type is not second.marker_type or first.value != second.value:
+        return False
+
+    first_center = (
+        sum(point.x for point in first.corners) / len(first.corners),
+        sum(point.y for point in first.corners) / len(first.corners),
+    )
+    second_center = (
+        sum(point.x for point in second.corners) / len(second.corners),
+        sum(point.y for point in second.corners) / len(second.corners),
+    )
+    return (
+        abs(first_center[0] - second_center[0]) <= 24
+        and abs(first_center[1] - second_center[1]) <= 24
+    )
 
 
 def _make_aruco_detector(dictionary_name: str) -> cv2.aruco.ArucoDetector:
