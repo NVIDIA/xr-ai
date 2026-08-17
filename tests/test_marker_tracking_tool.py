@@ -120,6 +120,18 @@ def _mixed_image() -> np.ndarray:
     return canvas
 
 
+def _downsampled_aruco_scene() -> np.ndarray:
+    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    source = np.full((3840, 2880), 220, dtype=np.uint8)
+    large = cv2.aruco.generateImageMarker(dictionary, 23, 600)
+    small = cv2.aruco.generateImageMarker(dictionary, 42, 48)
+    source[500:1100, 300:900] = large
+    source[1733:1781, 1279:1327] = small
+    return np.asarray(
+        Image.fromarray(source).resize((480, 640), Image.Resampling.LANCZOS)
+    )
+
+
 class _Endpoint:
     def __init__(self, image: np.ndarray) -> None:
         rgb = np.repeat(image[:, :, None], 3, axis=2)
@@ -291,6 +303,33 @@ async def test_marker_tool_uses_configured_aruco_dictionary() -> None:
     assert [(marker.marker_type, marker.value) for marker in result.markers] == [
         (MarkerType.ARUCO, "42")
     ]
+
+
+@pytest.mark.asyncio
+async def test_marker_tool_recovers_small_aruco_from_downsampled_scene() -> None:
+    frame = _downsampled_aruco_scene()
+    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    native_detector = cv2.aruco.ArucoDetector(dictionary)
+    _corners, native_ids, _rejected = native_detector.detectMarkers(frame)
+    assert native_ids is not None
+    assert native_ids.reshape(-1).tolist() == [23]
+
+    endpoint = _Endpoint(frame)
+    tool = MarkerTrackingTool(
+        endpoint=endpoint,
+        marker_types=(MarkerType.ARUCO,),
+    )
+    await endpoint.seed()
+
+    result = await tool.execute(MarkerTrackingRequest(participant_id="alice"))
+
+    assert [(marker.marker_type, marker.value) for marker in result.markers] == [
+        (MarkerType.ARUCO, "23"),
+        (MarkerType.ARUCO, "42"),
+    ]
+    small = next(marker for marker in result.markers if marker.value == "42")
+    assert all(210 <= point.x <= 225 for point in small.corners)
+    assert all(285 <= point.y <= 300 for point in small.corners)
 
 
 @pytest.mark.asyncio

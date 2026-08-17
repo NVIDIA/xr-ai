@@ -22,8 +22,8 @@ from .tools import Tool
 from .types import StrictRequest
 
 _LOGGER = logging.getLogger(__name__)
-_QR_SCAN_LONG_EDGE = 3840
-_QR_SCAN_MAX_SCALE = 6
+_MARKER_SCAN_LONG_EDGE = 3840
+_MARKER_SCAN_MAX_SCALE = 6
 
 
 class MarkerType(StrEnum):
@@ -95,15 +95,15 @@ def _corners(points: np.ndarray) -> tuple[MarkerPoint, MarkerPoint, MarkerPoint,
     )
 
 
-def _extract_qr_markers(pixels: np.ndarray) -> list[TrackedMarker]:
+def _full_frame_scans(pixels: np.ndarray) -> list[tuple[np.ndarray, int]]:
     height, width = pixels.shape[:2]
     grayscale = Image.fromarray(pixels).convert("L")
     scans = [(np.asarray(grayscale), 1)]
     scale = min(
-        _QR_SCAN_MAX_SCALE,
+        _MARKER_SCAN_MAX_SCALE,
         max(
             1,
-            (_QR_SCAN_LONG_EDGE + max(width, height) - 1)
+            (_MARKER_SCAN_LONG_EDGE + max(width, height) - 1)
             // max(width, height),
         ),
     )
@@ -113,7 +113,12 @@ def _extract_qr_markers(pixels: np.ndarray) -> list[TrackedMarker]:
             Image.Resampling.LANCZOS,
         )
         scans.append((np.asarray(enlarged), scale))
+    return scans
 
+
+def _extract_qr_markers(
+    scans: Iterable[tuple[np.ndarray, int]],
+) -> list[TrackedMarker]:
     markers: list[TrackedMarker] = []
     for scan, scan_scale in scans:
         barcodes = zxingcpp.read_barcodes(
@@ -169,22 +174,27 @@ def _make_aruco_detector(dictionary_name: str) -> cv2.aruco.ArucoDetector:
 
 
 def _extract_aruco_markers(
-    pixels: np.ndarray,
+    scans: Iterable[tuple[np.ndarray, int]],
     detector: cv2.aruco.ArucoDetector,
 ) -> list[TrackedMarker]:
-    if pixels.ndim == 3:
-        pixels = cv2.cvtColor(pixels, cv2.COLOR_RGB2GRAY)
-    corners, identifiers, _rejected = detector.detectMarkers(pixels)
-    if identifiers is None:
-        return []
-    return [
-        TrackedMarker(
-            marker_type=MarkerType.ARUCO,
-            value=str(int(identifier)),
-            corners=_corners(marker_corners),
-        )
-        for marker_corners, identifier in zip(corners, identifiers.reshape(-1), strict=True)
-    ]
+    markers: list[TrackedMarker] = []
+    for scan, scan_scale in scans:
+        corners, identifiers, _rejected = detector.detectMarkers(scan)
+        if identifiers is None:
+            continue
+        for marker_corners, identifier in zip(
+            corners,
+            identifiers.reshape(-1),
+            strict=True,
+        ):
+            marker = TrackedMarker(
+                marker_type=MarkerType.ARUCO,
+                value=str(int(identifier)),
+                corners=_corners(np.asarray(marker_corners) / scan_scale),
+            )
+            if not any(_same_marker(marker, existing) for existing in markers):
+                markers.append(marker)
+    return markers
 
 
 class MarkerTrackingTool(Tool[MarkerTrackingRequest, MarkerTrackingResult]):
@@ -271,11 +281,12 @@ class MarkerTrackingTool(Tool[MarkerTrackingRequest, MarkerTrackingResult]):
 
     def _extract(self, image: Image.Image) -> list[TrackedMarker]:
         pixels = _image_pixels(image)
+        scans = _full_frame_scans(pixels)
         markers: list[TrackedMarker] = []
         if MarkerType.QR_CODE in self.marker_types:
-            markers.extend(_extract_qr_markers(pixels))
+            markers.extend(_extract_qr_markers(scans))
         if self._aruco_detector is not None:
-            markers.extend(_extract_aruco_markers(pixels, self._aruco_detector))
+            markers.extend(_extract_aruco_markers(scans, self._aruco_detector))
         return markers
 
 
