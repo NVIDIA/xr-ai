@@ -19,7 +19,7 @@ The base install supplies finite `Tool` and streaming `AsyncTool` types. Install
 from pydantic import BaseModel
 from xr_ai_models import ChatMessage
 from xr_ai_tools import Tool, ToolSet
-from xr_ai_tools.tool_calling import handle_tool_call, tool_definitions
+from xr_ai_tools.tool_calling import run_tool_loop
 
 
 class LookupRequest(BaseModel):
@@ -44,29 +44,47 @@ lookup_tool = Tool(
 tools = (lookup_tool,)
 tool_set = ToolSet(tools)
 
-response = await llm.chat(messages, tools=tool_definitions(tools))
-messages.append(
-    ChatMessage(
-        role="assistant",
-        content=response.content,
-        tool_calls=response.tool_calls,
+async def call_model(messages, definitions):
+    # The caller owns model parameters, headers, timeouts, and retry policy.
+    return await llm.chat(
+        messages,
+        tools=definitions,
+        max_tokens=1024,
+        temperature=0.0,
     )
+
+
+result = await run_tool_loop(
+    [ChatMessage(role="user", content="look up the current answer")],
+    tool_set,
+    call_model,
+    max_iterations=4,
+    max_tool_calls=8,
 )
-for call in response.tool_calls or ():
-    result = await handle_tool_call(call, tool_set)
-    messages.append(result.message)
-    if result.return_direct:
-        final_answer = result.message.content
-        break
+final_answer = result.content
 ```
 
-`tool_definitions(...)` adapts native tools to `xr-ai-models` `ToolDef` values.
-`handle_tool_call(...)` validates and invokes one model-produced `ToolCall`, then
-returns a tool-role `ChatMessage` plus its `return_direct` hint. The application
-or agent owns prompts, model calls, conversation state, iteration policy, and
-whether calls run sequentially or concurrently. A unary side-effect tool uses
-`result_model=None`, returns `None`, and produces `null` as its model-visible
-result.
+`run_tool_loop(...)` is a stateless bounded turn runner. It passes an immutable
+transcript and the current `ToolSet` definitions to the supplied model callback,
+executes emitted calls sequentially, and returns the complete transcript and a
+structured tool-call audit. Unknown tools and invalid Pydantic arguments are
+returned to the model for repair. Iteration exhaustion, tool-call budget
+exhaustion, empty or truncated responses, and unsafe mixed `return_direct`
+batches raise typed errors carrying the partial transcript and audit. Blank or
+duplicate tool-call IDs are rejected before executing their batch.
+
+The application or agent continues to own prompts, conversation history, model
+parameters, retries, participant context, cancellation, and background tasks.
+The loop never retries an executed tool. A direct-return tool must be the only
+call in its model batch, so the loop can reject an ambiguous batch before any
+side effect occurs.
+
+The lower-level `tool_definitions(...)` and `handle_tool_call(...)` helpers
+remain available for specialized loops. The former adapts native tools to
+`xr-ai-models` `ToolDef` values. The latter validates and invokes one
+model-produced `ToolCall`, then returns a tool-role `ChatMessage` plus its
+`return_direct` hint. A unary side-effect tool uses `result_model=None`, returns
+`None`, and produces `null` as its model-visible result.
 
 Tool catalogs can assign model-visible aliases without wrapping or changing the
 underlying tools:
