@@ -59,6 +59,12 @@ class VoiceTranscript(BaseModel):
     """Speech presentation time as Unix microseconds."""
 
 
+class VoiceParticipantJoined(BaseModel):
+    """Notification that one participant joined the voice transport."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class VoiceParticipantLeft(BaseModel):
     """Notification that one participant left the voice transport."""
 
@@ -208,6 +214,7 @@ class VoiceAgent(Agent):
         transport: HubVoiceTransport | None = None,
         response_capacity: int = 32,
         text_input: bool = True,
+        participant_joined_topic: Topic[VoiceParticipantJoined] | None = None,
         participant_left_topic: Topic[VoiceParticipantLeft] | None = None,
         interrupted_topic: Topic[VoiceInterrupted] | None = None,
         interrupt_on_supersede: bool = False,
@@ -230,6 +237,7 @@ class VoiceAgent(Agent):
         self.query_topic = query_topic
         self.response_capacity = response_capacity
         self.text_input = text_input
+        self.participant_joined_topic = participant_joined_topic
         self.participant_left_topic = participant_left_topic
         self.interrupted_topic = interrupted_topic
         self.interrupt_on_supersede = interrupt_on_supersede
@@ -270,6 +278,7 @@ class VoiceAgent(Agent):
                 await self._session.run(
                     self._publish_input,
                     on_transcript=self._publish_transcript,
+                    on_participant_joined=self._participant_joined,
                     on_participant_left=self._participant_left,
                     on_interrupted=(
                         self._publish_interrupted
@@ -494,6 +503,21 @@ class VoiceAgent(Agent):
                 return
             queue.task_done()
 
+    async def _participant_joined(self, participant_id: str) -> None:
+        topic = self.participant_joined_topic
+        if topic is None:
+            return
+        runtime = self._running_runtime()
+        self._start_lifecycle_task(
+            runtime.publish(
+                topic,
+                VoiceParticipantJoined(),
+                participant_id=participant_id,
+                source=self._source,
+            ),
+            name=f"voice-participant-joined:{participant_id}",
+        )
+
     async def _participant_left(self, participant_id: str) -> None:
         topic = self.participant_left_topic
         if topic is None:
@@ -645,6 +669,7 @@ __all__ = [
     "VoiceAgent",
     "VoiceInterrupted",
     "VoiceOutput",
+    "VoiceParticipantJoined",
     "VoiceParticipantLeft",
     "VoiceStreamClosedError",
     "VoiceTranscript",

@@ -16,7 +16,7 @@ compatibility package. Update out-of-tree code as follows:
 | `VoiceSession` | Configure `VoiceAgent` with STT, TTS, VAD, gating, readiness probes, and closeables, then run it with the shared `AgentRuntime`. The lower-level media session is no longer public. |
 | `VadConfig` | Import the unchanged tuning model from `xr_ai_voice`. |
 | `GatedQueryFrame` | Subscribe to the application query topic carrying `xr_ai_voice.UserQuery`. |
-| `ParticipantLeftFrame` and `InterruptionFrame` | Subscribe to application topics carrying `VoiceParticipantLeft` and `VoiceInterrupted`. Participant joins and voice-gate greetings remain session-owned. |
+| `ParticipantJoinedFrame`, `ParticipantLeftFrame`, and `InterruptionFrame` | Subscribe to application topics carrying `VoiceParticipantJoined`, `VoiceParticipantLeft`, and `VoiceInterrupted`. Participant identity comes from runtime metadata; voice-gate greetings remain session-owned. |
 | `BrainResponseEndFrame` | Publish a finite `VoiceOutput`, or terminate an incremental response with `final=True`. |
 | `VadSttProcessor`, `VoiceGateProcessor`, and `StreamingTtsProcessor` | Configure `VoiceAgent` with `VadConfig`, `VoiceGateConfig`, and `text_topic`; pipeline processors are private implementation details. |
 | `XRMediaHubTransport` | Construct `xr_ai_voice.HubVoiceTransport` and pass it to `VoiceAgent` only when another application component must share that existing hub boundary. |

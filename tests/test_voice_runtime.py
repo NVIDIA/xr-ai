@@ -25,6 +25,7 @@ from xr_ai_voice import (
     VoiceAgent,
     VoiceInterrupted,
     VoiceOutput,
+    VoiceParticipantJoined,
     VoiceParticipantLeft,
     VoiceStreamClosedError,
     VoiceTranscript,
@@ -33,6 +34,7 @@ from xr_ai_voice import _runtime as voice_runtime_module
 from xr_ai_voice._types import VoiceQuery
 
 QUERY_TOPIC = Topic("test.user-query", UserQuery)
+PARTICIPANT_JOINED_TOPIC = Topic("test.participant-joined", VoiceParticipantJoined)
 PARTICIPANT_LEFT_TOPIC = Topic("test.participant-left", VoiceParticipantLeft)
 INTERRUPTED_TOPIC = Topic("test.interrupted", VoiceInterrupted)
 
@@ -185,6 +187,15 @@ class _LifecycleRecorder(Agent):
         super().__init__()
         self.events: list[tuple[str, str | None]] = []
         self.changed = asyncio.Event()
+
+    @subscribe(PARTICIPANT_JOINED_TOPIC)
+    async def participant_joined(
+        self,
+        _event: VoiceParticipantJoined,
+        ctx: RuntimeContext,
+    ) -> None:
+        self.events.append(("participant-joined", ctx.metadata.participant_id))
+        self.changed.set()
 
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
@@ -458,6 +469,7 @@ async def test_voice_agent_publishes_configured_lifecycle_topics() -> None:
     voice = _voice_agent(
         session,
         query_topic=QUERY_TOPIC,
+        participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
         participant_left_topic=PARTICIPANT_LEFT_TOPIC,
         interrupted_topic=INTERRUPTED_TOPIC,
         text_input=False,
@@ -465,11 +477,13 @@ async def test_voice_agent_publishes_configured_lifecycle_topics() -> None:
     runtime.register("voice", voice)
 
     async with _running_voice(runtime, voice, session):
+        await session.run_options["on_participant_joined"]("alice")
         await session.run_options["on_participant_left"]("alice")
         assert session.run_options["on_interrupted"](None) is None
-        await asyncio.wait_for(recorder.wait_for(2), 1.0)
+        await asyncio.wait_for(recorder.wait_for(3), 1.0)
 
     assert recorder.events == [
+        ("participant-joined", "alice"),
         ("participant-left", "alice"),
         ("interrupted", None),
     ]

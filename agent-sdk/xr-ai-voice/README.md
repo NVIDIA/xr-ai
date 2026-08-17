@@ -9,7 +9,7 @@ The voice runtime for XR agents. Pipecat implements the media pipeline, but
 applications work with XR concepts rather than Pipecat modules:
 
 - `VoiceAgent` publishes every final pre-gate STT result on `voice.transcript`
-  and accepted speech, text, participant departure, and interruption on typed
+  and accepted speech, text, participant lifecycle, and interruption on typed
   topics; it subscribes to `voice.output`.
 - `VoiceAgent` privately owns readiness, hub transport, pipeline assembly,
   signals, execution, and cleanup.
@@ -69,10 +69,15 @@ The queue preserves order and drops its oldest pending transcript when full;
 shutdown cancels the active delivery and discards pending transcripts. Runtime
 subscribers should enqueue long-running work internally and return promptly.
 
-Accepted speech, typed text, participant departure, and interruption remain on
-application-named topics. Application agents subscribe to the events they own,
-perform cleanup in their own subscriber methods, and may publish finite or
-incremental `VoiceOutput` messages:
+Accepted speech, typed text, participant lifecycle, and interruption remain on
+application-named topics. Pass `participant_joined_topic` and/or
+`participant_left_topic` to publish `VoiceParticipantJoined` and
+`VoiceParticipantLeft`; participant identity is runtime metadata rather than
+event payload. Join publication occurs after the voice gate handles its greeting.
+The hub suppresses duplicate roster joins while a participant remains connected
+and emits a new join after a leave/reconnect. Application agents subscribe to the
+events they own, perform cleanup in their own subscriber methods, and may publish
+finite or incremental `VoiceOutput` messages:
 
 `VoiceAgent` consumes only untopiced client data when `text_input=True`; named
 application and control messages are never interpreted as user queries. The

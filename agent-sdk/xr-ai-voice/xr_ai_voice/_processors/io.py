@@ -51,6 +51,7 @@ class _VoiceIOProcessor(FrameProcessor):
         input_sink: VoiceInputSink,
         *,
         transport: HubVoiceTransport | None = None,
+        on_participant_joined: Callable[[str], Awaitable[None] | None] | None = None,
         on_participant_left: Callable[[str], Awaitable[None] | None] | None = None,
         on_interrupted: Callable[[str | None], Awaitable[None] | None] | None = None,
         interrupt_on_supersede: bool = False,
@@ -58,6 +59,7 @@ class _VoiceIOProcessor(FrameProcessor):
         super().__init__()
         self._input_sink = input_sink
         self._transport = transport
+        self._on_participant_joined = on_participant_joined
         self._on_participant_left = on_participant_left
         self._on_interrupted = on_interrupted
         self._interrupt_on_supersede = interrupt_on_supersede
@@ -132,6 +134,7 @@ class _VoiceIOProcessor(FrameProcessor):
             logger.info("voice participant joined pid={!r}", frame.participant_id)
             if self._transport is not None:
                 self._transport.set_target_participant(frame.participant_id)
+            await self._notify_joined(frame.participant_id)
             await self.push_frame(frame, direction)
             return
 
@@ -288,6 +291,16 @@ class _VoiceIOProcessor(FrameProcessor):
         frame = TextFrame(text=text)
         frame.transport_destination = pid
         await self.push_frame(frame)
+
+    async def _notify_joined(self, pid: str) -> None:
+        if self._on_participant_joined is None:
+            return
+        try:
+            result = self._on_participant_joined(pid)
+            if inspect.isawaitable(result):
+                await result
+        except Exception:
+            logger.exception("voice participant-joined callback raised pid={!r}", pid)
 
     async def _notify_left(self, pid: str) -> None:
         if self._on_participant_left is None:

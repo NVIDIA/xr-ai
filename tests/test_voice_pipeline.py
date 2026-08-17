@@ -1255,14 +1255,19 @@ class _IterAssistant(_VoiceIOProcessor):
 
 class _LifecycleAssistant(_VoiceIOProcessor):
     def __init__(self) -> None:
+        self.joined:           list[str] = []
         self.left:             list[str] = []
         super().__init__(
             self.handle,
+            on_participant_joined=self.on_participant_joined,
             on_participant_left=self.on_participant_left,
         )
 
     async def handle(self, _query: VoiceQuery) -> None:
         pass
+
+    async def on_participant_joined(self, pid: str) -> None:
+        self.joined.append(pid)
 
     async def on_participant_left(self, pid: str) -> None:
         self.left.append(pid)
@@ -1746,7 +1751,7 @@ async def test_assistant_no_transport_steering_when_not_configured():
 
 
 @pytest.mark.asyncio
-async def test_assistant_participant_left_callback_fires():
+async def test_assistant_participant_lifecycle_callbacks_fire():
     assistant = _LifecycleAssistant()
     sink = await _run_chain(
         assistant,
@@ -1756,6 +1761,7 @@ async def test_assistant_participant_left_callback_fires():
         ],
     )
 
+    assert assistant.joined == ["p1"]
     assert assistant.left   == ["p1"]
     kinds = [type(f).__name__ for f in sink.frames]
     assert "ParticipantJoinedFrame" in kinds
