@@ -6,23 +6,30 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
+from builtins import BaseExceptionGroup
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 import nemo_relay
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from xr_ai_hub import DataMessage
+from xr_ai_models import STTService, TTSService
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
+from xr_ai_voicegate import VoiceGateConfig
 
-from ._session import VoiceSession
+from ._processors import VadConfig
+from ._readiness import ProbeFn
+from ._session import _VoiceSession
+from ._transport import HubVoiceTransport
 from ._types import VoiceQuery
-
-QueryTransform = Callable[[str], str]
 
 _OPEN_STREAM_CAPACITY = 1024
 _CLOSED_STREAM_CAPACITY = 1024
+_TRANSCRIPT_CAPACITY = 32
 
 
 class VoiceStreamClosedError(ValueError):
@@ -31,6 +38,15 @@ class VoiceStreamClosedError(ValueError):
 
 class UserQuery(BaseModel):
     """One accepted user query emitted by the voice input boundary."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1)
+    timestamp_us: int = Field(ge=0)
+
+
+class VoiceTranscript(BaseModel):
+    """One final STT result emitted before voice-gate filtering."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -74,6 +90,7 @@ class VoiceOutput(BaseModel):
         return self
 
 
+VOICE_TRANSCRIPT_TOPIC = Topic("voice.transcript", VoiceTranscript)
 VOICE_OUTPUT_TOPIC = Topic("voice.output", VoiceOutput, telemetry="none")
 
 
@@ -160,13 +177,20 @@ class VoiceAgent(Agent):
 
     def __init__(
         self,
-        session: VoiceSession,
         *,
         query_topic: Topic[UserQuery],
+        stt: STTService,
+        tts: TTSService,
+        vad: VadConfig,
+        voice_gate: VoiceGateConfig,
+        probes: Mapping[str, ProbeFn] | None = None,
+        ready_file: Path | None = None,
+        closeables: Iterable[Any] = (),
+        text_topic: str = "agent.response",
+        idle_timeout_secs: float | None = None,
+        transport: HubVoiceTransport | None = None,
         response_capacity: int = 32,
         text_input: bool = True,
-        text_ignore_topics: Iterable[str] | None = None,
-        text_transform: QueryTransform | None = None,
         participant_left_topic: Topic[VoiceParticipantLeft] | None = None,
         interrupted_topic: Topic[VoiceInterrupted] | None = None,
         interrupt_on_supersede: bool = False,
@@ -174,14 +198,21 @@ class VoiceAgent(Agent):
         if response_capacity <= 0:
             raise ValueError("voice response capacity must be positive")
         super().__init__()
-        self.session = session
+        self._session = _VoiceSession(
+            stt=stt,
+            tts=tts,
+            vad=vad,
+            voice_gate=voice_gate,
+            probes=probes,
+            ready_file=ready_file,
+            closeables=closeables,
+            text_topic=text_topic,
+            idle_timeout_secs=idle_timeout_secs,
+            transport=transport,
+        )
         self.query_topic = query_topic
         self.response_capacity = response_capacity
         self.text_input = text_input
-        self.text_ignore_topics = (
-            tuple(text_ignore_topics) if text_ignore_topics is not None else (session.text_topic,)
-        )
-        self.text_transform = text_transform
         self.participant_left_topic = participant_left_topic
         self.interrupted_topic = interrupted_topic
         self.interrupt_on_supersede = interrupt_on_supersede
@@ -192,6 +223,10 @@ class VoiceAgent(Agent):
         self._response_traces: dict[tuple[str, str, str], _ResponseTrace] = {}
         self._closed_streams: dict[tuple[str, str, str], None] = {}
         self._lifecycle_tasks: set[asyncio.Task[None]] = set()
+        self._transcript_queue: asyncio.Queue[
+            tuple[str, VoiceTranscript]
+        ] | None = None
+        self._transcript_task: asyncio.Task[None] | None = None
 
     async def run(self, runtime: AgentRuntime, *, source: str = "voice") -> None:
         """Run the owned voice session and bridge it to a running runtime."""
@@ -204,19 +239,21 @@ class VoiceAgent(Agent):
             raise ValueError("voice agent source must not be empty")
         self._runtime = runtime
         self._source = source
-        unsubscribe: Callable[[], None] | None = None
+        unsubscribe_data: Callable[[], None] | None = None
         try:
-            await self.session.__aenter__()
+            await self._session.__aenter__()
+            self._transcript_queue = asyncio.Queue(maxsize=_TRANSCRIPT_CAPACITY)
+            self._transcript_task = asyncio.create_task(
+                self._deliver_transcripts(runtime),
+                name="voice-transcript-delivery",
+            )
             try:
                 if self.text_input:
-                    unsubscribe = self.session.endpoint.on_data(self._on_data)
-                await self.session.run(
+                    unsubscribe_data = self._session.endpoint.on_data(self._on_data)
+                await self._session.run(
                     self._publish_input,
-                    on_participant_left=(
-                        self._publish_participant_left
-                        if self.participant_left_topic is not None
-                        else None
-                    ),
+                    on_transcript=self._publish_transcript,
+                    on_participant_left=self._participant_left,
                     on_interrupted=(
                         self._publish_interrupted
                         if self.interrupted_topic is not None
@@ -225,8 +262,9 @@ class VoiceAgent(Agent):
                     interrupt_on_supersede=self.interrupt_on_supersede,
                 )
             finally:
-                if unsubscribe is not None:
-                    unsubscribe()
+                if unsubscribe_data is not None:
+                    unsubscribe_data()
+                await self._stop_transcript_delivery()
                 tasks = tuple(self._lifecycle_tasks)
                 for task in tasks:
                     task.cancel()
@@ -236,7 +274,7 @@ class VoiceAgent(Agent):
                     *(stream.aclose() for stream in tuple(self._streams.values()))
                 )
                 self._closed_streams.clear()
-                await self.session.close()
+                await self._session.close()
         finally:
             self._runtime = None
             self._source = "voice"
@@ -268,7 +306,7 @@ class VoiceAgent(Agent):
                     streaming=False,
                     status="completed",
                 ):
-                    await self.session.enqueue_response(
+                    await self._session.enqueue_response(
                         participant_id,
                         output.text,
                         interrupt=output.interrupt,
@@ -298,7 +336,7 @@ class VoiceAgent(Agent):
                         streaming=False,
                         status="completed",
                     ):
-                        await self.session.enqueue_response(
+                        await self._session.enqueue_response(
                             participant_id,
                             output.text,
                             interrupt=output.interrupt,
@@ -320,7 +358,7 @@ class VoiceAgent(Agent):
                     timestamp_us=timestamp_us,
                     interrupt=output.interrupt,
                 )
-                await self.session.enqueue_response(
+                await self._session.enqueue_response(
                     participant_id,
                     stream,
                     interrupt=output.interrupt,
@@ -363,10 +401,87 @@ class VoiceAgent(Agent):
             source=self._source,
         )
 
-    def _publish_participant_left(self, participant_id: str) -> None:
-        runtime = self._running_runtime()
+    async def _publish_transcript(
+        self,
+        participant_id: str,
+        text: str,
+        timestamp_us: int,
+    ) -> None:
+        """Queue one final STT result without waiting for runtime subscribers."""
+
+        queue = self._transcript_queue
+        if queue is None:
+            return
+        if queue.full():
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+            else:
+                queue.task_done()
+                logger.warning(
+                    "voice transcript queue full; dropped oldest transcript"
+                )
+        queue.put_nowait(
+            (
+                participant_id,
+                VoiceTranscript(text=text, timestamp_us=timestamp_us),
+            )
+        )
+
+    async def _deliver_transcripts(self, runtime: AgentRuntime) -> None:
+        queue = self._transcript_queue
+        assert queue is not None
+        while True:
+            participant_id, transcript = await queue.get()
+            try:
+                await runtime.publish(
+                    VOICE_TRANSCRIPT_TOPIC,
+                    transcript,
+                    participant_id=participant_id,
+                    source=self._source,
+                )
+            except asyncio.CancelledError:
+                raise
+            except BaseExceptionGroup as error:
+                if runtime.running:
+                    logger.error(
+                        "voice transcript publication failed pid={!r}: {}",
+                        participant_id,
+                        error,
+                    )
+            except Exception as error:
+                if runtime.running:
+                    logger.error(
+                        "voice transcript publication failed pid={!r}: {}",
+                        participant_id,
+                        error,
+                    )
+            finally:
+                queue.task_done()
+
+    async def _stop_transcript_delivery(self) -> None:
+        task = self._transcript_task
+        self._transcript_task = None
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        queue = self._transcript_queue
+        self._transcript_queue = None
+        if queue is None:
+            return
+        while True:
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+            queue.task_done()
+
+    async def _participant_left(self, participant_id: str) -> None:
         topic = self.participant_left_topic
-        assert topic is not None
+        if topic is None:
+            return
+        runtime = self._running_runtime()
         self._start_lifecycle_task(
             runtime.publish(
                 topic,
@@ -489,32 +604,31 @@ class VoiceAgent(Agent):
             timestamp=started_at,
             end_timestamp=datetime.now(UTC) if started_at is not None else None,
         )
+
     async def _on_data(self, message: DataMessage) -> None:
-        if message.topic in self.text_ignore_topics:
+        if message.topic:
             return
         text = (message.data or b"").decode("utf-8", errors="replace").strip()
-        if not text or not self.session.is_running:
+        if not text or not self._session.is_running:
             return
-        if not self.session.transport.target_participant:
-            self.session.transport.set_target_participant(message.participant_id)
-        if self.text_transform is not None:
-            text = self.text_transform(text)
-        text = text.strip()
-        if not text:
-            return
+        if not self._session.transport.target_participant:
+            self._session.transport.set_target_participant(message.participant_id)
         logger.info("text input pid={!r} {!r}", message.participant_id, text[:80])
-        await self.session.enqueue_query(
+        await self._session.enqueue_query(
             message.participant_id,
             text,
             pts_us=message.pts_us,
         )
 
+
 __all__ = [
     "VOICE_OUTPUT_TOPIC",
+    "VOICE_TRANSCRIPT_TOPIC",
     "UserQuery",
     "VoiceAgent",
     "VoiceInterrupted",
     "VoiceOutput",
     "VoiceParticipantLeft",
     "VoiceStreamClosedError",
+    "VoiceTranscript",
 ]

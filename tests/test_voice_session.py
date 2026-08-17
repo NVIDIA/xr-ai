@@ -7,8 +7,9 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from xr_ai_voice import VadConfig, VoiceSession
+from xr_ai_voice import VadConfig
 from xr_ai_voice import _session as session_module
+from xr_ai_voice._session import _VoiceSession as VoiceSession
 from xr_ai_voicegate import VoiceGateConfig
 
 

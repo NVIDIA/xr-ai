@@ -46,5 +46,5 @@ silero_threshold:  0.3
 # speech. DISABLED by default (0 = off) — a quiet session stays connected
 # indefinitely, which is what XR sessions usually want. Set a positive value
 # (e.g. 300 for 5 min) to opt in; the worker then tears the pipeline down
-# after that long idle. VoiceSession owns the timeout.
+# after that long idle. VoiceAgent owns the timeout.
 idle_timeout_secs: 0

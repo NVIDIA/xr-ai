@@ -364,16 +364,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── Data channel ──────────────────────────────────────────────────────────
 
-    fun sendPing() {
-        viewModelScope.launch {
-            try {
-                session?.send("ping".toByteArray(Charsets.UTF_8))
-            } catch (e: Exception) {
-                lastError = e.message
-            }
-        }
-    }
-
     fun sendCustom(text: String) {
         if (text.isBlank()) return
         viewModelScope.launch {

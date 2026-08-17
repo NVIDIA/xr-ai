@@ -87,7 +87,8 @@ participant-scoped or global events. An agent that owns resources or background
 work is responsible for controlling them, including creating, cancelling, and
 awaiting its own tasks. The runtime neither knows nor controls whether an
 agent's internal work is running. `publish()` waits for every fan-out delivery
-to settle before propagating any subscriber failures.
+to settle before propagating any subscriber failures. Subscriber callbacks
+should hand off lengthy work to agent-owned bounded queues and return promptly.
 
 Topics default to `telemetry="full"`. High-cardinality transport topics use
 `"none"` when their consumer aggregates fragments and records one semantic
@@ -102,5 +103,8 @@ head-of-line blocking on unrelated or streaming tools.
 
 Domain controls such as `start_monitoring`, `stop_monitoring`, and `status` are
 ordinary tools. Agent lifetime itself is not a model tool. Model loops,
-planning, memory, and model clients remain agent implementations. Raw audio and
-video stay on the XR-Media-Hub path.
+planning, memory, and model clients remain agent implementations. Raw video
+stays on the XR-Media-Hub path. `VoiceAgent` publishes final pre-gate STT
+results on `voice.transcript` for explicit subscribers. Its media session is
+private, and its bounded transcript-delivery queue prevents slow subscribers
+from delaying STT or command gating.

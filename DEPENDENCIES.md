@@ -66,12 +66,12 @@ xr-ai-voice  (agent-sdk/xr-ai-voice/)
     └── numpy >=1.24
     └── scipy >=1.11
     Native voice runtime used by simple-vlm-example. Exposes ``VoiceAgent``,
-    its ``UserQuery`` / ``VoiceOutput`` / participant-lifecycle schemas,
-    ``VoiceSession``, ``HubVoiceTransport``, and
-    ``VadConfig``. Voice lifecycle events enter application-named topics so
+    its pre-gate transcript, ``UserQuery``, ``VoiceOutput``, and
+    participant-lifecycle schemas, plus ``HubVoiceTransport`` and ``VadConfig``.
+    The media session is private to ``VoiceAgent``. Voice lifecycle events enter application-named topics so
     application agents own their cleanup. Pipecat, audio framing, and pipeline
-    processors are implementation details. Service health gates transport
-    construction, while the session touches its ready file only after the input
+    processors are implementation details. Service health gates readiness,
+    while the private session touches its ready file only after the input
     transport starts its hub IPC receive loop. The
     readiness contract is split across the ``_readiness`` / ``_session``
     modules. Not a dep of xr-ai-hub-client itself — import only in workers that
@@ -430,8 +430,8 @@ serving any web sample runs that script once:
 
 ### simple-vlm-example  (agent-samples/simple-vlm-example/)
 
-Vision Q&A driven by voice, text, or "ping": audio → STT → query;
-text → query; "ping" → default-prompt query.  Each query runs against
+Vision Q&A driven by voice or text: audio → STT → query; text → query.
+Each query runs against
 the latest video frame via streaming VLM and replies with both
 `vlm.response` text and sentence-batched Piper TTS audio.
 
@@ -446,8 +446,8 @@ inside `SimpleVlmAgent`. Single-image, ordered multi-image, and timestamped
 frame-sequence inference share the same list-based VLM path. Camera bytes stay
 in a bounded in-process registry and image locations are redacted from VLM
 telemetry while the provider receives the original frames.
-`VoiceAgent` owns `VoiceSession`, readiness, hub transport, signals, and the
-private Pipecat pipeline; it routes `"ping"` and ad-hoc text through the same
+`VoiceAgent` privately owns readiness, signals, and the Pipecat pipeline; it
+routes direct client text through the same
 sample-named `UserQuery` topic as speech and publishes lifecycle events on
 sample-named topics. `SimpleVlmAgent` handles cancellation and frame cleanup
 inside its own subscriber methods. Voice-gate

@@ -8,11 +8,11 @@
 The voice runtime for XR agents. Pipecat implements the media pipeline, but
 applications work with XR concepts rather than Pipecat modules:
 
-- `VoiceAgent` publishes accepted speech, text, participant departure, and
-  interruption as voice-owned schemas on application-named topics; it
-  subscribes to `voice.output`.
-- `VoiceSession` owns readiness, hub transport, private pipeline assembly,
-  signals, execution, and cleanup behind `VoiceAgent`.
+- `VoiceAgent` publishes every final pre-gate STT result on `voice.transcript`
+  and accepted speech, text, participant departure, and interruption on typed
+  topics; it subscribes to `voice.output`.
+- `VoiceAgent` privately owns readiness, hub transport, pipeline assembly,
+  signals, execution, and cleanup.
 - `HubVoiceTransport` is available when an application needs to share one transport explicitly.
 
 ## Usage
@@ -26,21 +26,17 @@ from xr_ai_voice import (
     VadConfig,
     VoiceAgent,
     VoiceInterrupted,
-    VoiceSession,
 )
 from xr_ai_voicegate import VoiceGateConfig
 
-session = VoiceSession(
+queries = Topic("my-sample.user-query", UserQuery)
+interruptions = Topic("my-sample.interrupted", VoiceInterrupted)
+voice = VoiceAgent(
+    query_topic=queries,
     stt=stt,
     tts=tts,
     vad=VadConfig(),
     voice_gate=VoiceGateConfig(),
-)
-queries = Topic("my-sample.user-query", UserQuery)
-interruptions = Topic("my-sample.interrupted", VoiceInterrupted)
-voice = VoiceAgent(
-    session,
-    query_topic=queries,
     interrupted_topic=interruptions,
 )
 runtime.register("voice", voice)
@@ -60,15 +56,32 @@ async with runtime:
 | `silero_threshold` | `0.5` | Silero VAD speech-probability threshold. |
 | `stop_probe_after_s` | `0.25` | Cadence for up to three early wake/STOP transcription probes; set to `0` or less to disable probes. |
 
-`VoiceSession.text_topic` controls the completed-response echo sent through the
+`VoiceAgent.text_topic` controls the completed-response echo sent through the
 hub data channel. Its default is `"agent.response"`; set it to `""` when the
 application publishes its own response data so each turn is delivered only
 once. This setting does not disable TTS or Relay telemetry.
 
-`VoiceAgent` publishes accepted speech, typed text, participant departure, and
-interruption on application-named topics. Application agents subscribe to the
-events they own, perform cleanup in their own subscriber methods, and may
-publish finite or incremental `VoiceOutput` messages:
+Each non-empty final STT result is published on `VOICE_TRANSCRIPT_TOPIC` as a
+`VoiceTranscript` before wake-phrase filtering. It therefore includes speech
+that the gate later rejects. The participant ID and `voice` source are runtime
+metadata. Early wake/STOP probes are internal and are not published as final
+transcripts. Accepted speech continues separately as `UserQuery`, with any
+matched wake phrase and preceding background speech removed by the gate.
+
+Transcript publication uses one private bounded FIFO owned by `VoiceAgent`, so
+a slow runtime subscriber cannot delay STT, voice gating, or accepted queries.
+The queue preserves order and drops its oldest pending transcript when full;
+shutdown cancels the active delivery and discards pending transcripts. Runtime
+subscribers should enqueue long-running work internally and return promptly.
+
+Accepted speech, typed text, participant departure, and interruption remain on
+application-named topics. Application agents subscribe to the events they own,
+perform cleanup in their own subscriber methods, and may publish finite or
+incremental `VoiceOutput` messages:
+
+`VoiceAgent` consumes only untopiced client data when `text_input=True`; named
+application and control messages are never interpreted as user queries. The
+hub preserves the original data-channel topic for every processor.
 
 ```python
 from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceOutput
@@ -109,13 +122,12 @@ rate; a nested `voice.stt.result` mark carries the transcript. TTS inputs carry
 the sentence being synthesized. Raw audio is never written to Relay events.
 These scopes measure provider work and downstream handoff, not client playback.
 
-`VoiceSession` is the media engine owned by `VoiceAgent`. It manages
-readiness, hub transport, VAD/STT, voice gating, TTS, signals, and cleanup; it
-does not execute application handlers. Typed-text ingress is also internal to
-`VoiceAgent`. The lower-level `VoiceSession.run()`, `enqueue_query()`, and
-`enqueue_response()` methods are public for runtime integrations.
-`VoiceSession.endpoint` is available only after entering the session, so model
-health probes complete before the default hub transport opens its sockets.
+The media session is private to `VoiceAgent`. The agent manages readiness,
+VAD/STT, voice gating, TTS, typed-text ingress, signals, and cleanup; it does not
+execute application handlers. Applications that already need the public
+`HubVoiceTransport` for frames or status publication construct it explicitly
+and pass it to `VoiceAgent`; the agent does not expose its private session or
+transport.
 
 When wake phrases and the listening chime are enabled, the VAD/STT stage probes
 the opening audio on a fixed cadence while the user is still speaking. Probe
