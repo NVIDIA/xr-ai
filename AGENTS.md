@@ -96,6 +96,8 @@ See [Adding a sample](docs/source/guides/adding-a-sample.md) and the
   reference pages. Update narrative README or `docs/source/` content only when
   concepts, workflows, operations, or architecture change. Breaking changes
   also require a migration entry.
+- Top-level sample commands and options live in their `[project.scripts]` and
+  `argparse` declarations; Sphinx generates the user-facing CLI reference.
 - Any `pyproject.toml` change must update `DEPENDENCIES.md`; regenerate the
   affected project's gitignored `uv.lock` locally to verify resolution.
 - Never put API keys or tokens in source files. Use environment variables or

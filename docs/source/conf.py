@@ -7,8 +7,11 @@ from __future__ import annotations
 import ast
 import os
 import re
+import sys
 from pathlib import Path
 from runpy import run_path
+
+sys.path.insert(0, str(Path(__file__).parent))
 
 _API_CONTRACT = run_path(str(Path(__file__).with_name("_api_contract.py")))
 API_PACKAGE_DIRS = _API_CONTRACT["API_PACKAGE_DIRS"]
@@ -102,6 +105,7 @@ author = "NVIDIA"
 
 # -- General configuration ---------------------------------------------------
 extensions = [
+    "_cli_reference",
     "autoapi.extension",
     "myst_parser",
     "sphinx_copybutton",
