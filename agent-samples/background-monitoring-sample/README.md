@@ -42,9 +42,9 @@ participant before every operation.
 
 `FileOutputAgent` owns structured durable outputs and the bounded recent-history
 tool. `QRInstrumentAgent` performs reusable one-frame QR-associated reads and
-writes source-frame snapshots used to debug QR extraction. The shared QR decoder
-scans the whole frame at native resolution and at one enlarged resolution, then
-maps every decoded corner back to the source frame.
+writes source-frame snapshots used to debug marker extraction. The shared image
+agent uses `MarkerTrackingTool` in QR-only mode and provides the decoded text and
+source-frame corners used to associate each display reading with its instrument.
 
 `InstrumentMonitorAgent` owns all participant-scoped instrument state. It
 normalizes numeric readings, retains a known unit when a later VLM result omits

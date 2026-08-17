@@ -6,12 +6,10 @@
 from __future__ import annotations
 
 import asyncio
-import io
 import time
 from pathlib import Path
 
 from loguru import logger
-from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_models import VLMService
 from xr_ai_runtime import Agent
@@ -23,7 +21,11 @@ from xr_ai_tools.image_polygon import (
     ImagePolygonFillRequest,
     ImagePolygonFillTool,
 )
-from xr_ai_tools.qr_code import DecodedQRCode, extract_qr_codes_zxing
+from xr_ai_tools.marker_tracking import (
+    MarkerTrackingRequest,
+    MarkerType,
+    TrackedMarker,
+)
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 
 from .events import InstrumentReading
@@ -86,16 +88,24 @@ class QRInstrumentAgent(Agent):
                 frame.sequence,
                 source,
             )
-            with Image.open(io.BytesIO(source)) as opened:
-                codes = await asyncio.to_thread(
-                extract_qr_codes_zxing,
-                opened.convert("RGB"),
+            tracked = await self._images.track_qr_markers.execute(
+                MarkerTrackingRequest(participant_id=request.participant_id)
             )
+            if not tracked.available:
+                return LabInstrumentReadResult(
+                    available=False,
+                    message=tracked.message or "The camera frame could not be scanned.",
+                )
+            markers = [
+                marker
+                for marker in tracked.markers
+                if marker.marker_type is MarkerType.QR_CODE
+            ]
             logger.info(
                 "instrument QR scan pid={!r} image={} codes={}",
                 request.participant_id,
                 scan_path,
-                [code.data for code in codes],
+                [marker.value for marker in markers],
             )
         except asyncio.CancelledError:
             raise
@@ -103,20 +113,24 @@ class QRInstrumentAgent(Agent):
             logger.opt(exception=True).warning("instrument frame or QR scan failed pid={!r}", request.participant_id)
             return LabInstrumentReadResult(available=False, message=str(exc))
 
-        if not codes:
+        if not markers:
             return LabInstrumentReadResult(message="No readable QR-labelled lab instruments were found.")
 
         readings: list[InstrumentReading] = []
-        for code in codes:
+        for marker in markers:
             try:
-                reading = await self._read_one(frame.image, frame.timestamp_us, code)
+                reading = await self._read_one(
+                    frame.image,
+                    frame.timestamp_us,
+                    marker,
+                )
             except asyncio.CancelledError:
                 raise
             except Exception:
                 logger.opt(exception=True).warning(
                     "instrument display read failed pid={!r} qr={!r}",
                     request.participant_id,
-                    code.data,
+                    marker.value,
                 )
                 continue
             if reading is not None:
@@ -153,14 +167,15 @@ class QRInstrumentAgent(Agent):
         self,
         image: ImageReference,
         timestamp_us: int,
-        code: DecodedQRCode,
+        marker: TrackedMarker,
     ) -> InstrumentReading | None:
-        if code.corners is None:
-            return None
         marked = await self._fill_polygon.execute(
             ImagePolygonFillRequest(
                 image=image,
-                coordinates=[ImagePoint(x=point.x, y=point.y) for point in code.corners],
+                coordinates=[
+                    ImagePoint(x=point.x, y=point.y)
+                    for point in marker.corners
+                ],
             )
         )
         if not marked.available or marked.image is None:
@@ -170,7 +185,7 @@ class QRInstrumentAgent(Agent):
                 image=marked.image,
                 query=(
                     "The magenta polygon marks the QR code attached to the lab instrument "
-                    f"named {code.data!r}. Read that instrument's nearby display. Return only "
+                    f"named {marker.value!r}. Read that instrument's nearby display. Return only "
                     "the displayed meter reading including its unit; return UNKNOWN if unreadable."
                 ),
             )
@@ -180,7 +195,7 @@ class QRInstrumentAgent(Agent):
             return None
         return InstrumentReading(
             timestamp_us=timestamp_us,
-            qr_text=code.data,
+            qr_text=marker.value,
             meter_reading=reading,
         )
 

@@ -171,7 +171,9 @@ def test_sample_uses_named_native_agents_and_shared_connection_client() -> None:
         "qr_instruments.py",
     } <= {path.name for path in package.glob("*.py")}
     assert "xr-ai-agent-runtime" in dependencies
-    assert "xr-ai-tools[frames,image-editing,qr-code,vision]" in dependencies
+    assert (
+        "xr-ai-tools[frames,image-editing,marker-tracking,vision]" in dependencies
+    )
     assert "xr-ai-voice" in dependencies
     assert "xr-ai-nat" not in dependencies
     assert "xr-ai-pipecat" not in dependencies
@@ -227,6 +229,10 @@ def test_monitor_and_foreground_share_participant_image_acquisition(tmp_path: Pa
     assert monitor._images is images
     assert foreground._images is images
     assert qr_instruments._images is images
+    assert {tool.name for tool in images.tools} == {
+        "get_current_frame",
+        "track_markers",
+    }
     assert monitor.query_image is not foreground.query_image
     assert {tool.name for tool in monitor.tools} == {
         "query_image",
