@@ -480,8 +480,8 @@ loads the wrong runtime and aborts.</p>
 <code class="docutils literal notranslate"><span class="pre">LD_LIBRARY_PATH</span></code> before spawning (logged once as a WARNING), so the
 venv-bundled cuDNN is used. If you hit this running a service <strong>directly</strong>
 (outside the launcher), clear the conflicting path yourself first:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Inspect what&#39;s on the path</span>
-<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$LD_LIBRARY_PATH</span><span class="s2">&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Inspect what's on the path</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">"</span><span class="nv">$LD_LIBRARY_PATH</span><span class="s2">"</span>
 <span class="c1"># Run the service without the host cuDNN shadowing the venv copy</span>
 env<span class="w"> </span>-u<span class="w"> </span>LD_LIBRARY_PATH<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>&lt;command&gt;
 </pre></div>
@@ -500,20 +500,20 @@ env<span class="w"> </span>-u<span class="w"> </span>LD_LIBRARY_PATH<span class=
 NGC vLLM container.</p>
 <p><strong>Fix:</strong> log in with your NGC API key once. Get a key from
 <a class="reference external" href="https://ngc.nvidia.com/setup/api-key">https://ngc.nvidia.com/setup/api-key</a> and run:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>login<span class="w"> </span>nvcr.io<span class="w"> </span>-u<span class="w"> </span><span class="s1">&#39;$oauthtoken&#39;</span><span class="w"> </span>-p<span class="w"> </span><span class="nv">$NGC_API_KEY</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>login<span class="w"> </span>nvcr.io<span class="w"> </span>-u<span class="w"> </span><span class="s1">'$oauthtoken'</span><span class="w"> </span>-p<span class="w"> </span><span class="nv">$NGC_API_KEY</span>
 </pre></div>
 </div>
 <p>The credential is cached in <code class="docutils literal notranslate"><span class="pre">~/.docker/config.json</span></code> and reused on subsequent
 runs. Alternatively, save the key into the xr-ai credential cache so the
 wrapper can auto-login:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">"</span>
 <span class="s2">import json, os, pathlib</span>
-<span class="s2">p = pathlib.Path.home() / &#39;.config/xr-ai/credentials.json&#39;</span>
+<span class="s2">p = pathlib.Path.home() / '.config/xr-ai/credentials.json'</span>
 <span class="s2">d = json.loads(p.read_text()) if p.exists() else {}</span>
-<span class="s2">d[&#39;NGC_API_KEY&#39;] = os.environ[&#39;NGC_API_KEY&#39;]</span>
+<span class="s2">d['NGC_API_KEY'] = os.environ['NGC_API_KEY']</span>
 <span class="s2">p.parent.mkdir(parents=True, exist_ok=True)</span>
 <span class="s2">p.write_text(json.dumps(d, indent=2))</span>
-<span class="s2">&quot;</span>
+<span class="s2">"</span>
 </pre></div>
 </div>
 <p>The orchestrator’s <code class="docutils literal notranslate"><span class="pre">load_credentials()</span></code> injects <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> into the
