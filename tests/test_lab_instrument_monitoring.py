@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Focused contracts for the native background monitoring sample."""
+"""Focused contracts for the native lab instrument monitoring sample."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools import Tool
 from xr_ai_tools.current_frame import CurrentFrameRequest, ImageFrame
 from xr_ai_tools.image import ImageReference
+from xr_ai_tools.marker_tracking import MarkerType
 from xr_ai_tools.tool_calling import handle_tool_call, tool_definitions
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult
 from xr_ai_voice import (
@@ -32,12 +33,13 @@ from xr_ai_voice import (
 )
 
 _REPO = Path(__file__).resolve().parents[1]
-_SAMPLE = _REPO / "agent-samples" / "background-monitoring-sample"
+_SAMPLE = _REPO / "agent-samples" / "lab-instrument-monitoring"
 _WORKER = _SAMPLE / "worker"
 sys.path.insert(0, str(_WORKER))
 
-from background_monitoring_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
-from background_monitoring_worker.events import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+from lab_instrument_monitoring_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
+from lab_instrument_monitoring_worker.device_map import DeviceMap  # noqa: E402  # pyright: ignore[reportMissingImports]
+from lab_instrument_monitoring_worker.events import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     FOREGROUND_RECORD_TOPIC,
     INSTRUMENT_CHANGE_TOPIC,
     INSTRUMENT_LOST_TOPIC,
@@ -53,11 +55,11 @@ from background_monitoring_worker.events import (  # noqa: E402  # pyright: igno
     MonitorRecord,
     ParticipantJoined,
 )
-from background_monitoring_worker.file_output import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+from lab_instrument_monitoring_worker.file_output import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     FileOutputAgent,
     MonitoringHistoryRequest,
 )
-from background_monitoring_worker.foreground import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+from lab_instrument_monitoring_worker.foreground import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     CURRENT_VIEW_TOOL,
     FOREGROUND_TOOL_DEFS,
     LAB_INSTRUMENTS_STATUS_TOOL,
@@ -66,26 +68,26 @@ from background_monitoring_worker.foreground import (  # noqa: E402  # pyright: 
     VISUAL_MONITOR_STATUS_TOOL,
     ForegroundAgent,
 )
-from background_monitoring_worker.images import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+from lab_instrument_monitoring_worker.images import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     ParticipantImageAgent,
 )
-from background_monitoring_worker.instrument_alerts import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+from lab_instrument_monitoring_worker.instrument_alerts import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     InstrumentAlertAgent,
 )
-from background_monitoring_worker.instrument_monitor import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+from lab_instrument_monitoring_worker.instrument_monitor import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     InstrumentMonitorAgent,
     normalize_meter_reading,
 )
-from background_monitoring_worker.monitor import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+from lab_instrument_monitoring_worker.instruments import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    LabInstrumentAgent,
+    LabInstrumentReadResult,
+    ReadLabInstrumentsRequest,
+)
+from lab_instrument_monitoring_worker.monitor import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     MonitorAgent,
     MonitoringRequest,
     StartMonitoringRequest,
     parse_monitor_response,
-)
-from background_monitoring_worker.qr_instruments import (  # noqa: E402  # pyright: ignore[reportMissingImports]
-    LabInstrumentReadResult,
-    QRInstrumentAgent,
-    ReadLabInstrumentsRequest,
 )
 
 
@@ -138,26 +140,41 @@ def _make_monitor(images: ParticipantImageAgent | None = None) -> MonitorAgent:
     )
 
 
-def _make_qr(images: ParticipantImageAgent | None = None) -> QRInstrumentAgent:
-    return QRInstrumentAgent(
+def _device_map() -> DeviceMap:
+    return DeviceMap(
+        {
+            (MarkerType.QR_CODE, "meter-a"): "Device1",
+            (MarkerType.ARUCO, "23"): "Device2",
+        }
+    )
+
+
+def _make_instruments(
+    images: ParticipantImageAgent | None = None,
+) -> LabInstrumentAgent:
+    return LabInstrumentAgent(
         images=images or _make_images(),
         vlm=SimpleNamespace(),  # type: ignore[arg-type]
+        device_map=_device_map(),
     )
 
 
 def _make_instrument_monitor(
-    reader: QRInstrumentAgent | None = None,
+    reader: LabInstrumentAgent | None = None,
 ) -> InstrumentMonitorAgent:
-    return InstrumentMonitorAgent(reader=reader or _make_qr(), interval_s=5.0)
+    return InstrumentMonitorAgent(
+        reader=reader or _make_instruments(),
+        interval_s=5.0,
+    )
 
 
 def test_sample_uses_named_native_agents_and_shared_connection_client() -> None:
     project = tomllib.loads((_WORKER / "pyproject.toml").read_text())
     dependencies = set(project["project"]["dependencies"])
-    package = _WORKER / "background_monitoring_worker"
+    package = _WORKER / "lab_instrument_monitoring_worker"
 
-    assert project["project"]["scripts"]["background_monitoring_worker"] == (
-        "background_monitoring_worker.__main__:run"
+    assert project["project"]["scripts"]["lab_instrument_monitoring_worker"] == (
+        "lab_instrument_monitoring_worker.__main__:run"
     )
     assert {
         "app.py",
@@ -168,39 +185,36 @@ def test_sample_uses_named_native_agents_and_shared_connection_client() -> None:
         "instrument_alerts.py",
         "instrument_monitor.py",
         "monitor.py",
-        "qr_instruments.py",
+        "device_map.py",
+        "instruments.py",
     } <= {path.name for path in package.glob("*.py")}
     assert "xr-ai-agent-runtime" in dependencies
-    assert (
-        "xr-ai-tools[frames,image-editing,marker-tracking,vision]" in dependencies
-    )
+    assert "xr-ai-tools[frames,image-editing,marker-tracking,vision]" in dependencies
     assert "xr-ai-voice" in dependencies
     assert "xr-ai-nat" not in dependencies
     assert "xr-ai-pipecat" not in dependencies
     assert all("mcp" not in dependency.lower() for dependency in dependencies)
     hub = yaml.safe_load((_SAMPLE / "yaml" / "xr_media_hub.yaml").read_text())
     assert hub["enable_token_server"] is True
-    assert (
-        (_SAMPLE / "yaml" / hub["web_client_dir"]).resolve()
-        == _REPO / "client-samples" / "web"
-    )
+    assert (_SAMPLE / "yaml" / hub["web_client_dir"]).resolve() == _REPO / "client-samples" / "web"
     assert not any(path.name == "web" for path in _SAMPLE.iterdir())
 
 
 def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
-    config = load_config(_SAMPLE / "yaml" / "background_monitoring_worker.yaml")
+    config = load_config(_SAMPLE / "yaml" / "lab_instrument_monitoring_worker.yaml")
     models = json.loads(config.models_config.read_text())
 
     assert config.models_config == _SAMPLE / "yaml" / "models.local.json"
     assert models["models"]["llm"]["adapter"]["preset"] == "nemotron_omni"
     assert models["models"]["llm"]["endpoint"]["base_url"].endswith(":8108")
-    assert models["models"]["vlm"]["adapter"]["preset"] == (
-        "cosmos3_nano_reasoner"
-    )
+    assert models["models"]["vlm"]["adapter"]["preset"] == ("cosmos3_nano_reasoner")
     assert models["models"]["vlm"]["endpoint"]["base_url"].endswith(":8100")
     assert models["models"]["llm"]["deployment"]["service"] == "omni"
     assert models["models"]["vlm"]["deployment"]["service"] == "vlm"
     assert config.voice_gate_yaml == _SAMPLE / "yaml" / "voice_gate.yaml"
+    assert config.device_map.resolve(MarkerType.QR_CODE, "S4-RC").device_name == ("Device1")
+    assert config.device_map.resolve(MarkerType.ARUCO, "1").device_name == "Device4"
+    assert config.device_map.resolve(MarkerType.ARUCO, "99").device_name == "ArUco 99"
     assert config.artifacts_dir == _SAMPLE / "artifacts"
     assert config.monitor_interval_s == 5.0
     assert config.instrument_state_interval_s == 10.0
@@ -213,26 +227,27 @@ def test_monitor_and_foreground_share_participant_image_acquisition(tmp_path: Pa
     images = _make_images()
     vlm = SimpleNamespace()
     monitor = _make_monitor(images)
-    qr_instruments = _make_qr(images)
-    instrument_monitor = _make_instrument_monitor(qr_instruments)
+    lab_instruments = _make_instruments(images)
+    instrument_monitor = _make_instrument_monitor(lab_instruments)
     foreground = ForegroundAgent(
         llm=SimpleNamespace(),  # type: ignore[arg-type]
         images=images,
         vlm=vlm,  # type: ignore[arg-type]
         files=FileOutputAgent(tmp_path, history_size=2),
         monitor=monitor,
-        qr_instruments=qr_instruments,
+        lab_instruments=lab_instruments,
         instrument_monitor=instrument_monitor,
         prompt="Answer.",
     )
 
     assert monitor._images is images
     assert foreground._images is images
-    assert qr_instruments._images is images
+    assert lab_instruments._images is images
     assert {tool.name for tool in images.tools} == {
         "get_current_frame",
         "track_markers",
     }
+    assert set(images.track_markers.marker_types) == set(MarkerType)
     assert monitor.query_image is not foreground.query_image
     assert {tool.name for tool in monitor.tools} == {
         "query_image",
@@ -240,7 +255,7 @@ def test_monitor_and_foreground_share_participant_image_acquisition(tmp_path: Pa
         "stop_monitoring",
         "monitoring_status",
     }
-    assert {tool.name for tool in qr_instruments.tools} == {"read_lab_instruments"}
+    assert {tool.name for tool in lab_instruments.tools} == {"read_lab_instruments"}
     assert {tool.name for tool in instrument_monitor.tools} == {
         "start_instrument_monitoring",
         "stop_instrument_monitoring",
@@ -298,30 +313,60 @@ async def test_instrument_monitor_emits_only_changes_lost_once_and_full_state() 
 
     async with runtime:
         monitor.bind_runtime(runtime)
-        await monitor.start_instrument_monitoring.execute(
-            MonitoringRequest(participant_id="participant-1")
-        )
+        await monitor.start_instrument_monitoring.execute(MonitoringRequest(participant_id="participant-1"))
         await asyncio.wait_for(read_started.wait(), timeout=1.0)
         await monitor._observe(
             "participant-1",
-            [InstrumentReading(timestamp_us=1, qr_text="meter-a", meter_reading="12 V")],
+            [
+                InstrumentReading(
+                    timestamp_us=1,
+                    marker_type=MarkerType.QR_CODE,
+                    marker_id="meter-a",
+                    device_name="Device1",
+                    meter_reading="12 V",
+                )
+            ],
             observed_at=100.0,
         )
         await monitor._observe(
             "participant-1",
-            [InstrumentReading(timestamp_us=2, qr_text="meter-a", meter_reading="12.0")],
+            [
+                InstrumentReading(
+                    timestamp_us=2,
+                    marker_type=MarkerType.QR_CODE,
+                    marker_id="meter-a",
+                    device_name="Device1",
+                    meter_reading="12.0",
+                )
+            ],
             observed_at=101.0,
         )
         await monitor._publish_lost("participant-1", 111.0)
         await monitor._publish_lost("participant-1", 112.0)
         await monitor._observe(
             "participant-1",
-            [InstrumentReading(timestamp_us=3, qr_text="meter-a", meter_reading="12")],
+            [
+                InstrumentReading(
+                    timestamp_us=3,
+                    marker_type=MarkerType.QR_CODE,
+                    marker_id="meter-a",
+                    device_name="Device1",
+                    meter_reading="12",
+                )
+            ],
             observed_at=113.0,
         )
         await monitor._observe(
             "participant-1",
-            [InstrumentReading(timestamp_us=4, qr_text="meter-a", meter_reading="13")],
+            [
+                InstrumentReading(
+                    timestamp_us=4,
+                    marker_type=MarkerType.QR_CODE,
+                    marker_id="meter-a",
+                    device_name="Device1",
+                    meter_reading="13",
+                )
+            ],
             observed_at=114.0,
         )
         await monitor._publish_snapshot("participant-1")
@@ -335,11 +380,13 @@ async def test_instrument_monitor_emits_only_changes_lost_once_and_full_state() 
     assert collector.changes[-1].meter_reading == "13 V"
     assert len(collector.lost) == 1
     assert collector.snapshots[-1].instruments[0].meter_reading == "13 V"
+    assert collector.snapshots[-1].instruments[0].marker_id == "meter-a"
+    assert collector.snapshots[-1].instruments[0].device_name == "Device1"
     assert collector.snapshots[-1].instruments[0].tracking is True
     assert [output.text for output in collector.voice] == [
-        "Now tracking meter-a at 12 V.",
-        "I am no longer tracking meter-a. Its last reading was 12 V.",
-        "meter-a changed from 12 V to 13 V.",
+        "Now tracking Device1 at 12 V.",
+        "I am no longer tracking Device1. Its last reading was 12 V.",
+        "Device1 changed from 12 V to 13 V.",
     ]
 
 
@@ -363,15 +410,9 @@ async def test_monitor_controls_are_participant_scoped_and_idempotent() -> None:
                 instruction="a different request",
             )
         )
-        running = await monitor.monitoring_status.execute(
-            MonitoringRequest(participant_id="participant-1")
-        )
-        stopped = await monitor.stop_monitoring.execute(
-            MonitoringRequest(participant_id="participant-1")
-        )
-        stopped_again = await monitor.stop_monitoring.execute(
-            MonitoringRequest(participant_id="participant-1")
-        )
+        running = await monitor.monitoring_status.execute(MonitoringRequest(participant_id="participant-1"))
+        stopped = await monitor.stop_monitoring.execute(MonitoringRequest(participant_id="participant-1"))
+        stopped_again = await monitor.stop_monitoring.execute(MonitoringRequest(participant_id="participant-1"))
 
         assert started.active is True
         assert started.instruction == "packages near the doorway"
@@ -450,7 +491,9 @@ async def test_file_output_records_transcript_monitor_instruments_and_foreground
             InstrumentChange(
                 timestamp_us=now,
                 change_type="discovered",
-                qr_text="meter-a",
+                marker_type=MarkerType.QR_CODE,
+                marker_id="meter-a",
+                device_name="Device1",
                 meter_reading="12 V",
                 last_seen_us=now,
             ),
@@ -525,7 +568,7 @@ async def test_foreground_injects_participant_into_current_frame_tool(tmp_path: 
         vlm=SimpleNamespace(),  # type: ignore[arg-type]
         files=FileOutputAgent(tmp_path, history_size=2),
         monitor=_make_monitor(images),
-        qr_instruments=_make_qr(images),
+        lab_instruments=_make_instruments(images),
         instrument_monitor=_make_instrument_monitor(),
         prompt="Answer briefly.",
     )
@@ -584,8 +627,8 @@ async def test_foreground_background_control_returns_direct(tmp_path: Path) -> N
     llm = Llm()
     images = _make_images()
     monitor = _make_monitor(images)
-    qr_instruments = _make_qr(images)
-    instrument_monitor = _make_instrument_monitor(qr_instruments)
+    lab_instruments = _make_instruments(images)
+    instrument_monitor = _make_instrument_monitor(lab_instruments)
     runtime = AgentRuntime()
     runtime.register("monitor", monitor)
 
@@ -597,7 +640,7 @@ async def test_foreground_background_control_returns_direct(tmp_path: Path) -> N
             vlm=SimpleNamespace(),  # type: ignore[arg-type]
             files=FileOutputAgent(tmp_path, history_size=2),
             monitor=monitor,
-            qr_instruments=qr_instruments,
+            lab_instruments=lab_instruments,
             instrument_monitor=instrument_monitor,
             prompt="Route one request.",
         )
@@ -605,9 +648,7 @@ async def test_foreground_background_control_returns_direct(tmp_path: Path) -> N
             "Watch the doorway.",
             "participant-2",
         )
-        status = await monitor.monitoring_status.execute(
-            MonitoringRequest(participant_id="participant-2")
-        )
+        status = await monitor.monitoring_status.execute(MonitoringRequest(participant_id="participant-2"))
 
         assert response == "Background monitoring started. Monitoring: the doorway."
         assert tools == [VISUAL_MONITOR_START_TOOL]
@@ -637,7 +678,7 @@ async def test_foreground_uses_one_unfiltered_tool_catalog(
         vlm=SimpleNamespace(),  # type: ignore[arg-type]
         files=FileOutputAgent(tmp_path, history_size=2),
         monitor=_make_monitor(images),
-        qr_instruments=_make_qr(images),
+        lab_instruments=_make_instruments(images),
         instrument_monitor=_make_instrument_monitor(),
         prompt="Route one request.",
     )
@@ -685,7 +726,7 @@ async def test_foreground_tool_loop_returns_model_answer_and_tool_audit(tmp_path
         vlm=SimpleNamespace(),  # type: ignore[arg-type]
         files=files,
         monitor=_make_monitor(images),
-        qr_instruments=_make_qr(images),
+        lab_instruments=_make_instruments(images),
         instrument_monitor=_make_instrument_monitor(),
         prompt="Answer briefly.",
     )
@@ -705,12 +746,7 @@ async def test_foreground_tool_loop_returns_model_answer_and_tool_audit(tmp_path
 
 
 def test_foreground_prompt_has_non_overlapping_routing_eval_cases() -> None:
-    prompt = (
-        _WORKER
-        / "background_monitoring_worker"
-        / "prompts"
-        / "foreground_prompt.txt"
-    ).read_text().lower()
+    prompt = (_WORKER / "lab_instrument_monitoring_worker" / "prompts" / "foreground_prompt.txt").read_text().lower()
     cases = yaml.safe_load((_SAMPLE / "eval" / "cases.yaml").read_text())
 
     assert {case["expected_tool"] for case in cases} == {

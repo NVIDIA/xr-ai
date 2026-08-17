@@ -3,6 +3,7 @@
 
 models_config: models.local.json
 voice_gate_yaml: voice_gate.yaml
+device_map_yaml: device_map.yaml
 artifacts_dir: ../artifacts
 
 monitor_interval_s: 5.0

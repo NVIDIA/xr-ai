@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Compose background monitoring, foreground queries, voice, and file output."""
+"""Compose lab monitoring, foreground queries, voice, and file output."""
 
 from __future__ import annotations
 
@@ -32,8 +32,8 @@ from .foreground import ForegroundAgent
 from .images import ParticipantImageAgent
 from .instrument_alerts import InstrumentAlertAgent
 from .instrument_monitor import InstrumentMonitorAgent
+from .instruments import LabInstrumentAgent
 from .monitor import MonitorAgent
-from .qr_instruments import QRInstrumentAgent
 
 
 @asynccontextmanager
@@ -41,7 +41,7 @@ async def _relay_event_log(output_dir: Path) -> AsyncIterator[Path]:
     path = output_dir / "relay-events.jsonl"
     sink = path.open("w", encoding="utf-8")
     lock = Lock()
-    subscriber = "background-monitoring-event-log"
+    subscriber = "lab-instrument-monitoring-event-log"
 
     def write_event(event: nemo_relay.Event) -> None:
         if event.kind == "mark" and event.name == "llm.chunk":
@@ -120,18 +120,19 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             interval_s=config.monitor_interval_s,
         ),
     )
-    qr_instruments = runtime.register(
-        "qr-instruments",
-        QRInstrumentAgent(
+    lab_instruments = runtime.register(
+        "lab-instruments",
+        LabInstrumentAgent(
             images=images,
             vlm=vlm,
-            debug_dir=config.artifacts_dir / "qr-scans",
+            device_map=config.device_map,
+            debug_dir=config.artifacts_dir / "marker-scans",
         ),
     )
     instrument_monitor = runtime.register(
         "instrument-monitor",
         InstrumentMonitorAgent(
-            reader=qr_instruments,
+            reader=lab_instruments,
             interval_s=config.instrument_monitor_interval_s,
             snapshot_interval_s=config.instrument_state_interval_s,
             lost_after_s=config.instrument_lost_after_s,
@@ -146,7 +147,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             vlm=vlm,
             files=files,
             monitor=monitor,
-            qr_instruments=qr_instruments,
+            lab_instruments=lab_instruments,
             instrument_monitor=instrument_monitor,
             prompt=config.foreground_prompt,
         ),
@@ -169,7 +170,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     transport.endpoint.on_participant(participant_event)
 
     logger.info("file outputs → {}", config.artifacts_dir)
-    logger.info("background-monitoring-sample starting")
+    logger.info("lab-instrument-monitoring starting")
     async with _relay_event_log(config.artifacts_dir):
         async with runtime:
             monitor.bind_runtime(runtime)
@@ -181,7 +182,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                 await instrument_monitor.stop()
                 await monitor.stop()
                 await images.stop()
-    logger.info("background-monitoring-sample stopped")
+    logger.info("lab-instrument-monitoring stopped")
 
 
 __all__ = ["run_app"]

@@ -3,7 +3,7 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-# Background monitoring sample
+# Lab instrument monitoring
 
 This sample writes monitoring output only to files and keeps one visual monitor
 available for every connected participant while a separate foreground agent answers voice or typed queries.
@@ -21,12 +21,12 @@ accepted STT / typed text ─> ForegroundAgent ─┬> direct answer
                                            ├> current frame → image query
                                            ├> FileOutputAgent history tool
                                            ├> MonitorAgent start/stop/status tools
-                                           ├> one-shot QR-labelled reads → VLM
+                                           ├> one-shot marker-labelled reads → VLM
                                            ├> InstrumentMonitorAgent controls
                                            ├> Piper TTS
                                            └> foreground.jsonl
 MonitorAgent while active ──> current frame → image query ──> monitor.jsonl
-InstrumentMonitorAgent ──> QRInstrumentAgent ──> change/lost/state topics
+InstrumentMonitorAgent ──> LabInstrumentAgent ──> change/lost/state topics
  change/lost topics ──> InstrumentAlertAgent ──> participant voice note
  change/lost/state topics ──> FileOutputAgent ──> instrument-monitoring.jsonl
 ```
@@ -41,10 +41,11 @@ current-view tool and calls the monitor's control tools directly, binding the
 participant before every operation.
 
 `FileOutputAgent` owns structured durable outputs and the bounded recent-history
-tool. `QRInstrumentAgent` performs reusable one-frame QR-associated reads and
-writes source-frame snapshots used to debug marker extraction. The shared image
-agent uses `MarkerTrackingTool` in QR-only mode and provides the decoded text and
-source-frame corners used to associate each display reading with its instrument.
+tool. `LabInstrumentAgent` performs reusable one-frame marker-associated reads
+and writes source-frame snapshots used to debug marker extraction. The shared
+image agent uses `MarkerTrackingTool` for QR and ArUco markers. `device_map.yaml`
+maps each marker family and raw ID to the device name used in readings, state,
+logs, and voice alerts.
 
 `InstrumentMonitorAgent` owns all participant-scoped instrument state. It
 normalizes numeric readings, retains a known unit when a later VLM result omits
@@ -73,10 +74,10 @@ cd agent-samples/model-servers
 uv sync
 uv run model_servers
 
-cd ../background-monitoring-sample
+cd ../lab-instrument-monitoring
 uv sync
 uv sync --project worker
-uv run background_monitoring_sample
+uv run lab_instrument_monitoring
 ```
 
 Connect a glasses or platform client using the authenticated LiveKit URL,
@@ -101,7 +102,7 @@ Each connection writes to a new participant-scoped directory:
 
 ```text
 artifacts/
-├── qr-scans/
+├── marker-scans/
 │   └── <invocation>-<participant>-<frame>-<sequence>.jpg
 ├── relay-events.jsonl
 └── <participant>-<utc-session-stamp>/
@@ -118,14 +119,16 @@ notices, or errors. Foreground records include the query, response, and
 model-selected tool names. Relay events contain prompts, responses, participant
 metadata, and tool lifecycles;
 live camera bytes are redacted by the shared vision tool. Every lab-instrument
-invocation saves the exact source JPEG under `qr-scans/`; the worker log records
-that path and the decoded QR identifiers for debugging. Instrument monitoring
+invocation saves the exact source JPEG under `marker-scans/`; the worker log
+records that path and decoded marker identifiers for debugging. Instrument monitoring
 records contain discrete changes, one-time tracking-loss events, and complete
 state snapshots.
 
 The visual and instrument monitoring cadences, 10-second instrument-state
 interval, device-loss timeout, history bound, frame timeouts, prompts, VAD
-settings, and output path live in `yaml/background_monitoring_worker.yaml`. Model
+settings, device-map path, and output path live in
+`yaml/lab_instrument_monitoring_worker.yaml`. Marker-to-device mappings live in
+`yaml/device_map.yaml`. Model
 adapters, endpoints, readiness, and deployment ownership live in
 `yaml/models.local.json`.
 
@@ -135,6 +138,6 @@ The eval checks whether the LLM selects current vision, monitoring history,
 background controls, or no tool. It requires `agent-llm` to be running.
 
 ```bash
-cd agent-samples/background-monitoring-sample
+cd agent-samples/lab-instrument-monitoring
 uv run --project worker python eval/eval.py
 ```

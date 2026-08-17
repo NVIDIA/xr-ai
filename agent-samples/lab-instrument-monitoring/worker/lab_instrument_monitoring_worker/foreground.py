@@ -40,16 +40,16 @@ from .file_output import (
 )
 from .images import ParticipantImageAgent
 from .instrument_monitor import InstrumentMonitorAgent
+from .instruments import (
+    LabInstrumentAgent,
+    LabInstrumentReadResult,
+    ReadLabInstrumentsRequest,
+)
 from .monitor import (
     MonitorAgent,
     MonitoringRequest,
     MonitoringState,
     StartMonitoringRequest,
-)
-from .qr_instruments import (
-    LabInstrumentReadResult,
-    QRInstrumentAgent,
-    ReadLabInstrumentsRequest,
 )
 
 CURRENT_VIEW_TOOL = "current_view"
@@ -75,14 +75,12 @@ _VISUAL_MONITOR_STOP_DESCRIPTION = (
 )
 _VISUAL_MONITOR_STATUS_DESCRIPTION = "Report whether the ordinary background visual watch is running."
 _LAB_INSTRUMENTS_READ_DESCRIPTION = (
-    "Read current QR-labelled instruments, meters, gauges, readings, or numeric displays."
+    "Read current marker-labelled instruments, meters, gauges, readings, or numeric displays."
 )
-_LAB_INSTRUMENTS_START_DESCRIPTION = "Start continuous QR-labelled instrument reading monitoring."
-_LAB_INSTRUMENTS_STOP_DESCRIPTION = (
-    "The only route to stop continuous QR-labelled instrument reading monitoring."
-)
+_LAB_INSTRUMENTS_START_DESCRIPTION = "Start continuous marker-labelled instrument reading monitoring."
+_LAB_INSTRUMENTS_STOP_DESCRIPTION = "The only route to stop continuous marker-labelled instrument reading monitoring."
 _LAB_INSTRUMENTS_STATUS_DESCRIPTION = (
-    "Report whether continuous QR-labelled instrument reading monitoring is running."
+    "Report whether continuous marker-labelled instrument reading monitoring is running."
 )
 
 
@@ -180,7 +178,7 @@ class ForegroundAgent(Agent):
         vlm: VLMService,
         files: FileOutputAgent,
         monitor: MonitorAgent,
-        qr_instruments: QRInstrumentAgent,
+        lab_instruments: LabInstrumentAgent,
         instrument_monitor: InstrumentMonitorAgent,
         prompt: str,
     ) -> None:
@@ -190,7 +188,7 @@ class ForegroundAgent(Agent):
         self._llm = llm
         self._files = files
         self._monitor = monitor
-        self._qr_instruments = qr_instruments
+        self._lab_instruments = lab_instruments
         self._instrument_monitor = instrument_monitor
         self._prompt = prompt.strip()
         self._tasks: dict[str, asyncio.Task[None]] = {}
@@ -313,14 +311,10 @@ class ForegroundAgent(Agent):
     def _participant_tools(self, participant_id: str) -> ToolSet:
         async def inspect_current(request: _CurrentFrameArgs) -> ImageQueryResult:
             try:
-                frame = await self._images.get_current_frame.execute(
-                    CurrentFrameRequest(participant_id=participant_id)
-                )
+                frame = await self._images.get_current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
             except FrameUnavailable as exc:
                 return ImageQueryResult(text=str(exc), available=False)
-            return await self.query_image.execute(
-                ImageQueryRequest(image=frame.image, query=request.question)
-            )
+            return await self.query_image.execute(ImageQueryRequest(image=frame.image, query=request.question))
 
         async def read_history(request: _HistoryArgs) -> MonitoringHistoryResult:
             return await self._files.read_monitoring_history.execute(
@@ -341,19 +335,15 @@ class ForegroundAgent(Agent):
             )
 
         async def stop_visual_monitor(_request: _ControlArgs) -> MonitoringState:
-            return await self._monitor.stop_monitoring.execute(
-                MonitoringRequest(participant_id=participant_id)
-            )
+            return await self._monitor.stop_monitoring.execute(MonitoringRequest(participant_id=participant_id))
 
         async def visual_monitor_status(_request: _ControlArgs) -> MonitoringState:
-            return await self._monitor.monitoring_status.execute(
-                MonitoringRequest(participant_id=participant_id)
-            )
+            return await self._monitor.monitoring_status.execute(MonitoringRequest(participant_id=participant_id))
 
         async def read_lab_instruments(
             _request: _ControlArgs,
         ) -> LabInstrumentReadResult:
-            return await self._qr_instruments.read_lab_instruments.execute(
+            return await self._lab_instruments.read_lab_instruments.execute(
                 ReadLabInstrumentsRequest(participant_id=participant_id)
             )
 
@@ -425,7 +415,7 @@ class ForegroundAgent(Agent):
                     LabInstrumentReadResult,
                     read_lab_instruments,
                     return_direct=True,
-                    render_result=QRInstrumentAgent.render_readings,
+                    render_result=LabInstrumentAgent.render_readings,
                 ),
                 Tool(
                     LAB_INSTRUMENTS_START_TOOL,

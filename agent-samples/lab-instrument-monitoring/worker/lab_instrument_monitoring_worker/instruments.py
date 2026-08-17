@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""QR-associated lab-instrument reading and background monitoring."""
+"""Marker-associated lab-instrument reading."""
 
 from __future__ import annotations
 
@@ -23,11 +23,11 @@ from xr_ai_tools.image_polygon import (
 )
 from xr_ai_tools.marker_tracking import (
     MarkerTrackingRequest,
-    MarkerType,
     TrackedMarker,
 )
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 
+from .device_map import DeviceMap
 from .events import InstrumentReading
 from .images import ParticipantImageAgent
 
@@ -44,17 +44,19 @@ class LabInstrumentReadResult(BaseModel):
     message: str = ""
 
 
-class QRInstrumentAgent(Agent):
-    """Read QR-named instruments from one current frame."""
+class LabInstrumentAgent(Agent):
+    """Read marker-identified instruments from one current frame."""
 
     def __init__(
         self,
         *,
         images: ParticipantImageAgent,
         vlm: VLMService,
+        device_map: DeviceMap,
         debug_dir: Path | None = None,
     ) -> None:
         self._images = images
+        self._device_map = device_map
         self._debug_dir = debug_dir
         if debug_dir is not None:
             debug_dir.mkdir(parents=True, exist_ok=True)
@@ -62,7 +64,7 @@ class QRInstrumentAgent(Agent):
         self._fill_polygon = ImagePolygonFillTool(images=images.images)
         self.read_lab_instruments = Tool(
             "read_lab_instruments",
-            "Read every visible lab instrument display and associate each reading with its QR-code text.",
+            "Read every visible lab instrument display and associate each reading with its configured marker identity.",
             ReadLabInstrumentsRequest,
             LabInstrumentReadResult,
             self._read_lab_instruments,
@@ -88,7 +90,7 @@ class QRInstrumentAgent(Agent):
                 frame.sequence,
                 source,
             )
-            tracked = await self._images.track_qr_markers.execute(
+            tracked = await self._images.track_markers.execute(
                 MarkerTrackingRequest(participant_id=request.participant_id)
             )
             if not tracked.available:
@@ -96,25 +98,24 @@ class QRInstrumentAgent(Agent):
                     available=False,
                     message=tracked.message or "The camera frame could not be scanned.",
                 )
-            markers = [
-                marker
-                for marker in tracked.markers
-                if marker.marker_type is MarkerType.QR_CODE
-            ]
+            markers = tracked.markers
             logger.info(
-                "instrument QR scan pid={!r} image={} codes={}",
+                "instrument marker scan pid={!r} image={} markers={}",
                 request.participant_id,
                 scan_path,
-                [marker.value for marker in markers],
+                [f"{marker.marker_type.value}:{marker.value}" for marker in markers],
             )
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            logger.opt(exception=True).warning("instrument frame or QR scan failed pid={!r}", request.participant_id)
+            logger.opt(exception=True).warning(
+                "instrument frame or marker scan failed pid={!r}",
+                request.participant_id,
+            )
             return LabInstrumentReadResult(available=False, message=str(exc))
 
         if not markers:
-            return LabInstrumentReadResult(message="No readable QR-labelled lab instruments were found.")
+            return LabInstrumentReadResult(message="No readable marker-labelled lab instruments were found.")
 
         readings: list[InstrumentReading] = []
         for marker in markers:
@@ -128,7 +129,7 @@ class QRInstrumentAgent(Agent):
                 raise
             except Exception:
                 logger.opt(exception=True).warning(
-                    "instrument display read failed pid={!r} qr={!r}",
+                    "instrument display read failed pid={!r} marker={!r}",
                     request.participant_id,
                     marker.value,
                 )
@@ -138,7 +139,7 @@ class QRInstrumentAgent(Agent):
         if not readings:
             return LabInstrumentReadResult(
                 available=False,
-                message="QR codes were found, but their instrument displays could not be read.",
+                message="Markers were found, but their instrument displays could not be read.",
             )
         return LabInstrumentReadResult(readings=readings)
 
@@ -152,14 +153,10 @@ class QRInstrumentAgent(Agent):
         if self._debug_dir is None:
             return None
         safe_participant = "".join(
-            character if character.isalnum() or character in "-_." else "-"
-            for character in participant_id
+            character if character.isalnum() or character in "-_." else "-" for character in participant_id
         )
         invoked_at_us = time.time_ns() // 1_000
-        path = self._debug_dir / (
-            f"{invoked_at_us}-{safe_participant}-"
-            f"frame-{frame_timestamp_us}-seq-{sequence}.jpg"
-        )
+        path = self._debug_dir / (f"{invoked_at_us}-{safe_participant}-frame-{frame_timestamp_us}-seq-{sequence}.jpg")
         await asyncio.to_thread(path.write_bytes, image)
         return path
 
@@ -169,13 +166,11 @@ class QRInstrumentAgent(Agent):
         timestamp_us: int,
         marker: TrackedMarker,
     ) -> InstrumentReading | None:
+        identity = self._device_map.resolve(marker.marker_type, marker.value)
         marked = await self._fill_polygon.execute(
             ImagePolygonFillRequest(
                 image=image,
-                coordinates=[
-                    ImagePoint(x=point.x, y=point.y)
-                    for point in marker.corners
-                ],
+                coordinates=[ImagePoint(x=point.x, y=point.y) for point in marker.corners],
             )
         )
         if not marked.available or marked.image is None:
@@ -184,8 +179,10 @@ class QRInstrumentAgent(Agent):
             ImageQueryRequest(
                 image=marked.image,
                 query=(
-                    "The magenta polygon marks the QR code attached to the lab instrument "
-                    f"named {marker.value!r}. Read that instrument's nearby display. Return only "
+                    "The magenta polygon marks the "
+                    f"{marker.marker_type.value} marker {marker.value!r} attached to the lab "
+                    f"instrument named {identity.device_name!r}. Read that instrument's nearby "
+                    "display. Return only "
                     "the displayed meter reading including its unit; return UNKNOWN if unreadable."
                 ),
             )
@@ -195,7 +192,9 @@ class QRInstrumentAgent(Agent):
             return None
         return InstrumentReading(
             timestamp_us=timestamp_us,
-            qr_text=marker.value,
+            marker_type=marker.marker_type,
+            marker_id=marker.value,
+            device_name=identity.device_name,
             meter_reading=reading,
         )
 
@@ -203,11 +202,11 @@ class QRInstrumentAgent(Agent):
     def render_readings(result: LabInstrumentReadResult) -> str:
         if not result.readings:
             return result.message or "No lab instrument readings were available."
-        return "; ".join(f"{reading.qr_text}: {reading.meter_reading}" for reading in result.readings)
+        return "; ".join(f"{reading.device_name}: {reading.meter_reading}" for reading in result.readings)
 
 
 __all__ = [
     "LabInstrumentReadResult",
-    "QRInstrumentAgent",
+    "LabInstrumentAgent",
     "ReadLabInstrumentsRequest",
 ]

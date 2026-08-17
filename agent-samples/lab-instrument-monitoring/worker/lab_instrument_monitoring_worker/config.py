@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Typed configuration for the background monitoring worker."""
+"""Typed configuration for the lab instrument monitoring worker."""
 
 from __future__ import annotations
 
@@ -11,6 +11,8 @@ from typing import Any
 
 import yaml
 
+from .device_map import DeviceMap, load_device_map
+
 _PACKAGE = Path(__file__).resolve().parent
 
 
@@ -18,6 +20,7 @@ _PACKAGE = Path(__file__).resolve().parent
 class WorkerConfig:
     models_config: Path
     voice_gate_yaml: Path
+    device_map: DeviceMap
     artifacts_dir: Path
     foreground_prompt: str
     monitor_prompt: str
@@ -87,6 +90,7 @@ def load_config(path: Path | None) -> WorkerConfig:
     return WorkerConfig(
         models_config=_resolve(path, str(data.get("models_config", "models.local.json"))),
         voice_gate_yaml=_resolve(path, str(data.get("voice_gate_yaml", "voice_gate.yaml"))),
+        device_map=load_device_map(_resolve(path, str(data.get("device_map_yaml", "device_map.yaml")))),
         artifacts_dir=_resolve(path, str(data.get("artifacts_dir", "../artifacts"))),
         foreground_prompt=_prompt(data, path, "foreground_prompt"),
         monitor_prompt=_prompt(data, path, "monitor_prompt"),

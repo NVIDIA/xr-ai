@@ -29,12 +29,9 @@ class InstrumentAlertAgent(Agent):
         ctx: RuntimeContext,
     ) -> None:
         if event.change_type == "discovered":
-            text = f"Now tracking {event.qr_text} at {event.meter_reading}."
+            text = f"Now tracking {event.device_name} at {event.meter_reading}."
         else:
-            text = (
-                f"{event.qr_text} changed from {event.previous_reading} "
-                f"to {event.meter_reading}."
-            )
+            text = f"{event.device_name} changed from {event.previous_reading} to {event.meter_reading}."
         await ctx.publish(
             VOICE_OUTPUT_TOPIC,
             VoiceOutput(text=text, timestamp_us=event.timestamp_us),
@@ -49,10 +46,7 @@ class InstrumentAlertAgent(Agent):
         await ctx.publish(
             VOICE_OUTPUT_TOPIC,
             VoiceOutput(
-                text=(
-                    f"I am no longer tracking {event.qr_text}. "
-                    f"Its last reading was {event.meter_reading}."
-                ),
+                text=(f"I am no longer tracking {event.device_name}. Its last reading was {event.meter_reading}."),
                 timestamp_us=event.timestamp_us,
             ),
         )

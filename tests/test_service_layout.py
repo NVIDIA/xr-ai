@@ -67,7 +67,7 @@ _ALLOWED_LEGACY_REFERENCES = {
 }
 _HUB_PROJECT = _ROOT / "services" / "xr-media-hub"
 _SAMPLE_WEB_CLIENTS = {
-    "background-monitoring-sample": _ROOT / "client-samples" / "web",
+    "lab-instrument-monitoring": _ROOT / "client-samples" / "web",
     "simple-vlm-example": _ROOT / "client-samples" / "web",
     "xr-render-demo": _ROOT / "client-samples" / "web-xr",
 }

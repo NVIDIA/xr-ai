@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Launch the background monitor, voice worker, hub, and model dependencies."""
+"""Launch lab instrument monitoring, voice, hub, and model dependencies."""
 
 from dataclasses import replace
 from pathlib import Path
@@ -15,7 +15,7 @@ from xr_ai_launcher import (
 from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
-_WORKER_CONFIG = "yaml/background_monitoring_worker.yaml"
+_WORKER_CONFIG = "yaml/lab_instrument_monitoring_worker.yaml"
 
 _MODEL_PROCESSES = {
     "stt": Process(
@@ -46,9 +46,7 @@ def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
     deployment = load_model_deployment(_BASE / _WORKER_CONFIG)
     unknown_services = deployment.services.keys() - _MODEL_PROCESSES.keys()
     if unknown_services:
-        raise ValueError(
-            f"model profile declares unknown services: {sorted(unknown_services)}"
-        )
+        raise ValueError(f"model profile declares unknown services: {sorted(unknown_services)}")
 
     processes = [
         Process(
@@ -66,7 +64,7 @@ def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
         Process(
             "worker",
             "worker",
-            "background_monitoring_worker",
+            "lab_instrument_monitoring_worker",
             config=_WORKER_CONFIG,
         )
     )
@@ -74,7 +72,7 @@ def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
 
 
 def run() -> None:
-    setup_logging("orchestrator", namespace="background-monitoring-sample")
+    setup_logging("orchestrator", namespace="lab-instrument-monitoring")
     processes, credentials = _build_processes()
     for credential in credentials:
         ensure_credentials(credential)

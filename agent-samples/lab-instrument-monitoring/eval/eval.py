@@ -9,7 +9,7 @@ import asyncio
 from pathlib import Path
 
 import yaml
-from background_monitoring_worker.foreground import FOREGROUND_TOOL_DEFS
+from lab_instrument_monitoring_worker.foreground import FOREGROUND_TOOL_DEFS
 from xr_ai_models import ChatMessage, load_models_config, make_llm
 
 _SAMPLE = Path(__file__).resolve().parents[1]
@@ -17,12 +17,10 @@ _SAMPLE = Path(__file__).resolve().parents[1]
 
 async def main() -> None:
     prompt = (
-        _SAMPLE
-        / "worker"
-        / "background_monitoring_worker"
-        / "prompts"
-        / "foreground_prompt.txt"
-    ).read_text(encoding="utf-8").strip()
+        (_SAMPLE / "worker" / "lab_instrument_monitoring_worker" / "prompts" / "foreground_prompt.txt")
+        .read_text(encoding="utf-8")
+        .strip()
+    )
     cases = yaml.safe_load((_SAMPLE / "eval" / "cases.yaml").read_text(encoding="utf-8"))
     llm = make_llm(
         load_models_config(_SAMPLE / "yaml" / "models.local.json"),
@@ -51,9 +49,7 @@ async def main() -> None:
             print(f"{label} {case['name']}: tool={actual_tool!r}")
             if not passed:
                 print(f"  content={response.content!r}")
-                failures.append(
-                    f"{case['name']}: expected {expected_tool!r}, received {actual_tool!r}"
-                )
+                failures.append(f"{case['name']}: expected {expected_tool!r}, received {actual_tool!r}")
     finally:
         await llm.close()
     if failures:

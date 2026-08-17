@@ -175,7 +175,7 @@ full details (and self-hosted NIM containers).
 Each sample has its own `xr_media_hub.yaml` controlling the hub; refer to
 `services/xr-media-hub/xr_media_hub.yaml` for the full option list.
 
-## Background monitoring sample (file-only ambient vision + foreground voice)
+## Lab instrument monitoring (marker-associated readings + foreground voice)
 
 This sample offers one on-demand background visual observation task per
 participant while a separate generic tool-calling agent answers voice or typed
@@ -188,10 +188,10 @@ and intentionally serves no sample-specific monitoring web UI.
 Start `model-servers`, then run:
 
 ```bash
-cd agent-samples/background-monitoring-sample
+cd agent-samples/lab-instrument-monitoring
 uv sync
 uv sync --project worker
-uv run background_monitoring_sample
+uv run lab_instrument_monitoring
 ```
 
 Connect an existing glasses or platform client using the authenticated URL,

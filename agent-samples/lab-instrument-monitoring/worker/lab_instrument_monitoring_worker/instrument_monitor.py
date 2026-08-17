@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Stateful monitoring for readings produced by the QR instrument reader."""
+"""Stateful monitoring for readings produced by the lab instrument reader."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ import nemo_relay
 from loguru import logger
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools import Tool
+from xr_ai_tools.marker_tracking import MarkerType
 from xr_ai_voice import VoiceParticipantLeft
 
 from .events import (
@@ -29,8 +30,8 @@ from .events import (
     InstrumentState,
     InstrumentStateSnapshot,
 )
+from .instruments import LabInstrumentAgent, ReadLabInstrumentsRequest
 from .monitor import MonitoringRequest, MonitoringState
-from .qr_instruments import QRInstrumentAgent, ReadLabInstrumentsRequest
 
 _NUMBER = re.compile(r"[+-]?(?:\d+(?:[.,]\d+)?|[.,]\d+)(?:[eE][+-]?\d+)?")
 _UNIT = re.compile(r"(?:°\s*)?[A-Za-zµμ%]+(?:\s*/\s*[A-Za-z]+)?")
@@ -79,7 +80,7 @@ class _TrackedInstrument:
 
 @dataclass(slots=True)
 class _ParticipantTracker:
-    instruments: dict[str, _TrackedInstrument] = field(default_factory=dict)
+    instruments: dict[tuple[MarkerType, str], _TrackedInstrument] = field(default_factory=dict)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
@@ -123,7 +124,7 @@ class InstrumentMonitorAgent(Agent):
     def __init__(
         self,
         *,
-        reader: QRInstrumentAgent,
+        reader: LabInstrumentAgent,
         interval_s: float,
         snapshot_interval_s: float = 10.0,
         lost_after_s: float = 15.0,
@@ -144,7 +145,7 @@ class InstrumentMonitorAgent(Agent):
         self._stopped = False
         self.start_instrument_monitoring = Tool(
             "start_instrument_monitoring",
-            "Continuously track QR-labelled lab instrument readings.",
+            "Continuously track marker-labelled lab instrument readings.",
             MonitoringRequest,
             MonitoringState,
             self._start_monitoring,
@@ -153,7 +154,7 @@ class InstrumentMonitorAgent(Agent):
         )
         self.stop_instrument_monitoring = Tool(
             "stop_instrument_monitoring",
-            "Stop tracking QR-labelled lab instrument readings.",
+            "Stop tracking marker-labelled lab instrument readings.",
             MonitoringRequest,
             MonitoringState,
             self._stop_monitoring,
@@ -162,7 +163,7 @@ class InstrumentMonitorAgent(Agent):
         )
         self.instrument_monitoring_status = Tool(
             "instrument_monitoring_status",
-            "Report whether QR-labelled lab instrument tracking is active.",
+            "Report whether marker-labelled lab instrument tracking is active.",
             MonitoringRequest,
             MonitoringState,
             self._monitoring_status,
@@ -268,29 +269,32 @@ class InstrumentMonitorAgent(Agent):
         seen_at = time.monotonic() if observed_at is None else observed_at
         changes: list[InstrumentChange] = []
         async with tracker.lock:
-            for reading in {item.qr_text: item for item in readings}.values():
-                previous = tracker.instruments.get(reading.qr_text)
+            unique = {(item.marker_type, item.marker_id): item for item in readings}
+            for marker_key, reading in unique.items():
+                previous = tracker.instruments.get(marker_key)
                 normalized = normalize_meter_reading(
                     reading.meter_reading,
                     previous_unit=previous.unit if previous is not None else "",
                 )
                 if normalized is None:
                     logger.warning(
-                        "ignoring unstructured instrument reading pid={!r} qr={!r} reading={!r}",
+                        "ignoring unstructured instrument reading pid={!r} marker={!r} reading={!r}",
                         participant_id,
-                        reading.qr_text,
+                        marker_key,
                         reading.meter_reading,
                     )
                     continue
                 value, unit, display = normalized
                 if previous is None:
                     state = InstrumentState(
-                        qr_text=reading.qr_text,
+                        marker_type=reading.marker_type,
+                        marker_id=reading.marker_id,
+                        device_name=reading.device_name,
                         meter_reading=display,
                         first_seen_us=reading.timestamp_us,
                         last_seen_us=reading.timestamp_us,
                     )
-                    tracker.instruments[reading.qr_text] = _TrackedInstrument(
+                    tracker.instruments[marker_key] = _TrackedInstrument(
                         value=value,
                         unit=unit,
                         state=state,
@@ -300,7 +304,9 @@ class InstrumentMonitorAgent(Agent):
                         InstrumentChange(
                             timestamp_us=reading.timestamp_us,
                             change_type="discovered",
-                            qr_text=reading.qr_text,
+                            marker_type=reading.marker_type,
+                            marker_id=reading.marker_id,
+                            device_name=reading.device_name,
                             meter_reading=display,
                             last_seen_us=reading.timestamp_us,
                         )
@@ -320,7 +326,9 @@ class InstrumentMonitorAgent(Agent):
                     InstrumentChange(
                         timestamp_us=reading.timestamp_us,
                         change_type="reading_changed",
-                        qr_text=reading.qr_text,
+                        marker_type=reading.marker_type,
+                        marker_id=reading.marker_id,
+                        device_name=reading.device_name,
                         previous_reading=old_display,
                         meter_reading=display,
                         last_seen_us=reading.timestamp_us,
@@ -349,7 +357,9 @@ class InstrumentMonitorAgent(Agent):
                 lost.append(
                     InstrumentLost(
                         timestamp_us=timestamp_us,
-                        qr_text=tracked.state.qr_text,
+                        marker_type=tracked.state.marker_type,
+                        marker_id=tracked.state.marker_id,
+                        device_name=tracked.state.device_name,
                         meter_reading=tracked.state.meter_reading,
                         last_seen_us=tracked.state.last_seen_us,
                     )
@@ -372,7 +382,7 @@ class InstrumentMonitorAgent(Agent):
                 tracked.state.model_copy(deep=True)
                 for tracked in sorted(
                     tracker.instruments.values(),
-                    key=lambda tracked: tracked.state.qr_text,
+                    key=lambda tracked: tracked.state.device_name,
                 )
             ]
         await runtime.publish(

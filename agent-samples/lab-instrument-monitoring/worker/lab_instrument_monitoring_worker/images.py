@@ -9,7 +9,7 @@ from xr_ai_hub import ProcessorEndpoint
 from xr_ai_runtime import Agent, RuntimeContext, subscribe
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
-from xr_ai_tools.marker_tracking import MarkerTrackingTool, MarkerType
+from xr_ai_tools.marker_tracking import MarkerTrackingTool
 from xr_ai_voice import VoiceParticipantLeft
 
 from .events import PARTICIPANT_LEFT_TOPIC
@@ -32,14 +32,13 @@ class ParticipantImageAgent(Agent):
             frame_max_age_s=frame_max_age_s,
             frame_timeout_s=frame_timeout_s,
         )
-        self.track_qr_markers = MarkerTrackingTool(
+        self.track_markers = MarkerTrackingTool(
             endpoint=endpoint,
-            marker_types=(MarkerType.QR_CODE,),
             frame_max_age_s=frame_max_age_s,
             frame_timeout_s=frame_timeout_s,
             manage_status=False,
         )
-        super().__init__((self.get_current_frame, self.track_qr_markers))
+        super().__init__((self.get_current_frame, self.track_markers))
 
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
@@ -50,7 +49,7 @@ class ParticipantImageAgent(Agent):
         participant_id = ctx.metadata.participant_id
         if participant_id is not None:
             self.get_current_frame.release(participant_id)
-            self.track_qr_markers.release(participant_id)
+            self.track_markers.release(participant_id)
 
     async def stop(self) -> None:
         """Release every retained image when the application stops."""

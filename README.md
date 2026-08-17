@@ -51,7 +51,7 @@ endpoint and no local GPU is required for the agent or hub.
 |---|---|
 | model-servers (shared models) | ~58 GB |
 | simple-vlm-example (standalone) | ~23 GB |
-| background-monitoring-sample (requires model-servers) | ~55 GB (models) + Piper TTS |
+| lab-instrument-monitoring (requires model-servers) | ~55 GB (models) + Piper TTS |
 | xr-render-demo (requires model-servers) | ~55 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 
@@ -330,7 +330,7 @@ for the full option list.
 
 ---
 
-### Background monitoring sample (file-only ambient vision + foreground voice)
+### Lab instrument monitoring (marker-associated readings + foreground voice)
 
 This sample provides an on-demand visual observation task per connected
 participant and runs foreground voice or typed queries through a generic
@@ -343,15 +343,15 @@ served.
 Start `model-servers`, then run:
 
 ```bash
-cd agent-samples/background-monitoring-sample
+cd agent-samples/lab-instrument-monitoring
 uv sync
 uv sync --project worker
-uv run background_monitoring_sample
+uv run lab_instrument_monitoring
 ```
 
 Connect an existing glasses or platform client with the authenticated URL and
 token printed by the hub. See the
-[sample README](agent-samples/background-monitoring-sample/README.md) for the
+[sample README](agent-samples/lab-instrument-monitoring/README.md) for the
 agent topology, output records, transcription semantics, and routing eval.
 
 ---

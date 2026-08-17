@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Command-line entry point for the background monitoring worker."""
+"""Command-line entry point for the lab instrument monitoring worker."""
 
 from __future__ import annotations
 

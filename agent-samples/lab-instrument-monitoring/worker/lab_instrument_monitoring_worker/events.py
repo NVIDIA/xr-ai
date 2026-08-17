@@ -9,6 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_runtime import Topic
+from xr_ai_tools.marker_tracking import MarkerType
 from xr_ai_voice import (
     UserQuery,
     VoiceInterrupted,
@@ -37,14 +38,18 @@ class InstrumentReading(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     timestamp_us: int = Field(ge=0)
-    qr_text: str = Field(min_length=1)
+    marker_type: MarkerType
+    marker_id: str = Field(min_length=1)
+    device_name: str = Field(min_length=1)
     meter_reading: str = Field(min_length=1)
 
 
 class InstrumentState(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    qr_text: str = Field(min_length=1)
+    marker_type: MarkerType
+    marker_id: str = Field(min_length=1)
+    device_name: str = Field(min_length=1)
     meter_reading: str = Field(min_length=1)
     first_seen_us: int = Field(ge=0)
     last_seen_us: int = Field(ge=0)
@@ -57,7 +62,9 @@ class InstrumentChange(BaseModel):
     event_type: Literal["change"] = "change"
     timestamp_us: int = Field(ge=0)
     change_type: Literal["discovered", "reading_changed"]
-    qr_text: str = Field(min_length=1)
+    marker_type: MarkerType
+    marker_id: str = Field(min_length=1)
+    device_name: str = Field(min_length=1)
     previous_reading: str | None = None
     meter_reading: str = Field(min_length=1)
     last_seen_us: int = Field(ge=0)
@@ -68,7 +75,9 @@ class InstrumentLost(BaseModel):
 
     event_type: Literal["lost"] = "lost"
     timestamp_us: int = Field(ge=0)
-    qr_text: str = Field(min_length=1)
+    marker_type: MarkerType
+    marker_id: str = Field(min_length=1)
+    device_name: str = Field(min_length=1)
     meter_reading: str = Field(min_length=1)
     last_seen_us: int = Field(ge=0)
 
@@ -90,34 +99,34 @@ class ForegroundRecord(BaseModel):
     tools: list[str] = Field(default_factory=list)
 
 
-USER_QUERY_TOPIC = Topic("background-monitoring.user-query", UserQuery)
+USER_QUERY_TOPIC = Topic("lab-instrument-monitoring.user-query", UserQuery)
 PARTICIPANT_JOINED_TOPIC = Topic(
-    "background-monitoring.participant-joined",
+    "lab-instrument-monitoring.participant-joined",
     ParticipantJoined,
 )
 PARTICIPANT_LEFT_TOPIC = Topic(
-    "background-monitoring.participant-left",
+    "lab-instrument-monitoring.participant-left",
     VoiceParticipantLeft,
 )
 INTERRUPTED_TOPIC = Topic(
-    "background-monitoring.interrupted",
+    "lab-instrument-monitoring.interrupted",
     VoiceInterrupted,
 )
-MONITOR_RECORD_TOPIC = Topic("background-monitoring.monitor-record", MonitorRecord)
+MONITOR_RECORD_TOPIC = Topic("lab-instrument-monitoring.monitor-record", MonitorRecord)
 INSTRUMENT_CHANGE_TOPIC = Topic(
-    "background-monitoring.instrument-change",
+    "lab-instrument-monitoring.instrument-change",
     InstrumentChange,
 )
 INSTRUMENT_LOST_TOPIC = Topic(
-    "background-monitoring.instrument-lost",
+    "lab-instrument-monitoring.instrument-lost",
     InstrumentLost,
 )
 INSTRUMENT_STATE_TOPIC = Topic(
-    "background-monitoring.instrument-state",
+    "lab-instrument-monitoring.instrument-state",
     InstrumentStateSnapshot,
 )
 FOREGROUND_RECORD_TOPIC = Topic(
-    "background-monitoring.foreground-record",
+    "lab-instrument-monitoring.foreground-record",
     ForegroundRecord,
 )
 

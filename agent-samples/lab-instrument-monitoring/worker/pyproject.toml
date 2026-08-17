@@ -6,7 +6,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "background-monitoring-sample-worker"
+name = "lab-instrument-monitoring-worker"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
@@ -33,7 +33,7 @@ xr-ai-voice = { path = "../../../agent-sdk/xr-ai-voice", editable = true }
 xr-ai-voicegate = { path = "../../../utils/xr-ai-voicegate", editable = true }
 
 [project.scripts]
-background_monitoring_worker = "background_monitoring_worker.__main__:run"
+lab_instrument_monitoring_worker = "lab_instrument_monitoring_worker.__main__:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["background_monitoring_worker"]
+packages = ["lab_instrument_monitoring_worker"]

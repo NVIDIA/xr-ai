@@ -41,6 +41,10 @@
   query: Can you read what is on the instrument?
   expected_tool: lab_instruments__read
 
+- name: read-aruco-instrument
+  query: Read the meter identified by the ArUco marker.
+  expected_tool: lab_instruments__read
+
 - name: read-instrument-voice
   query: Hey agent, read this instrument.
   expected_tool: lab_instruments__read
