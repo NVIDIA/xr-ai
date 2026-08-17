@@ -408,8 +408,8 @@ model-backed tools use injected <code class="docutils literal notranslate"><span
 
 
 <span class="n">lookup_tool</span> <span class="o">=</span> <span class="n">Tool</span><span class="p">(</span>
-    <span class="s2">&quot;lookup&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;Look up one answer.&quot;</span><span class="p">,</span>
+    <span class="s2">"lookup"</span><span class="p">,</span>
+    <span class="s2">"Look up one answer."</span><span class="p">,</span>
     <span class="n">LookupRequest</span><span class="p">,</span>
     <span class="n">LookupResult</span><span class="p">,</span>
     <span class="n">lookup</span><span class="p">,</span>
@@ -420,7 +420,7 @@ model-backed tools use injected <code class="docutils literal notranslate"><span
 <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="n">tool_definitions</span><span class="p">(</span><span class="n">tools</span><span class="p">))</span>
 <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
     <span class="n">ChatMessage</span><span class="p">(</span>
-        <span class="n">role</span><span class="o">=</span><span class="s2">&quot;assistant&quot;</span><span class="p">,</span>
+        <span class="n">role</span><span class="o">=</span><span class="s2">"assistant"</span><span class="p">,</span>
         <span class="n">content</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
         <span class="n">tool_calls</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">tool_calls</span><span class="p">,</span>
     <span class="p">)</span>
@@ -442,14 +442,14 @@ whether calls run sequentially or concurrently. A unary side-effect tool uses
 result.</p>
 <p>Tool catalogs can assign model-visible aliases without wrapping or changing the
 underlying tools:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tools</span> <span class="o">=</span> <span class="n">ToolSet</span><span class="p">({</span><span class="s2">&quot;camera_status&quot;</span><span class="p">:</span> <span class="n">vision</span><span class="o">.</span><span class="n">status</span><span class="p">})</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tools</span> <span class="o">=</span> <span class="n">ToolSet</span><span class="p">({</span><span class="s2">"camera_status"</span><span class="p">:</span> <span class="n">vision</span><span class="o">.</span><span class="n">status</span><span class="p">})</span>
 </pre></div>
 </div>
 <p>When composing independently named tool groups, namespace them at the workflow
 boundary:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tools</span> <span class="o">=</span> <span class="n">ToolSet</span><span class="o">.</span><span class="n">namespaced</span><span class="p">({</span>
-    <span class="s2">&quot;vision&quot;</span><span class="p">:</span> <span class="n">vision</span><span class="o">.</span><span class="n">tools</span><span class="p">,</span>
-    <span class="s2">&quot;planner&quot;</span><span class="p">:</span> <span class="n">planner</span><span class="o">.</span><span class="n">tools</span><span class="p">,</span>
+    <span class="s2">"vision"</span><span class="p">:</span> <span class="n">vision</span><span class="o">.</span><span class="n">tools</span><span class="p">,</span>
+    <span class="s2">"planner"</span><span class="p">:</span> <span class="n">planner</span><span class="o">.</span><span class="n">tools</span><span class="p">,</span>
 <span class="p">})</span>
 </pre></div>
 </div>
@@ -520,66 +520,79 @@ all derived pixels together.</p>
 <span class="n">vision</span> <span class="o">=</span> <span class="n">ImageQueryTool</span><span class="p">(</span><span class="n">images</span><span class="o">=</span><span class="n">images</span><span class="p">,</span> <span class="n">vlm</span><span class="o">=</span><span class="n">vlm</span><span class="p">)</span>
 <span class="n">video</span> <span class="o">=</span> <span class="n">VideoQueryTool</span><span class="p">(</span><span class="n">images</span><span class="o">=</span><span class="n">images</span><span class="p">,</span> <span class="n">vlm</span><span class="o">=</span><span class="n">vlm</span><span class="p">)</span>
 
-<span class="n">frame</span> <span class="o">=</span> <span class="k">await</span> <span class="n">frames</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">CurrentFrameRequest</span><span class="p">(</span><span class="n">participant_id</span><span class="o">=</span><span class="s2">&quot;alice&quot;</span><span class="p">))</span>
+<span class="n">frame</span> <span class="o">=</span> <span class="k">await</span> <span class="n">frames</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">CurrentFrameRequest</span><span class="p">(</span><span class="n">participant_id</span><span class="o">=</span><span class="s2">"alice"</span><span class="p">))</span>
 <span class="n">answer</span> <span class="o">=</span> <span class="k">await</span> <span class="n">vision</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
-    <span class="n">ImageQueryRequest</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="n">frame</span><span class="o">.</span><span class="n">image</span><span class="p">,</span> <span class="n">query</span><span class="o">=</span><span class="s2">&quot;What is on the table?&quot;</span><span class="p">)</span>
+    <span class="n">ImageQueryRequest</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="n">frame</span><span class="o">.</span><span class="n">image</span><span class="p">,</span> <span class="n">query</span><span class="o">=</span><span class="s2">"What is on the table?"</span><span class="p">)</span>
 <span class="p">)</span>
 
 <span class="c1"># The same VLM tool accepts images that did not come from a camera tool.</span>
 <span class="n">other</span> <span class="o">=</span> <span class="k">await</span> <span class="n">vision</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
     <span class="n">ImageQueryRequest</span><span class="p">(</span>
-        <span class="n">image</span><span class="o">=</span><span class="n">ImageReference</span><span class="p">(</span><span class="n">uri</span><span class="o">=</span><span class="s2">&quot;/tmp/reference.png&quot;</span><span class="p">),</span>
-        <span class="n">query</span><span class="o">=</span><span class="s2">&quot;Does this match the current object?&quot;</span><span class="p">,</span>
+        <span class="n">image</span><span class="o">=</span><span class="n">ImageReference</span><span class="p">(</span><span class="n">uri</span><span class="o">=</span><span class="s2">"/tmp/reference.png"</span><span class="p">),</span>
+        <span class="n">query</span><span class="o">=</span><span class="s2">"Does this match the current object?"</span><span class="p">,</span>
     <span class="p">)</span>
 <span class="p">)</span>
 
 <span class="c1"># The newest recorded window needs no caller-supplied timestamp.</span>
 <span class="n">sample</span> <span class="o">=</span> <span class="k">await</span> <span class="n">video_memory</span><span class="o">.</span><span class="n">get_latest_frames</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
     <span class="n">LatestFramesRequest</span><span class="p">(</span>
-        <span class="n">participant_id</span><span class="o">=</span><span class="s2">&quot;alice&quot;</span><span class="p">,</span>
+        <span class="n">participant_id</span><span class="o">=</span><span class="s2">"alice"</span><span class="p">,</span>
         <span class="n">duration_seconds</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
         <span class="n">frame_budget</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
     <span class="p">)</span>
 <span class="p">)</span>
 <span class="n">change</span> <span class="o">=</span> <span class="k">await</span> <span class="n">video</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
-    <span class="n">VideoQueryRequest</span><span class="p">(</span><span class="n">frames</span><span class="o">=</span><span class="n">sample</span><span class="o">.</span><span class="n">frames</span><span class="p">,</span> <span class="n">query</span><span class="o">=</span><span class="s2">&quot;What changed over time?&quot;</span><span class="p">)</span>
+    <span class="n">VideoQueryRequest</span><span class="p">(</span><span class="n">frames</span><span class="o">=</span><span class="n">sample</span><span class="o">.</span><span class="n">frames</span><span class="p">,</span> <span class="n">query</span><span class="o">=</span><span class="s2">"What changed over time?"</span><span class="p">)</span>
 <span class="p">)</span>
 </pre></div>
 </div>
 </section>
-<section id="qr-code-reading-and-extraction">
-<h2>QR-code reading and extraction<a class="headerlink" href="#qr-code-reading-and-extraction" title="Link to this heading">#</a></h2>
-<p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[qr-code]</span></code> to use <code class="docutils literal notranslate"><span class="pre">QRCodeTool</span></code>. The finite
-<code class="docutils literal notranslate"><span class="pre">read_qr_codes</span></code> tool acquires a participant’s current camera frame and uses
-ZXing-C++ by default. Its typed result distinguishes an unavailable frame from
-a valid frame with no readable code, and returns every decoded UTF-8 payload
-with optional source-image corner coordinates. The default extractor scans the
-full frame plus overlapping original-size and upscaled tiles, then deduplicates
-localized results. When one frame contains multiple QR codes, <code class="docutils literal notranslate"><span class="pre">result.codes</span></code>
-contains one entry for each code.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.qr_code</span><span class="w"> </span><span class="kn">import</span> <span class="n">QRCodeRequest</span><span class="p">,</span> <span class="n">QRCodeTool</span>
+<section id="marker-tracking">
+<h2>Marker tracking<a class="headerlink" href="#marker-tracking" title="Link to this heading">#</a></h2>
+<p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[marker-tracking]</span></code> to use <code class="docutils literal notranslate"><span class="pre">MarkerTrackingTool</span></code>. The finite
+<code class="docutils literal notranslate"><span class="pre">track_markers</span></code> tool acquires a participant’s current camera frame and detects
+QR codes with ZXing-C++ and ArUco markers with OpenCV. Its typed result
+distinguishes an unavailable frame from a valid frame with no marker. Every
+marker has the same <code class="docutils literal notranslate"><span class="pre">marker_type</span></code>, <code class="docutils literal notranslate"><span class="pre">value</span></code>, and four-corner contract: <code class="docutils literal notranslate"><span class="pre">value</span></code>
+is decoded text for QR codes and the decimal marker ID for ArUco markers.
+QR detection scans the complete frame at native resolution and at one bounded
+enlarged resolution so small codes remain readable without discarding context.
+Results from both scans are deduplicated and use source-frame coordinates.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.marker_tracking</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">MarkerTrackingRequest</span><span class="p">,</span>
+    <span class="n">MarkerTrackingTool</span><span class="p">,</span>
+    <span class="n">MarkerType</span><span class="p">,</span>
+<span class="p">)</span>
 
-<span class="n">qr_codes</span> <span class="o">=</span> <span class="n">QRCodeTool</span><span class="p">(</span><span class="n">endpoint</span><span class="o">=</span><span class="n">processor_endpoint</span><span class="p">)</span>
-<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">qr_codes</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">QRCodeRequest</span><span class="p">(</span><span class="n">participant_id</span><span class="o">=</span><span class="s2">&quot;participant-1&quot;</span><span class="p">))</span>
-<span class="k">for</span> <span class="n">code</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">codes</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">code</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">code</span><span class="o">.</span><span class="n">corners</span><span class="p">)</span>
+<span class="n">markers</span> <span class="o">=</span> <span class="n">MarkerTrackingTool</span><span class="p">(</span><span class="n">endpoint</span><span class="o">=</span><span class="n">processor_endpoint</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">markers</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+    <span class="n">MarkerTrackingRequest</span><span class="p">(</span><span class="n">participant_id</span><span class="o">=</span><span class="s2">"participant-1"</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="k">for</span> <span class="n">marker</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">markers</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">marker</span><span class="o">.</span><span class="n">marker_type</span><span class="p">,</span> <span class="n">marker</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">marker</span><span class="o">.</span><span class="n">corners</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>Frame acquisition and extraction are separate. Pass any sync or async callable
-as <code class="docutils literal notranslate"><span class="pre">extractor=</span></code> to replace ZXing-C++ without changing the tool or its callers.
-The callable receives one RGB <code class="docutils literal notranslate"><span class="pre">PIL.Image.Image</span></code> and returns an iterable of
-<code class="docutils literal notranslate"><span class="pre">DecodedQRCode</span></code> values or equivalent dictionaries; <code class="docutils literal notranslate"><span class="pre">corners</span></code> may be omitted by
-backends that decode without localization.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">model_extractor</span><span class="p">(</span><span class="n">image</span><span class="p">):</span>
-    <span class="k">return</span> <span class="k">await</span> <span class="n">custom_qr_model</span><span class="o">.</span><span class="n">extract</span><span class="p">(</span><span class="n">image</span><span class="p">)</span>
-
-
-<span class="n">qr_codes</span> <span class="o">=</span> <span class="n">QRCodeTool</span><span class="p">(</span>
+<p>Both marker families are enabled by default. Select families only while
+initializing the tool; requests and results do not change. ArUco detection uses
+<code class="docutils literal notranslate"><span class="pre">DICT_4X4_50</span></code> by default and accepts any OpenCV predefined dictionary name.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">aruco_only</span> <span class="o">=</span> <span class="n">MarkerTrackingTool</span><span class="p">(</span>
     <span class="n">endpoint</span><span class="o">=</span><span class="n">processor_endpoint</span><span class="p">,</span>
-    <span class="n">extractor</span><span class="o">=</span><span class="n">model_extractor</span><span class="p">,</span>
+    <span class="n">marker_types</span><span class="o">=</span><span class="p">(</span><span class="n">MarkerType</span><span class="o">.</span><span class="n">ARUCO</span><span class="p">,),</span>
+    <span class="n">aruco_dictionary</span><span class="o">=</span><span class="s2">"DICT_6X6_250"</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
+<p>Generate sample QR and ArUco marker PNGs with the standalone utility beside the
+tool. Its inline dependency metadata lets <code class="docutils literal notranslate"><span class="pre">uv</span></code> create an isolated environment
+without modifying the project environment:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>xr_ai_tools/utilities/generate_marker.py<span class="w"> </span>qr<span class="w"> </span><span class="s2">"XR AI"</span><span class="w"> </span>--output<span class="w"> </span>qr.png
+uv<span class="w"> </span>run<span class="w"> </span>xr_ai_tools/utilities/generate_marker.py<span class="w"> </span>aruco<span class="w"> </span><span class="m">23</span><span class="w"> </span>--output<span class="w"> </span>aruco.png
+uv<span class="w"> </span>run<span class="w"> </span>xr_ai_tools/utilities/generate_marker.py<span class="w"> </span>aruco<span class="w"> </span><span class="m">42</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--dictionary<span class="w"> </span>DICT_6X6_250<span class="w"> </span>--output<span class="w"> </span>aruco-42.png
+</pre></div>
+</div>
+<p>Run these commands from <code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-tools/</span></code>. Both commands produce square
+512-pixel PNGs by default; use <code class="docutils literal notranslate"><span class="pre">--help</span></code> to see sizing and border options.</p>
 <p>Call <code class="docutils literal notranslate"><span class="pre">release(participant_id)</span></code> when a participant disconnects. Applications
 that expose the tool to a model should inject the active participant identity
 at their workflow boundary, as they do for other participant-scoped tools.</p>
@@ -605,7 +618,7 @@ tool error.</p>
 <span class="p">)</span>
 
 <span class="n">images</span> <span class="o">=</span> <span class="n">ImageRegistry</span><span class="p">()</span>
-<span class="n">source</span> <span class="o">=</span> <span class="n">images</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;measurement.png&quot;</span><span class="p">))</span>
+<span class="n">source</span> <span class="o">=</span> <span class="n">images</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">"measurement.png"</span><span class="p">))</span>
 <span class="n">fill_polygon</span> <span class="o">=</span> <span class="n">ImagePolygonFillTool</span><span class="p">(</span><span class="n">images</span><span class="o">=</span><span class="n">images</span><span class="p">)</span>
 
 <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">fill_polygon</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
@@ -676,7 +689,7 @@ tool error.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-tools-and-model-tool-calls">Native tools and model tool calls</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#typed-capability-services">Typed capability services</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#image-selection-and-vlm-query-tools">Image selection and VLM query tools</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#qr-code-reading-and-extraction">QR-code reading and extraction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#marker-tracking">Marker tracking</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#magenta-polygon-image-editing">Magenta polygon image editing</a></li>
 </ul>
   </nav></div>
