@@ -434,9 +434,9 @@ through configuration.</p>
 <span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">"agent_llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm"</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron3_nano"</span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8107"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"agent-llm"</span><span class="p">}</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8108"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"omni"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
@@ -469,7 +469,7 @@ through configuration.</p>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nemotron_omni</span></code></p></td>
 <td><p>nemotron-omni-llm-server</p></td>
-<td><p>reasoning field: <code class="docutils literal notranslate"><span class="pre">reasoning_content</span></code>, vision + video</p></td>
+<td><p>default LLM; reasoning field: <code class="docutils literal notranslate"><span class="pre">reasoning_content</span></code>, thinking off unless requested, vision + video</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nemotron_embedding</span></code></p></td>
 <td><p>embedding-server</p></td>

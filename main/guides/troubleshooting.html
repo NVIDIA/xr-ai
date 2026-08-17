@@ -535,8 +535,9 @@ environment before each wrapper runs; the docker backend uses it to run
 <p>and the per-run log file under <code class="docutils literal notranslate"><span class="pre">/tmp/log_&lt;sample&gt;_&lt;timestamp&gt;/&lt;service&gt;.log</span></code>
 contains only wrapper messages — nothing from inside the container.</p>
 <p><strong>Health probe</strong> — confirm vLLM never reached the <code class="docutils literal notranslate"><span class="pre">/health</span></code> endpoint:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8107/health<span class="w">   </span><span class="c1"># nemotron3_nano (agent-llm)</span>
-curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8100/health<span class="w">   </span><span class="c1"># vlm_server</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8108/health<span class="w">   </span><span class="c1"># nemotron_omni (default LLM)</span>
+curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8100/health<span class="w">   </span><span class="c1"># vlm_server (default Cosmos VLM)</span>
+curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8107/health<span class="w">   </span><span class="c1"># superseded nemotron3_nano</span>
 </pre></div>
 </div>
 <p><strong>Container post-mortem</strong> — the wrapper streams <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">logs</span> <span class="pre">-f</span></code> into the
@@ -681,19 +682,21 @@ the IWER emulator built into the web client itself for desktop dev.</p>
 </section>
 <section id="vllm-cold-start-takes-38-minutes">
 <h3>vLLM cold start takes 3–8 minutes<a class="headerlink" href="#vllm-cold-start-takes-38-minutes" title="Link to this heading">#</a></h3>
-<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">vlm_server</span></code> or <code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code> weight load is fast,
+<p><strong>Symptom:</strong> a vLLM server’s weight load is fast,
 but the server then sits silent for several minutes before becoming healthy.</p>
 <p><strong>Cause:</strong> CUDA graph capture + FlashInfer FP4 MoE autotune happen on first
 run after weight load. They are silent.</p>
-<p><strong>Fix:</strong> the shipped YAMLs default to <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> which avoids both.
-Eager mode is 10–20% slower per token but starts in ~5 s after weight load —
-imperceptible at &lt;250 tokens/turn where STT+VAD+TTS dominate latency. Don’t
-flip <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">false</span></code> unless you have a measured reason.</p>
+<p><strong>Fix:</strong> the default Omni profiles set <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">false</span></code> to enable CUDA
+graph capture and maximize steady-state throughput, so this startup delay is
+expected. For development, set <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> in the active model YAML
+to skip CUDA graph capture. Eager mode starts faster but can reduce per-token
+throughput; keep the default when steady-state performance matters more than
+cold-start time.</p>
 </section>
 <section id="xr-render-demo-exits-but-vram-is-still-pinned">
 <h3><code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code> exits but VRAM is still pinned<a class="headerlink" href="#xr-render-demo-exits-but-vram-is-still-pinned" title="Link to this heading">#</a></h3>
-<p><strong>By design.</strong> The vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>,
-<code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>) survive stack
+<p><strong>By design.</strong> The vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code>,
+<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>, and <code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>) survive stack
 restarts so model weights stay loaded across worker crashes and debug
 restarts. See <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> → <em>vLLM model
 persistence</em>.</p>
