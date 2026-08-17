@@ -496,63 +496,63 @@ workflow composition become distinct responsibilities.</p>
 <section id="orchestrator-pyproject-toml">
 <h2>Orchestrator <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code><a class="headerlink" href="#orchestrator-pyproject-toml" title="Link to this heading">#</a></h2>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[build-system]
-requires = [&quot;hatchling&quot;]
-build-backend = &quot;hatchling.build&quot;
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
-name = &quot;&lt;kebab-name&gt;&quot;
-version = &quot;0.1.0&quot;
-requires-python = &quot;&gt;=3.11,&lt;3.13&quot;
-dependencies = [&quot;xr-ai-launcher&quot;]
+name = "&lt;kebab-name&gt;"
+version = "0.1.0"
+requires-python = "&gt;=3.11,&lt;3.13"
+dependencies = ["xr-ai-launcher"]
 
 [tool.uv.sources]
-xr-ai-launcher = { path = &quot;../../utils/xr-ai-launcher&quot;, editable = true }
+xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
 
 [project.scripts]
-&lt;snake_name&gt; = &quot;main:run&quot;
+&lt;snake_name&gt; = "main:run"
 
 [tool.hatch.build.targets.wheel]
-only-include = [&quot;main.py&quot;]
+only-include = ["main.py"]
 </pre></div>
 </div>
 </section>
 <section id="worker-pyproject-toml">
 <h2>Worker <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code><a class="headerlink" href="#worker-pyproject-toml" title="Link to this heading">#</a></h2>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[build-system]
-requires = [&quot;hatchling&quot;]
-build-backend = &quot;hatchling.build&quot;
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
-name = &quot;&lt;kebab-name&gt;-worker&quot;
-version = &quot;0.1.0&quot;
-requires-python = &quot;&gt;=3.11,&lt;3.13&quot;
+name = "&lt;kebab-name&gt;-worker"
+version = "0.1.0"
+requires-python = "&gt;=3.11,&lt;3.13"
 dependencies = [
-    &quot;xr-ai-hub-client&quot;,
-    &quot;xr-ai-models&quot;,
+    "xr-ai-hub-client",
+    "xr-ai-models",
     # add task-specific deps here: numpy, torch, etc.
 ]
 
 [tool.uv.sources]
-xr-ai-hub-client  = { path = &quot;../../../agent-sdk/xr-ai-hub&quot;, editable = true }
-xr-ai-models = { path = &quot;../../../agent-sdk/xr-ai-models&quot;, editable = true }
+xr-ai-hub-client  = { path = "../../../agent-sdk/xr-ai-hub", editable = true }
+xr-ai-models = { path = "../../../agent-sdk/xr-ai-models", editable = true }
 
 [project.scripts]
-&lt;snake_name&gt;_worker = &quot;&lt;snake_name&gt;_worker.__main__:run&quot;
+&lt;snake_name&gt;_worker = "&lt;snake_name&gt;_worker.__main__:run"
 
 [tool.hatch.build.targets.wheel]
-packages = [&quot;&lt;snake_name&gt;_worker&quot;]
+packages = ["&lt;snake_name&gt;_worker"]
 </pre></div>
 </div>
 </section>
 <section id="orchestrator-main-py">
 <h2>Orchestrator <code class="docutils literal notranslate"><span class="pre">main.py</span></code><a class="headerlink" href="#orchestrator-main-py" title="Link to this heading">#</a></h2>
 <p>Exact boilerplate — do not add logic here:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">&quot;&quot;&quot;</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">"""</span>
 <span class="sd">&lt;Name&gt; agent orchestrator.  Runs the process stack for this sample.</span>
 
 <span class="sd">How to run (from agent-samples/&lt;name&gt;/):</span>
 <span class="sd">    uv sync &amp;&amp; uv run &lt;snake_name&gt;</span>
-<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">"""</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_launcher</span><span class="w"> </span><span class="kn">import</span> <span class="n">Process</span><span class="p">,</span> <span class="n">run_stack</span>
@@ -560,8 +560,8 @@ packages = [&quot;&lt;snake_name&gt;_worker&quot;]
 <span class="n">_BASE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span>
 
 <span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;hub&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/xr-media-hub&quot;</span><span class="p">,</span> <span class="s2">&quot;xr_media_hub&quot;</span><span class="p">),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;worker&quot;</span><span class="p">,</span> <span class="s2">&quot;worker&quot;</span><span class="p">,</span>               <span class="s2">&quot;&lt;snake_name&gt;_worker&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/xr-media-hub"</span><span class="p">,</span> <span class="s2">"xr_media_hub"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span>               <span class="s2">"&lt;snake_name&gt;_worker"</span><span class="p">),</span>
 <span class="p">]</span>
 
 
@@ -569,7 +569,7 @@ packages = [&quot;&lt;snake_name&gt;_worker&quot;]
     <span class="n">run_stack</span><span class="p">(</span><span class="n">PROCESSES</span><span class="p">,</span> <span class="n">_BASE</span><span class="p">)</span>
 
 
-<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
     <span class="n">run</span><span class="p">()</span>
 </pre></div>
 </div>
@@ -579,9 +579,9 @@ packages = [&quot;&lt;snake_name&gt;_worker&quot;]
 <p>Use this template when the worker talks directly to <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code>. Native
 voice workers keep argument parsing in <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code> and delegate composition
 to sibling <code class="docutils literal notranslate"><span class="pre">app.py</span></code> and <code class="docutils literal notranslate"><span class="pre">config.py</span></code> modules; see
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/a7719f1b1be4664fcab9bc03d3455e050ef23861/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/794ce0c6de27c02670d3bde42b14cbd2cbe2c179/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
 for that shape. Fill in the sections marked <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">←</span> <span class="pre">FILL</span> <span class="pre">IN</span></code>.</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>&quot;&quot;&quot;
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>"""
 &lt;Name&gt; agent worker — &lt;one-line description&gt;.
 
 Launched as a subprocess by ``uv run &lt;snake_name&gt;`` (the orchestrator).
@@ -589,16 +589,16 @@ Do not run this directly.
 
 Protocol                            # ← include only if the worker sends/receives data msgs
 --------
-Client → agent  (topic &quot;&lt;in.topic&gt;&quot;):
+Client → agent  (topic "&lt;in.topic&gt;"):
     &lt;description&gt;
 
-Agent → client  (topic &quot;&lt;out.topic&gt;&quot;):
+Agent → client  (topic "&lt;out.topic&gt;"):
     &lt;description&gt;
 
 Environment                         # ← include only if env vars are read
 -----------
     ENV_VAR   description (default: value)
-&quot;&quot;&quot;
+"""
 from __future__ import annotations
 
 import argparse
@@ -612,17 +612,17 @@ from xr_ai_hub import (          # ← import only what you use
     Subscribe,                     # ← only needed when scoping subscriptions
 )
 
-log = logging.getLogger(&quot;&lt;snake_name&gt;&quot;)
+log = logging.getLogger("&lt;snake_name&gt;")
 
-_HUB_PUB  = &quot;ipc:///tmp/xr_hub_pub&quot;
-_HUB_PUSH = &quot;ipc:///tmp/xr_hub_in&quot;
+_HUB_PUB  = "ipc:///tmp/xr_hub_pub"
+_HUB_PUSH = "ipc:///tmp/xr_hub_in"
 
 
 class &lt;CamelName&gt;Agent:            # ← FILL IN agent logic
 
     def __init__(self) -&gt; None:
         self._ep = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
-        self._ep.on_frame(self._on_frame)       # ← remove callbacks you don&#39;t use
+        self._ep.on_frame(self._on_frame)       # ← remove callbacks you don't use
         self._ep.on_audio(self._on_audio)
         self._ep.on_data(self._on_data)
         self._ep.on_participant(self._on_participant)
@@ -648,7 +648,7 @@ class &lt;CamelName&gt;Agent:            # ← FILL IN agent logic
 async def main(ready_file: Path | None = None) -&gt; None:
     logging.basicConfig(
         level=logging.INFO,
-        format=&quot;%(asctime)s %(name)s %(levelname)s %(message)s&quot;,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
 
     agent = &lt;CamelName&gt;Agent()
@@ -660,7 +660,7 @@ async def main(ready_file: Path | None = None) -&gt; None:
     if ready_file:
         ready_file.touch()
 
-    log.info(&quot;&lt;snake_name&gt; connecting  sub=%s  push=%s&quot;, _HUB_PUB, _HUB_PUSH)
+    log.info("&lt;snake_name&gt; connecting  sub=%s  push=%s", _HUB_PUB, _HUB_PUSH)
     try:
         await agent.run()
     finally:
@@ -669,12 +669,12 @@ async def main(ready_file: Path | None = None) -&gt; None:
 
 def run() -&gt; None:
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument(&quot;--ready-file&quot;, type=Path, default=None)
+    p.add_argument("--ready-file", type=Path, default=None)
     ns, _ = p.parse_known_args()
     asyncio.run(main(ready_file=ns.ready_file))
 
 
-if __name__ == &quot;__main__&quot;:
+if __name__ == "__main__":
     run()
 </pre></div>
 </div>
