@@ -11,7 +11,7 @@ _TEST = Path(__file__).parent / "javascript/web_camera_capture.test.mjs"
 
 def test_web_camera_capture_behavior() -> None:
     result = subprocess.run(
-        ["node", "--experimental-default-type=module", str(_TEST)],
+        ["node", str(_TEST)],
         check=False,
         capture_output=True,
         text=True,

@@ -3,6 +3,11 @@
 
 const LIVEKIT_URL = 'mock:livekit-client';
 const APP_CORE_URL = 'mock:app-core';
+const WEB_CLIENT_ROOT = new URL('../../client-samples/web/', import.meta.url).href;
+
+function isWebClientJavaScript(url) {
+  return url.startsWith(WEB_CLIENT_ROOT) && new URL(url).pathname.endsWith('.js');
+}
 
 export async function resolve(specifier, context, nextResolve) {
   if (specifier === 'livekit-client') {
@@ -77,6 +82,10 @@ export async function load(url, context, nextLoad) {
         }
       `,
     };
+  }
+
+  if (isWebClientJavaScript(url)) {
+    return nextLoad(url, { ...context, format: 'module' });
   }
 
   return nextLoad(url, context);
