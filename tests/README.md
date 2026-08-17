@@ -28,6 +28,10 @@ Multi-client / multi-agent coverage for the XR-Media-Hub IPC pipeline.
 The IPC suite runs without Docker or LiveKit — it speaks ZMQ over
 `ipc://` only.
 
+Install Node.js 24 before running the test suite. The browser camera behavior
+tests use Node's built-in test runner, and CI pins this version for reproducible
+results.
+
 ```bash
 cd xr-ai/tests
 uv sync

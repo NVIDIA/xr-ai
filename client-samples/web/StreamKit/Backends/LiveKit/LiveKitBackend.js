@@ -18,7 +18,6 @@ import {
   Room,
   RoomEvent,
   Track,
-  createLocalVideoTrack,
   createLocalAudioTrack,
 } from 'livekit-client';
 
@@ -123,6 +122,15 @@ export class LiveKitBackend {
    */
   constructor(config) {
     this.#config = config;
+  }
+
+  /**
+   * The browser camera track currently published to LiveKit.
+   *
+   * @returns {MediaStreamTrack | null}
+   */
+  get cameraTrack() {
+    return this.#videoTrack?.mediaStreamTrack ?? null;
   }
 
   // ── Public API ──────────────────────────────────────────────────────────────
@@ -323,15 +331,32 @@ export class LiveKitBackend {
     const facingMode = config?.facing   ?? 'user';
 
     const constraints = deviceId
-      ? { deviceId: { exact: deviceId } }
-      : { facingMode };
+      ? { deviceId: { exact: deviceId }, resizeMode: 'none' }
+      : { facingMode, resizeMode: 'none' };
 
-    const track = await createLocalVideoTrack(constraints);
-    this.#videoTrack = track;
-
-    await this.#room.localParticipant.publishTrack(track, {
-      source: Track.Source.Camera,
+    // LiveKit's convenience capture adds a 16:9 h720 constraint, which can make
+    // mobile browsers crop the sensor before the frame reaches WebRTC.
+    const mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: constraints,
     });
+    const mediaTrack = mediaStream.getVideoTracks()[0];
+    if (!mediaTrack) {
+      throw new Error('Camera capture returned no video track');
+    }
+
+    try {
+      const publication = await this.#room.localParticipant.publishTrack(mediaTrack, {
+        source: Track.Source.Camera,
+      });
+      const track = publication.videoTrack;
+      if (!track) throw new Error('LiveKit did not publish the camera track');
+      this.#videoTrack = track;
+      console.info('LiveKitBackend: published camera settings', mediaTrack.getSettings());
+    } catch (error) {
+      mediaTrack.stop();
+      throw error;
+    }
   }
 
   /**

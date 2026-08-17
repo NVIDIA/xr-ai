@@ -474,6 +474,7 @@ async def test_vad_stt_stop_probe_schedules_on_speech_start(monkeypatch):
     # Exactly one STT call — the probe's — because on_utterance never fired.
     assert len(stt.calls) == 1
     assert stt.calls[0][1] == 16000
+    assert len(stt.calls[0][0]) == len(frame.audio) + round(16000 * 0.12) * 2
 
 
 @pytest.mark.asyncio
@@ -621,13 +622,14 @@ async def test_vad_stt_stop_probe_cancelled_when_vad_finalizes_first(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_vad_stt_final_transcription_waits_for_probe_cancellation(monkeypatch):
+async def test_vad_stt_final_transcription_waits_for_inflight_probe(monkeypatch):
     _StagedVad.instances.clear()
 
     class _SerialStt(_StagedStt):
         def __init__(self) -> None:
             super().__init__(texts=[])
             self.first_started = asyncio.Event()
+            self.release_first = asyncio.Event()
             self.active = 0
             self.max_active = 0
 
@@ -646,14 +648,24 @@ async def test_vad_stt_final_transcription_waits_for_probe_cancellation(monkeypa
             try:
                 if call_number == 1:
                     self.first_started.set()
-                    await asyncio.Event().wait()
+                    await self.release_first.wait()
                 return "hey agent place a cube"
             finally:
                 self.active -= 1
 
     stt = _SerialStt()
     monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
-    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.05))
+    partials: list[str] = []
+
+    async def on_partial(_pid: str, text: str) -> bool:
+        partials.append(text)
+        return True
+
+    proc = VadSttProcessor(
+        stt=stt,
+        vad_cfg=VadConfig(stop_probe_after_s=0.05),
+        on_partial_transcript=on_partial,
+    )
     frame = InputAudioRawFrame(
         audio=b"\x00\x00" * 320,
         sample_rate=16000,
@@ -671,14 +683,82 @@ async def test_vad_stt_final_transcription_waits_for_probe_cancellation(monkeypa
         await asyncio.sleep(0.05)
         await worker.queue_frame(frame)
         await asyncio.wait_for(stt.first_started.wait(), timeout=1.0)
-        await _StagedVad.instances[-1].trigger_utterance()
+        finalize = asyncio.create_task(_StagedVad.instances[-1].trigger_utterance())
         await asyncio.sleep(0.05)
+        assert not finalize.done()
+        stt.release_first.set()
+        await asyncio.wait_for(finalize, timeout=1.0)
         await worker.queue_frame(EndFrame())
 
     await asyncio.gather(runner.run(), drive())
 
     assert len(stt.calls) == 2
     assert stt.max_active == 1
+    assert partials == ["hey agent place a cube"]
+    transcripts = [item for item in sink.frames if isinstance(item, TranscriptionFrame)]
+    assert [item.text for item in transcripts] == ["hey agent place a cube"]
+
+
+@pytest.mark.asyncio
+async def test_vad_stt_final_transcription_cancels_stalled_probe(monkeypatch):
+    _StagedVad.instances.clear()
+
+    class _StalledProbeStt(_StagedStt):
+        def __init__(self) -> None:
+            super().__init__(texts=[])
+            self.probe_started = asyncio.Event()
+
+        async def transcribe(
+            self,
+            audio: bytes,
+            *,
+            sample_rate: int | None = None,
+            channels: int = 1,
+            timeout: float | None = None,
+        ) -> str:
+            self.calls.append((audio, sample_rate or 16000))
+            if len(self.calls) == 1:
+                self.probe_started.set()
+                await asyncio.Event().wait()
+            return "hey agent place a cube"
+
+    stt = _StalledProbeStt()
+    monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
+    monkeypatch.setattr(
+        "xr_ai_voice._processors.vad_stt._PARTIAL_PROBE_FINISH_GRACE_S",
+        0.05,
+    )
+    proc = VadSttProcessor(
+        stt=stt,
+        vad_cfg=VadConfig(stop_probe_after_s=0.05),
+        on_partial_transcript=lambda _pid, _text: asyncio.sleep(0, result=True),
+    )
+    frame = InputAudioRawFrame(
+        audio=b"\x00\x00" * 320,
+        sample_rate=16000,
+        num_channels=1,
+    )
+    frame.transport_source = "web-client"
+
+    sink = _CaptureSink()
+    worker = PipelineWorker(
+        Pipeline([proc, sink]),
+        cancel_on_idle_timeout=False,
+        enable_rtvi=False,
+    )
+    runner = WorkerRunner()
+    await runner.add_workers(worker)
+
+    async def drive() -> None:
+        await asyncio.sleep(0.05)
+        await worker.queue_frame(frame)
+        await asyncio.wait_for(stt.probe_started.wait(), timeout=1.0)
+        await asyncio.wait_for(_StagedVad.instances[-1].trigger_utterance(), timeout=0.5)
+        await worker.queue_frame(EndFrame())
+
+    await asyncio.gather(runner.run(), drive())
+
+    assert len(stt.calls) == 2
     transcripts = [item for item in sink.frames if isinstance(item, TranscriptionFrame)]
     assert [item.text for item in transcripts] == ["hey agent place a cube"]
 
@@ -990,6 +1070,55 @@ async def test_voice_gate_processor_chime_routes_through_pipeline_audio_path():
 
 
 @pytest.mark.asyncio
+async def test_voice_gate_processor_never_falls_back_to_late_chime_for_speech_query():
+    cfg = VoiceGateConfig(magic_phrases=("agent",), listening_chime=True)
+    proc = VoiceGateProcessor(cfg=cfg, tts=_FakeTts())
+    proc.gate.observe_tts_wav(_silence_wav(24000))
+
+    started = UserStartedSpeakingFrame()
+    started.transport_source = "pid-1"
+    transcript = TranscriptionFrame(
+        text="agent, what time is it",
+        user_id="pid-1",
+        timestamp="t",
+    )
+    transcript.transport_source = "pid-1"
+    sink = await _run_chain(
+        proc,
+        sends=[
+            started,
+            transcript,
+        ],
+    )
+
+    assert not any(isinstance(frame, OutputAudioRawFrame) for frame in sink.frames)
+    queries = [frame for frame in sink.frames if isinstance(frame, GatedQueryFrame)]
+    assert [query.text for query in queries] == ["what time is it"]
+
+
+@pytest.mark.asyncio
+async def test_voice_gate_processor_synthetic_query_chimes_after_empty_speech_turn():
+    cfg = VoiceGateConfig(magic_phrases=("agent",), listening_chime=True)
+    proc = VoiceGateProcessor(cfg=cfg, tts=_FakeTts())
+    proc.gate.observe_tts_wav(_silence_wav(24000))
+
+    started = UserStartedSpeakingFrame()
+    started.transport_source = "pid-1"
+    stopped = UserStoppedSpeakingFrame()
+    stopped.transport_source = "pid-1"
+    synthetic = TranscriptionFrame(
+        text="agent, what time is it",
+        user_id="pid-1",
+        timestamp="t",
+    )
+    sink = await _run_chain(proc, sends=[started, stopped, synthetic])
+
+    assert any(isinstance(frame, OutputAudioRawFrame) for frame in sink.frames)
+    queries = [frame for frame in sink.frames if isinstance(frame, GatedQueryFrame)]
+    assert [query.text for query in queries] == ["what time is it"]
+
+
+@pytest.mark.asyncio
 async def test_voice_gate_processor_chimes_on_partial_wake_without_dispatching_early():
     cfg = VoiceGateConfig(
         magic_phrases=("agent", "hey agent"),
@@ -1058,10 +1187,14 @@ async def test_voice_gate_processor_phrase_only_falls_back_to_final_chime():
     proc = VoiceGateProcessor(cfg=cfg, tts=_FakeTts())
     proc.gate.observe_tts_wav(_silence_wav(24000))
 
-    sink = await _run_chain(
-        proc,
-        sends=[TranscriptionFrame(text="hey agent", user_id="pid-1", timestamp="t")],
-    )
+    started = UserStartedSpeakingFrame()
+    started.transport_source = "pid-1"
+    transcript = TranscriptionFrame(text="hey agent", user_id="pid-1", timestamp="t")
+    transcript.transport_source = "pid-1"
+    sink = await _run_chain(proc, sends=[
+        started,
+        transcript,
+    ])
 
     assert any(isinstance(frame, OutputAudioRawFrame) for frame in sink.frames)
     assert not any(isinstance(frame, GatedQueryFrame) for frame in sink.frames)

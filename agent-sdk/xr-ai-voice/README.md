@@ -58,7 +58,7 @@ async with runtime:
 | `silence_duration` | `0.8` | Seconds of silence that finalize an utterance. |
 | `min_speech` | `0.15` | Minimum speech duration accepted as an utterance. |
 | `silero_threshold` | `0.5` | Silero VAD speech-probability threshold. |
-| `stop_probe_after_s` | `0.4` | Delay before an early wake/STOP transcription probe; set to `0` or less to disable probes. |
+| `stop_probe_after_s` | `0.25` | Cadence for up to three early wake/STOP transcription probes; set to `0` or less to disable probes. |
 
 `VoiceSession.text_topic` controls the completed-response echo sent through the
 hub data channel. Its default is `"agent.response"`; set it to `""` when the
@@ -118,9 +118,13 @@ does not execute application handlers. Typed-text ingress is also internal to
 health probes complete before the default hub transport opens its sockets.
 
 When wake phrases and the listening chime are enabled, the VAD/STT stage probes
-the opening audio while the user is still speaking. A recognized phrase emits
-the chime immediately, while only the final transcript enters the voice gate as
-a query. STOP commands use the same early-probe path for immediate interruption.
+the opening audio on a fixed cadence while the user is still speaking. Probe
+audio includes a short silent tail so offline STT can finalize the wake word. A
+recognized phrase emits the chime immediately, while only the final transcript
+enters the voice gate as a query. An in-flight probe gets a short grace period
+before final STT and is then cancelled, so a slow probe cannot stall the audio
+pipeline. A missed probe never inserts a late chime in front of response speech.
+STOP commands use the same early-probe path for immediate interruption.
 
 The final transcript accepts a wake phrase at its beginning or after
 sentence-final `.`, `?`, or `!` punctuation followed by whitespace or a closing

@@ -14,6 +14,11 @@ lk_port_ws:  7880
 lk_port_tcp: 7881
 lk_port_udp: 7882
 
+# Cloud VMs behind NAT may need STUN-based public-IP discovery. Also skip
+# validation when the NAT does not support LiveKit's public-IP self-ping.
+# lk_use_external_ip: true
+# lk_skip_external_ip_validation: true
+
 # ── Web client server ─────────────────────────────────────────────────────────
 # The page serves both stacks: LiveKit (agent audio/data over the WSS proxy on
 # this port) AND CloudXR (one-tap Launch XR → WebXR over wss://<host>:48322).

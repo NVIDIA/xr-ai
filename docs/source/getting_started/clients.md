@@ -88,6 +88,10 @@ To connect:
    directly.
 4. Click **Connect**. You are now live in the XR session.
 
+The camera preview displays the same browser track published to the hub and
+adapts to its captured aspect ratio. The browser console logs the published
+track settings when the camera starts.
+
 ## Web-XR (XR render demo)
 
 The XR render demo client lives in `client-samples/web-xr/`. Unlike the basic
