@@ -454,7 +454,8 @@ participant-scoped or global events. An agent that owns resources or background
 work is responsible for controlling them, including creating, cancelling, and
 awaiting its own tasks. The runtime neither knows nor controls whether an
 agent’s internal work is running. <code class="docutils literal notranslate"><span class="pre">publish()</span></code> waits for every fan-out delivery
-to settle before propagating any subscriber failures.</p>
+to settle before propagating any subscriber failures. Subscriber callbacks
+should hand off lengthy work to agent-owned bounded queues and return promptly.</p>
 <p>Topics default to <code class="docutils literal notranslate"><span class="pre">telemetry=&quot;full&quot;</span></code>. High-cardinality transport topics use
 <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> when their consumer aggregates fragments and records one semantic
 operation scope. Delivery and failure behavior remains unchanged. Keeping the
@@ -466,8 +467,11 @@ state is shared between them owns the appropriate synchronization, such as an
 head-of-line blocking on unrelated or streaming tools.</p>
 <p>Domain controls such as <code class="docutils literal notranslate"><span class="pre">start_monitoring</span></code>, <code class="docutils literal notranslate"><span class="pre">stop_monitoring</span></code>, and <code class="docutils literal notranslate"><span class="pre">status</span></code> are
 ordinary tools. Agent lifetime itself is not a model tool. Model loops,
-planning, memory, and model clients remain agent implementations. Raw audio and
-video stay on the XR-Media-Hub path.</p>
+planning, memory, and model clients remain agent implementations. Raw video
+stays on the XR-Media-Hub path. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes final pre-gate STT
+results on <code class="docutils literal notranslate"><span class="pre">voice.transcript</span></code> for explicit subscribers. Its media session is
+private, and its bounded transcript-delivery queue prevents slow subscribers
+from delaying STT or command gating.</p>
 </section>
 
 
