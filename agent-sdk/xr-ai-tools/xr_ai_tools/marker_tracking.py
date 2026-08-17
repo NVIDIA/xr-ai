@@ -30,7 +30,10 @@ class MarkerType(StrEnum):
     """Marker families supported by :class:`MarkerTrackingTool`."""
 
     QR_CODE = "qr_code"
+    """QR codes containing arbitrary text."""
+
     ARUCO = "aruco"
+    """ArUco fiducial markers containing numeric identifiers."""
 
 
 class MarkerTrackingRequest(StrictRequest):
@@ -40,25 +43,34 @@ class MarkerTrackingRequest(StrictRequest):
         min_length=1,
         description="Participant whose current camera frame should be scanned.",
     )
+    """Participant whose current camera frame should be scanned."""
 
 
 class MarkerPoint(BaseModel):
     """One image-space corner of a tracked marker."""
 
     x: float = Field(description="Horizontal pixel coordinate.")
+    """Horizontal pixel coordinate."""
+
     y: float = Field(description="Vertical pixel coordinate.")
+    """Vertical pixel coordinate."""
 
 
 class TrackedMarker(BaseModel):
     """One detected marker and its quadrilateral in the source frame."""
 
     marker_type: MarkerType = Field(description="Detected marker family.")
+    """Detected marker family."""
+
     value: str = Field(
         description="Decoded QR text or decimal ArUco marker identifier."
     )
+    """Decoded QR text or decimal ArUco marker identifier."""
+
     corners: tuple[MarkerPoint, MarkerPoint, MarkerPoint, MarkerPoint] = Field(
         description="Four clockwise image-space corners."
     )
+    """Four clockwise image-space corners."""
 
 
 class MarkerTrackingResult(BaseModel):
@@ -68,14 +80,19 @@ class MarkerTrackingResult(BaseModel):
         default_factory=list,
         description="Detected markers in detector-provided order.",
     )
+    """Detected markers in detector-provided order."""
+
     available: bool = Field(
         default=True,
         description="Whether a current frame was available and could be scanned.",
     )
+    """Whether a current frame was available and could be scanned."""
+
     message: str | None = Field(
         default=None,
         description="Human-readable detail when no marker was returned.",
     )
+    """Human-readable detail when no marker was returned."""
 
 
 def _image_pixels(image: Image.Image | np.ndarray) -> np.ndarray:

@@ -36,29 +36,46 @@ _MAX_IMAGES = 4
 
 
 class ImageQueryRequest(StrictRequest):
+    """An image reference and the question to answer from it."""
+
     image: ImageReference = Field(description="Image selected by another tool or caller.")
+    """Image selected by another tool or caller."""
+
     query: str = Field(min_length=1, description="Question to answer from the image.")
+    """Question to answer from the image."""
 
 
 class MultiImageQueryRequest(StrictRequest):
+    """An ordered image collection and one question spanning the images."""
+
     images: list[ImageReference] = Field(
         min_length=1,
         max_length=_MAX_IMAGES,
         description="Ordered images selected by other tools or the caller.",
     )
+    """Ordered images selected by other tools or the caller."""
+
     query: str = Field(min_length=1, description="Question to answer from the images.")
+    """Question to answer from the images."""
 
 
 class VideoQueryRequest(StrictRequest):
+    """Chronological image frames and a temporal question about them."""
+
     frames: list[TimedImage] = Field(
         min_length=1,
         max_length=_MAX_IMAGES,
         description="Chronologically ordered image frames with Unix timestamps.",
     )
+    """Chronologically ordered image frames with Unix timestamps."""
+
     query: str = Field(min_length=1, description="Question to answer from the timed frames.")
+    """Question to answer from the timed frames."""
 
     @model_validator(mode="after")
     def validate_timeline(self) -> VideoQueryRequest:
+        """Require frames to be supplied in chronological order."""
+
         timestamps = [frame.timestamp_us for frame in self.frames]
         if timestamps != sorted(timestamps):
             raise ValueError("frames must be in chronological timestamp order")
@@ -66,15 +83,23 @@ class VideoQueryRequest(StrictRequest):
 
 
 class ImageQueryResult(BaseModel):
+    """A complete VLM answer and visual-input availability state."""
+
     text: str = Field(description="Complete answer text.")
+    """Complete answer text."""
+
     available: bool = Field(
         default=True,
         description="Whether the supplied visual input produced a usable answer.",
     )
+    """Whether the supplied visual input produced a usable answer."""
 
 
 class ImageQueryChunk(BaseModel):
+    """One incremental text fragment from a streaming VLM answer."""
+
     text: str = Field(description="A partial fragment of the streamed answer text.")
+    """Partial fragment of the streamed answer text."""
 
 
 class _ImageInference:

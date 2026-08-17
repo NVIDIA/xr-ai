@@ -16,11 +16,16 @@ from ._utils import merge_dicts
 
 
 Category = Literal["llm", "vlm", "stt", "tts", "embedding"]
+"""A model role supported by :class:`ModelsConfig`."""
+
 ModelKind = Literal["openai_compat"]
+"""A supported model-service adapter implementation."""
+
 Readiness = Literal["health", "none"]
 Ownership = Literal["managed", "reused", "external"]
 
 KIND_OPENAI_COMPAT: ModelKind = "openai_compat"
+"""The adapter kind for OpenAI-compatible HTTP endpoints."""
 
 
 @dataclass(frozen=True)
@@ -28,10 +33,19 @@ class AdapterSpec:
     """API dialect and model-specific request/response behavior."""
 
     kind: ModelKind = KIND_OPENAI_COMPAT
+    """The concrete client implementation used for this role."""
+
     model_name: str = ""
+    """The model identifier sent to endpoints that require one."""
+
     reasoning_field: str | None = None
+    """The response field containing reasoning, or ``None`` for auto-detection."""
+
     capabilities: dict[str, Any] = field(default_factory=dict)
+    """Overrides used to construct the service's capability flags."""
+
     default_extras: dict[str, Any] = field(default_factory=dict)
+    """Model-specific fields merged into every request payload."""
 
 
 @dataclass(frozen=True)
@@ -39,12 +53,21 @@ class EndpointSpec:
     """Connectivity, authentication, timeout, and readiness for an adapter."""
 
     base_url: str = ""
+    """The endpoint root URL, without a model-specific route."""
+
     api_key_env: str | None = None
+    """Environment variable containing the bearer token, when required."""
+
     timeout: float = 60.0
+    """Default request timeout in seconds."""
+
     readiness: Readiness = "health"
+    """How the client determines whether the endpoint is ready."""
 
     @property
     def health_check(self) -> bool:
+        """Whether readiness requires a successful endpoint health check."""
+
         return self.readiness == "health"
 
 
@@ -53,7 +76,10 @@ class DeploymentSpec:
     """Process ownership for the endpoint that serves a model role."""
 
     ownership: Ownership = "external"
+    """Whether the launcher starts, reuses, or does not manage the service."""
+
     service: str | None = None
+    """The launcher service name for managed or reused deployments."""
 
 
 class _RoleSpec:
@@ -64,38 +90,56 @@ class _RoleSpec:
 
     @property
     def kind(self) -> ModelKind:
+        """The adapter implementation used for this role."""
+
         return self.adapter.kind
 
     @property
     def model_name(self) -> str:
+        """The endpoint's configured model identifier."""
+
         return self.adapter.model_name
 
     @property
     def reasoning_field(self) -> str | None:
+        """The response field containing reasoning, when explicitly configured."""
+
         return self.adapter.reasoning_field
 
     @property
     def capabilities(self) -> dict[str, Any]:
+        """Capability overrides declared for this model role."""
+
         return self.adapter.capabilities
 
     @property
     def default_extras(self) -> dict[str, Any]:
+        """Model-specific fields included in every request payload."""
+
         return self.adapter.default_extras
 
     @property
     def base_url(self) -> str:
+        """The endpoint root URL."""
+
         return self.endpoint.base_url
 
     @property
     def api_key_env(self) -> str | None:
+        """The environment variable containing the endpoint bearer token."""
+
         return self.endpoint.api_key_env
 
     @property
     def timeout(self) -> float:
+        """The default request timeout in seconds."""
+
         return self.endpoint.timeout
 
     @property
     def health_check(self) -> bool:
+        """Whether readiness requires a successful endpoint health check."""
+
         return self.endpoint.health_check
 
     def _set_specs(
@@ -136,9 +180,16 @@ def _reject_mixed_construction(**legacy_nondefault: bool) -> None:
 
 @dataclass(frozen=True, init=False)
 class LLMSpec(_RoleSpec):
+    """Configuration for a text chat-completion model role."""
+
     adapter: AdapterSpec = field(default_factory=AdapterSpec)
+    """Model-specific request and response behavior."""
+
     endpoint: EndpointSpec = field(default_factory=EndpointSpec)
+    """Endpoint connectivity, authentication, and readiness settings."""
+
     deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
+    """Launcher ownership metadata for the serving process."""
 
     def __init__(
         self,
@@ -196,9 +247,16 @@ class LLMSpec(_RoleSpec):
 
 @dataclass(frozen=True, init=False)
 class VLMSpec(_RoleSpec):
+    """Configuration for an image- or video-language model role."""
+
     adapter: AdapterSpec = field(default_factory=AdapterSpec)
+    """Model-specific request and response behavior."""
+
     endpoint: EndpointSpec = field(default_factory=EndpointSpec)
+    """Endpoint connectivity, authentication, and readiness settings."""
+
     deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
+    """Launcher ownership metadata for the serving process."""
 
     def __init__(
         self,
@@ -253,11 +311,18 @@ class VLMSpec(_RoleSpec):
 
 @dataclass(frozen=True, init=False)
 class STTSpec(_RoleSpec):
+    """Configuration for a speech-to-text model role."""
+
     adapter: AdapterSpec = field(default_factory=AdapterSpec)
+    """Model-specific request and response behavior."""
+
     endpoint: EndpointSpec = field(
         default_factory=lambda: EndpointSpec(timeout=30.0)
     )
+    """Endpoint connectivity, authentication, and readiness settings."""
+
     deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
+    """Launcher ownership metadata for the serving process."""
 
     def __init__(
         self,
@@ -297,13 +362,22 @@ class STTSpec(_RoleSpec):
             ),
             deployment or DeploymentSpec(),
         )
+
+
 @dataclass(frozen=True, init=False)
 class TTSSpec(_RoleSpec):
+    """Configuration for a text-to-speech model role."""
+
     adapter: AdapterSpec = field(default_factory=AdapterSpec)
+    """Model-specific request and response behavior."""
+
     endpoint: EndpointSpec = field(
         default_factory=lambda: EndpointSpec(timeout=30.0)
     )
+    """Endpoint connectivity, authentication, and readiness settings."""
+
     deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
+    """Launcher ownership metadata for the serving process."""
 
     def __init__(
         self,
@@ -347,9 +421,16 @@ class TTSSpec(_RoleSpec):
 
 @dataclass(frozen=True, init=False)
 class EmbeddingSpec(_RoleSpec):
+    """Configuration for a text-embedding model role."""
+
     adapter: AdapterSpec = field(default_factory=AdapterSpec)
+    """Model-specific request and response behavior."""
+
     endpoint: EndpointSpec = field(default_factory=EndpointSpec)
+    """Endpoint connectivity, authentication, and readiness settings."""
+
     deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
+    """Launcher ownership metadata for the serving process."""
 
     def __init__(
         self,
@@ -394,6 +475,8 @@ class EmbeddingSpec(_RoleSpec):
 
 
 Spec = LLMSpec | VLMSpec | STTSpec | TTSSpec | EmbeddingSpec
+"""Any typed model-role specification stored in :class:`ModelsConfig`."""
+
 T = TypeVar("T", LLMSpec, VLMSpec, STTSpec, TTSSpec, EmbeddingSpec)
 
 
@@ -402,24 +485,37 @@ class ModelsConfig:
     """Logical-name to typed model-role specifications."""
 
     entries: dict[str, Spec]
+    """Model-role specifications keyed by application-defined logical name."""
 
     def llm(self, name: str) -> LLMSpec:
+        """Return the LLM specification named *name*."""
+
         return _typed(self.entries, name, LLMSpec)
 
     def vlm(self, name: str) -> VLMSpec:
+        """Return the VLM specification named *name*."""
+
         return _typed(self.entries, name, VLMSpec)
 
     def stt(self, name: str) -> STTSpec:
+        """Return the speech-to-text specification named *name*."""
+
         return _typed(self.entries, name, STTSpec)
 
     def tts(self, name: str) -> TTSSpec:
+        """Return the text-to-speech specification named *name*."""
+
         return _typed(self.entries, name, TTSSpec)
 
     def embedding(self, name: str) -> EmbeddingSpec:
+        """Return the embedding specification named *name*."""
+
         return _typed(self.entries, name, EmbeddingSpec)
 
     @property
     def required_credentials(self) -> tuple[str, ...]:
+        """Return the sorted environment-variable names required by all roles."""
+
         return tuple(sorted({
             spec.endpoint.api_key_env
             for spec in self.entries.values()
@@ -440,7 +536,12 @@ def _typed(entries: dict[str, Spec], name: str, cls: type[T]) -> T:
 
 
 def load_models_config(path: Path | str) -> ModelsConfig:
-    """Load a JSON or YAML model profile and resolve adapter presets."""
+    """Load a YAML or JSON model profile and resolve its adapter presets.
+
+    The file may contain model entries directly or nested below a ``models``
+    key. Invalid entries raise :class:`ValueError` with the file path and role
+    name included in the message.
+    """
 
     raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
     if not isinstance(raw, dict):
@@ -451,7 +552,11 @@ def load_models_config(path: Path | str) -> ModelsConfig:
 def load_models_config_from_dict(
     raw: dict[str, Any], *, source: str = "<dict>"
 ) -> ModelsConfig:
-    """Build a model configuration from a parsed direct or ``models`` mapping."""
+    """Build a model configuration from a parsed direct or ``models`` mapping.
+
+    ``source`` labels validation errors and is useful when the mapping did not
+    originate from a file.
+    """
 
     if not isinstance(raw, dict):
         raise ValueError(f"{source}: top-level must be a mapping")

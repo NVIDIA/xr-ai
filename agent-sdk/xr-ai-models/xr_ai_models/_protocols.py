@@ -17,48 +17,79 @@ from typing import Any, AsyncIterator, Literal, Mapping, Protocol, Sequence, run
 
 
 ImageInput = bytes | Path | str
-"""bytes, filesystem path, ``data:`` URL, or ``http(s)://`` URL."""
+"""Image bytes, a filesystem path, a ``data:`` URL, or an HTTP(S) URL."""
 
 VideoInput = bytes | Path | str
-"""bytes, filesystem path, ``data:`` URL, or ``http(s)://`` URL."""
+"""Video bytes, a filesystem path, a ``data:`` URL, or an HTTP(S) URL."""
 
 
 @dataclass(frozen=True)
 class TextPart:
+    """Text content in a multimodal chat message."""
+
     text: str
+    """The text presented to the model."""
+
     type: Literal["text"] = "text"
+    """The OpenAI-compatible discriminator for this content part."""
 
 
 @dataclass(frozen=True)
 class ImagePart:
+    """An image reference in a multimodal chat message."""
+
     url: str
+    """An HTTP(S) or ``data:`` URL containing the image."""
+
     type: Literal["image_url"] = "image_url"
+    """The OpenAI-compatible discriminator for this content part."""
 
 
 @dataclass(frozen=True)
 class VideoPart:
+    """A video reference in a multimodal chat message."""
+
     url: str
+    """An HTTP(S) or ``data:`` URL containing the video."""
+
     type: Literal["video_url"] = "video_url"
+    """The OpenAI-compatible discriminator for this content part."""
 
 
 ContentPart = TextPart | ImagePart | VideoPart
+"""A supported text, image, or video part in a chat message."""
 
 
 @dataclass(frozen=True)
 class ToolCall:
+    """A function-tool invocation requested by a model."""
+
     id: str
+    """The provider-assigned identifier used to submit the tool result."""
+
     name: str
+    """The function name requested by the model."""
+
     arguments: str
     """JSON-encoded arguments string, per the OpenAI tool-call contract."""
 
 
 @dataclass(frozen=True)
 class ToolDef:
+    """A function tool definition exposed to a chat model."""
+
     name: str
+    """The function name the model uses in a :class:`ToolCall`."""
+
     description: str
+    """A natural-language description of what the function does."""
+
     parameters: dict[str, Any]
+    """The function parameters as a JSON Schema object."""
 
     def to_openai(self) -> dict[str, Any]:
+        """Return this definition in OpenAI's function-tool wire format."""
+
         return {
             "type": "function",
             "function": {
@@ -71,33 +102,67 @@ class ToolDef:
 
 @dataclass(frozen=True)
 class ChatMessage:
+    """One input turn in an LLM or VLM conversation."""
+
     role: Literal["system", "user", "assistant", "tool"]
+    """The participant role associated with the message."""
+
     content: str | list[ContentPart]
+    """Plain text or ordered multimodal content supplied by the participant."""
+
     tool_calls: list[ToolCall] | None = None
+    """Tool calls emitted by an assistant turn, when present."""
+
     tool_call_id: str | None = None
+    """The call identifier answered by a tool-result message, when applicable."""
 
 
 @dataclass(frozen=True)
 class ChatResponse:
+    """A normalized non-streaming response from a chat model."""
+
     content: str
+    """The assistant's user-visible response text."""
+
     reasoning: str | None
+    """Normalized model reasoning, when the endpoint returns it."""
+
     tool_calls: list[ToolCall] | None
+    """Function-tool invocations requested by the model, when present."""
+
     finish_reason: str | None
+    """The provider's reason for ending generation, when supplied."""
+
     raw: dict[str, Any]
+    """The unmodified provider response object."""
 
 
 @dataclass(frozen=True)
 class Capabilities:
+    """Features supported by a configured model endpoint."""
+
     streaming: bool = True
+    """Whether the endpoint supports token streaming."""
+
     tool_calls: bool = False
+    """Whether the endpoint supports function-tool calls."""
+
     vision: bool = False
+    """Whether the endpoint accepts image inputs."""
+
     video: bool = False
+    """Whether the endpoint accepts video inputs."""
+
     reasoning: bool = False
+    """Whether the endpoint can return model reasoning."""
 
 
 @runtime_checkable
 class LLMService(Protocol):
+    """Structural interface for text chat-completion services."""
+
     capabilities: Capabilities
+    """Features supported by this service."""
 
     async def chat(
         self,
@@ -110,7 +175,10 @@ class LLMService(Protocol):
         thinking_budget: int | None = None,
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
-    ) -> ChatResponse: pass
+    ) -> ChatResponse:
+        """Generate one complete response for a sequence of chat messages."""
+
+        pass
 
     def stream(
         self,
@@ -123,16 +191,28 @@ class LLMService(Protocol):
         thinking_budget: int | None = None,
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
-    ) -> AsyncIterator[str]: pass
+    ) -> AsyncIterator[str]:
+        """Stream user-visible response text for a sequence of chat messages."""
 
-    async def health(self) -> bool: pass
+        pass
 
-    async def close(self) -> None: pass
+    async def health(self) -> bool:
+        """Return whether the configured endpoint is ready for requests."""
+
+        pass
+
+    async def close(self) -> None:
+        """Release resources owned by the service."""
+
+        pass
 
 
 @runtime_checkable
 class VLMService(Protocol):
+    """Structural interface for visual chat-completion services."""
+
     capabilities: Capabilities
+    """Features supported by this service."""
 
     async def ask_image(
         self,
@@ -144,7 +224,10 @@ class VLMService(Protocol):
         temperature: float | None = None,
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
-    ) -> ChatResponse: pass
+    ) -> ChatResponse:
+        """Generate one response to a question about an image."""
+
+        pass
 
     async def ask_images(
         self,
@@ -156,7 +239,10 @@ class VLMService(Protocol):
         temperature: float | None = None,
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
-    ) -> ChatResponse: pass
+    ) -> ChatResponse:
+        """Generate one response to a question about multiple images."""
+
+        pass
 
     async def ask_video(
         self,
@@ -168,7 +254,10 @@ class VLMService(Protocol):
         temperature: float | None = None,
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
-    ) -> ChatResponse: pass
+    ) -> ChatResponse:
+        """Generate one response to a question about a video."""
+
+        pass
 
     def stream(
         self,
@@ -180,7 +269,10 @@ class VLMService(Protocol):
         temperature: float | None = None,
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
-    ) -> AsyncIterator[str]: pass
+    ) -> AsyncIterator[str]:
+        """Stream response text for a question about an image."""
+
+        pass
 
     def stream_images(
         self,
@@ -192,15 +284,26 @@ class VLMService(Protocol):
         temperature: float | None = None,
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
-    ) -> AsyncIterator[str]: pass
+    ) -> AsyncIterator[str]:
+        """Stream response text for a question about multiple images."""
 
-    async def health(self) -> bool: pass
+        pass
 
-    async def close(self) -> None: pass
+    async def health(self) -> bool:
+        """Return whether the configured endpoint is ready for requests."""
+
+        pass
+
+    async def close(self) -> None:
+        """Release resources owned by the service."""
+
+        pass
 
 
 @runtime_checkable
 class STTService(Protocol):
+    """Structural interface for speech-to-text services."""
+
     async def transcribe(
         self,
         audio: bytes,
@@ -208,37 +311,68 @@ class STTService(Protocol):
         sample_rate: int | None = None,
         channels: int = 1,
         timeout: float | None = None,
-    ) -> str: pass
+    ) -> str:
+        """Transcribe WAV data or 16-bit PCM audio into text."""
 
-    async def health(self) -> bool: pass
+        pass
 
-    async def close(self) -> None: pass
+    async def health(self) -> bool:
+        """Return whether the configured endpoint is ready for requests."""
+
+        pass
+
+    async def close(self) -> None:
+        """Release resources owned by the service."""
+
+        pass
 
 
 @runtime_checkable
 class TTSService(Protocol):
+    """Structural interface for text-to-speech services."""
+
     async def synthesize(
         self,
         text: str,
         *,
         response_format: str = "wav",
         timeout: float | None = None,
-    ) -> bytes: pass
+    ) -> bytes:
+        """Synthesize text and return audio in the requested format."""
 
-    async def health(self) -> bool: pass
+        pass
 
-    async def close(self) -> None: pass
+    async def health(self) -> bool:
+        """Return whether the configured endpoint is ready for requests."""
+
+        pass
+
+    async def close(self) -> None:
+        """Release resources owned by the service."""
+
+        pass
 
 
 @runtime_checkable
 class EmbeddingService(Protocol):
+    """Structural interface for text-embedding services."""
+
     async def embed(
         self,
         texts: Sequence[str],
         *,
         timeout: float | None = None,
-    ) -> list[list[float]]: pass
+    ) -> list[list[float]]:
+        """Embed text strings, returning one vector for each input in order."""
 
-    async def health(self) -> bool: pass
+        pass
 
-    async def close(self) -> None: pass
+    async def health(self) -> bool:
+        """Return whether the configured endpoint is ready for requests."""
+
+        pass
+
+    async def close(self) -> None:
+        """Release resources owned by the service."""
+
+        pass

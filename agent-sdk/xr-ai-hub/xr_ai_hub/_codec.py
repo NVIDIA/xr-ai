@@ -28,21 +28,51 @@ _decoders: dict[int, Callable[[list], Any]] = {}
 
 
 def register_encoder(type_id: int, fn: Callable[[Any], list]) -> None:
-    """Register a serializer for type_id. fn must return a msgpack-serialisable list."""
+    """Register the payload serializer for a wire message type.
+
+    Parameters
+    ----------
+    type_id :
+        Numeric wire identifier, normally a :class:`~xr_ai_hub.MsgType` value.
+    fn :
+        Callable that converts a message object to a msgpack-serializable list.
+    """
     _encoders[type_id] = fn
 
 
 def register_decoder(type_id: int, fn: Callable[[list], Any]) -> None:
-    """Register a deserializer for type_id. fn receives the decoded list."""
+    """Register the payload deserializer for a wire message type.
+
+    Parameters
+    ----------
+    type_id :
+        Numeric wire identifier, normally a :class:`~xr_ai_hub.MsgType` value.
+    fn :
+        Callable that converts a decoded msgpack list to a message object.
+    """
     _decoders[type_id] = fn
 
 
 def encode(type_id: int, msg: Any) -> bytes:
+    """Encode a registered message as a type byte followed by msgpack payload.
+
+    Raises
+    ------
+    KeyError
+        If no encoder is registered for ``type_id``.
+    """
     payload = msgpack.packb(_encoders[type_id](msg), use_bin_type=True)
     return _TYPE_HDR.pack(type_id) + cast(bytes, payload)
 
 
 def decode(raw: bytes) -> tuple[int, Any]:
+    """Decode a wire message into its numeric type identifier and payload object.
+
+    Raises
+    ------
+    KeyError
+        If no decoder is registered for the encoded type identifier.
+    """
     (type_id,) = _TYPE_HDR.unpack_from(raw, 0)
     payload = msgpack.unpackb(raw[1:], raw=False)
     return type_id, _decoders[type_id](payload)

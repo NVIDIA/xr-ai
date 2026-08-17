@@ -23,7 +23,10 @@ class ToolInvocationResult:
     """A model-visible result from one local tool invocation."""
 
     content: str
+    """Model-visible serialized result or validation error."""
+
     return_direct: bool
+    """Whether the agent should return the content without another model turn."""
 
 
 class Tool(Generic[RequestT, ResultT]):

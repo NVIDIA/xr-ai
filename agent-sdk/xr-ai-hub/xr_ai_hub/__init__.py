@@ -7,8 +7,8 @@ xr_ai_hub — lightweight agent-side SDK for XR-Media-Hub.
 Agents only need this package (pyzmq + msgpack). The hub implementation and
 its LiveKit, FastAPI, and uvicorn dependencies are not included.
 
-Typical usage
--------------
+Typical usage::
+
     from xr_ai_hub import ProcessorEndpoint, DataMessage, FrameSignal
 
     ep = ProcessorEndpoint(sub_addr="ipc:///tmp/xr_hub_pub",

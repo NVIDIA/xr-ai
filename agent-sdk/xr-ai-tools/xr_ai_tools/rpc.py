@@ -79,6 +79,17 @@ class RPCClient:
         *,
         timeout_s: float | None = None,
     ) -> dict[str, Any]:
+        """Call a remote operation and return its decoded result map.
+
+        Args:
+            operation: Remote dispatch name.
+            arguments: Msgpack-compatible operation arguments.
+            timeout_s: Per-call timeout, overriding the client default.
+
+        Raises:
+            RPCError: If transport, protocol, timeout, or remote execution fails.
+        """
+
         self._ensure_started()
         socket = self._socket
         assert socket is not None
@@ -144,6 +155,8 @@ class RPCClient:
                 socket.close(linger=0)
 
     async def close(self) -> None:
+        """Cancel pending calls and close the transport."""
+
         receiver, self._receiver = self._receiver, None
         if receiver is not None:
             receiver.cancel()
@@ -168,6 +181,12 @@ class RPCServer:
         self._send_lock = asyncio.Lock()
 
     async def serve(self, *, ready: Callable[[], None] | None = None) -> None:
+        """Bind the endpoint and dispatch requests until cancelled.
+
+        Args:
+            ready: Optional callback invoked after the endpoint is bound.
+        """
+
         if self._socket is not None:
             raise RuntimeError("RPC server is already running")
         socket = zmq.asyncio.Context.instance().socket(zmq.ROUTER)
@@ -235,6 +254,8 @@ class RPCServer:
                 await self._socket.send_multipart([identity, _pack(response)])
 
     async def close(self) -> None:
+        """Cancel active request handlers and close the bound socket."""
+
         tasks = tuple(self._tasks)
         for task in tasks:
             task.cancel()

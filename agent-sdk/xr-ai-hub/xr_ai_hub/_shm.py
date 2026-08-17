@@ -60,7 +60,10 @@ _STATE_OFFSET = 4
 class SlotView(NamedTuple):
     """Zero-copy view into one ring-buffer slot's pixel data."""
     data:   memoryview
+    """Pixel bytes backed directly by the shared-memory segment."""
+
     signal: FrameSignal
+    """Metadata identifying and describing the occupied slot."""
 
 
 class ShmRingBuffer:
@@ -72,6 +75,18 @@ class ShmRingBuffer:
 
     The caller that uses read_slot() MUST call release_slot() before the next
     write_frame() for that slot can succeed. Both operations are O(1).
+
+    Parameters
+    ----------
+    name :
+        Operating-system name of the shared-memory segment.
+    num_slots :
+        Number of fixed-capacity slots to allocate when ``create`` is true.
+    max_frame_bytes :
+        Maximum pixel payload per slot when ``create`` is true.
+    create :
+        Create and initialize the segment instead of attaching to an existing
+        one. The creator is responsible for eventually calling :meth:`unlink`.
     """
 
     def __init__(
@@ -114,9 +129,13 @@ class ShmRingBuffer:
         pts_us:  int,
         seq:     int,
     ) -> int:
-        """
-        Write frame into the next free slot. Returns slot index.
-        Raises RuntimeError if all slots are occupied (back-pressure signal).
+        """Write a frame into the next free slot and return its index.
+
+        Raises
+        ------
+        RuntimeError
+            If every slot is occupied. This is the producer's back-pressure
+            signal; consumers release occupied slots with :meth:`release_slot`.
         """
         slot    = self._claim_slot()
         hdr_off = _GH_SIZE + slot * self._slot_stride
@@ -134,9 +153,15 @@ class ShmRingBuffer:
     # ── consumer ──────────────────────────────────────────────────────────────
 
     def read_slot(self, signal: FrameSignal) -> SlotView:
-        """
-        Return a zero-copy memoryview of a ready slot's pixel data.
-        The view is valid until release_slot() is called — do not hold it longer.
+        """Return a zero-copy view of a ready slot's pixel data.
+
+        The view remains valid until :meth:`release_slot` is called for the
+        slot and must not be retained afterward.
+
+        Raises
+        ------
+        RuntimeError
+            If the indicated slot is not ready for consumption.
         """
         hdr_off = _GH_SIZE + signal.slot * self._slot_stride
         hdr     = _SH.unpack_from(self._buf, hdr_off)
@@ -149,7 +174,7 @@ class ShmRingBuffer:
         )
 
     def release_slot(self, slot: int) -> None:
-        """Mark slot FREE so the producer can reuse it."""
+        """Mark a consumed slot as free so the producer can reuse it."""
         hdr_off = _GH_SIZE + slot * self._slot_stride
         hdr     = _SH.unpack_from(self._buf, hdr_off)
         _SH.pack_into(self._buf, hdr_off, _MAGIC_SLOT, _STATE_FREE, hdr[2], 0, hdr[4], hdr[5], hdr[6], hdr[7], 0)
@@ -170,6 +195,7 @@ class ShmRingBuffer:
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
     def close(self) -> None:
+        """Release this process's view and close its shared-memory handle."""
         self._buf.release()
         try:
             self._shm.close()
@@ -179,8 +205,13 @@ class ShmRingBuffer:
             pass
 
     def unlink(self) -> None:
-        """Remove the underlying shared memory segment. Call once from the owner (Hub)."""
+        """Remove the shared-memory segment; call once from its creating owner."""
         self._shm.unlink()
 
-    def __enter__(self):    return self
-    def __exit__(self, *_): self.close()
+    def __enter__(self):
+        """Return this ring buffer from a context manager."""
+        return self
+
+    def __exit__(self, *_):
+        """Close this process's handle when leaving a context manager."""
+        self.close()

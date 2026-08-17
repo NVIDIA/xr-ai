@@ -38,6 +38,12 @@ def offset_user_frame(
     right: float = 0.0,
     up: float = 0.0,
 ) -> Vector3:
+    """Offset a point along the user's horizontal axes and world-space up.
+
+    The user's forward and right axes are projected onto the horizontal plane.
+    Returned coordinates are rounded to millimeter precision.
+    """
+
     (forward_x, forward_z), (right_x, right_z) = _horizontal_axes(frame)
     return _position(
         start.x + forward_x * forward + right_x * right,
@@ -47,6 +53,8 @@ def offset_user_frame(
 
 
 def gaze_target(frame: SpatialFrame, distance: float = 1.5) -> Vector3:
+    """Return a point along the user's three-dimensional gaze direction."""
+
     if distance < 0:
         raise ValueError("distance must be non-negative")
     return _position(
@@ -61,6 +69,8 @@ def user_relative(
     direction: Literal["front", "back", "left", "right", "above", "below"],
     distance: float,
 ) -> Vector3:
+    """Return a point in a named direction from the user's frame origin."""
+
     if distance < 0:
         raise ValueError("distance must be non-negative; flip the direction instead")
     offsets = {
@@ -88,6 +98,8 @@ def anchor_relative(
     ],
     distance: float,
 ) -> Vector3:
+    """Return a point in a named user-relative direction from an anchor."""
+
     if distance < 0:
         raise ValueError("distance must be non-negative; flip the direction instead")
     offsets = {
@@ -107,6 +119,8 @@ def toward(
     target: Vector3,
     distance: float,
 ) -> Vector3:
+    """Move a point by a signed distance along the line toward a target."""
+
     delta_x = target.x - start.x
     delta_y = target.y - start.y
     delta_z = target.z - start.z
@@ -122,6 +136,8 @@ def toward(
 
 
 def midpoint(first: Vector3, second: Vector3) -> Vector3:
+    """Return the midpoint between two positions."""
+
     return _position(
         (first.x + second.x) / 2,
         (first.y + second.y) / 2,

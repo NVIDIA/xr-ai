@@ -130,50 +130,9 @@ The simple VLM sample provides complete local and hosted profiles.
 
 ## Protocols
 
-```python
-class LLMService(Protocol):
-    capabilities: Capabilities
-    async def chat(self, messages, *, tools=None, max_tokens=None,
-                   temperature=None, enable_thinking=False,
-                   thinking_budget=None, timeout=None,
-                   headers=None) -> ChatResponse: ...
-    def stream(self, messages, *, ...) -> AsyncIterator[str]: ...
-    async def health(self) -> bool: ...
-    async def close(self) -> None: ...
-
-class VLMService(Protocol):
-    capabilities: Capabilities
-    async def ask_image(self, image, question, *, system_prompt="",
-                        max_tokens=None, temperature=None,
-                        timeout=None, headers=None) -> ChatResponse: ...
-    async def ask_images(self, images, question, *, system_prompt="",
-                         max_tokens=None, temperature=None,
-                         timeout=None, headers=None) -> ChatResponse: ...
-    async def ask_video(self, video, question, *, system_prompt="",
-                        max_tokens=None, temperature=None,
-                        timeout=None, headers=None) -> ChatResponse: ...
-    def stream(self, image, question, *, system_prompt="",
-               max_tokens=None, temperature=None,
-               timeout=None, headers=None) -> AsyncIterator[str]: ...
-    def stream_images(self, images, question, *, system_prompt="",
-                      max_tokens=None, temperature=None,
-                      timeout=None, headers=None) -> AsyncIterator[str]: ...
-    async def health(self) -> bool: ...
-
-class STTService(Protocol):
-    async def transcribe(self, audio: bytes, *, sample_rate=None,
-                         channels=1, timeout=None) -> str: ...
-    async def health(self) -> bool: ...
-
-class TTSService(Protocol):
-    async def synthesize(self, text: str, *, response_format="wav",
-                         timeout=None) -> bytes: ...
-    async def health(self) -> bool: ...
-
-class EmbeddingService(Protocol):
-    async def embed(self, texts, *, timeout=None) -> list[list[float]]: ...
-    async def health(self) -> bool: ...
-```
+The versioned documentation site generates exact protocol methods, parameters,
+types, and defaults from the public Python declarations. This README keeps only
+the behavioral rules that span multiple calls or implementations.
 
 `ChatResponse.reasoning` is the canonical reasoning field — the
 `reasoning_field` knob normalizes `reasoning_content` (nemotron_v3 parser)

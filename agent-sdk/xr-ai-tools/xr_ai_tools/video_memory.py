@@ -14,24 +14,44 @@ from .types import EmptyRequest, StrictRequest
 
 
 class ListRecordedParticipantsResult(BaseModel):
+    """Participants with camera recordings available in video memory."""
+
     participants: list[str]
+    """Exact recorded participant identifiers."""
 
 
 class VideoStatsRequest(StrictRequest):
+    """Select one participant's recording statistics."""
+
     participant_id: str = Field(min_length=1)
+    """Participant whose camera recording should be inspected."""
 
 
 class VideoStatsResult(BaseModel):
+    """Storage and time-range statistics for one participant's recording."""
+
     participant_id: str
+    """Participant whose recording was inspected."""
+
     num_chunks: int
+    """Number of persisted video chunks."""
+
     total_bytes: int
+    """Total encoded size of all chunks in bytes."""
+
     avg_chunk_bytes: int
+    """Average encoded chunk size in bytes."""
+
     earliest_us: int
+    """Earliest recorded Unix timestamp in microseconds."""
+
     latest_us: int
+    """Latest recorded Unix timestamp in microseconds."""
 
 
 class _ParticipantRequest(StrictRequest):
     participant_id: str = Field(min_length=1)
+    """Participant whose camera recording should be queried."""
 
 
 class _DurationRequest(_ParticipantRequest):
@@ -40,6 +60,7 @@ class _DurationRequest(_ParticipantRequest):
         le=300,
         description="Whole seconds of recorded history in the requested window.",
     )
+    """Whole seconds of recorded history in the requested window."""
 
 
 class LatestVideoRequest(_DurationRequest):
@@ -53,13 +74,23 @@ class HistoricalVideoRequest(_DurationRequest):
         gt=0,
         description="Unix-epoch timestamp in microseconds at the start of the window.",
     )
+    """Unix timestamp in microseconds at the start of the window."""
 
 
 class RecordedVideoResult(BaseModel):
+    """A recorded H.264 file and its covered time range."""
+
     path: str
+    """Local path to the exported H.264 file."""
+
     size: int
+    """Encoded file size in bytes."""
+
     start_us: int
+    """Beginning of the returned window in Unix microseconds."""
+
     end_us: int
+    """End of the returned window in Unix microseconds."""
 
 
 class _FrameSamplingRequest(_DurationRequest):
@@ -68,16 +99,21 @@ class _FrameSamplingRequest(_DurationRequest):
         le=256,
         description="Maximum total number of evenly distributed frames to return.",
     )
+    """Maximum total number of evenly distributed frames to return."""
+
     max_width: int | None = Field(
         default=None,
         gt=0,
         description="Optional maximum exported width; requires max_height.",
     )
+    """Optional maximum exported width; requires ``max_height``."""
+
     max_height: int | None = Field(
         default=None,
         gt=0,
         description="Optional maximum exported height; requires max_width.",
     )
+    """Optional maximum exported height; requires ``max_width``."""
 
     @model_validator(mode="after")
     def validate_resolution(self) -> _FrameSamplingRequest:
@@ -97,46 +133,82 @@ class HistoricalFramesRequest(_FrameSamplingRequest):
         gt=0,
         description="Unix-epoch timestamp in microseconds at the start of the window.",
     )
+    """Unix timestamp in microseconds at the start of the window."""
 
 
 class SampledVideoFrame(TimedImage):
+    """One image sampled from a recorded video window."""
+
     timestamp_us: int = Field(
         ge=0,
         description="Estimated Unix-epoch timestamp interpolated from recording chunk metadata.",
     )
+    """Estimated Unix timestamp interpolated from recording chunk metadata."""
     width: int
+    """Frame width in pixels."""
+
     height: int
+    """Frame height in pixels."""
 
 
 class SampleFramesResult(BaseModel):
+    """Bounded image samples and metadata for a recorded video window."""
+
     frames: list[SampledVideoFrame]
+    """Sampled frames in chronological order."""
+
     start_us: int
+    """Beginning of the sampled window in Unix microseconds."""
+
     end_us: int
+    """End of the sampled window in Unix microseconds."""
+
     duration_seconds: int
+    """Requested duration of the sampled window in whole seconds."""
+
     frame_budget: int
+    """Requested maximum number of returned frames."""
+
     max_width: int | None
+    """Requested maximum frame width, if resizing was enabled."""
+
     max_height: int | None
+    """Requested maximum frame height, if resizing was enabled."""
 
 
 class HistoricalFrameRequest(_ParticipantRequest):
+    """Select the recorded frame nearest an absolute timestamp."""
+
     start_us: int = Field(
         gt=0,
         description="Unix-epoch timestamp in microseconds of the requested frame.",
     )
+    """Unix timestamp in microseconds of the requested frame."""
 
 
 class HistoricalFrameResult(TimedImage):
+    """The recorded image nearest a requested absolute timestamp."""
+
     timestamp_us: int = Field(
         ge=0,
         description="Estimated Unix-epoch timestamp interpolated from recording chunk metadata.",
     )
+    """Estimated Unix timestamp interpolated from recording chunk metadata."""
     width: int
+    """Frame width in pixels."""
+
     height: int
+    """Frame height in pixels."""
 
 
 class VideoHealthResult(BaseModel):
+    """Readiness and recording state reported by video memory."""
+
     ready: bool = True
+    """Whether the service is ready for queries."""
+
     recording_enabled: bool
+    """Whether the service is currently persisting camera video."""
 
 
 class VideoMemoryTools:
@@ -263,17 +335,23 @@ class VideoMemoryTools:
         )
 
     async def get_health(self) -> VideoHealthResult:
+        """Return detailed video-memory readiness and recording state."""
+
         return VideoHealthResult.model_validate(
             await self._rpc.call("get_health", {}, timeout_s=2.0)
         )
 
     async def health(self) -> bool:
+        """Return whether the video-memory service is reachable and ready."""
+
         try:
             return (await self.get_health()).ready
         except Exception:
             return False
 
     async def close(self) -> None:
+        """Close the underlying service connection."""
+
         await self._rpc.close()
 
 

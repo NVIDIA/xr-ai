@@ -22,70 +22,131 @@ _MAX_TIMESTAMP_US = 9_223_372_036_854_775_807
 
 
 class AddTranscriptRequest(StrictRequest):
+    """One timestamped transcript segment to persist."""
+
     source_id: str = Field(description="Participant or internal source identifier.")
+    """Participant or internal source identifier."""
+
     timestamp_us: int = Field(description="Unix timestamp in microseconds.")
+    """Unix timestamp in microseconds."""
+
     text: str = Field(min_length=1, description="Text segment to persist.")
+    """Text segment to persist."""
 
     @field_validator("text")
     @classmethod
     def text_must_not_be_blank(cls, value: str) -> str:
+        """Require visible text in a persisted segment."""
+
         if not value.strip():
             raise ValueError("text must not be blank")
         return value
 
 
 class AddTranscriptResult(BaseModel):
+    """Confirmation that a transcript segment was persisted."""
+
     ok: bool = True
+    """Whether the append operation succeeded."""
 
 
 class TranscriptSegment(BaseModel):
+    """Persisted transcript text at a point in time."""
+
     timestamp_us: int
+    """Unix timestamp in microseconds."""
+
     text: str
+    """Persisted transcript text."""
 
 
 class QueryTranscriptsRequest(StrictRequest):
+    """Source and inclusive time window for a transcript query."""
+
     source_id: str = Field(description="Participant or internal source identifier.")
+    """Participant or internal source identifier."""
+
     start_us: int = Field(description="Inclusive window start in Unix microseconds.")
+    """Inclusive window start in Unix microseconds."""
+
     end_us: int = Field(description="Inclusive window end in Unix microseconds.")
+    """Inclusive window end in Unix microseconds."""
 
 
 class QueryTranscriptsResult(BaseModel):
+    """Transcript segments selected from one source and time window."""
+
     segments: list[TranscriptSegment]
+    """Matching segments ordered by timestamp."""
 
 
 class ListTranscriptSourcesResult(BaseModel):
+    """Persistent source identifiers known to text memory."""
+
     sources: list[str]
+    """Source identifiers in lexical order."""
 
 
 class TranscriptStatsRequest(StrictRequest):
+    """Select one transcript source for statistics."""
+
     source_id: str = Field(description="Participant or internal source identifier.")
+    """Participant or internal source identifier."""
 
 
 class TranscriptStatsResult(BaseModel):
+    """Aggregate storage and time-range statistics for one source."""
+
     source_id: str
+    """Participant or internal source identifier."""
+
     count: int
+    """Number of stored transcript segments."""
+
     total_chars: int
+    """Total number of characters across stored segments."""
+
     earliest_us: int | None
+    """Earliest stored Unix timestamp in microseconds, if present."""
+
     latest_us: int | None
+    """Latest stored Unix timestamp in microseconds, if present."""
 
 
 class RecallConversationRequest(StrictRequest):
+    """Participant and inclusive time window for conversation recall."""
+
     participant_id: str = Field(description="Participant whose conversation to recall.")
+    """Participant whose conversation to recall."""
+
     start_us: int = Field(default=0, description="Inclusive window start in Unix microseconds.")
+    """Inclusive window start in Unix microseconds."""
+
     end_us: int = Field(
         default=_MAX_TIMESTAMP_US,
         description="Inclusive window end in Unix microseconds.",
     )
+    """Inclusive window end in Unix microseconds."""
 
 
 class ConversationEntry(BaseModel):
+    """One timestamped user or agent turn in a recalled conversation."""
+
     timestamp_us: int
+    """Unix timestamp in microseconds."""
+
     role: Literal["user", "agent"]
+    """Speaker responsible for the text."""
+
     text: str
+    """Conversation text."""
 
 
 class RecallConversationResult(BaseModel):
+    """Chronological user and agent turns recalled for a participant."""
+
     entries: list[ConversationEntry]
+    """Conversation turns ordered by timestamp."""
 
 
 class _TranscriptStore:

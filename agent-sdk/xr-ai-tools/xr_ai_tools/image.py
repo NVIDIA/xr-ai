@@ -25,10 +25,13 @@ class ImageReference(BaseModel):
         min_length=1,
         description=("Opaque xr-image URI returned by an image tool, local image path, file URI, or HTTP(S) URL."),
     )
+    """Opaque image URI, local path, file URI, or HTTP(S) URL."""
 
     @field_validator("uri")
     @classmethod
     def reject_inline_data(cls, value: str) -> str:
+        """Reject data URIs so image bytes remain outside request payloads."""
+
         if value.startswith("data:"):
             raise ValueError("register inline image data with ImageRegistry.put()")
         return value
@@ -40,7 +43,10 @@ class TimedImage(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     image: ImageReference
+    """Reference to the image content."""
+
     timestamp_us: int = Field(ge=0)
+    """Position on the image sequence's microsecond timeline."""
 
 
 class ImageRegistry:
@@ -112,6 +118,8 @@ class ImageRegistry:
                 del self._images[uri]
 
     def clear(self) -> None:
+        """Remove all registered opaque images."""
+
         self._images.clear()
 
     def __len__(self) -> int:

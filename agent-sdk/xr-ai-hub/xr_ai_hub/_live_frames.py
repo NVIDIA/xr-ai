@@ -20,6 +20,15 @@ class LiveFrameSource:
 
     The source stops at raw ``FrameData`` so consumers own image conversion and
     model work without adding dependencies to the hub client.
+
+    Parameters
+    ----------
+    endpoint :
+        Running processor endpoint used to observe signals and request pixels.
+    max_age_s :
+        Maximum accepted frame age in seconds.
+    timeout_s :
+        Maximum time :meth:`get` waits for a fresh frame signal.
     """
 
     def __init__(
@@ -58,7 +67,7 @@ class LiveFrameSource:
         return time.time_ns() // 1_000 - signal.pts_us < self._max_age_us
 
     def participants(self) -> list[str]:
-        """Return participant IDs with a frame inside the configured freshness window."""
+        """Return participant IDs with a frame inside the freshness window."""
         return sorted(
             {
                 participant_id
@@ -68,7 +77,14 @@ class LiveFrameSource:
         )
 
     async def get(self, participant_id: str) -> FrameData:
-        """Return fresh pixels for ``participant_id`` or raise ``FrameUnavailable``."""
+        """Return fresh pixels for a participant.
+
+        Raises
+        ------
+        FrameUnavailable
+            If no fresh signal arrives before the configured timeout or the
+            hub cannot supply pixels for the selected frame.
+        """
         signal = self._freshest(participant_id)
         if signal is None or not self._is_fresh(signal):
             event = asyncio.Event()
@@ -104,7 +120,7 @@ class LiveFrameSource:
         return frame
 
     def release(self, participant_id: str) -> None:
-        """Drop cached signals and wake pending requests for a disconnected participant."""
+        """Drop a participant's signals and wake its pending frame requests."""
         self._latest = {
             key: signal
             for key, signal in self._latest.items()

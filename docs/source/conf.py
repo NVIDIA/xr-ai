@@ -9,9 +9,9 @@ import re
 from pathlib import Path
 from runpy import run_path
 
-API_PACKAGE_DIRS = run_path(str(Path(__file__).with_name("_api_contract.py")))[
-    "API_PACKAGE_DIRS"
-]
+_API_CONTRACT = run_path(str(Path(__file__).with_name("_api_contract.py")))
+API_PACKAGE_DIRS = _API_CONTRACT["API_PACKAGE_DIRS"]
+PUBLIC_API_MODULES = _API_CONTRACT["PUBLIC_API_MODULES"]
 
 _GITHUB_BLOB_PREFIX = "https://github.com/NVIDIA/xr-ai/blob/"
 _GITHUB_TREE_PREFIX = "https://github.com/NVIDIA/xr-ai/tree/"
@@ -119,9 +119,11 @@ _PRIVATE_API_MEMBER_SUFFIXES = (
 
 
 def _skip_private_api_details(_app, what, name, _obj, _skip, _options):
-    """Hide implementation modules and transport-adapter accessors."""
+    """Hide private modules and transport-adapter accessors."""
 
-    if what == "module" or name.endswith(_PRIVATE_API_MEMBER_SUFFIXES):
+    if what == "module" and name not in PUBLIC_API_MODULES:
+        return True
+    if name.endswith(_PRIVATE_API_MEMBER_SUFFIXES):
         return True
     return None
 

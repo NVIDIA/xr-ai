@@ -91,8 +91,11 @@ See [Adding a sample](docs/source/guides/adding-a-sample.md) and the
 
 ## Change contract
 
-- Update the relevant README and `docs/source/` page in the same change as an
-  API, command, configuration, package, or quickstart change.
+- Public Python API names, signatures, types, defaults, and field behavior live
+  in `__all__`, declarations, and co-located docstrings; Sphinx generates their
+  reference pages. Update narrative README or `docs/source/` content only when
+  concepts, workflows, operations, or architecture change. Breaking changes
+  also require a migration entry.
 - Any `pyproject.toml` change must update `DEPENDENCIES.md`; regenerate the
   affected project's gitignored `uv.lock` locally to verify resolution.
 - Never put API keys or tokens in source files. Use environment variables or

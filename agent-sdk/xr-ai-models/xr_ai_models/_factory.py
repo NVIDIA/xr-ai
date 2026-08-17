@@ -16,6 +16,13 @@ from ._protocols import Capabilities, EmbeddingService, LLMService, STTService, 
 
 
 def make_embedding(config: ModelsConfig, name: str) -> EmbeddingService:
+    """Construct the embedding service for the named configuration entry.
+
+    Raises :class:`KeyError` when *name* is absent, :class:`TypeError` when it
+    names a different model role, and :class:`ValueError` for an unsupported
+    adapter kind.
+    """
+
     spec = config.embedding(name)
     if spec.kind == KIND_OPENAI_COMPAT:
         return OpenAICompatEmbedding(
@@ -29,6 +36,13 @@ def make_embedding(config: ModelsConfig, name: str) -> EmbeddingService:
 
 
 def make_llm(config: ModelsConfig, name: str) -> LLMService:
+    """Construct the text chat service for the named configuration entry.
+
+    Raises :class:`KeyError` when *name* is absent, :class:`TypeError` when it
+    names a different model role, and :class:`ValueError` for an unsupported
+    adapter kind.
+    """
+
     spec = config.llm(name)
     adapter = spec.adapter
     endpoint = spec.endpoint
@@ -47,6 +61,13 @@ def make_llm(config: ModelsConfig, name: str) -> LLMService:
 
 
 def make_vlm(config: ModelsConfig, name: str) -> VLMService:
+    """Construct the visual chat service for the named configuration entry.
+
+    Raises :class:`KeyError` when *name* is absent, :class:`TypeError` when it
+    names a different model role, and :class:`ValueError` for an unsupported
+    adapter kind.
+    """
+
     spec = config.vlm(name)
     adapter = spec.adapter
     endpoint = spec.endpoint
@@ -64,6 +85,13 @@ def make_vlm(config: ModelsConfig, name: str) -> VLMService:
 
 
 def make_stt(config: ModelsConfig, name: str) -> STTService:
+    """Construct the speech-to-text service for the named configuration entry.
+
+    Raises :class:`KeyError` when *name* is absent, :class:`TypeError` when it
+    names a different model role, and :class:`ValueError` for an unsupported
+    adapter kind.
+    """
+
     spec = config.stt(name)
     adapter = spec.adapter
     endpoint = spec.endpoint
@@ -78,6 +106,13 @@ def make_stt(config: ModelsConfig, name: str) -> STTService:
 
 
 def make_tts(config: ModelsConfig, name: str) -> TTSService:
+    """Construct the text-to-speech service for the named configuration entry.
+
+    Raises :class:`KeyError` when *name* is absent, :class:`TypeError` when it
+    names a different model role, and :class:`ValueError` for an unsupported
+    adapter kind.
+    """
+
     spec = config.tts(name)
     adapter = spec.adapter
     endpoint = spec.endpoint

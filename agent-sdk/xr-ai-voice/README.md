@@ -48,13 +48,8 @@ async with runtime:
 ## Voice tuning and data echo
 
 `VadConfig` controls utterance boundaries and bounded early transcription:
-
-| Field | Default | Meaning |
-|---|---:|---|
-| `silence_duration` | `0.8` | Seconds of silence that finalize an utterance. |
-| `min_speech` | `0.15` | Minimum speech duration accepted as an utterance. |
-| `silero_threshold` | `0.5` | Silero VAD speech-probability threshold. |
-| `stop_probe_after_s` | `0.25` | Cadence for up to three early wake/STOP transcription probes; set to `0` or less to disable probes. |
+the generated Python reference lists every field, type, default, and description.
+Set `stop_probe_after_s` to `0` or less to disable early probes.
 
 `VoiceAgent.text_topic` controls the completed-response echo sent through the
 hub data channel. Its default is `"agent.response"`; set it to `""` when the

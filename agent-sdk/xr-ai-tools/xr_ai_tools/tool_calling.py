@@ -20,7 +20,10 @@ class ToolCallResult:
     """One model-ready tool response and its control-flow hint."""
 
     message: ChatMessage
+    """Tool-role message to append to the model conversation."""
+
     return_direct: bool
+    """Whether the agent should return the tool result immediately."""
 
 
 @dataclass(frozen=True, slots=True)

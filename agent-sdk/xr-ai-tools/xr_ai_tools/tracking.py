@@ -11,22 +11,50 @@ from .types import EmptyRequest, SpatialFrame, Vector3
 
 
 class HeadPose(BaseModel):
+    """Head pose and orientation reported by the OpenXR service."""
+
     is_valid: bool
+    """Whether the remaining pose fields describe a valid tracked pose."""
+
     position: Vector3
+    """World-space head position."""
+
     forward: Vector3
+    """World-space forward direction."""
+
     right: Vector3
+    """World-space right direction."""
+
     up: Vector3
+    """World-space up direction."""
+
     yaw_deg: float
+    """Head yaw in degrees."""
+
     pitch_deg: float
+    """Head pitch in degrees."""
+
     ts: int
+    """Service-provided pose timestamp."""
+
     error: str | None = None
+    """Tracking failure detail when the pose is invalid."""
 
 
 class OpenXRHealth(BaseModel):
+    """OpenXR service health and session state."""
+
     status: str = "ok"
+    """Service health status label."""
+
     session_open: bool
+    """Whether an OpenXR session is currently open."""
+
     open_attempts: int
+    """Number of attempts made to open an OpenXR session."""
+
     last_open_error: str | None = None
+    """Most recent session-open failure, if any."""
 
 
 class TrackingTools:
@@ -56,17 +84,23 @@ class TrackingTools:
         )
 
     async def get_health(self) -> OpenXRHealth:
+        """Return detailed OpenXR service and session health."""
+
         return OpenXRHealth.model_validate(
             await self._rpc.call("get_health", {}, timeout_s=2.0)
         )
 
     async def health(self) -> bool:
+        """Return whether the service is reachable with an open XR session."""
+
         try:
             return (await self.get_health()).session_open
         except Exception:
             return False
 
     async def close(self) -> None:
+        """Close the underlying service connection."""
+
         await self._rpc.close()
 
 

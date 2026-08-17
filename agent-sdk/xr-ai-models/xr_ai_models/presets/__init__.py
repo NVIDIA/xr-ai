@@ -38,6 +38,14 @@ _PRESETS: dict[str, dict[str, Any]] = {
 
 
 def get_preset(name: str) -> dict[str, Any]:
+    """Return an independent copy of a built-in model preset.
+
+    Raises
+    ------
+    KeyError
+        If ``name`` does not identify a built-in preset.
+    """
+
     try:
         return deepcopy(_PRESETS[name])
     except KeyError as exc:
@@ -47,6 +55,8 @@ def get_preset(name: str) -> dict[str, Any]:
 
 
 def available_presets() -> list[str]:
+    """Return the sorted names of all built-in model presets."""
+
     return sorted(_PRESETS)
 
 

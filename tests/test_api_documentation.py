@@ -44,6 +44,16 @@ def _package(tmp_path: Path, source: str) -> Path:
     return package
 
 
+def _enroll(
+    monkeypatch: pytest.MonkeyPatch,
+    contract: ModuleType,
+    package: Path,
+    public_modules: tuple[str, ...] = (),
+) -> None:
+    monkeypatch.setattr(contract, "API_PACKAGE_DIRS", (package,))
+    monkeypatch.setattr(contract, "PUBLIC_API_MODULES", public_modules)
+
+
 def test_documented_public_api_passes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -65,7 +75,7 @@ DEFAULT_CLIENT = Client()
 __all__ = ["Client", "DEFAULT_CLIENT"]
 ''',
     )
-    monkeypatch.setattr(contract, "API_PACKAGE_DIRS", (package,))
+    _enroll(monkeypatch, contract, package)
 
     assert contract.validate_public_api() == []
 
@@ -89,7 +99,7 @@ DEFAULT_CLIENT = Client()
 __all__ = ["Client", "DEFAULT_CLIENT", "Missing"]
 ''',
     )
-    monkeypatch.setattr(contract, "API_PACKAGE_DIRS", (package,))
+    _enroll(monkeypatch, contract, package)
 
     assert contract.validate_public_api() == [
         "example_api: public method Client.run has no docstring",
@@ -111,7 +121,7 @@ class Client:
 ''',
         encoding="utf-8",
     )
-    monkeypatch.setattr(contract, "API_PACKAGE_DIRS", (package,))
+    _enroll(monkeypatch, contract, package)
 
     assert contract.validate_public_api() == ["example_api: exported Client does not resolve"]
 
@@ -123,11 +133,11 @@ def test_reexport_resolves_exact_definition(
     contract = _load_contract()
     package = _package(
         tmp_path,
-        """
+        '''
 from .public import Client
 
 __all__ = ["Client"]
-""",
+''',
     )
     (package / "public.py").write_text(
         '''
@@ -143,7 +153,7 @@ class Client:
 """,
         encoding="utf-8",
     )
-    monkeypatch.setattr(contract, "API_PACKAGE_DIRS", (package,))
+    _enroll(monkeypatch, contract, package)
 
     assert contract.validate_public_api() == []
 
@@ -179,12 +189,91 @@ class Request(BaseModel):
 __all__ = ["Item", "Request"]
 ''',
     )
-    monkeypatch.setattr(contract, "API_PACKAGE_DIRS", (package,))
+    _enroll(monkeypatch, contract, package)
 
     assert contract.validate_public_api() == [
         "example_api: public field Item.missing has no docstring",
         "example_api: public field Request.missing has no docstring",
     ]
+
+
+def test_public_module_checks_its_local_definition(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contract = _load_contract()
+    package = _package(tmp_path, "__all__ = []\n")
+    (package / "public.py").write_text(
+        '''
+class Client:
+    pass
+
+
+__all__ = ["Client"]
+''',
+        encoding="utf-8",
+    )
+    (package / "other.py").write_text(
+        '''
+class Client:
+    """An unrelated documented class with the same name."""
+''',
+        encoding="utf-8",
+    )
+    _enroll(monkeypatch, contract, package, ("example_api.public",))
+
+    assert contract.validate_public_api() == [
+        "example_api.public: exported Client has no docstring"
+    ]
+
+
+def test_public_module_resolves_documented_import(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contract = _load_contract()
+    package = _package(tmp_path, "__all__ = []\n")
+    (package / "public.py").write_text(
+        '''
+from .implementation import Client
+
+__all__ = ["Client"]
+''',
+        encoding="utf-8",
+    )
+    (package / "implementation.py").write_text(
+        '''
+class Client:
+    """A documented client."""
+''',
+        encoding="utf-8",
+    )
+    _enroll(monkeypatch, contract, package, ("example_api.public",))
+
+    assert contract.validate_public_api() == []
+
+
+def test_public_subpackage_is_supported(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contract = _load_contract()
+    package = _package(tmp_path, "__all__ = []\n")
+    subpackage = package / "extras"
+    subpackage.mkdir()
+    subpackage.joinpath("__init__.py").write_text(
+        '''
+class Client:
+    """A documented client in a public subpackage."""
+
+
+__all__ = ["Client"]
+''',
+        encoding="utf-8",
+    )
+    _enroll(monkeypatch, contract, package, ("example_api.extras",))
+
+    assert contract.validate_public_api() == []
 
 
 def test_generated_voice_reference_rejects_private_transport_details(

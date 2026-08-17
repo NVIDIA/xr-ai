@@ -34,21 +34,27 @@ class ImagePoint(BaseModel):
         allow_inf_nan=False,
         description="Horizontal pixel coordinate from the left edge.",
     )
+    """Horizontal pixel coordinate from the left edge."""
+
     y: float = Field(
         ge=0,
         allow_inf_nan=False,
         description="Vertical pixel coordinate from the top edge.",
     )
+    """Vertical pixel coordinate from the top edge."""
 
 
 class ImagePolygonFillRequest(StrictRequest):
     """Fill the polygon defined by ordered image-space vertices."""
 
     image: ImageReference = Field(description="Source image returned by an image tool or supplied by the caller.")
+    """Source image returned by an image tool or supplied by the caller."""
+
     coordinates: list[ImagePoint] = Field(
         min_length=3,
         description="Ordered polygon vertices; the final vertex is connected to the first.",
     )
+    """Ordered vertices, with the final vertex connected to the first."""
 
 
 class ImagePolygonFillResult(BaseModel):
@@ -58,14 +64,19 @@ class ImagePolygonFillResult(BaseModel):
         default=None,
         description="Opaque reference to the edited PNG image when available.",
     )
+    """Opaque reference to the edited PNG image when available."""
+
     available: bool = Field(
         default=True,
         description="Whether the supplied image and polygon produced an edited image.",
     )
+    """Whether the supplied image and polygon produced an edited image."""
+
     message: str | None = Field(
         default=None,
         description="Recoverable failure detail when no edited image was produced.",
     )
+    """Recoverable failure detail when no edited image was produced."""
 
 
 def _open_image(source: ImageInput) -> Image.Image:

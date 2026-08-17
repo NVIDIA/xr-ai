@@ -20,17 +20,29 @@ class ImageFrame(TimedImage):
     """One selected camera frame and its source metadata."""
 
     width: int = Field(gt=0)
+    """Frame width in pixels."""
+
     height: int = Field(gt=0)
+    """Frame height in pixels."""
+
     sequence: int = Field(ge=0)
+    """Source track sequence number."""
+
     participant_id: str = Field(min_length=1)
+    """Participant that published the frame."""
+
     track_id: str = ""
+    """Source video track identifier, when available."""
 
 
 class CurrentFrameRequest(StrictRequest):
+    """Select the latest camera frame for one participant."""
+
     participant_id: str = Field(
         min_length=1,
         description="Participant whose latest camera frame should be returned.",
     )
+    """Participant whose latest camera frame should be returned."""
 
 
 class CurrentFrameTool(Tool[CurrentFrameRequest, ImageFrame]):

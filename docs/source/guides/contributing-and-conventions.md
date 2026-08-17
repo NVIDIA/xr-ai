@@ -21,8 +21,13 @@ uv run pytest
 uv tool run ruff check <changed-python-files>
 ```
 
-Update the relevant README and this documentation with user-visible changes.
+Public Python references are generated from each enrolled module's literal
+`__all__`, declarations, annotations, defaults, and docstrings. An API-only
+change therefore updates the code, its co-located documentation, and tests; the
+strict documentation build rejects unresolved or undocumented exports. Update
+a README or narrative page when concepts, workflows, operations, or
+architecture change, and add a migration entry for a breaking change.
+
 A `pyproject.toml` change also requires a `DEPENDENCIES.md` update; regenerate
-the affected project's gitignored `uv.lock` locally. New source files require an
-SPDX header; see
-[SPDX headers](spdx-headers.md).
+the affected project's gitignored `uv.lock` locally. New source files require
+an SPDX header; see [SPDX headers](spdx-headers.md).

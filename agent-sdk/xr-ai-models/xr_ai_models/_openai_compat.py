@@ -260,10 +260,12 @@ def _pcm_to_wav(pcm: bytes, sample_rate: int, channels: int) -> bytes:
 
 
 class OpenAICompatLLM:
-    """OpenAI-compatible /v1/chat/completions client.
+    """OpenAI-compatible ``/v1/chat/completions`` client.
 
     Used directly for plain LLMs (Llama-Nemotron, Nemotron3-Nano,
     Nemotron-Omni) and indirectly via :class:`OpenAICompatVLM` for VLMs.
+    The API key is read once from ``api_key_env`` during construction. An
+    injected HTTP client remains owned by the caller and is not closed here.
     """
 
     def __init__(
@@ -282,8 +284,12 @@ class OpenAICompatLLM:
         base = base_url.rstrip("/")
         self._chat_url   = base + "/v1/chat/completions"
         self.health_url  = base + "/health"
+        """The URL used to check endpoint readiness."""
+
         self._model      = model_name
         self.capabilities = capabilities or Capabilities()
+        """Features declared for this model endpoint."""
+
         self._reasoning_field = reasoning_field
         self._default_extras  = default_extras or {}
         self._api_key = os.environ.get(api_key_env) if api_key_env else None
@@ -340,6 +346,13 @@ class OpenAICompatLLM:
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> ChatResponse:
+        """Generate and return one normalized chat response.
+
+        Per-call generation values override endpoint defaults. ``headers`` may
+        supply request context but cannot override the configured authorization
+        header.
+        """
+
         payload = self._build_payload(
             messages,
             tools=tools, max_tokens=max_tokens, temperature=temperature,
@@ -367,6 +380,12 @@ class OpenAICompatLLM:
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> AsyncIterator[str]:
+        """Stream user-visible text deltas from a chat completion.
+
+        Malformed server-sent event lines and deltas without content are
+        skipped. Tool-call and reasoning deltas are not yielded.
+        """
+
         payload = self._build_payload(
             messages,
             tools=tools, max_tokens=max_tokens, temperature=temperature,
@@ -397,9 +416,17 @@ class OpenAICompatLLM:
                     yield content
 
     async def health(self) -> bool:
+        """Return whether the endpoint health check succeeds.
+
+        Returns ``True`` without an HTTP request when health checks were
+        disabled at construction time.
+        """
+
         return await _http_health(self._client, self.health_url, self._health_check)
 
     async def close(self) -> None:
+        """Close the internally created HTTP client, if one is owned."""
+
         if self._owns_client:
             await self._client.aclose()
 
@@ -414,7 +441,12 @@ class OpenAICompatLLM:
 
 
 class OpenAICompatVLM:
-    """Vision LLM client — image-bearing chat completions, fronted as ``ask_image``."""
+    """OpenAI-compatible client for image- and video-bearing chat requests.
+
+    Image and video paths or bytes are converted to ``data:`` URLs before
+    submission. An injected HTTP client remains owned by the caller and is not
+    closed here.
+    """
 
     def __init__(
         self,
@@ -441,10 +473,14 @@ class OpenAICompatVLM:
 
     @property
     def capabilities(self) -> Capabilities:
+        """Return the features declared for the underlying chat endpoint."""
+
         return self._llm.capabilities
 
     @property
     def health_url(self) -> str:
+        """Return the URL used to check endpoint readiness."""
+
         return self._llm.health_url
 
     def _build_image_messages(
@@ -480,6 +516,8 @@ class OpenAICompatVLM:
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> ChatResponse:
+        """Generate one response to *question* about *image*."""
+
         return await self.ask_images(
             [image],
             question,
@@ -501,6 +539,11 @@ class OpenAICompatVLM:
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> ChatResponse:
+        """Generate one response to *question* about an ordered image sequence.
+
+        Raises :class:`ValueError` when *images* is empty.
+        """
+
         return await self._llm.chat(
             self._build_image_messages(images, question, system_prompt),
             max_tokens=max_tokens, temperature=temperature, timeout=timeout,
@@ -533,6 +576,12 @@ class OpenAICompatVLM:
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> ChatResponse:
+        """Generate one response to *question* about *video*.
+
+        Raises :class:`ValueError` unless video support was declared in the
+        configured capabilities.
+        """
+
         if not self.capabilities.video:
             raise ValueError(
                 "this VLM was constructed with capabilities.video=False; "
@@ -556,6 +605,8 @@ class OpenAICompatVLM:
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> AsyncIterator[str]:
+        """Stream response text for *question* about *image*."""
+
         async for chunk in self.stream_images(
             [image],
             question,
@@ -578,6 +629,11 @@ class OpenAICompatVLM:
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> AsyncIterator[str]:
+        """Stream response text for a question about an ordered image sequence.
+
+        Raises :class:`ValueError` when *images* is empty.
+        """
+
         async for chunk in self._llm.stream(
             self._build_image_messages(images, question, system_prompt),
             max_tokens=max_tokens, temperature=temperature, timeout=timeout,
@@ -586,9 +642,13 @@ class OpenAICompatVLM:
             yield chunk
 
     async def health(self) -> bool:
+        """Return whether the underlying chat endpoint is ready."""
+
         return await self._llm.health()
 
     async def close(self) -> None:
+        """Release resources owned by the underlying chat client."""
+
         await self._llm.close()
 
     async def __aenter__(self) -> "OpenAICompatVLM":
@@ -602,7 +662,11 @@ class OpenAICompatVLM:
 
 
 class OpenAICompatSTT:
-    """STT client — multipart POST to /v1/audio/transcriptions."""
+    """OpenAI-compatible ``/v1/audio/transcriptions`` client.
+
+    The API key is read once from ``api_key_env`` during construction. An
+    injected HTTP client remains owned by the caller and is not closed here.
+    """
 
     def __init__(
         self,
@@ -616,6 +680,8 @@ class OpenAICompatSTT:
         base = base_url.rstrip("/")
         self._url       = base + "/v1/audio/transcriptions"
         self.health_url = base + "/health"
+        """The URL used to check endpoint readiness."""
+
         self._api_key   = os.environ.get(api_key_env) if api_key_env else None
         _warn_if_cleartext_key(base_url, self._api_key)
         self._health_check = health_check
@@ -630,6 +696,13 @@ class OpenAICompatSTT:
         channels: int = 1,
         timeout: float | None = None,
     ) -> str:
+        """Transcribe WAV data or 16-bit PCM audio into text.
+
+        When ``sample_rate`` is provided, *audio* is interpreted as raw signed
+        16-bit PCM with the given channel count and wrapped in a WAV container.
+        Otherwise, *audio* must already contain a server-supported audio file.
+        """
+
         wav_bytes = _pcm_to_wav(audio, sample_rate, channels) if sample_rate is not None else audio
         kwargs: dict[str, Any] = {
             "files":   {"file": ("audio.wav", wav_bytes, "audio/wav")},
@@ -645,9 +718,17 @@ class OpenAICompatSTT:
         return resp.json().get("text", "")
 
     async def health(self) -> bool:
+        """Return whether the endpoint health check succeeds.
+
+        Returns ``True`` without an HTTP request when health checks were
+        disabled at construction time.
+        """
+
         return await _http_health(self._client, self.health_url, self._health_check)
 
     async def close(self) -> None:
+        """Close the internally created HTTP client, if one is owned."""
+
         if self._owns_client:
             await self._client.aclose()
 
@@ -662,7 +743,11 @@ class OpenAICompatSTT:
 
 
 class OpenAICompatTTS:
-    """TTS client — JSON POST to /v1/audio/speech, returns raw audio bytes."""
+    """OpenAI-compatible ``/v1/audio/speech`` client.
+
+    The API key is read once from ``api_key_env`` during construction. An
+    injected HTTP client remains owned by the caller and is not closed here.
+    """
 
     def __init__(
         self,
@@ -676,6 +761,8 @@ class OpenAICompatTTS:
         base = base_url.rstrip("/")
         self._url       = base + "/v1/audio/speech"
         self.health_url = base + "/health"
+        """The URL used to check endpoint readiness."""
+
         self._api_key   = os.environ.get(api_key_env) if api_key_env else None
         _warn_if_cleartext_key(base_url, self._api_key)
         self._health_check = health_check
@@ -689,6 +776,8 @@ class OpenAICompatTTS:
         response_format: str = "wav",
         timeout: float | None = None,
     ) -> bytes:
+        """Synthesize *text* and return audio bytes in *response_format*."""
+
         kwargs: dict[str, Any] = {
             "json":    {"input": text, "response_format": response_format},
             "headers": _auth_headers(self._api_key),
@@ -702,9 +791,17 @@ class OpenAICompatTTS:
         return resp.content
 
     async def health(self) -> bool:
+        """Return whether the endpoint health check succeeds.
+
+        Returns ``True`` without an HTTP request when health checks were
+        disabled at construction time.
+        """
+
         return await _http_health(self._client, self.health_url, self._health_check)
 
     async def close(self) -> None:
+        """Close the internally created HTTP client, if one is owned."""
+
         if self._owns_client:
             await self._client.aclose()
 
@@ -719,7 +816,11 @@ class OpenAICompatTTS:
 
 
 class OpenAICompatEmbedding:
-    """OpenAI-compatible ``/v1/embeddings`` client."""
+    """OpenAI-compatible ``/v1/embeddings`` client.
+
+    The API key is read once from ``api_key_env`` during construction. An
+    injected HTTP client remains owned by the caller and is not closed here.
+    """
 
     def __init__(
         self,
@@ -734,6 +835,8 @@ class OpenAICompatEmbedding:
         base = base_url.rstrip("/")
         self._url = base + "/v1/embeddings"
         self.health_url = base + "/health"
+        """The URL used to check endpoint readiness."""
+
         self._model = model_name
         self._api_key = os.environ.get(api_key_env) if api_key_env else None
         _warn_if_cleartext_key(base_url, self._api_key)
@@ -747,6 +850,12 @@ class OpenAICompatEmbedding:
         *,
         timeout: float | None = None,
     ) -> list[list[float]]:
+        """Embed *texts* and return one vector per input in input order.
+
+        An empty input is handled locally. A response containing a different
+        number of vectors raises :class:`ValueError`.
+        """
+
         if not texts:
             return []
         kwargs: dict[str, Any] = {
@@ -765,9 +874,17 @@ class OpenAICompatEmbedding:
         return [[float(value) for value in row["embedding"]] for row in rows]
 
     async def health(self) -> bool:
+        """Return whether the endpoint health check succeeds.
+
+        Returns ``True`` without an HTTP request when health checks were
+        disabled at construction time.
+        """
+
         return await _http_health(self._client, self.health_url, self._health_check)
 
     async def close(self) -> None:
+        """Close the internally created HTTP client, if one is owned."""
+
         if self._owns_client:
             await self._client.aclose()
 

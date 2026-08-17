@@ -78,6 +78,7 @@ CallbackUnsubscribe = Callable[[], None]
 
 # Reserved topic for internal SDK status messages — not forwarded to app callbacks.
 AGENT_STATUS_TOPIC = "_agent.status"
+"""Reserved return-data topic used for aggregated agent readiness status."""
 
 _FRAME_REQUEST_TIMEOUT = 1.0  # seconds before request_frame() gives up
 
@@ -113,9 +114,16 @@ class Subscribe(Flag):
         ep.subscribe("alice", filter=Subscribe.DATA)
     """
     DATA  = auto()  # `data.{pid}.*`
+    """Application data messages for a participant."""
+
     AUDIO = auto()  # `audio.{pid}.*`
+    """PCM audio chunks for a participant."""
+
     VIDEO = auto()  # `video.{pid}.*` AND `video_data.{pid}.*` (signal + pixels)
+    """Video frame signals and requested pixel data for a participant."""
+
     ALL   = DATA | AUDIO | VIDEO
+    """All participant-scoped message categories."""
 
 
 # Topic-prefix categories used by the subscription machinery. Each Subscribe
@@ -165,6 +173,23 @@ class ProcessorEndpoint:
 
         ep = ProcessorEndpoint(..., auto_subscribe=False)
         ep.subscribe("alice")  # may be called before alice has joined
+
+    Parameters
+    ----------
+    sub_addr :
+        ZMQ address of the hub publisher that supplies inbound messages.
+    push_addr :
+        ZMQ address of the hub receiver for outbound messages.
+    auto_subscribe :
+        Whether participant join and leave events automatically manage
+        subscriptions. Defaults to ``True``.
+    filter :
+        Default message categories selected for each subscription.
+    agent_id :
+        Stable identity used for agent presence and readiness. When omitted,
+        ``XR_AI_AGENT_ID`` or a process-local generated identity is used.
+    announces_readiness :
+        Whether this endpoint participates in the hub's readiness aggregation.
     """
 
     def __init__(
@@ -356,11 +381,20 @@ class ProcessorEndpoint:
 
     # ── callback registration ─────────────────────────────────────────────────
 
-    def on_frame(self,       cb: FrameSignalCallback) -> None: self._frame_cbs.append(cb)
-    def on_frame_data(self,  cb: FrameDataCallback)   -> None: self._frame_data_cbs.append(cb)
-    def on_audio(self,       cb: AudioCallback)       -> None: self._audio_cbs.append(cb)
+    def on_frame(self, cb: FrameSignalCallback) -> None:
+        """Register an async callback for video frame metadata."""
+        self._frame_cbs.append(cb)
+
+    def on_frame_data(self, cb: FrameDataCallback) -> None:
+        """Register an async callback for requested frame pixel data."""
+        self._frame_data_cbs.append(cb)
+
+    def on_audio(self, cb: AudioCallback) -> None:
+        """Register an async callback for inbound PCM audio chunks."""
+        self._audio_cbs.append(cb)
+
     def on_data(self, cb: DataCallback) -> CallbackUnsubscribe:
-        """Register a data callback and return an idempotent unsubscriber."""
+        """Register an async data callback and return an idempotent unsubscriber."""
 
         self._data_cbs.append(cb)
 
@@ -369,14 +403,19 @@ class ProcessorEndpoint:
                 self._data_cbs.remove(cb)
 
         return unsubscribe
-    def on_participant(self, cb: ParticipantCallback) -> None: self._participant_cbs.append(cb)
+
+    def on_participant(self, cb: ParticipantCallback) -> None:
+        """Register an async callback for participant join and leave events."""
+        self._participant_cbs.append(cb)
 
     # ── return path ───────────────────────────────────────────────────────────
 
     async def send_return_data(self, msg: DataMessage) -> None:
+        """Send an application data message to its target participant."""
         await self._push.send(encode(MsgType.RETURN_DATA, msg))
 
     async def send_return_audio(self, chunk: AudioChunk) -> None:
+        """Queue a PCM audio chunk for playback by its target participant."""
         await self._push.send(encode(MsgType.RETURN_AUDIO, chunk))
 
     async def flush_return_audio(self, participant_id: str) -> None:
@@ -542,7 +581,11 @@ class ProcessorEndpoint:
     _ROSTER_HANDSHAKE_WAIT = 0.1
 
     async def run(self) -> None:
-        """Receive and dispatch messages until stop() is called."""
+        """Receive and dispatch messages until :meth:`stop` is called.
+
+        Registered callbacks run in independent tasks. An unhandled callback
+        exception is fatal to the processor process.
+        """
         self._running_event.clear()
         self._running = True
         self._running_event.set()
@@ -706,6 +749,7 @@ class ProcessorEndpoint:
         await self._running_event.wait()
 
     def stop(self) -> None:
+        """Request receive-loop shutdown and detach this agent's presence."""
         # Detach here rather than only when run() unwinds: run() blocks in
         # recv() until the next message, so a stopped agent would otherwise
         # keep the room at "loading" indefinitely.
@@ -714,5 +758,6 @@ class ProcessorEndpoint:
         self._running_event.clear()
 
     def close(self) -> None:
+        """Close the endpoint's ZMQ sockets without waiting for queued messages."""
         self._sub.close(linger=0)
         self._push.close(linger=0)
