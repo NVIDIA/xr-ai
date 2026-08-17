@@ -826,17 +826,6 @@ private fun DataChannelSection(vm: AppViewModel) {
     var messageText by remember { mutableStateOf("") }
 
     SectionCard(title = "Data Channel") {
-        // Ping button
-        CardRow {
-            Button(
-                onClick = { vm.sendPing() },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = isConnected,
-                colors = ButtonDefaults.buttonColors(containerColor = ColorSecondary),
-                shape = RoundedCornerShape(8.dp),
-            ) { Text("Send Ping") }
-        }
-
         // Custom message input + send button
         CardRow(showDivider = false) {
             OutlinedTextField(

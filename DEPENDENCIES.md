@@ -430,8 +430,8 @@ serving any web sample runs that script once:
 
 ### simple-vlm-example  (agent-samples/simple-vlm-example/)
 
-Vision Q&A driven by voice, text, or "ping": audio → STT → query;
-text → query; "ping" → default-prompt query.  Each query runs against
+Vision Q&A driven by voice or text: audio → STT → query; text → query.
+Each query runs against
 the latest video frame via streaming VLM and replies with both
 `vlm.response` text and sentence-batched Piper TTS audio.
 

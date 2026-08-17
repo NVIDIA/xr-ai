@@ -17,7 +17,7 @@ Identical to the web client:
 | Audio | Start / stop microphone; three modes (Voice Processing, Software AEC, Raw) |
 | Camera | Start / stop camera; selector auto-populated from Camera2 (front, back, any extra lens, USB cameras) |
 | Agent status | Live badge (`idle` / `processing`) driven by the `_agent.status` channel |
-| Data channel | Send Ping, send arbitrary UTF-8 messages |
+| Data channel | Send arbitrary UTF-8 messages |
 | Received messages | Scrollable list with per-message timestamps |
 | Error display | Snackbar toast, auto-dismissed after 4 s |
 

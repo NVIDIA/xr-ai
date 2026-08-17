@@ -24,7 +24,6 @@ import {
   stopAudio         as _stopAudio,
   startCamera       as _startCamera,
   stopCamera        as _stopCamera,
-  sendPing          as _sendPing,
   sendCustom        as _sendCustom,
   wireBaseEvents,
 } from '/App/core.js';
@@ -157,7 +156,6 @@ async function disconnect() {
     render();
   }
 }
-function sendPing()         { return _sendPing(model); }
 function sendCustom(text)   { return _sendCustom(model, text, showError); }
 function connect()          {
   return _connect(model, {
@@ -177,7 +175,7 @@ function connect()          {
 // Bootstrap
 // ─────────────────────────────────────────────────────────────────────────────
 
-wireBaseEvents(model, { connect, disconnect, startAudio, stopAudio, startCamera, stopCamera, sendPing, sendCustom });
+wireBaseEvents(model, { connect, disconnect, startAudio, stopAudio, startCamera, stopCamera, sendCustom });
 window.addEventListener('pagehide', () => {
   clearCameraPreview();
   const pendingDisconnect = model.session?.disconnect();
