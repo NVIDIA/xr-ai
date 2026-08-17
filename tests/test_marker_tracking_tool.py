@@ -46,10 +46,45 @@ _QR_MODULES = (
     "0000000000000000000000000",
 )
 
+_SECOND_QR_MODULES = (
+    "00000000000000000000000000000",
+    "00000000000000000000000000000",
+    "00000000000000000000000000000",
+    "00000000000000000000000000000",
+    "00001111111001000011111110000",
+    "00001000001010011010000010000",
+    "00001011101000010010111010000",
+    "00001011101011110010111010000",
+    "00001011101000000010111010000",
+    "00001000001011011010000010000",
+    "00001111111010101011111110000",
+    "00000000000001001000000000000",
+    "00001111101111010101010100000",
+    "00000011000000100000011010000",
+    "00000010011101011100011100000",
+    "00001110000110011101011110000",
+    "00000000111100100101000000000",
+    "00000000000011010001101110000",
+    "00001111111010111011010100000",
+    "00001000001001011001011100000",
+    "00001011101011001010000000000",
+    "00001011101010100001110100000",
+    "00001011101011011000010000000",
+    "00001000001011001101111000000",
+    "00001111111011101110100100000",
+    "00000000000000000000000000000",
+    "00000000000000000000000000000",
+    "00000000000000000000000000000",
+    "00000000000000000000000000000",
+)
 
-def _qr_image(scale: int = 6) -> np.ndarray:
+
+def _qr_image(
+    modules: tuple[str, ...] = _QR_MODULES,
+    scale: int = 6,
+) -> np.ndarray:
     pixels = np.array(
-        [[0 if value == "1" else 255 for value in row] for row in _QR_MODULES],
+        [[0 if value == "1" else 255 for value in row] for row in modules],
         dtype=np.uint8,
     )
     return pixels.repeat(scale, axis=0).repeat(scale, axis=1)
@@ -152,6 +187,34 @@ async def test_marker_tool_detects_qr_and_aruco_with_uniform_schema() -> None:
     assert tool.frames.participants() == ["alice"]
     tool.release("alice")
     assert tool.frames.participants() == []
+
+
+@pytest.mark.asyncio
+async def test_marker_tool_returns_every_qr_marker_in_frame() -> None:
+    first = _qr_image()
+    second = _qr_image(_SECOND_QR_MODULES)
+    canvas = np.full(
+        (max(first.shape[0], second.shape[0]) + 40, first.shape[1] + second.shape[1] + 80),
+        255,
+        dtype=np.uint8,
+    )
+    canvas[20 : 20 + first.shape[0], 20 : 20 + first.shape[1]] = first
+    second_x = 60 + first.shape[1]
+    canvas[20 : 20 + second.shape[0], second_x : second_x + second.shape[1]] = second
+    endpoint = _Endpoint(canvas)
+    tool = MarkerTrackingTool(
+        endpoint=endpoint,
+        marker_types=(MarkerType.QR_CODE,),
+    )
+    await endpoint.seed()
+
+    result = await tool.execute(MarkerTrackingRequest(participant_id="alice"))
+
+    assert {(marker.marker_type, marker.value) for marker in result.markers} == {
+        (MarkerType.QR_CODE, "XR AI QR tool"),
+        (MarkerType.QR_CODE, "second QR payload"),
+    }
+    assert len(result.markers) == 2
 
 
 @pytest.mark.asyncio
