@@ -323,11 +323,6 @@ struct ContentView: View {
     @ViewBuilder
     private var dataSection: some View {
         Section("Data Channel") {
-            Button("Send Ping") {
-                Task { await model.sendPing() }
-            }
-            .disabled(model.connectionState != .connected)
-
             HStack {
                 TextField("Custom message…", text: $sendText)
                     .autocorrectionDisabled()

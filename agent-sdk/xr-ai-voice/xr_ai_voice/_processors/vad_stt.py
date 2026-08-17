@@ -47,6 +47,7 @@ from .._frames import ParticipantLeftFrame
 
 # True acknowledges and False requests another bounded probe.
 PartialTranscriptHandler = Callable[[str, str], Awaitable[bool]]
+FinalTranscriptHandler = Callable[[str, str, int], Awaitable[None]]
 _MAX_PARTIAL_PROBES = 3
 _PARTIAL_PROBE_TAIL_S = 0.12
 _PARTIAL_PROBE_FINISH_GRACE_S = 0.15
@@ -90,11 +91,13 @@ class VadSttProcessor(FrameProcessor):
         stt: STTService,
         vad_cfg: VadConfig,
         on_partial_transcript: PartialTranscriptHandler | None = None,
+        on_final_transcript: FinalTranscriptHandler | None = None,
     ) -> None:
         super().__init__()
         self._stt                   = stt
         self._vad_cfg               = vad_cfg
         self._on_partial_transcript = on_partial_transcript
+        self._on_final_transcript   = on_final_transcript
         self._detectors: dict[str, VadDetector] = {}
         # Track which pid is currently in an utterance so on_utterance
         # can push the matching ``UserStoppedSpeakingFrame`` even though
@@ -245,6 +248,12 @@ class VadSttProcessor(FrameProcessor):
             tf.transport_source = pid
             # Anchor the transcript to speech onset, not to STT completion.
             tf.pts = self._utterance_pts.pop(pid, None)
+            if self._on_final_transcript is not None:
+                await self._on_final_transcript(
+                    pid,
+                    text,
+                    tf.pts // 1_000 if tf.pts is not None else time.time_ns() // 1_000,
+                )
             await self.push_frame(tf)
 
         det = VadDetector(

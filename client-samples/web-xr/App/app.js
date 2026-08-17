@@ -24,7 +24,6 @@ import {
   stopAudio         as _stopAudio,
   startCamera       as _startCamera,
   stopCamera        as _stopCamera,
-  sendPing          as _sendPing,
   sendCustom        as _sendCustom,
   wireBaseEvents,
 } from '/App/core.js';
@@ -82,7 +81,6 @@ function startCamera()      { return _startCamera(model, { render, showError, en
 function startAudio()       { return _startAudio(model, render, showError); }
 function stopAudio()        { return _stopAudio(model, render, showError); }
 function disconnect()       { return _disconnect(model, render); }
-function sendPing()         { return _sendPing(model); }
 function sendCustom(text)   { return _sendCustom(model, text, showError); }
 
 function connect() {
@@ -258,7 +256,7 @@ function wireEvents() {
     if (link?.href) verifyCert(link.href);
   });
 
-  wireBaseEvents(model, { connect, disconnect, startAudio, stopAudio, startCamera, stopCamera, sendPing, sendCustom });
+  wireBaseEvents(model, { connect, disconnect, startAudio, stopAudio, startCamera, stopCamera, sendCustom });
 
   // ── XR Stream ──────────────────────────────────────────────────────────────
   const xrHostInput = $('xr-host-input');

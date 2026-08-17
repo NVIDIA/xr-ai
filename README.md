@@ -165,8 +165,8 @@ pre-warm models:
 > ```
 >
 > Persisted vLLM processes or containers may otherwise keep serving the
-> previous model and image even though the checked-in configuration now selects
-> Cosmos3.
+> previous models and images even though the checked-in configuration now selects
+> Nemotron-3 Nano Omni and Cosmos3 Nano Reasoner.
 
 ```bash
 cd agent-samples/model-servers
@@ -175,22 +175,13 @@ uv run model_servers
 ```
 
 GPU profiles are auto-detected (`dual_48G_ada` / `spark` / `96G_blackwell`).
-On first run the stack downloads roughly 60 GB from Hugging Face and can take
-tens of minutes. The VLM process loads the Cosmos3 8B Reasoner weights. On
-subsequent runs the containers restart in under a minute.
+On first run the stack downloads tens of GB from Hugging Face and can take
+tens of minutes. On subsequent runs the containers restart in under a minute.
 
-The default `--vlm-llm-stack` starts Nemotron-3 Nano (8107), the Cosmos3 Nano
-Reasoner (8100),
-STT (8103), and embeddings (8109). Use `--omni-stack` to replace Nano and
-Cosmos with Nemotron-3 Nano Omni (8108); STT and embeddings remain available.
-On `dual_48G_ada`, the default stack places Cosmos and embeddings on GPU 0;
-the Omni stack places Omni on GPU 0 and embeddings on GPU 1.
-Switching stacks stops the incompatible persistent models first and aborts if
-they cannot be stopped, avoiding GPU overcommit.
-
-```bash
-uv run model_servers --omni-stack
-```
+The stack starts Nemotron-3 Nano Omni for LLM requests (8108), Cosmos3 Nano
+Reasoner for vision requests (8100), STT (8103), and embeddings (8109). On
+`dual_48G_ada`, Cosmos and embeddings use GPU 0 while Omni and STT use GPU 1.
+Starting the stack stops the superseded Nano text server on port 8107 first.
 
 `HF_TOKEN` is required by default: without it the roughly 60 GB first-run download
 can stall indefinitely.  See [`docs/source/getting_started/credentials.md`](docs/source/getting_started/credentials.md)
@@ -202,14 +193,13 @@ To stop all model servers when done:
 uv run model_servers --stop
 ```
 
-`--stop` always stops both stack variants, so it takes no stack-selection flag.
+`--stop` stops every persisted model service in the shared topology.
 
 ### Simple VLM example (vision Q&A over voice + text)
 
-End-to-end voice + vision sample.  Speak into the mic, type into the data
-channel, or send the literal text `"ping"` — all routes go through the
-same VLM pipeline against the latest video frame.  Replies arrive as
-streaming Piper TTS audio plus a `vlm.response` text message.
+End-to-end voice + vision sample. Speak into the mic or type into the data
+channel; both routes use the same VLM pipeline against the latest video frame.
+Replies arrive as streaming Piper TTS audio plus a `vlm.response` text message.
 
 The packaged worker uses `CurrentFrameTool` to select an image, then passes its
 lightweight reference to `StreamingImageQueryTool` inside `SimpleVlmAgent` and
@@ -239,10 +229,9 @@ several minutes).  `HF_TOKEN` is required by default; pass
 `--allow-anonymous` to run without one (see
 [`docs/source/getting_started/credentials.md`](docs/source/getting_started/credentials.md)).
 
-**With model-servers pre-running** — if VLM (port 8100) and STT (port 8103)
-are already up from `model-servers`, the demo detects them at startup and
-reuses them.  No extra flags needed.  When you exit, those services keep
-running.
+**With model-servers pre-running** — start `model_servers` to pre-warm VLM
+(port 8100) and STT (port 8103). The demo detects and reuses them.
+When you exit, those services keep running.
 
 #### Step 1 — Start the server
 
@@ -275,7 +264,6 @@ automatically.  Click **Connect**.
 
 You are now live in the XR session.  To test the agent:
 
-- Type `ping` in the data channel → the agent describes what the camera sees.
 - Type any question → sent verbatim to the VLM.
 - Speak into your mic → speech is transcribed and sent as a query.
 
@@ -418,10 +406,19 @@ model_backend: nim     # default is "local"
 ```
 
 The worker loads `yaml/models.nim.yaml` for the native model-backed functions —
-no `main.py` edits. Provide
-an `NGC_API_KEY` as an **environment variable** (or via the launcher
-credential prompt — not in YAML) and just don't start the local
-`agent-llm` / `vlm` model-servers. See
+no `main.py` edits. Provide an `NGC_API_KEY` as an **environment variable** (or
+via the launcher credential prompt — not in YAML). Do not run `model_servers`,
+because its single topology starts both local `omni` and `vlm`. Start STT by
+itself from the repository root, setting `GPU_PROFILE` to `dual_48G_ada`,
+`spark`, or `96G_blackwell`:
+
+```bash
+GPU_PROFILE=dual_48G_ada
+uv run --project services/stt-server stt_server \
+  --config "agent-samples/model-servers/yaml/${GPU_PROFILE}/stt_server.yaml"
+```
+
+Then start `xr_render_demo` in another terminal. See
 [`docs/source/components/ai-services.md`](docs/source/components/ai-services.md#hosting-models-on-nvidia-nim).
 
 ---

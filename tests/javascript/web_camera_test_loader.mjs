@@ -74,7 +74,6 @@ export async function load(url, context, nextLoad) {
           await model.session?.stopCamera();
           model.isCameraActive = false;
         }
-        export const sendPing = async () => {};
         export const sendCustom = async () => {};
         export function wireBaseEvents(model, actions) {
           globalThis.__appModel = model;

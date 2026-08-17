@@ -21,7 +21,7 @@ uv run --project ~/hub/xr-ai/agent-samples/model-servers model_servers
 
 ```
 
-By default the harness calls the agent LLM at `http://localhost:8107`. It does
+By default the harness calls the agent LLM at `http://localhost:8108`. It does
 not require the render-demo stack, capability services, MCP adapters, or LOVR.
 
 ## Run
@@ -52,7 +52,7 @@ uv run --project agent-samples/xr-render-demo/worker \
   python agent-samples/xr-render-demo/eval/eval.py --prompt /tmp/alt-system.txt
 
 # Score against a hosted model (e.g. nvidia/nemotron-3-super-120b-a12b at
-# build.nvidia.com) instead of the local vLLM on 8107.  Set NVIDIA_API_KEY
+# build.nvidia.com) instead of the local vLLM on 8108.  Set NVIDIA_API_KEY
 # in the env first (or pass --agent-api-key).
 export NVIDIA_API_KEY=nvapi-...
 uv run --project agent-samples/xr-render-demo/worker \

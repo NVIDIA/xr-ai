@@ -82,7 +82,7 @@ agent-samples/<kebab-name>/
   cancel tasks before `ProcessorEndpoint.stop()` and `.close()`, and move
   CPU-bound work to an executor.
 - Voice workers delegate readiness, signals, pipeline cancellation, and cleanup
-  to `VoiceSession`.
+  to `VoiceAgent`; its media session is private.
 - New worker code is a named package with relative internal imports and an
   explicit `__main__.py`.
 

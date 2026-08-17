@@ -8,9 +8,10 @@
 #   model_backend: nim
 # The worker loads this file for its native model-backed tools. Provide an
 # NGC API key (env NGC_API_KEY, or
-# the launcher credential prompt) — see docs/source/getting_started/credentials.md. Then run the
-# demo without the local agent-llm / vlm model-servers. STT/TTS stay
-# local. Full guide: docs/source/components/ai-services.md "Hosting models on NVIDIA NIM".
+# the launcher credential prompt) — see docs/source/getting_started/credentials.md.
+# Do not run model_servers because it starts local Omni and Cosmos; start only
+# STT separately. The demo starts local TTS. Full guide:
+# docs/source/components/ai-services.md "Hosting models on NVIDIA NIM".
 #
 # Model ids below are examples — confirm the exact slugs for your account at
 # https://build.nvidia.com. The agentic loop is tuned for the local Nemotron
@@ -38,9 +39,9 @@ agent_llm:
     tool_calls: true
     reasoning:  true
 
-# Visual question answering used by native vision tools. The hosted model
-# is the Cosmos3 Nano Reasoner, matching the role of the local Reasoner-only
-# vLLM service; it is not the separate Cosmos3 Generator.
+# Visual question answering used by native vision tools. The hosted model is
+# the Cosmos3 Nano Reasoner, matching the local VLM service; it is not the
+# separate Cosmos3 Generator.
 vlm:
   kind:        openai_compat
   category:    vlm

@@ -66,12 +66,12 @@ xr-ai-voice  (agent-sdk/xr-ai-voice/)
     └── numpy >=1.24
     └── scipy >=1.11
     Native voice runtime used by simple-vlm-example. Exposes ``VoiceAgent``,
-    its ``UserQuery`` / ``VoiceOutput`` / participant-lifecycle schemas,
-    ``VoiceSession``, ``HubVoiceTransport``, and
-    ``VadConfig``. Voice lifecycle events enter application-named topics so
+    its pre-gate transcript, ``UserQuery``, ``VoiceOutput``, and
+    participant-lifecycle schemas, plus ``HubVoiceTransport`` and ``VadConfig``.
+    The media session is private to ``VoiceAgent``. Voice lifecycle events enter application-named topics so
     application agents own their cleanup. Pipecat, audio framing, and pipeline
-    processors are implementation details. Service health gates transport
-    construction, while the session touches its ready file only after the input
+    processors are implementation details. Service health gates readiness,
+    while the private session touches its ready file only after the input
     transport starts its hub IPC receive loop. The
     readiness contract is split across the ``_readiness`` / ``_session``
     modules. Not a dep of xr-ai-hub-client itself — import only in workers that
@@ -430,8 +430,8 @@ serving any web sample runs that script once:
 
 ### simple-vlm-example  (agent-samples/simple-vlm-example/)
 
-Vision Q&A driven by voice, text, or "ping": audio → STT → query;
-text → query; "ping" → default-prompt query.  Each query runs against
+Vision Q&A driven by voice or text: audio → STT → query; text → query.
+Each query runs against
 the latest video frame via streaming VLM and replies with both
 `vlm.response` text and sentence-batched Piper TTS audio.
 
@@ -446,8 +446,8 @@ inside `SimpleVlmAgent`. Single-image, ordered multi-image, and timestamped
 frame-sequence inference share the same list-based VLM path. Camera bytes stay
 in a bounded in-process registry and image locations are redacted from VLM
 telemetry while the provider receives the original frames.
-`VoiceAgent` owns `VoiceSession`, readiness, hub transport, signals, and the
-private Pipecat pipeline; it routes `"ping"` and ad-hoc text through the same
+`VoiceAgent` privately owns readiness, signals, and the Pipecat pipeline; it
+routes direct client text through the same
 sample-named `UserQuery` topic as speech and publishes lifecycle events on
 sample-named topics. `SimpleVlmAgent` handles cancellation and frame cleanup
 inside its own subscriber methods. Voice-gate
@@ -475,13 +475,10 @@ run this first to warm up model weights before starting any demo sample.
 |---|---|---|---|
 | Orchestrator | `model-servers` | `xr-ai-launcher`, `xr-ai-logging`, `xr-ai-vllm` (for `--stop`) | — |
 
-The default `--vlm-llm-stack` starts stt-server (8103),
-nemotron3-nano-llm-server (8107, `persistent=True`), and vlm-server (8100,
-`persistent=True`), plus embedding-server (8109, `persistent=True`).
-`--omni-stack` replaces Nano and Cosmos with nemotron-omni-llm-server (8108,
-`persistent=True`) while retaining stt-server and embedding-server. The stacks
-are mutually exclusive; `--stop` shuts down every model-server port without
-selecting one.
+The default stack starts stt-server (8103), nemotron-omni-llm-server (8108),
+vlm-server with Cosmos3 Nano Reasoner (8100), and embedding-server (8109), all
+with persistent launch mode. Starting it stops the superseded Nano text server
+on port 8107; `--stop` shuts down every model-server port.
 GPU profiles: `dual_48G_ada`, `spark`, `96G_blackwell` (auto-detected).
 
 ### xr-render-demo  (agent-samples/xr-render-demo/)
@@ -502,12 +499,12 @@ Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in
 `make_llm` / `make_stt` / `make_tts` / `make_vlm`.  `httpx` is retained as
 a transitive dep of `xr-ai-voice` and `xr-ai-tools[frames]`.
 
-Requires `model-servers` to be running first — model servers are declared as
-`launch_mode="reuse"` so the launcher skips spawning them but the dependency
-is explicit in the process list.
+Requires `model-servers` to be running first — the Omni and Cosmos model
+servers are declared as `launch_mode="reuse"` so the launcher skips spawning
+them but the dependencies are explicit in the process list.
 Starts: hub, cloudxr-runtime, piper-tts (8105), video-memory (8310),
-scene (8320), openxr-service (8330), and worker. The model-server
-entries are declared with `launch_mode="reuse"` and must already be healthy.
+scene (8320), openxr-service (8330), and worker. The model-server entries use
+`launch_mode="reuse"` and must already be healthy.
 No MCP adapters run in the sample stack.
 Web client must be a build that includes the bundled CloudXR JS SDK
 (see `client-samples/web-xr-build/`).

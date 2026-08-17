@@ -13,9 +13,6 @@ models_config: models.local.json
 # directory). Owns the magic-phrase / follow-up / listening-chime knobs.
 voice_gate_yaml: voice_gate.yaml
 
-# Sent to the VLM whenever the client posts the literal text "ping".
-default_prompt: "Describe what you see."
-
 # The worker uses its packaged prompts/system.txt by default. Set
 # system_prompt or system_prompt_file here only to override it.
 
@@ -34,5 +31,5 @@ min_speech:        0.1    # minimum seconds of speech before STT is called
 # speech. DISABLED by default (0 = off) — a quiet session stays connected
 # indefinitely, which is what XR sessions usually want. Set a positive value
 # (e.g. 300 for 5 min) to opt in; the worker then tears the pipeline down
-# after that long idle. Applied by VoiceSession.
+# after that long idle. Applied by VoiceAgent.
 idle_timeout_secs: 0

@@ -21,7 +21,6 @@ class WorkerConfig:
     models_config: Path
     voice_gate_yaml: Path
     system_prompt: str
-    default_prompt: str
     frame_max_age_s: float
     frame_timeout_s: float
     silence_duration: float
@@ -73,7 +72,6 @@ def load_config(path: Path | None) -> WorkerConfig:
             str(data.get("voice_gate_yaml", "voice_gate.yaml")),
         ),
         system_prompt=_load_system_prompt(data, path),
-        default_prompt=str(data.get("default_prompt", "Describe what you see.")),
         frame_max_age_s=float(data.get("frame_max_age_s", 2.0)),
         frame_timeout_s=float(data.get("frame_timeout_s", 5.0)),
         silence_duration=float(data.get("silence_duration", 0.4)),

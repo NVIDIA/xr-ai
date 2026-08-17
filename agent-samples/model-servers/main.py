@@ -9,16 +9,10 @@ process exits.  Model weights stay hot across stack restarts.
 
 Servers started
 ---------------
-  default / --vlm-llm-stack
-    stt        — nvidia/parakeet-tdt-0.6b-v3        port 8103  (NeMo ASR)
-    agent-llm  — NVIDIA-Nemotron-3-Nano-30B-A3B     port 8107  (vLLM)
-    vlm        — nvidia/Cosmos3-Nano Reasoner       port 8100  (vLLM)
-    embedding  — nvidia/llama-nemotron-embed-1b-v2  port 8109  (vLLM)
-
-  --omni-stack
-    stt        — nvidia/parakeet-tdt-0.6b-v3        port 8103  (NeMo ASR)
-    omni       — Nemotron-3-Nano-Omni-30B-A3B       port 8108  (vLLM)
-    embedding  — nvidia/llama-nemotron-embed-1b-v2  port 8109  (vLLM)
+  stt        — nvidia/parakeet-tdt-0.6b-v3        port 8103  (NeMo ASR)
+  omni       — Nemotron-3-Nano-Omni-30B-A3B       port 8108  (vLLM)
+  vlm        — nvidia/Cosmos3-Nano Reasoner       port 8100  (vLLM)
+  embedding  — nvidia/llama-nemotron-embed-1b-v2  port 8109  (vLLM)
 
 How to run:
     uv run --project agent-samples/model-servers model_servers
@@ -42,20 +36,12 @@ _STOP_SERVICES = [
     ("omni", 8108),
     ("embedding", 8109),
 ]
-_INCOMPATIBLE_STACK_SERVICES = {
-    "vlm-llm": [("agent-llm", 8107), ("vlm", 8100)],
-    "omni": [("omni", 8108)],
-}
+_REPLACED_SERVICES = [("agent-llm", 8107)]
 
-# agent-llm (Nemotron-30B) loads first on single-GPU profiles so its
-# FlashInfer MoE JIT compilation runs with the full GPU free.  The compiled
-# kernels are cached after the first run (~3-8 min).
-def _build_processes(stack: str = "vlm-llm") -> list[Process]:
-    """Return the selected shared model stack for the detected GPU profile."""
+
+def _build_processes() -> list[Process]:
+    """Return the shared Omni, Cosmos, speech, and embedding services."""
     ai = f"yaml/{detect_gpu_config()}"
-    embedding_config = f"{ai}/embedding_server_{stack.replace('-', '_')}.yaml"
-    if not (_BASE / embedding_config).exists():
-        embedding_config = f"{ai}/embedding_server.yaml"
     stt = Process(
         "stt", "../../services/stt-server", "stt_server",
         config=f"{ai}/stt_server.yaml",
@@ -63,27 +49,14 @@ def _build_processes(stack: str = "vlm-llm") -> list[Process]:
     )
     embedding = Process(
         "embedding", "../../services/embedding-server", "embedding_server",
-        config=embedding_config,
+        config=f"{ai}/embedding_server.yaml",
         launch_mode="persist", port=8109,
     )
-    if stack == "omni":
-        return [
-            stt,
-            Process(
-                "omni", "../../services/nemotron-omni-llm",
-                "nemotron_omni_llm_server",
-                config=f"{ai}/nemotron_omni_llm_server.yaml",
-                launch_mode="persist", port=8108,
-            ),
-            embedding,
-        ]
-    if stack != "vlm-llm":
-        raise ValueError(f"unknown model stack: {stack}")
     return [
         stt,
-        Process("agent-llm", "../../services/nemotron3-nano-llm",  "nemotron3_nano_llm_server",
-                config=f"{ai}/nemotron3_nano_llm_server.yaml",
-                launch_mode="persist", port=8107),
+        Process("omni",      "../../services/nemotron-omni-llm", "nemotron_omni_llm_server",
+                config=f"{ai}/nemotron_omni_llm_server.yaml",
+                launch_mode="persist", port=8108),
         Process("vlm",       "../../services/vlm-server",          "vlm_server",
                 config=f"{ai}/vlm_server.yaml",
                 launch_mode="persist", port=8100),
@@ -100,35 +73,24 @@ def _stop_models() -> None:
         print(f"model-servers: failed to stop persistent servers: {exc}", flush=True)
 
 
-def _stop_incompatible_stack(stack: str) -> None:
-    """Free GPU capacity held by the other mutually exclusive model stack."""
-    incompatible = _INCOMPATIBLE_STACK_SERVICES["vlm-llm" if stack == "omni" else "omni"]
-    if not stop_persistent_servers(incompatible):
-        raise RuntimeError("could not stop incompatible persistent model stack")
+def _stop_replaced_models() -> None:
+    """Free GPU capacity held by the superseded Nano text model."""
+    if not stop_persistent_servers(_REPLACED_SERVICES):
+        raise RuntimeError("could not stop replaced persistent model")
 
 
 def run() -> None:
     setup_logging("orchestrator", namespace="model-servers")
 
     p = argparse.ArgumentParser(add_help=False)
-    mode = p.add_mutually_exclusive_group()
-    mode.add_argument(
+    p.add_argument(
         "--stop", action="store_true",
-        help="Stop every persisted model-server stack and exit.",
+        help="Stop every persisted model service and exit.",
     )
-    mode.add_argument(
-        "--omni-stack", action="store_const", const="omni", dest="stack",
-        help="Start Nemotron-3-Nano-Omni with STT instead of the VLM + LLM stack.",
-    )
-    mode.add_argument(
-        "--vlm-llm-stack", action="store_const", const="vlm-llm", dest="stack",
-        help="Start the default Nemotron-3-Nano + Cosmos VLM stack.",
-    )
-    p.set_defaults(stack="vlm-llm")
     p.add_argument("--allow-anonymous", action="store_true",
                    help="Start without HF_TOKEN (unauthenticated downloads "
                         "of the multi-GB checkpoints may stall indefinitely).")
-    ns, _ = p.parse_known_args()
+    ns = p.parse_args()
 
     if ns.stop:
         _stop_models()
@@ -137,8 +99,8 @@ def run() -> None:
     # A missing HF_TOKEN silently stalls the multi-GB first-run download; see
     # docs/source/getting_started/credentials.md.
     require_credentials("HF_TOKEN", allow_missing=ns.allow_anonymous)
-    _stop_incompatible_stack(ns.stack)
-    run_stack(_build_processes(ns.stack), _BASE, exit_after_ready=True)
+    _stop_replaced_models()
+    run_stack(_build_processes(), _BASE, exit_after_ready=True)
 
 
 if __name__ == "__main__":

@@ -20,8 +20,9 @@ import yaml
 from xr_ai_hub import FrameData, FrameSignal, FrameUnavailable, PixelFormat, ProcessorEndpoint
 from xr_ai_models import ChatResponse, VLMService
 from xr_ai_runtime import AgentRuntime
-from xr_ai_voice import UserQuery, VoiceAgent, VoiceInterrupted, VoiceOutput, VoiceSession
-from xr_ai_voice import _session as session_module
+from xr_ai_voice import UserQuery, VoiceAgent, VoiceInterrupted, VoiceOutput
+from xr_ai_voice import _runtime as voice_runtime_module
+from xr_ai_voice._session import _VoiceSession as VoiceSession
 from xr_ai_voicegate import VoiceGateConfig
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -78,6 +79,14 @@ class _Transport:
 class _DataEndpoint:
     def __init__(self) -> None:
         self.statuses: list[tuple[str, str]] = []
+
+    def on_audio(self, callback):
+        self.audio_callback = callback
+
+        def unsubscribe() -> None:
+            self.audio_callback = None
+
+        return unsubscribe
 
     def on_data(self, callback) -> None:
         self.data_callback = callback
@@ -275,7 +284,6 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
     assert 'Never refer to "the user" in the third person.' in prompt
     assert "when the user" not in prompt
     assert "If the user" not in prompt
-    assert config.default_prompt == "Describe what you see."
     assert config.frame_max_age_s == 5.0
     assert config.frame_timeout_s == 5.0
     assert config.idle_timeout_secs is None
@@ -505,9 +513,9 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     monkeypatch.setattr(app, "make_stt", lambda _models, _name: stt)
     monkeypatch.setattr(app, "make_vlm", lambda _models, _name: vlm)
     monkeypatch.setattr(app, "make_tts", lambda _models, _name: tts)
+    monkeypatch.setattr(app, "HubVoiceTransport", lambda: transport)
     monkeypatch.setattr(app, "CurrentFrameTool", _CurrentFrameTool)
     monkeypatch.setattr(app, "StreamingImageQueryTool", _StreamingImageQueryTool)
-    monkeypatch.setattr(session_module, "HubVoiceTransport", lambda: transport)
 
     def make_session(**kwargs):
         session = VoiceSession(**kwargs)  # type: ignore[arg-type]
@@ -529,7 +537,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
                 is None
             )
             await asyncio.wait_for(response_complete.wait(), 1.0)
-            options["on_participant_left"]("alice")
+            await options["on_participant_left"]("alice")
 
             async def wait_until_released() -> None:
                 while not _CurrentFrameTool.instances[0].released:
@@ -555,7 +563,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
         session.enqueue_response = enqueue_response  # type: ignore[method-assign]
         return session
 
-    monkeypatch.setattr(app, "VoiceSession", make_session)
+    monkeypatch.setattr(voice_runtime_module, "_VoiceSession", make_session)
     _CurrentFrameTool.instances.clear()
     _StreamingImageQueryTool.instances.clear()
 
@@ -590,8 +598,6 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert all(task.done() for task in response_tasks)
     assert run_options["interrupt_on_supersede"] is True
     assert callable(run_options["on_interrupted"])
-    assert app._text_transform(config.default_prompt)("PING") == config.default_prompt
-    assert app._text_transform(config.default_prompt)("What is this?") == "What is this?"
 
 
 async def test_relay_event_log_excludes_stream_chunks(tmp_path) -> None:
@@ -826,7 +832,7 @@ async def test_current_frame_tool_propagates_conversion_errors(monkeypatch) -> N
         await frames.execute(CurrentFrameRequest(participant_id="alice"))
 
 
-async def test_sample_runtime_streams_vision_through_voice_agent() -> None:
+async def test_sample_runtime_streams_vision_through_voice_agent(monkeypatch) -> None:
     endpoint = _LiveEndpoint()
     vlm = _StreamingVlm()
     images = ImageRegistry()
@@ -876,6 +882,11 @@ async def test_sample_runtime_streams_vision_through_voice_agent() -> None:
             pass
 
     session = Session()
+    monkeypatch.setattr(
+        voice_runtime_module,
+        "_VoiceSession",
+        lambda **_kwargs: session,
+    )
     runtime = AgentRuntime()
     runtime.register(
         "simple-vlm",
@@ -883,11 +894,14 @@ async def test_sample_runtime_streams_vision_through_voice_agent() -> None:
     )
     runtime.register(
         "voice",
-        VoiceAgent(  # type: ignore[arg-type]
-            session,
+        VoiceAgent(
             query_topic=USER_QUERY_TOPIC,
+            stt=object(),
+            tts=object(),
+            vad=object(),
+            voice_gate=object(),
             text_input=False,
-        ),
+        ),  # type: ignore[arg-type]
     )
     assert endpoint.frame_callback is not None
     await endpoint.frame_callback(

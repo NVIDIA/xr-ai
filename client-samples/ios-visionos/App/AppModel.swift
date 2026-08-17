@@ -515,14 +515,6 @@ final class AppModel {
 
     // MARK: - Data
 
-    func sendPing() async {
-        do {
-            try await session?.send(Data("ping".utf8))
-        } catch {
-            lastError = error.localizedDescription
-        }
-    }
-
     func sendCustom(text: String) async {
         guard !text.isEmpty, let data = text.data(using: .utf8) else { return }
         do {

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for the shared model-server stack selector."""
+"""Unit tests for the shared model-server topology."""
 from __future__ import annotations
 
 import importlib.util
@@ -38,45 +38,39 @@ _embedding = importlib.util.module_from_spec(_EMBEDDING_SPEC)
 _EMBEDDING_SPEC.loader.exec_module(_embedding)
 
 
-def test_default_stack_uses_nano_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_default_stack_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "spark")
 
     processes = _model_servers._build_processes()
 
-    assert [process.name for process in processes] == ["stt", "agent-llm", "vlm", "embedding"]
-    assert [process.port for process in processes] == [8103, 8107, 8100, 8109]
+    assert [process.name for process in processes] == ["stt", "omni", "vlm", "embedding"]
+    assert [process.port for process in processes] == [8103, 8108, 8100, 8109]
 
 
-def test_omni_stack_replaces_nano_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dual_ada_places_omni_opposite_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
 
-    processes = _model_servers._build_processes("omni")
+    processes = _model_servers._build_processes()
+    configs = {
+        process.name: yaml.safe_load(
+            (_REPO_ROOT / "agent-samples/model-servers" / str(process.config)).read_text()
+        )
+        for process in processes
+        if process.name in {"omni", "vlm"}
+    }
 
-    assert [process.name for process in processes] == ["stt", "omni", "embedding"]
-    assert [process.port for process in processes] == [8103, 8108, 8109]
-    assert str(processes[1].config) == "yaml/dual_48G_ada/nemotron_omni_llm_server.yaml"
+    assert configs["omni"]["cuda_visible_devices"] == "1"
+    assert configs["vlm"]["cuda_visible_devices"] == "0"
 
 
-@pytest.mark.parametrize(
-    ("stack", "config_name", "gpu"),
-    [
-        ("vlm-llm", "embedding_server.yaml", "0"),
-        ("omni", "embedding_server_omni.yaml", "1"),
-    ],
-)
-def test_dual_ada_embedding_follows_stack_gpu_layout(
-    monkeypatch: pytest.MonkeyPatch,
-    stack: str,
-    config_name: str,
-    gpu: str,
-) -> None:
+def test_dual_ada_embedding_stays_with_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
 
-    process = next(p for p in _model_servers._build_processes(stack) if p.name == "embedding")
+    process = next(p for p in _model_servers._build_processes() if p.name == "embedding")
     config_path = _REPO_ROOT / "agent-samples/model-servers" / str(process.config)
 
-    assert config_path.name == config_name
-    assert yaml.safe_load(config_path.read_text())["cuda_visible_devices"] == gpu
+    assert config_path.name == "embedding_server.yaml"
+    assert yaml.safe_load(config_path.read_text())["cuda_visible_devices"] == "0"
 
 
 @pytest.mark.parametrize("profile", ["96G_blackwell", "dual_48G_ada", "spark"])
@@ -118,18 +112,7 @@ def test_stop_cleans_every_stack(monkeypatch: pytest.MonkeyPatch) -> None:
     ]
 
 
-@pytest.mark.parametrize(
-    ("stack", "expected"),
-    [
-        ("omni", [("agent-llm", 8107), ("vlm", 8100)]),
-        ("vlm-llm", [("omni", 8108)]),
-    ],
-)
-def test_starting_stack_stops_incompatible_persistent_models(
-    monkeypatch: pytest.MonkeyPatch,
-    stack: str,
-    expected: list[tuple[str, int]],
-) -> None:
+def test_starting_stack_stops_only_replaced_nano(monkeypatch: pytest.MonkeyPatch) -> None:
     stopped: list[tuple[str, int]] = []
     monkeypatch.setattr(
         _model_servers,
@@ -137,45 +120,42 @@ def test_starting_stack_stops_incompatible_persistent_models(
         lambda services: stopped.extend(services) or True,
     )
 
-    _model_servers._stop_incompatible_stack(stack)
+    _model_servers._stop_replaced_models()
 
-    assert stopped == expected
+    assert stopped == [("agent-llm", 8107)]
 
 
-@pytest.mark.parametrize(
-    ("argv", "expected"),
-    [([], "vlm-llm"), (["--vlm-llm-stack"], "vlm-llm"), (["--omni-stack"], "omni")],
-)
-def test_cli_selects_requested_stack(
-    monkeypatch: pytest.MonkeyPatch,
-    argv: list[str],
-    expected: str,
-) -> None:
-    selected: list[str] = []
+def test_cli_starts_single_default_stack(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "_stop_incompatible_stack", lambda _stack: None)
-    monkeypatch.setattr(_model_servers, "_build_processes", lambda stack: selected.append(stack) or [])
-    monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: None)
-    monkeypatch.setattr(sys, "argv", ["model_servers", *argv])
+    monkeypatch.setattr(_model_servers, "_stop_replaced_models", lambda: calls.append("stop"))
+    monkeypatch.setattr(_model_servers, "_build_processes", lambda: calls.append("build") or [])
+    monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: calls.append("run"))
+    monkeypatch.setattr(sys, "argv", ["model_servers"])
 
     _model_servers.run()
 
-    assert selected == [expected]
+    assert calls == ["stop", "build", "run"]
 
 
-@pytest.mark.parametrize(
-    ("argv", "expected_stopped"),
-    [
-        (["--omni-stack"], [("agent-llm", 8107), ("vlm", 8100)]),
-        (["--vlm-llm-stack"], [("omni", 8108)]),
-    ],
-)
-def test_cli_stops_incompatible_stack_before_starting(
+@pytest.mark.parametrize("removed_arg", ["--vlm-llm-stack", "--omni-stack"])
+def test_cli_rejects_removed_stack_arguments(
     monkeypatch: pytest.MonkeyPatch,
-    argv: list[str],
-    expected_stopped: list[tuple[str, int]],
+    capsys: pytest.CaptureFixture[str],
+    removed_arg: str,
 ) -> None:
+    monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(sys, "argv", ["model_servers", removed_arg])
+
+    with pytest.raises(SystemExit) as exc_info:
+        _model_servers.run()
+
+    assert exc_info.value.code == 2
+    assert f"unrecognized arguments: {removed_arg}" in capsys.readouterr().err
+
+
+def test_cli_stops_nano_before_starting(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[object] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
@@ -184,16 +164,16 @@ def test_cli_stops_incompatible_stack_before_starting(
         "stop_persistent_servers",
         lambda services: calls.append(list(services)) or True,
     )
-    monkeypatch.setattr(_model_servers, "_build_processes", lambda _stack: [])
+    monkeypatch.setattr(_model_servers, "_build_processes", lambda: [])
     monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: calls.append("run"))
-    monkeypatch.setattr(sys, "argv", ["model_servers", *argv])
+    monkeypatch.setattr(sys, "argv", ["model_servers"])
 
     _model_servers.run()
 
-    assert calls == [expected_stopped, "run"]
+    assert calls == [[("agent-llm", 8107)], "run"]
 
 
-def test_cli_aborts_when_incompatible_stack_cannot_stop(
+def test_cli_aborts_when_replaced_model_cannot_stop(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     started: list[bool] = []
@@ -201,9 +181,9 @@ def test_cli_aborts_when_incompatible_stack_cannot_stop(
     monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "stop_persistent_servers", lambda _services: False)
     monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: started.append(True))
-    monkeypatch.setattr(sys, "argv", ["model_servers", "--omni-stack"])
+    monkeypatch.setattr(sys, "argv", ["model_servers"])
 
-    with pytest.raises(RuntimeError, match="could not stop incompatible"):
+    with pytest.raises(RuntimeError, match="could not stop replaced"):
         _model_servers.run()
 
     assert started == []

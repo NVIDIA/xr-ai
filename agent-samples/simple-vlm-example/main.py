@@ -6,14 +6,10 @@ simple-vlm-example orchestrator — vision Q&A over voice or text.
 
 Pipeline
 --------
-Audio in (mic)        → STT → text query
-Text in (data ch.)    → text query
-"ping" data message   → default prompt ("Describe what you see.")
-                                                │
-                                                ▼
-                  latest video frame + query → VLM stream
-                                                │
-                       sentence-batched TTS  ←──┴──→  data channel reply
+Audio in (mic)     → STT → text query ─┐
+Text in (data ch.) ─────→ text query ──┴→ latest video frame → VLM stream
+                                                      │
+                             sentence-batched TTS  ←──┴──→ data channel reply
 
 Model deployment
 ----------------

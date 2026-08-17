@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Readiness polling used by :class:`xr_ai_voice.VoiceSession`."""
+"""Readiness polling used by the private VoiceAgent media session."""
 from __future__ import annotations
 
 import asyncio

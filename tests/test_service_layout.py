@@ -249,8 +249,7 @@ def test_sample_process_projects_resolve(monkeypatch) -> None:
     declarations = [
         (
             _ROOT / "agent-samples/model-servers",
-            model_servers._build_processes("vlm-llm")
-            + model_servers._build_processes("omni"),
+            model_servers._build_processes(),
         ),
         (
             _ROOT / "agent-samples/simple-vlm-example",

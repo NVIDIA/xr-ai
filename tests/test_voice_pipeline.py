@@ -238,9 +238,19 @@ async def test_vad_stt_emits_transcription_on_utterance(monkeypatch):
             await self._on_utt(pcm_int16, sample_rate)
 
     monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StubVad)
-    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig())
+    published: list[tuple[str, str, int]] = []
+
+    async def on_final_transcript(pid: str, text: str, timestamp_us: int) -> None:
+        published.append((pid, text, timestamp_us))
+
+    proc = VadSttProcessor(
+        stt=stt,
+        vad_cfg=VadConfig(),
+        on_final_transcript=on_final_transcript,
+    )
     frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
     frame.transport_source = "web-client"
+    frame.pts = 123_000
 
     events = []
     subscriber = "xr-ai-voice-stt-scopes"
@@ -261,6 +271,7 @@ async def test_vad_stt_emits_transcription_on_utterance(monkeypatch):
     # transport_source consumer see the real participant.
     assert transcripts[0].user_id         == "web-client"
     assert transcripts[0].transport_source == "web-client"
+    assert published == [("web-client", "hello agent", 123)]
     assert stt.calls and stt.calls[0][1] == 16000
     stt_start = next(
         event.to_dict()
