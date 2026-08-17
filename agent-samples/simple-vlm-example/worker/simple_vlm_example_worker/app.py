@@ -110,7 +110,10 @@ async def run_app(
                     system_prompt=config.system_prompt,
                 ),
             ),
-            session.endpoint.set_status,
+            lambda status, participant_id: session.endpoint.set_status(
+                status,
+                participant_id,
+            ),
         ),
     )
 

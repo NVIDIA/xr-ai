@@ -21,6 +21,7 @@ from xr_ai_hub import FrameData, FrameSignal, FrameUnavailable, PixelFormat, Pro
 from xr_ai_models import ChatResponse, VLMService
 from xr_ai_runtime import AgentRuntime
 from xr_ai_voice import UserQuery, VoiceAgent, VoiceInterrupted, VoiceOutput, VoiceSession
+from xr_ai_voice import _session as session_module
 from xr_ai_voicegate import VoiceGateConfig
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -506,9 +507,10 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     monkeypatch.setattr(app, "make_tts", lambda _models, _name: tts)
     monkeypatch.setattr(app, "CurrentFrameTool", _CurrentFrameTool)
     monkeypatch.setattr(app, "StreamingImageQueryTool", _StreamingImageQueryTool)
+    monkeypatch.setattr(session_module, "HubVoiceTransport", lambda: transport)
 
     def make_session(**kwargs):
-        session = VoiceSession(transport=transport, **kwargs)  # type: ignore[arg-type]
+        session = VoiceSession(**kwargs)  # type: ignore[arg-type]
         sessions.append(session)
 
         async def run(handler, **options) -> None:
