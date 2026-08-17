@@ -1,0 +1,104 @@
+xr_ai_tools.image
+=================
+
+.. py:module:: xr_ai_tools.image
+
+.. autoapi-nested-parse::
+
+   Lightweight image references and bounded in-process image storage.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_tools.image.ImageReference
+   xr_ai_tools.image.TimedImage
+   xr_ai_tools.image.ImageRegistry
+
+
+Module Contents
+---------------
+
+.. py:class:: ImageReference
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   A lightweight reference to image bytes, a local path, or an HTTP URL.
+
+
+   .. py:attribute:: uri
+      :type:  str
+
+      Opaque image URI, local path, file URI, or HTTP(S) URL.
+
+
+
+   .. py:method:: reject_inline_data(value: str) -> str
+      :classmethod:
+
+
+      Reject data URIs so image bytes remain outside request payloads.
+
+
+
+.. py:class:: TimedImage
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   An image reference positioned on a microsecond timeline.
+
+
+   .. py:attribute:: image
+      :type:  ImageReference
+
+      Reference to the image content.
+
+
+
+   .. py:attribute:: timestamp_us
+      :type:  int
+
+      Position on the image sequence's microsecond timeline.
+
+
+
+.. py:class:: ImageRegistry(*, capacity: int = 128, allow_external: bool = False)
+
+   Bounded in-process storage behind opaque image references.
+
+
+   .. py:method:: put(image: ImageInput, *, owner: str | None = None) -> ImageReference
+
+      Store image input without placing its bytes in tool results or telemetry.
+
+
+
+   .. py:method:: put_derived(image: ImageInput, *, source: ImageReference) -> ImageReference
+
+      Store derived image input with the source reference's owner.
+
+
+
+   .. py:method:: resolve(reference: ImageReference) -> ImageInput
+
+      Resolve an opaque handle or normalize an external image location.
+
+
+
+   .. py:method:: release_owner(owner: str) -> None
+
+      Remove opaque images associated with one participant or workflow.
+
+
+
+   .. py:method:: clear() -> None
+
+      Remove all registered opaque images.
+
+
+

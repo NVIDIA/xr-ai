@@ -1,0 +1,313 @@
+xr_ai_tools.text_memory
+=======================
+
+.. py:module:: xr_ai_tools.text_memory
+
+.. autoapi-nested-parse::
+
+   Participant-scoped persistent text-memory tools.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_tools.text_memory.AddTranscriptRequest
+   xr_ai_tools.text_memory.AddTranscriptResult
+   xr_ai_tools.text_memory.TranscriptSegment
+   xr_ai_tools.text_memory.QueryTranscriptsRequest
+   xr_ai_tools.text_memory.QueryTranscriptsResult
+   xr_ai_tools.text_memory.ListTranscriptSourcesResult
+   xr_ai_tools.text_memory.TranscriptStatsRequest
+   xr_ai_tools.text_memory.TranscriptStatsResult
+   xr_ai_tools.text_memory.RecallConversationRequest
+   xr_ai_tools.text_memory.ConversationEntry
+   xr_ai_tools.text_memory.RecallConversationResult
+   xr_ai_tools.text_memory.TextMemoryTool
+   xr_ai_tools.text_memory.TextMemoryTools
+
+
+Module Contents
+---------------
+
+.. py:class:: AddTranscriptRequest
+
+   Bases: :py:obj:`xr_ai_tools.types.StrictRequest`
+
+
+   One timestamped transcript segment to persist.
+
+
+   .. py:attribute:: source_id
+      :type:  str
+
+      Participant or internal source identifier.
+
+
+
+   .. py:attribute:: timestamp_us
+      :type:  int
+
+      Unix timestamp in microseconds.
+
+
+
+   .. py:attribute:: text
+      :type:  str
+
+      Text segment to persist.
+
+
+
+   .. py:method:: text_must_not_be_blank(value: str) -> str
+      :classmethod:
+
+
+      Require visible text in a persisted segment.
+
+
+
+.. py:class:: AddTranscriptResult
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Confirmation that a transcript segment was persisted.
+
+
+   .. py:attribute:: ok
+      :type:  bool
+      :value: True
+
+
+      Whether the append operation succeeded.
+
+
+
+.. py:class:: TranscriptSegment
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Persisted transcript text at a point in time.
+
+
+   .. py:attribute:: timestamp_us
+      :type:  int
+
+      Unix timestamp in microseconds.
+
+
+
+   .. py:attribute:: text
+      :type:  str
+
+      Persisted transcript text.
+
+
+
+.. py:class:: QueryTranscriptsRequest
+
+   Bases: :py:obj:`xr_ai_tools.types.StrictRequest`
+
+
+   Source and inclusive time window for a transcript query.
+
+
+   .. py:attribute:: source_id
+      :type:  str
+
+      Participant or internal source identifier.
+
+
+
+   .. py:attribute:: start_us
+      :type:  int
+
+      Inclusive window start in Unix microseconds.
+
+
+
+   .. py:attribute:: end_us
+      :type:  int
+
+      Inclusive window end in Unix microseconds.
+
+
+
+.. py:class:: QueryTranscriptsResult
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Transcript segments selected from one source and time window.
+
+
+   .. py:attribute:: segments
+      :type:  list[TranscriptSegment]
+
+      Matching segments ordered by timestamp.
+
+
+
+.. py:class:: ListTranscriptSourcesResult
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Persistent source identifiers known to text memory.
+
+
+   .. py:attribute:: sources
+      :type:  list[str]
+
+      Source identifiers in lexical order.
+
+
+
+.. py:class:: TranscriptStatsRequest
+
+   Bases: :py:obj:`xr_ai_tools.types.StrictRequest`
+
+
+   Select one transcript source for statistics.
+
+
+   .. py:attribute:: source_id
+      :type:  str
+
+      Participant or internal source identifier.
+
+
+
+.. py:class:: TranscriptStatsResult
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Aggregate storage and time-range statistics for one source.
+
+
+   .. py:attribute:: source_id
+      :type:  str
+
+      Participant or internal source identifier.
+
+
+
+   .. py:attribute:: count
+      :type:  int
+
+      Number of stored transcript segments.
+
+
+
+   .. py:attribute:: total_chars
+      :type:  int
+
+      Total number of characters across stored segments.
+
+
+
+   .. py:attribute:: earliest_us
+      :type:  int | None
+
+      Earliest stored Unix timestamp in microseconds, if present.
+
+
+
+   .. py:attribute:: latest_us
+      :type:  int | None
+
+      Latest stored Unix timestamp in microseconds, if present.
+
+
+
+.. py:class:: RecallConversationRequest
+
+   Bases: :py:obj:`xr_ai_tools.types.StrictRequest`
+
+
+   Participant and inclusive time window for conversation recall.
+
+
+   .. py:attribute:: participant_id
+      :type:  str
+
+      Participant whose conversation to recall.
+
+
+
+   .. py:attribute:: start_us
+      :type:  int
+
+      Inclusive window start in Unix microseconds.
+
+
+
+   .. py:attribute:: end_us
+      :type:  int
+
+      Inclusive window end in Unix microseconds.
+
+
+
+.. py:class:: ConversationEntry
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   One timestamped user or agent turn in a recalled conversation.
+
+
+   .. py:attribute:: timestamp_us
+      :type:  int
+
+      Unix timestamp in microseconds.
+
+
+
+   .. py:attribute:: role
+      :type:  Literal['user', 'agent']
+
+      Speaker responsible for the text.
+
+
+
+   .. py:attribute:: text
+      :type:  str
+
+      Conversation text.
+
+
+
+.. py:class:: RecallConversationResult
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Chronological user and agent turns recalled for a participant.
+
+
+   .. py:attribute:: entries
+      :type:  list[ConversationEntry]
+
+      Conversation turns ordered by timestamp.
+
+
+
+.. py:class:: TextMemoryTool(directory: str | pathlib.Path | _TranscriptStore)
+
+   Bases: :py:obj:`xr_ai_tools.tools.Tool`\ [\ :py:obj:`AddTranscriptRequest`\ , :py:obj:`AddTranscriptResult`\ ]
+
+
+   Append timestamped text to participant-scoped JSONL storage.
+
+
+.. py:class:: TextMemoryTools(directory: str | pathlib.Path)
+
+   Own transcript persistence, query, statistics, and conversation recall tools.
+
+
