@@ -35,7 +35,6 @@ Module Contents
 
 .. py:class:: ListRecordedParticipantsResult
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    Participants with camera recordings available in video memory.
@@ -50,7 +49,6 @@ Module Contents
 
 .. py:class:: VideoStatsRequest
 
-   Bases: :py:obj:`xr_ai_tools.types.StrictRequest`
 
 
    Select one participant's recording statistics.
@@ -65,7 +63,6 @@ Module Contents
 
 .. py:class:: VideoStatsResult
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    Storage and time-range statistics for one participant's recording.
@@ -115,7 +112,6 @@ Module Contents
 
 .. py:class:: LatestVideoRequest
 
-   Bases: :py:obj:`_DurationRequest`
 
 
    Select the newest recorded video window.
@@ -123,7 +119,6 @@ Module Contents
 
 .. py:class:: HistoricalVideoRequest
 
-   Bases: :py:obj:`_DurationRequest`
 
 
    Select a recorded video window beginning at an absolute timestamp.
@@ -138,7 +133,6 @@ Module Contents
 
 .. py:class:: RecordedVideoResult
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    A recorded H.264 file and its covered time range.
@@ -174,7 +168,6 @@ Module Contents
 
 .. py:class:: LatestFramesRequest
 
-   Bases: :py:obj:`_FrameSamplingRequest`
 
 
    Sample the newest recorded frame window.
@@ -182,7 +175,6 @@ Module Contents
 
 .. py:class:: HistoricalFramesRequest
 
-   Bases: :py:obj:`_FrameSamplingRequest`
 
 
    Sample a recorded frame window beginning at an absolute timestamp.
@@ -197,7 +189,6 @@ Module Contents
 
 .. py:class:: SampledVideoFrame
 
-   Bases: :py:obj:`xr_ai_tools.image.TimedImage`
 
 
    One image sampled from a recorded video window.
@@ -226,7 +217,6 @@ Module Contents
 
 .. py:class:: SampleFramesResult
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    Bounded image samples and metadata for a recorded video window.
@@ -283,7 +273,6 @@ Module Contents
 
 .. py:class:: HistoricalFrameRequest
 
-   Bases: :py:obj:`_ParticipantRequest`
 
 
    Select the recorded frame nearest an absolute timestamp.
@@ -298,7 +287,6 @@ Module Contents
 
 .. py:class:: HistoricalFrameResult
 
-   Bases: :py:obj:`xr_ai_tools.image.TimedImage`
 
 
    The recorded image nearest a requested absolute timestamp.
@@ -327,7 +315,6 @@ Module Contents
 
 .. py:class:: VideoHealthResult
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    Readiness and recording state reported by video memory.

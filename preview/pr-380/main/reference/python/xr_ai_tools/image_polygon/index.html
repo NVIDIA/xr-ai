@@ -469,8 +469,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_tools.image_polygon.ImagePoint">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.image_polygon.</span></span><span class="sig-name descname"><span class="pre">ImagePoint</span></span><a class="headerlink" href="#xr_ai_tools.image_polygon.ImagePoint" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">pydantic.BaseModel</span></code></p>
-<p>One non-negative source-image pixel coordinate.</p>
+<dd><p>One non-negative source-image pixel coordinate.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_tools.image_polygon.ImagePoint.x">
 <span class="sig-name descname"><span class="pre">x</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#xr_ai_tools.image_polygon.ImagePoint.x" title="Link to this definition">#</a></dt>
@@ -488,8 +487,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_tools.image_polygon.ImagePolygonFillRequest">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.image_polygon.</span></span><span class="sig-name descname"><span class="pre">ImagePolygonFillRequest</span></span><a class="headerlink" href="#xr_ai_tools.image_polygon.ImagePolygonFillRequest" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference internal" href="../types/index.html#xr_ai_tools.types.StrictRequest" title="xr_ai_tools.types.StrictRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">xr_ai_tools.types.StrictRequest</span></code></a></p>
-<p>Fill the polygon defined by ordered image-space vertices.</p>
+<dd><p>Fill the polygon defined by ordered image-space vertices.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_tools.image_polygon.ImagePolygonFillRequest.image">
 <span class="sig-name descname"><span class="pre">image</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="../image/index.html#xr_ai_tools.image.ImageReference" title="xr_ai_tools.image.ImageReference"><span class="pre">xr_ai_tools.image.ImageReference</span></a></em><a class="headerlink" href="#xr_ai_tools.image_polygon.ImagePolygonFillRequest.image" title="Link to this definition">#</a></dt>
@@ -507,8 +505,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_tools.image_polygon.ImagePolygonFillResult">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.image_polygon.</span></span><span class="sig-name descname"><span class="pre">ImagePolygonFillResult</span></span><a class="headerlink" href="#xr_ai_tools.image_polygon.ImagePolygonFillResult" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">pydantic.BaseModel</span></code></p>
-<p>A lossless PNG copy containing the filled polygon.</p>
+<dd><p>A lossless PNG copy containing the filled polygon.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_tools.image_polygon.ImagePolygonFillResult.image">
 <span class="sig-name descname"><span class="pre">image</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="../image/index.html#xr_ai_tools.image.ImageReference" title="xr_ai_tools.image.ImageReference"><span class="pre">xr_ai_tools.image.ImageReference</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#xr_ai_tools.image_polygon.ImagePolygonFillResult.image" title="Link to this definition">#</a></dt>
@@ -545,8 +542,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_tools.image_polygon.ImagePolygonFillTool">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.image_polygon.</span></span><span class="sig-name descname"><span class="pre">ImagePolygonFillTool</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">images</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../image/index.html#xr_ai_tools.image.ImageRegistry" title="xr_ai_tools.image.ImageRegistry"><span class="pre">xr_ai_tools.image.ImageRegistry</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_tools.image_polygon.ImagePolygonFillTool" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference internal" href="../tools/index.html#xr_ai_tools.tools.Tool" title="xr_ai_tools.tools.Tool"><code class="xref py py-obj docutils literal notranslate"><span class="pre">xr_ai_tools.tools.Tool</span></code></a>[<a class="reference internal" href="#xr_ai_tools.image_polygon.ImagePolygonFillRequest" title="xr_ai_tools.image_polygon.ImagePolygonFillRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ImagePolygonFillRequest</span></code></a>, <a class="reference internal" href="#xr_ai_tools.image_polygon.ImagePolygonFillResult" title="xr_ai_tools.image_polygon.ImagePolygonFillResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ImagePolygonFillResult</span></code></a>]</p>
-<p>Create a magenta polygon overlay without changing the source image.</p>
+<dd><p>Create a magenta polygon overlay without changing the source image.</p>
 </dd></dl>
 
 </section>

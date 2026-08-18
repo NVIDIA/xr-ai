@@ -102,7 +102,6 @@ Package Contents
 
 .. py:class:: Topic
 
-   Bases: :py:obj:`Generic`\ [\ :py:obj:`MessageT`\ ]
 
 
    A stable publish/subscribe name paired with its payload model.
@@ -187,7 +186,6 @@ Package Contents
 
 .. py:exception:: RuntimeClosedError
 
-   Bases: :py:obj:`RuntimeError`
 
 
    Raised when work is submitted to a runtime that is not running.

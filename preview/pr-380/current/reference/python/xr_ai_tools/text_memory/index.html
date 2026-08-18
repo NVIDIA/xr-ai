@@ -464,8 +464,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.AddTranscriptRequest">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.text_memory.</span></span><span class="sig-name descname"><span class="pre">AddTranscriptRequest</span></span><a class="headerlink" href="#xr_ai_tools.text_memory.AddTranscriptRequest" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference internal" href="../types/index.html#xr_ai_tools.types.StrictRequest" title="xr_ai_tools.types.StrictRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">xr_ai_tools.types.StrictRequest</span></code></a></p>
-<p>One timestamped transcript segment to persist.</p>
+<dd><p>One timestamped transcript segment to persist.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.AddTranscriptRequest.source_id">
 <span class="sig-name descname"><span class="pre">source_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_tools.text_memory.AddTranscriptRequest.source_id" title="Link to this definition">#</a></dt>
@@ -495,8 +494,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.AddTranscriptResult">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.text_memory.</span></span><span class="sig-name descname"><span class="pre">AddTranscriptResult</span></span><a class="headerlink" href="#xr_ai_tools.text_memory.AddTranscriptResult" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">pydantic.BaseModel</span></code></p>
-<p>Confirmation that a transcript segment was persisted.</p>
+<dd><p>Confirmation that a transcript segment was persisted.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.AddTranscriptResult.ok">
 <span class="sig-name descname"><span class="pre">ok</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#xr_ai_tools.text_memory.AddTranscriptResult.ok" title="Link to this definition">#</a></dt>
@@ -508,8 +506,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.TranscriptSegment">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.text_memory.</span></span><span class="sig-name descname"><span class="pre">TranscriptSegment</span></span><a class="headerlink" href="#xr_ai_tools.text_memory.TranscriptSegment" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">pydantic.BaseModel</span></code></p>
-<p>Persisted transcript text at a point in time.</p>
+<dd><p>Persisted transcript text at a point in time.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.TranscriptSegment.timestamp_us">
 <span class="sig-name descname"><span class="pre">timestamp_us</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#xr_ai_tools.text_memory.TranscriptSegment.timestamp_us" title="Link to this definition">#</a></dt>
@@ -527,8 +524,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.QueryTranscriptsRequest">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.text_memory.</span></span><span class="sig-name descname"><span class="pre">QueryTranscriptsRequest</span></span><a class="headerlink" href="#xr_ai_tools.text_memory.QueryTranscriptsRequest" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference internal" href="../types/index.html#xr_ai_tools.types.StrictRequest" title="xr_ai_tools.types.StrictRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">xr_ai_tools.types.StrictRequest</span></code></a></p>
-<p>Source and inclusive time window for a transcript query.</p>
+<dd><p>Source and inclusive time window for a transcript query.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.QueryTranscriptsRequest.source_id">
 <span class="sig-name descname"><span class="pre">source_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_tools.text_memory.QueryTranscriptsRequest.source_id" title="Link to this definition">#</a></dt>
@@ -552,8 +548,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.QueryTranscriptsResult">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.text_memory.</span></span><span class="sig-name descname"><span class="pre">QueryTranscriptsResult</span></span><a class="headerlink" href="#xr_ai_tools.text_memory.QueryTranscriptsResult" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">pydantic.BaseModel</span></code></p>
-<p>Transcript segments selected from one source and time window.</p>
+<dd><p>Transcript segments selected from one source and time window.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.QueryTranscriptsResult.segments">
 <span class="sig-name descname"><span class="pre">segments</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_tools.text_memory.TranscriptSegment" title="xr_ai_tools.text_memory.TranscriptSegment"><span class="pre">TranscriptSegment</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#xr_ai_tools.text_memory.QueryTranscriptsResult.segments" title="Link to this definition">#</a></dt>
@@ -565,8 +560,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.ListTranscriptSourcesResult">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.text_memory.</span></span><span class="sig-name descname"><span class="pre">ListTranscriptSourcesResult</span></span><a class="headerlink" href="#xr_ai_tools.text_memory.ListTranscriptSourcesResult" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">pydantic.BaseModel</span></code></p>
-<p>Persistent source identifiers known to text memory.</p>
+<dd><p>Persistent source identifiers known to text memory.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.ListTranscriptSourcesResult.sources">
 <span class="sig-name descname"><span class="pre">sources</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#xr_ai_tools.text_memory.ListTranscriptSourcesResult.sources" title="Link to this definition">#</a></dt>
@@ -578,8 +572,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.TranscriptStatsRequest">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.text_memory.</span></span><span class="sig-name descname"><span class="pre">TranscriptStatsRequest</span></span><a class="headerlink" href="#xr_ai_tools.text_memory.TranscriptStatsRequest" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference internal" href="../types/index.html#xr_ai_tools.types.StrictRequest" title="xr_ai_tools.types.StrictRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">xr_ai_tools.types.StrictRequest</span></code></a></p>
-<p>Select one transcript source for statistics.</p>
+<dd><p>Select one transcript source for statistics.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.TranscriptStatsRequest.source_id">
 <span class="sig-name descname"><span class="pre">source_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_tools.text_memory.TranscriptStatsRequest.source_id" title="Link to this definition">#</a></dt>
@@ -591,8 +584,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.TranscriptStatsResult">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.text_memory.</span></span><span class="sig-name descname"><span class="pre">TranscriptStatsResult</span></span><a class="headerlink" href="#xr_ai_tools.text_memory.TranscriptStatsResult" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">pydantic.BaseModel</span></code></p>
-<p>Aggregate storage and time-range statistics for one source.</p>
+<dd><p>Aggregate storage and time-range statistics for one source.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.TranscriptStatsResult.source_id">
 <span class="sig-name descname"><span class="pre">source_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_tools.text_memory.TranscriptStatsResult.source_id" title="Link to this definition">#</a></dt>
@@ -628,8 +620,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.RecallConversationRequest">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.text_memory.</span></span><span class="sig-name descname"><span class="pre">RecallConversationRequest</span></span><a class="headerlink" href="#xr_ai_tools.text_memory.RecallConversationRequest" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference internal" href="../types/index.html#xr_ai_tools.types.StrictRequest" title="xr_ai_tools.types.StrictRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">xr_ai_tools.types.StrictRequest</span></code></a></p>
-<p>Participant and inclusive time window for conversation recall.</p>
+<dd><p>Participant and inclusive time window for conversation recall.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.RecallConversationRequest.participant_id">
 <span class="sig-name descname"><span class="pre">participant_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_tools.text_memory.RecallConversationRequest.participant_id" title="Link to this definition">#</a></dt>
@@ -653,8 +644,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.ConversationEntry">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.text_memory.</span></span><span class="sig-name descname"><span class="pre">ConversationEntry</span></span><a class="headerlink" href="#xr_ai_tools.text_memory.ConversationEntry" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">pydantic.BaseModel</span></code></p>
-<p>One timestamped user or agent turn in a recalled conversation.</p>
+<dd><p>One timestamped user or agent turn in a recalled conversation.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.ConversationEntry.timestamp_us">
 <span class="sig-name descname"><span class="pre">timestamp_us</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#xr_ai_tools.text_memory.ConversationEntry.timestamp_us" title="Link to this definition">#</a></dt>
@@ -678,8 +668,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.RecallConversationResult">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.text_memory.</span></span><span class="sig-name descname"><span class="pre">RecallConversationResult</span></span><a class="headerlink" href="#xr_ai_tools.text_memory.RecallConversationResult" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">pydantic.BaseModel</span></code></p>
-<p>Chronological user and agent turns recalled for a participant.</p>
+<dd><p>Chronological user and agent turns recalled for a participant.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.RecallConversationResult.entries">
 <span class="sig-name descname"><span class="pre">entries</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_tools.text_memory.ConversationEntry" title="xr_ai_tools.text_memory.ConversationEntry"><span class="pre">ConversationEntry</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#xr_ai_tools.text_memory.RecallConversationResult.entries" title="Link to this definition">#</a></dt>
@@ -691,8 +680,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_tools.text_memory.TextMemoryTool">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.text_memory.</span></span><span class="sig-name descname"><span class="pre">TextMemoryTool</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">directory</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">pathlib.Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">_TranscriptStore</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_tools.text_memory.TextMemoryTool" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference internal" href="../tools/index.html#xr_ai_tools.tools.Tool" title="xr_ai_tools.tools.Tool"><code class="xref py py-obj docutils literal notranslate"><span class="pre">xr_ai_tools.tools.Tool</span></code></a>[<a class="reference internal" href="#xr_ai_tools.text_memory.AddTranscriptRequest" title="xr_ai_tools.text_memory.AddTranscriptRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AddTranscriptRequest</span></code></a>, <a class="reference internal" href="#xr_ai_tools.text_memory.AddTranscriptResult" title="xr_ai_tools.text_memory.AddTranscriptResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AddTranscriptResult</span></code></a>]</p>
-<p>Append timestamped text to participant-scoped JSONL storage.</p>
+<dd><p>Append timestamped text to participant-scoped JSONL storage.</p>
 </dd></dl>
 
 <dl class="py class">

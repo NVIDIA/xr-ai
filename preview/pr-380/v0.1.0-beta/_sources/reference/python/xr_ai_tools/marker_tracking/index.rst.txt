@@ -27,7 +27,6 @@ Module Contents
 
 .. py:class:: MarkerType
 
-   Bases: :py:obj:`enum.StrEnum`
 
 
    Marker families supported by :class:`MarkerTrackingTool`.
@@ -51,7 +50,6 @@ Module Contents
 
 .. py:class:: MarkerTrackingRequest
 
-   Bases: :py:obj:`xr_ai_tools.types.StrictRequest`
 
 
    Track markers in one participant's current live camera frame.
@@ -66,7 +64,6 @@ Module Contents
 
 .. py:class:: MarkerPoint
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    One image-space corner of a tracked marker.
@@ -88,7 +85,6 @@ Module Contents
 
 .. py:class:: TrackedMarker
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    One detected marker and its quadrilateral in the source frame.
@@ -117,7 +113,6 @@ Module Contents
 
 .. py:class:: MarkerTrackingResult
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    All enabled markers found in one current camera frame.
@@ -146,7 +141,6 @@ Module Contents
 
 .. py:class:: MarkerTrackingTool(*, endpoint: xr_ai_hub.ProcessorEndpoint, marker_types: collections.abc.Iterable[MarkerType | str] = (MarkerType.QR_CODE, MarkerType.ARUCO), aruco_dictionary: str = 'DICT_4X4_50', frame_max_age_s: float = 2.0, frame_timeout_s: float = 5.0, manage_status: bool = True)
 
-   Bases: :py:obj:`xr_ai_tools.tools.Tool`\ [\ :py:obj:`MarkerTrackingRequest`\ , :py:obj:`MarkerTrackingResult`\ ]
 
 
    A finite tool that tracks enabled marker families in a current frame.
