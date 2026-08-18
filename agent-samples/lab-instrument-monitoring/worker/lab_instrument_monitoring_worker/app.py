@@ -12,10 +12,9 @@ from threading import Lock
 
 import nemo_relay
 from loguru import logger
-from xr_ai_hub import ParticipantEvent
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_llm, make_stt, make_tts, make_vlm
-from xr_ai_runtime import AgentRuntime, RuntimeClosedError
+from xr_ai_runtime import AgentRuntime
 from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 
@@ -25,7 +24,6 @@ from .events import (
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     USER_QUERY_TOPIC,
-    ParticipantJoined,
 )
 from .file_output import FileOutputAgent
 from .foreground import ForegroundAgent
@@ -90,6 +88,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         text_topic="",
         idle_timeout_secs=config.idle_timeout_secs,
         transport=transport,
+        participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
         participant_left_topic=PARTICIPANT_LEFT_TOPIC,
         interrupted_topic=INTERRUPTED_TOPIC,
         interrupt_on_supersede=True,
@@ -153,21 +152,6 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         ),
     )
     runtime.register("voice", voice)
-
-    async def participant_event(event: ParticipantEvent) -> None:
-        if not event.joined:
-            return
-        try:
-            await runtime.publish(
-                PARTICIPANT_JOINED_TOPIC,
-                ParticipantJoined(timestamp_us=event.pts_us),
-                participant_id=event.participant_id,
-                source="hub",
-            )
-        except RuntimeClosedError:
-            return
-
-    transport.endpoint.on_participant(participant_event)
 
     logger.info("file outputs → {}", config.artifacts_dir)
     logger.info("lab-instrument-monitoring starting")

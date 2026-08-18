@@ -12,11 +12,11 @@ import nemo_relay
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_hub import FrameUnavailable
-from xr_ai_models import ChatMessage, LLMService, ToolDef, VLMService
+from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef, VLMService
 from xr_ai_runtime import Agent, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameRequest
-from xr_ai_tools.tool_calling import handle_tool_call, tool_definitions
+from xr_ai_tools.tool_calling import ToolLoopIterationLimitError, run_tool_loop
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult, ImageQueryTool
 from xr_ai_voice import (
     VOICE_OUTPUT_TOPIC,
@@ -270,43 +270,51 @@ class ForegroundAgent(Agent):
 
     async def _answer(self, query: str, participant_id: str) -> tuple[str, list[str]]:
         tools = self._participant_tools(participant_id)
-        definitions = tool_definitions(tools)
         messages = [
             ChatMessage(role="system", content=self._prompt),
             ChatMessage(role="user", content=query),
         ]
-        used: list[str] = []
-        for round_index in range(_MAX_TOOL_ROUNDS):
+
+        round_index = 0
+
+        async def call_model(
+            transcript: tuple[ChatMessage, ...],
+            definitions: tuple[ToolDef, ...],
+        ) -> ChatResponse:
+            nonlocal round_index
+            round_index += 1
             response = await self._llm.chat(
-                messages,
+                transcript,
                 tools=definitions,
                 max_tokens=512,
                 temperature=0.0,
                 enable_thinking=False,
             )
-            tool_calls = response.tool_calls or []
             logger.info(
                 "foreground route pid={!r} round={} tools={}",
                 participant_id,
-                round_index + 1,
-                [call.name for call in tool_calls],
+                round_index,
+                [call.name for call in response.tool_calls or ()],
             )
-            if not tool_calls:
-                return (response.content.strip() or "I don't have an answer."), used
-            messages.append(
-                ChatMessage(
-                    role="assistant",
-                    content=response.content or "",
-                    tool_calls=list(tool_calls),
-                )
+            return response
+
+        try:
+            result = await run_tool_loop(
+                messages,
+                tools,
+                call_model,
+                max_iterations=_MAX_TOOL_ROUNDS,
             )
-            for call in tool_calls:
-                result = await handle_tool_call(call, tools)
-                used.append(call.name)
-                if result.return_direct:
-                    return (result.message.content.strip() or "Done."), used
-                messages.append(result.message)
-        return "I couldn't finish that request within the tool limit.", used
+        except ToolLoopIterationLimitError as exc:
+            return (
+                "I couldn't finish that request within the tool limit.",
+                [record.call.name for record in exc.tool_calls],
+            )
+        fallback = "Done." if result.return_direct else "I don't have an answer."
+        return (
+            result.content.strip() or fallback,
+            [record.call.name for record in result.tool_calls],
+        )
 
     def _participant_tools(self, participant_id: str) -> ToolSet:
         async def inspect_current(request: _CurrentFrameArgs) -> ImageQueryResult:

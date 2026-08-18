@@ -18,6 +18,7 @@ from xr_ai_runtime import Agent, RuntimeContext, subscribe
 from xr_ai_tools import Tool
 from xr_ai_voice import (
     VOICE_TRANSCRIPT_TOPIC,
+    VoiceParticipantJoined,
     VoiceParticipantLeft,
     VoiceTranscript,
 )
@@ -35,7 +36,6 @@ from .events import (
     InstrumentLost,
     InstrumentStateSnapshot,
     MonitorRecord,
-    ParticipantJoined,
 )
 
 _SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
@@ -101,7 +101,7 @@ class FileOutputAgent(Agent):
     @subscribe(PARTICIPANT_JOINED_TOPIC)
     async def participant_joined(
         self,
-        _event: ParticipantJoined,
+        _event: VoiceParticipantJoined,
         ctx: RuntimeContext,
     ) -> None:
         participant_id = self._participant(ctx)

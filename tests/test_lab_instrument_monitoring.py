@@ -28,6 +28,7 @@ from xr_ai_voice import (
     VOICE_OUTPUT_TOPIC,
     VOICE_TRANSCRIPT_TOPIC,
     VoiceOutput,
+    VoiceParticipantJoined,
     VoiceParticipantLeft,
     VoiceTranscript,
 )
@@ -53,7 +54,6 @@ from lab_instrument_monitoring_worker.events import (  # noqa: E402  # pyright: 
     InstrumentReading,
     InstrumentStateSnapshot,
     MonitorRecord,
-    ParticipantJoined,
 )
 from lab_instrument_monitoring_worker.file_output import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     FileOutputAgent,
@@ -458,7 +458,7 @@ async def test_file_output_records_transcript_monitor_instruments_and_foreground
     async with runtime:
         await runtime.publish(
             PARTICIPANT_JOINED_TOPIC,
-            ParticipantJoined(timestamp_us=now),
+            VoiceParticipantJoined(),
             participant_id="glasses/user",
         )
         await runtime.publish(
@@ -734,7 +734,7 @@ async def test_foreground_tool_loop_returns_model_answer_and_tool_audit(tmp_path
     try:
         await runtime.publish(
             PARTICIPANT_JOINED_TOPIC,
-            ParticipantJoined(timestamp_us=1),
+            VoiceParticipantJoined(),
             participant_id="participant-4",
         )
         response, tools = await agent._answer("What changed?", "participant-4")

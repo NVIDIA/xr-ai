@@ -13,14 +13,9 @@ from xr_ai_tools.marker_tracking import MarkerType
 from xr_ai_voice import (
     UserQuery,
     VoiceInterrupted,
+    VoiceParticipantJoined,
     VoiceParticipantLeft,
 )
-
-
-class ParticipantJoined(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    timestamp_us: int = Field(ge=0)
 
 
 class MonitorRecord(BaseModel):
@@ -102,7 +97,7 @@ class ForegroundRecord(BaseModel):
 USER_QUERY_TOPIC = Topic("lab-instrument-monitoring.user-query", UserQuery)
 PARTICIPANT_JOINED_TOPIC = Topic(
     "lab-instrument-monitoring.participant-joined",
-    ParticipantJoined,
+    VoiceParticipantJoined,
 )
 PARTICIPANT_LEFT_TOPIC = Topic(
     "lab-instrument-monitoring.participant-left",
@@ -148,5 +143,4 @@ __all__ = [
     "InstrumentState",
     "InstrumentStateSnapshot",
     "MonitorRecord",
-    "ParticipantJoined",
 ]
