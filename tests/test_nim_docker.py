@@ -28,6 +28,23 @@ class TestBuildNimRunArgv:
             extra_env=None,
         )
 
+    def _fingerprint(self, argv: list[str]) -> str:
+        labels = [argv[i + 1] for i, a in enumerate(argv) if a == "--label"]
+        tagged = next(
+            x for x in labels if x.startswith(f"{_docker._CONFIG_LABEL}=")
+        )
+        return tagged.split("=", 1)[1]
+
+    def test_fingerprint_changes_when_ngc_key_rotates(
+        self, tmp_path, monkeypatch,
+    ):
+        monkeypatch.setenv("NGC_API_KEY", "nvapi-first")
+        first = self._fingerprint(build_nim_run_argv(**self._base_kwargs(tmp_path)))
+        monkeypatch.setenv("NGC_API_KEY", "nvapi-second")
+        second = self._fingerprint(build_nim_run_argv(**self._base_kwargs(tmp_path)))
+        assert first != second
+        assert "nvapi" not in first and "nvapi" not in second
+
     def _env_flags(self, argv: list[str]) -> list[str]:
         return [argv[i + 1] for i, a in enumerate(argv) if a == "-e"]
 

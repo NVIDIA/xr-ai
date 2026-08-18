@@ -178,6 +178,48 @@ nim_llm:
         await llm.close()
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("use_ssl", '"false"', "use_ssl must be a boolean"),
+        ("language", "null", "language must be a non-empty string"),
+        ("language", '""', "language must be a non-empty string"),
+        ("voice", "3", "voice must be a non-empty string"),
+        ("sample_rate", "44100.5", "sample_rate must be a positive integer"),
+        ("sample_rate", "-1", "sample_rate must be a positive integer"),
+        ("sample_rate", "true", "sample_rate must be a positive integer"),
+    ],
+)
+def test_riva_fields_are_validated_not_coerced(
+    tmp_path, field, value, message
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        load_models_config(_write(tmp_path, f"""
+stt:
+  kind:     riva_grpc
+  category: stt
+  base_url: localhost:50051
+  {field}: {value}
+"""))
+
+
+def test_riva_fields_accept_valid_values(tmp_path) -> None:
+    cfg = load_models_config(_write(tmp_path, """
+tts:
+  kind:        riva_grpc
+  category:    tts
+  base_url:    localhost:50052
+  use_ssl:     true
+  language:    en-GB
+  voice:       Magpie-Multilingual.EN-US.Sofia
+  sample_rate: 22050
+"""))
+    tts = cfg.tts("tts")
+    assert tts.use_ssl is True
+    assert tts.language == "en-GB"
+    assert tts.sample_rate == 22050
+
+
 def test_health_path_must_be_an_absolute_path(tmp_path) -> None:
     with pytest.raises(ValueError, match="health_path"):
         load_models_config(_write(tmp_path, """

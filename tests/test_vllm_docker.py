@@ -137,6 +137,25 @@ class TestBuildRunArgv:
 
         assert fingerprint(first) != fingerprint(second)
 
+    def test_fingerprint_changes_when_hf_token_rotates(self, tmp_path):
+        kwargs = self._base_kwargs(tmp_path)
+        kwargs["hf_token"] = "hf_first"
+        first = _fingerprint_from_argv(build_run_argv(**kwargs))
+        kwargs["hf_token"] = "hf_second"
+        second = _fingerprint_from_argv(build_run_argv(**kwargs))
+        assert first != second
+        # The digest is one-way: the token value never reaches the label.
+        assert "hf_first" not in first and "hf_second" not in second
+
+    def test_tokenless_fingerprint_omits_the_credential_key(self, tmp_path):
+        # No hf_token → no digest key, so fingerprints stay compatible with
+        # containers created by code that predates credential digests.
+        kwargs = self._base_kwargs(tmp_path)
+        kwargs["hf_token"] = None
+        first = _fingerprint_from_argv(build_run_argv(**kwargs))
+        second = _fingerprint_from_argv(build_run_argv(**kwargs))
+        assert first == second
+
     def test_network_host(self, tmp_path):
         argv = build_run_argv(**self._base_kwargs(tmp_path))
         assert "--network" in argv
