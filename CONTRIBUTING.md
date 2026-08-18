@@ -59,8 +59,10 @@ Language-specific toolchains are pinned in each client project:
 
 - Keep code, tests, dependency metadata, and user-facing docs in the same
   change.
-- Update `DEPENDENCIES.md` whenever a `pyproject.toml` changes and regenerate
-  the affected project's gitignored `uv.lock` locally.
+- After changing a `pyproject.toml`, run
+  `uv run --script .github/scripts/generate_dependency_map.py` and regenerate the
+  affected project's gitignored `uv.lock` locally. Do not hand-edit the
+  generated dependency inventory; pre-commit updates it and CI rejects drift.
 - Add the repository SPDX header to new source files. See
   [SPDX headers](docs/source/guides/spdx-headers.md).
 - Describe the motivation and validation in the pull request and link related
