@@ -63,43 +63,43 @@ log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class Process:
-    """
-    Declares one process in the stack.
+    """Declare one process in a launcher-managed stack."""
 
-    name                 — label used in log output.
-    project              — path to the uv project (relative to the sample root, or absolute).
-    command              — entry-point script to run inside the project's venv.
-    config               — path to the YAML config (relative to the sample root, or absolute).
-                           Passed as ``--config <path>`` to the subprocess. Omit for
-                           processes that take no config.
-    gpu                  — optional CUDA_VISIBLE_DEVICES value (e.g. ``"0"``, ``"0,1"``).
-    launch_mode          — controls spawn + shutdown behaviour:
-    port                 — optional service port, used to stop ``persist`` services.
-    quiet_native_output  — when True, captured subprocess lines that don't look like
-                           Python loguru output (no ``HH:MM:SS.SSS`` prefix) are routed
-                           through stdlib ``logging`` at DEBUG instead of printed to
-                           stdout. Use for processes that emit native C/C++ chatter
-                           (e.g. OpenXR loader output) interleaved with their own Python
-                           loguru lines. Default ``False`` — every other Process keeps
-                           today's unconditional ``print`` behavior verbatim.
-
-      ``"own"``     (default) — launcher spawns this process and kills it on shutdown.
-      ``"persist"`` — launcher spawns this process but leaves it running on shutdown.
-                      Use for heavy model servers that should survive stack restarts
-                      (e.g. vLLM containers).  Cleanup is the caller's responsibility.
-      ``"reuse"``   — launcher does NOT spawn this process; it is assumed to be already
-                      running (e.g. started by ``model-servers``).  The entry in the
-                      process list documents the dependency; the launcher skips it
-                      entirely and does not kill it on shutdown.
-    """
     name:                str
+    """Label used in launcher output and readiness diagnostics."""
+
     project:             str | Path
+    """uv project path, relative to the sample root or absolute."""
+
     command:             str
+    """Entry-point command to run inside the project's environment."""
+
     config:              str | Path | None = None
+    """Optional YAML path, relative to the sample root or absolute.
+
+    The launcher passes the resolved path to the process as ``--config``.
+    """
+
     gpu:                 str | None = None
+    """Optional ``CUDA_VISIBLE_DEVICES`` value, such as ``"0"`` or ``"0,1"``."""
+
     launch_mode:         str = "own"
+    """Spawn and shutdown behavior.
+
+    ``own`` starts the process and stops it with the stack. ``persist`` starts
+    it but leaves it running at shutdown. ``reuse`` assumes the process is
+    already running and neither starts nor stops it.
+    """
+
     port:                int | None = None
+    """Optional service port used to stop a persistent process."""
+
     quiet_native_output: bool = False
+    """Route unformatted native output to DEBUG instead of the terminal.
+
+    Use this for processes that interleave native C/C++ output with Python
+    loguru records. All output remains available in the per-process log file.
+    """
 
 
 @dataclass(frozen=True)
@@ -120,6 +120,7 @@ class Parallel:
         ])
     """
     processes: tuple[Process, ...]
+    """Processes started together before the launcher advances."""
 
     def __init__(self, processes: Sequence[Process]) -> None:
         object.__setattr__(self, "processes", tuple(processes))

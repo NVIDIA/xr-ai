@@ -98,18 +98,23 @@ class VoiceGate:
     # ── handler registration ──────────────────────────────────────────────────
 
     def on_query(self, h: QueryHandler) -> None:
+        """Register the handler for accepted user queries."""
         self._on_query_h = h
 
     def on_stop(self, h: StopHandler) -> None:
+        """Register the handler for stop commands."""
         self._on_stop_h = h
 
     def on_phrase_only(self, h: PhraseOnlyHandler) -> None:
+        """Register the handler for a wake phrase without a query payload."""
         self._on_phrase_only_h = h
 
     def on_drop(self, h: DropHandler) -> None:
+        """Register the handler for transcripts rejected by the gate."""
         self._on_drop_h = h
 
     def on_participant_joined(self, h: ParticipantJoinedHandler) -> None:
+        """Register the handler for participant-joined notifications."""
         self._on_participant_joined_h = h
 
     def bind(
@@ -138,9 +143,11 @@ class VoiceGate:
     # ── per-participant lifecycle ─────────────────────────────────────────────
 
     async def participant_joined(self, pid: str) -> None:
+        """Notify the registered handler that participant *pid* joined."""
         await self._invoke(self._on_participant_joined_h, "on_participant_joined", pid)
 
     def forget(self, pid: str) -> None:
+        """Discard all gate state for participant *pid*."""
         self._followup_until.pop(pid, None)
         self._followup_started.discard(pid)
 

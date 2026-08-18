@@ -40,7 +40,10 @@ _PRE_ROLL_CHUNKS = 10     # ~320 ms pre-roll (10 × 32 ms)
 
 
 OnUtteranceCb   = Callable[[bytes, int], Awaitable[None]]
+"""Async callback receiving completed int16 PCM bytes and their sample rate."""
+
 OnSpeechStartCb = Callable[[], Awaitable[None]]
+"""Async callback fired once when an utterance crosses the speech threshold."""
 
 
 class VadDetector:

@@ -377,3 +377,17 @@ def test_generated_reference_accepts_public_surface(tmp_path: Path) -> None:
     reference.write_text("VoiceAgent HubVoiceTransport", encoding="utf-8")
 
     assert reference_check.validate_generated_api(tmp_path) == []
+
+
+def test_utility_packages_are_enrolled() -> None:
+    contract = _load_contract()
+
+    enrolled = {path.name for path in contract.API_PACKAGE_DIRS}
+
+    assert {
+        "xr_ai_launcher",
+        "xr_ai_logging",
+        "xr_ai_vad",
+        "xr_ai_vllm",
+        "xr_ai_voicegate",
+    } <= enrolled
