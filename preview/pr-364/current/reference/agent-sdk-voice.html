@@ -59,7 +59,7 @@
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Release migration" href="migrations.html" />
+    <link rel="next" title="Command-line reference" href="command-line.html" />
     <link rel="prev" title="xr-ai-tools" href="agent-sdk-tools.html" />
 
 
@@ -319,13 +319,43 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 </ul>
 </details></li>
 </ul>
@@ -392,7 +422,7 @@
 applications work with XR concepts rather than Pipecat modules:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes every final pre-gate STT result on <code class="docutils literal notranslate"><span class="pre">voice.transcript</span></code>
-and accepted speech, text, participant departure, and interruption on typed
+and accepted speech, text, participant lifecycle, and interruption on typed
 topics; it subscribes to <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> privately owns readiness, hub transport, pipeline assembly,
 signals, execution, and cleanup.</p></li>
@@ -429,34 +459,9 @@ signals, execution, and cleanup.</p></li>
 </section>
 <section id="voice-tuning-and-data-echo">
 <h2>Voice tuning and data echo<a class="headerlink" href="#voice-tuning-and-data-echo" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">VadConfig</span></code> controls utterance boundaries and bounded early transcription:</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Field</p></th>
-<th class="head text-right"><p>Default</p></th>
-<th class="head"><p>Meaning</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">silence_duration</span></code></p></td>
-<td class="text-right"><p><code class="docutils literal notranslate"><span class="pre">0.8</span></code></p></td>
-<td><p>Seconds of silence that finalize an utterance.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">min_speech</span></code></p></td>
-<td class="text-right"><p><code class="docutils literal notranslate"><span class="pre">0.15</span></code></p></td>
-<td><p>Minimum speech duration accepted as an utterance.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">silero_threshold</span></code></p></td>
-<td class="text-right"><p><code class="docutils literal notranslate"><span class="pre">0.5</span></code></p></td>
-<td><p>Silero VAD speech-probability threshold.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">stop_probe_after_s</span></code></p></td>
-<td class="text-right"><p><code class="docutils literal notranslate"><span class="pre">0.25</span></code></p></td>
-<td><p>Cadence for up to three early wake/STOP transcription probes; set to <code class="docutils literal notranslate"><span class="pre">0</span></code> or less to disable probes.</p></td>
-</tr>
-</tbody>
-</table>
-</div>
+<p><code class="docutils literal notranslate"><span class="pre">VadConfig</span></code> controls utterance boundaries and bounded early transcription:
+the generated Python reference lists every field, type, default, and description.
+Set <code class="docutils literal notranslate"><span class="pre">stop_probe_after_s</span></code> to <code class="docutils literal notranslate"><span class="pre">0</span></code> or less to disable early probes.</p>
 <p><code class="docutils literal notranslate"><span class="pre">VoiceAgent.text_topic</span></code> controls the completed-response echo sent through the
 hub data channel. Its default is <code class="docutils literal notranslate"><span class="pre">&quot;agent.response&quot;</span></code>; set it to <code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> when the
 application publishes its own response data so each turn is delivered only
@@ -472,10 +477,15 @@ a slow runtime subscriber cannot delay STT, voice gating, or accepted queries.
 The queue preserves order and drops its oldest pending transcript when full;
 shutdown cancels the active delivery and discards pending transcripts. Runtime
 subscribers should enqueue long-running work internally and return promptly.</p>
-<p>Accepted speech, typed text, participant departure, and interruption remain on
-application-named topics. Application agents subscribe to the events they own,
-perform cleanup in their own subscriber methods, and may publish finite or
-incremental <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code> messages:</p>
+<p>Accepted speech, typed text, participant lifecycle, and interruption remain on
+application-named topics. Pass <code class="docutils literal notranslate"><span class="pre">participant_joined_topic</span></code> and/or
+<code class="docutils literal notranslate"><span class="pre">participant_left_topic</span></code> to publish <code class="docutils literal notranslate"><span class="pre">VoiceParticipantJoined</span></code> and
+<code class="docutils literal notranslate"><span class="pre">VoiceParticipantLeft</span></code>; participant identity is runtime metadata rather than
+event payload. Join publication occurs after the voice gate handles its greeting.
+The hub suppresses duplicate roster joins while a participant remains connected
+and emits a new join after a leave/reconnect. Application agents subscribe to the
+events they own, perform cleanup in their own subscriber methods, and may publish
+finite or incremental <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code> messages:</p>
 <p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> consumes only untopiced client data when <code class="docutils literal notranslate"><span class="pre">text_input=True</span></code>; named
 application and control messages are never interpreted as user queries. The
 hub preserves the original data-channel topic for every processor.</p>
@@ -499,8 +509,10 @@ preserves the input timestamp. <code class="docutils literal notranslate"><span 
 chunk for a stream that voice already closed, including when wrapped in the
 runtime publication exception group.</p>
 <p>Lifecycle publication runs on <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>-owned tasks, so participant cleanup
-cannot block the shared media processor. The agent cancels and awaits those
-tasks during shutdown.</p>
+cannot block the shared media processor. Join and leave publications are
+serialized per participant, preserving lifecycle order even when a subscriber
+is slow; different participants remain independent. The agent cancels and
+awaits those tasks during shutdown.</p>
 <p>Relay telemetry treats <code class="docutils literal notranslate"><span class="pre">voice.output</span></code> as a high-cardinality transport topic and
 does not emit runtime scopes per fragment. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> instead emits one
 <code class="docutils literal notranslate"><span class="pre">voice.response</span></code> agent scope for each finite response or completed incremental
@@ -554,11 +566,11 @@ after a comma, semicolon, or within ordinary prose does not activate the gate.</
       </div>
     </a>
     <a class="right-next"
-       href="migrations.html"
+       href="command-line.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Release migration</p>
+        <p class="prev-next-title">Command-line reference</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

@@ -39,6 +39,7 @@ Classes
    xr_ai_voice.VoiceAgent
    xr_ai_voice.VoiceInterrupted
    xr_ai_voice.VoiceOutput
+   xr_ai_voice.VoiceParticipantJoined
    xr_ai_voice.VoiceParticipantLeft
    xr_ai_voice.VoiceTranscript
    xr_ai_voice.HubVoiceTransport
@@ -127,7 +128,7 @@ Package Contents
 
 
 
-.. py:class:: VoiceAgent(*, query_topic: xr_ai_runtime.Topic[UserQuery], stt: xr_ai_models.STTService, tts: xr_ai_models.TTSService, vad: xr_ai_voice._processors.VadConfig, voice_gate: xr_ai_voicegate.VoiceGateConfig, probes: collections.abc.Mapping[str, xr_ai_voice._readiness.ProbeFn] | None = None, ready_file: pathlib.Path | None = None, closeables: collections.abc.Iterable[Any] = (), text_topic: str = 'agent.response', idle_timeout_secs: float | None = None, transport: xr_ai_voice._transport.HubVoiceTransport | None = None, response_capacity: int = 32, text_input: bool = True, participant_left_topic: xr_ai_runtime.Topic[VoiceParticipantLeft] | None = None, interrupted_topic: xr_ai_runtime.Topic[VoiceInterrupted] | None = None, interrupt_on_supersede: bool = False)
+.. py:class:: VoiceAgent(*, query_topic: xr_ai_runtime.Topic[UserQuery], stt: xr_ai_models.STTService, tts: xr_ai_models.TTSService, vad: xr_ai_voice.VadConfig, voice_gate: xr_ai_voicegate.VoiceGateConfig, probes: collections.abc.Mapping[str, collections.abc.Callable[[], collections.abc.Awaitable[bool]]] | None = None, ready_file: pathlib.Path | None = None, closeables: collections.abc.Iterable[Any] = (), text_topic: str = 'agent.response', idle_timeout_secs: float | None = None, transport: xr_ai_voice.HubVoiceTransport | None = None, response_capacity: int = 32, text_input: bool = True, participant_joined_topic: xr_ai_runtime.Topic[VoiceParticipantJoined] | None = None, participant_left_topic: xr_ai_runtime.Topic[VoiceParticipantLeft] | None = None, interrupted_topic: xr_ai_runtime.Topic[VoiceInterrupted] | None = None, interrupt_on_supersede: bool = False)
 
 
 
@@ -209,6 +210,13 @@ Package Contents
 
       Require identity for incremental output and text for finite output.
 
+
+
+.. py:class:: VoiceParticipantJoined
+
+
+
+   Notification that one participant joined the voice transport.
 
 
 .. py:class:: VoiceParticipantLeft

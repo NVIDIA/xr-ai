@@ -1,0 +1,173 @@
+xr_ai_vllm
+==========
+
+.. py:module:: xr_ai_vllm
+
+.. autoapi-nested-parse::
+
+   xr-ai-vllm — pluggable vLLM backend for xr-ai inference services.
+
+   Lets each vLLM-backed service host vllm via either:
+
+   * `pip`    — pip-installed `vllm` CLI in the wrapper's venv (default; today's behavior).
+   * `docker` — `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …` (NGC container).
+
+   The choice is per-server, set via `vllm_backend: pip|docker` in the service's
+   YAML. Both paths honor identical config keys (model, ports, vllm flags); only
+   the runtime hosting vllm differs.
+
+   Stdlib-only by contract — no vllm or other heavy deps imported here, so the
+   docker path stays light even when pip vllm is not installed.
+
+   Typical usage from a service wrapper::
+
+       from xr_ai_vllm import serve, DEFAULT_IMAGE
+
+       serve(
+           backend=cfg.get("vllm_backend", "pip"),
+           persistent=True,
+           image=cfg.get("vllm_image", DEFAULT_IMAGE),
+           container_name="xr-ai-vllm-vlm-server",
+           log_prefix="vlm_server",
+           model=model,
+           extra_serve_args=[
+               "--served-model-name", served_name,
+               "--max-num-seqs", str(max_seqs),
+               ...
+           ],
+           host=host, port=port,
+           model_cache=model_cache,
+           hf_token=os.environ.get("HF_TOKEN"),
+           cuda_visible_devices=cfg.get("cuda_visible_devices"),
+           ready_file=ns.ready_file,
+       )
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   xr_ai_vllm.DEFAULT_IMAGE
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   xr_ai_vllm.gpu_compute_major
+   xr_ai_vllm.load_config
+   xr_ai_vllm.resolve_model_cache
+   xr_ai_vllm.setup_hf_env
+   xr_ai_vllm.serve
+   xr_ai_vllm.stop_persistent_servers
+
+
+Package Contents
+----------------
+
+.. py:function:: gpu_compute_major() -> int
+
+   Return the GPU's compute-capability major version, or 0 if unknown.
+
+   Reads ``CUDA_VISIBLE_DEVICES`` from the env, so set the device filter
+   before calling. Logs a warning on failure and falls back to 0.
+
+
+.. py:function:: load_config(argv: list[str] | None = None) -> tuple[dict, pathlib.Path, pathlib.Path | None]
+
+   Parse ``--config``/``--ready-file`` and load the YAML config.
+
+   Reconfigures stdout/stderr to line-buffered so logs flush under the
+   launcher's piped stdout. Returns ``(cfg, yaml_dir, ready_file)``;
+   ``yaml_dir`` is the config's directory (cwd when no config is given),
+   used as the base for relative paths like ``model_cache``.
+
+
+.. py:function:: resolve_model_cache(cfg: dict, yaml_dir: pathlib.Path, *, default: str) -> pathlib.Path
+
+   Resolve ``model_cache`` (relative to the YAML dir) and ensure it exists.
+
+
+.. py:function:: setup_hf_env(cfg: dict, model_cache: pathlib.Path) -> str | None
+
+   Apply the shared HuggingFace / CUDA env block.
+
+   Sets ``CUDA_VISIBLE_DEVICES`` (when configured), ``HF_TOKEN`` (when
+   provided), ``HF_HUB_ENABLE_HF_TRANSFER``, ``HF_HOME``, and
+   ``TRANSFORMERS_CACHE``.
+
+   Both ``HF_HOME`` and ``TRANSFORMERS_CACHE`` are set via ``setdefault``, so
+   an externally-set value wins over the YAML default. This intentionally
+   differs from the pre-consolidation per-server code where the LLM wrappers
+   used an unconditional assignment for ``HF_HOME``; callers that need the
+   YAML value to take priority must unset the env var before calling.
+   ``TRANSFORMERS_CACHE`` mirrors ``HF_HOME`` for Transformers <4.36 and
+   third-party libraries that have not yet adopted the ``HF_HOME`` superset.
+
+   Returns the resolved ``cuda_visible_devices`` string (or ``None``) so
+   callers that run GPU detection can confirm the device filter is applied.
+
+
+.. py:data:: DEFAULT_IMAGE
+   :value: 'nvcr.io/nvidia/vllm:26.04-py3'
+
+
+   Default NGC vLLM image used when a service does not override ``vllm_image``.
+
+   Individual services may pin a newer image when required by their model.
+
+
+.. py:function:: serve(*, backend: str, persistent: bool, image: str = DEFAULT_IMAGE, container_name: str, log_prefix: str, model: str, extra_serve_args: list[str], host: str, port: int, model_cache: pathlib.Path, hf_token: str | None = None, cuda_visible_devices: str | None = None, extra_env: dict[str, str] | None = None, extra_pip: list[str] | None = None, ready_file: pathlib.Path | None = None) -> None
+
+   Launch vLLM via *backend* (`"pip"` or `"docker"`).
+
+   *extra_serve_args* are the flags appended after `vllm serve <model>` —
+   everything past the model id (e.g. ``--served-model-name``,
+   ``--max-num-seqs``, ``--reasoning-parser``, …). They are passed verbatim,
+   so caller-side flag construction is unchanged from the per-service
+   wrappers' previous inline argv.
+
+   *persistent* controls the pip-mode lifecycle only:
+
+   * ``True``  — vLLM pip process starts in a new session so it survives
+     wrapper restarts.  Cleanup is via `stop_persistent_servers`.
+   * ``False`` — die with the wrapper.
+
+   For the docker backend *persistent* is ignored: the container always
+   runs foreground with ``start_new_session=True``, so it escapes the
+   launcher's process group regardless. Use
+   ``Process(..., launch_mode="persist")`` in the orchestrator ``main.py``
+   to tell the launcher not to kill the wrapper on shutdown.
+
+   *container_name* is only consulted in docker mode. Use a stable,
+   service-specific name (e.g. ``xr-ai-vllm-<entry-point>``) so the stop
+   helper can find it.
+
+   *extra_pip* is docker-mode only: a list of pip-installable package
+   specs that get installed into the container right before ``vllm
+   serve`` runs (same shell line that already installs ``hf_transfer``).
+   Use it for models whose architecture imports a wheel the NGC image
+   doesn't bundle — e.g. ``["mamba-ssm", "causal-conv1d"]`` for
+   Nemotron-Omni's hybrid SSM backbone. Silently ignored in pip mode
+   (deps belong in the wrapper's pyproject.toml there).
+
+
+.. py:function:: stop_persistent_servers(services: list[tuple[str, int]]) -> bool
+
+   Stop persisted servers and report whether every discovered server stopped.
+
+   *services* is a list of ``(label, port)`` tuples.  For each entry:
+
+   1. Look for a docker container labelled ``xr-ai-vllm.port=<port>``
+      (stamped at start time by the vLLM wrapper) and ``docker stop`` it.
+   2. Fall back to port → pid → SIGTERM → SIGKILL for pip-mode vLLM or
+      in-process servers (e.g. STT).
+
+   A missing container and listener is already stopped. Output is print-style
+   with ``[<label>] …`` prefixes. Discovery errors and listeners that are not
+   identified as xr-ai services fail closed without sending a signal.
+
+
