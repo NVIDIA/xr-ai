@@ -455,6 +455,9 @@ also an async context manager.</p>
 and topic views. <code class="docutils literal notranslate"><span class="pre">/api/events?after=&lt;sequence&gt;</span></code> reports cursor rollover so a
 browser can recover after falling behind the bounded store. <code class="docutils literal notranslate"><span class="pre">/healthz</span></code> reports
 whether the HTTP listener can answer requests.</p>
+<p>The shipped <code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code> worker publishes participant-scoped VLM queries
+and response chunks, while <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code> publishes XR requests and spoken
+agent output. Both configure and start their viewer from the sample worker YAML.</p>
 <p>The listener has no application authentication or TLS. Its loopback default is
 intentional because payloads may contain speech transcripts or camera-derived
 text. For remote development, keep it on loopback and use an SSH tunnel:</p>
@@ -463,7 +466,9 @@ text. For remote development, keep it on loopback and use an SSH tunnel:</p>
 </div>
 <p>Do not bind it to <code class="docutils literal notranslate"><span class="pre">0.0.0.0</span></code> on an untrusted network. A remotely exposed viewer
 needs an authenticated TLS reverse proxy chosen by the deployment owner; it
-does not reuse the media hub’s participant credentials.</p>
+does not reuse the media hub’s participant credentials. The server also rejects
+unrecognized HTTP <code class="docutils literal notranslate"><span class="pre">Host</span></code> names. A reverse proxy must preserve a configured host,
+use a literal listener address, or rewrite <code class="docutils literal notranslate"><span class="pre">Host</span></code> to <code class="docutils literal notranslate"><span class="pre">127.0.0.1</span></code>.</p>
 </section>
 
 
