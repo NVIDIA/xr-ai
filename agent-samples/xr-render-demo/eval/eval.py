@@ -28,7 +28,6 @@ import time
 from pathlib import Path
 
 import httpx
-import yaml
 from xr_ai_tools.tool_calling import tool_definitions
 
 _HERE       = Path(__file__).resolve().parent
@@ -37,25 +36,19 @@ SYS_PROMPT  = (_HERE / "../worker/xr_render_demo_worker/prompts/system.txt").res
 # Borrow the worker's config and native-tool assembly so the eval advertises
 # the same model-facing function schemas as the live worker.
 sys.path.insert(0, str((_HERE / "../worker").resolve()))
-from xr_render_demo_worker.config import load_config  # noqa: E402
+from xr_render_demo_worker.config import load_config, load_models  # noqa: E402
 from xr_render_demo_worker.scene_loop import (  # noqa: E402
     LIVE_PERCEPTION_TOOL,
     PAST_PERCEPTION_TOOL,
     PERCEPTION_TOOL_DEFS,
 )
 from xr_render_demo_worker.tools import NativeCapabilities  # noqa: E402
-_WORKER_CFG = load_config((_HERE / "../yaml/xr_render_demo_worker.yaml").resolve())
+_WORKER_YAML = (_HERE / "../yaml/xr_render_demo_worker.yaml").resolve()
+_WORKER_CFG = load_config(_WORKER_YAML)
 
 def _agent_llm_base_url() -> str:
-    """Read agent_llm.base_url from models.yaml."""
-    # WorkerConfig.models_yaml is resolved relative to the live launcher's
-    # cwd (the sample root); eval runs from eval/, so anchor it ourselves.
-    p = Path(_WORKER_CFG.models_yaml)
-    if not p.is_absolute():
-        p = (_HERE / ".." / p).resolve()
-    with open(p) as f:
-        models = yaml.safe_load(f) or {}
-    return str(models["agent_llm"]["base_url"]).rstrip("/")
+    """agent_llm.base_url from the worker's selected deployment profile."""
+    return load_models(_WORKER_YAML).llm("agent_llm").base_url.rstrip("/")
 
 
 AGENT_LLM   = f"{_agent_llm_base_url()}/v1/chat/completions"  # overridable via --agent-llm

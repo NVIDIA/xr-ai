@@ -178,10 +178,20 @@ GPU profiles are auto-detected (`dual_48G_ada` / `spark` / `96G_blackwell`).
 On first run the stack downloads tens of GB from Hugging Face and can take
 tens of minutes. On subsequent runs the containers restart in under a minute.
 
-The stack starts Nemotron-3 Nano Omni for LLM requests (8108), Cosmos3 Nano
-Reasoner for vision requests (8100), STT (8103), and embeddings (8109). On
-`dual_48G_ada`, Cosmos and embeddings use GPU 0 while Omni and STT use GPU 1.
-Starting the stack stops the superseded Nano text server on port 8107 first.
+Which servers start is a deployment profile: `--models <name|path>` selects
+`default`, `vlm_llm_nim` (LLM and VLM as self-hosted NIM containers;
+requires docker + `NGC_API_KEY`), `vlm_speech_nim` (Riva speech NIM
+containers), or any profile JSON of your own. Starting a profile stops
+persisted servers outside it first and aborts if they cannot be stopped,
+avoiding GPU overcommit.
+
+The default profile starts Nemotron-3 Nano Omni (8108, serving both the
+reactive and agent LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103),
+and embeddings (8109).
+
+```bash
+uv run model_servers --models vlm_llm_nim
+```
 
 `HF_TOKEN` is required by default: without it the roughly 60 GB first-run download
 can stall indefinitely.  See [`docs/source/getting_started/credentials.md`](docs/source/getting_started/credentials.md)
@@ -402,23 +412,14 @@ uv run model_servers --stop
 (STT/TTS stay local) by setting **one key** in `xr_render_demo_worker.yaml`:
 
 ```yaml
-model_backend: nim     # default is "local"
+models_config: models.hosted.json     # default is models.local.json
 ```
 
-The worker loads `yaml/models.nim.yaml` for the native model-backed functions —
-no `main.py` edits. Provide an `NGC_API_KEY` as an **environment variable** (or
-via the launcher credential prompt — not in YAML). Do not run `model_servers`,
-because its single topology starts both local `omni` and `vlm`. Start STT by
-itself from the repository root, setting `GPU_PROFILE` to `dual_48G_ada`,
-`spark`, or `96G_blackwell`:
-
-```bash
-GPU_PROFILE=dual_48G_ada
-uv run --project services/stt-server stt_server \
-  --config "agent-samples/model-servers/yaml/${GPU_PROFILE}/stt_server.yaml"
-```
-
-Then start `xr_render_demo` in another terminal. See
+The profile is consumed by both the worker and orchestrator, so there are
+no `main.py`
+edits, and the stack owns its own speech servers, so the model-servers stack
+isn't needed at all. Provide an `NGC_API_KEY` as an **environment variable** (or via the
+launcher credential prompt, not in YAML). See
 [`docs/source/components/ai-services.md`](docs/source/components/ai-services.md#hosting-models-on-nvidia-nim).
 
 ---

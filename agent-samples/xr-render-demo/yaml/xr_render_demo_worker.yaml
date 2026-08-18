@@ -5,19 +5,31 @@
 # Paths resolve relative to this file's directory.
 
 # ── AI model services ─────────────────────────────────────────────────────────
-# Model backend: where the LLM and VLM run.
-#   local — local vLLM model-servers (default)
-#   nim   — hosted NVIDIA NIM (build.nvidia.com); the worker loads
-#           models.nim.yaml. Requires NGC_API_KEY (docs/source/getting_started/credentials.md).
-#           STT/TTS stay local. This is the ONLY change needed — no main.py edit.
-model_backend: local
-
-# Model endpoints (URLs, presets, timeouts) are declared in models.yaml and
-# loaded via xr-ai-models.  Edit that file to change which model runs where.
-# Path is resolved relative to THIS file's directory (`yaml/`), so the bare
-# `models.yaml` here points at `agent-samples/xr-render-demo/yaml/models.yaml`.
-# Used by the LOCAL backend; ignored when model_backend is "nim".
-models_yaml: models.yaml
+# Model deployment profile, resolved relative to this file. Each entry's
+# deployment.ownership decides what the orchestrator does: `managed` entries
+# it launches itself, `reused` entries it expects already running, `external`
+# entries need no local process. Managed model servers persist across stack
+# restarts (docs/source/components/ai-services.md "Model-server persistence");
+# on a profile
+# switch the incoming server evicts whatever held its port. Shipped presets:
+#   models.local.json     — reuses the model-servers stack for STT, LLMs,
+#                           and VLM (start model-servers first); owns piper
+#                           TTS.
+#   models.hosted.json    — LLMs and VLM on hosted NVIDIA NIM
+#                           (build.nvidia.com); owns local speech. Nothing
+#                           to pre-start.
+#   models.vlm_llm_nim.json — LLMs and VLM reused from the model-servers vlm_llm_nim
+#                           stack (`model_servers --models vlm_llm_nim`; start it
+#                           first); owns local piper TTS. Riva speech NIMs
+#                           don't fit next to CloudXR + LOVR + the LLM/VLM
+#                           NIMs on 2x48 GB; see the model-servers
+#                           vlm_speech_nim profile for capable boxes.
+# Only hosted needs a sample-side NGC_API_KEY
+# (see docs/source/getting_started/credentials.md);
+# the NIM stacks carry their own credentials in model-servers. Entries
+# mix freely; copy a preset under any name and select it here. This is the
+# only change needed to switch.
+models_config: models.local.json
 
 # ── Voice gate ────────────────────────────────────────────────────────────────
 # Magic-phrase opt-in gate; see voice_gate.yaml for the schema.  Ships with

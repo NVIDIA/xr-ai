@@ -58,7 +58,9 @@ change, even when an individual dependency publishes newer Python wheels.
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `httpx>=0.27`
   - `pyyaml>=6.0`
-- Optional dependency groups: none
+- Optional dependency groups:
+  - `riva`:
+    - `nvidia-riva-client>=2.17`
 - Commands: none
 
 #### `xr-ai-agent-runtime` — [`agent-sdk/xr-ai-runtime/`](agent-sdk/xr-ai-runtime/)
@@ -273,6 +275,19 @@ change, even when an individual dependency publishes newer Python wheels.
 - Commands:
   - `nemotron3_nano_llm_server` → `nemotron3_nano_llm_server.__main__:run`
 
+#### `nim-server` — [`services/nim-server/`](services/nim-server/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `pyyaml>=6.0`
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `nim_server` → `nim_server.__main__:run`
+
 #### `xr-openxr-service` — [`services/openxr-service/`](services/openxr-service/)
 
 - Python: `>=3.11,<3.13`
@@ -427,7 +442,7 @@ change, even when an individual dependency publishes newer Python wheels.
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-tools[frames,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
@@ -496,7 +511,7 @@ change, even when an individual dependency publishes newer Python wheels.
 - Runtime dependencies:
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
-  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-tools[frames,image-editing,marker-tracking,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
   - `xr-media-hub` → [`xr-media-hub`](services/xr-media-hub/) (local, editable)

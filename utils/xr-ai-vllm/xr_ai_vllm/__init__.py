@@ -52,6 +52,7 @@ from ._config import (
     resolve_model_cache,
     setup_hf_env,
 )
+from ._nim import serve_nim
 
 log = logging.getLogger(__name__)
 
@@ -252,6 +253,7 @@ def stop_persistent_servers(
 
 __all__ = [
     "serve",
+    "serve_nim",
     "stop_persistent_servers",
     "DEFAULT_IMAGE",
     "resolve_model_cache",

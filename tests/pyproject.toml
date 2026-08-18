@@ -14,7 +14,7 @@ dependencies = [
     # Pulled in via editable installs of the workspace packages.
     "xr-ai-agent-runtime",
     "xr-ai-hub-client",
-    "xr-ai-models",
+    "xr-ai-models[riva]",
     "xr-ai-tools[frames,image-editing,marker-tracking,services,vision]",
     "xr-ai-voice",
     "xr-media-hub",

@@ -15,7 +15,9 @@ Model deployment
 ----------------
 ``models_config`` in yaml/simple_vlm_example_worker.yaml selects a deployment
 profile. The default profile owns local STT, VLM, and TTS services; the hosted
-profile replaces only the VLM with NVIDIA NIM.
+profile replaces only the VLM with NVIDIA NIM; models.vlm_llm_nim.json and
+models.vlm_speech_nim.json reuse self-hosted NIM containers from the
+model-servers nim / vlm_speech_nim stacks (start the matching stack first).
 
 How to run (from agent-samples/simple-vlm-example/):
     uv sync && uv run simple_vlm_example
@@ -38,6 +40,17 @@ _BASE = Path(__file__).resolve().parent
 _WORKER_CONFIG = "yaml/simple_vlm_example_worker.yaml"
 
 _MODEL_PROCESSES = {
+    # NIM services are reused from the model-servers vlm_llm_nim / vlm_speech_nim
+    # stacks; start the matching stack first.
+    "stt-nim": Process(
+        "stt-nim", "../../services/nim-server", "nim_server",
+    ),
+    "tts-nim": Process(
+        "tts-nim", "../../services/nim-server", "nim_server",
+    ),
+    "vlm-nim": Process(
+        "vlm-nim", "../../services/nim-server", "nim_server",
+    ),
     "vlm": Process(
         "vlm", "../../services/vlm-server", "vlm_server",
         config="yaml/vlm_server.yaml",

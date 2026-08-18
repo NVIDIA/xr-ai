@@ -279,11 +279,12 @@ class OpenAICompatLLM:
         api_key_env: str | None = None,
         timeout: float = 60.0,
         health_check: bool = True,
+        health_path: str = "/health",
         client: httpx.AsyncClient | None = None,
     ) -> None:
         base = base_url.rstrip("/")
         self._chat_url   = base + "/v1/chat/completions"
-        self.health_url  = base + "/health"
+        self.health_url  = base + health_path
         """The URL used to check endpoint readiness."""
 
         self._model      = model_name
@@ -458,6 +459,7 @@ class OpenAICompatVLM:
         api_key_env: str | None = None,
         timeout: float = 60.0,
         health_check: bool = True,
+        health_path: str = "/health",
         client: httpx.AsyncClient | None = None,
     ) -> None:
         self._llm = OpenAICompatLLM(
@@ -468,6 +470,7 @@ class OpenAICompatVLM:
             api_key_env=api_key_env,
             timeout=timeout,
             health_check=health_check,
+            health_path=health_path,
             client=client,
         )
 
@@ -675,13 +678,12 @@ class OpenAICompatSTT:
         api_key_env: str | None = None,
         timeout: float = 30.0,
         health_check: bool = True,
+        health_path: str = "/health",
         client: httpx.AsyncClient | None = None,
     ) -> None:
         base = base_url.rstrip("/")
         self._url       = base + "/v1/audio/transcriptions"
-        self.health_url = base + "/health"
-        """The URL used to check endpoint readiness."""
-
+        self.health_url = base + health_path
         self._api_key   = os.environ.get(api_key_env) if api_key_env else None
         _warn_if_cleartext_key(base_url, self._api_key)
         self._health_check = health_check
@@ -756,13 +758,12 @@ class OpenAICompatTTS:
         api_key_env: str | None = None,
         timeout: float = 30.0,
         health_check: bool = True,
+        health_path: str = "/health",
         client: httpx.AsyncClient | None = None,
     ) -> None:
         base = base_url.rstrip("/")
         self._url       = base + "/v1/audio/speech"
-        self.health_url = base + "/health"
-        """The URL used to check endpoint readiness."""
-
+        self.health_url = base + health_path
         self._api_key   = os.environ.get(api_key_env) if api_key_env else None
         _warn_if_cleartext_key(base_url, self._api_key)
         self._health_check = health_check
@@ -830,13 +831,12 @@ class OpenAICompatEmbedding:
         api_key_env: str | None = None,
         timeout: float = 60.0,
         health_check: bool = True,
+        health_path: str = "/health",
         client: httpx.AsyncClient | None = None,
     ) -> None:
         base = base_url.rstrip("/")
         self._url = base + "/v1/embeddings"
-        self.health_url = base + "/health"
-        """The URL used to check endpoint readiness."""
-
+        self.health_url = base + health_path
         self._model = model_name
         self._api_key = os.environ.get(api_key_env) if api_key_env else None
         _warn_if_cleartext_key(base_url, self._api_key)

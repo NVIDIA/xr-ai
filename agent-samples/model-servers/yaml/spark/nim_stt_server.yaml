@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Self-hosted NIM: Riva ASR (parakeet). Workers reach the gRPC port via the
+# riva_grpc model kind; http_port serves /v1/health/ready only.
+# UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.
+image:     nvcr.io/nim/nvidia/parakeet-tdt-0.6b-v2:1.2.0
+http_port: 9010
+grpc_port: 50051
+
+nim_cache: ../../../../models/nim
+
+cuda_visible_devices: "0"
+env:
+  # Single-process inference: the default multiprocessing mode runs two
+  # CUDA processes; one is plenty for demo traffic. ~14 GB VRAM either way.
+  NIM_USE_MULTIPROCESSING_FOR_INFERENCE: "false"

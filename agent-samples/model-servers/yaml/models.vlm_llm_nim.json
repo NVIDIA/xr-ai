@@ -1,0 +1,80 @@
+{
+  "models": {
+    "stt": {
+      "adapter": {
+        "preset": "parakeet_stt"
+      },
+      "endpoint": {
+        "base_url": "http://localhost:8103",
+        "readiness": "health"
+      },
+      "deployment": {
+        "ownership": "managed",
+        "service": "stt"
+      }
+    },
+    "llm": {
+      "category": "llm",
+      "adapter": {
+        "kind": "openai_compat",
+        "model_name": "nvidia/nemotron-3-nano",
+        "capabilities": {
+          "tool_calls": true
+        },
+        "default_extras": {
+          "chat_template_kwargs": {
+            "enable_thinking": false
+          }
+        }
+      },
+      "endpoint": {
+        "base_url": "http://localhost:8110",
+        "readiness": "health",
+        "health_path": "/v1/health/ready"
+      },
+      "deployment": {
+        "ownership": "managed",
+        "service": "llm-nim",
+        "credentials": [
+          "NGC_API_KEY"
+        ]
+      }
+    },
+    "vlm": {
+      "category": "vlm",
+      "adapter": {
+        "kind": "openai_compat",
+        "model_name": "nvidia/cosmos-reason1-7b",
+        "capabilities": {
+          "streaming": true,
+          "vision": true
+        }
+      },
+      "endpoint": {
+        "base_url": "http://localhost:8100",
+        "readiness": "health",
+        "health_path": "/v1/health/ready"
+      },
+      "deployment": {
+        "ownership": "managed",
+        "service": "vlm-nim",
+        "credentials": [
+          "NGC_API_KEY"
+        ]
+      }
+    },
+    "embedding": {
+      "adapter": {
+        "preset": "nemotron_embedding"
+      },
+      "endpoint": {
+        "base_url": "http://localhost:8109",
+        "readiness": "health"
+      },
+      "deployment": {
+        "ownership": "managed",
+        "service": "embedding"
+      }
+    }
+  }
+}

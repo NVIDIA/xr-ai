@@ -37,7 +37,7 @@ from xr_ai_models.presets import available_presets, get_preset
 
 def test_package_root_exports_complete_config_surface() -> None:
     assert KIND_OPENAI_COMPAT == "openai_compat"
-    assert get_args(ModelKind) == ("openai_compat",)
+    assert get_args(ModelKind) == ("openai_compat", "riva_grpc")
     assert set(get_args(Category)) == {"llm", "vlm", "stt", "tts", "embedding"}
     assert LLMSpec in get_args(Spec)
 
@@ -157,6 +157,81 @@ nim_llm:
     assert nim.base_url == "https://integrate.api.nvidia.com"
 
 
+async def test_health_path_defaults_and_reaches_the_client(tmp_path) -> None:
+    cfg = load_models_config(_write(tmp_path, """
+local_llm:
+  kind:     preset:nemotron3_nano
+  base_url: http://localhost:8107
+nim_llm:
+  kind:        openai_compat
+  category:    llm
+  base_url:    http://localhost:8106
+  model_name:  nvidia/nemotron-3-nano
+  health_path: /v1/health/ready
+"""))
+    assert cfg.llm("local_llm").health_path == "/health"
+    assert cfg.llm("nim_llm").health_path == "/v1/health/ready"
+    llm = make_llm(cfg, "nim_llm")
+    try:
+        assert llm.health_url == "http://localhost:8106/v1/health/ready"
+    finally:
+        await llm.close()
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("use_ssl", '"false"', "use_ssl must be a boolean"),
+        ("language", "null", "language must be a non-empty string"),
+        ("language", '""', "language must be a non-empty string"),
+        ("voice", "3", "voice must be a non-empty string"),
+        ("sample_rate", "44100.5", "sample_rate must be a positive integer"),
+        ("sample_rate", "-1", "sample_rate must be a positive integer"),
+        ("sample_rate", "true", "sample_rate must be a positive integer"),
+    ],
+)
+def test_riva_fields_are_validated_not_coerced(
+    tmp_path, field, value, message
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        load_models_config(_write(tmp_path, f"""
+stt:
+  kind:     riva_grpc
+  category: stt
+  base_url: localhost:50051
+  {field}: {value}
+"""))
+
+
+def test_riva_fields_accept_valid_values(tmp_path) -> None:
+    cfg = load_models_config(_write(tmp_path, """
+tts:
+  kind:        riva_grpc
+  category:    tts
+  base_url:    localhost:50052
+  use_ssl:     true
+  language:    en-GB
+  voice:       Magpie-Multilingual.EN-US.Sofia
+  sample_rate: 22050
+"""))
+    tts = cfg.tts("tts")
+    assert tts.use_ssl is True
+    assert tts.language == "en-GB"
+    assert tts.sample_rate == 22050
+
+
+def test_health_path_must_be_an_absolute_path(tmp_path) -> None:
+    with pytest.raises(ValueError, match="health_path"):
+        load_models_config(_write(tmp_path, """
+llm:
+  kind:        openai_compat
+  category:    llm
+  base_url:    http://localhost:8106
+  model_name:  m
+  health_path: v1/health/ready
+"""))
+
+
 def test_profile_separates_adapter_endpoint_and_deployment(tmp_path) -> None:
     cfg = load_models_config(_write(tmp_path, """
 models:
@@ -191,6 +266,49 @@ models:
     hosted = cfg.vlm("hosted_vision")
     assert hosted.health_check is False
     assert cfg.required_credentials == ("EXAMPLE_API_KEY",)
+
+
+def test_profile_deployment_credentials(tmp_path) -> None:
+    cfg = load_models_config(_write(tmp_path, """
+models:
+  vision:
+    adapter: { preset: cosmos_vlm }
+    endpoint: { base_url: http://localhost:8100, readiness: none }
+    deployment:
+      ownership: managed
+      service: vlm-nim
+      credentials: [NGC_API_KEY]
+"""))
+
+    vision = cfg.vlm("vision")
+    assert vision.deployment.credentials == ("NGC_API_KEY",)
+    # Deployment credentials are the launcher's concern; the worker-side
+    # aggregate stays endpoint keys only.
+    assert cfg.required_credentials == ()
+
+
+@pytest.mark.parametrize(
+    ("credentials", "match"),
+    [
+        ("NGC_API_KEY", "must be a list"),
+        ("[123]", "non-empty strings"),
+        ('[""]', "non-empty strings"),
+    ],
+)
+def test_profile_rejects_invalid_deployment_credentials(
+    tmp_path, credentials, match
+) -> None:
+    with pytest.raises(ValueError, match=match):
+        load_models_config(_write(tmp_path, f"""
+models:
+  vision:
+    adapter: {{ preset: cosmos_vlm }}
+    endpoint: {{ base_url: http://localhost:8100 }}
+    deployment:
+      ownership: managed
+      service: vlm-nim
+      credentials: {credentials}
+"""))
 
 
 def test_profile_rejects_managed_role_without_service(tmp_path) -> None:

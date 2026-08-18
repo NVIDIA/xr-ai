@@ -127,9 +127,11 @@ def test_sample_model_profiles_select_cosmos3_reasoner() -> None:
     )
 
     render = _SAMPLES / "xr-render-demo" / "yaml"
-    render_local = yaml.safe_load((render / "models.yaml").read_text())
-    render_hosted = yaml.safe_load((render / "models.nim.yaml").read_text())
-    assert render_local["vlm"]["kind"] == "preset:cosmos3_nano_reasoner"
-    assert render_hosted["vlm"]["model_name"] == (
+    render_local = json.loads((render / "models.local.json").read_text())
+    render_hosted = json.loads((render / "models.hosted.json").read_text())
+    assert render_local["models"]["vlm"]["adapter"]["preset"] == (
+        "cosmos3_nano_reasoner"
+    )
+    assert render_hosted["models"]["vlm"]["adapter"]["model_name"] == (
         "nvidia/cosmos3-nano-reasoner"
     )

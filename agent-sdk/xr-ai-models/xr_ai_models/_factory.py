@@ -4,7 +4,7 @@
 """``make_*`` constructors that dispatch a :class:`Spec` to a concrete client."""
 from __future__ import annotations
 
-from ._config import KIND_OPENAI_COMPAT, ModelsConfig
+from ._config import KIND_OPENAI_COMPAT, KIND_RIVA_GRPC, ModelsConfig
 from ._openai_compat import (
     OpenAICompatEmbedding,
     OpenAICompatLLM,
@@ -31,6 +31,7 @@ def make_embedding(config: ModelsConfig, name: str) -> EmbeddingService:
             api_key_env=spec.api_key_env,
             timeout=spec.timeout,
             health_check=spec.health_check,
+            health_path=spec.health_path,
         )
     raise ValueError(f"unsupported embedding kind: {spec.kind!r}")
 
@@ -56,6 +57,7 @@ def make_llm(config: ModelsConfig, name: str) -> LLMService:
             api_key_env=endpoint.api_key_env,
             timeout=endpoint.timeout,
             health_check=endpoint.health_check,
+            health_path=endpoint.health_path,
         )
     raise ValueError(f"unsupported LLM kind: {adapter.kind!r}")
 
@@ -80,6 +82,7 @@ def make_vlm(config: ModelsConfig, name: str) -> VLMService:
             api_key_env=endpoint.api_key_env,
             timeout=endpoint.timeout,
             health_check=endpoint.health_check,
+            health_path=endpoint.health_path,
         )
     raise ValueError(f"unsupported VLM kind: {adapter.kind!r}")
 
@@ -101,6 +104,19 @@ def make_stt(config: ModelsConfig, name: str) -> STTService:
             api_key_env=endpoint.api_key_env,
             timeout=endpoint.timeout,
             health_check=endpoint.health_check,
+            health_path=endpoint.health_path,
+        )
+    if adapter.kind == KIND_RIVA_GRPC:
+        # Deferred: RivaSTT needs the optional nvidia-riva-client (riva extra).
+        from ._riva_grpc import RivaSTT
+        return RivaSTT(
+            base_url=endpoint.base_url,
+            api_key_env=endpoint.api_key_env,
+            function_id=adapter.function_id,
+            use_ssl=adapter.use_ssl,
+            language=adapter.language,
+            timeout=endpoint.timeout,
+            health_check=endpoint.health_check,
         )
     raise ValueError(f"unsupported STT kind: {adapter.kind!r}")
 
@@ -120,6 +136,20 @@ def make_tts(config: ModelsConfig, name: str) -> TTSService:
         return OpenAICompatTTS(
             base_url=endpoint.base_url,
             api_key_env=endpoint.api_key_env,
+            timeout=endpoint.timeout,
+            health_check=endpoint.health_check,
+            health_path=endpoint.health_path,
+        )
+    if adapter.kind == KIND_RIVA_GRPC:
+        from ._riva_grpc import RivaTTS
+        return RivaTTS(
+            base_url=endpoint.base_url,
+            api_key_env=endpoint.api_key_env,
+            function_id=adapter.function_id,
+            use_ssl=adapter.use_ssl,
+            voice=adapter.voice,
+            language=adapter.language,
+            sample_rate=adapter.sample_rate,
             timeout=endpoint.timeout,
             health_check=endpoint.health_check,
         )

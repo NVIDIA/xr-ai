@@ -18,7 +18,7 @@ from ._utils import merge_dicts
 Category = Literal["llm", "vlm", "stt", "tts", "embedding"]
 """A model role supported by :class:`ModelsConfig`."""
 
-ModelKind = Literal["openai_compat"]
+ModelKind = Literal["openai_compat", "riva_grpc"]
 """A supported model-service adapter implementation."""
 
 Readiness = Literal["health", "none"]
@@ -26,11 +26,18 @@ Ownership = Literal["managed", "reused", "external"]
 
 KIND_OPENAI_COMPAT: ModelKind = "openai_compat"
 """The adapter kind for OpenAI-compatible HTTP endpoints."""
+KIND_RIVA_GRPC: ModelKind = "riva_grpc"
+"""The adapter kind for Riva gRPC speech clients (the ``riva`` extra)."""
 
 
 @dataclass(frozen=True)
 class AdapterSpec:
-    """API dialect and model-specific request/response behavior."""
+    """API dialect and model-specific request/response behavior.
+
+    The ``riva_grpc`` speech fields ride here: ``function_id`` (hosted NVCF
+    selects the model by function-id metadata), ``use_ssl``, ``language``,
+    and the TTS-only ``voice`` and ``sample_rate``.
+    """
 
     kind: ModelKind = KIND_OPENAI_COMPAT
     """The concrete client implementation used for this role."""
@@ -46,6 +53,21 @@ class AdapterSpec:
 
     default_extras: dict[str, Any] = field(default_factory=dict)
     """Model-specific fields merged into every request payload."""
+
+    function_id: str | None = None
+    """NVCF function id for hosted Riva speech endpoints."""
+
+    use_ssl: bool = False
+    """Whether the Riva gRPC channel uses TLS."""
+
+    language: str = "en-US"
+    """BCP-47 language code for Riva speech recognition and synthesis."""
+
+    voice: str = ""
+    """Riva TTS voice name; the service default when empty."""
+
+    sample_rate: int = 44100
+    """Riva TTS output sample rate in Hz."""
 
 
 @dataclass(frozen=True)
@@ -64,6 +86,9 @@ class EndpointSpec:
     readiness: Readiness = "health"
     """How the client determines whether the endpoint is ready."""
 
+    health_path: str = "/health"
+    """Endpoint path probed for readiness (NIM containers use /v1/health/ready)."""
+
     @property
     def health_check(self) -> bool:
         """Whether readiness requires a successful endpoint health check."""
@@ -73,13 +98,21 @@ class EndpointSpec:
 
 @dataclass(frozen=True)
 class DeploymentSpec:
-    """Process ownership for the endpoint that serves a model role."""
+    """Process ownership for the endpoint that serves a model role.
+
+    ``credentials`` names keys the launched service itself needs (e.g.
+    NGC_API_KEY for a NIM container's nvcr.io pull and engine download)
+    even when the endpoint takes no API key.
+    """
 
     ownership: Ownership = "external"
     """Whether the launcher starts, reuses, or does not manage the service."""
 
     service: str | None = None
     """The launcher service name for managed or reused deployments."""
+
+    credentials: tuple[str, ...] = ()
+    """Environment keys the launched service needs (collected by the launcher)."""
 
 
 class _RoleSpec:
@@ -141,6 +174,30 @@ class _RoleSpec:
         """Whether readiness requires a successful endpoint health check."""
 
         return self.endpoint.health_check
+
+    @property
+    def health_path(self) -> str:
+        return self.endpoint.health_path
+
+    @property
+    def function_id(self) -> str | None:
+        return self.adapter.function_id
+
+    @property
+    def use_ssl(self) -> bool:
+        return self.adapter.use_ssl
+
+    @property
+    def language(self) -> str:
+        return self.adapter.language
+
+    @property
+    def voice(self) -> str:
+        return self.adapter.voice
+
+    @property
+    def sample_rate(self) -> int:
+        return self.adapter.sample_rate
 
     def _set_specs(
         self,
@@ -658,7 +715,9 @@ def _resolve_preset(body: dict[str, Any]) -> tuple[dict[str, Any], Category | No
 
 def _construct(category: Category, body: dict[str, Any]) -> Spec:
     kind = body.get("kind", KIND_OPENAI_COMPAT)
-    if kind != KIND_OPENAI_COMPAT:
+    if kind == KIND_RIVA_GRPC and category not in ("stt", "tts"):
+        raise ValueError("riva_grpc is a speech kind; use it for stt/tts only")
+    if kind not in (KIND_OPENAI_COMPAT, KIND_RIVA_GRPC):
         raise ValueError(f"unsupported adapter kind: {kind!r}")
 
     endpoint = EndpointSpec(
@@ -666,9 +725,10 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
         api_key_env=_optional_str(body, "api_key_env"),
         timeout=_timeout(body, category),
         readiness=_readiness(body),
+        health_path=_health_path(body),
     )
     adapter = AdapterSpec(
-        kind=KIND_OPENAI_COMPAT,
+        kind=kind,
         model_name=(
             _require_str(body, "model_name")
             if category in ("llm", "vlm", "embedding")
@@ -677,6 +737,11 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
         reasoning_field=_optional_str(body, "reasoning_field"),
         capabilities=_mapping(body, "capabilities"),
         default_extras=_mapping(body, "default_extras"),
+        function_id=_optional_str(body, "function_id"),
+        use_ssl=_riva_bool(body, "use_ssl", False),
+        language=_riva_str(body, "language", "en-US", allow_empty=False),
+        voice=_riva_str(body, "voice", "", allow_empty=True),
+        sample_rate=_riva_sample_rate(body),
     )
     deployment = _deployment(body.get("deployment", {}))
 
@@ -712,6 +777,36 @@ def _readiness(body: dict[str, Any]) -> Readiness:
     return readiness
 
 
+def _riva_bool(body: dict[str, Any], key: str, default: bool) -> bool:
+    value = body.get(key, default)
+    if not isinstance(value, bool):
+        raise ValueError(f"{key} must be a boolean")
+    return value
+
+
+def _riva_str(
+    body: dict[str, Any], key: str, default: str, *, allow_empty: bool
+) -> str:
+    value = body.get(key, default)
+    if not isinstance(value, str) or (not allow_empty and not value):
+        raise ValueError(f"{key} must be a non-empty string")
+    return value
+
+
+def _riva_sample_rate(body: dict[str, Any]) -> int:
+    value = body.get("sample_rate", 44100)
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError("sample_rate must be a positive integer")
+    return value
+
+
+def _health_path(body: dict[str, Any]) -> str:
+    path = body.get("health_path", "/health")
+    if not isinstance(path, str) or not path.startswith("/"):
+        raise ValueError("health_path must be a string starting with '/'")
+    return path
+
+
 def _deployment(value: Any) -> DeploymentSpec:
     if not isinstance(value, dict):
         raise ValueError("deployment must be a mapping")
@@ -721,7 +816,14 @@ def _deployment(value: Any) -> DeploymentSpec:
     service = _optional_str(value, "service")
     if ownership != "external" and service is None:
         raise ValueError(f"{ownership} deployments require a service name")
-    return DeploymentSpec(ownership=ownership, service=service)
+    credentials = value.get("credentials", [])
+    if not isinstance(credentials, list):
+        raise ValueError("deployment credentials must be a list")
+    if not all(isinstance(name, str) and name for name in credentials):
+        raise ValueError("deployment credentials must be non-empty strings")
+    return DeploymentSpec(
+        ownership=ownership, service=service, credentials=tuple(credentials)
+    )
 
 
 def _timeout(body: dict[str, Any], category: Category) -> float:

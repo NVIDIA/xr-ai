@@ -12,16 +12,17 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from xr_ai_vllm import _docker
 from xr_ai_vllm._docker import (
     _CONFIG_LABEL,
     _already_logged_in,
-    _launch_fingerprint,
     _LogStreamer,
     _registry_for,
     build_run_argv,
     container_exists,
     container_label,
     container_running,
+    launch_fingerprint,
     pid_on_port,
     run,
 )
@@ -136,6 +137,25 @@ class TestBuildRunArgv:
 
         assert fingerprint(first) != fingerprint(second)
 
+    def test_fingerprint_changes_when_hf_token_rotates(self, tmp_path):
+        kwargs = self._base_kwargs(tmp_path)
+        kwargs["hf_token"] = "hf_first"
+        first = _fingerprint_from_argv(build_run_argv(**kwargs))
+        kwargs["hf_token"] = "hf_second"
+        second = _fingerprint_from_argv(build_run_argv(**kwargs))
+        assert first != second
+        # The digest is one-way: the token value never reaches the label.
+        assert "hf_first" not in first and "hf_second" not in second
+
+    def test_tokenless_fingerprint_omits_the_credential_key(self, tmp_path):
+        # No hf_token → no digest key, so fingerprints stay compatible with
+        # containers created by code that predates credential digests.
+        kwargs = self._base_kwargs(tmp_path)
+        kwargs["hf_token"] = None
+        first = _fingerprint_from_argv(build_run_argv(**kwargs))
+        second = _fingerprint_from_argv(build_run_argv(**kwargs))
+        assert first == second
+
     def test_network_host(self, tmp_path):
         argv = build_run_argv(**self._base_kwargs(tmp_path))
         assert "--network" in argv
@@ -158,10 +178,13 @@ class TestBuildRunArgv:
         env_flags = [argv[i + 1] for i, a in enumerate(argv) if a == "-e"]
         assert "NVIDIA_VISIBLE_DEVICES=0,1" in env_flags
 
-    def test_hf_token_in_env(self, tmp_path):
-        argv = build_run_argv(**self._base_kwargs(tmp_path))
-        env_flags = [argv[i + 1] for i, a in enumerate(argv) if a == "-e"]
-        assert any(f.startswith("HF_TOKEN=") for f in env_flags)
+    def test_hf_token_passed_by_name_only(self, tmp_path):
+        kwargs = self._base_kwargs(tmp_path)
+        kwargs["hf_token"] = "hf_secret"
+        argv = build_run_argv(**kwargs)
+        # Name-only -e keeps the token off the ps-visible argv.
+        assert "HF_TOKEN" in argv
+        assert not any("hf_secret" in a for a in argv)
 
     def test_no_hf_token_when_none(self, tmp_path):
         kwargs = self._base_kwargs(tmp_path)
@@ -391,16 +414,22 @@ def _run_kwargs(tmp_path):
     )
 
 
+def _fingerprint_from_argv(argv):
+    labels = [argv[i + 1] for i, v in enumerate(argv) if v == "--label"]
+    tagged = next(x for x in labels if x.startswith(f"{_CONFIG_LABEL}="))
+    return tagged.split("=", 1)[1]
+
+
 def _expected_fingerprint(kwargs):
-    return _launch_fingerprint(
-        image=kwargs["image"],
-        port=kwargs["port"],
-        model_cache=kwargs["model_cache"],
-        cuda_visible_devices=kwargs["cuda_visible_devices"],
-        extra_env=kwargs["extra_env"],
-        extra_pip=kwargs["extra_pip"],
-        vllm_argv=kwargs["vllm_argv"],
-    )
+    return launch_fingerprint({
+        "image": kwargs["image"],
+        "port": kwargs["port"],
+        "model_cache": str(kwargs["model_cache"]),
+        "cuda_visible_devices": kwargs["cuda_visible_devices"],
+        "extra_env": kwargs["extra_env"] or {},
+        "extra_pip": kwargs["extra_pip"] or [],
+        "vllm_argv": kwargs["vllm_argv"],
+    })
 
 
 class TestRun:
@@ -408,6 +437,9 @@ class TestRun:
         kwargs = _run_kwargs(tmp_path)
         with (
             patch("xr_ai_vllm._docker._docker_available", return_value=True),
+            patch("xr_ai_vllm._docker.container_on_port_checked",
+                  return_value=(None, True)),
+            patch("xr_ai_vllm._docker.evict_local_listener"),
             patch("xr_ai_vllm._docker._lifecycle.health_ok", return_value=True),
             patch("xr_ai_vllm._docker.container_exists", return_value=False),
             patch("xr_ai_vllm._docker.stop_container") as stop,
@@ -436,6 +468,9 @@ class TestRun:
 
         with (
             patch("xr_ai_vllm._docker._docker_available", return_value=True),
+            patch("xr_ai_vllm._docker.container_on_port_checked",
+                  return_value=(None, True)),
+            patch("xr_ai_vllm._docker.evict_local_listener"),
             patch("xr_ai_vllm._docker._lifecycle.health_ok", return_value=True),
             patch("xr_ai_vllm._docker.container_exists", side_effect=lambda _name: state["exists"]),
             patch("xr_ai_vllm._docker.container_running", return_value=True),
@@ -470,6 +505,9 @@ class TestRun:
 
         with (
             patch("xr_ai_vllm._docker._docker_available", return_value=True),
+            patch("xr_ai_vllm._docker.container_on_port_checked",
+                  return_value=(None, True)),
+            patch("xr_ai_vllm._docker.evict_local_listener"),
             patch("xr_ai_vllm._docker._lifecycle.health_ok", return_value=False),
             patch("xr_ai_vllm._docker.container_exists", side_effect=lambda _name: state["exists"]),
             patch("xr_ai_vllm._docker.container_running", return_value=False),
@@ -491,18 +529,31 @@ class TestRun:
 
     def test_matching_stopped_container_is_restarted(self, tmp_path):
         kwargs = _run_kwargs(tmp_path)
-        wait_handle = MagicMock()
-        wait_handle.poll.return_value = None
 
         with (
             patch("xr_ai_vllm._docker._docker_available", return_value=True),
+            patch("xr_ai_vllm._docker.container_on_port_checked",
+                  return_value=(None, True)),
+            patch("xr_ai_vllm._docker.evict_local_listener"),
             patch("xr_ai_vllm._docker._lifecycle.health_ok", return_value=False),
             patch("xr_ai_vllm._docker.container_exists", return_value=True),
             patch("xr_ai_vllm._docker.container_running", return_value=False),
-            patch("xr_ai_vllm._docker.container_label", return_value=_expected_fingerprint(kwargs)),
+            patch("xr_ai_vllm._docker.container_label",
+                  side_effect=lambda name, label: _fingerprint_from_argv(
+                      build_run_argv(
+                          image=kwargs["image"],
+                          container_name=kwargs["container_name"],
+                          port=kwargs["port"],
+                          model_cache=kwargs["model_cache"],
+                          hf_token=kwargs["hf_token"],
+                          cuda_visible_devices=kwargs["cuda_visible_devices"],
+                          extra_env=kwargs["extra_env"],
+                          extra_pip=kwargs["extra_pip"],
+                          vllm_argv=kwargs["vllm_argv"],
+                      )
+                  )),
             patch("xr_ai_vllm._docker.start_container", return_value=True) as start,
-            patch("xr_ai_vllm._docker._wait_for_container", return_value=wait_handle) as wait,
-            patch("xr_ai_vllm._docker.build_run_argv") as build,
+            patch("xr_ai_vllm._docker.subprocess.Popen") as popen,
             patch("xr_ai_vllm._docker._LogStreamer", return_value=MagicMock()),
             patch("xr_ai_vllm._docker._lifecycle.wait_until_healthy"),
             patch("xr_ai_vllm._docker._lifecycle.idle_until_stopped"),
@@ -512,23 +563,35 @@ class TestRun:
             run(**kwargs)
 
         start.assert_called_once_with("xr-ai-vllm-test")
-        wait.assert_called_once_with("xr-ai-vllm-test")
-        build.assert_not_called()
+        popen.assert_not_called()
 
     def test_matching_running_container_continues_startup(self, tmp_path):
         kwargs = _run_kwargs(tmp_path)
-        wait_handle = MagicMock()
-        wait_handle.poll.return_value = None
 
         with (
             patch("xr_ai_vllm._docker._docker_available", return_value=True),
+            patch("xr_ai_vllm._docker.container_on_port_checked",
+                  return_value=("xr-ai-vllm-test", True)),
+            patch("xr_ai_vllm._docker.evict_local_listener"),
             patch("xr_ai_vllm._docker._lifecycle.health_ok", return_value=False),
             patch("xr_ai_vllm._docker.container_exists", return_value=True),
             patch("xr_ai_vllm._docker.container_running", return_value=True),
-            patch("xr_ai_vllm._docker.container_label", return_value=_expected_fingerprint(kwargs)),
-            patch("xr_ai_vllm._docker._wait_for_container", return_value=wait_handle) as wait,
+            patch("xr_ai_vllm._docker.container_label",
+                  side_effect=lambda name, label: _fingerprint_from_argv(
+                      build_run_argv(
+                          image=kwargs["image"],
+                          container_name=kwargs["container_name"],
+                          port=kwargs["port"],
+                          model_cache=kwargs["model_cache"],
+                          hf_token=kwargs["hf_token"],
+                          cuda_visible_devices=kwargs["cuda_visible_devices"],
+                          extra_env=kwargs["extra_env"],
+                          extra_pip=kwargs["extra_pip"],
+                          vllm_argv=kwargs["vllm_argv"],
+                      )
+                  )),
             patch("xr_ai_vllm._docker.start_container") as start,
-            patch("xr_ai_vllm._docker.build_run_argv") as build,
+            patch("xr_ai_vllm._docker.subprocess.Popen") as popen,
             patch("xr_ai_vllm._docker._LogStreamer", return_value=MagicMock()),
             patch("xr_ai_vllm._docker._lifecycle.wait_until_healthy"),
             patch("xr_ai_vllm._docker._lifecycle.idle_until_stopped"),
@@ -537,6 +600,374 @@ class TestRun:
         ):
             run(**kwargs)
 
-        wait.assert_called_once_with("xr-ai-vllm-test")
         start.assert_not_called()
-        build.assert_not_called()
+        popen.assert_not_called()
+
+
+class TestRunContainer:
+    """Lifecycle branches of the shared run_container flow (no docker daemon)."""
+
+    class _FakeStreamer:
+        log_path = None
+
+        def __init__(self, name):
+            pass
+
+        def stop(self):
+            pass
+
+    def _kwargs(self, tmp_path: Path) -> dict:
+        return dict(
+            argv=["docker", "run", "some-image"],
+            image="some-image",
+            container_name="xr-ai-test-ctr",
+            log_prefix="test",
+            port=1,
+            health_url="http://127.0.0.1:1/health",
+            launch_banner="launching",
+            reuse_banner="reusing",
+            ready_banner="ready",
+            ready_file=tmp_path / "ready",
+        )
+
+    def _common_stubs(self, monkeypatch, d) -> dict:
+        captured: dict = {}
+        monkeypatch.setattr(d, "_docker_available", lambda: True)
+        monkeypatch.setattr(d, "container_on_port_checked", lambda port: (None, True))
+        monkeypatch.setattr(d, "evict_local_listener", lambda port, log_prefix: None)
+        monkeypatch.setattr(d, "container_label", lambda name, label: None)
+        monkeypatch.setattr(d, "start_container", lambda name: True)
+        monkeypatch.setattr(d, "container_running", lambda name: False)
+        monkeypatch.setattr(d, "container_exists", lambda name: False)
+        monkeypatch.setattr(d, "_LogStreamer", self._FakeStreamer)
+        monkeypatch.setattr(d, "_maybe_ngc_login", lambda image: None)
+        monkeypatch.setattr(d._lifecycle, "idle_until_stopped", lambda *a, **k: None)
+
+        def _wait(url, *, is_alive, **kw):
+            captured["is_alive"] = is_alive
+
+        monkeypatch.setattr(d._lifecycle, "wait_until_healthy", _wait)
+        return captured
+
+    def test_reuse_healthy_touches_ready_file_without_popen(self, monkeypatch, tmp_path):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
+        monkeypatch.setattr(_docker, "container_running", lambda name: True)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: True)
+
+        def _no_popen(*a, **kw):
+            raise AssertionError("Popen must not be called on healthy reuse")
+
+        monkeypatch.setattr(_docker.subprocess, "Popen", _no_popen)
+        kwargs = self._kwargs(tmp_path)
+        _docker.run_container(**kwargs)
+        assert kwargs["ready_file"].exists()
+
+    def test_adopt_running_container_aliveness_follows_container(
+        self, monkeypatch, tmp_path,
+    ):
+        captured = self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: False)
+        running = {"v": True}
+        monkeypatch.setattr(_docker, "container_running", lambda name: running["v"])
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
+
+        def _no_popen(*a, **kw):
+            raise AssertionError("adopting a running container must not docker run/start")
+
+        monkeypatch.setattr(_docker.subprocess, "Popen", _no_popen)
+        kwargs = self._kwargs(tmp_path)
+        _docker.run_container(**kwargs)
+        assert kwargs["ready_file"].exists()
+        is_alive = captured["is_alive"]
+        assert is_alive() is True
+        running["v"] = False
+        assert is_alive() is False
+
+    def test_matching_stopped_container_is_restarted(self, monkeypatch, tmp_path):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: False)
+        state = {"running": False}
+        monkeypatch.setattr(_docker, "container_running", lambda name: state["running"])
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
+        started: list[str] = []
+
+        def _start(name):
+            started.append(name)
+            state["running"] = True
+            return True
+
+        monkeypatch.setattr(_docker, "start_container", _start)
+
+        def _no_popen(*a, **kw):
+            raise AssertionError("matching stopped container must docker start, not run")
+
+        monkeypatch.setattr(_docker.subprocess, "Popen", _no_popen)
+        kwargs = self._kwargs(tmp_path)
+        _docker.run_container(**kwargs)
+        assert started == ["xr-ai-test-ctr"]
+        assert kwargs["ready_file"].exists()
+
+    def test_stale_stopped_container_is_recreated(self, monkeypatch, tmp_path):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: False)
+        monkeypatch.setattr(_docker, "container_running", lambda name: False)
+        state = {"exists": True}
+        monkeypatch.setattr(_docker, "container_exists", lambda name: state["exists"])
+        monkeypatch.setattr(_docker, "container_label", lambda name, label: "stale")
+        removed: list[str] = []
+
+        def _remove(name):
+            removed.append(name)
+            state["exists"] = False
+            return True
+
+        monkeypatch.setattr(_docker, "remove_container", _remove)
+        popen_argvs: list[list[str]] = []
+
+        class _FakeProc:
+            def poll(self):
+                return None
+
+            def terminate(self):
+                pass
+
+        monkeypatch.setattr(
+            _docker.subprocess, "Popen",
+            lambda argv, **kw: popen_argvs.append(list(argv)) or _FakeProc(),
+        )
+        kwargs = self._kwargs(tmp_path)
+        _docker.run_container(**kwargs)
+        assert removed == ["xr-ai-test-ctr"]
+        assert popen_argvs == [["docker", "run", "some-image"]]
+        assert kwargs["ready_file"].exists()
+
+    def test_own_container_on_port_is_not_evicted(self, monkeypatch, tmp_path):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(
+            _docker, "container_on_port_checked",
+            lambda port: ("xr-ai-test-ctr", True),
+        )
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
+        monkeypatch.setattr(_docker, "container_running", lambda name: True)
+
+        def _no_evict(*a, **kw):
+            raise AssertionError("must not evict our own container")
+
+        monkeypatch.setattr(_docker, "stop_container", _no_evict)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: True)
+        kwargs = self._kwargs(tmp_path)
+        _docker.run_container(**kwargs)
+        assert kwargs["ready_file"].exists()
+
+    def test_unchecked_port_inspection_skips_eviction(self, monkeypatch, tmp_path):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(
+            _docker, "container_on_port_checked",
+            lambda port: (None, False),
+        )
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
+        monkeypatch.setattr(_docker, "container_running", lambda name: True)
+
+        def _no_evict(*a, **kw):
+            raise AssertionError("must not evict on failed inspection")
+
+        monkeypatch.setattr(_docker, "stop_container", _no_evict)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: True)
+        kwargs = self._kwargs(tmp_path)
+        _docker.run_container(**kwargs)
+        assert kwargs["ready_file"].exists()
+
+    def test_running_container_with_changed_config_is_recreated(
+        self, monkeypatch, tmp_path,
+    ):
+        # A profile switch that moves GPUs (or bumps the image pin) reuses the
+        # container name; the creation-time contract is immutable, so the
+        # fingerprint label mismatch forces a recreate.
+        self._common_stubs(monkeypatch, _docker)
+        state = {"running": True}
+        monkeypatch.setattr(_docker, "container_running", lambda name: state["running"])
+        monkeypatch.setattr(_docker, "container_exists", lambda name: state["running"])
+        monkeypatch.setattr(_docker, "container_label", lambda name, label: "stale")
+        removed: list[str] = []
+
+        def _remove(name):
+            removed.append(name)
+            state["running"] = False
+            return True
+
+        monkeypatch.setattr(_docker, "stop_container", lambda name, **kw: True)
+        monkeypatch.setattr(_docker, "remove_container", _remove)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: False)
+        popen_argvs: list[list[str]] = []
+
+        class _FakeProc:
+            def poll(self):
+                return None
+
+            def terminate(self):
+                pass
+
+        monkeypatch.setattr(
+            _docker.subprocess, "Popen",
+            lambda argv, **kw: popen_argvs.append(list(argv)) or _FakeProc(),
+        )
+        kwargs = self._kwargs(tmp_path)
+        _docker.run_container(**kwargs)
+        assert removed == ["xr-ai-test-ctr"]
+        assert popen_argvs == [["docker", "run", "some-image"]]
+
+    def test_foreign_port_holder_is_evicted_before_launch(self, monkeypatch, tmp_path):
+        # A profile switch leaves a different persistent xr-ai container on
+        # this port (e.g. a NIM where the local vLLM belongs); it must be
+        # stopped and removed, then our container launched.
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(
+            _docker, "container_on_port_checked",
+            lambda port: ("xr-ai-nim-cosmos-reason1-7b", True),
+        )
+        evicted: list[tuple[str, str]] = []
+        monkeypatch.setattr(
+            _docker, "stop_container",
+            lambda name, **kw: evicted.append(("stop", name)) or True,
+        )
+        monkeypatch.setattr(
+            _docker, "remove_container",
+            lambda name: evicted.append(("rm", name)) or True,
+        )
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: False)
+        monkeypatch.setattr(_docker, "container_running", lambda name: False)
+        monkeypatch.setattr(_docker, "container_exists", lambda name: False)
+        popen_argvs: list[list[str]] = []
+
+        class _FakeProc:
+            def poll(self):
+                return None
+
+            def terminate(self):
+                pass
+
+        monkeypatch.setattr(
+            _docker.subprocess, "Popen",
+            lambda argv, **kw: popen_argvs.append(list(argv)) or _FakeProc(),
+        )
+        kwargs = self._kwargs(tmp_path)
+        _docker.run_container(**kwargs)
+        assert evicted == [
+            ("stop", "xr-ai-nim-cosmos-reason1-7b"),
+            ("rm", "xr-ai-nim-cosmos-reason1-7b"),
+        ]
+        assert popen_argvs == [["docker", "run", "some-image"]]
+
+    def test_local_pip_listener_is_evicted_when_no_container_holds_port(
+        self, monkeypatch, tmp_path,
+    ):
+        # A pip-mode vLLM left by a profile switch can answer the health
+        # probe and be mistaken for a reusable container.
+        self._common_stubs(monkeypatch, _docker)
+        evictions: list[int] = []
+        monkeypatch.setattr(
+            _docker, "evict_local_listener",
+            lambda port, log_prefix: evictions.append(port),
+        )
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: False)
+
+        class _FakeProc:
+            def poll(self):
+                return None
+
+            def terminate(self):
+                pass
+
+        monkeypatch.setattr(
+            _docker.subprocess, "Popen", lambda argv, **kw: _FakeProc(),
+        )
+        kwargs = self._kwargs(tmp_path)
+        _docker.run_container(**kwargs)
+        assert evictions == [1]
+
+
+class TestEvictLocalListener:
+    def test_xr_ai_listener_is_terminated(self, monkeypatch):
+        monkeypatch.setattr(
+            _docker, "pid_on_port_checked", lambda port: (4242, True, True),
+        )
+        monkeypatch.setattr(
+            _docker, "is_xr_ai_server_process", lambda pid, label, port: True,
+        )
+        sent: list[int] = []
+
+        def _kill(pid, sig):
+            if sig == 0:
+                raise ProcessLookupError
+            sent.append(sig)
+
+        monkeypatch.setattr(_docker.os, "kill", _kill)
+        monkeypatch.setattr(_docker.time, "sleep", lambda s: None)
+        _docker.evict_local_listener(8100, "test")
+        assert sent == [_docker.signal.SIGTERM]
+
+    def test_non_xr_ai_listener_is_left_alone(self, monkeypatch):
+        monkeypatch.setattr(
+            _docker, "pid_on_port_checked", lambda port: (4242, True, True),
+        )
+        monkeypatch.setattr(
+            _docker, "is_xr_ai_server_process", lambda pid, label, port: False,
+        )
+
+        def _no_kill(pid, sig):
+            raise AssertionError("must not signal an unrelated process")
+
+        monkeypatch.setattr(_docker.os, "kill", _no_kill)
+        _docker.evict_local_listener(8100, "test")
+
+    def test_free_port_is_a_noop(self, monkeypatch):
+        monkeypatch.setattr(
+            _docker, "pid_on_port_checked", lambda port: (None, True, False),
+        )
+
+        def _no_kill(pid, sig):
+            raise AssertionError("nothing to signal on a free port")
+
+        monkeypatch.setattr(_docker.os, "kill", _no_kill)
+        _docker.evict_local_listener(8100, "test")
+
+
+class TestPipEviction:
+    def test_pip_run_evicts_container_holding_its_port(self, monkeypatch):
+        from xr_ai_vllm import _pip
+
+        evicted: list[tuple[str, str]] = []
+        monkeypatch.setattr(
+            _pip._docker, "container_on_port_checked",
+            lambda port: ("xr-ai-nim-cosmos-reason1-7b", True),
+        )
+        monkeypatch.setattr(
+            _pip._docker, "stop_container",
+            lambda name, **kw: evicted.append(("stop", name)) or True,
+        )
+        monkeypatch.setattr(
+            _pip._docker, "remove_container",
+            lambda name: evicted.append(("rm", name)) or True,
+        )
+        monkeypatch.setattr(_pip._lifecycle, "health_ok", lambda url, **kw: True)
+        monkeypatch.setattr(
+            _pip._lifecycle, "idle_until_stopped", lambda *a, **kw: None,
+        )
+
+        def _no_popen(*a, **kw):
+            raise AssertionError("reuse path must not spawn vllm")
+
+        monkeypatch.setattr(_pip.subprocess, "Popen", _no_popen)
+        _pip.run(
+            persistent=True,
+            log_prefix="test",
+            vllm_argv=["vllm", "serve", "m"],
+            host="0.0.0.0",
+            port=8100,
+            ready_file=None,
+        )
+        assert evicted == [
+            ("stop", "xr-ai-nim-cosmos-reason1-7b"),
+            ("rm", "xr-ai-nim-cosmos-reason1-7b"),
+        ]

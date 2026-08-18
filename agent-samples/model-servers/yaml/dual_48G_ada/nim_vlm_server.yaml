@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Self-hosted NIM: VLM, the same Cosmos model the local vlm-server runs.
+# Swap in any vision NIM from https://catalog.ngc.nvidia.com, but check its
+# engine accepts a full image prompt: the nemotron-nano-vl NIM builds a
+# 3200-token input cap on this class of GPU, below its own ~3330-token
+# per-image cost, so every image request 500s.
+# GPU 0 with the embedding server and a demo's CloudXR + LOVR; the
+# Nemotron NIM and local STT share GPU 1.
+image:     nvcr.io/nim/nvidia/cosmos-reason1-7b:1.4.1
+http_port: 8100
+
+nim_cache: ../../../../models/nim
+
+cuda_visible_devices: "0"
+env:
+  NIM_MAX_MODEL_LEN: "16384"
+  # Fraction of total GPU memory despite the PERCENT name (0..1]; leaves
+  # headroom for whatever shares the GPU.
+  NIM_KVCACHE_PERCENT: "0.7"

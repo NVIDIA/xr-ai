@@ -15,7 +15,6 @@ environment, this module runs `docker login nvcr.io` once per process so the
 pull can proceed. Existing `~/.docker/config.json` entries take priority and
 are not overwritten.
 """
-
 from __future__ import annotations
 
 import hashlib
@@ -31,6 +30,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 from . import _lifecycle
 
@@ -45,28 +45,30 @@ _LAUNCH_CONTRACT_VERSION = 1
 # ── docker run argv builder ──────────────────────────────────────────────────
 
 
-def _launch_fingerprint(
-    *,
-    image: str,
-    port: int,
-    model_cache: Path,
-    cuda_visible_devices: str | None,
-    extra_env: dict[str, str] | None,
-    extra_pip: list[str] | None,
-    vllm_argv: list[str],
-) -> str:
-    payload = {
-        "launch_contract_version": _LAUNCH_CONTRACT_VERSION,
-        "image": image,
-        "port": port,
-        "model_cache": str(model_cache),
-        "cuda_visible_devices": cuda_visible_devices,
-        "extra_env": extra_env or {},
-        "extra_pip": extra_pip or [],
-        "vllm_argv": vllm_argv,
-    }
+def credential_digest(value: str | None) -> str | None:
+    """One-way digest so a credential can join a fingerprint without exposure.
+
+    The salt is a fixed application constant: fingerprints must be
+    deterministic across processes and machines for the container label
+    comparison to work.
+    """
+    if not value:
+        return None
+    return hashlib.pbkdf2_hmac(
+        "sha256", value.encode(), b"xr-ai-vllm.launch-contract", 600_000
+    ).hex()[:12]
+
+
+def launch_fingerprint(payload: dict[str, Any]) -> str:
+    """Digest of a container's complete launch contract.
+
+    Stamped as the ``xr-ai-vllm.config`` label at creation and compared on
+    reuse, so a container created under any different configuration (image
+    pin, GPU placement, env, argv) is replaced instead of silently reused.
+    """
+    versioned = {"launch_contract_version": _LAUNCH_CONTRACT_VERSION, **payload}
     encoded = json.dumps(
-        payload,
+        versioned,
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
@@ -99,15 +101,21 @@ def build_run_argv(
     # caller needing to know the container name — implementation detail stays
     # inside this module.
     argv += ["--label", f"xr-ai-vllm.port={port}"]
-    fingerprint = _launch_fingerprint(
-        image=image,
-        port=port,
-        model_cache=model_cache,
-        cuda_visible_devices=cuda_visible_devices,
-        extra_env=extra_env,
-        extra_pip=extra_pip,
-        vllm_argv=vllm_argv,
-    )
+    payload: dict[str, Any] = {
+        "image": image,
+        "port": port,
+        "model_cache": str(model_cache),
+        "cuda_visible_devices": cuda_visible_devices,
+        "extra_env": extra_env or {},
+        "extra_pip": extra_pip or [],
+        "vllm_argv": vllm_argv,
+    }
+    # The name-only -e resolves the token into the container's creation-time
+    # env, so a rotated token must change the contract; the key is omitted
+    # entirely when unset to keep tokenless fingerprints stable.
+    if hf_token:
+        payload["hf_token_digest"] = credential_digest(hf_token)
+    fingerprint = launch_fingerprint(payload)
     argv += ["--label", f"{_CONFIG_LABEL}={fingerprint}"]
     argv += ["--network", "host"]
     # vLLM workers communicate via /dev/shm; the default 64 MiB tmpfs is too
@@ -134,7 +142,10 @@ def build_run_argv(
         "HF_HUB_ENABLE_HF_TRANSFER": "1",
     }
     if hf_token:
-        env_vars["HF_TOKEN"] = hf_token
+        # Name-only passthrough keeps the token off the ps-visible argv;
+        # docker reads the value from this process's environment (run()
+        # exports it before spawning).
+        argv += ["-e", "HF_TOKEN"]
     if extra_env:
         env_vars.update(extra_env)
     for key, val in env_vars.items():
@@ -205,26 +216,6 @@ def container_running(name: str) -> bool:
         return False
 
 
-def container_label(name: str, label: str) -> str | None:
-    """Return one Docker container label, or ``None`` when unavailable."""
-
-    try:
-        raw = subprocess.check_output(
-            [
-                "docker",
-                "inspect",
-                "--format",
-                f'{{{{ index .Config.Labels "{label}" }}}}',
-                name,
-            ],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        ).strip()
-        return raw or None
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        return None
-
-
 def remove_container(name: str) -> bool:
     """``docker rm`` *name* if it exists; return True if the container was removed.
 
@@ -245,6 +236,83 @@ def remove_container(name: str) -> bool:
         return True
     except (FileNotFoundError, subprocess.CalledProcessError):
         return False
+
+
+def container_label(name: str, label: str) -> str | None:
+    """Return one Docker container label, or ``None`` when unavailable."""
+    try:
+        raw = subprocess.check_output(
+            [
+                "docker",
+                "inspect",
+                "--format",
+                f'{{{{ index .Config.Labels "{label}" }}}}',
+                name,
+            ],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        return raw or None
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+
+
+def _requested_fingerprint(argv: list[str]) -> str | None:
+    """The ``xr-ai-vllm.config`` label value carried by a ``docker run`` argv."""
+    prefix = f"{_CONFIG_LABEL}="
+    for i, arg in enumerate(argv[:-1]):
+        if arg == "--label" and argv[i + 1].startswith(prefix):
+            return argv[i + 1][len(prefix):]
+    return None
+
+
+def start_container(name: str) -> bool:
+    """Start one stopped container without attaching its output."""
+    try:
+        subprocess.run(
+            ["docker", "start", name],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+        return True
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return False
+
+
+def evict_local_listener(port: int, log_prefix: str) -> None:
+    """SIGTERM an xr-ai pip-mode server holding *port* (profile switch).
+
+    A non-xr-ai listener is left alone with a hint; the subsequent launch
+    fails to bind rather than this helper killing an unrelated process.
+    """
+    pid, checked, listening = pid_on_port_checked(port)
+    if not checked or not listening or pid is None:
+        return
+    if not (
+        is_xr_ai_server_process(pid, "vllm", port)
+        or is_xr_ai_server_process(pid, "stt", port)
+    ):
+        print(
+            f"[{log_prefix}] port {port} is held by pid {pid}, which is not "
+            f"an xr-ai server; the launch will fail to bind unless it is "
+            f"stopped",
+            flush=True,
+        )
+        return
+    print(
+        f"[{log_prefix}] port {port} is held by xr-ai server pid {pid}; "
+        f"stopping it to make way",
+        flush=True,
+    )
+    try:
+        os.kill(pid, signal.SIGTERM)
+        for _ in range(40):
+            time.sleep(0.5)
+            os.kill(pid, 0)
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass  # the listener exiting is the goal state
 
 
 def stop_container(name: str, timeout_s: int = 20) -> bool:
@@ -278,30 +346,6 @@ def stop_container(name: str, timeout_s: int = 20) -> bool:
             return False
     except FileNotFoundError:
         return False
-
-
-def start_container(name: str) -> bool:
-    """Start one stopped container without attaching its output."""
-    try:
-        subprocess.run(
-            ["docker", "start", name],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-        )
-        return True
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        return False
-
-
-def _wait_for_container(name: str) -> subprocess.Popen:
-    """Return a liveness handle that exits when the container stops."""
-    return subprocess.Popen(
-        ["docker", "wait", name],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
 
 
 # ── NGC auth ────────────────────────────────────────────────────────────────
@@ -543,24 +587,63 @@ def run(
     extra_pip: list[str] | None,
     ready_file: Path | None,
 ) -> None:
-    if not _docker_available():
-        log.error(
-            "vllm_backend: docker requires docker on PATH and a running daemon "
-            "(`docker version` failed). Install Docker Engine and the NVIDIA "
-            "Container Toolkit, then retry."
-        )
-        sys.exit(2)
-
-    health_url = _lifecycle.health_url(host, port)
-    fingerprint = _launch_fingerprint(
+    if hf_token:
+        # Exported for build_run_argv's name-only passthrough.
+        os.environ["HF_TOKEN"] = hf_token
+    argv = build_run_argv(
         image=image,
+        container_name=container_name,
         port=port,
         model_cache=model_cache,
+        hf_token=hf_token,
         cuda_visible_devices=cuda_visible_devices,
         extra_env=extra_env,
         extra_pip=extra_pip,
         vllm_argv=vllm_argv,
     )
+    run_container(
+        argv=argv,
+        image=image,
+        container_name=container_name,
+        log_prefix=log_prefix,
+        port=port,
+        health_url=_lifecycle.health_url(host, port),
+        launch_banner=(
+            f"Launching vLLM (docker)  image={image}  "
+            f"container={container_name}  http://{host}:{port}/v1"
+        ),
+        reuse_banner=f"vLLM already running on port {port} — reusing",
+        ready_banner=f"Ready  →  http://localhost:{port}/v1  (docker: {container_name})",
+        ready_file=ready_file,
+    )
+
+
+def run_container(
+    *,
+    argv: list[str],
+    image: str,
+    container_name: str,
+    log_prefix: str,
+    port: int,
+    health_url: str,
+    launch_banner: str,
+    reuse_banner: str,
+    ready_banner: str,
+    ready_file: Path | None,
+) -> None:
+    """Shared container lifecycle for the vLLM docker backend and NIMs.
+
+    Reuse-if-healthy, foreign-holder eviction, running-container adoption,
+    stopped-container recreation, signal cleanup, log streaming, and
+    post-mortem capture behave identically for both backends.
+    """
+    if not _docker_available():
+        log.error(
+            "docker backend requires docker on PATH and a running daemon "
+            "(`docker version` failed). Install Docker Engine and the NVIDIA "
+            "Container Toolkit, then retry."
+        )
+        sys.exit(2)
 
     # On abort (Ctrl-C during model-servers startup) the launcher passes
     # no_kill=set() and SIGTERMs every wrapper's process group. Without a
@@ -600,101 +683,110 @@ def run(
     signal.signal(signal.SIGINT,  _on_signal)
     signal.signal(signal.SIGTERM, _on_signal)
 
-    proc: subprocess.Popen | None = None
+    # A profile switch can leave a different persistent xr-ai server holding
+    # this port (e.g. a NIM container where the local vLLM belongs, or vice
+    # versa). Evict it by label before any reuse probe: a foreign server can
+    # answer the health probe and be silently mistaken for ours.
+    holder, checked = container_on_port_checked(port)
+    if not checked:
+        print(
+            f"[{log_prefix}] could not inspect port {port} ownership; if the "
+            f"launch fails to bind, stop whatever holds the port",
+            flush=True,
+        )
+    if checked and holder and holder != container_name:
+        print(
+            f"[{log_prefix}] port {port} is held by container {holder}; "
+            f"stopping it to make way for {container_name}",
+            flush=True,
+        )
+        stop_container(holder)
+        if not remove_container(holder) and container_running(holder):
+            # Falling through would reuse the foreign server under our
+            # identity via the health probe.
+            log.error("could not evict container %s from port %d", holder, port)
+            sys.exit(1)
+    if checked and not holder:
+        # The same profile switch can leave a pip-mode server on this port;
+        # it too can answer the health probe and be mistaken for ours.
+        evict_local_listener(port, log_prefix)
+
+    # A same-name container is reusable only when its complete launch
+    # contract (the creation-time xr-ai-vllm.config fingerprint) matches this
+    # run's; anything else — image pin bump, GPU move, edited YAML — gets
+    # replaced, because a container's creation-time config is immutable.
+    fingerprint = _requested_fingerprint(argv)
     existing = container_exists(container_name)
     running = existing and container_running(container_name)
+    matching = existing and (
+        container_label(container_name, _CONFIG_LABEL) == fingerprint
+    )
 
-    # A healthy endpoint is reusable only when the expected Docker container
-    # owns it and its complete launch contract matches.
     if _lifecycle.health_ok(health_url):
         if not running:
             log.error(
-                "Port %d is healthy, but expected container %s is not running; "
-                "refusing to reuse an unowned listener",
+                "port %d is healthy, but expected container %s is not "
+                "running; refusing to reuse an unowned listener",
                 port,
                 container_name,
             )
             sys.exit(1)
-        if container_label(container_name, _CONFIG_LABEL) == fingerprint:
-            print(
-                f"[{log_prefix}] vLLM already running on port {port} — reusing",
-                flush=True,
-            )
+        if matching:
+            print(f"[{log_prefix}] {reuse_banner}", flush=True)
             if ready_file:
                 ready_file.touch()
-            signal.signal(signal.SIGINT, orig_int)
+            signal.signal(signal.SIGINT,  orig_int)
             signal.signal(signal.SIGTERM, orig_term)
             _lifecycle.idle_until_stopped(health_url, log_prefix)
             return
-
         print(
-            f"[{log_prefix}] Running container configuration changed — recreating {container_name}",
+            f"[{log_prefix}] container {container_name} is running with a "
+            f"different configuration; recreating",
             flush=True,
         )
         if not stop_container(container_name) or not remove_container(container_name):
-            log.error(
-                "Unable to replace stale running container %s",
-                container_name,
-            )
+            log.error("could not replace outdated container %s", container_name)
             sys.exit(1)
-        existing = False
-        running = False
+        existing = running = False
 
-    elif existing:
-        existing_fingerprint = container_label(container_name, _CONFIG_LABEL)
-        if existing_fingerprint != fingerprint:
+    if running and matching:
+        # Running but not yet healthy — e.g. started by a wrapper that died,
+        # or a NIM mid engine-download. Adopt it instead of a doomed
+        # `docker run` (the name is taken).
+        print(
+            f"[{log_prefix}] container {container_name} already running — "
+            f"waiting for readiness",
+            flush=True,
+        )
+        proc = None
+    elif existing and matching:
+        # Same launch contract, so `docker start` is safe and keeps the
+        # container's in-image setup (pip installs) from the first run.
+        print(
+            f"[{log_prefix}] Restarting matching stopped container "
+            f"{container_name}",
+            flush=True,
+        )
+        if not start_container(container_name):
+            log.error("could not restart container %s", container_name)
+            sys.exit(1)
+        proc = None
+    else:
+        if existing:
             print(
-                f"[{log_prefix}] Container configuration changed — recreating {container_name}",
+                f"[{log_prefix}] Container configuration changed — "
+                f"recreating {container_name}",
                 flush=True,
             )
             if running and not stop_container(container_name):
-                log.error(
-                    "Unable to stop stale running container %s",
-                    container_name,
-                )
+                log.error("could not stop outdated container %s", container_name)
                 sys.exit(1)
             if not remove_container(container_name):
-                log.error(
-                    "Unable to remove stale container %s",
-                    container_name,
-                )
+                log.error("could not remove outdated container %s", container_name)
                 sys.exit(1)
-            existing = False
-            running = False
-        elif running:
-            print(
-                f"[{log_prefix}] Matching container still starting — waiting",
-                flush=True,
-            )
-            proc = _wait_for_container(container_name)
-        else:
-            print(
-                f"[{log_prefix}] Restarting matching stopped container {container_name}",
-                flush=True,
-            )
-            if not start_container(container_name):
-                log.error("Unable to restart container %s", container_name)
-                sys.exit(1)
-            proc = _wait_for_container(container_name)
 
-    if proc is None:
         _maybe_ngc_login(image)
-        argv = build_run_argv(
-            image=image,
-            container_name=container_name,
-            port=port,
-            model_cache=model_cache,
-            hf_token=hf_token,
-            cuda_visible_devices=cuda_visible_devices,
-            extra_env=extra_env,
-            extra_pip=extra_pip,
-            vllm_argv=vllm_argv,
-        )
-        print(
-            f"[{log_prefix}] Launching vLLM (docker)  image={image}  "
-            f"container={container_name}  http://{host}:{port}/v1",
-            flush=True,
-        )
+        print(f"[{log_prefix}] {launch_banner}", flush=True)
         proc = subprocess.Popen(argv, start_new_session=True)
     _state["proc"] = proc
 
@@ -703,7 +795,10 @@ def run(
     try:
         _lifecycle.wait_until_healthy(
             health_url,
-            is_alive=lambda: proc.poll() is None,
+            is_alive=lambda: (
+                proc.poll() is None if proc is not None
+                else container_running(container_name)
+            ),
         )
     except SystemExit:
         # Two ways to land here: (a) wait_until_healthy raised SystemExit(1)
@@ -717,10 +812,10 @@ def run(
         time.sleep(0.5)
         streamer.stop()
         _append_post_mortem(container_name, streamer.log_path)
-        log.error("vLLM container failed — see %s", streamer.log_path)
+        log.error("container %s failed — see %s", container_name, streamer.log_path)
         raise
 
-    log.info("Ready  →  http://localhost:%d/v1  (docker: %s)", port, container_name)
+    print(f"[{log_prefix}] {ready_banner}", flush=True)
     if ready_file:
         ready_file.touch()
 

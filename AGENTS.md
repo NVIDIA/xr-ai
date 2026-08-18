@@ -34,7 +34,10 @@ docs/source/     User and contributor documentation
 - `agent-sdk/xr-ai-hub/` depends only on `pyzmq` and `msgpack`.
 - All model HTTP goes through the typed services and factories in
   `xr_ai_models`. Do not add vendor SDKs or hand-written model HTTP clients to
-  workers or services.
+  workers or services. One scoped exception: Riva speech NIMs expose only
+  gRPC, so the optional `riva` extra adds `nvidia-riva-client` behind
+  `kind: riva_grpc`, with the import deferred into `make_stt`/`make_tts`;
+  the base install stays httpx-only.
 - Workers never import `xr_media_hub` or `xr_ai_launcher`. Use public SDK
   packages and task-specific libraries.
 - Tools are native, in-process `Tool` or `AsyncTool` instances from

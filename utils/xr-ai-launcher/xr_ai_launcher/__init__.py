@@ -41,7 +41,7 @@ from ._credentials import (
     warn_if_missing,
 )
 from ._gpu import detect_gpu_config
-from ._models import ModelDeployment, load_model_deployment
+from ._models import ModelDeployment, load_deployment_profile, load_model_deployment
 from ._processes import ManagedProcess
 from ._stack import Parallel, Process, run_stack
 
@@ -51,7 +51,7 @@ __all__ = [
     "ensure_credentials", "load_credentials", "require_credentials", "warn_if_missing",
     "read_config_scalar",
     "detect_gpu_config",
-    "ModelDeployment", "load_model_deployment",
+    "ModelDeployment", "load_deployment_profile", "load_model_deployment",
     "ManagedProcess",
     "Parallel", "Process", "run_stack",
 ]

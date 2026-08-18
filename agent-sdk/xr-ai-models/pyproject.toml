@@ -15,6 +15,9 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+[project.optional-dependencies]
+riva = ["nvidia-riva-client>=2.17"]
+
 [tool.uv.sources]
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
 

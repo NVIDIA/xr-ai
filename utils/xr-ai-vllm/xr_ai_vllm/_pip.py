@@ -17,7 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import _lifecycle
+from . import _docker, _lifecycle
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +32,21 @@ def run(
     ready_file: Path | None,
 ) -> None:
     health_url = _lifecycle.health_url(host, port)
+
+    # A profile switch can leave an xr-ai container (vLLM docker or NIM) on
+    # this port; it can answer the health probe and be silently mistaken for
+    # a reusable pip server. Evict it before the reuse check.
+    holder, checked = _docker.container_on_port_checked(port)
+    if checked and holder:
+        print(
+            f"[{log_prefix}] port {port} is held by container {holder}; "
+            f"stopping it to make way",
+            flush=True,
+        )
+        _docker.stop_container(holder)
+        if not _docker.remove_container(holder) and _docker.container_running(holder):
+            log.error("could not evict container %s from port %d", holder, port)
+            sys.exit(1)
 
     if persistent and _lifecycle.health_ok(health_url):
         print(

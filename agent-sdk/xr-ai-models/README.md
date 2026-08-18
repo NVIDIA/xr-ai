@@ -120,7 +120,11 @@ orchestrator can call `load_model_deployment(worker_config)` from
 `xr-ai-launcher` to map `managed` to `launch_mode="own"`, `reused` to
 `launch_mode="reuse"`, and `external` to no local process. Credentials used by
 the launcher must be declared explicitly as `endpoint.api_key_env`; launcher
-profiles do not inherit credentials from adapter presets.
+profiles do not inherit credentials from adapter presets. A deployment may
+additionally list `credentials` the launched service itself needs (e.g.
+`NGC_API_KEY` for a NIM container's nvcr.io pull and engine download) even
+when the endpoint takes no API key; only the launcher collects these, and
+`ModelsConfig.required_credentials` stays endpoint keys only.
 
 The launcher validates the `.json` suffix before reading a profile; selecting a
 YAML profile is supported only for worker-side `xr-ai-models` loading. Model
@@ -177,6 +181,36 @@ without that route use `readiness: none`, which makes
 `health()` return `True` without a request — otherwise a worker's readiness
 gate would block forever. See
 `docs/source/components/ai-services.md` for hosted endpoint operation.
+
+## Riva gRPC speech (NIM STT/TTS)
+
+NIM speech is Riva over gRPC, not OpenAI `/v1/audio`. The `riva_grpc` kind
+covers it, for self-hosted Riva/NIM speech containers and for hosted NVCF
+endpoints alike. It requires the `riva` extra (`xr-ai-models[riva]` →
+`nvidia-riva-client`); the import is deferred to `make_stt`/`make_tts` so
+the base install stays gRPC-free.
+
+```yaml
+stt:
+  kind:      riva_grpc
+  category:  stt
+  base_url:  localhost:50051   # self-hosted container's gRPC port
+  language:  en-US
+```
+
+STT input must be 16-bit PCM: `transcribe` accepts a 16-bit PCM WAV (any
+other sample width raises `ValueError`, since the frames go to Riva labelled
+LINEAR_PCM and would transcribe as garbage) or raw int16 PCM with an
+explicit `sample_rate=`.
+
+TTS additionally takes `voice:` and `sample_rate:` (default 44100).
+`health_check: true` (the default) runs a gRPC channel-ready probe. For a
+hosted NVCF endpoint, set `base_url: grpc.nvcf.nvidia.com:443`,
+`use_ssl: true`, `api_key_env`, the model's `function_id:` from
+build.nvidia.com, and `health_check: false` (no health surface).
+
+Future non-OpenAI-compat backends (LiteLLM, vendor SDKs) plug in as new
+`kind`s in `_factory.py::make_*`; the protocols and callers do not change.
 
 ## Tests
 
