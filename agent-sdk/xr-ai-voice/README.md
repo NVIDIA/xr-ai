@@ -87,6 +87,12 @@ async with runtime:
         await aggregation.stop()
 ```
 
+Applications should call `await aggregation.release(participant_id)` from
+their participant-left subscriber so buffered speech and stream state are
+discarded as soon as that participant departs. The application owns its
+lifecycle topic; the shared aggregator therefore exposes cleanup directly
+rather than subscribing to one hard-coded topic name.
+
 Aggregation is participant-scoped. A lone finite contribution passes through
 without an LLM call after the short coalescing window. Two or more finite
 contributions in one batch are rewritten into a single concise utterance. The

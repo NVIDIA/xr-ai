@@ -264,6 +264,36 @@ async def test_updates_during_estimated_playback_coalesce_after_current_output()
     assert len(llm.calls) == 1
 
 
+async def test_release_cancels_only_departed_participant_state() -> None:
+    llm = _LLM()
+    runtime, aggregator, recorder = await _start(
+        llm,
+        speech_rate_wpm=1.0,
+        minimum_playback_s=0.0,
+    )
+    try:
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Long response for Alice."),
+            participant_id="alice",
+            source="foreground",
+        )
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Long response for Bob."),
+            participant_id="bob",
+            source="foreground",
+        )
+        await recorder.wait_for(2)
+
+        await aggregator.release("alice")
+
+        assert "alice" not in aggregator._states
+        assert "bob" in aggregator._states
+    finally:
+        await _stop(runtime, aggregator)
+
+
 async def test_urgent_contribution_interrupts_active_stream() -> None:
     llm = _LLM()
     runtime, aggregator, recorder = await _start(llm)
