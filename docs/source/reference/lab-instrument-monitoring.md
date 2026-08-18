@@ -46,7 +46,7 @@ accepted speech / typed query          ├─> current frame + generic VLM query
               ├─> visual monitor controls      v
               ├─> instrument controls   InstrumentMonitorAgent
               └─> current readings             │
-                                               ├─> change event ─┬─> voice alert
+                                               ├─> change event ─┬─> voice aggregation
                                                ├─> lost event ───┤
                                                └─> state event ──┴─> JSONL/backend
 ```
@@ -66,6 +66,7 @@ appear in the worker's agent contracts.
 | `LabInstrumentAgent` | One-frame marker-associated reads and debug source images | Long-lived state or notification policy |
 | `InstrumentMonitorAgent` | Reading normalization, change detection, last-seen state, loss detection, periodic snapshots | Speech or storage |
 | `InstrumentAlertAgent` | Which instrument events become participant voice output | Tracking state |
+| `VoiceAggregationAgent` | Participant speech pacing, ordering, and coalescing | Instrument or foreground decisions |
 | `FileOutputAgent` | Session files, JSONL records, recent visual-history tool | Agent decisions |
 
 This ownership keeps periodic tasks and mutable state out of the runtime. The
@@ -162,6 +163,13 @@ unit, the previous known unit is retained. The agent publishes:
 A device moving in and out of view does not repeatedly alert unless its value
 changes. This is application policy and belongs in the tracker rather than the
 VLM prompt or voice agent.
+
+Only marker identities present in `device_map.yaml` are treated as instruments.
+Unknown QR payloads and ArUco IDs are logged and ignored, preventing detector
+false positives from becoming names such as `ArUco 17`. The one-frame reader
+also instructs the VLM to use only a display on the same physical instrument
+body as the highlighted marker and to return `UNKNOWN` when an adjacent display
+cannot be excluded.
 
 ## Connecting a backend
 

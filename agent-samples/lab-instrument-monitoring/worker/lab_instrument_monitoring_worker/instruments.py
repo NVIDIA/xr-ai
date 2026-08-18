@@ -170,6 +170,13 @@ class LabInstrumentAgent(Agent):
         marker: TrackedMarker,
     ) -> InstrumentReading | None:
         identity = self._device_map.resolve(marker.marker_type, marker.value)
+        if identity is None:
+            logger.warning(
+                "ignoring unmapped instrument marker type={} id={!r}",
+                marker.marker_type.value,
+                marker.value,
+            )
+            return None
         marked = await self._fill_polygon.execute(
             ImagePolygonFillRequest(
                 image=image,
@@ -181,13 +188,7 @@ class LabInstrumentAgent(Agent):
         result = await self._query_image.execute(
             ImageQueryRequest(
                 image=marked.image,
-                query=(
-                    "The magenta polygon marks the "
-                    f"{marker.marker_type.value} marker {marker.value!r} attached to the lab "
-                    f"instrument named {identity.device_name!r}. Read that instrument's nearby "
-                    "display. Return only "
-                    "the displayed meter reading including its unit; return UNKNOWN if unreadable."
-                ),
+                query=self._reading_query(marker, identity.device_name),
             )
         )
         reading = result.text.strip()
@@ -199,6 +200,18 @@ class LabInstrumentAgent(Agent):
             marker_id=marker.value,
             device_name=identity.device_name,
             meter_reading=reading,
+        )
+
+    @staticmethod
+    def _reading_query(marker: TrackedMarker, device_name: str) -> str:
+        return (
+            "The magenta polygon marks the "
+            f"{marker.marker_type.value} marker {marker.value!r} attached to the lab "
+            f"instrument named {device_name!r}. Read only the display physically on the same "
+            "instrument body as the highlighted marker. Do not use a reading from an adjacent, "
+            "overlapping, or nearby instrument. Return only the displayed meter reading including "
+            "its unit. Return UNKNOWN if the highlighted marker and display are not clearly part "
+            "of the same device, or if the reading is unreadable."
         )
 
     @staticmethod

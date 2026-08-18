@@ -19,7 +19,7 @@ from xr_ai_tools.current_frame import CurrentFrameRequest
 from xr_ai_tools.tool_calling import ToolLoopIterationLimitError, run_tool_loop
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult, ImageQueryTool
 from xr_ai_voice import (
-    VOICE_OUTPUT_TOPIC,
+    VOICE_CONTRIBUTION_TOPIC,
     UserQuery,
     VoiceInterrupted,
     VoiceOutput,
@@ -259,7 +259,7 @@ class ForegroundAgent(Agent):
                     ),
                 )
                 await ctx.publish(
-                    VOICE_OUTPUT_TOPIC,
+                    VOICE_CONTRIBUTION_TOPIC,
                     VoiceOutput(
                         text=response,
                         interrupt=True,

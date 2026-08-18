@@ -15,7 +15,7 @@ from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_llm, make_stt, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime
-from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent
+from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent, VoiceAggregationAgent
 from xr_ai_voicegate import load_voice_gate_config
 
 from .config import WorkerConfig
@@ -155,6 +155,10 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             prompt=config.foreground_prompt,
         ),
     )
+    voice_aggregation = runtime.register(
+        "voice-aggregation",
+        VoiceAggregationAgent(llm=llm),
+    )
     runtime.register("voice", voice)
 
     logger.info("file outputs → {}", config.artifacts_dir)
@@ -170,6 +174,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                 await instrument_monitor.stop()
                 await monitor.stop()
                 await images.stop()
+                await voice_aggregation.stop()
     logger.info("lab-instrument-monitoring stopped")
 
 

@@ -25,12 +25,18 @@ class DeviceMap:
     def __init__(self, names: dict[tuple[MarkerType, str], str]) -> None:
         self._names = dict(names)
 
-    def resolve(self, marker_type: MarkerType, marker_id: str) -> DeviceIdentity:
-        fallback = marker_id if marker_type is MarkerType.QR_CODE else f"ArUco {marker_id}"
+    def resolve(
+        self,
+        marker_type: MarkerType,
+        marker_id: str,
+    ) -> DeviceIdentity | None:
+        device_name = self._names.get((marker_type, marker_id))
+        if device_name is None:
+            return None
         return DeviceIdentity(
             marker_type=marker_type,
             marker_id=marker_id,
-            device_name=self._names.get((marker_type, marker_id), fallback),
+            device_name=device_name,
         )
 
 

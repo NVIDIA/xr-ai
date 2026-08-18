@@ -22,11 +22,11 @@ from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools import Tool
 from xr_ai_tools.current_frame import CurrentFrameRequest, ImageFrame
 from xr_ai_tools.image import ImageReference
-from xr_ai_tools.marker_tracking import MarkerType
+from xr_ai_tools.marker_tracking import MarkerPoint, MarkerType, TrackedMarker
 from xr_ai_tools.tool_calling import handle_tool_call, tool_definitions
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult
 from xr_ai_voice import (
-    VOICE_OUTPUT_TOPIC,
+    VOICE_CONTRIBUTION_TOPIC,
     VOICE_TRANSCRIPT_TOPIC,
     VoiceOutput,
     VoiceParticipantJoined,
@@ -112,7 +112,7 @@ class _InstrumentEventCollector(Agent):
     async def state(self, event: InstrumentStateSnapshot, _ctx: RuntimeContext) -> None:
         self.snapshots.append(event)
 
-    @subscribe(VOICE_OUTPUT_TOPIC)
+    @subscribe(VOICE_CONTRIBUTION_TOPIC)
     async def voice_output(self, event: VoiceOutput, _ctx: RuntimeContext) -> None:
         self.voice.append(event)
 
@@ -225,15 +225,16 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     assert models["models"]["llm"]["deployment"]["service"] == "omni"
     assert models["models"]["vlm"]["deployment"]["service"] == "vlm"
     assert config.voice_gate_yaml == _SAMPLE / "yaml" / "voice_gate.yaml"
-    assert config.device_map.resolve(MarkerType.QR_CODE, "device-1").device_name == (
-        "Device1"
-    )
-    assert config.device_map.resolve(MarkerType.QR_CODE, "device-5").device_name == (
-        "Device5"
-    )
-    assert config.device_map.resolve(MarkerType.ARUCO, "1").device_name == "Device2"
-    assert config.device_map.resolve(MarkerType.ARUCO, "4").device_name == "Device5"
-    assert config.device_map.resolve(MarkerType.ARUCO, "99").device_name == "ArUco 99"
+    device_1 = config.device_map.resolve(MarkerType.QR_CODE, "device-1")
+    device_5 = config.device_map.resolve(MarkerType.QR_CODE, "device-5")
+    aruco_1 = config.device_map.resolve(MarkerType.ARUCO, "1")
+    aruco_4 = config.device_map.resolve(MarkerType.ARUCO, "4")
+    assert device_1 is not None and device_1.device_name == "Device1"
+    assert device_5 is not None and device_5.device_name == "Device5"
+    assert aruco_1 is not None and aruco_1.device_name == "Device2"
+    assert aruco_4 is not None and aruco_4.device_name == "Device5"
+    assert config.device_map.resolve(MarkerType.QR_CODE, "S2-CF") is None
+    assert config.device_map.resolve(MarkerType.ARUCO, "99") is None
     assert config.artifacts_dir == _SAMPLE / "artifacts"
     assert config.capture_marker_scans is False
     assert config.monitor_interval_s == 5.0
@@ -277,7 +278,8 @@ def test_sample_markers_match_device_map() -> None:
             assert identifiers is not None and len(identifiers) == 1
             decoded_id = str(identifiers[0, 0])
         assert decoded_id == marker_id
-        assert config.device_map.resolve(marker_type, decoded_id).device_name == device_name
+        identity = config.device_map.resolve(marker_type, decoded_id)
+        assert identity is not None and identity.device_name == device_name
 
 
 def test_monitor_and_foreground_share_participant_image_acquisition(tmp_path: Path) -> None:
@@ -348,6 +350,26 @@ def test_instrument_reading_normalization_retains_units() -> None:
         "22 Ω",
     )
     assert normalize_meter_reading("UNKNOWN", previous_unit="V") is None
+
+
+def test_instrument_read_prompt_rejects_adjacent_device_displays() -> None:
+    query = LabInstrumentAgent._reading_query(
+        TrackedMarker(
+            marker_type=MarkerType.QR_CODE,
+            value="device-1",
+            corners=[
+                MarkerPoint(x=1, y=1),
+                MarkerPoint(x=2, y=1),
+                MarkerPoint(x=2, y=2),
+                MarkerPoint(x=1, y=2),
+            ],
+        ),
+        "Device1",
+    )
+
+    assert "same instrument body" in query
+    assert "adjacent" in query
+    assert "UNKNOWN" in query
 
 
 @pytest.mark.asyncio

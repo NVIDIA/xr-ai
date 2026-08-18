@@ -26,11 +26,11 @@ accepted STT / typed text ─> ForegroundAgent ─┬> direct answer
                                            ├> MonitorAgent start/stop/status tools
                                            ├> one-shot marker-labelled reads → VLM
                                            ├> InstrumentMonitorAgent controls
-                                           ├> Piper TTS
+                                           ├> VoiceAggregationAgent → Piper TTS
                                            └> foreground.jsonl
 MonitorAgent while active ──> current frame → image query ──> monitor.jsonl
 InstrumentMonitorAgent ──> LabInstrumentAgent ──> change/lost/state topics
- change/lost topics ──> InstrumentAlertAgent ──> participant voice note
+ change/lost topics ──> InstrumentAlertAgent ──> VoiceAggregationAgent
  change/lost/state topics ──> FileOutputAgent ──> instrument-monitoring.jsonl
 ```
 
@@ -51,6 +51,10 @@ image agent uses `MarkerTrackingTool` for QR and ArUco markers. `device_map.yaml
 maps each marker family and raw ID to the device name used in readings, state,
 logs, and voice alerts. Ready-to-print PNGs for every configured device and a
 mapping table are available in [`sample-markers/`](sample-markers/).
+Detections absent from the device map are logged and ignored; they never become
+invented device names or voice alerts. For each mapped marker, the VLM is told
+to accept only a display on the same physical instrument body and to return
+`UNKNOWN` when an adjacent display cannot be ruled out.
 
 `InstrumentMonitorAgent` owns all participant-scoped instrument state. It
 normalizes numeric readings, retains a known unit when a later VLM result omits
@@ -60,6 +64,10 @@ its value is unchanged. Once a device has not been seen for the configured loss
 timeout, the agent emits one lost-device event. It also emits the full tracked
 state every 10 seconds. `InstrumentAlertAgent` converts change and lost-device
 topics into voice notes; state snapshots are persisted without being spoken.
+Foreground replies and alert notes first pass through `VoiceAggregationAgent`,
+which keeps one participant response active and combines non-urgent updates
+that arrive while it is being spoken. Interrupting safety messages retain the
+existing immediate interruption behavior.
 
 Each foreground turn starts with only the system prompt and current request.
 Its native `run_tool_loop` integration uses a namespaced route catalog and
