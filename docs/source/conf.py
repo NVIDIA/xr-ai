@@ -6,6 +6,12 @@ from __future__ import annotations
 
 import os
 import re
+from pathlib import Path
+from runpy import run_path
+
+API_PACKAGE_DIRS = run_path(str(Path(__file__).with_name("_api_contract.py")))[
+    "API_PACKAGE_DIRS"
+]
 
 _GITHUB_BLOB_PREFIX = "https://github.com/NVIDIA/xr-ai/blob/"
 _GITHUB_TREE_PREFIX = "https://github.com/NVIDIA/xr-ai/tree/"
@@ -43,6 +49,7 @@ author = "NVIDIA"
 
 # -- General configuration ---------------------------------------------------
 extensions = [
+    "autoapi.extension",
     "myst_parser",
     "sphinx_copybutton",
     "sphinx_design",
@@ -50,6 +57,22 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx_multiversion",
 ]
+
+# Build the public Python reference from source without importing SDK packages.
+# This keeps optional voice, model, and native dependencies out of the docs
+# environment. Package ``__all__`` declarations remain the publication boundary.
+autoapi_type = "python"
+autoapi_dirs = [str(path) for path in API_PACKAGE_DIRS]
+autoapi_root = "reference/python"
+autoapi_add_toctree_entry = True
+autoapi_keep_files = False
+autoapi_options = [
+    "members",
+    "show-module-summary",
+    "imported-members",
+]
+autoapi_member_order = "bysource"
+autoapi_python_class_content = "class"
 
 # MyST Markdown is the page format (matches the repo's existing docs/*.md).
 source_suffix = {
@@ -89,6 +112,21 @@ html_css_files = ["css/custom.css"]
 html_sidebars = {"**": ["versioning.html", "sidebar-nav-bs"]}
 
 
+_PRIVATE_API_MEMBER_SUFFIXES = (
+    ".HubVoiceTransport.input",
+    ".HubVoiceTransport.output",
+)
+
+
+def _skip_private_api_details(_app, what, name, _obj, _skip, _options):
+    """Hide implementation modules and transport-adapter accessors."""
+
+    if what == "module" or name.endswith(_PRIVATE_API_MEMBER_SUFFIXES):
+        return True
+    return None
+
+
 def setup(app):
     app.connect("source-read", _rewrite_github_links)
+    app.connect("autoapi-skip-member", _skip_private_api_details)
     return {"parallel_read_safe": True, "parallel_write_safe": True}

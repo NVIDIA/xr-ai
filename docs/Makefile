@@ -19,20 +19,25 @@ LATEST_RELEASE := $(shell git tag --list 'v*' | python3 ../.github/scripts/selec
 CURRENTENV    = XR_AI_DOCS_GITHUB_REF=$(DOCS_GITHUB_REF)
 SMVENV        = XR_AI_DOCS_LATEST_VERSION=$(or $(LATEST_RELEASE),main)
 
-.PHONY: help html versions strict strict-versions latest-release clean
+.PHONY: help api-check html versions strict strict-versions latest-release clean
 help:
 	@echo "Targets: html, versions, strict, strict-versions, latest-release, clean."
 
-html:
+api-check:
+	@python3 "$(SOURCEDIR)/_api_contract.py"
+
+html: api-check
 	@$(CURRENTENV) $(SPHINXBUILD) -b html $(SPHINXOPTS) "$(SOURCEDIR)" "$(CURRENTBUILDDIR)"
+	@python3 "$(SOURCEDIR)/_api_reference_check.py" "$(CURRENTBUILDDIR)"
 
 versions:
 	@$(SMVENV) $(SPHINXMULTIVERSION) $(SPHINXOPTS) "$(SOURCEDIR)" "$(BUILDDIR)"
 
-strict:
+strict: api-check
 	@$(CURRENTENV) $(SPHINXBUILD) -W --keep-going -b html $(SPHINXOPTS) "$(SOURCEDIR)" "$(CURRENTBUILDDIR)"
+	@python3 "$(SOURCEDIR)/_api_reference_check.py" "$(CURRENTBUILDDIR)"
 
-strict-versions:
+strict-versions: api-check
 	@$(SMVENV) $(SPHINXMULTIVERSION) -W --keep-going $(SPHINXOPTS) "$(SOURCEDIR)" "$(BUILDDIR)"
 
 latest-release:

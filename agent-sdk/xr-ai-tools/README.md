@@ -212,6 +212,9 @@ QR codes with ZXing-C++ and ArUco markers with OpenCV. Its typed result
 distinguishes an unavailable frame from a valid frame with no marker. Every
 marker has the same `marker_type`, `value`, and four-corner contract: `value`
 is decoded text for QR codes and the decimal marker ID for ArUco markers.
+Both detectors scan the complete frame at native resolution and at one bounded
+enlarged resolution so small markers remain readable without discarding context.
+Results from both scans are deduplicated and use source-frame coordinates.
 
 ```python
 from xr_ai_tools.marker_tracking import (

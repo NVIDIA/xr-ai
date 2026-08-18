@@ -34,6 +34,8 @@ on:
     paths:
       - "docs/**"
       - "agent-sdk/*/README.md"
+      - "agent-sdk/xr-ai-runtime/**/*.py"
+      - "agent-sdk/xr-ai-voice/**/*.py"
       - ".github/workflows/docs.yaml"
       - ".github/scripts/select_latest_docs_release.py"
       - ".github/scripts/publish_docs.sh"
@@ -44,6 +46,8 @@ on:
     paths:
       - "docs/**"
       - "agent-sdk/*/README.md"
+      - "agent-sdk/xr-ai-runtime/**/*.py"
+      - "agent-sdk/xr-ai-voice/**/*.py"
       - ".github/workflows/docs.yaml"
       - ".github/scripts/select_latest_docs_release.py"
       - ".github/scripts/publish_docs.sh"

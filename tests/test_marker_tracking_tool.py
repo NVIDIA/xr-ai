@@ -6,12 +6,15 @@
 from __future__ import annotations
 
 import time
+from types import SimpleNamespace
 
 import cv2
 import numpy as np
 import pytest
+from PIL import Image
 from pydantic import ValidationError
 from xr_ai_hub import FrameData, FrameSignal, PixelFormat
+from xr_ai_tools import marker_tracking as marker_tracking_module
 from xr_ai_tools.marker_tracking import (
     MarkerTrackingRequest,
     MarkerTrackingTool,
@@ -119,6 +122,18 @@ def _mixed_image() -> np.ndarray:
     return canvas
 
 
+def _downsampled_aruco_scene() -> np.ndarray:
+    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    source = np.full((3840, 2880), 220, dtype=np.uint8)
+    large = cv2.aruco.generateImageMarker(dictionary, 23, 600)
+    small = cv2.aruco.generateImageMarker(dictionary, 42, 48)
+    source[500:1100, 300:900] = large
+    source[1733:1781, 1279:1327] = small
+    return np.asarray(
+        Image.fromarray(source).resize((480, 640), Image.Resampling.LANCZOS)
+    )
+
+
 class _Endpoint:
     def __init__(self, image: np.ndarray) -> None:
         rgb = np.repeat(image[:, :, None], 3, axis=2)
@@ -163,6 +178,27 @@ class _Endpoint:
         )
 
 
+def test_marker_scan_enlargement_respects_dimension_and_scale_limits() -> None:
+    below_long_edge_limit = np.full((2160, 3839), 255, dtype=np.uint8)
+
+    scans = marker_tracking_module._full_frame_scans(below_long_edge_limit)
+
+    assert [scan.shape for scan, _scale_x, _scale_y in scans] == [
+        (2160, 3839),
+        (2161, 3840),
+    ]
+    assert scans[-1][1] == pytest.approx(3840 / 3839)
+    assert scans[-1][2] == pytest.approx(2161 / 2160)
+
+    at_long_edge_limit = np.full((2, 3840), 255, dtype=np.uint8)
+    assert len(marker_tracking_module._full_frame_scans(at_long_edge_limit)) == 1
+
+    below_scale_limit = np.full((2, 100), 255, dtype=np.uint8)
+    limited_scans = marker_tracking_module._full_frame_scans(below_scale_limit)
+    assert limited_scans[-1][0].shape == (12, 600)
+    assert limited_scans[-1][1:] == (6.0, 6.0)
+
+
 @pytest.mark.asyncio
 async def test_marker_tool_detects_qr_and_aruco_with_uniform_schema() -> None:
     endpoint = _Endpoint(_mixed_image())
@@ -202,6 +238,7 @@ async def test_marker_tool_returns_every_qr_marker_in_frame() -> None:
     second_x = 60 + first.shape[1]
     canvas[20 : 20 + second.shape[0], second_x : second_x + second.shape[1]] = second
     endpoint = _Endpoint(canvas)
+
     tool = MarkerTrackingTool(
         endpoint=endpoint,
         marker_types=(MarkerType.QR_CODE,),
@@ -215,6 +252,79 @@ async def test_marker_tool_returns_every_qr_marker_in_frame() -> None:
         (MarkerType.QR_CODE, "second QR payload"),
     }
     assert len(result.markers) == 2
+
+
+def test_marker_tool_preserves_repeated_qr_payloads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def barcode(left: int) -> SimpleNamespace:
+        return SimpleNamespace(
+            text="XR AI QR tool",
+            position=SimpleNamespace(
+                top_left=SimpleNamespace(x=left, y=2),
+                top_right=SimpleNamespace(x=left + 6, y=2),
+                bottom_right=SimpleNamespace(x=left + 6, y=8),
+                bottom_left=SimpleNamespace(x=left, y=8),
+            ),
+        )
+
+    detections = iter(
+        [
+            [barcode(2), barcode(10)],
+            [barcode(4), barcode(20)],
+        ]
+    )
+    monkeypatch.setattr(
+        marker_tracking_module.zxingcpp,
+        "read_barcodes",
+        lambda *_args, **_kwargs: next(detections),
+    )
+
+    markers = marker_tracking_module._extract_qr_markers(
+        [
+            (np.full((12, 20), 255, dtype=np.uint8), 1.0, 1.0),
+            (np.full((24, 40), 255, dtype=np.uint8), 2.0, 2.0),
+        ]
+    )
+
+    assert [marker.value for marker in markers] == [
+        "XR AI QR tool",
+        "XR AI QR tool",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_marker_tool_recovers_multiple_small_qr_codes() -> None:
+    first = _qr_image()
+    second = _qr_image(_SECOND_QR_MODULES)
+    source = np.full((3840, 2880), 220, dtype=np.uint8)
+    source[2100 : 2100 + first.shape[0], 120 : 120 + first.shape[1]] = first
+    source[
+        2200 : 2200 + second.shape[0],
+        2100 : 2100 + second.shape[1],
+    ] = second
+    frame = np.asarray(
+        Image.fromarray(source).resize((480, 640), Image.Resampling.LANCZOS)
+    )
+    endpoint = _Endpoint(frame)
+    tool = MarkerTrackingTool(
+        endpoint=endpoint,
+        marker_types=(MarkerType.QR_CODE,),
+    )
+    await endpoint.seed()
+
+    result = await tool.execute(MarkerTrackingRequest(participant_id="alice"))
+
+    assert {marker.value for marker in result.markers} == {
+        "XR AI QR tool",
+        "second QR payload",
+    }
+    assert len(result.markers) == 2
+    assert all(
+        0 <= point.x < frame.shape[1] and 0 <= point.y < frame.shape[0]
+        for marker in result.markers
+        for point in marker.corners
+    )
 
 
 @pytest.mark.asyncio
@@ -255,6 +365,47 @@ async def test_marker_tool_uses_configured_aruco_dictionary() -> None:
     assert [(marker.marker_type, marker.value) for marker in result.markers] == [
         (MarkerType.ARUCO, "42")
     ]
+
+
+def test_marker_tool_preserves_nearby_repeated_aruco_ids() -> None:
+    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    marker = cv2.aruco.generateImageMarker(dictionary, 23, 6)
+    canvas = np.full((20, 30), 255, dtype=np.uint8)
+    canvas[7:13, 5:11] = marker
+    canvas[7:13, 13:19] = marker
+    markers = marker_tracking_module._extract_aruco_markers(
+        marker_tracking_module._full_frame_scans(canvas),
+        cv2.aruco.ArucoDetector(dictionary),
+    )
+
+    assert [tracked.value for tracked in markers] == ["23", "23"]
+
+
+@pytest.mark.asyncio
+async def test_marker_tool_recovers_small_aruco_from_downsampled_scene() -> None:
+    frame = _downsampled_aruco_scene()
+    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    native_detector = cv2.aruco.ArucoDetector(dictionary)
+    _corners, native_ids, _rejected = native_detector.detectMarkers(frame)
+    assert native_ids is not None
+    assert native_ids.reshape(-1).tolist() == [23]
+
+    endpoint = _Endpoint(frame)
+    tool = MarkerTrackingTool(
+        endpoint=endpoint,
+        marker_types=(MarkerType.ARUCO,),
+    )
+    await endpoint.seed()
+
+    result = await tool.execute(MarkerTrackingRequest(participant_id="alice"))
+
+    assert [(marker.marker_type, marker.value) for marker in result.markers] == [
+        (MarkerType.ARUCO, "23"),
+        (MarkerType.ARUCO, "42"),
+    ]
+    small = next(marker for marker in result.markers if marker.value == "42")
+    assert all(210 <= point.x <= 225 for point in small.corners)
+    assert all(285 <= point.y <= 300 for point in small.corners)
 
 
 @pytest.mark.asyncio

@@ -66,9 +66,16 @@ class VadConfig:
     ends. Set to ``0`` or negative to disable probes.
     """
     silence_duration:   float = 0.8
+    """Seconds of silence that finalize an utterance."""
+
     min_speech:         float = 0.15
+    """Minimum speech duration accepted as an utterance."""
+
     silero_threshold:   float = 0.5
+    """Silero VAD speech-probability threshold."""
+
     stop_probe_after_s: float = 0.25
+    """Cadence for bounded early wake and STOP transcription probes."""
 
 
 class VadSttProcessor(FrameProcessor):
