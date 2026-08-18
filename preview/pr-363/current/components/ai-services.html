@@ -319,6 +319,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -870,7 +871,7 @@ wire format (<code class="docutils literal notranslate"><span class="pre">finish
 <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">on&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">off&quot;</span></code> in a system or user
 message; reasoning preamble is <strong>not</strong> stripped server-side. Hosting backend
 is selectable per YAML (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/c8e073d918833d5c9a6d3013b659eb5140c892ac/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/40553426bb5836ee08634f05b8485edf60bd2cd4/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
 for the full HTTP contract and tuning knobs.</p></li>
 <li><p><strong>nemotron3-nano-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</span></code> (auto-selected by GPU compute
@@ -881,7 +882,7 @@ FlashInfer FP4 MoE kernels. Requires a Blackwell-class GPU (B200 or RTX PRO
 <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> by default to avoid the silent 3–8 min CUDA graph and
 FlashInfer autotune on cold start. Hosting backend is selectable per YAML
 (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/c8e073d918833d5c9a6d3013b659eb5140c892ac/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/40553426bb5836ee08634f05b8485edf60bd2cd4/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
 for the vLLM flags it forwards and Blackwell prerequisites.</p></li>
 <li><p><strong>nemotron-omni-llm</strong> is a vLLM-backed multimodal LLM serving
 <code class="docutils literal notranslate"><span class="pre">Nemotron-3-Nano-Omni-30B-A3B-Reasoning</span></code> (text + video input) at port 8108.

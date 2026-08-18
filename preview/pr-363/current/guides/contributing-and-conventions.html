@@ -315,6 +315,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -407,11 +408,11 @@
 -->
 <section id="contributing-and-conventions">
 <h1>Contributing and conventions<a class="headerlink" href="#contributing-and-conventions" title="Link to this heading">#</a></h1>
-<p>The root <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/c8e073d918833d5c9a6d3013b659eb5140c892ac/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
+<p>The root <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/40553426bb5836ee08634f05b8485edf60bd2cd4/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
 explains setup, testing, pull requests, and DCO sign-off.
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/c8e073d918833d5c9a6d3013b659eb5140c892ac/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> contains the
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/40553426bb5836ee08634f05b8485edf60bd2cd4/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> contains the
 architecture and change constraints used by both humans and coding agents.
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/c8e073d918833d5c9a6d3013b659eb5140c892ac/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/40553426bb5836ee08634f05b8485edf60bd2cd4/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
 is the package dependency map.</p>
 <p>For a Python change:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>&lt;affected-project&gt;
@@ -429,6 +430,11 @@ architecture change, and add a migration entry for a breaking change.</p>
 <p>The user-facing command catalog is generated from top-level sample
 <code class="docutils literal notranslate"><span class="pre">[project.scripts]</span></code> entries and literal <code class="docutils literal notranslate"><span class="pre">argparse</span></code> declarations. Keep option
 descriptions in <code class="docutils literal notranslate"><span class="pre">help=</span></code> and do not repeat flag tables in narrative pages.</p>
+<p>Sample configuration examples and field-level guidance live in checked-in
+YAML/JSON and adjacent YAML comments. The generated catalog enrolls files under
+a top-level sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> tree and files beside a direct capability
+subproject, then renders them verbatim. Narrative docs should cover only
+workflows, operational decisions, credentials, and process relationships.</p>
 <p>A <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> change also requires a <code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code> update; regenerate
 the affected project’s gitignored <code class="docutils literal notranslate"><span class="pre">uv.lock</span></code> locally. New source files require
 an SPDX header; see <a class="reference internal" href="spdx-headers.html"><span class="std std-doc">SPDX headers</span></a>.</p>
