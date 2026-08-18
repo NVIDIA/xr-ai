@@ -423,7 +423,7 @@
 <p>The fastest path: paste this to your agent and it does the rest, including
 walking you through the choices below. See <a class="reference internal" href="skills.html"><span class="doc">Skills</span></a> for how it works.</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set up xr-ai for me: fetch
-https://raw.githubusercontent.com/NVIDIA/xr-ai/76e0abe62ca4dacacf475000bacd90d3bfe25bae/skills/getting-started/SKILL.md,
+https://raw.githubusercontent.com/NVIDIA/xr-ai/d1a49ec778d64593c26ebc937bd998d22d8e9f8c/skills/getting-started/SKILL.md,
 install it as a skill (or just follow it), and walk me through the setup.
 </pre></div>
 </div>
@@ -459,9 +459,17 @@ are presets for common configurations; to run on a different GPU, refer to
 <a class="reference internal" href="requirements.html"><span class="doc">Running on other GPUs</span></a>.
 On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.</p>
-<p>The stack starts Nemotron-3 Nano Omni for LLM requests (8108), Cosmos3 Nano
-Reasoner for vision requests (8100), STT (8103), and embeddings (8109).
-Starting it stops the superseded Nano text server on port 8107 first.</p>
+<p>Which servers start is a deployment profile selected with
+<code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">&lt;name|path&gt;</span></code>. The default starts Nemotron-3 Nano Omni (8108,
+serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), and
+embeddings (8109); <code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code> serves the LLM and VLM as self-hosted NIM
+containers (requires docker + <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code>); <code class="docutils literal notranslate"><span class="pre">vlm_speech_nim</span></code> serves
+speech from Riva NIM containers. Starting a profile stops persisted servers
+outside it first and aborts if they cannot be stopped, avoiding GPU
+overcommit.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--models<span class="w"> </span>vlm_llm_nim
+</pre></div>
+</div>
 <p><code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default: without it the large first-run download
 can stall indefinitely. Refer to the
 <a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a> for how to set it, or
@@ -470,7 +478,7 @@ pass <code class="docutils literal notranslate"><span class="pre">--allow-anonym
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">--stop</span></code> stops every persisted model service in the shared topology.</p>
+<p><code class="docutils literal notranslate"><span class="pre">--stop</span></code> stops every model-server port, so it takes no profile selection.</p>
 </section>
 <section id="simple-vlm-example-vision-q-a-over-voice-text">
 <h2>Simple VLM example (vision Q&amp;A over voice + text)<a class="headerlink" href="#simple-vlm-example-vision-q-a-over-voice-text" title="Link to this heading">#</a></h2>
@@ -631,22 +639,14 @@ uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w
 <p><strong>Hosted NVIDIA NIM</strong> — run the LLMs and VLM on hosted NIM
 (<a class="reference external" href="https://build.nvidia.com">build.nvidia.com</a>) instead of local vLLM (STT/TTS
 stay local) by setting <strong>one key</strong> in <code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.yaml</span></code>:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">model_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nim</span><span class="w">     </span><span class="c1"># default is "local"</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">models_config</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">models.hosted.json</span><span class="w">     </span><span class="c1"># default is models.local.json</span>
 </pre></div>
 </div>
-<p>The worker loads <code class="docutils literal notranslate"><span class="pre">yaml/models.nim.yaml</span></code> for native model-backed Functions.
-Provide an <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> as an <strong>environment variable</strong> (or via the launcher
-credential prompt — not in YAML). Do not run <code class="docutils literal notranslate"><span class="pre">model_servers</span></code>, because its
-single topology starts both local <code class="docutils literal notranslate"><span class="pre">omni</span></code> and <code class="docutils literal notranslate"><span class="pre">vlm</span></code>. Start STT by itself from
-the repository root, setting <code class="docutils literal notranslate"><span class="pre">GPU_PROFILE</span></code> to <code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, or
-<code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">GPU_PROFILE</span><span class="o">=</span>dual_48G_ada
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/stt-server<span class="w"> </span>stt_server<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--config<span class="w"> </span><span class="s2">"agent-samples/model-servers/yaml/</span><span class="si">${</span><span class="nv">GPU_PROFILE</span><span class="si">}</span><span class="s2">/stt_server.yaml"</span>
-</pre></div>
-</div>
-<p>Then start <code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code> in another terminal. Refer to the AI-services
-guide.</p>
+<p>The profile is consumed by both the worker and orchestrator, so there are
+no <code class="docutils literal notranslate"><span class="pre">main.py</span></code>
+edits, and the stack owns its own speech servers, so the model-servers stack
+isn’t needed at all. Provide an <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> as an <strong>environment variable</strong> (or via the
+launcher credential prompt, not in YAML). Refer to the AI-services guide.</p>
 </section>
 </section>
 <section id="hub-only-standalone">

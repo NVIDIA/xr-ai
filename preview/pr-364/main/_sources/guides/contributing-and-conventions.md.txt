@@ -38,6 +38,9 @@ a top-level sample's `yaml/` tree and files beside a direct capability
 subproject, then renders them verbatim. Narrative docs should cover only
 workflows, operational decisions, credentials, and process relationships.
 
-A `pyproject.toml` change also requires a `DEPENDENCIES.md` update; regenerate
-the affected project's gitignored `uv.lock` locally. New source files require
-an SPDX header; see [SPDX headers](spdx-headers.md).
+After a `pyproject.toml` change, run
+`uv run --script .github/scripts/generate_dependency_map.py`. The pre-commit hook
+normally regenerates the Python inventory in `DEPENDENCIES.md` automatically,
+and CI rejects drift. Do not edit that generated section by hand. Regenerate the
+affected project's gitignored `uv.lock` locally. New source files require an
+SPDX header; see [SPDX headers](spdx-headers.md).

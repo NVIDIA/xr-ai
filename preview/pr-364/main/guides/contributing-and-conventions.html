@@ -463,9 +463,12 @@ YAML/JSON and adjacent YAML comments. The generated catalog enrolls files under
 a top-level sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> tree and files beside a direct capability
 subproject, then renders them verbatim. Narrative docs should cover only
 workflows, operational decisions, credentials, and process relationships.</p>
-<p>A <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> change also requires a <code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code> update; regenerate
-the affected project’s gitignored <code class="docutils literal notranslate"><span class="pre">uv.lock</span></code> locally. New source files require
-an SPDX header; see <a class="reference internal" href="spdx-headers.html"><span class="std std-doc">SPDX headers</span></a>.</p>
+<p>After a <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> change, run
+<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--script</span> <span class="pre">.github/scripts/generate_dependency_map.py</span></code>. The pre-commit hook
+normally regenerates the Python inventory in <code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code> automatically,
+and CI rejects drift. Do not edit that generated section by hand. Regenerate the
+affected project’s gitignored <code class="docutils literal notranslate"><span class="pre">uv.lock</span></code> locally. New source files require an
+SPDX header; see <a class="reference internal" href="spdx-headers.html"><span class="std std-doc">SPDX headers</span></a>.</p>
 </section>
 
 

@@ -414,11 +414,11 @@
 -->
 <section id="contributing-and-conventions">
 <h1>Contributing and conventions<a class="headerlink" href="#contributing-and-conventions" title="Link to this heading">#</a></h1>
-<p>The root <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/76e0abe62ca4dacacf475000bacd90d3bfe25bae/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
+<p>The root <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/d1a49ec778d64593c26ebc937bd998d22d8e9f8c/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
 explains setup, testing, pull requests, and DCO sign-off.
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/76e0abe62ca4dacacf475000bacd90d3bfe25bae/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> contains the
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/d1a49ec778d64593c26ebc937bd998d22d8e9f8c/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> contains the
 architecture and change constraints used by both humans and coding agents.
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/76e0abe62ca4dacacf475000bacd90d3bfe25bae/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/d1a49ec778d64593c26ebc937bd998d22d8e9f8c/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
 is the package dependency map.</p>
 <p>For a Python change:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>&lt;affected-project&gt;
@@ -441,9 +441,12 @@ YAML/JSON and adjacent YAML comments. The generated catalog enrolls files under
 a top-level sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> tree and files beside a direct capability
 subproject, then renders them verbatim. Narrative docs should cover only
 workflows, operational decisions, credentials, and process relationships.</p>
-<p>A <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> change also requires a <code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code> update; regenerate
-the affected project’s gitignored <code class="docutils literal notranslate"><span class="pre">uv.lock</span></code> locally. New source files require
-an SPDX header; see <a class="reference internal" href="spdx-headers.html"><span class="std std-doc">SPDX headers</span></a>.</p>
+<p>After a <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> change, run
+<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--script</span> <span class="pre">.github/scripts/generate_dependency_map.py</span></code>. The pre-commit hook
+normally regenerates the Python inventory in <code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code> automatically,
+and CI rejects drift. Do not edit that generated section by hand. Regenerate the
+affected project’s gitignored <code class="docutils literal notranslate"><span class="pre">uv.lock</span></code> locally. New source files require an
+SPDX header; see <a class="reference internal" href="spdx-headers.html"><span class="std std-doc">SPDX headers</span></a>.</p>
 </section>
 
 

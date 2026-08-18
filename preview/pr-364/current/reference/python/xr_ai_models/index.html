@@ -540,6 +540,12 @@ OpenAI-compatible endpoints.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.VLMSpec" title="xr_ai_models.VLMSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VLMSpec</span></code></a></p></td>
 <td><p>Configuration for an image- or video-language model role.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.RivaSTT" title="xr_ai_models.RivaSTT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RivaSTT</span></code></a></p></td>
+<td><p>Riva ASR client: offline (batch) recognition over gRPC.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.RivaTTS" title="xr_ai_models.RivaTTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RivaTTS</span></code></a></p></td>
+<td><p>Riva TTS client: streaming synthesis over gRPC, concatenated to one</p></td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -1099,6 +1105,7 @@ OpenAI-compatible endpoints.</p>
 <dd><em class="sig-param"><span class="n"><span class="pre">api_key_env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">60.0</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">health_check</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">health_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'/health'</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">httpx.AsyncClient</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 </dl>
 
@@ -1192,6 +1199,7 @@ disabled at construction time.</p>
 <dd><em class="sig-param"><span class="n"><span class="pre">api_key_env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">60.0</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">health_check</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">health_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'/health'</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">httpx.AsyncClient</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 </dl>
 
@@ -1199,12 +1207,6 @@ disabled at construction time.</p>
 <dd><p>OpenAI-compatible <code class="docutils literal notranslate"><span class="pre">/v1/embeddings</span></code> client.</p>
 <p>The API key is read once from <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code> during construction. An
 injected HTTP client remains owned by the caller and is not closed here.</p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_models.OpenAICompatEmbedding.health_url">
-<span class="sig-name descname"><span class="pre">health_url</span></span><a class="headerlink" href="#xr_ai_models.OpenAICompatEmbedding.health_url" title="Link to this definition">#</a></dt>
-<dd><p>The URL used to check endpoint readiness.</p>
-</dd></dl>
-
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_models.OpenAICompatEmbedding.embed">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">embed</span></span><span class="sig-paren">(</span>
@@ -1247,6 +1249,7 @@ disabled at construction time.</p>
 <dd><em class="sig-param"><span class="n"><span class="pre">api_key_env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">30.0</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">health_check</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">health_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'/health'</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">httpx.AsyncClient</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 </dl>
 
@@ -1254,12 +1257,6 @@ disabled at construction time.</p>
 <dd><p>OpenAI-compatible <code class="docutils literal notranslate"><span class="pre">/v1/audio/transcriptions</span></code> client.</p>
 <p>The API key is read once from <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code> during construction. An
 injected HTTP client remains owned by the caller and is not closed here.</p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_models.OpenAICompatSTT.health_url">
-<span class="sig-name descname"><span class="pre">health_url</span></span><a class="headerlink" href="#xr_ai_models.OpenAICompatSTT.health_url" title="Link to this definition">#</a></dt>
-<dd><p>The URL used to check endpoint readiness.</p>
-</dd></dl>
-
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_models.OpenAICompatSTT.transcribe">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">transcribe</span></span><span class="sig-paren">(</span>
@@ -1305,6 +1302,7 @@ disabled at construction time.</p>
 <dd><em class="sig-param"><span class="n"><span class="pre">api_key_env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">30.0</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">health_check</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">health_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'/health'</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">httpx.AsyncClient</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 </dl>
 
@@ -1312,12 +1310,6 @@ disabled at construction time.</p>
 <dd><p>OpenAI-compatible <code class="docutils literal notranslate"><span class="pre">/v1/audio/speech</span></code> client.</p>
 <p>The API key is read once from <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code> during construction. An
 injected HTTP client remains owned by the caller and is not closed here.</p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_models.OpenAICompatTTS.health_url">
-<span class="sig-name descname"><span class="pre">health_url</span></span><a class="headerlink" href="#xr_ai_models.OpenAICompatTTS.health_url" title="Link to this definition">#</a></dt>
-<dd><p>The URL used to check endpoint readiness.</p>
-</dd></dl>
-
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_models.OpenAICompatTTS.synthesize">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">synthesize</span></span><span class="sig-paren">(</span>
@@ -1362,6 +1354,7 @@ disabled at construction time.</p>
 <dd><em class="sig-param"><span class="n"><span class="pre">api_key_env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">60.0</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">health_check</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">health_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'/health'</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">httpx.AsyncClient</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 </dl>
 
@@ -1499,6 +1492,9 @@ configured capabilities.</p>
 <dt class="sig sig-object py" id="xr_ai_models.AdapterSpec">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">AdapterSpec</span></span><a class="headerlink" href="#xr_ai_models.AdapterSpec" title="Link to this definition">#</a></dt>
 <dd><p>API dialect and model-specific request/response behavior.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">riva_grpc</span></code> speech fields ride here: <code class="docutils literal notranslate"><span class="pre">function_id</span></code> (hosted NVCF
+selects the model by function-id metadata), <code class="docutils literal notranslate"><span class="pre">use_ssl</span></code>, <code class="docutils literal notranslate"><span class="pre">language</span></code>,
+and the TTS-only <code class="docutils literal notranslate"><span class="pre">voice</span></code> and <code class="docutils literal notranslate"><span class="pre">sample_rate</span></code>.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_models.AdapterSpec.kind">
 <span class="sig-name descname"><span class="pre">kind</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ModelKind</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'openai_compat'</span></em><a class="headerlink" href="#xr_ai_models.AdapterSpec.kind" title="Link to this definition">#</a></dt>
@@ -1529,6 +1525,36 @@ configured capabilities.</p>
 <dd><p>Model-specific fields merged into every request payload.</p>
 </dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_models.AdapterSpec.function_id">
+<span class="sig-name descname"><span class="pre">function_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#xr_ai_models.AdapterSpec.function_id" title="Link to this definition">#</a></dt>
+<dd><p>NVCF function id for hosted Riva speech endpoints.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_models.AdapterSpec.use_ssl">
+<span class="sig-name descname"><span class="pre">use_ssl</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#xr_ai_models.AdapterSpec.use_ssl" title="Link to this definition">#</a></dt>
+<dd><p>Whether the Riva gRPC channel uses TLS.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_models.AdapterSpec.language">
+<span class="sig-name descname"><span class="pre">language</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'en-US'</span></em><a class="headerlink" href="#xr_ai_models.AdapterSpec.language" title="Link to this definition">#</a></dt>
+<dd><p>BCP-47 language code for Riva speech recognition and synthesis.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_models.AdapterSpec.voice">
+<span class="sig-name descname"><span class="pre">voice</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#xr_ai_models.AdapterSpec.voice" title="Link to this definition">#</a></dt>
+<dd><p>Riva TTS voice name; the service default when empty.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_models.AdapterSpec.sample_rate">
+<span class="sig-name descname"><span class="pre">sample_rate</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">44100</span></em><a class="headerlink" href="#xr_ai_models.AdapterSpec.sample_rate" title="Link to this definition">#</a></dt>
+<dd><p>Riva TTS output sample rate in Hz.</p>
+</dd></dl>
+
 </dd></dl>
 
 <dl class="py data">
@@ -1541,6 +1567,9 @@ configured capabilities.</p>
 <dt class="sig sig-object py" id="xr_ai_models.DeploymentSpec">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">DeploymentSpec</span></span><a class="headerlink" href="#xr_ai_models.DeploymentSpec" title="Link to this definition">#</a></dt>
 <dd><p>Process ownership for the endpoint that serves a model role.</p>
+<p><code class="docutils literal notranslate"><span class="pre">credentials</span></code> names keys the launched service itself needs (e.g.
+NGC_API_KEY for a NIM container’s nvcr.io pull and engine download)
+even when the endpoint takes no API key.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_models.DeploymentSpec.ownership">
 <span class="sig-name descname"><span class="pre">ownership</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Ownership</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'external'</span></em><a class="headerlink" href="#xr_ai_models.DeploymentSpec.ownership" title="Link to this definition">#</a></dt>
@@ -1551,6 +1580,12 @@ configured capabilities.</p>
 <dt class="sig sig-object py" id="xr_ai_models.DeploymentSpec.service">
 <span class="sig-name descname"><span class="pre">service</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#xr_ai_models.DeploymentSpec.service" title="Link to this definition">#</a></dt>
 <dd><p>The launcher service name for managed or reused deployments.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_models.DeploymentSpec.credentials">
+<span class="sig-name descname"><span class="pre">credentials</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ellipsis</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">()</span></em><a class="headerlink" href="#xr_ai_models.DeploymentSpec.credentials" title="Link to this definition">#</a></dt>
+<dd><p>Environment keys the launched service needs (collected by the launcher).</p>
 </dd></dl>
 
 </dd></dl>
@@ -1620,6 +1655,12 @@ configured capabilities.</p>
 <dt class="sig sig-object py" id="xr_ai_models.EndpointSpec.readiness">
 <span class="sig-name descname"><span class="pre">readiness</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Readiness</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'health'</span></em><a class="headerlink" href="#xr_ai_models.EndpointSpec.readiness" title="Link to this definition">#</a></dt>
 <dd><p>How the client determines whether the endpoint is ready.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_models.EndpointSpec.health_path">
+<span class="sig-name descname"><span class="pre">health_path</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'/health'</span></em><a class="headerlink" href="#xr_ai_models.EndpointSpec.health_path" title="Link to this definition">#</a></dt>
+<dd><p>Endpoint path probed for readiness (NIM containers use /v1/health/ready).</p>
 </dd></dl>
 
 <dl class="py property">
@@ -1960,6 +2001,102 @@ names a different model role, and <code class="xref py py-class docutils literal
 adapter kind.</p>
 </dd></dl>
 
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_models.RivaSTT">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">RivaSTT</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">base_url</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">api_key_env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">function_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">use_ssl</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">language</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'en-US'</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">30.0</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">health_check</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_models.RivaSTT" title="Link to this definition">#</a></dt>
+<dd><p>Riva ASR client: offline (batch) recognition over gRPC.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_models.RivaSTT.transcribe">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">transcribe</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">audio</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bytes</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#xr_ai_models.RivaSTT.transcribe" title="Link to this definition">#</a></dt>
+<dd><p>Recognize <em>audio</em> (WAV or raw 16-bit PCM) and return the transcript.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_models.RivaSTT.health">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">health</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#xr_ai_models.RivaSTT.health" title="Link to this definition">#</a></dt>
+<dd><p>Whether the Riva gRPC channel is ready (assumed when probing is off).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_models.RivaSTT.close">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_models.RivaSTT.close" title="Link to this definition">#</a></dt>
+<dd><p>Close the underlying gRPC channel.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_models.RivaTTS">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">RivaTTS</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">base_url</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">api_key_env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">function_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">use_ssl</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">voice</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">language</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'en-US'</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">44100</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">30.0</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">health_check</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_models.RivaTTS" title="Link to this definition">#</a></dt>
+<dd><p>Riva TTS client: streaming synthesis over gRPC, concatenated to one
+WAV (or raw PCM) result.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_models.RivaTTS.synthesize">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">synthesize</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">response_format</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'wav'</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bytes</span></span></span><a class="headerlink" href="#xr_ai_models.RivaTTS.synthesize" title="Link to this definition">#</a></dt>
+<dd><p>Synthesize <em>text</em> and return WAV bytes (or raw 16-bit PCM).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_models.RivaTTS.health">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">health</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#xr_ai_models.RivaTTS.health" title="Link to this definition">#</a></dt>
+<dd><p>Whether the Riva gRPC channel is ready (assumed when probing is off).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_models.RivaTTS.close">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_models.RivaTTS.close" title="Link to this definition">#</a></dt>
+<dd><p>Close the underlying gRPC channel.</p>
+</dd></dl>
+
+</dd></dl>
+
 </section>
 </section>
 
@@ -2118,21 +2255,18 @@ adapter kind.</p>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatEmbedding"><code class="docutils literal notranslate"><span class="pre">OpenAICompatEmbedding</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatEmbedding.health_url"><code class="docutils literal notranslate"><span class="pre">health_url</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatEmbedding.embed"><code class="docutils literal notranslate"><span class="pre">embed()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatEmbedding.health"><code class="docutils literal notranslate"><span class="pre">health()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatEmbedding.close"><code class="docutils literal notranslate"><span class="pre">close()</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatSTT"><code class="docutils literal notranslate"><span class="pre">OpenAICompatSTT</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatSTT.health_url"><code class="docutils literal notranslate"><span class="pre">health_url</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatSTT.transcribe"><code class="docutils literal notranslate"><span class="pre">transcribe()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatSTT.health"><code class="docutils literal notranslate"><span class="pre">health()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatSTT.close"><code class="docutils literal notranslate"><span class="pre">close()</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatTTS"><code class="docutils literal notranslate"><span class="pre">OpenAICompatTTS</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatTTS.health_url"><code class="docutils literal notranslate"><span class="pre">health_url</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatTTS.synthesize"><code class="docutils literal notranslate"><span class="pre">synthesize()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatTTS.health"><code class="docutils literal notranslate"><span class="pre">health()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatTTS.close"><code class="docutils literal notranslate"><span class="pre">close()</span></code></a></li>
@@ -2156,12 +2290,18 @@ adapter kind.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.reasoning_field"><code class="docutils literal notranslate"><span class="pre">reasoning_field</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.capabilities"><code class="docutils literal notranslate"><span class="pre">capabilities</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.default_extras"><code class="docutils literal notranslate"><span class="pre">default_extras</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.function_id"><code class="docutils literal notranslate"><span class="pre">function_id</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.use_ssl"><code class="docutils literal notranslate"><span class="pre">use_ssl</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.language"><code class="docutils literal notranslate"><span class="pre">language</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.voice"><code class="docutils literal notranslate"><span class="pre">voice</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.sample_rate"><code class="docutils literal notranslate"><span class="pre">sample_rate</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.Category"><code class="docutils literal notranslate"><span class="pre">Category</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.DeploymentSpec"><code class="docutils literal notranslate"><span class="pre">DeploymentSpec</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.DeploymentSpec.ownership"><code class="docutils literal notranslate"><span class="pre">ownership</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.DeploymentSpec.service"><code class="docutils literal notranslate"><span class="pre">service</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.DeploymentSpec.credentials"><code class="docutils literal notranslate"><span class="pre">credentials</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.EmbeddingSpec"><code class="docutils literal notranslate"><span class="pre">EmbeddingSpec</span></code></a><ul class="nav section-nav flex-column">
@@ -2175,6 +2315,7 @@ adapter kind.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.EndpointSpec.api_key_env"><code class="docutils literal notranslate"><span class="pre">api_key_env</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.EndpointSpec.timeout"><code class="docutils literal notranslate"><span class="pre">timeout</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.EndpointSpec.readiness"><code class="docutils literal notranslate"><span class="pre">readiness</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.EndpointSpec.health_path"><code class="docutils literal notranslate"><span class="pre">health_path</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.EndpointSpec.health_check"><code class="docutils literal notranslate"><span class="pre">health_check</span></code></a></li>
 </ul>
 </li>
@@ -2222,6 +2363,18 @@ adapter kind.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.make_stt"><code class="docutils literal notranslate"><span class="pre">make_stt()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.make_tts"><code class="docutils literal notranslate"><span class="pre">make_tts()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.make_vlm"><code class="docutils literal notranslate"><span class="pre">make_vlm()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.RivaSTT"><code class="docutils literal notranslate"><span class="pre">RivaSTT</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.RivaSTT.transcribe"><code class="docutils literal notranslate"><span class="pre">transcribe()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.RivaSTT.health"><code class="docutils literal notranslate"><span class="pre">health()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.RivaSTT.close"><code class="docutils literal notranslate"><span class="pre">close()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.RivaTTS"><code class="docutils literal notranslate"><span class="pre">RivaTTS</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.RivaTTS.synthesize"><code class="docutils literal notranslate"><span class="pre">synthesize()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.RivaTTS.health"><code class="docutils literal notranslate"><span class="pre">health()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.RivaTTS.close"><code class="docutils literal notranslate"><span class="pre">close()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>

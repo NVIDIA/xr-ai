@@ -497,13 +497,16 @@ in the dependency chain of the processes it manages.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.detect_gpu_config" title="xr_ai_launcher.detect_gpu_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">detect_gpu_config</span></code></a>(→ str)</p></td>
 <td><p>Return the GPU config profile by querying nvidia-smi.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.load_model_deployment" title="xr_ai_launcher.load_model_deployment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_model_deployment</span></code></a>(→ ModelDeployment)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.load_deployment_profile" title="xr_ai_launcher.load_deployment_profile"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_deployment_profile</span></code></a>(→ ModelDeployment)</p></td>
+<td><p>Load a JSON deployment profile directly (no worker YAML indirection).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.load_model_deployment" title="xr_ai_launcher.load_model_deployment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_model_deployment</span></code></a>(→ ModelDeployment)</p></td>
 <td><p>Load the JSON profile selected by a YAML worker configuration.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.ManagedProcess" title="xr_ai_launcher.ManagedProcess"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ManagedProcess</span></code></a>(name, cmd[, cwd, env])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.ManagedProcess" title="xr_ai_launcher.ManagedProcess"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ManagedProcess</span></code></a>(name, cmd[, cwd, env])</p></td>
 <td><p>Run <em>cmd</em> as a subprocess and terminate it cleanly when the context exits.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.run_stack" title="xr_ai_launcher.run_stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_stack</span></code></a>(→ None)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.run_stack" title="xr_ai_launcher.run_stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_stack</span></code></a>(→ None)</p></td>
 <td><p>Start <em>processes</em> in declaration order, waiting for each item to signal</p></td>
 </tr>
 </tbody>
@@ -640,6 +643,12 @@ spark          — 1× Blackwell GB10 (DGX Spark; ~96 GiB GPU-visible HBM)
 <dd><p>Return the configured ownership mode for <em>service</em>, if managed.</p>
 </dd></dl>
 
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_launcher.load_deployment_profile">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">load_deployment_profile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">profile_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_launcher.ModelDeployment" title="xr_ai_launcher.ModelDeployment"><span class="pre">ModelDeployment</span></a></span></span><a class="headerlink" href="#xr_ai_launcher.load_deployment_profile" title="Link to this definition">#</a></dt>
+<dd><p>Load a JSON deployment profile directly (no worker YAML indirection).</p>
 </dd></dl>
 
 <dl class="py function">
@@ -884,6 +893,7 @@ and <code class="docutils literal notranslate"><span class="pre">Process.config<
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.ModelDeployment.launch_mode"><code class="docutils literal notranslate"><span class="pre">launch_mode()</span></code></a></li>
 </ul>
 </li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.load_deployment_profile"><code class="docutils literal notranslate"><span class="pre">load_deployment_profile()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.load_model_deployment"><code class="docutils literal notranslate"><span class="pre">load_model_deployment()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.ManagedProcess"><code class="docutils literal notranslate"><span class="pre">ManagedProcess()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.Parallel"><code class="docutils literal notranslate"><span class="pre">Parallel</span></code></a><ul class="nav section-nav flex-column">
