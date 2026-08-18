@@ -20,11 +20,11 @@ log = logging.getLogger("xr_ai_launcher.cloudxr_env")
 
 _EXPORT_RE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 
-# OpenXR runtime selector written by services/cloudxr-runtime into cloudxr.env.
 XR_RUNTIME_VAR = "XR_RUNTIME_JSON"
+"""OpenXR runtime selector written by the CloudXR runtime service."""
 
-# Profiles on CloudXR's direct native transport (skip the WSS proxy).
 NATIVE_DEVICE_PROFILES = frozenset({"auto-native", "apple-vision-pro", "ipad-pro"})
+"""CloudXR device profiles that use direct native transport instead of WSS."""
 
 _DEVICE_PROFILE_RE = re.compile(
     r"^\s*NV_DEVICE_PROFILE\s*:\s*[\"']?([\w-]+)[\"']?", re.MULTILINE

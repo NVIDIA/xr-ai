@@ -154,7 +154,9 @@ sub-project generically. To add a new process to a stack:
 The orchestrator's process management and several cross-cutting concerns live
 in single-purpose packages under `utils/`. Each is small and narrowly scoped,
 and most are deliberately dependency-light so they can be added to any
-sub-project without dragging in a heavy dependency chain.
+sub-project without dragging in a heavy dependency chain. Their public names,
+signatures, types, defaults, fields, and method behavior are generated in the
+{doc}`Python API reference </reference/python/index>`.
 
 **`xr-ai-launcher`** — process management for the xr-ai stack: the `Process`,
 `Parallel`, and `run_stack` API described above, plus helpers for CloudXR
@@ -189,14 +191,3 @@ an NGC container), chosen per-server via `vllm_backend: pip|docker` in the
 service YAML. Both paths honor identical configuration keys; only the runtime hosting
 vllm differs. Stdlib-only by contract, so the docker path stays light even when
 pip vllm is not installed.
-
-**`xr-ai-nemo-runtime`** — opt-in NGC NeMo container backend for the in-process
-NeMo servers (the STT server and the Magpie TTS server). The NeMo servers load
-torch+NeMo in the wrapper's venv and inherit the host's cuDNN/CUDA via
-`LD_LIBRARY_PATH`, which aborts at torch import on hosts whose system cuDNN
-differs from torch's bundled one. This runs the same FastAPI server inside an
-NGC NeMo image instead — so torch, NeMo, and cuDNN all come from the container
-and the host's libraries are irrelevant — opted into per-server via
-`backend: docker` in the service YAML (default `pip` keeps the in-venv
-behavior). It is a bespoke NeMo docker path, deliberately separate from
-`xr-ai-vllm`, and is stdlib-only by contract.

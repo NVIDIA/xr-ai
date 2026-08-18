@@ -28,9 +28,9 @@ _PUBLIC_PACKAGE_EXPORTS = {
     )
     for package_dir in API_PACKAGE_DIRS
 }
-_PRIVATE_TYPE_REFERENCE = re.compile(
+_NONCANONICAL_TYPE_REFERENCE = re.compile(
     rf"\b(?P<package>{'|'.join(map(re.escape, _PUBLIC_PACKAGE_EXPORTS))})"
-    r"\._[A-Za-z0-9_.]*\.(?P<name>[A-Za-z][A-Za-z0-9_]*)"
+    r"\.(?:[A-Za-z_][A-Za-z0-9_]*\.)+(?P<name>[A-Za-z][A-Za-z0-9_]*)"
 )
 
 _GITHUB_BLOB_PREFIX = "https://github.com/NVIDIA/xr-ai/blob/"
@@ -74,7 +74,7 @@ def _canonicalize_public_type_references(value):
             return f"{package}.{name}"
         return match.group(0)
 
-    return _PRIVATE_TYPE_REFERENCE.sub(replace, value)
+    return _NONCANONICAL_TYPE_REFERENCE.sub(replace, value)
 
 
 def _prepare_api_templates(environment) -> None:

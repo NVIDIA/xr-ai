@@ -14,25 +14,28 @@ import yaml
 
 @dataclass(frozen=True)
 class VoiceGateConfig:
-    """Voice-gate behaviour knobs.
+    """Voice-gate behavior settings."""
 
-    ``magic_phrases``    — sentence-boundary opt-in phrases; a match is valid
-                           at transcript start or after ``.``, ``?``, or ``!``.
-                           An empty tuple dispatches every STT transcript.
-    ``followup_grace_s`` — seconds after a phrase match during which the
-                           next utterance from the same participant must
-                           begin to bypass the gate. It may finish later.
-    ``listening_chime``  — when true AND ``magic_phrases`` is non-empty,
-                           a short two-tone chime plays on the consumer's
-                           audio sink whenever the worker invokes
-                           ``VoiceGate.play_chime``. Defaults to ``True``
-                           because the chime is an audible "I heard you"
-                           cue that most consumers want by default;
-                           opt out explicitly with ``listening_chime: false``.
-    """
     magic_phrases:    tuple[str, ...] = ()
+    """Sentence-boundary opt-in phrases.
+
+    A match is valid at transcript start or after ``.``, ``?``, or ``!``.
+    An empty tuple dispatches every non-STOP STT transcript.
+    """
+
     followup_grace_s: float           = 5.0
+    """Seconds in which the next utterance may begin without another phrase.
+
+    The utterance may finish after the grace period.
+    """
+
     listening_chime:  bool            = True
+    """Whether phrase matches may emit a listening chime.
+
+    The chime is available only when ``magic_phrases`` is non-empty and plays
+    when the consumer calls ``VoiceGate.play_chime``. It defaults to true;
+    set ``listening_chime: false`` to disable it.
+    """
 
 
 def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
@@ -65,10 +68,14 @@ def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
 class AudioSink(Protocol):
     """Consumer-supplied return-audio writer."""
 
-    async def play_wav(self, pid: str, wav_bytes: bytes) -> None: ...
+    async def play_wav(self, pid: str, wav_bytes: bytes) -> None:
+        """Play WAV bytes for participant *pid*."""
+        ...
 
 
 class TTSLike(Protocol):
     """Duck-typed text-to-speech client used for ``say_stop_ack``."""
 
-    async def synthesize(self, text: str) -> bytes: ...
+    async def synthesize(self, text: str) -> bytes:
+        """Synthesize *text* and return WAV bytes."""
+        ...

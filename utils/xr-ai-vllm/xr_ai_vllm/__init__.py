@@ -55,10 +55,11 @@ from ._config import (
 
 log = logging.getLogger(__name__)
 
-# Default NGC image. Override per-server via `vllm_image:` in YAML.
-# vlm-server intentionally pins a newer tag locally for Cosmos3 support; keep
-# that service-specific override in mind when updating this shared default.
 DEFAULT_IMAGE = "nvcr.io/nvidia/vllm:26.04-py3"
+"""Default NGC vLLM image used when a service does not override ``vllm_image``.
+
+Individual services may pin a newer image when required by their model.
+"""
 
 
 def serve(
@@ -95,9 +96,9 @@ def serve(
 
     For the docker backend *persistent* is ignored: the container always
     runs foreground with ``start_new_session=True``, so it escapes the
-    launcher's process group regardless.  Use ``Process(persistent=True)``
-    in the orchestrator ``main.py`` to tell the launcher not to kill the
-    wrapper on shutdown.
+    launcher's process group regardless. Use
+    ``Process(..., launch_mode="persist")`` in the orchestrator ``main.py``
+    to tell the launcher not to kill the wrapper on shutdown.
 
     *container_name* is only consulted in docker mode. Use a stable,
     service-specific name (e.g. ``xr-ai-vllm-<entry-point>``) so the stop
