@@ -385,11 +385,11 @@
 <p>The voice runtime for XR agents. Pipecat implements the media pipeline, but
 applications work with XR concepts rather than Pipecat modules:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes accepted speech, text, participant departure, and
-interruption as voice-owned schemas on application-named topics; it
-subscribes to <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns readiness, hub transport, private pipeline assembly,
-signals, execution, and cleanup behind <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes every final pre-gate STT result on <code class="docutils literal notranslate"><span class="pre">voice.transcript</span></code>
+and accepted speech, text, participant departure, and interruption on typed
+topics; it subscribes to <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> privately owns readiness, hub transport, pipeline assembly,
+signals, execution, and cleanup.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code> is available when an application needs to share one transport explicitly.</p></li>
 </ul>
 <section id="usage">
@@ -401,21 +401,17 @@ signals, execution, and cleanup behind <code class="docutils literal notranslate
     <span class="n">VadConfig</span><span class="p">,</span>
     <span class="n">VoiceAgent</span><span class="p">,</span>
     <span class="n">VoiceInterrupted</span><span class="p">,</span>
-    <span class="n">VoiceSession</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voicegate</span><span class="w"> </span><span class="kn">import</span> <span class="n">VoiceGateConfig</span>
 
-<span class="n">session</span> <span class="o">=</span> <span class="n">VoiceSession</span><span class="p">(</span>
+<span class="n">queries</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"my-sample.user-query"</span><span class="p">,</span> <span class="n">UserQuery</span><span class="p">)</span>
+<span class="n">interruptions</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"my-sample.interrupted"</span><span class="p">,</span> <span class="n">VoiceInterrupted</span><span class="p">)</span>
+<span class="n">voice</span> <span class="o">=</span> <span class="n">VoiceAgent</span><span class="p">(</span>
+    <span class="n">query_topic</span><span class="o">=</span><span class="n">queries</span><span class="p">,</span>
     <span class="n">stt</span><span class="o">=</span><span class="n">stt</span><span class="p">,</span>
     <span class="n">tts</span><span class="o">=</span><span class="n">tts</span><span class="p">,</span>
     <span class="n">vad</span><span class="o">=</span><span class="n">VadConfig</span><span class="p">(),</span>
     <span class="n">voice_gate</span><span class="o">=</span><span class="n">VoiceGateConfig</span><span class="p">(),</span>
-<span class="p">)</span>
-<span class="n">queries</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"my-sample.user-query"</span><span class="p">,</span> <span class="n">UserQuery</span><span class="p">)</span>
-<span class="n">interruptions</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"my-sample.interrupted"</span><span class="p">,</span> <span class="n">VoiceInterrupted</span><span class="p">)</span>
-<span class="n">voice</span> <span class="o">=</span> <span class="n">VoiceAgent</span><span class="p">(</span>
-    <span class="n">session</span><span class="p">,</span>
-    <span class="n">query_topic</span><span class="o">=</span><span class="n">queries</span><span class="p">,</span>
     <span class="n">interrupted_topic</span><span class="o">=</span><span class="n">interruptions</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"voice"</span><span class="p">,</span> <span class="n">voice</span><span class="p">)</span>
@@ -455,14 +451,28 @@ signals, execution, and cleanup behind <code class="docutils literal notranslate
 </tbody>
 </table>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">VoiceSession.text_topic</span></code> controls the completed-response echo sent through the
+<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent.text_topic</span></code> controls the completed-response echo sent through the
 hub data channel. Its default is <code class="docutils literal notranslate"><span class="pre">&quot;agent.response&quot;</span></code>; set it to <code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> when the
 application publishes its own response data so each turn is delivered only
 once. This setting does not disable TTS or Relay telemetry.</p>
-<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes accepted speech, typed text, participant departure, and
-interruption on application-named topics. Application agents subscribe to the
-events they own, perform cleanup in their own subscriber methods, and may
-publish finite or incremental <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code> messages:</p>
+<p>Each non-empty final STT result is published on <code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code> as a
+<code class="docutils literal notranslate"><span class="pre">VoiceTranscript</span></code> before wake-phrase filtering. It therefore includes speech
+that the gate later rejects. The participant ID and <code class="docutils literal notranslate"><span class="pre">voice</span></code> source are runtime
+metadata. Early wake/STOP probes are internal and are not published as final
+transcripts. Accepted speech continues separately as <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>, with any
+matched wake phrase and preceding background speech removed by the gate.</p>
+<p>Transcript publication uses one private bounded FIFO owned by <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>, so
+a slow runtime subscriber cannot delay STT, voice gating, or accepted queries.
+The queue preserves order and drops its oldest pending transcript when full;
+shutdown cancels the active delivery and discards pending transcripts. Runtime
+subscribers should enqueue long-running work internally and return promptly.</p>
+<p>Accepted speech, typed text, participant departure, and interruption remain on
+application-named topics. Application agents subscribe to the events they own,
+perform cleanup in their own subscriber methods, and may publish finite or
+incremental <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code> messages:</p>
+<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> consumes only untopiced client data when <code class="docutils literal notranslate"><span class="pre">text_input=True</span></code>; named
+application and control messages are never interpreted as user queries. The
+hub preserves the original data-channel topic for every processor.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">VOICE_OUTPUT_TOPIC</span><span class="p">,</span> <span class="n">VoiceOutput</span>
 
 <span class="k">await</span> <span class="n">runtime</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span>
@@ -497,13 +507,12 @@ sentence synthesis. STT inputs contain only byte count, duration, and sample
 rate; a nested <code class="docutils literal notranslate"><span class="pre">voice.stt.result</span></code> mark carries the transcript. TTS inputs carry
 the sentence being synthesized. Raw audio is never written to Relay events.
 These scopes measure provider work and downstream handoff, not client playback.</p>
-<p><code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> is the media engine owned by <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>. It manages
-readiness, hub transport, VAD/STT, voice gating, TTS, signals, and cleanup; it
-does not execute application handlers. Typed-text ingress is also internal to
-<code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>. The lower-level <code class="docutils literal notranslate"><span class="pre">VoiceSession.run()</span></code>, <code class="docutils literal notranslate"><span class="pre">enqueue_query()</span></code>, and
-<code class="docutils literal notranslate"><span class="pre">enqueue_response()</span></code> methods are public for runtime integrations.
-<code class="docutils literal notranslate"><span class="pre">VoiceSession.endpoint</span></code> is available only after entering the session, so model
-health probes complete before the default hub transport opens its sockets.</p>
+<p>The media session is private to <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>. The agent manages readiness,
+VAD/STT, voice gating, TTS, typed-text ingress, signals, and cleanup; it does not
+execute application handlers. Applications that already need the public
+<code class="docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code> for frames or status publication construct it explicitly
+and pass it to <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>; the agent does not expose its private session or
+transport.</p>
 <p>When wake phrases and the listening chime are enabled, the VAD/STT stage probes
 the opening audio on a fixed cadence while the user is still speaking. Probe
 audio includes a short silent tail so offline STT can finalize the wake word. A

@@ -416,34 +416,40 @@ compatibility package. Update out-of-tree code as follows:</p>
 <td><p>Put application behavior in an <code class="docutils literal notranslate"><span class="pre">xr_ai_runtime.Agent</span></code> subscriber and let <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.VoiceAgent</span></code> own the voice pipeline.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">run_voice_pipeline</span></code></p></td>
-<td><p>Run the composed application with <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">VoiceAgent.run(runtime)</span></code>. Lower-level integrations can use <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">VoiceSession.run(input_sink)</span></code>.</p></td>
+<td><p>Configure <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> directly and run it with <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">VoiceAgent.run(runtime)</span></code>; its media session is private.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">VadConfig</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code></p></td>
+<td><p>Configure <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> with STT, TTS, VAD, gating, readiness probes, and closeables, then run it with the shared <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code>. The lower-level media session is no longer public.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">VadConfig</span></code></p></td>
 <td><p>Import the unchanged tuning model from <code class="docutils literal notranslate"><span class="pre">xr_ai_voice</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">GatedQueryFrame</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">GatedQueryFrame</span></code></p></td>
 <td><p>Subscribe to the application query topic carrying <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.UserQuery</span></code>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ParticipantLeftFrame</span></code> and <code class="docutils literal notranslate"><span class="pre">InterruptionFrame</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ParticipantLeftFrame</span></code> and <code class="docutils literal notranslate"><span class="pre">InterruptionFrame</span></code></p></td>
 <td><p>Subscribe to application topics carrying <code class="docutils literal notranslate"><span class="pre">VoiceParticipantLeft</span></code> and <code class="docutils literal notranslate"><span class="pre">VoiceInterrupted</span></code>. Participant joins and voice-gate greetings remain session-owned.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BrainResponseEndFrame</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BrainResponseEndFrame</span></code></p></td>
 <td><p>Publish a finite <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code>, or terminate an incremental response with <code class="docutils literal notranslate"><span class="pre">final=True</span></code>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">VadSttProcessor</span></code>, <code class="docutils literal notranslate"><span class="pre">VoiceGateProcessor</span></code>, and <code class="docutils literal notranslate"><span class="pre">StreamingTtsProcessor</span></code></p></td>
-<td><p>Configure <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> with <code class="docutils literal notranslate"><span class="pre">VadConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">VoiceGateConfig</span></code>, and <code class="docutils literal notranslate"><span class="pre">text_topic</span></code>; pipeline processors are private implementation details.</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">VadSttProcessor</span></code>, <code class="docutils literal notranslate"><span class="pre">VoiceGateProcessor</span></code>, and <code class="docutils literal notranslate"><span class="pre">StreamingTtsProcessor</span></code></p></td>
+<td><p>Configure <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> with <code class="docutils literal notranslate"><span class="pre">VadConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">VoiceGateConfig</span></code>, and <code class="docutils literal notranslate"><span class="pre">text_topic</span></code>; pipeline processors are private implementation details.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">XRMediaHubTransport</span></code></p></td>
-<td><p>Use <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.HubVoiceTransport</span></code> only when an application must share a transport explicitly; otherwise let <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> create it.</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">XRMediaHubTransport</span></code></p></td>
+<td><p>Construct <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.HubVoiceTransport</span></code> and pass it to <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> only when another application component must share that existing hub boundary.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">SttClient</span></code> and <code class="docutils literal notranslate"><span class="pre">TtsClient</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">SttClient</span></code> and <code class="docutils literal notranslate"><span class="pre">TtsClient</span></code></p></td>
 <td><p>Construct services through <code class="docutils literal notranslate"><span class="pre">xr_ai_models.make_stt</span></code> and <code class="docutils literal notranslate"><span class="pre">make_tts</span></code>, or use <code class="docutils literal notranslate"><span class="pre">OpenAICompatSTT</span></code> and <code class="docutils literal notranslate"><span class="pre">OpenAICompatTTS</span></code> directly.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">http_probe</span></code>, <code class="docutils literal notranslate"><span class="pre">mcp_probe</span></code>, and <code class="docutils literal notranslate"><span class="pre">wait_for_services</span></code></p></td>
-<td><p>Pass additional readiness callables through <code class="docutils literal notranslate"><span class="pre">VoiceSession(probes=...)</span></code>; MCP readiness is no longer part of the voice SDK.</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">http_probe</span></code>, <code class="docutils literal notranslate"><span class="pre">mcp_probe</span></code>, and <code class="docutils literal notranslate"><span class="pre">wait_for_services</span></code></p></td>
+<td><p>Pass additional readiness callables through <code class="docutils literal notranslate"><span class="pre">VoiceAgent(probes=...)</span></code>; MCP readiness is no longer part of the voice SDK.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_pipecat.audio</span></code> conversion helpers</p></td>
-<td><p>Let <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> own media conversion. Applications that process raw hub media should use <code class="docutils literal notranslate"><span class="pre">xr_ai_hub</span></code> types and own their format conversion.</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_pipecat.audio</span></code> conversion helpers</p></td>
+<td><p>Let <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> own media conversion. Applications that truly need raw hub media should use <code class="docutils literal notranslate"><span class="pre">xr_ai_hub</span></code> types and own their format conversion.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">VoiceAgent.text_transform</span></code> and <code class="docutils literal notranslate"><span class="pre">text_ignore_topics</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> treats only untopiced client data as direct text. Use <code class="docutils literal notranslate"><span class="pre">text_input=False</span></code> to disable it; transform application queries in their subscribing agent.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_models.config</span></code>, <code class="docutils literal notranslate"><span class="pre">factory</span></code>, <code class="docutils literal notranslate"><span class="pre">openai_compat</span></code>, and <code class="docutils literal notranslate"><span class="pre">protocols</span></code></p></td>
 <td><p>Import public names directly from <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code>. This includes <code class="docutils literal notranslate"><span class="pre">KIND_OPENAI_COMPAT</span></code>, <code class="docutils literal notranslate"><span class="pre">ModelKind</span></code>, <code class="docutils literal notranslate"><span class="pre">Category</span></code>, and <code class="docutils literal notranslate"><span class="pre">Spec</span></code>.</p></td>
@@ -462,6 +468,9 @@ compatibility package. Update out-of-tree code as follows:</p>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">HistoricalFrameResult.path</span></code> and <code class="docutils literal notranslate"><span class="pre">SampledVideoFrame.path</span></code></p></td>
 <td><p>Read the canonical exported-frame location from <code class="docutils literal notranslate"><span class="pre">result.image.uri</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_tools.qr_code.QRCodeTool</span></code></p></td>
+<td><p>Initialize <code class="docutils literal notranslate"><span class="pre">xr_ai_tools.marker_tracking.MarkerTrackingTool</span></code>; select QR and/or ArUco with <code class="docutils literal notranslate"><span class="pre">marker_types</span></code>, then use the same <code class="docutils literal notranslate"><span class="pre">track_markers</span></code> request and result contract for either family.</p></td>
 </tr>
 </tbody>
 </table>
