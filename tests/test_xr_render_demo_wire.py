@@ -1218,3 +1218,45 @@ def test_scene_loop_bounds_participant_state_as_one_lru_unit() -> None:
     for state in (brain._history, brain._recent_moves,  # noqa: SLF001
                   brain._pre_move_positions):  # noqa: SLF001
         assert set(state) == {"alice", "carol"}
+
+
+async def test_worker_builds_model_services_from_shipped_config() -> None:
+    # The worker must construct every model client from the profile selected
+    # by its worker YAML.
+    from xr_render_demo_worker.__main__ import _make_model_services
+
+    config_path = (
+        _WORKER_DIR.parent / "yaml" / "xr_render_demo_worker.yaml"
+    )
+    models_cfg, services = _make_model_services(config_path)
+    try:
+        assert models_cfg.llm("llm").base_url
+        assert len(services) == 5
+        assert all(service is not None for service in services)
+    finally:
+        await asyncio.gather(
+            *(service.close() for service in services), return_exceptions=True
+        )
+
+
+async def test_worker_main_resolves_models_from_config_path(monkeypatch) -> None:
+    from xr_render_demo_worker import __main__ as worker_main
+
+    config_path = _WORKER_DIR.parent / "yaml" / "xr_render_demo_worker.yaml"
+    cfg = worker_main.load_config(config_path)
+    seen: list[object] = []
+
+    class _Abort(Exception):
+        pass
+
+    def _capture(path):
+        seen.append(path)
+        raise _Abort
+
+    monkeypatch.setattr(worker_main, "_make_model_services", _capture)
+    monkeypatch.setattr(worker_main, "setup_logging", lambda *_a, **_k: None)
+    # main() registers a process-global trace sink; keep it out of the test run.
+    monkeypatch.setattr(worker_main.logger, "add", lambda *_a, **_k: 0)
+    with pytest.raises(_Abort):
+        await worker_main.main(cfg, config_path=config_path)
+    assert seen == [config_path]

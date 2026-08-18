@@ -600,7 +600,9 @@ Keep non-obvious fan-out in the same change:
   server-side packages.
 - `agent-sdk/xr-ai-models/` depends only on `xr-ai-logging`, `httpx`, and
   `pyyaml`. In-tree backends use typed OpenAI-compatible HTTP rather than vendor
-  SDKs.
+  SDKs, with one scoped exception: the optional `riva` extra adds
+  `nvidia-riva-client` for gRPC-only Riva speech NIMs (see AGENTS.md); the
+  base install is unchanged.
 - `agent-sdk/xr-ai-tools/` keeps capability-specific dependencies optional;
   spatial math remains CPU-only.
 - Agent workers use public SDK packages and task-specific libraries. They never
