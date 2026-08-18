@@ -457,8 +457,8 @@ compatibility package. Update out-of-tree code as follows:</p>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">GatedQueryFrame</span></code></p></td>
 <td><p>Subscribe to the application query topic carrying <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.UserQuery</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ParticipantLeftFrame</span></code> and <code class="docutils literal notranslate"><span class="pre">InterruptionFrame</span></code></p></td>
-<td><p>Subscribe to application topics carrying <code class="docutils literal notranslate"><span class="pre">VoiceParticipantLeft</span></code> and <code class="docutils literal notranslate"><span class="pre">VoiceInterrupted</span></code>. Participant joins and voice-gate greetings remain session-owned.</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ParticipantJoinedFrame</span></code>, <code class="docutils literal notranslate"><span class="pre">ParticipantLeftFrame</span></code>, and <code class="docutils literal notranslate"><span class="pre">InterruptionFrame</span></code></p></td>
+<td><p>Subscribe to application topics carrying <code class="docutils literal notranslate"><span class="pre">VoiceParticipantJoined</span></code>, <code class="docutils literal notranslate"><span class="pre">VoiceParticipantLeft</span></code>, and <code class="docutils literal notranslate"><span class="pre">VoiceInterrupted</span></code>. Participant identity comes from runtime metadata; voice-gate greetings remain session-owned.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BrainResponseEndFrame</span></code></p></td>
 <td><p>Publish a finite <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code>, or terminate an incremental response with <code class="docutils literal notranslate"><span class="pre">final=True</span></code>.</p></td>

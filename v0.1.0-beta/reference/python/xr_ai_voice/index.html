@@ -471,13 +471,16 @@ audio framing, and pipeline processors are implementation details.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_voice.VoiceOutput" title="xr_ai_voice.VoiceOutput"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VoiceOutput</span></code></a></p></td>
 <td><p>One complete response or one chunk of an incremental voice response.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_voice.VoiceParticipantLeft" title="xr_ai_voice.VoiceParticipantLeft"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VoiceParticipantLeft</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_voice.VoiceParticipantJoined" title="xr_ai_voice.VoiceParticipantJoined"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VoiceParticipantJoined</span></code></a></p></td>
+<td><p>Notification that one participant joined the voice transport.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_voice.VoiceParticipantLeft" title="xr_ai_voice.VoiceParticipantLeft"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VoiceParticipantLeft</span></code></a></p></td>
 <td><p>Notification that one participant left the voice transport.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_voice.VoiceTranscript" title="xr_ai_voice.VoiceTranscript"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VoiceTranscript</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_voice.VoiceTranscript" title="xr_ai_voice.VoiceTranscript"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VoiceTranscript</span></code></a></p></td>
 <td><p>One final STT result emitted before voice-gate filtering.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_voice.HubVoiceTransport" title="xr_ai_voice.HubVoiceTransport"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_voice.HubVoiceTransport" title="xr_ai_voice.HubVoiceTransport"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code></a></p></td>
 <td><p>Own the hub endpoint and bidirectional voice media transport.</p></td>
 </tr>
 </tbody>
@@ -571,6 +574,7 @@ ends. Set to <code class="docutils literal notranslate"><span class="pre">0</spa
 <dd><em class="sig-param"><span class="n"><span class="pre">transport</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_voice.HubVoiceTransport" title="xr_ai_voice.HubVoiceTransport"><span class="pre">xr_ai_voice.HubVoiceTransport</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">response_capacity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">32</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">text_input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">participant_joined_topic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.Topic" title="xr_ai_runtime.Topic"><span class="pre">xr_ai_runtime.Topic</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_voice.VoiceParticipantJoined" title="xr_ai_voice.VoiceParticipantJoined"><span class="pre">VoiceParticipantJoined</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">participant_left_topic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.Topic" title="xr_ai_runtime.Topic"><span class="pre">xr_ai_runtime.Topic</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_voice.VoiceParticipantLeft" title="xr_ai_voice.VoiceParticipantLeft"><span class="pre">VoiceParticipantLeft</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">interrupted_topic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.Topic" title="xr_ai_runtime.Topic"><span class="pre">xr_ai_runtime.Topic</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_voice.VoiceInterrupted" title="xr_ai_voice.VoiceInterrupted"><span class="pre">VoiceInterrupted</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">interrupt_on_supersede</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>,</dd>
@@ -646,6 +650,12 @@ ends. Set to <code class="docutils literal notranslate"><span class="pre">0</spa
 <dd><p>Require identity for incremental output and text for finite output.</p>
 </dd></dl>
 
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_voice.VoiceParticipantJoined">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_voice.</span></span><span class="sig-name descname"><span class="pre">VoiceParticipantJoined</span></span><a class="headerlink" href="#xr_ai_voice.VoiceParticipantJoined" title="Link to this definition">#</a></dt>
+<dd><p>Notification that one participant joined the voice transport.</p>
 </dd></dl>
 
 <dl class="py class">
@@ -818,6 +828,7 @@ ends. Set to <code class="docutils literal notranslate"><span class="pre">0</spa
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceOutput.validate_boundary"><code class="docutils literal notranslate"><span class="pre">validate_boundary()</span></code></a></li>
 </ul>
 </li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceParticipantJoined"><code class="docutils literal notranslate"><span class="pre">VoiceParticipantJoined</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceParticipantLeft"><code class="docutils literal notranslate"><span class="pre">VoiceParticipantLeft</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceStreamClosedError"><code class="docutils literal notranslate"><span class="pre">VoiceStreamClosedError</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceTranscript"><code class="docutils literal notranslate"><span class="pre">VoiceTranscript</span></code></a><ul class="nav section-nav flex-column">
