@@ -101,7 +101,10 @@ See [Adding a sample](docs/source/guides/adding-a-sample.md) and the
 - Sample configuration values and field guidance live in checked-in YAML/JSON
   and adjacent YAML comments. Files under a top-level sample's `yaml/` tree or
   beside a direct capability subproject are generated into the config reference.
-- Any `pyproject.toml` change must update `DEPENDENCIES.md`; regenerate the
+- After any `pyproject.toml` change, run
+  `python3 .github/scripts/generate_dependency_map.py`; the pre-commit hook
+  normally regenerates the Python inventory automatically and CI rejects drift.
+  Do not hand-edit the generated section in `DEPENDENCIES.md`. Regenerate the
   affected project's gitignored `uv.lock` locally to verify resolution.
 - Never put API keys or tokens in source files. Use environment variables or
   the credential store documented in `docs/source/getting_started/credentials.md`.

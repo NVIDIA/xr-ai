@@ -23,6 +23,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  dependency-map:
+    name: generated dependency map
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check generated dependency map
+        run: python3 .github/scripts/generate_dependency_map.py --check
+
   uv-lock:
     name: uv lock (every project)
     runs-on: ubuntu-latest

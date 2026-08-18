@@ -18,6 +18,18 @@ repos:
 
   - repo: local
     hooks:
+      - id: generate-dependency-map
+        name: generate dependency map
+        description: >
+          Regenerates the Python project inventory from pyproject.toml files.
+          Pre-commit aborts when the generated document changes so the operator
+          can review and re-stage it.
+        entry: python3 .github/scripts/generate_dependency_map.py
+        language: system
+        pass_filenames: false
+        files: >-
+          (^|/)pyproject\.toml$|^DEPENDENCIES\.md$|^\.github/scripts/generate_dependency_map\.py$
+
       - id: check-spdx-headers
         name: check SPDX headers
         description: >
