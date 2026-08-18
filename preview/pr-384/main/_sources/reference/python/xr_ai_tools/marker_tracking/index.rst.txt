@@ -1,0 +1,154 @@
+xr_ai_tools.marker_tracking
+===========================
+
+.. py:module:: xr_ai_tools.marker_tracking
+
+.. autoapi-nested-parse::
+
+   QR and ArUco marker detection from live participant frames.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_tools.marker_tracking.MarkerType
+   xr_ai_tools.marker_tracking.MarkerTrackingRequest
+   xr_ai_tools.marker_tracking.MarkerPoint
+   xr_ai_tools.marker_tracking.TrackedMarker
+   xr_ai_tools.marker_tracking.MarkerTrackingResult
+   xr_ai_tools.marker_tracking.MarkerTrackingTool
+
+
+Module Contents
+---------------
+
+.. py:class:: MarkerType
+
+
+
+   Marker families supported by :class:`MarkerTrackingTool`.
+
+
+   .. py:attribute:: QR_CODE
+      :value: 'qr_code'
+
+
+      QR codes containing arbitrary text.
+
+
+
+   .. py:attribute:: ARUCO
+      :value: 'aruco'
+
+
+      ArUco fiducial markers containing numeric identifiers.
+
+
+
+.. py:class:: MarkerTrackingRequest
+
+
+
+   Track markers in one participant's current live camera frame.
+
+
+   .. py:attribute:: participant_id
+      :type:  str
+
+      Participant whose current camera frame should be scanned.
+
+
+
+.. py:class:: MarkerPoint
+
+
+
+   One image-space corner of a tracked marker.
+
+
+   .. py:attribute:: x
+      :type:  float
+
+      Horizontal pixel coordinate.
+
+
+
+   .. py:attribute:: y
+      :type:  float
+
+      Vertical pixel coordinate.
+
+
+
+.. py:class:: TrackedMarker
+
+
+
+   One detected marker and its quadrilateral in the source frame.
+
+
+   .. py:attribute:: marker_type
+      :type:  MarkerType
+
+      Detected marker family.
+
+
+
+   .. py:attribute:: value
+      :type:  str
+
+      Decoded QR text or decimal ArUco marker identifier.
+
+
+
+   .. py:attribute:: corners
+      :type:  tuple[MarkerPoint, MarkerPoint, MarkerPoint, MarkerPoint]
+
+      Four clockwise image-space corners.
+
+
+
+.. py:class:: MarkerTrackingResult
+
+
+
+   All enabled markers found in one current camera frame.
+
+
+   .. py:attribute:: markers
+      :type:  list[TrackedMarker]
+
+      Detected markers in detector-provided order.
+
+
+
+   .. py:attribute:: available
+      :type:  bool
+
+      Whether a current frame was available and could be scanned.
+
+
+
+   .. py:attribute:: message
+      :type:  str | None
+
+      Human-readable detail when no marker was returned.
+
+
+
+.. py:class:: MarkerTrackingTool(*, endpoint: xr_ai_hub.ProcessorEndpoint, marker_types: collections.abc.Iterable[MarkerType | str] = (MarkerType.QR_CODE, MarkerType.ARUCO), aruco_dictionary: str = 'DICT_4X4_50', frame_max_age_s: float = 2.0, frame_timeout_s: float = 5.0, manage_status: bool = True)
+
+
+
+   A finite tool that tracks enabled marker families in a current frame.
+
+
+   .. py:method:: release(participant_id: str) -> None
+
+      Forget cached frame state after a participant disconnects.
+
+
+
