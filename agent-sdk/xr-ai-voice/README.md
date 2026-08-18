@@ -11,6 +11,9 @@ applications work with XR concepts rather than Pipecat modules:
 - `VoiceAgent` publishes every final pre-gate STT result on `voice.transcript`
   and accepted speech, text, participant lifecycle, and interruption on typed
   topics; it subscribes to `voice.output`.
+- `VoiceAggregationAgent` optionally serializes candidate speech per
+  participant and rewrites simultaneous finite updates into one concise
+  response before publishing to `voice.output`.
 - `VoiceAgent` privately owns readiness, hub transport, pipeline assembly,
   signals, execution, and cleanup.
 - `HubVoiceTransport` is available when an application needs to share one transport explicitly.
@@ -44,6 +47,62 @@ runtime.register("voice", voice)
 async with runtime:
     await voice.run(runtime)
 ```
+
+## Multiple voice producers
+
+Applications with foreground responses, background monitors, timers, and
+alerts can register one `VoiceAggregationAgent`. Producers publish the same
+`VoiceOutput` payload to `VOICE_CONTRIBUTION_TOPIC`; only the aggregator
+publishes the final response to `VOICE_OUTPUT_TOPIC`:
+
+```python
+from xr_ai_voice import (
+    VOICE_CONTRIBUTION_TOPIC,
+    VoiceAggregationAgent,
+    VoiceOutput,
+)
+
+aggregation = runtime.register(
+    "voice-aggregation",
+    VoiceAggregationAgent(llm=llm),
+)
+```
+
+A producer uses its runtime context while handling an application event:
+
+```python
+await ctx.publish(
+    VOICE_CONTRIBUTION_TOPIC,
+    VoiceOutput(text="The timer is done."),
+)
+```
+
+The application stops participant-owned aggregation tasks before the runtime:
+
+```python
+async with runtime:
+    try:
+        await voice.run(runtime)
+    finally:
+        await aggregation.stop()
+```
+
+Aggregation is participant-scoped. A lone finite contribution passes through
+without an LLM call after the short coalescing window. Two or more finite
+contributions in one batch are rewritten into a single concise utterance; if
+the rewrite fails, their original text is joined so updates are not lost. The
+earliest input timestamp is preserved, and an interrupt on any contribution
+makes the combined response interrupt active speech. Queue capacity provides
+bounded ingress, and batches have a bounded size; additional contributions
+remain ordered for following batches.
+
+A lone incremental contribution starts streaming immediately with a new
+aggregator-owned response ID. Other contributions wait behind that stream;
+finite updates that accumulated while it ran are coalesced when it finishes.
+An urgent contribution interrupts the active stream. A stream that stops
+producing chunks is closed after `stream_idle_timeout_s`, allowing pending
+updates to proceed. Call `stop()` before shutting down the runtime so the agent
+can cancel its participant-owned tasks.
 
 ## Voice tuning and data echo
 
@@ -95,14 +154,15 @@ await runtime.publish(
 ```
 
 Incremental producers reuse a `response_id`, set `final=False` while more
-chunks remain, and end with `final=True`. Aggregation is private to voice/TTS,
-and producer identity is part of the response key so independent agents cannot
-merge output accidentally. Output is serialized per participant; urgent output
-sets `interrupt=True` to replace active and queued speech. Producers may copy
-the originating query's `timestamp_us` into `VoiceOutput` so the TTS response
-preserves the input timestamp. `VoiceStreamClosedError` identifies an empty final
-chunk for a stream that voice already closed, including when wrapped in the
-runtime publication exception group.
+chunks remain, and end with `final=True`. Without the optional aggregation
+agent, producer identity is part of the response key so independent agents
+cannot merge output accidentally. `VoiceAgent` serializes output per
+participant; urgent output sets `interrupt=True` to replace active and queued
+speech. Producers may copy the originating query's `timestamp_us` into
+`VoiceOutput` so the TTS response preserves the input timestamp.
+`VoiceStreamClosedError` identifies an empty final chunk for a stream that
+voice already closed, including when wrapped in the runtime publication
+exception group.
 
 Lifecycle publication runs on `VoiceAgent`-owned tasks, so participant cleanup
 cannot block the shared media processor. Join and leave publications are
