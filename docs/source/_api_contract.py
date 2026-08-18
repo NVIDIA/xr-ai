@@ -16,6 +16,7 @@ API_PACKAGE_DIRS = (
     _REPOSITORY_ROOT / "agent-sdk" / "xr-ai-runtime" / "xr_ai_runtime",
     _REPOSITORY_ROOT / "agent-sdk" / "xr-ai-tools" / "xr_ai_tools",
     _REPOSITORY_ROOT / "agent-sdk" / "xr-ai-voice" / "xr_ai_voice",
+    _REPOSITORY_ROOT / "agent-sdk" / "xr-ai-web-events" / "xr_ai_web_events",
     _REPOSITORY_ROOT / "utils" / "xr-ai-launcher" / "xr_ai_launcher",
     _REPOSITORY_ROOT / "utils" / "xr-ai-logging" / "xr_ai_logging",
     _REPOSITORY_ROOT / "utils" / "xr-ai-vad" / "xr_ai_vad",
