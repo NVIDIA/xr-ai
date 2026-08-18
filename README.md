@@ -234,8 +234,7 @@ runtime-selection details.
 
 There are two ways to run it:
 
-**Standalone** (~23 GB VRAM) — starts its own VLM and STT, owns them for the
-session, and stops them when you exit:
+**Standalone** (~23 GB VRAM) — starts its own VLM and STT:
 
 ```bash
 cd agent-samples/simple-vlm-example
@@ -250,7 +249,11 @@ several minutes).  `HF_TOKEN` is required by default; pass
 
 **With model-servers pre-running** — start `model_servers` to pre-warm VLM
 (port 8100) and STT (port 8103). The demo detects and reuses them.
-When you exit, those services keep running.
+
+In both modes the VLM and STT keep running after you exit so the next run
+skips the model reload (see
+[vLLM model persistence](docs/source/components/ai-services.md#vllm-model-persistence)); free
+the VRAM with `cd agent-samples/model-servers && uv run model_servers --stop`.
 
 #### Step 1 — Start the server
 
@@ -259,14 +262,19 @@ uv run simple_vlm_example
 ```
 
 The hub, VLM, STT, and TTS start together (or reuse running services).
-When ready the hub prints:
+The hub prints:
 
 ```
-[hub]   LiveKit URL : wss://0.0.0.0:8080
+[hub]   LiveKit URL : wss://localhost:8080
 [hub]   Room        : xr-room
 [hub]   Token       : eyJ…
 [hub]   Web client  : https://localhost:8080
 ```
+
+This banner appears as soon as the hub itself is ready, while the model
+services and worker are still starting.  The stack accepts clients once the
+launcher prints its `All processes ready` banner; a client connected before
+that gets a session with no agent responding.
 
 #### Step 2 — Connect a client
 

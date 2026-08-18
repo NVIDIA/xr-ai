@@ -123,7 +123,7 @@ async def main(ready_file: Path | None = None) -> None:
     else:
         lk_scheme   = "ws"
         lk_url_port = cfg.lk_port_ws
-    logger.info("LiveKit URL : {}://0.0.0.0:{}", lk_scheme, lk_url_port)
+    logger.info("LiveKit URL : {}://localhost:{}", lk_scheme, lk_url_port)
     logger.info("Room        : {}", cfg.room_name)
     logger.info("Token       : {}", token)
     if cfg.enable_web_server:

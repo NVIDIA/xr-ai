@@ -357,7 +357,8 @@ with stale memory limits, entrypoint, setup commands, or model arguments.
 **Stopping the persisted servers**, from the repo root:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers --stop
+uv run --project agent-samples/model-servers model_servers --stop    # also simple-vlm-example's VLM and STT
+uv run --project agent-samples/xr-render-demo xr_render_demo --stop
 ```
 
 Cleanup locates labelled Docker containers before inspecting ports, then
