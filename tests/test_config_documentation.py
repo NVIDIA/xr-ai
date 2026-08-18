@@ -56,6 +56,12 @@ def test_config_catalog_preserves_source_and_language() -> None:
     scene = configs["agent-samples/xr-render-demo/scene/scene_service.yaml"]
     assert "lovr_bin" in scene.content
 
+    for path in (
+        "agent-samples/simple-vlm-example/yaml/xr_media_hub.yaml",
+        "agent-samples/xr-render-demo/yaml/xr_media_hub.yaml",
+    ):
+        assert "# Development-only placeholders." in configs[path].content
+
     for config in configs.values():
         assert config.content == (_ROOT / config.path).read_text(encoding="utf-8")
 

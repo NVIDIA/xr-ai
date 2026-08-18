@@ -66,11 +66,11 @@ def _directive_type():
 
         def run(self):
             repository_root = Path(self.state.document.settings.env.srcdir).parents[1]
-            container = nodes.container(classes=["xr-ai-config-reference"])
             by_sample: dict[str, list[SampleConfig]] = {}
             for config in load_config_catalog(repository_root):
                 by_sample.setdefault(config.sample, []).append(config)
 
+            sections: list[nodes.section] = []
             for sample, configs in by_sample.items():
                 sample_section = nodes.section(ids=[nodes.make_id(f"config-{sample}")])
                 sample_section += nodes.title(text=sample)
@@ -82,8 +82,8 @@ def _directive_type():
                     literal["language"] = config.language
                     file_section += literal
                     sample_section += file_section
-                container += sample_section
-            return [container]
+                sections.append(sample_section)
+            return sections
 
     return ConfigReferenceDirective
 

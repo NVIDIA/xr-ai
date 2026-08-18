@@ -6,6 +6,7 @@
 # See services/xr-media-hub/xr_media_hub.yaml for all available options.
 
 # ── LiveKit server ────────────────────────────────────────────────────────────
+# Development-only placeholders. Replace both values outside local samples.
 api_key:    devkey
 api_secret: devsecret-xr-livekit-prototype-2026
 room_name:  xr-room
