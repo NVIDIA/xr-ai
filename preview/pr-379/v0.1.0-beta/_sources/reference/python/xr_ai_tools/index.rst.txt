@@ -48,7 +48,6 @@ Package Contents
 
 .. py:class:: AsyncTool(name: str, description: str, request_model: type[RequestT], chunk_model: type[ChunkT], handler: collections.abc.Callable[[RequestT], collections.abc.AsyncIterator[ChunkT]])
 
-   Bases: :py:obj:`Generic`\ [\ :py:obj:`RequestT`\ , :py:obj:`ChunkT`\ ]
 
 
    A validated asynchronous tool independent of any output transport.
@@ -68,7 +67,6 @@ Package Contents
 
 .. py:class:: Tool(name: str, description: str, request_model: type[RequestT], result_model: type[pydantic.BaseModel] | None, handler: collections.abc.Callable[[RequestT], collections.abc.Awaitable[ResultT] | ResultT], *, return_direct: bool = False, render_result: collections.abc.Callable[[ResultT], str] | None = None)
 
-   Bases: :py:obj:`Generic`\ [\ :py:obj:`RequestT`\ , :py:obj:`ResultT`\ ]
 
 
    A Pydantic-validated tool shared by agents, voice, and background triggers.

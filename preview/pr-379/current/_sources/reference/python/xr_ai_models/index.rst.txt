@@ -221,7 +221,6 @@ Package Contents
 
 .. py:class:: EmbeddingService
 
-   Bases: :py:obj:`Protocol`
 
 
    Structural interface for text-embedding services.
@@ -279,7 +278,6 @@ Package Contents
 
 .. py:class:: LLMService
 
-   Bases: :py:obj:`Protocol`
 
 
    Structural interface for text chat-completion services.
@@ -324,7 +322,6 @@ Package Contents
 
 .. py:class:: STTService
 
-   Bases: :py:obj:`Protocol`
 
 
    Structural interface for speech-to-text services.
@@ -435,7 +432,6 @@ Package Contents
 
 .. py:class:: TTSService
 
-   Bases: :py:obj:`Protocol`
 
 
    Structural interface for text-to-speech services.
@@ -493,7 +489,6 @@ Package Contents
 
 .. py:class:: VLMService
 
-   Bases: :py:obj:`Protocol`
 
 
    Structural interface for visual chat-completion services.
@@ -916,7 +911,6 @@ Package Contents
 
 .. py:class:: EmbeddingSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', model_name: str = '', api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None)
 
-   Bases: :py:obj:`_RoleSpec`
 
 
    Configuration for a text-embedding model role.
@@ -1002,7 +996,6 @@ Package Contents
 
 .. py:class:: LLMSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', model_name: str = '', api_key_env: str | None = None, reasoning_field: str | None = None, capabilities: dict[str, Any] | None = None, default_extras: dict[str, Any] | None = None, timeout: float = 60.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None)
 
-   Bases: :py:obj:`_RoleSpec`
 
 
    Configuration for a text chat-completion model role.
@@ -1091,7 +1084,6 @@ Package Contents
 
 .. py:class:: STTSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', api_key_env: str | None = None, timeout: float = 30.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None)
 
-   Bases: :py:obj:`_RoleSpec`
 
 
    Configuration for a speech-to-text model role.
@@ -1120,7 +1112,6 @@ Package Contents
 
 .. py:class:: TTSSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', api_key_env: str | None = None, timeout: float = 30.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None)
 
-   Bases: :py:obj:`_RoleSpec`
 
 
    Configuration for a text-to-speech model role.
@@ -1149,7 +1140,6 @@ Package Contents
 
 .. py:class:: VLMSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', model_name: str = '', api_key_env: str | None = None, capabilities: dict[str, Any] | None = None, default_extras: dict[str, Any] | None = None, timeout: float = 60.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None)
 
-   Bases: :py:obj:`_RoleSpec`
 
 
    Configuration for an image- or video-language model role.

@@ -124,7 +124,6 @@ Package Contents
 
 .. py:exception:: FrameUnavailable
 
-   Bases: :py:obj:`Exception`
 
 
    Raised when a fresh camera frame cannot be obtained before the timeout.
@@ -471,7 +470,6 @@ Package Contents
 
 .. py:class:: Subscribe(*args, **kwds)
 
-   Bases: :py:obj:`enum.Flag`
 
 
    Per-participant message-category filter.
@@ -584,7 +582,6 @@ Package Contents
 
 .. py:class:: SlotView
 
-   Bases: :py:obj:`NamedTuple`
 
 
    Zero-copy view into one ring-buffer slot's pixel data.
@@ -935,7 +932,6 @@ Package Contents
 
 .. py:class:: MsgType
 
-   Bases: :py:obj:`enum.IntEnum`
 
 
    Wire-level message identifiers used by the hub IPC protocol.
@@ -1090,7 +1086,6 @@ Package Contents
 
 .. py:class:: PixelFormat
 
-   Bases: :py:obj:`enum.IntEnum`
 
 
    Pixel layouts supported by shared-memory video frames.

@@ -43,7 +43,6 @@ Module Contents
 
 .. py:class:: Tool(name: str, description: str, request_model: type[RequestT], result_model: type[pydantic.BaseModel] | None, handler: collections.abc.Callable[[RequestT], collections.abc.Awaitable[ResultT] | ResultT], *, return_direct: bool = False, render_result: collections.abc.Callable[[ResultT], str] | None = None)
 
-   Bases: :py:obj:`Generic`\ [\ :py:obj:`RequestT`\ , :py:obj:`ResultT`\ ]
 
 
    A Pydantic-validated tool shared by agents, voice, and background triggers.

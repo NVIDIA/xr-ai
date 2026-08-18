@@ -605,8 +605,7 @@ its LiveKit, FastAPI, and uvicorn dependencies are not included.</p>
 <dl class="py exception">
 <dt class="sig sig-object py" id="xr_ai_hub.FrameUnavailable">
 <em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">FrameUnavailable</span></span><a class="headerlink" href="#xr_ai_hub.FrameUnavailable" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">Exception</span></code></p>
-<p>Raised when a fresh camera frame cannot be obtained before the timeout.</p>
+<dd><p>Raised when a fresh camera frame cannot be obtained before the timeout.</p>
 </dd></dl>
 
 <dl class="py class">
@@ -951,8 +950,7 @@ exception is fatal to the processor process.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_hub.Subscribe">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">Subscribe</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwds</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_hub.Subscribe" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">enum.Flag</span></code></p>
-<p>Per-participant message-category filter.</p>
+<dd><p>Per-participant message-category filter.</p>
 <p>Each flag corresponds to a class of pid-scoped ZMQ topics on the hub
 PUB socket. <code class="docutils literal notranslate"><span class="pre">Subscribe.ALL</span></code> (the default) gets every category for
 each subscribed participant; combine flags with <code class="docutils literal notranslate"><span class="pre">|</span></code> to scope down.</p>
@@ -1086,8 +1084,7 @@ slot and must not be retained afterward.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_hub.SlotView">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">SlotView</span></span><a class="headerlink" href="#xr_ai_hub.SlotView" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">NamedTuple</span></code></p>
-<p>Zero-copy view into one ring-buffer slot’s pixel data.</p>
+<dd><p>Zero-copy view into one ring-buffer slot’s pixel data.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_hub.SlotView.data">
 <span class="sig-name descname"><span class="pre">data</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">memoryview</span></em><a class="headerlink" href="#xr_ai_hub.SlotView.data" title="Link to this definition">#</a></dt>
@@ -1387,8 +1384,7 @@ sampling rate. The hub only copies pixels when a request arrives.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_hub.MsgType">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">MsgType</span></span><a class="headerlink" href="#xr_ai_hub.MsgType" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">enum.IntEnum</span></code></p>
-<p>Wire-level message identifiers used by the hub IPC protocol.</p>
+<dd><p>Wire-level message identifiers used by the hub IPC protocol.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_hub.MsgType.FRAME_SIGNAL">
 <span class="sig-name descname"><span class="pre">FRAME_SIGNAL</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#xr_ai_hub.MsgType.FRAME_SIGNAL" title="Link to this definition">#</a></dt>
@@ -1508,8 +1504,7 @@ sampling rate. The hub only copies pixels when a request arrives.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_hub.PixelFormat">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">PixelFormat</span></span><a class="headerlink" href="#xr_ai_hub.PixelFormat" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">enum.IntEnum</span></code></p>
-<p>Pixel layouts supported by shared-memory video frames.</p>
+<dd><p>Pixel layouts supported by shared-memory video frames.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_hub.PixelFormat.I420">
 <span class="sig-name descname"><span class="pre">I420</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#xr_ai_hub.PixelFormat.I420" title="Link to this definition">#</a></dt>

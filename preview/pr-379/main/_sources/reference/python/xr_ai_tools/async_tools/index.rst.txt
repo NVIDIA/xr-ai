@@ -22,7 +22,6 @@ Module Contents
 
 .. py:class:: AsyncTool(name: str, description: str, request_model: type[RequestT], chunk_model: type[ChunkT], handler: collections.abc.Callable[[RequestT], collections.abc.AsyncIterator[ChunkT]])
 
-   Bases: :py:obj:`Generic`\ [\ :py:obj:`RequestT`\ , :py:obj:`ChunkT`\ ]
 
 
    A validated asynchronous tool independent of any output transport.

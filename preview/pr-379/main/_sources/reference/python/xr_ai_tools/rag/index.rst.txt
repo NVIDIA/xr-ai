@@ -27,7 +27,6 @@ Module Contents
 
 .. py:class:: RetrieveRequest
 
-   Bases: :py:obj:`xr_ai_tools.types.StrictRequest`
 
 
    Search parameters for retrieving relevant document passages.
@@ -57,7 +56,6 @@ Module Contents
 
 .. py:class:: RetrievedChunk
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    A document passage returned by similarity search.
@@ -86,7 +84,6 @@ Module Contents
 
 .. py:class:: RetrieveResult
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    Ranked document passages returned for a retrieval request.
@@ -101,7 +98,6 @@ Module Contents
 
 .. py:class:: ListDocumentsResult
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    Documents currently indexed by the retrieval service.
@@ -116,7 +112,6 @@ Module Contents
 
 .. py:class:: RAGHealthResult
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    Readiness and index statistics reported by the RAG service.

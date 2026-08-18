@@ -24,7 +24,6 @@ Module Contents
 
 .. py:class:: HeadPose
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    Head pose and orientation reported by the OpenXR service.
@@ -97,7 +96,6 @@ Module Contents
 
 .. py:class:: OpenXRHealth
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    OpenXR service health and session state.

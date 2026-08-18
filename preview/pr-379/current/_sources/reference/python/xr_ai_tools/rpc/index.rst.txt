@@ -31,7 +31,6 @@ Module Contents
 
 .. py:exception:: RPCError(message: str, *, code: str = 'rpc_error')
 
-   Bases: :py:obj:`RuntimeError`
 
 
    A transport, protocol, or remote execution failure.

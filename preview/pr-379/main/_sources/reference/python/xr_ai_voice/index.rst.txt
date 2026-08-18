@@ -8,7 +8,7 @@ xr_ai_voice
    Public voice runtime for XR agents.
 
    Applications configure and register :class:`VoiceAgent`; media sessions,
-   Pipecat, audio framing, and pipeline processors are implementation details.
+   audio framing, and pipeline processors are implementation details.
 
 
 
@@ -108,7 +108,6 @@ Package Contents
 
 .. py:class:: UserQuery
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    One accepted user query emitted by the voice input boundary.
@@ -130,7 +129,6 @@ Package Contents
 
 .. py:class:: VoiceAgent(*, query_topic: xr_ai_runtime.Topic[UserQuery], stt: xr_ai_models.STTService, tts: xr_ai_models.TTSService, vad: xr_ai_voice._processors.VadConfig, voice_gate: xr_ai_voicegate.VoiceGateConfig, probes: collections.abc.Mapping[str, xr_ai_voice._readiness.ProbeFn] | None = None, ready_file: pathlib.Path | None = None, closeables: collections.abc.Iterable[Any] = (), text_topic: str = 'agent.response', idle_timeout_secs: float | None = None, transport: xr_ai_voice._transport.HubVoiceTransport | None = None, response_capacity: int = 32, text_input: bool = True, participant_left_topic: xr_ai_runtime.Topic[VoiceParticipantLeft] | None = None, interrupted_topic: xr_ai_runtime.Topic[VoiceInterrupted] | None = None, interrupt_on_supersede: bool = False)
 
-   Bases: :py:obj:`xr_ai_runtime.Agent`
 
 
    Own voice media lifecycle and bridge runtime input and output topics.
@@ -154,7 +152,6 @@ Package Contents
 
 .. py:class:: VoiceInterrupted
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    Notification that participant-scoped or global voice work was interrupted.
@@ -162,7 +159,6 @@ Package Contents
 
 .. py:class:: VoiceOutput
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    One complete response or one chunk of an incremental voice response.
@@ -217,7 +213,6 @@ Package Contents
 
 .. py:class:: VoiceParticipantLeft
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    Notification that one participant left the voice transport.
@@ -225,7 +220,6 @@ Package Contents
 
 .. py:exception:: VoiceStreamClosedError
 
-   Bases: :py:obj:`ValueError`
 
 
    Raised when output targets a voice stream the consumer already closed.
@@ -233,7 +227,6 @@ Package Contents
 
 .. py:class:: VoiceTranscript
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    One final STT result emitted before voice-gate filtering.
@@ -255,22 +248,9 @@ Package Contents
 
 .. py:class:: HubVoiceTransport(input_name: str | None = None, output_name: str | None = None)
 
-   Bases: :py:obj:`pipecat.transports.base_transport.BaseTransport`
 
 
-   Owns the ProcessorEndpoint + bidirectional Pipecat transports.
-
-
-   .. py:method:: input() -> XRMediaHubInputTransport
-
-      Return the Pipecat input transport backed by the media hub.
-
-
-
-   .. py:method:: output() -> XRMediaHubOutputTransport
-
-      Return the Pipecat output transport backed by the media hub.
-
+   Own the hub endpoint and bidirectional voice media transport.
 
 
    .. py:property:: endpoint
