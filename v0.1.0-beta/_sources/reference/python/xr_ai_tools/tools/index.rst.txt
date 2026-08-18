@@ -14,9 +14,9 @@ Classes
 
 .. autoapisummary::
 
-   xr_ai_tools.tools.ToolInvocationResult
-   xr_ai_tools.tools.Tool
-   xr_ai_tools.tools.ToolSet
+   xr_ai_tools.ToolInvocationResult
+   xr_ai_tools.Tool
+   xr_ai_tools.ToolSet
 
 
 Module Contents

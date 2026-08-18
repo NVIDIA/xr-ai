@@ -349,6 +349,8 @@
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">API Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
@@ -373,6 +375,9 @@
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 </ul>
 </details></li>
 </ul>
@@ -500,7 +505,7 @@ audio framing, and pipeline processors are implementation details.</p>
 <dt class="sig sig-object py" id="xr_ai_voice.VadConfig">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_voice.</span></span><span class="sig-name descname"><span class="pre">VadConfig</span></span><a class="headerlink" href="#xr_ai_voice.VadConfig" title="Link to this definition">#</a></dt>
 <dd><p>Tuning knobs for the Silero-VAD utterance detector.</p>
-<p>Mirrors the constructor of <code class="xref py py-class docutils literal notranslate"><span class="pre">xr_ai_vad.VadDetector</span></code>. Default
+<p>Mirrors the constructor of <a class="reference internal" href="../xr_ai_vad/index.html#xr_ai_vad.VadDetector" title="xr_ai_vad.VadDetector"><code class="xref py py-class docutils literal notranslate"><span class="pre">xr_ai_vad.VadDetector</span></code></a>. Default
 values match the in-tree samples’ current behavior.</p>
 <p><code class="docutils literal notranslate"><span class="pre">stop_probe_after_s</span></code> — cadence in seconds for up to three STT probes of
 the partial audio buffer. This gives STOP commands a fast interrupt path
@@ -572,7 +577,7 @@ ends. Set to <code class="docutils literal notranslate"><span class="pre">0</spa
 <dd><em class="sig-param"><span class="n"><span class="pre">stt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_models/index.html#xr_ai_models.STTService" title="xr_ai_models.STTService"><span class="pre">xr_ai_models.STTService</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">tts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_models/index.html#xr_ai_models.TTSService" title="xr_ai_models.TTSService"><span class="pre">xr_ai_models.TTSService</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">vad</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_voice.VadConfig" title="xr_ai_voice.VadConfig"><span class="pre">xr_ai_voice.VadConfig</span></a></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">voice_gate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">xr_ai_voicegate.VoiceGateConfig</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">voice_gate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGateConfig" title="xr_ai_voicegate.VoiceGateConfig"><span class="pre">xr_ai_voicegate.VoiceGateConfig</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">probes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Awaitable</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">ready_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">closeables</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">()</span></span></em>,</dd>
