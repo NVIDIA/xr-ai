@@ -53,11 +53,13 @@ class ToolLoopError(RuntimeError):
         messages: Sequence[ChatMessage],
         tool_calls: Sequence[ToolCallRecord],
         iterations: int,
+        rejected_response: ChatResponse | None = None,
     ) -> None:
         super().__init__(message)
         self.messages = tuple(messages)
         self.tool_calls = tuple(tool_calls)
         self.iterations = iterations
+        self.rejected_response = rejected_response
 
 
 class ToolLoopIterationLimitError(ToolLoopError):
@@ -159,12 +161,10 @@ async def run_tool_loop(
     for iteration in range(1, max_iterations + 1):
         response = await call_model(tuple(transcript), definitions)
         calls = tuple(response.tool_calls or ())
-        transcript.append(
-            ChatMessage(
-                role="assistant",
-                content=response.content,
-                tool_calls=list(calls) if response.tool_calls is not None else None,
-            )
+        assistant_message = ChatMessage(
+            role="assistant",
+            content=response.content,
+            tool_calls=list(calls) if response.tool_calls is not None else None,
         )
 
         if response.finish_reason in {"length", "max_tokens"}:
@@ -173,6 +173,7 @@ async def run_tool_loop(
                 messages=transcript,
                 tool_calls=records,
                 iterations=iteration,
+                rejected_response=response,
             )
 
         if response.finish_reason == "tool_calls" and not calls:
@@ -181,15 +182,20 @@ async def run_tool_loop(
                 messages=transcript,
                 tool_calls=records,
                 iterations=iteration,
+                rejected_response=response,
             )
 
         call_ids = tuple(call.id for call in calls)
-        if any(not call_id.strip() for call_id in call_ids):
+        if any(
+            not isinstance(call_id, str) or not call_id.strip()
+            for call_id in call_ids
+        ):
             raise ToolLoopMalformedResponseError(
-                "tool-call IDs must not be blank",
+                "tool-call IDs must be non-empty strings",
                 messages=transcript,
                 tool_calls=records,
                 iterations=iteration,
+                rejected_response=response,
             )
         if len(set(call_ids)) != len(call_ids) or seen_call_ids.intersection(call_ids):
             raise ToolLoopMalformedResponseError(
@@ -197,6 +203,7 @@ async def run_tool_loop(
                 messages=transcript,
                 tool_calls=records,
                 iterations=iteration,
+                rejected_response=response,
             )
 
         direct_calls = tuple(
@@ -210,6 +217,7 @@ async def run_tool_loop(
                 messages=transcript,
                 tool_calls=records,
                 iterations=iteration,
+                rejected_response=response,
             )
 
         if len(records) + len(calls) > max_tool_calls:
@@ -218,9 +226,9 @@ async def run_tool_loop(
                 messages=transcript,
                 tool_calls=records,
                 iterations=iteration,
+                rejected_response=response,
             )
 
-        seen_call_ids.update(call_ids)
         if not calls:
             content = response.content.strip()
             if not content:
@@ -229,7 +237,9 @@ async def run_tool_loop(
                     messages=transcript,
                     tool_calls=records,
                     iterations=iteration,
+                    rejected_response=response,
                 )
+            transcript.append(assistant_message)
             return ToolLoopResult(
                 content=content,
                 messages=tuple(transcript),
@@ -238,6 +248,8 @@ async def run_tool_loop(
                 return_direct=False,
             )
 
+        transcript.append(assistant_message)
+        seen_call_ids.update(call_ids)
         for call in calls:
             result = await handle_tool_call(call, tools)
             transcript.append(result.message)

@@ -84,7 +84,7 @@ class _Model:
         return next(self._responses)
 
 
-def _call(call_id: str, name: str, arguments: str) -> ToolCall:
+def _call(call_id: Any, name: str, arguments: str) -> ToolCall:
     return ToolCall(id=call_id, name=name, arguments=arguments)
 
 
@@ -288,6 +288,7 @@ async def test_invalid_direct_call_can_be_repaired_without_returning() -> None:
 
 
 async def test_mixed_direct_return_batch_is_rejected_before_any_effect() -> None:
+    initial = (ChatMessage(role="user", content="both"),)
     invoked: list[str] = []
 
     async def regular(request: ValueRequest) -> ValueResult:
@@ -316,14 +317,16 @@ async def test_mixed_direct_return_batch_is_rejected_before_any_effect() -> None
 
     with pytest.raises(ToolLoopDirectReturnError) as raised:
         await run_tool_loop(
-            (ChatMessage(role="user", content="both"),),
+            initial,
             ToolSet((regular_tool, direct_tool)),
             _Model((_response(tool_calls=calls, finish_reason="tool_calls"),)),
         )
 
     assert invoked == []
     assert raised.value.tool_calls == ()
-    assert raised.value.messages[-1].tool_calls == calls
+    assert raised.value.messages == initial
+    assert raised.value.rejected_response is not None
+    assert raised.value.rejected_response.tool_calls == calls
 
 
 async def test_multiple_direct_return_calls_are_rejected_before_any_effect() -> None:
@@ -359,6 +362,8 @@ async def test_multiple_direct_return_calls_are_rejected_before_any_effect() -> 
 @pytest.mark.parametrize(
     "calls",
     [
+        [_call(None, "record", '{"value":1}')],
+        [_call(7, "record", '{"value":1}')],
         [_call("", "record", '{"value":1}')],
         [_call("  ", "record", '{"value":1}')],
         [
@@ -387,6 +392,9 @@ async def test_malformed_tool_call_ids_are_rejected_before_any_effect(
 
     assert invoked == []
     assert raised.value.tool_calls == ()
+    assert [message.role for message in raised.value.messages] == ["user"]
+    assert raised.value.rejected_response is not None
+    assert raised.value.rejected_response.tool_calls == calls
 
 
 async def test_reused_tool_call_id_is_rejected_before_repeated_effect() -> None:
@@ -419,6 +427,14 @@ async def test_reused_tool_call_id_is_rejected_before_repeated_effect() -> None:
 
     assert invoked == [1]
     assert len(raised.value.tool_calls) == 1
+    assert [message.role for message in raised.value.messages] == [
+        "user",
+        "assistant",
+        "tool",
+    ]
+    assert raised.value.rejected_response is not None
+    assert raised.value.rejected_response.tool_calls is not None
+    assert raised.value.rejected_response.tool_calls[0].id == "reused"
 
 
 async def test_tool_calls_finish_reason_requires_a_nonempty_call_batch() -> None:
@@ -431,6 +447,7 @@ async def test_tool_calls_finish_reason_requires_a_nonempty_call_batch() -> None
 
 
 async def test_tool_call_budget_rejects_whole_batch_before_effects() -> None:
+    initial = (ChatMessage(role="user", content="record"),)
     invoked: list[int] = []
 
     async def record(request: ValueRequest) -> ValueResult:
@@ -445,7 +462,7 @@ async def test_tool_call_budget_rejects_whole_batch_before_effects() -> None:
 
     with pytest.raises(ToolLoopToolCallLimitError) as raised:
         await run_tool_loop(
-            (ChatMessage(role="user", content="record"),),
+            initial,
             ToolSet((tool,)),
             _Model((_response(tool_calls=calls, finish_reason="tool_calls"),)),
             max_tool_calls=1,
@@ -454,6 +471,9 @@ async def test_tool_call_budget_rejects_whole_batch_before_effects() -> None:
     assert invoked == []
     assert raised.value.iterations == 1
     assert raised.value.tool_calls == ()
+    assert raised.value.messages == initial
+    assert raised.value.rejected_response is not None
+    assert raised.value.rejected_response.tool_calls == calls
 
 
 async def test_iteration_limit_keeps_partial_transcript_and_audit() -> None:
@@ -497,6 +517,7 @@ async def test_iteration_limit_keeps_partial_transcript_and_audit() -> None:
 async def test_truncated_batch_is_rejected_before_tool_execution(
     finish_reason: str,
 ) -> None:
+    initial = (ChatMessage(role="user", content="record"),)
     invoked: list[int] = []
 
     async def record(request: ValueRequest) -> ValueResult:
@@ -516,13 +537,15 @@ async def test_truncated_batch_is_rejected_before_tool_execution(
 
     with pytest.raises(ToolLoopTruncatedResponseError) as raised:
         await run_tool_loop(
-            (ChatMessage(role="user", content="record"),),
+            initial,
             ToolSet((tool,)),
             model,
         )
 
     assert invoked == []
-    assert raised.value.messages[-1].content == "partial"
+    assert raised.value.messages == initial
+    assert raised.value.rejected_response is not None
+    assert raised.value.rejected_response.content == "partial"
 
 
 async def test_empty_model_response_is_not_treated_as_success() -> None:
@@ -531,10 +554,9 @@ async def test_empty_model_response_is_not_treated_as_success() -> None:
     with pytest.raises(ToolLoopEmptyResponseError) as raised:
         await run_tool_loop(initial, ToolSet(()), _Model((_response("  "),)))
 
-    assert raised.value.messages == (
-        *initial,
-        ChatMessage(role="assistant", content="  "),
-    )
+    assert raised.value.messages == initial
+    assert raised.value.rejected_response is not None
+    assert raised.value.rejected_response.content == "  "
 
 
 async def test_cancellation_propagates_from_tool_execution() -> None:

@@ -71,7 +71,9 @@ structured tool-call audit. Unknown tools and invalid Pydantic arguments are
 returned to the model for repair. Iteration exhaustion, tool-call budget
 exhaustion, empty or truncated responses, and unsafe mixed `return_direct`
 batches raise typed errors carrying the partial transcript and audit. Blank or
-duplicate tool-call IDs are rejected before executing their batch.
+non-string or duplicate tool-call IDs are rejected before executing their batch.
+Error `messages` contain only a valid, resumable transcript; the rejected model
+turn remains available separately as `rejected_response` for diagnostics.
 
 The application or agent continues to own prompts, conversation history, model
 parameters, retries, participant context, cancellation, and background tasks.
