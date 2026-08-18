@@ -5,8 +5,8 @@
 
 # Networking and firewall
 
-The XR-Media-Hub and CloudXR runtime use the following ports. Open them permanently
-if a firewall is active.
+XR-Media-Hub, CloudXR, and optional application viewers use the following
+ports. Open only the externally reachable ports required by the deployment.
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
@@ -14,6 +14,7 @@ if a firewall is active.
 | 7881 | TCP | LiveKit WebRTC TCP fallback (DTLS/SRTP — already encrypted) |
 | 7882 | UDP | LiveKit WebRTC UDP media (DTLS/SRTP — already encrypted) |
 | 8080 | TCP | Web client + token server + wss:// /rtc proxy (HTTPS — the single entry point for browser, Android, iOS, and visionOS clients) |
+| 8092 | TCP | Optional live agent-event viewer (plain HTTP — bound to 127.0.0.1 by default; do not expose to an untrusted network) |
 | 48322 | TCP | CloudXR WSS proxy (XR headset or client connection) |
 
 ## Ubuntu or Debian (`ufw`)
@@ -62,6 +63,49 @@ sudo firewall-cmd --permanent --add-port=7882/udp
 sudo firewall-cmd --permanent --add-port=8080/tcp
 sudo firewall-cmd --permanent --add-port=48322/tcp
 sudo firewall-cmd --reload
+```
+
+## Live agent-event viewer
+
+Samples that use `WebEventsAgent` serve their live event page at
+`http://127.0.0.1:8092` by default. Because the listener is loopback-only, no
+firewall rule is needed when the browser runs on the XR-AI host. For access
+from a development machine, keep the loopback binding and use an SSH tunnel:
+
+```bash
+ssh -L 8092:127.0.0.1:8092 user@xr-host
+```
+
+Then open `http://127.0.0.1:8092` locally.
+
+For direct access on a trusted private network, explicitly change the worker
+configuration in `agent-samples/simple-vlm-example/yaml/simple_vlm_example_worker.yaml`
+or `agent-samples/xr-render-demo/yaml/xr_render_demo_worker.yaml`:
+
+```yaml
+web_events_host: 0.0.0.0
+web_events_port: 8092
+```
+
+Restrict the firewall rule to the client subnet instead of opening the port to
+every source. For example, with `ufw` and a `192.168.1.0/24` development
+network:
+
+```bash
+sudo ufw allow from 192.168.1.0/24 to any port 8092 proto tcp
+sudo ufw reload
+```
+
+Apply the equivalent source-restricted rule to the cloud security group when
+the host is behind a provider firewall. The viewer rejects unrecognized HTTP
+`Host` names to prevent DNS rebinding. Connect using a literal server address;
+an authenticated reverse proxy can instead rewrite `Host` to `127.0.0.1`.
+
+```{warning}
+The live event viewer does not provide authentication or TLS, and its payloads
+can include transcripts and camera-derived text. Do not expose port 8092 to
+the public Internet. Use the loopback binding with an SSH tunnel, or put the
+viewer behind an authenticated TLS reverse proxy.
 ```
 
 ## TLS for the web client

@@ -318,6 +318,7 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
@@ -355,6 +356,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_logging/index.html">xr_ai_logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
 </ul>
 </details></li>
 </ul>
@@ -537,7 +539,9 @@ the XR compositor and the agentic LLM do not share a card.</p>
 <h2>Worker configuration<a class="headerlink" href="#worker-configuration" title="Link to this heading">#</a></h2>
 <p>The worker reads two config files:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">yaml/xr_render_demo_worker.yaml</span></code> — native capability endpoints, text-memory directory, and VAD tunables.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">yaml/xr_render_demo_worker.yaml</span></code> — native capability endpoints, text-memory
+directory, VAD tunables, and the <code class="docutils literal notranslate"><span class="pre">web_events_host</span></code> / <code class="docutils literal notranslate"><span class="pre">web_events_port</span></code> live
+viewer listener.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code> (deployment profile set by <code class="docutils literal notranslate"><span class="pre">models_config:</span></code> in the
 worker YAML): model endpoint and deployment declarations consumed by
 <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> and the orchestrator.  Each entry maps a logical name
@@ -692,6 +696,8 @@ context in future turns so the model understands “fix that”, “undo”,
 “the one I just added”. Final messages are also persisted through native
 text memory without model scratch output or tool traces.</p></li>
 </ol>
+<p>The worker mirrors accepted XR requests and non-empty <code class="docutils literal notranslate"><span class="pre">voice.output</span></code> chunks to
+its live event viewer at <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code> by default.</p>
 </section>
 <section id="native-capability-composition">
 <h2>Native capability composition<a class="headerlink" href="#native-capability-composition" title="Link to this heading">#</a></h2>
@@ -789,7 +795,7 @@ a streaming client connects. LOVR cannot start before then.</p>
 It derives schemas from the worker’s native tools and evaluates tool
 effects against deterministic fixtures, so the live LOVR scene is not mutated.
 Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/209368cbaaa7c06b0d9d36ea33ee8fbfedf9c42a/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/474b944e4f55f8eb4d407998bb9cfb41f98ea210/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
 for the case format and the watch-mode loop. Run with:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo/worker<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>python<span class="w"> </span>agent-samples/xr-render-demo/eval/eval.py
