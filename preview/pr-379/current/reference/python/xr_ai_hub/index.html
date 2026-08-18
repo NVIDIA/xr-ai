@@ -596,7 +596,7 @@ its LiveKit, FastAPI, and uvicorn dependencies are not included.</p>
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">LiveFrameSource</span></span><span class="sig-paren">(</span>
 
 <dl>
-<dd><em class="sig-param"><span class="n"><span class="pre">endpoint</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">xr_ai_hub._processor.ProcessorEndpoint</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">endpoint</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_hub.ProcessorEndpoint" title="xr_ai_hub.ProcessorEndpoint"><span class="pre">xr_ai_hub.ProcessorEndpoint</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">max_age_s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2.0</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">timeout_s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5.0</span></span></em>,</dd>
@@ -624,7 +624,7 @@ model work without adding dependencies to the hub client.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_hub.LiveFrameSource.get">
-<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">xr_ai_hub._types.FrameData</span></span></span><a class="headerlink" href="#xr_ai_hub.LiveFrameSource.get" title="Link to this definition">#</a></dt>
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_hub.FrameData" title="xr_ai_hub.FrameData"><span class="pre">xr_ai_hub.FrameData</span></a></span></span><a class="headerlink" href="#xr_ai_hub.LiveFrameSource.get" title="Link to this definition">#</a></dt>
 <dd><p>Return fresh pixels for a participant.</p>
 <section id="id4">
 <h4>Raises<a class="headerlink" href="#id4" title="Link to this heading">#</a></h4>
@@ -807,13 +807,13 @@ an older build that does not answer probes.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_hub.ProcessorEndpoint.send_return_data">
-<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">send_return_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">xr_ai_hub._types.DataMessage</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_hub.ProcessorEndpoint.send_return_data" title="Link to this definition">#</a></dt>
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">send_return_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_hub.DataMessage" title="xr_ai_hub.DataMessage"><span class="pre">xr_ai_hub.DataMessage</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_hub.ProcessorEndpoint.send_return_data" title="Link to this definition">#</a></dt>
 <dd><p>Send an application data message to its target participant.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_hub.ProcessorEndpoint.send_return_audio">
-<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">send_return_audio</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chunk</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">xr_ai_hub._types.AudioChunk</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_hub.ProcessorEndpoint.send_return_audio" title="Link to this definition">#</a></dt>
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">send_return_audio</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chunk</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_hub.AudioChunk" title="xr_ai_hub.AudioChunk"><span class="pre">xr_ai_hub.AudioChunk</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_hub.ProcessorEndpoint.send_return_audio" title="Link to this definition">#</a></dt>
 <dd><p>Queue a PCM audio chunk for playback by its target participant.</p>
 </dd></dl>
 
@@ -888,11 +888,11 @@ without coupling process readiness to participant discovery.</p>
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">request_frame</span></span><span class="sig-paren">(</span>
 
 <dl>
-<dd><em class="sig-param"><span class="n"><span class="pre">signal</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">xr_ai_hub._types.FrameSignal</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">signal</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_hub.FrameSignal" title="xr_ai_hub.FrameSignal"><span class="pre">xr_ai_hub.FrameSignal</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_FRAME_REQUEST_TIMEOUT</span></span></em>,</dd>
 </dl>
 
-<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">xr_ai_hub._types.FrameData</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_hub.ProcessorEndpoint.request_frame" title="Link to this definition">#</a></dt>
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_hub.FrameData" title="xr_ai_hub.FrameData"><span class="pre">xr_ai_hub.FrameData</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_hub.ProcessorEndpoint.request_frame" title="Link to this definition">#</a></dt>
 <dd><p>Request a pixel-data snapshot of the latest frame for this participant/track.</p>
 <p>The hub holds the most recent SHM slot and copies pixels only when a
 request arrives — no frame data is sent unless explicitly requested.</p>
@@ -1011,7 +1011,7 @@ one. The creator is responsible for eventually calling <a class="reference inter
 <dd><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bytes</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">memoryview</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">height</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">fmt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">xr_ai_hub._types.PixelFormat</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">fmt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_hub.PixelFormat" title="xr_ai_hub.PixelFormat"><span class="pre">xr_ai_hub.PixelFormat</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">pts_us</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">seq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>,</dd>
 </dl>
@@ -1030,7 +1030,7 @@ signal; consumers release occupied slots with <a class="reference internal" href
 
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_hub.ShmRingBuffer.read_slot">
-<span class="sig-name descname"><span class="pre">read_slot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">signal</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">xr_ai_hub._types.FrameSignal</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_hub.SlotView" title="xr_ai_hub.SlotView"><span class="pre">SlotView</span></a></span></span><a class="headerlink" href="#xr_ai_hub.ShmRingBuffer.read_slot" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">read_slot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">signal</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_hub.FrameSignal" title="xr_ai_hub.FrameSignal"><span class="pre">xr_ai_hub.FrameSignal</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_hub.SlotView" title="xr_ai_hub.SlotView"><span class="pre">SlotView</span></a></span></span><a class="headerlink" href="#xr_ai_hub.ShmRingBuffer.read_slot" title="Link to this definition">#</a></dt>
 <dd><p>Return a zero-copy view of a ready slot’s pixel data.</p>
 <p>The view remains valid until <a class="reference internal" href="#xr_ai_hub.ShmRingBuffer.release_slot" title="xr_ai_hub.ShmRingBuffer.release_slot"><code class="xref py py-meth docutils literal notranslate"><span class="pre">release_slot()</span></code></a> is called for the
 slot and must not be retained afterward.</p>
@@ -1076,7 +1076,7 @@ slot and must not be retained afterward.</p>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_hub.SlotView.signal">
-<span class="sig-name descname"><span class="pre">signal</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">xr_ai_hub._types.FrameSignal</span></em><a class="headerlink" href="#xr_ai_hub.SlotView.signal" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">signal</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#xr_ai_hub.FrameSignal" title="xr_ai_hub.FrameSignal"><span class="pre">xr_ai_hub.FrameSignal</span></a></em><a class="headerlink" href="#xr_ai_hub.SlotView.signal" title="Link to this definition">#</a></dt>
 <dd><p>Metadata identifying and describing the occupied slot.</p>
 </dd></dl>
 
