@@ -23,6 +23,7 @@ from xr_ai_voice import (
     VoiceParticipantLeft,
 )
 from xr_ai_voicegate import load_voice_gate_config
+from xr_ai_web_events import WebEventsAgent
 
 from .config import WorkerConfig
 from .events import (
@@ -38,6 +39,7 @@ from .instrument_alerts import InstrumentAlertAgent
 from .instrument_monitor import InstrumentMonitorAgent
 from .instruments import LabInstrumentAgent
 from .monitor import MonitorAgent
+from .web_events import WebEventsAdapterAgent
 
 
 class _VoiceAggregationLifecycleAgent(Agent):
@@ -117,6 +119,16 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     )
 
     runtime = AgentRuntime()
+    web_events = runtime.register(
+        "web-events",
+        WebEventsAgent(
+            host=config.web_events_host,
+            port=config.web_events_port,
+            max_events=config.web_events_max_events,
+            title="Lab instrument monitoring events",
+        ),
+    )
+    runtime.register("web-events-adapter", WebEventsAdapterAgent())
     files = runtime.register(
         "file-output",
         FileOutputAgent(
@@ -186,17 +198,19 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     logger.info("file outputs → {}", config.artifacts_dir)
     logger.info("lab-instrument-monitoring starting")
     async with _relay_event_log(config.artifacts_dir):
-        async with runtime:
-            monitor.bind_runtime(runtime)
-            instrument_monitor.bind_runtime(runtime)
-            try:
-                await voice.run(runtime)
-            finally:
-                await foreground.stop()
-                await instrument_monitor.stop()
-                await monitor.stop()
-                await images.stop()
-                await voice_aggregation.stop()
+        async with web_events:
+            logger.info("live events → {}", web_events.url)
+            async with runtime:
+                monitor.bind_runtime(runtime)
+                instrument_monitor.bind_runtime(runtime)
+                try:
+                    await voice.run(runtime)
+                finally:
+                    await foreground.stop()
+                    await instrument_monitor.stop()
+                    await monitor.stop()
+                    await images.stop()
+                    await voice_aggregation.stop()
     logger.info("lab-instrument-monitoring stopped")
 
 

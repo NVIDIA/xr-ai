@@ -17,6 +17,7 @@ dependencies = [
     "xr-ai-models",
     "xr-ai-tools[frames,image-editing,marker-tracking,vision]",
     "xr-ai-voice",
+    "xr-ai-web-events",
     "xr-ai-voicegate",
     "loguru>=0.7",
     "pydantic>=2.12",
@@ -30,6 +31,7 @@ xr-ai-logging = { path = "../../../utils/xr-ai-logging", editable = true }
 xr-ai-models = { path = "../../../agent-sdk/xr-ai-models", editable = true }
 xr-ai-tools = { path = "../../../agent-sdk/xr-ai-tools", editable = true }
 xr-ai-voice = { path = "../../../agent-sdk/xr-ai-voice", editable = true }
+xr-ai-web-events = { path = "../../../agent-sdk/xr-ai-web-events", editable = true }
 xr-ai-voicegate = { path = "../../../utils/xr-ai-voicegate", editable = true }
 
 [project.scripts]

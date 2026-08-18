@@ -32,6 +32,7 @@ from xr_ai_voice import (
     VoiceParticipantLeft,
     VoiceTranscript,
 )
+from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent
 
 _REPO = Path(__file__).resolve().parents[1]
 _SAMPLE = _REPO / "agent-samples" / "lab-instrument-monitoring"
@@ -94,6 +95,9 @@ from lab_instrument_monitoring_worker.monitor import (  # noqa: E402  # pyright:
     StartMonitoringRequest,
     parse_monitor_response,
 )
+from lab_instrument_monitoring_worker.web_events import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    WebEventsAdapterAgent,
+)
 
 
 class _InstrumentEventCollector(Agent):
@@ -119,6 +123,16 @@ class _InstrumentEventCollector(Agent):
     @subscribe(VOICE_CONTRIBUTION_TOPIC)
     async def voice_output(self, event: VoiceOutput, _ctx: RuntimeContext) -> None:
         self.voice.append(event)
+
+
+class _WebEventCollector(Agent):
+    def __init__(self) -> None:
+        super().__init__()
+        self.events: list[WebEvent] = []
+
+    @subscribe(WEB_EVENT_TOPIC)
+    async def web_event(self, event: WebEvent, _ctx: RuntimeContext) -> None:
+        self.events.append(event)
 
 
 def _fake_endpoint() -> SimpleNamespace:
@@ -190,12 +204,14 @@ def test_sample_uses_named_native_agents_and_shared_connection_client() -> None:
         "instrument_alerts.py",
         "instrument_monitor.py",
         "monitor.py",
+        "web_events.py",
         "device_map.py",
         "instruments.py",
     } <= {path.name for path in package.glob("*.py")}
     assert "xr-ai-agent-runtime" in dependencies
     assert "xr-ai-tools[frames,image-editing,marker-tracking,vision]" in dependencies
     assert "xr-ai-voice" in dependencies
+    assert "xr-ai-web-events" in dependencies
     assert "xr-ai-nat" not in dependencies
     assert "xr-ai-pipecat" not in dependencies
     assert all("mcp" not in dependency.lower() for dependency in dependencies)
@@ -203,7 +219,9 @@ def test_sample_uses_named_native_agents_and_shared_connection_client() -> None:
     assert hub["enable_token_server"] is True
     assert (_SAMPLE / "yaml" / hub["web_client_dir"]).resolve() == _REPO / "client-samples" / "web"
     assert not any(path.name == "web" for path in _SAMPLE.iterdir())
-    assert 'text_topic="agent.response"' in (package / "app.py").read_text()
+    app_source = (package / "app.py").read_text()
+    assert 'text_topic="agent.response"' in app_source
+    assert "async with web_events:" in app_source
 
 
 def test_published_guide_covers_architecture_and_adaptation() -> None:
@@ -247,6 +265,9 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     assert config.device_map.resolve(MarkerType.ARUCO, "99") is None
     assert config.artifacts_dir == _SAMPLE / "artifacts"
     assert config.capture_marker_scans is False
+    assert config.web_events_host == "127.0.0.1"
+    assert config.web_events_port == 8092
+    assert config.web_events_max_events == 5_000
     assert config.monitor_interval_s == 5.0
     assert config.instrument_state_interval_s == 10.0
     assert config.instrument_lost_after_s == 30.0
@@ -442,9 +463,7 @@ async def test_instrument_monitor_emits_only_changes_lost_once_and_full_state() 
 
     async with runtime:
         monitor.bind_runtime(runtime)
-        await monitor.start_instrument_monitoring.execute(
-            MonitoringRequest(participant_id="participant-1")
-        )
+        await monitor.start_instrument_monitoring.execute(MonitoringRequest(participant_id="participant-1"))
         await asyncio.wait_for(read_started.wait(), timeout=1.0)
         await monitor._observe(
             "participant-1",
@@ -582,15 +601,9 @@ async def test_monitor_controls_are_participant_scoped_and_idempotent() -> None:
                 instruction="a different request",
             )
         )
-        running = await monitor.monitoring_status.execute(
-            MonitoringRequest(participant_id="participant-1")
-        )
-        stopped = await monitor.stop_monitoring.execute(
-            MonitoringRequest(participant_id="participant-1")
-        )
-        stopped_again = await monitor.stop_monitoring.execute(
-            MonitoringRequest(participant_id="participant-1")
-        )
+        running = await monitor.monitoring_status.execute(MonitoringRequest(participant_id="participant-1"))
+        stopped = await monitor.stop_monitoring.execute(MonitoringRequest(participant_id="participant-1"))
+        stopped_again = await monitor.stop_monitoring.execute(MonitoringRequest(participant_id="participant-1"))
 
         assert started.active is True
         assert started.instruction == "packages near the doorway"
@@ -792,6 +805,90 @@ async def test_file_output_records_transcript_monitor_instruments_and_foreground
     instruments = (sessions[0] / "instrument-monitoring.jsonl").read_text()
     assert '"event_type":"change"' in instruments
     assert '"event_type":"state"' in instruments
+
+
+@pytest.mark.asyncio
+async def test_web_events_adapter_projects_explicit_sample_topics() -> None:
+    adapter = WebEventsAdapterAgent()
+    collector = _WebEventCollector()
+    runtime = AgentRuntime()
+    runtime.register("web-events-adapter", adapter)
+    runtime.register("collector", collector)
+
+    async with runtime:
+        await runtime.publish(
+            PARTICIPANT_JOINED_TOPIC,
+            VoiceParticipantJoined(),
+            participant_id="participant-1",
+        )
+        await runtime.publish(
+            VOICE_TRANSCRIPT_TOPIC,
+            VoiceTranscript(text="Read the meter", timestamp_us=1),
+            participant_id="participant-1",
+        )
+        await runtime.publish(
+            MONITOR_RECORD_TOPIC,
+            MonitorRecord(timestamp_us=2, record_type="baseline", caption="A lab bench."),
+            participant_id="participant-1",
+        )
+        await runtime.publish(
+            INSTRUMENT_CHANGE_TOPIC,
+            InstrumentChange(
+                timestamp_us=3,
+                change_type="discovered",
+                marker_type=MarkerType.QR_CODE,
+                marker_id="meter-a",
+                device_name="Device1",
+                meter_reading="12 V",
+                last_seen_us=3,
+            ),
+            participant_id="participant-1",
+        )
+        await runtime.publish(
+            INSTRUMENT_LOST_TOPIC,
+            InstrumentLost(
+                timestamp_us=4,
+                marker_type=MarkerType.QR_CODE,
+                marker_id="meter-a",
+                device_name="Device1",
+                meter_reading="12 V",
+                last_seen_us=3,
+            ),
+            participant_id="participant-1",
+        )
+        await runtime.publish(
+            INSTRUMENT_STATE_TOPIC,
+            InstrumentStateSnapshot(timestamp_us=5),
+            participant_id="participant-1",
+        )
+        await runtime.publish(
+            FOREGROUND_RECORD_TOPIC,
+            ForegroundRecord(
+                timestamp_us=6,
+                query="Read the meter",
+                response="Device1 is at 12 V.",
+            ),
+            participant_id="participant-1",
+        )
+        await runtime.publish(
+            PARTICIPANT_LEFT_TOPIC,
+            VoiceParticipantLeft(),
+            participant_id="participant-1",
+        )
+
+    assert [event.topic for event in collector.events] == [
+        "participants.lifecycle",
+        "voice.transcripts",
+        "monitor.observations",
+        "instruments.changes",
+        "instruments.tracking",
+        "instruments.state",
+        "foreground.responses",
+        "participants.lifecycle",
+    ]
+    assert collector.events[0].payload == {"status": "joined"}
+    assert collector.events[-1].payload == {"status": "left"}
+    assert collector.events[3].payload["device_name"] == "Device1"
 
 
 @pytest.mark.asyncio

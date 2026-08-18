@@ -23,6 +23,9 @@ class WorkerConfig:
     device_map: DeviceMap
     artifacts_dir: Path
     capture_marker_scans: bool
+    web_events_host: str
+    web_events_port: int
+    web_events_max_events: int
     foreground_prompt: str
     monitor_prompt: str
     monitor_interval_s: float
@@ -87,6 +90,12 @@ def load_config(path: Path | None) -> WorkerConfig:
         raise ValueError("instrument_lost_after_s must be positive")
     if history_size <= 0:
         raise ValueError("monitor_history_size must be positive")
+    web_events_port = int(data.get("web_events_port", 8092))
+    web_events_max_events = int(data.get("web_events_max_events", 5_000))
+    if not 0 <= web_events_port <= 65_535:
+        raise ValueError("web_events_port must be between 0 and 65535")
+    if web_events_max_events <= 0:
+        raise ValueError("web_events_max_events must be positive")
     idle_timeout = float(data.get("idle_timeout_secs", 0.0))
     return WorkerConfig(
         models_config=_resolve(path, str(data.get("models_config", "models.local.json"))),
@@ -94,6 +103,9 @@ def load_config(path: Path | None) -> WorkerConfig:
         device_map=load_device_map(_resolve(path, str(data.get("device_map_yaml", "device_map.yaml")))),
         artifacts_dir=_resolve(path, str(data.get("artifacts_dir", "../artifacts"))),
         capture_marker_scans=bool(data.get("capture_marker_scans", False)),
+        web_events_host=str(data.get("web_events_host", "127.0.0.1")).strip(),
+        web_events_port=web_events_port,
+        web_events_max_events=web_events_max_events,
         foreground_prompt=_prompt(data, path, "foreground_prompt"),
         monitor_prompt=_prompt(data, path, "monitor_prompt"),
         monitor_interval_s=interval,

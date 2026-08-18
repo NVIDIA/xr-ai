@@ -32,6 +32,7 @@ MonitorAgent while active ──> current frame → image query ──> monitor.
 InstrumentMonitorAgent ──> LabInstrumentAgent ──> change/lost/state topics
  change/lost topics ──> InstrumentAlertAgent ──> VoiceAggregationAgent
  change/lost/state topics ──> FileOutputAgent ──> instrument-monitoring.jsonl
+ selected typed topics ──> WebEventsAdapterAgent ──> browser event viewer
 ```
 
 `ParticipantImageAgent` owns the shared image registry, `CurrentFrameTool`, and
@@ -100,9 +101,14 @@ uv run lab_instrument_monitoring
 ```
 
 Connect a glasses or platform client using the authenticated LiveKit URL,
-room, and token printed by the hub. Port 8080 serves the shared connection web client together with the authenticated
-token and signaling routes. Monitoring output remains file-only; no monitoring
-dashboard is included.
+room, and token printed by the hub. Port 8080 serves the shared connection web
+client together with the authenticated token and signaling routes. The separate
+read-only event viewer runs at <http://127.0.0.1:8092> and groups live output by
+participant and topic. JSONL files remain the durable output.
+
+The event viewer intentionally listens on loopback and does not reuse media-hub
+authentication. Use an SSH tunnel for remote development; do not expose it on
+an untrusted network without an authenticated TLS reverse proxy.
 
 Ask the foreground assistant to start a background task with an optional focus,
 for example “watch for packages near the doorway.” It can report status or stop
@@ -141,13 +147,14 @@ metadata, and tool lifecycles;
 live camera bytes are redacted by the shared vision tool. When
 `capture_marker_scans` is enabled, every lab-instrument invocation saves the
 exact source JPEG under `marker-scans/`; the worker log records that path and
-decoded marker identifiers for debugging. Instrument monitoring
+marker-family counts for debugging. Unmapped marker payloads are represented by
+a bounded hash rather than logged verbatim. Instrument monitoring
 records contain discrete changes, one-time tracking-loss events, and complete
 state snapshots.
 
 The visual and instrument monitoring cadences, 10-second instrument-state
 interval, device-loss timeout, history bound, frame timeouts, prompts, VAD
-settings, device-map path, and output path live in
+settings, device-map path, output path, and event-viewer listener live in
 `yaml/lab_instrument_monitoring_worker.yaml`. Marker-to-device mappings live in
 `yaml/device_map.yaml`. Model
 adapters, endpoints, readiness, and deployment ownership live in

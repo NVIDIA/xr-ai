@@ -68,6 +68,8 @@ appear in the worker's agent contracts.
 | `InstrumentAlertAgent` | Which instrument events become participant voice output | Tracking state |
 | `VoiceAggregationAgent` | Participant speech pacing, ordering, and coalescing | Instrument or foreground decisions |
 | `FileOutputAgent` | Session files, JSONL records, recent visual-history tool | Agent decisions |
+| `WebEventsAdapterAgent` | Explicit sample-event projection into browser topics | HTTP serving or durable history |
+| `WebEventsAgent` | Bounded in-memory history and read-only HTTP page | Application topic selection or persistence |
 
 This ownership keeps periodic tasks and mutable state out of the runtime. The
 runtime delivers typed events; each agent cancels its own participant tasks and
@@ -97,6 +99,7 @@ client's `agent.response` topic so the same output can be rendered as captions.
 | `instrument_alerts.py` | Converts selected events to voice | Send UI notifications or suppress speech |
 | `monitor.py` | Generic opt-in visual change monitor | Build a different periodic visual task |
 | `file_output.py` | JSONL persistence and recent-history access | Publish records to a customer backend |
+| `web_events.py` | Explicit runtime-topic projections for the browser viewer | Select or rename live presentation topics |
 | `yaml/device_map.yaml` | Sample identity data | Map real marker IDs to domain objects |
 | `sample-markers/` | Five QR and five ArUco examples | Print or replace with deployment markers |
 
@@ -208,6 +211,20 @@ class InstrumentBackendAgent(Agent):
 Register this subscriber beside `FileOutputAgent`. Storage and voice can remain
 enabled during development and be removed independently for production. Use a
 typed msgpack/ZMQ service when the backend boundary is a separate process.
+
+## Live event viewer
+
+`WebEventsAdapterAgent` subscribes explicitly to monitor, instrument change,
+tracking-loss, state, foreground, transcript, and participant lifecycle topics.
+It publishes compact `WebEvent` projections to the shared `WebEventsAgent`; it
+does not tail JSONL files or subscribe by wildcard. The page at
+<http://127.0.0.1:8092> groups those events by participant and presentation
+topic while the JSONL files remain the durable record.
+
+The viewer is read-only and bounded by `web_events_max_events`. Its listener has
+no participant authentication or TLS, so the sample keeps it on loopback. Use
+an SSH tunnel for remote development or put an authenticated TLS reverse proxy
+in front of it before any remote exposure.
 
 ## Adapting the sample
 
