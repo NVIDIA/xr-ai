@@ -97,15 +97,22 @@ Aggregation is participant-scoped. A lone finite contribution passes through
 without an LLM call after the short coalescing window. Two or more finite
 contributions in one batch are rewritten into a single concise utterance. The
 aggregator keeps each output open for an estimated spoken duration, based on
-`speech_rate_wpm`, so updates produced while that output is playing form the
-next batch instead of becoming separate queued utterances. This is pacing
-rather than a client playback acknowledgement, so applications can tune the
-speech-rate estimate for their selected TTS voice. If the rewrite fails, their
-original text is joined so updates are not lost. The
-earliest input timestamp is preserved, and an interrupt on any contribution
-makes the combined response interrupt active speech. Queue capacity provides
-bounded ingress, and batches have a bounded size; additional contributions
-remain ordered for following batches.
+`speech_rate_wpm` and clamped between `minimum_playback_s` and
+`maximum_playback_s`, so updates produced while that output is playing form the
+next batch instead of becoming separate queued utterances. This is open-loop
+pacing rather than a client playback acknowledgement. An estimate that is too
+short moves queuing downstream into TTS; one that is too long creates silence.
+Tune all three playback settings for the selected TTS voice.
+
+Rewrites have the explicit `rewrite_timeout_s` deadline. If a rewrite fails or
+times out, the original text is joined so updates are not lost. The earliest
+input timestamp is preserved. An `interrupt=True` contribution bypasses an LLM
+rewrite, cancels a rewrite already in progress, and replaces active speech
+without model latency. `queue_capacity` bounds all pending contributions for one
+participant, including chunks waiting behind another stream. When the bound is
+reached, the oldest non-urgent pending contribution is dropped with a warning
+so new output cannot grow stale in an unbounded buffer. Batches also have a
+bounded size; retained contributions remain ordered for following batches.
 
 A lone incremental contribution starts streaming immediately with a new
 aggregator-owned response ID. Other contributions wait behind that stream;
@@ -113,7 +120,9 @@ finite updates that accumulated while it ran are coalesced when it finishes.
 An urgent contribution interrupts the active stream. A stream that stops
 producing chunks is closed after `stream_idle_timeout_s`, allowing pending
 updates to proceed. Call `stop()` before shutting down the runtime so the agent
-can cancel its participant-owned tasks.
+can cancel its participant-owned tasks. Contributions published after shutdown
+starts are logged and dropped; shutdown logs the number of accepted pending
+contributions it discards.
 
 ## Voice tuning and data echo
 
