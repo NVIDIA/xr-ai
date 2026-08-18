@@ -623,7 +623,7 @@ spark          — 1× Blackwell GB10 (DGX Spark; ~96 GiB GPU-visible HBM)
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_launcher.ModelDeployment.services">
-<span class="sig-name descname"><span class="pre">services</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">LaunchMode</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#xr_ai_launcher.ModelDeployment.services" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">services</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'own'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'reuse'</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#xr_ai_launcher.ModelDeployment.services" title="Link to this definition">#</a></dt>
 <dd><p>Launcher ownership mode keyed by managed service name.</p>
 </dd></dl>
 
@@ -635,7 +635,7 @@ spark          — 1× Blackwell GB10 (DGX Spark; ~96 GiB GPU-visible HBM)
 
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_launcher.ModelDeployment.launch_mode">
-<span class="sig-name descname"><span class="pre">launch_mode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">service</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">LaunchMode</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_launcher.ModelDeployment.launch_mode" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">launch_mode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">service</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'own'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'reuse'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_launcher.ModelDeployment.launch_mode" title="Link to this definition">#</a></dt>
 <dd><p>Return the configured ownership mode for <em>service</em>, if managed.</p>
 </dd></dl>
 
@@ -747,7 +747,9 @@ already running and neither starts nor stops it.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_launcher.Process.port">
 <span class="sig-name descname"><span class="pre">port</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#xr_ai_launcher.Process.port" title="Link to this definition">#</a></dt>
-<dd><p>Optional service port used to stop a persistent process.</p>
+<dd><p>Optional service port metadata.</p>
+<p>The launcher stores but does not inspect this value or stop persistent
+services by port.</p>
 </dd></dl>
 
 <dl class="py attribute">

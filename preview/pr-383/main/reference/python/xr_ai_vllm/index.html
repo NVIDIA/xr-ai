@@ -611,9 +611,9 @@ wrapper restarts.  Cleanup is via <cite>stop_persistent_servers</cite>.</p></li>
 </ul>
 <p>For the docker backend <em>persistent</em> is ignored: the container always
 runs foreground with <code class="docutils literal notranslate"><span class="pre">start_new_session=True</span></code>, so it escapes the
-launcher’s process group regardless.  Use <code class="docutils literal notranslate"><span class="pre">Process(persistent=True)</span></code>
-in the orchestrator <code class="docutils literal notranslate"><span class="pre">main.py</span></code> to tell the launcher not to kill the
-wrapper on shutdown.</p>
+launcher’s process group regardless. Use
+<code class="docutils literal notranslate"><span class="pre">Process(...,</span> <span class="pre">launch_mode=&quot;persist&quot;)</span></code> in the orchestrator <code class="docutils literal notranslate"><span class="pre">main.py</span></code>
+to tell the launcher not to kill the wrapper on shutdown.</p>
 <p><em>container_name</em> is only consulted in docker mode. Use a stable,
 service-specific name (e.g. <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm-&lt;entry-point&gt;</span></code>) so the stop
 helper can find it.</p>

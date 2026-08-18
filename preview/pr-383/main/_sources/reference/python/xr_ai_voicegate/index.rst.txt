@@ -74,7 +74,7 @@ Package Contents
       Sentence-boundary opt-in phrases.
 
       A match is valid at transcript start or after ``.``, ``?``, or ``!``.
-      An empty tuple dispatches every STT transcript.
+      An empty tuple dispatches every non-STOP STT transcript.
 
 
 
@@ -146,37 +146,37 @@ Package Contents
    not kill the gate.
 
 
-   .. py:method:: on_query(h: QueryHandler) -> None
+   .. py:method:: on_query(h: Callable[[str, str, bool], Awaitable[None]]) -> None
 
       Register the handler for accepted user queries.
 
 
 
-   .. py:method:: on_stop(h: StopHandler) -> None
+   .. py:method:: on_stop(h: Callable[[str], Awaitable[None]]) -> None
 
       Register the handler for stop commands.
 
 
 
-   .. py:method:: on_phrase_only(h: PhraseOnlyHandler) -> None
+   .. py:method:: on_phrase_only(h: Callable[[str], Awaitable[None]]) -> None
 
       Register the handler for a wake phrase without a query payload.
 
 
 
-   .. py:method:: on_drop(h: DropHandler) -> None
+   .. py:method:: on_drop(h: Callable[[str, str], Awaitable[None]]) -> None
 
       Register the handler for transcripts rejected by the gate.
 
 
 
-   .. py:method:: on_participant_joined(h: ParticipantJoinedHandler) -> None
+   .. py:method:: on_participant_joined(h: Callable[[str], Awaitable[None]]) -> None
 
       Register the handler for participant-joined notifications.
 
 
 
-   .. py:method:: bind(*, on_query: QueryHandler, on_stop: StopHandler, on_phrase_only: PhraseOnlyHandler | None = None, on_drop: DropHandler | None = None, on_participant_joined: ParticipantJoinedHandler | None = None) -> None
+   .. py:method:: bind(*, on_query: Callable[[str, str, bool], Awaitable[None]], on_stop: Callable[[str], Awaitable[None]], on_phrase_only: Callable[[str], Awaitable[None]] | None = None, on_drop: Callable[[str, str], Awaitable[None]] | None = None, on_participant_joined: Callable[[str], Awaitable[None]] | None = None) -> None
 
       Register every handler in one call.
 

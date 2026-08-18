@@ -169,7 +169,7 @@ Package Contents
 
 
    .. py:attribute:: services
-      :type:  dict[str, LaunchMode]
+      :type:  dict[str, Literal['own', 'reuse']]
 
       Launcher ownership mode keyed by managed service name.
 
@@ -182,7 +182,7 @@ Package Contents
 
 
 
-   .. py:method:: launch_mode(service: str) -> LaunchMode | None
+   .. py:method:: launch_mode(service: str) -> Literal['own', 'reuse'] | None
 
       Return the configured ownership mode for *service*, if managed.
 
@@ -306,7 +306,10 @@ Package Contents
       :value: None
 
 
-      Optional service port used to stop a persistent process.
+      Optional service port metadata.
+
+      The launcher stores but does not inspect this value or stop persistent
+      services by port.
 
 
 
