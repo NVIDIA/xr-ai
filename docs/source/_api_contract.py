@@ -35,6 +35,21 @@ PUBLIC_API_MODULES = (
     "xr_ai_tools.video_memory",
     "xr_ai_tools.vision",
 )
+PUBLIC_API_EXCLUSIONS = (
+    "xr_ai_models.presets.cosmos3_nano_reasoner",
+    "xr_ai_models.presets.cosmos_vlm",
+    "xr_ai_models.presets.llama_nemotron",
+    "xr_ai_models.presets.magpie_tts",
+    "xr_ai_models.presets.nemotron3_nano",
+    "xr_ai_models.presets.nemotron_embedding",
+    "xr_ai_models.presets.nemotron_omni",
+    "xr_ai_models.presets.parakeet_stt",
+    "xr_ai_models.presets.piper_tts",
+    "xr_ai_runtime.agent",
+    "xr_ai_runtime.events",
+    "xr_ai_runtime.runtime",
+    "xr_ai_tools.utilities.generate_marker",
+)
 
 
 @dataclass(frozen=True)
@@ -260,11 +275,46 @@ def _validate_module(
     return failures
 
 
+def _importable_module_name(package_dir: Path, path: Path) -> str | None:
+    relative = path.relative_to(package_dir)
+    parts = relative.parts[:-1]
+    if path.name != "__init__.py":
+        parts = (*parts, path.stem)
+    if any(part.startswith("_") for part in parts):
+        return None
+    return ".".join((package_dir.name, *parts))
+
+
+def _importable_modules(package_dir: Path) -> set[str]:
+    return {
+        module_name
+        for path in package_dir.rglob("*.py")
+        if (module_name := _importable_module_name(package_dir, path)) is not None
+    }
+
+
 def validate_public_api() -> list[str]:
     """Return documentation contract violations for the enrolled packages."""
 
     failures: list[str] = []
     package_dirs = {path.name: path for path in API_PACKAGE_DIRS}
+    discovered_modules = set().union(
+        *(_importable_modules(package_dir) for package_dir in API_PACKAGE_DIRS)
+    )
+    classified_modules = {
+        *package_dirs,
+        *PUBLIC_API_MODULES,
+        *PUBLIC_API_EXCLUSIONS,
+    }
+    failures.extend(
+        f"{module_name}: importable module is neither enrolled nor excluded"
+        for module_name in sorted(discovered_modules - classified_modules)
+    )
+    failures.extend(
+        f"{module_name}: excluded module does not resolve"
+        for module_name in sorted(set(PUBLIC_API_EXCLUSIONS) - discovered_modules)
+    )
+
     for package_dir in API_PACKAGE_DIRS:
         failures.extend(_validate_module(package_dir, (), package_dir.name))
 

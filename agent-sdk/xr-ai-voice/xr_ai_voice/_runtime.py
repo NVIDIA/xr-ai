@@ -22,7 +22,6 @@ from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_voicegate import VoiceGateConfig
 
 from ._processors import VadConfig
-from ._readiness import ProbeFn
 from ._session import _VoiceSession
 from ._transport import HubVoiceTransport
 from ._types import VoiceQuery
@@ -201,7 +200,7 @@ class VoiceAgent(Agent):
         tts: TTSService,
         vad: VadConfig,
         voice_gate: VoiceGateConfig,
-        probes: Mapping[str, ProbeFn] | None = None,
+        probes: Mapping[str, Callable[[], Awaitable[bool]]] | None = None,
         ready_file: Path | None = None,
         closeables: Iterable[Any] = (),
         text_topic: str = "agent.response",

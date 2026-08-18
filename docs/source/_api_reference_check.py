@@ -5,11 +5,16 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
-_VOICE_REFERENCE = Path("reference/python/xr_ai_voice/index.html")
-_PRIVATE_VOICE_TERMS = {
+_API_REFERENCE = Path("reference/python")
+_PRIVATE_MODULE_REFERENCE = re.compile(
+    r"\bxr_ai_[a-z0-9_]+\._[a-z0-9_.]+",
+    flags=re.IGNORECASE,
+)
+_PRIVATE_TERMS = {
     "pipecat": "Pipecat",
     "xrmediahubinputtransport": "XRMediaHubInputTransport",
     "xrmediahuboutputtransport": "XRMediaHubOutputTransport",
@@ -19,15 +24,28 @@ _PRIVATE_VOICE_TERMS = {
 def validate_generated_api(build_dir: Path) -> list[str]:
     """Return private implementation details present in generated HTML."""
 
-    reference = build_dir / _VOICE_REFERENCE
-    if not reference.is_file():
-        return [f"generated voice API page is missing: {reference}"]
+    reference = build_dir / _API_REFERENCE
+    pages = sorted(reference.rglob("*.html")) if reference.is_dir() else []
+    if not pages:
+        return [f"generated API reference is missing: {reference}"]
 
-    html = reference.read_text(encoding="utf-8").casefold()
+    private_references: set[str] = set()
+    private_terms: set[str] = set()
+    for page in pages:
+        html = page.read_text(encoding="utf-8")
+        private_references.update(
+            match.group(0) for match in _PRIVATE_MODULE_REFERENCE.finditer(html)
+        )
+        folded = html.casefold()
+        private_terms.update(
+            label for term, label in _PRIVATE_TERMS.items() if term in folded
+        )
     return [
-        f"generated voice API exposes private implementation detail: {label}"
-        for term, label in _PRIVATE_VOICE_TERMS.items()
-        if term in html
+        *(f"generated API exposes private module path: {name}" for name in sorted(private_references)),
+        *(
+            f"generated API exposes private implementation detail: {label}"
+            for label in sorted(private_terms)
+        ),
     ]
 
 

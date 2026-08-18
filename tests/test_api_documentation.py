@@ -49,9 +49,11 @@ def _enroll(
     contract: ModuleType,
     package: Path,
     public_modules: tuple[str, ...] = (),
+    exclusions: tuple[str, ...] = (),
 ) -> None:
     monkeypatch.setattr(contract, "API_PACKAGE_DIRS", (package,))
     monkeypatch.setattr(contract, "PUBLIC_API_MODULES", public_modules)
+    monkeypatch.setattr(contract, "PUBLIC_API_EXCLUSIONS", exclusions)
 
 
 def test_documented_public_api_passes(
@@ -121,7 +123,12 @@ class Client:
 ''',
         encoding="utf-8",
     )
-    _enroll(monkeypatch, contract, package)
+    _enroll(
+        monkeypatch,
+        contract,
+        package,
+        exclusions=("example_api.implementation",),
+    )
 
     assert contract.validate_public_api() == ["example_api: exported Client does not resolve"]
 
@@ -153,9 +160,45 @@ class Client:
 """,
         encoding="utf-8",
     )
-    _enroll(monkeypatch, contract, package)
+    _enroll(
+        monkeypatch,
+        contract,
+        package,
+        exclusions=("example_api.public", "example_api.unrelated"),
+    )
 
     assert contract.validate_public_api() == []
+
+
+def test_import_source_must_bind_exported_name(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contract = _load_contract()
+    package = _package(
+        tmp_path,
+        '''
+from .source import Client
+
+__all__ = ["Client"]
+''',
+    )
+    (package / "source.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (package / "unrelated.py").write_text(
+        '''
+class Client:
+    """An unrelated documented class."""
+''',
+        encoding="utf-8",
+    )
+    _enroll(
+        monkeypatch,
+        contract,
+        package,
+        exclusions=("example_api.source", "example_api.unrelated"),
+    )
+
+    assert contract.validate_public_api() == ["example_api: exported Client does not resolve"]
 
 
 def test_undocumented_dataclass_and_pydantic_fields_fail(
@@ -220,7 +263,13 @@ class Client:
 ''',
         encoding="utf-8",
     )
-    _enroll(monkeypatch, contract, package, ("example_api.public",))
+    _enroll(
+        monkeypatch,
+        contract,
+        package,
+        ("example_api.public",),
+        ("example_api.other",),
+    )
 
     assert contract.validate_public_api() == [
         "example_api.public: exported Client has no docstring"
@@ -248,7 +297,13 @@ class Client:
 ''',
         encoding="utf-8",
     )
-    _enroll(monkeypatch, contract, package, ("example_api.public",))
+    _enroll(
+        monkeypatch,
+        contract,
+        package,
+        ("example_api.public",),
+        ("example_api.implementation",),
+    )
 
     assert contract.validate_public_api() == []
 
@@ -276,25 +331,46 @@ __all__ = ["Client"]
     assert contract.validate_public_api() == []
 
 
-def test_generated_voice_reference_rejects_private_transport_details(
+def test_importable_module_must_be_enrolled_or_explicitly_excluded(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contract = _load_contract()
+    package = _package(tmp_path, "__all__ = []\n")
+    (package / "extra.py").write_text("VALUE = 1\n", encoding="utf-8")
+    _enroll(monkeypatch, contract, package)
+
+    assert contract.validate_public_api() == [
+        "example_api.extra: importable module is neither enrolled nor excluded"
+    ]
+
+    monkeypatch.setattr(contract, "PUBLIC_API_EXCLUSIONS", ("example_api.extra",))
+    assert contract.validate_public_api() == []
+
+
+def test_generated_reference_rejects_private_implementation_details(
     tmp_path: Path,
 ) -> None:
     reference_check = _load_reference_check()
-    reference = tmp_path / "reference" / "python" / "xr_ai_voice" / "index.html"
-    reference.parent.mkdir(parents=True)
-    reference.write_text(
+    models = tmp_path / "reference" / "python" / "xr_ai_models" / "index.html"
+    models.parent.mkdir(parents=True)
+    models.write_text("xr_ai_models._protocols.LLMService", encoding="utf-8")
+    voice = tmp_path / "reference" / "python" / "xr_ai_voice" / "index.html"
+    voice.parent.mkdir(parents=True)
+    voice.write_text(
         "Pipecat XRMediaHubInputTransport XRMediaHubOutputTransport",
         encoding="utf-8",
     )
 
     assert reference_check.validate_generated_api(tmp_path) == [
-        "generated voice API exposes private implementation detail: Pipecat",
-        "generated voice API exposes private implementation detail: XRMediaHubInputTransport",
-        "generated voice API exposes private implementation detail: XRMediaHubOutputTransport",
+        "generated API exposes private module path: xr_ai_models._protocols.LLMService",
+        "generated API exposes private implementation detail: Pipecat",
+        "generated API exposes private implementation detail: XRMediaHubInputTransport",
+        "generated API exposes private implementation detail: XRMediaHubOutputTransport",
     ]
 
 
-def test_generated_voice_reference_accepts_public_surface(tmp_path: Path) -> None:
+def test_generated_reference_accepts_public_surface(tmp_path: Path) -> None:
     reference_check = _load_reference_check()
     reference = tmp_path / "reference" / "python" / "xr_ai_voice" / "index.html"
     reference.parent.mkdir(parents=True)

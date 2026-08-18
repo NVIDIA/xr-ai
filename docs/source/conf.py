@@ -4,6 +4,7 @@
 """Sphinx configuration for the XR AI versioned documentation site."""
 from __future__ import annotations
 
+import ast
 import os
 import re
 from pathlib import Path
@@ -12,6 +13,22 @@ from runpy import run_path
 _API_CONTRACT = run_path(str(Path(__file__).with_name("_api_contract.py")))
 API_PACKAGE_DIRS = _API_CONTRACT["API_PACKAGE_DIRS"]
 PUBLIC_API_MODULES = _API_CONTRACT["PUBLIC_API_MODULES"]
+_PUBLIC_PACKAGE_EXPORTS = {
+    package_dir.name: frozenset(
+        _API_CONTRACT["_literal_exports"](
+            ast.parse(
+                (package_dir / "__init__.py").read_text(encoding="utf-8"),
+                filename=str(package_dir / "__init__.py"),
+            ),
+            package_dir / "__init__.py",
+        )
+    )
+    for package_dir in API_PACKAGE_DIRS
+}
+_PRIVATE_TYPE_REFERENCE = re.compile(
+    rf"\b(?P<package>{'|'.join(map(re.escape, _PUBLIC_PACKAGE_EXPORTS))})"
+    r"\._[A-Za-z0-9_.]*\.(?P<name>[A-Za-z][A-Za-z0-9_]*)"
+)
 
 _GITHUB_BLOB_PREFIX = "https://github.com/NVIDIA/xr-ai/blob/"
 _GITHUB_TREE_PREFIX = "https://github.com/NVIDIA/xr-ai/tree/"
@@ -41,6 +58,42 @@ def _rewrite_github_links(_app, _docname: str, source: list[str]) -> None:
     source[0] = source[0].replace(
         f"{_GITHUB_TREE_PREFIX}main/", f"{_GITHUB_TREE_PREFIX}{ref}/"
     )
+
+
+def _canonicalize_public_type_references(value):
+    if not isinstance(value, str):
+        return value
+
+    def replace(match: re.Match[str]) -> str:
+        package = match.group("package")
+        name = match.group("name")
+        if name in _PUBLIC_PACKAGE_EXPORTS[package]:
+            return f"{package}.{name}"
+        return match.group(0)
+
+    return _PRIVATE_TYPE_REFERENCE.sub(replace, value)
+
+
+def _prepare_api_templates(environment) -> None:
+    environment.finalize = _canonicalize_public_type_references
+
+
+def _canonicalize_api_annotations(_app, env, _docnames) -> None:
+    for module_annotations in getattr(env, "autoapi_annotations", {}).values():
+        for name, value in module_annotations.items():
+            module_annotations[name] = _canonicalize_public_type_references(value)
+    for api_object in getattr(env, "autoapi_all_objects", {}).values():
+        for attribute in ("annotation", "args", "return_annotation"):
+            value = getattr(api_object, attribute, None)
+            if isinstance(value, str):
+                try:
+                    setattr(
+                        api_object,
+                        attribute,
+                        _canonicalize_public_type_references(value),
+                    )
+                except AttributeError:
+                    pass
 
 # -- Project information -----------------------------------------------------
 project = "XR AI"
@@ -73,6 +126,7 @@ autoapi_options = [
 ]
 autoapi_member_order = "bysource"
 autoapi_python_class_content = "class"
+autoapi_prepare_jinja_env = _prepare_api_templates
 
 # MyST Markdown is the page format (matches the repo's existing docs/*.md).
 source_suffix = {
@@ -129,6 +183,7 @@ def _skip_private_api_details(_app, what, name, _obj, _skip, _options):
 
 
 def setup(app):
+    app.connect("env-before-read-docs", _canonicalize_api_annotations)
     app.connect("source-read", _rewrite_github_links)
     app.connect("autoapi-skip-member", _skip_private_api_details)
     return {"parallel_read_safe": True, "parallel_write_safe": True}
