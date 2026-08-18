@@ -64,6 +64,7 @@ endpoint and no local GPU is required for the agent or hub.
 | model-servers (shared models) | ~58 GB |
 | simple-vlm-example (standalone) | ~23 GB |
 | lab-instrument-monitoring (requires model-servers) | ~55 GB (models) + Piper TTS |
+| tea-making-sample (requires model-servers) | ~58 GB shared models + <1 GB sample services |
 | xr-render-demo (requires model-servers) | ~55 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 
@@ -141,10 +142,10 @@ frames are dropped if it is closed.
 | Tests | `tests/` | Multi-client / multi-agent integration tests |
 
 Lightweight samples (`simple-vlm-example`) are self-contained — one command
-starts everything. Heavier samples (`lab-instrument-monitoring` and
-`xr-render-demo`) split model loading from the sample itself: start
-`model-servers` once, then run either sample as many times as you like without
-reloading weights.
+starts everything. Heavier samples (`lab-instrument-monitoring`,
+`tea-making-sample`, and `xr-render-demo`) split model loading from the sample
+itself: start `model-servers` once, then run any sample as many times as you
+like without reloading weights.
 
 The [tea-making guidance sample](agent-samples/tea-making-sample/README.md)
 combines a deterministic foreground workflow with file-backed transcript and
@@ -173,8 +174,8 @@ on startup.
 
 `model-servers` starts the shared inference services used across demos and exits
 immediately — the services keep running in the background with weights hot.
-Start this once before running `xr-render-demo`, or whenever you want to
-pre-warm models:
+Start this once before running `tea-making-sample` or `xr-render-demo`, or
+whenever you want to pre-warm models:
 
 > [!IMPORTANT]
 > After updating, stop any existing model servers before starting this stack:

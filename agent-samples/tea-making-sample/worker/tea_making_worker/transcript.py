@@ -26,9 +26,11 @@ from xr_ai_voice import (
 
 from .events import (
     BACKGROUND_FACT_TOPIC,
+    PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     TRANSCRIPT_RECORD_TOPIC,
     BackgroundFact,
+    ParticipantCleanupComplete,
     TranscriptRecord,
 )
 
@@ -172,6 +174,10 @@ class TranscriptAgent(Agent):
         ctx: RuntimeContext,
     ) -> None:
         await self._cancel(self._participant(ctx))
+        await ctx.publish(
+            PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
+            ParticipantCleanupComplete(producer="transcript"),
+        )
 
     async def stop(self) -> None:
         """Cancel all summary tasks before runtime shutdown."""

@@ -16,7 +16,7 @@ from typing import Any
 
 from pydantic import BaseModel
 from xr_ai_runtime import Agent, RuntimeContext, subscribe
-from xr_ai_voice import VoiceParticipantJoined, VoiceParticipantLeft
+from xr_ai_voice import VoiceParticipantJoined
 
 from .events import (
     BACKGROUND_FACT_TOPIC,
@@ -24,8 +24,8 @@ from .events import (
     FOREGROUND_RECORD_TOPIC,
     GUIDANCE_NOTICE_TOPIC,
     GUIDANCE_RECORD_TOPIC,
+    PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
-    PARTICIPANT_LEFT_TOPIC,
     TRANSCRIPT_RECORD_TOPIC,
     VIDEO_LOG_RECORD_TOPIC,
     BackgroundFact,
@@ -33,11 +33,19 @@ from .events import (
     ForegroundRecord,
     GuidanceNotice,
     GuidanceRecord,
+    ParticipantCleanupComplete,
     TranscriptRecord,
     VideoLogRecord,
 )
 
 _SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
+_CLEANUP_PRODUCERS = {
+    "guidance",
+    "foreground",
+    "change_watch",
+    "transcript",
+    "video_log",
+}
 
 
 @dataclass(slots=True)
@@ -76,7 +84,7 @@ class FileOutputAgent(Agent):
         self._history_size = history_size
         self._sessions: dict[str, _SessionFiles] = {}
         self._sessions_lock = asyncio.Lock()
-        self._active: set[str] = set()
+        self._cleanup: dict[str, set[str]] = {}
         self._closed: set[str] = set()
         super().__init__()
 
@@ -89,7 +97,7 @@ class FileOutputAgent(Agent):
         participant_id = self._participant(ctx)
         async with self._sessions_lock:
             self._closed.discard(participant_id)
-            self._active.add(participant_id)
+            self._cleanup[participant_id] = set()
         await self._state(participant_id)
 
     @subscribe(FOREGROUND_RECORD_TOPIC)
@@ -148,13 +156,19 @@ class FileOutputAgent(Agent):
     ) -> None:
         await self._write("video-log.jsonl", record, ctx)
 
-    @subscribe(PARTICIPANT_LEFT_TOPIC)
-    async def participant_left(
+    @subscribe(PARTICIPANT_CLEANUP_COMPLETE_TOPIC)
+    async def participant_cleanup_complete(
         self,
-        _event: VoiceParticipantLeft,
+        event: ParticipantCleanupComplete,
         ctx: RuntimeContext,
     ) -> None:
-        await self._close_participant(self._participant(ctx))
+        participant_id = self._participant(ctx)
+        async with self._sessions_lock:
+            completed = self._cleanup.setdefault(participant_id, set())
+            completed.add(event.producer)
+            ready = _CLEANUP_PRODUCERS <= completed
+        if ready:
+            await self._close_participant(participant_id)
 
     async def stop(self) -> None:
         """Close every active session before the runtime shuts down."""
@@ -202,7 +216,6 @@ class FileOutputAgent(Agent):
                 return None
             # Runtime subscribers fan out concurrently. Another agent can
             # publish its join record before this agent receives the same join.
-            self._active.add(participant_id)
             directory = self.output_dir / (
                 f"{_safe_participant(participant_id)}-{_session_stamp()}"
             )
@@ -241,7 +254,7 @@ class FileOutputAgent(Agent):
     async def _close_participant(self, participant_id: str) -> None:
         async with self._sessions_lock:
             state = self._sessions.pop(participant_id, None)
-            self._active.discard(participant_id)
+            self._cleanup.pop(participant_id, None)
             self._closed.add(participant_id)
         if state is None:
             return

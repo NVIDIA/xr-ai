@@ -29,9 +29,11 @@ from .change_watch import ChangeWatchAgent
 from .events import (
     FOREGROUND_RECORD_TOPIC,
     INTERRUPTED_TOPIC,
+    PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     USER_QUERY_TOPIC,
     ForegroundRecord,
+    ParticipantCleanupComplete,
 )
 from .images import ParticipantImageAgent
 from .transcript import TranscriptAgent
@@ -95,6 +97,10 @@ class ForegroundAgent(Agent):
         ctx: RuntimeContext,
     ) -> None:
         await self._cancel(self._participant(ctx))
+        await ctx.publish(
+            PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
+            ParticipantCleanupComplete(producer="foreground"),
+        )
 
     @subscribe(INTERRUPTED_TOPIC)
     async def interrupted(
@@ -164,7 +170,7 @@ class ForegroundAgent(Agent):
                 raise RuntimeError("active tea context has no active tool set")
             tools = _merge_tool_sets(
                 active_tools,
-                self._background_context.participant_tools(participant_id),
+                self._background_tools(participant_id),
             )
             system_prompt = f"{self._prompt}\n\nActive tea guide:\n{active_context}"
             route = "tea"
@@ -224,6 +230,11 @@ class ForegroundAgent(Agent):
         return _merge_tool_sets(
             ToolSet((current_view, rag_lookup_tool(self._rag))),
             self._guidance.root_tools(participant_id),
+            self._background_tools(participant_id),
+        )
+
+    def _background_tools(self, participant_id: str) -> ToolSet:
+        return _merge_tool_sets(
             self._background_context.participant_tools(participant_id),
             self._change_watch.participant_tools(participant_id),
             self._transcript.participant_tools(participant_id),

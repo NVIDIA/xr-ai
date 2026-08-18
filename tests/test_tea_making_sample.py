@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import json
 import sys
@@ -13,7 +14,9 @@ from types import SimpleNamespace
 
 import pytest
 import yaml
+from xr_ai_models import ChatResponse, ToolCall
 from xr_ai_runtime import AgentRuntime
+from xr_ai_tools.image import ImageRegistry
 from xr_ai_voice import VoiceParticipantJoined, VoiceParticipantLeft
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -21,14 +24,26 @@ _SAMPLE = _ROOT / "agent-samples" / "tea-making-sample"
 _WORKER = _SAMPLE / "worker"
 sys.path.insert(0, str(_WORKER))
 
+from tea_making_worker.background_context import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    BackgroundContextAgent,
+)
+from tea_making_worker.change_watch import ChangeWatchAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.events import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     FOREGROUND_RECORD_TOPIC,
+    GUIDANCE_RECORD_TOPIC,
+    PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     ForegroundRecord,
+    GuidanceRecord,
+    ParticipantCleanupComplete,
 )
 from tea_making_worker.file_output import FileOutputAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.foreground import ForegroundAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.spec import load_workflow  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.transcript import TranscriptAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.video_log import VideoLogAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.workflow import GuidanceAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.workflow_state import WorkflowStore  # noqa: E402  # pyright: ignore[reportMissingImports]
 
@@ -105,6 +120,48 @@ def test_workflow_requires_explicit_advancement() -> None:
     assert session.active
 
 
+def test_workflow_rejects_incomplete_completion_and_transitions_atomically() -> None:
+    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
+    store = WorkflowStore(workflow)
+    session = store.get("participant-invalid")
+    store.start(session)
+    store.observe(session, "Twinings Earl Grey label")
+
+    rejected = store.commit(session, {"tea_ready": True}, "")
+
+    assert rejected.accepted is False
+    assert "tea_name" in rejected.message
+    assert "tea_ready" not in session.state
+
+    session.state["tea_ready"] = True
+    store.advance(session, skip=False)
+    assert session.step_id == "fill_water"
+    revision = session.revision
+    with pytest.raises(ValueError, match="target_temperature_c"):
+        store.advance(session, skip=True)
+    assert session.step_id == "fill_water"
+    assert session.state["water_filled"] is False
+    assert session.revision == revision
+
+
+def test_skipping_steeping_detection_also_skips_the_timer() -> None:
+    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
+    store = WorkflowStore(workflow)
+    session = store.get("participant-skip")
+    store.start(session)
+    store.advance(session, skip=True)
+    store.advance(session, skip=True)
+    store.advance(session, skip=True)
+    assert session.step_id == "start_steeping"
+
+    message = store.advance(session, skip=True)
+
+    assert session.active is False
+    assert session.step_id is None
+    assert "guidance complete" in message.lower()
+    assert "steeping_started_at_us" not in session.state
+
+
 def test_workflow_enforces_consecutive_visual_evidence() -> None:
     workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
     store = WorkflowStore(workflow)
@@ -157,6 +214,177 @@ def test_guidance_exposes_one_foreground_stack_at_a_time() -> None:
 
 
 @pytest.mark.asyncio
+async def test_completed_step_does_not_invoke_trigger_or_model() -> None:
+    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
+    calls = 0
+
+    class Llm:
+        async def chat(self, *_args, **_kwargs):
+            nonlocal calls
+            calls += 1
+            raise AssertionError("completed steps must not call the model")
+
+    guidance = GuidanceAgent(
+        workflow=workflow,
+        llm=Llm(),  # type: ignore[arg-type]
+        current_frame=SimpleNamespace(),  # type: ignore[arg-type]
+        image_query=SimpleNamespace(),  # type: ignore[arg-type]
+        rag=SimpleNamespace(),  # type: ignore[arg-type]
+    )
+    session = guidance.store.get("participant-complete")
+    guidance.store.start(session)
+    guidance.store.observe(session, "Twinings Earl Grey label")
+    result = guidance.store.commit(
+        session,
+        {
+            "tea_name": "Twinings Earl Grey",
+            "target_temperature_c": 100,
+            "steep_duration_s": 180,
+            "guidance_source": "package",
+            "tea_ready": True,
+        },
+        "",
+    )
+    assert result.complete is True
+
+    await guidance._tick(session)
+
+    assert calls == 0
+
+
+@pytest.mark.asyncio
+async def test_slow_observation_does_not_block_reset() -> None:
+    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    class Llm:
+        async def chat(self, *_args, **_kwargs):
+            started.set()
+            await release.wait()
+            return ChatResponse(
+                "",
+                None,
+                [
+                    ToolCall(
+                        id="commit-1",
+                        name="workflow__commit",
+                        arguments=json.dumps(
+                            {
+                                "updates": {
+                                    "tea_name": "Twinings Earl Grey",
+                                    "target_temperature_c": 100,
+                                    "steep_duration_s": 180,
+                                    "guidance_source": "package",
+                                    "tea_ready": True,
+                                },
+                                "message": "",
+                            }
+                        ),
+                    )
+                ],
+                "tool_calls",
+                {},
+            )
+
+    guidance = GuidanceAgent(
+        workflow=workflow,
+        llm=Llm(),  # type: ignore[arg-type]
+        current_frame=SimpleNamespace(),  # type: ignore[arg-type]
+        image_query=SimpleNamespace(),  # type: ignore[arg-type]
+        rag=SimpleNamespace(),  # type: ignore[arg-type]
+    )
+    session = guidance.store.get("participant-slow")
+    guidance.store.start(session)
+
+    async def visible_tea(*_args):
+        return SimpleNamespace(available=True, value="Twinings Earl Grey label")
+
+    guidance._trigger = visible_tea  # type: ignore[method-assign]
+    tick = asyncio.create_task(guidance._tick(session))
+    await asyncio.wait_for(started.wait(), timeout=1.0)
+    async with asyncio.timeout(0.1):
+        async with session.lock:
+            guidance.store.reset(session)
+    release.set()
+    await tick
+
+    assert session.active is False
+    assert session.step_id is None
+
+
+@pytest.mark.asyncio
+async def test_active_workflow_keeps_background_stop_and_status_tools() -> None:
+    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
+    observed_tools: set[str] = set()
+
+    class Llm:
+        async def chat(self, _messages, *, tools, **_kwargs):
+            observed_tools.update(tool.name for tool in tools)
+            return ChatResponse("I can manage those tasks.", None, None, "stop", {})
+
+    llm = Llm()
+    images = SimpleNamespace(
+        images=ImageRegistry(),
+        get_current_frame=SimpleNamespace(),
+    )
+    guidance = GuidanceAgent(
+        workflow=workflow,
+        llm=llm,  # type: ignore[arg-type]
+        current_frame=images.get_current_frame,  # type: ignore[arg-type]
+        image_query=SimpleNamespace(),  # type: ignore[arg-type]
+        rag=SimpleNamespace(),  # type: ignore[arg-type]
+    )
+    guidance.store.start(guidance.store.get("participant-controls"))
+    change_watch = ChangeWatchAgent(
+        images=images,  # type: ignore[arg-type]
+        vlm=SimpleNamespace(),  # type: ignore[arg-type]
+        llm=llm,  # type: ignore[arg-type]
+        caption_prompt="Caption.",
+        event_prompt="Compare.",
+        default_instruction="important changes",
+        interval_s=2.0,
+    )
+    transcript = TranscriptAgent(
+        llm=llm,  # type: ignore[arg-type]
+        summary_prompt="Summarize.",
+        summary_interval_s=120.0,
+    )
+    video_log = VideoLogAgent(
+        images=images,  # type: ignore[arg-type]
+        vlm=SimpleNamespace(),  # type: ignore[arg-type]
+        llm=llm,  # type: ignore[arg-type]
+        caption_prompt="Caption.",
+        delta_prompt="Compare.",
+        interval_s=2.0,
+    )
+    foreground = ForegroundAgent(
+        llm=llm,  # type: ignore[arg-type]
+        images=images,  # type: ignore[arg-type]
+        vlm=SimpleNamespace(),  # type: ignore[arg-type]
+        rag=SimpleNamespace(),  # type: ignore[arg-type]
+        guidance=guidance,
+        background_context=BackgroundContextAgent(),
+        change_watch=change_watch,
+        transcript=transcript,
+        video_log=video_log,
+        prompt="Route.",
+        vlm_timeout_s=15.0,
+    )
+
+    await foreground._answer("Is recording running?", "participant-controls")
+
+    assert {
+        "change_watch__stop",
+        "change_watch__status",
+        "transcript__stop",
+        "transcript__status",
+        "video_log__stop",
+        "video_log__status",
+    } <= observed_tools
+
+
+@pytest.mark.asyncio
 async def test_file_output_writes_session_bounded_jsonl(tmp_path: Path) -> None:
     files = FileOutputAgent(tmp_path, history_size=4)
     runtime = AgentRuntime()
@@ -183,12 +411,61 @@ async def test_file_output_writes_session_bounded_jsonl(tmp_path: Path) -> None:
             VoiceParticipantLeft(),
             participant_id="glasses/user",
         )
+        for producer in (
+            "foreground",
+            "change_watch",
+            "transcript",
+            "video_log",
+        ):
+            await runtime.publish(
+                PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
+                ParticipantCleanupComplete(producer=producer),
+                participant_id="glasses/user",
+            )
+        await runtime.publish(
+            GUIDANCE_RECORD_TOPIC,
+            GuidanceRecord(
+                timestamp_us=11,
+                event="participant.left",
+                message="",
+                state={},
+            ),
+            participant_id="glasses/user",
+        )
+        await runtime.publish(
+            PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
+            ParticipantCleanupComplete(producer="guidance"),
+            participant_id="glasses/user",
+        )
 
     path = next(tmp_path.glob("glasses-user-*/foreground.jsonl"))
     records = [json.loads(line) for line in path.read_text().splitlines()]
     assert records[0]["type"] == "session"
     assert records[1]["tools"] == ["workflow__start"]
     assert records[-1]["type"] == "session_end"
+    guidance = [
+        json.loads(line)
+        for line in next(tmp_path.glob("glasses-user-*/guidance.jsonl"))
+        .read_text()
+        .splitlines()
+    ]
+    assert guidance[-2]["event"] == "participant.left"
+    assert guidance[-1]["type"] == "session_end"
+
+
+def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:
+    config = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
+    prompt_dir = _WORKER / "tea_making_worker/prompts"
+    assert config.foreground_prompt == (
+        prompt_dir / "foreground_prompt.txt"
+    ).read_text().strip()
+    assert config.video_delta_prompt == (
+        prompt_dir / "video_delta_prompt.txt"
+    ).read_text().strip()
+
+    override = tmp_path / "worker.yaml"
+    override.write_text("foreground_prompt: Explicit override\n")
+    assert load_config(override).foreground_prompt == "Explicit override"
 
 
 def test_foreground_prompt_has_route_eval_cases() -> None:

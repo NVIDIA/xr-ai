@@ -350,15 +350,32 @@ def workflow_status_tool(
 def workflow_commit_tool(
     store: WorkflowStore,
     session: WorkflowSession,
+    *,
+    expected_step_id: str | None = None,
+    expected_revision: int | None = None,
 ) -> Tool[CommitRequest, WorkflowCommitResult]:
     """Create the sole state mutation surface for observation models."""
 
     async def commit(request: CommitRequest) -> WorkflowCommitResult:
-        result = store.commit(
-            session,
-            dict(request.updates),
-            request.message,
-        )
+        async with session.lock:
+            if (
+                expected_step_id is not None
+                and (
+                    session.step_id != expected_step_id
+                    or session.revision != expected_revision
+                )
+            ):
+                return WorkflowCommitResult(
+                    accepted=False,
+                    complete=False,
+                    message="observation is stale",
+                    revision=session.revision,
+                )
+            result = store.commit(
+                session,
+                dict(request.updates),
+                request.message,
+            )
         return WorkflowCommitResult(
             accepted=result.accepted,
             complete=result.complete,

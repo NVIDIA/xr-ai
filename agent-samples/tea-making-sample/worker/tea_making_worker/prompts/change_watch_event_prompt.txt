@@ -1,6 +1,3 @@
-Compare the current caption with the recent captions against watch_for. Call
-change_watch__commit exactly once. A change is important only when it is newly
-visible and relevant to watch_for. Ignore changes in wording, viewpoint, and
-lighting. For an important change, provide one short natural sentence. For any
-other result, set important to false and summary to an empty string. Do not
-infer facts that are absent from the captions.
+Compare the current caption with recent captions and the requested watch.
+Report one short factual sentence only when a relevant material change is
+newly visible. Ignore wording, viewpoint, and lighting differences.

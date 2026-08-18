@@ -155,20 +155,24 @@ class WorkflowStore:
             )
             self._event(session, "workflow.advance_blocked", message)
             return message
+        candidate = copy.deepcopy(session.state)
         if skip:
-            invalid = self._invalid_patch(step, step.state_on_skip)
+            invalid = self._invalid_skip_patch(step.state_on_skip)
             if invalid:
                 raise ValueError(f"invalid skip state for {step.id}: {invalid}")
-            session.state.update(copy.deepcopy(step.state_on_skip))
-            session.revision += 1
-        transition = self._transition(session, step)
+            candidate.update(copy.deepcopy(step.state_on_skip))
+        next_step = None if skip and step.complete_on_skip else step.next_step
+        transition = self._transition_message(next_step, candidate)
+        session.state = candidate
+        session.revision += 1
+        self._apply_transition(session, next_step, transition)
         if not skip:
             self._event(session, "workflow.advanced", transition)
             return transition
         message = " ".join(
             item
             for item in (
-                self._render(step.skip_message, session),
+                self._render_state(step.skip_message, candidate),
                 transition,
             )
             if item
@@ -226,6 +230,12 @@ class WorkflowStore:
             if name not in session.state or session.state[name] != value
         }
         candidate = {**session.state, **changes}
+        if step.is_complete(candidate):
+            missing = [name for name in step.writes if name not in candidate]
+            if missing:
+                reason = f"completion requires fields: {missing}"
+                self._event(session, "step.commit_rejected", reason)
+                return CommitResult(False, False, reason, session.revision)
         if (
             step.evidence is not None
             and step.is_complete(candidate)
@@ -240,15 +250,19 @@ class WorkflowStore:
         if not changes:
             self._event(session, "step.commit_noop", "state unchanged")
             return CommitResult(True, False, "state unchanged", session.revision)
+        complete = step.is_complete(candidate)
+        notice = (
+            self._render_state(step.complete_message, candidate)
+            if complete
+            else ""
+        )
         session.state.update(copy.deepcopy(changes))
         session.revision += 1
-        complete = step.is_complete(session.state)
         notification = message.strip() if not complete else ""
         if notification:
             session.notices.append(notification)
         self._event(session, "step.commit", notification)
         if complete:
-            notice = self._render(step.complete_message, session)
             if notice:
                 session.notices.append(notice)
             self._event(session, "step.ready", notice)
@@ -279,39 +293,64 @@ class WorkflowStore:
         self._event(session, event, message)
 
     def _restart(self, session: WorkflowSession, *, event: str) -> str:
-        session.state = self.workflow.initial_state()
+        state = self.workflow.initial_state()
+        message = self._render_state(
+            self.workflow.step(self.workflow.start_step).enter_message,
+            state,
+        )
+        session.state = state
         session.active = True
+        session.step_id = self.workflow.start_step
+        session.next_tick = 0.0
         session.notices.clear()
         session.evidence_hits = 0
         session.revision += 1
-        message = self._enter(session, self.workflow.start_step)
+        self._event(session, "step.enter", message)
         self._event(session, event, message)
         return message
 
-    def _enter(self, session: WorkflowSession, step_id: str) -> str:
-        session.step_id = step_id
-        session.next_tick = 0.0
-        session.evidence_hits = 0
-        message = self._render(
-            self.workflow.step(step_id).enter_message,
-            session,
-        )
-        self._event(session, "step.enter", message)
-        return message
-
-    def _transition(self, session: WorkflowSession, step: Step) -> str:
-        if step.next_step is None:
+    def _apply_transition(
+        self,
+        session: WorkflowSession,
+        next_step: str | None,
+        message: str,
+    ) -> None:
+        if next_step is None:
             session.active = False
             session.step_id = None
-            message = self._render(self.workflow.complete_message, session)
             self._event(session, "workflow.complete", message)
-            return message
-        return self._enter(session, step.next_step)
+            return
+        session.step_id = next_step
+        session.next_tick = 0.0
+        session.evidence_hits = 0
+        self._event(session, "step.enter", message)
+
+    def _transition_message(
+        self,
+        next_step: str | None,
+        state: dict[str, Any],
+    ) -> str:
+        text = (
+            self.workflow.complete_message
+            if next_step is None
+            else self.workflow.step(next_step).enter_message
+        )
+        return self._render_state(text, state)
 
     def _invalid_patch(self, step: Step, updates: dict[str, Any]) -> str:
         unknown = updates.keys() - set(step.writes)
         if unknown:
             return f"fields not writable in this step: {sorted(unknown)}"
+        for name, value in updates.items():
+            expected = self.workflow.state_fields[name]
+            if not _valid_type(expected, value):
+                return f"{name} must be {expected.type}"
+        return ""
+
+    def _invalid_skip_patch(self, updates: dict[str, Any]) -> str:
+        unknown = updates.keys() - self.workflow.state_fields.keys()
+        if unknown:
+            return f"unknown state fields: {sorted(unknown)}"
         for name, value in updates.items():
             expected = self.workflow.state_fields[name]
             if not _valid_type(expected, value):
@@ -335,11 +374,15 @@ class WorkflowStore:
 
     @staticmethod
     def _render(text: str, session: WorkflowSession) -> str:
+        return WorkflowStore._render_state(text, session.state)
+
+    @staticmethod
+    def _render_state(text: str, state: dict[str, Any]) -> str:
         def replace(match: re.Match[str]) -> str:
             name, formatter = match.groups()
-            if name not in session.state:
+            if name not in state:
                 raise ValueError(f"message references missing state: {name}")
-            value = session.state[name]
+            value = state[name]
             if formatter is None:
                 return str(value)
             if formatter == "temperature_c":

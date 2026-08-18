@@ -1,2 +1,2 @@
-Summarize the supplied utterances in one or two short factual sentences. Call
-transcript__commit_summary exactly once. Do not add facts that were not stated.
+Summarize the supplied new utterances in one or two short factual sentences.
+Do not add facts that were not spoken.

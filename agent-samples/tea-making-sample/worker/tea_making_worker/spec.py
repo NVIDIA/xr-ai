@@ -67,6 +67,7 @@ class Step:
     evidence: Evidence | None
     complete_when: dict[str, Any]
     next_step: str | None
+    complete_on_skip: bool
     state_on_skip: dict[str, Any]
     enter_message: str
     complete_message: str
@@ -257,6 +258,7 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
             if raw.get("next") is not None
             else None
         ),
+        complete_on_skip=bool(raw.get("complete_on_skip", False)),
         state_on_skip=dict(state_on_skip),
         enter_message=str(messages.get("enter", "")).strip(),
         complete_message=str(messages.get("complete", "")).strip(),

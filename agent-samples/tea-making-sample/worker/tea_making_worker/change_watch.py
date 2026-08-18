@@ -28,9 +28,11 @@ from xr_ai_voice import VoiceParticipantLeft
 from .events import (
     BACKGROUND_FACT_TOPIC,
     CHANGE_WATCH_RECORD_TOPIC,
+    PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     BackgroundFact,
     ChangeWatchRecord,
+    ParticipantCleanupComplete,
 )
 
 if TYPE_CHECKING:
@@ -176,6 +178,10 @@ class ChangeWatchAgent(Agent):
         ctx: RuntimeContext,
     ) -> None:
         await self._cancel(self._participant(ctx))
+        await ctx.publish(
+            PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
+            ParticipantCleanupComplete(producer="change_watch"),
+        )
 
     async def stop(self) -> None:
         """Cancel all monitoring tasks before runtime shutdown."""

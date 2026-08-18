@@ -90,6 +90,8 @@ application.
   intervals, artifact output, RAG, and workflow paths.
 - `yaml/workflow.yaml` defines the tea steps, typed state, evidence gates, and
   user-facing messages.
+- `worker/tea_making_worker/prompts/` is the default source for model prompts;
+  explicit inline YAML values override those files.
 - `yaml/voice_gate.yaml` is the wake-word profile. The launcher selects the
   always-on profile when requested.
 - `yaml/rag_service.yaml` indexes Markdown and text files under

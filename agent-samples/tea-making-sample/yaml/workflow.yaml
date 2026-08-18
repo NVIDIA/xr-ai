@@ -205,11 +205,12 @@ steps:
       tools: [current_view]
     complete_when: {steeping_started: true}
     next: steep_timer
-    state_on_skip: {steeping_started_at_us: 1, steeping_started: true}
+    complete_on_skip: true
+    state_on_skip: {steeping_started: true}
     messages:
       enter: Put the tea in the water; I will start the timer when I see it immersed.
       complete: Steeping timer started. Say next to monitor it.
-      skip: Steeping detection skipped.
+      skip: Steeping detection and the timer were skipped.
 
   - id: steep_timer
     title: Wait for steeping

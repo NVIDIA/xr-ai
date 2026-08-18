@@ -27,9 +27,11 @@ from xr_ai_voice import VoiceParticipantLeft
 
 from .events import (
     BACKGROUND_FACT_TOPIC,
+    PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     VIDEO_LOG_RECORD_TOPIC,
     BackgroundFact,
+    ParticipantCleanupComplete,
     VideoLogRecord,
 )
 
@@ -168,6 +170,10 @@ class VideoLogAgent(Agent):
         ctx: RuntimeContext,
     ) -> None:
         await self._cancel(self._participant(ctx))
+        await ctx.publish(
+            PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
+            ParticipantCleanupComplete(producer="video_log"),
+        )
 
     async def stop(self) -> None:
         """Cancel all video logging tasks before runtime shutdown."""

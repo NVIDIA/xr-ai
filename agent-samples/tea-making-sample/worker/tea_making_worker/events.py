@@ -81,6 +81,16 @@ class VideoLogRecord(_Event):
     error: str = ""
 
 
+class ParticipantCleanupComplete(_Event):
+    producer: Literal[
+        "guidance",
+        "foreground",
+        "change_watch",
+        "transcript",
+        "video_log",
+    ]
+
+
 USER_QUERY_TOPIC = Topic("tea-making.user-query", UserQuery)
 PARTICIPANT_JOINED_TOPIC = Topic(
     "tea-making.participant-joined",
@@ -101,6 +111,10 @@ CHANGE_WATCH_RECORD_TOPIC = Topic(
 )
 TRANSCRIPT_RECORD_TOPIC = Topic("tea-making.transcript-record", TranscriptRecord)
 VIDEO_LOG_RECORD_TOPIC = Topic("tea-making.video-log-record", VideoLogRecord)
+PARTICIPANT_CLEANUP_COMPLETE_TOPIC = Topic(
+    "tea-making.participant-cleanup-complete",
+    ParticipantCleanupComplete,
+)
 
 
 __all__ = [
@@ -112,6 +126,7 @@ __all__ = [
     "INTERRUPTED_TOPIC",
     "PARTICIPANT_JOINED_TOPIC",
     "PARTICIPANT_LEFT_TOPIC",
+    "PARTICIPANT_CLEANUP_COMPLETE_TOPIC",
     "TRANSCRIPT_RECORD_TOPIC",
     "USER_QUERY_TOPIC",
     "VIDEO_LOG_RECORD_TOPIC",
@@ -120,6 +135,7 @@ __all__ = [
     "ForegroundRecord",
     "GuidanceNotice",
     "GuidanceRecord",
+    "ParticipantCleanupComplete",
     "TranscriptRecord",
     "VideoLogRecord",
 ]

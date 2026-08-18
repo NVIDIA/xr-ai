@@ -33,10 +33,12 @@ from xr_ai_voice import VoiceParticipantJoined, VoiceParticipantLeft
 from .events import (
     GUIDANCE_NOTICE_TOPIC,
     GUIDANCE_RECORD_TOPIC,
+    PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     GuidanceNotice,
     GuidanceRecord,
+    ParticipantCleanupComplete,
 )
 from .spec import Step, Workflow
 from .workflow_state import (
@@ -202,6 +204,10 @@ class GuidanceAgent(Agent):
             await self._flush(session)
         self.store.release(participant_id)
         self._publish_locks.pop(participant_id, None)
+        await ctx.publish(
+            PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
+            ParticipantCleanupComplete(producer="guidance"),
+        )
 
     async def stop(self) -> None:
         """Cancel every participant observation task owned by this agent."""
@@ -301,14 +307,27 @@ class GuidanceAgent(Agent):
 
     async def _tick(self, session: WorkflowSession) -> None:
         async with session.lock:
-            if not session.active or session.step_id is None:
+            if (
+                not session.active
+                or session.step_id is None
+                or self.store.step_complete(session)
+            ):
                 return
             now = monotonic_now()
             if session.next_tick > now:
                 return
             step = self.workflow.step(session.step_id)
+            revision = session.revision
+            state = dict(session.state)
             session.next_tick = now + step.trigger.interval_s
-            trigger = await self._trigger(session, step)
+        trigger = await self._trigger(
+            session.participant_id,
+            step,
+            state,
+        )
+        async with session.lock:
+            if not self._current(session, step, revision):
+                return
             if not trigger.available:
                 self.store.record(
                     session,
@@ -317,18 +336,27 @@ class GuidanceAgent(Agent):
                 )
             else:
                 self.store.observe(session, trigger.value)
-                await self._observe(session, step, trigger.value)
+                state = dict(session.state)
+        if trigger.available:
+            await self._observe(
+                session,
+                step,
+                trigger.value,
+                state,
+                revision,
+            )
         await self._flush(session)
 
     async def _trigger(
         self,
-        session: WorkflowSession,
+        participant_id: str,
         step: Step,
+        state: dict[str, Any],
     ) -> _TriggerResult:
-        arguments = _resolve(step.trigger.arguments, session)
+        arguments = _resolve(step.trigger.arguments, state)
         if step.trigger.function == "current_view":
             tool = participant_current_view_tool(
-                session.participant_id,
+                participant_id,
                 self._current_frame,
                 self._image_query,
                 timeout_s=self._vlm_timeout_s,
@@ -359,9 +387,16 @@ class GuidanceAgent(Agent):
         session: WorkflowSession,
         step: Step,
         observation: Any,
+        state: dict[str, Any],
+        revision: int,
     ) -> None:
         quick = self._named_tools(session, step.agent.tools)
-        commit = workflow_commit_tool(self.store, session)
+        commit = workflow_commit_tool(
+            self.store,
+            session,
+            expected_step_id=step.id,
+            expected_revision=revision,
+        )
         tools = ToolSet(
             {
                 commit.name: commit,
@@ -371,8 +406,8 @@ class GuidanceAgent(Agent):
         request = json.dumps(
             {
                 "observation": observation,
-                "already_complete": step.is_complete(session.state),
-                "state": self.workflow.project(step, session.state),
+                "already_complete": False,
+                "state": self.workflow.project(step, state),
             },
             ensure_ascii=False,
             separators=(",", ":"),
@@ -409,24 +444,55 @@ class GuidanceAgent(Agent):
                 max_tool_calls=3,
             )
         except ToolLoopError as exc:
-            self.store.record(
-                session,
-                "agent.observation_skipped",
-                str(exc),
-            )
+            async with session.lock:
+                if self._current(session, step, revision):
+                    self.store.record(
+                        session,
+                        "agent.observation_skipped",
+                        str(exc),
+                    )
             return
         called = tuple(record.call.name for record in result.tool_calls)
-        if "workflow__commit" not in called:
-            self.store.record(
-                session,
-                "agent.observation_skipped",
-                "model did not call workflow__commit",
-            )
-            return
-        self.store.record(
-            session,
-            "agent.observation_complete",
-            ",".join(called),
+        commit_record = next(
+            (
+                record
+                for record in result.tool_calls
+                if record.call.name == "workflow__commit"
+            ),
+            None,
+        )
+        async with session.lock:
+            if commit_record is None:
+                if self._current(session, step, revision):
+                    self.store.record(
+                        session,
+                        "agent.observation_skipped",
+                        "model did not call workflow__commit",
+                    )
+                return
+            commit_result = json.loads(commit_record.message.content)
+            if (
+                commit_result.get("accepted") is True
+                and session.step_id == step.id
+                and session.revision == commit_result.get("revision")
+            ):
+                self.store.record(
+                    session,
+                    "agent.observation_complete",
+                    ",".join(called),
+                )
+
+    @staticmethod
+    def _current(
+        session: WorkflowSession,
+        step: Step,
+        revision: int,
+    ) -> bool:
+        return (
+            session.active
+            and session.step_id == step.id
+            and session.revision == revision
+            and not step.is_complete(session.state)
         )
 
     async def _flush(self, session: WorkflowSession) -> None:
@@ -476,16 +542,16 @@ class GuidanceAgent(Agent):
         return participant_id
 
 
-def _resolve(value: Any, session: WorkflowSession) -> Any:
+def _resolve(value: Any, state: dict[str, Any]) -> Any:
     if isinstance(value, dict):
-        return {name: _resolve(item, session) for name, item in value.items()}
+        return {name: _resolve(item, state) for name, item in value.items()}
     if isinstance(value, list):
-        return [_resolve(item, session) for item in value]
+        return [_resolve(item, state) for item in value]
     if isinstance(value, str) and value.startswith("$state."):
         name = value.removeprefix("$state.")
-        if name not in session.state:
+        if name not in state:
             raise ValueError(f"trigger references missing state: {name}")
-        return session.state[name]
+        return state[name]
     return value
 
 
