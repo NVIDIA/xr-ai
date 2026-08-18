@@ -12,18 +12,15 @@ entry whose deployment is ``managed`` launches as the named service, so one
 profile can mix local in-process servers, vLLM servers, and self-hosted NIM
 containers. Shipped profiles (yaml/models.<name>.json):
 
-  vlm_llm  (default)
+  default
     stt        — nvidia/parakeet-tdt-0.6b-v3        port 8103  (NeMo ASR)
-    agent-llm  — NVIDIA-Nemotron-3-Nano-30B-A3B     port 8107  (vLLM)
+    omni       — Nemotron-3-Nano-Omni-30B-A3B       port 8108  (vLLM; llm + agent_llm)
     vlm        — nvidia/Cosmos3-Nano Reasoner       port 8100  (vLLM)
     embedding  — nvidia/llama-nemotron-embed-1b-v2  port 8109  (vLLM)
 
-  omni
-    stt, embedding, and Nemotron-3-Nano-Omni        port 8108  (vLLM)
-
   vlm_llm_nim
     stt + embedding local; the LLM and VLM as self-hosted NIM containers
-    (Nemotron-3-Nano port 8106, Cosmos-Reason1-7B port 8100). Requires
+    (Nemotron-3-Nano port 8110, Cosmos-Reason1-7B port 8100). Requires
     docker + NGC_API_KEY. Pairs with the samples' models.vlm_llm_nim.json.
 
   vlm_speech_nim
@@ -67,7 +64,7 @@ _BASE = Path(__file__).resolve().parent
 _MODEL_SERVICES: dict[str, tuple[str, str, str, int]] = {
     "stt-nim":   ("../../services/nim-server", "nim_server", "nim_stt_server", 9010),
     "tts-nim":   ("../../services/nim-server", "nim_server", "nim_tts_server", 9011),
-    "llm-nim":   ("../../services/nim-server", "nim_server", "nim_llm_server", 8106),
+    "llm-nim":   ("../../services/nim-server", "nim_server", "nim_llm_server", 8110),
     "vlm-nim":   ("../../services/nim-server", "nim_server", "nim_vlm_server", 8100),
     "stt":       ("../../services/stt-server", "stt_server", "stt_server", 8103),
     "agent-llm": (
@@ -167,18 +164,10 @@ def run() -> None:
     )
     mode.add_argument(
         "--models", dest="models", metavar="NAME_OR_PATH",
-        help="Deployment profile to start: a shipped name (vlm_llm, omni, "
+        help="Deployment profile to start: a shipped name (default, "
              "vlm_llm_nim, vlm_speech_nim) or a path to a profile JSON.",
     )
-    mode.add_argument(
-        "--omni-stack", action="store_const", const="omni", dest="models",
-        help="Alias for --models omni.",
-    )
-    mode.add_argument(
-        "--vlm-llm-stack", action="store_const", const="vlm_llm", dest="models",
-        help="Alias for --models vlm_llm (the default).",
-    )
-    p.set_defaults(models="vlm_llm")
+    p.set_defaults(models="default")
     p.add_argument("--allow-anonymous", action="store_true",
                    help="Start without HF_TOKEN (unauthenticated downloads "
                         "of the multi-GB checkpoints may stall indefinitely).")

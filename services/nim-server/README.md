@@ -13,7 +13,7 @@ which. Orchestrators list one `Process` row per NIM with a distinct
 ```yaml
 # yaml/nim_llm_server.yaml
 image:     nvcr.io/nim/meta/llama-3.1-8b-instruct:latest
-http_port: 8106
+http_port: 8110
 ```
 
 On first start the container pulls from `nvcr.io` and downloads the

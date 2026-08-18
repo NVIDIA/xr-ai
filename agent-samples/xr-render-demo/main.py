@@ -94,9 +94,9 @@ _MODEL_PROCESSES = {
         "stt", "../../services/stt-server", "stt_server",
         config="yaml/stt_server.yaml",
     ),
-    "agent-llm": Process(
-        "agent-llm", "../../services/nemotron3-nano-llm",
-        "nemotron3_nano_llm_server",
+    "omni": Process(
+        "omni", "../../services/nemotron-omni-llm",
+        "nemotron_omni_llm_server",
     ),
     "vlm": Process(
         "vlm", "../../services/vlm-server", "vlm_server",

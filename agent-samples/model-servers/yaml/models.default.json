@@ -13,17 +13,30 @@
         "service": "stt"
       }
     },
-    "agent_llm": {
+    "llm": {
       "adapter": {
-        "preset": "nemotron3_nano"
+        "preset": "nemotron_omni"
       },
       "endpoint": {
-        "base_url": "http://localhost:8107",
+        "base_url": "http://localhost:8108",
         "readiness": "health"
       },
       "deployment": {
         "ownership": "managed",
-        "service": "agent-llm"
+        "service": "omni"
+      }
+    },
+    "agent_llm": {
+      "adapter": {
+        "preset": "nemotron_omni"
+      },
+      "endpoint": {
+        "base_url": "http://localhost:8108",
+        "readiness": "health"
+      },
+      "deployment": {
+        "ownership": "managed",
+        "service": "omni"
       }
     },
     "vlm": {

@@ -42,16 +42,16 @@ On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.
 
 Which servers start is a deployment profile selected with
-`--models <name|path>`. The default `vlm_llm` starts Nemotron-3 Nano (8107),
-Cosmos (8100), STT (8103), and embeddings (8109); `omni` replaces Nano and
-Cosmos with Nemotron-3 Nano Omni (8108); `vlm_llm_nim` serves the LLM and
-VLM as self-hosted NIM containers (requires docker + `NGC_API_KEY`);
-`vlm_speech_nim` serves speech from Riva NIM containers. Starting a profile
-stops persisted servers outside it first and aborts if they cannot be
-stopped, avoiding GPU overcommit.
+`--models <name|path>`. The default starts Nemotron-3 Nano Omni (8108,
+serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), and
+embeddings (8109); `vlm_llm_nim` serves the LLM and VLM as self-hosted NIM
+containers (requires docker + `NGC_API_KEY`); `vlm_speech_nim` serves
+speech from Riva NIM containers. Starting a profile stops persisted servers
+outside it first and aborts if they cannot be stopped, avoiding GPU
+overcommit.
 
 ```bash
-uv run model_servers --models omni
+uv run model_servers --models vlm_llm_nim
 ```
 
 `HF_TOKEN` is required by default: without it the large first-run download

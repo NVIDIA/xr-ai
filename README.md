@@ -179,21 +179,18 @@ On first run the stack downloads tens of GB from Hugging Face and can take
 tens of minutes. On subsequent runs the containers restart in under a minute.
 
 Which servers start is a deployment profile: `--models <name|path>` selects
-`vlm_llm` (the default), `omni`, `vlm_llm_nim` (LLM and VLM as self-hosted
-NIM containers; requires docker + `NGC_API_KEY`), `vlm_speech_nim` (Riva
-speech NIM containers), or any profile JSON of your own. Starting a profile
-stops persisted servers outside it, so switching is one command.
+`default`, `vlm_llm_nim` (LLM and VLM as self-hosted NIM containers;
+requires docker + `NGC_API_KEY`), `vlm_speech_nim` (Riva speech NIM
+containers), or any profile JSON of your own. Starting a profile stops
+persisted servers outside it first and aborts if they cannot be stopped,
+avoiding GPU overcommit.
 
-The default `--vlm-llm-stack` starts Nemotron-3 Nano (8107), Cosmos (8100),
-STT (8103), and embeddings (8109). Use `--omni-stack` to replace Nano and
-Cosmos with Nemotron-3 Nano Omni (8108); STT and embeddings remain available.
-On `dual_48G_ada`, the default stack places Cosmos and embeddings on GPU 0;
-the Omni stack places Omni on GPU 0 and embeddings on GPU 1.
-Switching stacks stops the incompatible persistent models first and aborts if
-they cannot be stopped, avoiding GPU overcommit.
+The default profile starts Nemotron-3 Nano Omni (8108, serving both the
+reactive and agent LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103),
+and embeddings (8109).
 
 ```bash
-uv run model_servers --omni-stack
+uv run model_servers --models vlm_llm_nim
 ```
 
 `HF_TOKEN` is required by default: without it the roughly 60 GB first-run download

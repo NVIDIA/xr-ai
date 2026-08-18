@@ -345,8 +345,7 @@ _MODEL_SERVERS_YAML = _ROOT / "agent-samples" / "model-servers" / "yaml"
 @pytest.mark.parametrize(
     "profile_name",
     [
-        "models.vlm_llm.json",
-        "models.omni.json",
+        "models.default.json",
         "models.vlm_llm_nim.json",
         "models.vlm_speech_nim.json",
     ],

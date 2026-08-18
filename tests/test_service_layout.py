@@ -33,7 +33,7 @@ _MODEL_SERVICES = {
     "llama-nemotron-llm": (
         "llama-nemotron-llm-server",
         "llama_nemotron_llm_server",
-        8106,
+        8110,
     ),
     "magpie-tts": ("magpie-tts-server", "magpie_tts_server", 8104),
     "nemotron-omni-llm": (
@@ -249,8 +249,7 @@ def test_sample_process_projects_resolve(monkeypatch) -> None:
     declarations = [
         (
             _ROOT / "agent-samples/model-servers",
-            model_servers._build_processes("vlm_llm")[0]
-            + model_servers._build_processes("omni")[0]
+            model_servers._build_processes("default")[0]
             + model_servers._build_processes("vlm_llm_nim")[0]
             + model_servers._build_processes("vlm_speech_nim")[0],
         ),

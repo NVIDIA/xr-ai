@@ -7,7 +7,7 @@
 # any LLM NIM from https://catalog.ngc.nvidia.com.
 # UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.
 image:     nvcr.io/nim/nvidia/nemotron-3-nano:2.0.10
-http_port: 8106
+http_port: 8110
 
 nim_cache: ../../../../models/nim
 

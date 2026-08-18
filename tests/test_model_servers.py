@@ -39,24 +39,14 @@ _embedding = importlib.util.module_from_spec(_EMBEDDING_SPEC)
 _EMBEDDING_SPEC.loader.exec_module(_embedding)
 
 
-def test_default_profile_uses_nano_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "spark")
 
-    processes, credentials = _model_servers._build_processes("vlm_llm")
+    processes, credentials = _model_servers._build_processes("default")
 
-    assert [process.name for process in processes] == ["stt", "agent-llm", "vlm", "embedding"]
-    assert [process.port for process in processes] == [8103, 8107, 8100, 8109]
+    assert [process.name for process in processes] == ["stt", "omni", "vlm", "embedding"]
+    assert [process.port for process in processes] == [8103, 8108, 8100, 8109]
     assert credentials == ()
-
-
-def test_omni_profile_replaces_nano_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
-
-    processes, _ = _model_servers._build_processes("omni")
-
-    assert [process.name for process in processes] == ["stt", "omni", "embedding"]
-    assert [process.port for process in processes] == [8103, 8108, 8109]
-    assert str(processes[1].config) == "yaml/dual_48G_ada/nemotron_omni_llm_server.yaml"
 
 
 def test_nim_profile_mixes_nim_containers_and_local_servers(
@@ -69,7 +59,7 @@ def test_nim_profile_mixes_nim_containers_and_local_servers(
     assert [process.name for process in processes] == [
         "llm-nim", "vlm-nim", "stt", "embedding",
     ]
-    assert [process.port for process in processes] == [8106, 8100, 8103, 8109]
+    assert [process.port for process in processes] == [8110, 8100, 8103, 8109]
     assert credentials == ("NGC_API_KEY",)
 
 
@@ -89,8 +79,7 @@ def test_vlm_speech_nim_profile_serves_speech_from_riva_containers(
 @pytest.mark.parametrize(
     ("selection", "service", "config_name", "gpu"),
     [
-        ("vlm_llm", "embedding", "embedding_server.yaml", "0"),
-        ("omni", "embedding", "embedding_server_omni.yaml", "1"),
+        ("default", "embedding", "embedding_server.yaml", "0"),
         ("vlm_llm_nim", "embedding", "embedding_server.yaml", "0"),
         ("vlm_llm_nim", "stt", "stt_server.yaml", "1"),
         ("vlm_llm_nim", "vlm-nim", "nim_vlm_server.yaml", "0"),
@@ -147,7 +136,7 @@ def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
     assert set(stopped) == {
         ("stt-nim", 9010),
         ("tts-nim", 9011),
-        ("llm-nim", 8106),
+        ("llm-nim", 8110),
         ("vlm-nim", 8100),
         ("stt", 8103),
         ("agent-llm", 8107),
@@ -161,8 +150,7 @@ def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
     ("selection", "expected_stopped_ports"),
     [
         # The selected profile's ports are kept; everything else is stopped.
-        ("omni", {9010, 9011, 8106, 8100, 8107}),
-        ("vlm_llm", {9010, 9011, 8106, 8108}),
+        ("default", {9010, 9011, 8110, 8107}),
         ("vlm_llm_nim", {9010, 9011, 8107, 8108}),
     ],
 )
@@ -188,9 +176,7 @@ def test_starting_profile_stops_unselected_services(
 @pytest.mark.parametrize(
     ("argv", "expected"),
     [
-        ([], "vlm_llm"),
-        (["--vlm-llm-stack"], "vlm_llm"),
-        (["--omni-stack"], "omni"),
+        ([], "default"),
         (["--models", "vlm_llm_nim"], "vlm_llm_nim"),
     ],
 )
@@ -276,7 +262,7 @@ def test_cli_aborts_when_unselected_services_cannot_stop(
         _model_servers, "_build_processes", lambda _selection: ([], ()),
     )
     monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: started.append(True))
-    monkeypatch.setattr(sys, "argv", ["model_servers", "--omni-stack"])
+    monkeypatch.setattr(sys, "argv", ["model_servers"])
 
     with pytest.raises(RuntimeError, match="could not stop persistent servers"):
         _model_servers.run()

@@ -12,7 +12,7 @@
         }
       },
       "endpoint": {
-        "base_url": "http://localhost:8106",
+        "base_url": "http://localhost:8110",
         "readiness": "health",
         "health_path": "/v1/health/ready"
       },
@@ -36,7 +36,7 @@
         }
       },
       "endpoint": {
-        "base_url": "http://localhost:8106",
+        "base_url": "http://localhost:8110",
         "readiness": "health",
         "health_path": "/v1/health/ready"
       },
