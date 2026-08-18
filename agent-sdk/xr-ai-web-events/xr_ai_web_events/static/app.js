@@ -18,7 +18,15 @@ const paneKeys = new WeakMap();
 const scrollPositions = new Map();
 
 function participantName(event) {
-  return event.participant_id || 'Global';
+  return event.participant_id == null ? 'Global' : event.participant_id;
+}
+
+function participantKey(event) {
+  return event.participant_id == null ? 'global:' : `participant:${event.participant_id}`;
+}
+
+function participantOptionName(event) {
+  return event.participant_id == null ? 'Global (unscoped)' : event.participant_id;
 }
 
 function presentation(event) {
@@ -33,14 +41,19 @@ function presentation(event) {
 
 function refreshParticipantOptions() {
   const selected = participantFilter.value;
-  const names = [...new Set(events.map(participantName))].sort();
+  const participants = new Map(
+    events.map((event) => [participantKey(event), participantOptionName(event)]),
+  );
+  const options = [...participants.entries()].sort((left, right) => (
+    left[1].localeCompare(right[1]) || left[0].localeCompare(right[0])
+  ));
   participantFilter.replaceChildren(new Option('All', '*'));
-  names.forEach((name) => participantFilter.add(new Option(name, name)));
-  participantFilter.value = names.includes(selected) || selected === '*' ? selected : '*';
+  options.forEach(([key, name]) => participantFilter.add(new Option(name, key)));
+  participantFilter.value = participants.has(selected) || selected === '*' ? selected : '*';
 }
 
 function topicKey(event) {
-  return `${participantName(event)}\u0000${event.topic}`;
+  return `${participantKey(event)}\u0000${event.topic}`;
 }
 
 function render() {
@@ -57,7 +70,7 @@ function render() {
   }
   grid.querySelectorAll('.topic-pane').forEach((pane) => pane.remove());
   const selected = participantFilter.value;
-  const visible = selected === '*' ? events : events.filter((event) => participantName(event) === selected);
+  const visible = selected === '*' ? events : events.filter((event) => participantKey(event) === selected);
   const groups = new Map();
   visible.forEach((event) => {
     const key = topicKey(event);

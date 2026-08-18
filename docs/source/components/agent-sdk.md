@@ -68,7 +68,9 @@ events should become speech.
 Applications may publish selected compact payloads to `WEB_EVENT_TOPIC` for a
 `WebEventsAgent` to display. The viewer owns only a bounded live history and a
 loopback HTTP listener. It is not persistence, does not inspect every runtime
-topic, and does not enter model, voice, media, or hub authentication paths.
+topic, and does not enter model, voice, media, or hub authentication paths. The
+`simple-vlm-example` and `xr-render-demo` workers are concrete consumers: each
+selects its application-level requests and response chunks for the viewer.
 
 `ProcessorEndpoint` is the minimal agent-side hub boundary. It receives data,
 audio, frame signals, and participant events and sends participant-routed return

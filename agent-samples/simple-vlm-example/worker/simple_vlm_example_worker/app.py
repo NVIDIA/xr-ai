@@ -14,12 +14,20 @@ import nemo_relay
 from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_stt, make_tts, make_vlm
-from xr_ai_runtime import AgentRuntime
+from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import StreamingImageQueryTool
-from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent
+from xr_ai_voice import (
+    VOICE_OUTPUT_TOPIC,
+    HubVoiceTransport,
+    UserQuery,
+    VadConfig,
+    VoiceAgent,
+    VoiceOutput,
+)
 from xr_ai_voicegate import load_voice_gate_config
+from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent, WebEventsAgent
 
 from .agent import (
     INTERRUPTED_TOPIC,
@@ -28,6 +36,38 @@ from .agent import (
     SimpleVlmAgent,
 )
 from .config import WorkerConfig
+
+
+class _SimpleVlmWebEvents(Agent):
+    """Select user-visible conversation events for the live viewer."""
+
+    @subscribe(USER_QUERY_TOPIC)
+    async def user_query(self, query: UserQuery, ctx: RuntimeContext) -> None:
+        await ctx.publish(
+            WEB_EVENT_TOPIC,
+            WebEvent(
+                topic="simple-vlm.query",
+                title="User queries",
+                payload={"text": query.text},
+            ),
+        )
+
+    @subscribe(VOICE_OUTPUT_TOPIC)
+    async def assistant_output(
+        self,
+        output: VoiceOutput,
+        ctx: RuntimeContext,
+    ) -> None:
+        if not output.text:
+            return
+        await ctx.publish(
+            WEB_EVENT_TOPIC,
+            WebEvent(
+                topic="simple-vlm.response",
+                title="VLM responses",
+                payload={"text": output.text, "final": output.final},
+            ),
+        )
 
 
 @asynccontextmanager
@@ -116,13 +156,24 @@ async def run_app(
         ),
     )
     runtime.register("voice", voice)
+    viewer = runtime.register(
+        "web-events",
+        WebEventsAgent(
+            host=config.web_events_host,
+            port=config.web_events_port,
+            title="Simple VLM events",
+        ),
+    )
+    runtime.register("web-events-publisher", _SimpleVlmWebEvents())
 
     logger.info("Relay events → {}", log_file.parent / "relay-events.jsonl")
     logger.info("simple-vlm-example starting")
     async with _relay_event_log(log_file):
-        async with runtime:
-            try:
-                await voice.run(runtime)
-            finally:
-                await simple_vlm.stop()
+        async with viewer:
+            logger.info("Web events → {}", viewer.url)
+            async with runtime:
+                try:
+                    await voice.run(runtime)
+                finally:
+                    await simple_vlm.stop()
     logger.info("simple-vlm-example stopped")

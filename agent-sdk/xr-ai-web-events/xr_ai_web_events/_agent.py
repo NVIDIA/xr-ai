@@ -96,10 +96,32 @@ class WebEventsAgent(Agent):
             thread = self._thread
             if server is None:
                 return
-            self._server = None
-            self._thread = None
+            cleanup = asyncio.create_task(
+                self._close_server(server, thread),
+                name="xr-ai-web-events-stop",
+            )
+            try:
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError:
+                # The listener owns potentially sensitive in-memory data. Do
+                # not abandon its socket when the surrounding worker is being
+                # cancelled; finish cleanup before propagating cancellation.
+                await cleanup
+                raise
+            finally:
+                if cleanup.done():
+                    self._server = None
+                    self._thread = None
+
+    @staticmethod
+    async def _close_server(
+        server: _WebEventsServer,
+        thread: threading.Thread | None,
+    ) -> None:
+        try:
             if thread is not None and thread.is_alive():
                 await asyncio.to_thread(server.shutdown)
+        finally:
             server.server_close()
             if thread is not None:
                 await asyncio.to_thread(thread.join)

@@ -7,6 +7,7 @@ import asyncio
 import json
 import math
 import socket
+import threading
 from urllib.error import HTTPError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
@@ -182,6 +183,37 @@ async def test_viewer_lifecycle_is_idempotent_and_bind_failure_is_visible() -> N
         with pytest.raises(OSError):
             await blocked.start()
         assert not blocked.running
+
+
+async def test_viewer_cancellation_finishes_listener_cleanup(monkeypatch) -> None:
+    viewer = WebEventsAgent(port=0)
+    await viewer.start()
+    server = viewer._server  # noqa: SLF001
+    assert server is not None
+    host, port = server.server_address[:2]
+    shutdown_started = threading.Event()
+    allow_shutdown = threading.Event()
+    original_shutdown = server.shutdown
+
+    def delayed_shutdown() -> None:
+        shutdown_started.set()
+        allow_shutdown.wait()
+        original_shutdown()
+
+    monkeypatch.setattr(server, "shutdown", delayed_shutdown)
+    stop = asyncio.create_task(viewer.stop())
+    await asyncio.wait_for(asyncio.to_thread(shutdown_started.wait), 1.0)
+    stop.cancel()
+    allow_shutdown.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await stop
+
+    assert not viewer.running
+    assert viewer._server is None  # noqa: SLF001
+    assert viewer._thread is None  # noqa: SLF001
+    with socket.socket() as rebound:
+        rebound.bind((host, port))
 
 
 @pytest.mark.parametrize(

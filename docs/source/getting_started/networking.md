@@ -78,8 +78,9 @@ ssh -L 8092:127.0.0.1:8092 user@xr-host
 
 Then open `http://127.0.0.1:8092` locally.
 
-For direct access on a trusted private network, explicitly change the sample
-worker configuration:
+For direct access on a trusted private network, explicitly change the worker
+configuration in `agent-samples/simple-vlm-example/yaml/simple_vlm_example_worker.yaml`
+or `agent-samples/xr-render-demo/yaml/xr_render_demo_worker.yaml`:
 
 ```yaml
 web_events_host: 0.0.0.0

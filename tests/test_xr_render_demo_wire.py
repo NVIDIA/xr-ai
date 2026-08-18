@@ -15,6 +15,7 @@ import asyncio
 import json
 import runpy
 import sys
+import tomllib
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -116,6 +117,17 @@ def test_worker_config_idle_timeout_disabled_by_default() -> None:
     )
     cfg = load_config(worker_yaml)
     assert cfg.idle_timeout_secs is None
+    assert cfg.web_events_host == "127.0.0.1"
+    assert cfg.web_events_port == 8092
+
+
+def test_worker_depends_on_web_events_sdk() -> None:
+    project = tomllib.loads((_WORKER_DIR / "pyproject.toml").read_text())
+
+    assert "xr-ai-web-events" in project["project"]["dependencies"]
+    assert project["tool"]["uv"]["sources"]["xr-ai-web-events"]["path"] == (
+        "../../../agent-sdk/xr-ai-web-events"
+    )
 
 
 def test_worker_config_idle_timeout_opt_in(tmp_path) -> None:

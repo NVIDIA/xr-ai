@@ -49,6 +49,10 @@ and topic views. `/api/events?after=<sequence>` reports cursor rollover so a
 browser can recover after falling behind the bounded store. `/healthz` reports
 whether the HTTP listener can answer requests.
 
+The shipped `simple-vlm-example` worker publishes participant-scoped VLM queries
+and response chunks, while `xr-render-demo` publishes XR requests and spoken
+agent output. Both configure and start their viewer from the sample worker YAML.
+
 The listener has no application authentication or TLS. Its loopback default is
 intentional because payloads may contain speech transcripts or camera-derived
 text. For remote development, keep it on loopback and use an SSH tunnel:
