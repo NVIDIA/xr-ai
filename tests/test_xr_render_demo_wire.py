@@ -1218,3 +1218,23 @@ def test_scene_loop_bounds_participant_state_as_one_lru_unit() -> None:
     for state in (brain._history, brain._recent_moves,  # noqa: SLF001
                   brain._pre_move_positions):  # noqa: SLF001
         assert set(state) == {"alice", "carol"}
+
+
+async def test_worker_builds_model_services_from_shipped_config() -> None:
+    # Regression: main() must construct every model client from the shipped
+    # worker YAML via load_models(config_path) (a stale WorkerConfig field
+    # reference here once crashed the worker at startup).
+    from xr_render_demo_worker.__main__ import _make_model_services
+
+    config_path = (
+        _WORKER_DIR.parent / "yaml" / "xr_render_demo_worker.yaml"
+    )
+    models_cfg, services = _make_model_services(config_path)
+    try:
+        assert models_cfg.llm("llm").base_url
+        assert len(services) == 5
+        assert all(service is not None for service in services)
+    finally:
+        await asyncio.gather(
+            *(service.close() for service in services), return_exceptions=True
+        )

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from loguru import logger
 from xr_ai_logging import setup_logging
-from xr_ai_models import ChatMessage, load_models_config, make_llm, make_stt, make_tts, make_vlm
+from xr_ai_models import ChatMessage, make_llm, make_stt, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.tool_calling import tool_definitions
 from xr_ai_voice import (
@@ -28,7 +28,7 @@ from .agent import (
     USER_QUERY_TOPIC,
     RenderAgent,
 )
-from .config import WorkerConfig, load_config
+from .config import WorkerConfig, load_config, load_models
 from .lifecycle import XRSessionLifecycle
 from .scene_loop import (
     LIVE_PERCEPTION_TOOL,
@@ -62,6 +62,18 @@ async def _probe_warmed_llm(llm, *, warmup: bool) -> bool:
     return True
 
 
+def _make_model_services(config_path: pathlib.Path | None):
+    """Model clients for the profile selected by the worker YAML at *config_path*."""
+    models_cfg = load_models(config_path)
+    return models_cfg, (
+        make_llm(models_cfg, "llm"),
+        make_llm(models_cfg, "agent_llm"),
+        make_stt(models_cfg, "stt"),
+        make_tts(models_cfg, "tts"),
+        make_vlm(models_cfg, "vlm"),
+    )
+
+
 async def main(
     cfg: WorkerConfig,
     config_path: pathlib.Path | None = None,
@@ -83,12 +95,7 @@ async def main(
     )
     logger.bind(trace=True).info("=== trace started ===")
 
-    models_cfg = load_models_config(cfg.models_yaml)
-    llm = make_llm(models_cfg, "llm")
-    agent_llm = make_llm(models_cfg, "agent_llm")
-    stt = make_stt(models_cfg, "stt")
-    tts = make_tts(models_cfg, "tts")
-    vlm_service = make_vlm(models_cfg, "vlm")
+    models_cfg, (llm, agent_llm, stt, tts, vlm_service) = _make_model_services(config_path)
 
     async def llm_probe() -> bool:
         return await _probe_warmed_llm(
