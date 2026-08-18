@@ -45,7 +45,8 @@ tool. `LabInstrumentAgent` performs reusable one-frame marker-associated reads
 and writes source-frame snapshots used to debug marker extraction. The shared
 image agent uses `MarkerTrackingTool` for QR and ArUco markers. `device_map.yaml`
 maps each marker family and raw ID to the device name used in readings, state,
-logs, and voice alerts.
+logs, and voice alerts. Ready-to-print PNGs for every configured device and a
+mapping table are available in [`sample-markers/`](sample-markers/).
 
 `InstrumentMonitorAgent` owns all participant-scoped instrument state. It
 normalizes numeric readings, retains a known unit when a later VLM result omits

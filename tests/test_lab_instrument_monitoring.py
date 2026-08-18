@@ -14,6 +14,7 @@ from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
+import cv2
 import pytest
 import yaml
 from xr_ai_models import ChatResponse, ToolCall
@@ -212,8 +213,14 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     assert models["models"]["llm"]["deployment"]["service"] == "omni"
     assert models["models"]["vlm"]["deployment"]["service"] == "vlm"
     assert config.voice_gate_yaml == _SAMPLE / "yaml" / "voice_gate.yaml"
-    assert config.device_map.resolve(MarkerType.QR_CODE, "S4-RC").device_name == ("Device1")
-    assert config.device_map.resolve(MarkerType.ARUCO, "1").device_name == "Device4"
+    assert config.device_map.resolve(MarkerType.QR_CODE, "device-1").device_name == (
+        "Device1"
+    )
+    assert config.device_map.resolve(MarkerType.QR_CODE, "device-5").device_name == (
+        "Device5"
+    )
+    assert config.device_map.resolve(MarkerType.ARUCO, "1").device_name == "Device2"
+    assert config.device_map.resolve(MarkerType.ARUCO, "4").device_name == "Device5"
     assert config.device_map.resolve(MarkerType.ARUCO, "99").device_name == "ArUco 99"
     assert config.artifacts_dir == _SAMPLE / "artifacts"
     assert config.monitor_interval_s == 5.0
@@ -221,6 +228,43 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     assert config.instrument_lost_after_s == 30.0
     assert "Previous caption" not in config.monitor_prompt
     assert "current_view" in config.foreground_prompt
+
+
+def test_sample_markers_match_device_map() -> None:
+    marker_dir = _SAMPLE / "sample-markers"
+    expected = {
+        "qr/Device1_QR_device-1.png": (MarkerType.QR_CODE, "device-1", "Device1"),
+        "qr/Device2_QR_device-2.png": (MarkerType.QR_CODE, "device-2", "Device2"),
+        "qr/Device3_QR_device-3.png": (MarkerType.QR_CODE, "device-3", "Device3"),
+        "qr/Device4_QR_device-4.png": (MarkerType.QR_CODE, "device-4", "Device4"),
+        "qr/Device5_QR_device-5.png": (MarkerType.QR_CODE, "device-5", "Device5"),
+        "aruco/Device1_ArUco_0.png": (MarkerType.ARUCO, "0", "Device1"),
+        "aruco/Device2_ArUco_1.png": (MarkerType.ARUCO, "1", "Device2"),
+        "aruco/Device3_ArUco_2.png": (MarkerType.ARUCO, "2", "Device3"),
+        "aruco/Device4_ArUco_3.png": (MarkerType.ARUCO, "3", "Device4"),
+        "aruco/Device5_ArUco_4.png": (MarkerType.ARUCO, "4", "Device5"),
+    }
+    assert {
+        path.relative_to(marker_dir).as_posix() for path in marker_dir.rglob("*.png")
+    } == set(expected)
+
+    config = load_config(_SAMPLE / "yaml" / "lab_instrument_monitoring_worker.yaml")
+    qr_detector = cv2.QRCodeDetector()
+    aruco_detector = cv2.aruco.ArucoDetector(
+        cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    )
+
+    for filename, (marker_type, marker_id, device_name) in expected.items():
+        image = cv2.imread(str(marker_dir / filename))
+        assert image is not None
+        if marker_type is MarkerType.QR_CODE:
+            decoded_id, _, _ = qr_detector.detectAndDecode(image)
+        else:
+            _, identifiers, _ = aruco_detector.detectMarkers(image)
+            assert identifiers is not None and len(identifiers) == 1
+            decoded_id = str(identifiers[0, 0])
+        assert decoded_id == marker_id
+        assert config.device_map.resolve(marker_type, decoded_id).device_name == device_name
 
 
 def test_monitor_and_foreground_share_participant_image_acquisition(tmp_path: Path) -> None:
