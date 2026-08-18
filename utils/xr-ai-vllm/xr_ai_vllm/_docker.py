@@ -45,6 +45,13 @@ _LAUNCH_CONTRACT_VERSION = 1
 # ── docker run argv builder ──────────────────────────────────────────────────
 
 
+def credential_digest(value: str | None) -> str | None:
+    """One-way digest so a credential can join a fingerprint without exposure."""
+    if not value:
+        return None
+    return hashlib.sha256(value.encode()).hexdigest()[:12]
+
+
 def launch_fingerprint(payload: dict[str, Any]) -> str:
     """Digest of a container's complete launch contract.
 
@@ -87,7 +94,7 @@ def build_run_argv(
     # caller needing to know the container name — implementation detail stays
     # inside this module.
     argv += ["--label", f"xr-ai-vllm.port={port}"]
-    fingerprint = launch_fingerprint({
+    payload: dict[str, Any] = {
         "image": image,
         "port": port,
         "model_cache": str(model_cache),
@@ -95,7 +102,13 @@ def build_run_argv(
         "extra_env": extra_env or {},
         "extra_pip": extra_pip or [],
         "vllm_argv": vllm_argv,
-    })
+    }
+    # The name-only -e resolves the token into the container's creation-time
+    # env, so a rotated token must change the contract; the key is omitted
+    # entirely when unset to keep tokenless fingerprints stable.
+    if hf_token:
+        payload["hf_token_digest"] = credential_digest(hf_token)
+    fingerprint = launch_fingerprint(payload)
     argv += ["--label", f"{_CONFIG_LABEL}={fingerprint}"]
     argv += ["--network", "host"]
     # vLLM workers communicate via /dev/shm; the default 64 MiB tmpfs is too

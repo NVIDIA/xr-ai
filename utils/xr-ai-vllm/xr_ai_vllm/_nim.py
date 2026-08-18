@@ -46,6 +46,9 @@ def build_nim_run_argv(
     argv: list[str] = ["docker", "run"]
     argv += ["--name", container_name]
     argv += ["--label", f"xr-ai-vllm.port={http_port}"]
+    # serve_nim exports NGC_API_KEY before building the argv; a rotated key
+    # must change the launch contract or a stopped container restarts with
+    # the expired key baked into its creation-time env.
     fingerprint = _docker.launch_fingerprint({
         "image": image,
         "http_port": http_port,
@@ -53,6 +56,9 @@ def build_nim_run_argv(
         "nim_cache": str(nim_cache),
         "cuda_visible_devices": cuda_visible_devices,
         "extra_env": extra_env or {},
+        "ngc_api_key_digest": _docker.credential_digest(
+            os.environ.get("NGC_API_KEY")
+        ),
     })
     argv += ["--label", f"{_docker._CONFIG_LABEL}={fingerprint}"]
     # Bridge networking with explicit -p maps to each family's documented

@@ -738,10 +738,10 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
         capabilities=_mapping(body, "capabilities"),
         default_extras=_mapping(body, "default_extras"),
         function_id=_optional_str(body, "function_id"),
-        use_ssl=bool(body.get("use_ssl", False)),
-        language=str(body.get("language", "en-US")),
-        voice=str(body.get("voice", "")),
-        sample_rate=int(body.get("sample_rate", 44100)),
+        use_ssl=_riva_bool(body, "use_ssl", False),
+        language=_riva_str(body, "language", "en-US", allow_empty=False),
+        voice=_riva_str(body, "voice", "", allow_empty=True),
+        sample_rate=_riva_sample_rate(body),
     )
     deployment = _deployment(body.get("deployment", {}))
 
@@ -775,6 +775,29 @@ def _readiness(body: dict[str, Any]) -> Readiness:
     if "health_check" in body and (readiness == "health") != legacy:
         raise ValueError("readiness conflicts with health_check")
     return readiness
+
+
+def _riva_bool(body: dict[str, Any], key: str, default: bool) -> bool:
+    value = body.get(key, default)
+    if not isinstance(value, bool):
+        raise ValueError(f"{key} must be a boolean")
+    return value
+
+
+def _riva_str(
+    body: dict[str, Any], key: str, default: str, *, allow_empty: bool
+) -> str:
+    value = body.get(key, default)
+    if not isinstance(value, str) or (not allow_empty and not value):
+        raise ValueError(f"{key} must be a non-empty string")
+    return value
+
+
+def _riva_sample_rate(body: dict[str, Any]) -> int:
+    value = body.get("sample_rate", 44100)
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError("sample_rate must be a positive integer")
+    return value
 
 
 def _health_path(body: dict[str, Any]) -> str:
