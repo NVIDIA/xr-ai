@@ -53,9 +53,10 @@ maps each marker family and raw ID to the device name used in readings, state,
 logs, and voice alerts. Ready-to-print PNGs for every configured device and a
 mapping table are available in [`sample-markers/`](sample-markers/).
 Detections absent from the device map are logged and ignored; they never become
-invented device names or voice alerts. For each mapped marker, the VLM is told
-to accept only a display on the same physical instrument body and to return
-`UNKNOWN` when an adjacent display cannot be ruled out.
+invented device names or voice alerts. For each mapped marker, the VLM must
+visibly establish that the highlighted marker and display share one continuous
+instrument housing. A nearby or lone readable display is not sufficient; the
+reader returns `UNKNOWN` whenever ownership cannot be proved from the image.
 
 `InstrumentMonitorAgent` owns all participant-scoped instrument state. It
 normalizes numeric readings, retains a known unit when a later VLM result omits
@@ -85,9 +86,10 @@ direct path.
 
 ## Run
 
-The sample uses Nemotron Omni for foreground tool routing and Cosmos for image
-inference. It reuses those services and STT from `model-servers` and manages its
-own lightweight Piper TTS process.
+By default, the sample uses Nemotron Omni for foreground tool routing and Cosmos
+for image inference. It reuses those services and STT from `model-servers` and
+manages its own lightweight Piper TTS process. Pass `--vlm-mode omni` to route
+image inference to the same Nemotron Omni service instead of Cosmos.
 
 ```bash
 cd agent-samples/model-servers
@@ -98,6 +100,9 @@ cd ../lab-instrument-monitoring
 uv sync
 uv sync --project worker
 uv run lab_instrument_monitoring
+
+# Use Nemotron Omni for both language and visual inference.
+uv run lab_instrument_monitoring --vlm-mode omni
 ```
 
 Connect a glasses or platform client using the authenticated LiveKit URL,

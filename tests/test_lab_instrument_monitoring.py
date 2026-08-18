@@ -12,6 +12,7 @@ import time
 import tomllib
 from decimal import Decimal
 from pathlib import Path
+from runpy import run_path
 from types import SimpleNamespace
 
 import cv2
@@ -38,6 +39,11 @@ _REPO = Path(__file__).resolve().parents[1]
 _SAMPLE = _REPO / "agent-samples" / "lab-instrument-monitoring"
 _WORKER = _SAMPLE / "worker"
 sys.path.insert(0, str(_WORKER))
+
+_LAUNCHER = run_path(str(_SAMPLE / "main.py"))
+_build_processes = _LAUNCHER["_build_processes"]
+_materialize_worker_config = _LAUNCHER["_materialize_worker_config"]
+_parser = _LAUNCHER["_parser"]
 
 from lab_instrument_monitoring_worker.app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     _VoiceAggregationLifecycleAgent,
@@ -285,6 +291,34 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     assert "at most two short sentences" in current_view_prompt
 
 
+def test_launcher_can_route_visual_inference_to_omni(tmp_path: Path) -> None:
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir()
+    assert _parser().parse_args([]).vlm_mode == "cosmos"
+    assert _parser().parse_args(["--vlm-mode", "omni"]).vlm_mode == "omni"
+    worker_config = _materialize_worker_config(runtime_dir, "omni")
+    config = load_config(worker_config)
+    models = json.loads(config.models_config.read_text())
+    processes, _credentials = _build_processes(worker_config)
+
+    assert config.models_config == _SAMPLE / "yaml" / "models.omni.json"
+    assert config.voice_gate_yaml == _SAMPLE / "yaml" / "voice_gate.yaml"
+    assert config.artifacts_dir == _SAMPLE / "artifacts"
+    assert models["models"]["llm"]["deployment"]["service"] == "omni"
+    assert models["models"]["vlm"]["category"] == "vlm"
+    assert models["models"]["vlm"]["adapter"]["capabilities"]["vision"] is True
+    assert models["models"]["vlm"]["endpoint"]["base_url"].endswith(":8108")
+    assert models["models"]["vlm"]["deployment"]["service"] == "omni"
+    assert [process.name for process in processes] == [
+        "hub",
+        "stt",
+        "omni",
+        "tts",
+        "worker",
+    ]
+    assert processes[-1].config == worker_config
+
+
 def test_sample_markers_match_device_map() -> None:
     marker_dir = _SAMPLE / "sample-markers"
     expected = {
@@ -404,8 +438,10 @@ def test_instrument_read_prompt_rejects_adjacent_device_displays() -> None:
         "Device1",
     )
 
-    assert "same instrument body" in query
+    assert "same continuous housing" in query
     assert "adjacent" in query
+    assert "only readable display" in query
+    assert "target housing has no visible readable display" in query
     assert "UNKNOWN" in query
 
 

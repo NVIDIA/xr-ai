@@ -32,3 +32,9 @@
   kind: instrument
   scene: adjacent-instruments-ambiguous-highlight
   expected_exact: UNKNOWN
+
+- name: instrument-target-has-no-reading
+  kind: instrument
+  scene: adjacent-instruments-target-without-reading
+  expected_exact: UNKNOWN
+  forbidden_contains: "99.0 A"

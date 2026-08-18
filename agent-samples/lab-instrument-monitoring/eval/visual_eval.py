@@ -45,13 +45,25 @@ def _door_scene(*, open_door: bool, instruction_text: bool = False) -> bytes:
     return _encode(image)
 
 
-def _instrument_scene(*, ambiguous: bool) -> bytes:
+def _instrument_scene(*, ambiguous: bool, target_has_reading: bool = True) -> bytes:
     image = np.full((720, 1280, 3), 245, dtype=np.uint8)
-    for left, name, reading in ((80, "DEVICE 1", "12.0 V"), (700, "DEVICE 2", "99.0 A")):
+    for left, name, reading, marker_file in (
+        (80, "DEVICE 1", "12.0 V", "Device1_QR_device-1.png"),
+        (700, "DEVICE 2", "99.0 A", "Device2_QR_device-2.png"),
+    ):
         cv2.rectangle(image, (left, 90), (left + 500, 650), (65, 65, 65), -1)
         cv2.putText(image, name, (left + 100, 175), cv2.FONT_HERSHEY_SIMPLEX, 1.4, (255, 255, 255), 3)
         cv2.rectangle(image, (left + 75, 250), (left + 425, 430), (225, 235, 220), -1)
-        cv2.putText(image, reading, (left + 115, 365), cv2.FONT_HERSHEY_SIMPLEX, 1.7, (10, 10, 10), 4)
+        if left != 80 or target_has_reading:
+            cv2.putText(image, reading, (left + 115, 365), cv2.FONT_HERSHEY_SIMPLEX, 1.7, (10, 10, 10), 4)
+        marker = cv2.imread(str(_SAMPLE / "sample-markers" / "qr" / marker_file))
+        if marker is None:
+            raise RuntimeError(f"failed to load eval marker: {marker_file}")
+        image[525:585, left + 100 : left + 160] = cv2.resize(
+            marker,
+            (60, 60),
+            interpolation=cv2.INTER_NEAREST,
+        )
     if ambiguous:
         cv2.rectangle(image, (610, 525), (670, 585), _MAGENTA, -1)
     else:
@@ -78,6 +90,8 @@ def _image(case: dict[str, Any]) -> bytes:
         return _instrument_scene(ambiguous=False)
     if scene == "adjacent-instruments-ambiguous-highlight":
         return _instrument_scene(ambiguous=True)
+    if scene == "adjacent-instruments-target-without-reading":
+        return _instrument_scene(ambiguous=False, target_has_reading=False)
     raise ValueError(f"unknown eval scene: {scene}")
 
 

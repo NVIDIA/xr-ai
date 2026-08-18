@@ -25,7 +25,9 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         "simple_vlm_example",
         "xr_render_demo",
     }
-    assert commands["lab_instrument_monitoring"].arguments == ()
+    assert [argument.flags for argument in commands["lab_instrument_monitoring"].arguments] == [
+        ("--vlm-mode",),
+    ]
     assert [argument.flags for argument in commands["model_servers"].arguments] == [
         ("--stop",),
         ("--models",),

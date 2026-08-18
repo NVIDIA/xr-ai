@@ -207,13 +207,18 @@ class LabInstrumentAgent(Agent):
     @staticmethod
     def _reading_query(marker: TrackedMarker, device_name: str) -> str:
         return (
-            "The magenta polygon marks the "
-            f"{marker.marker_type.value} marker {marker.value!r} attached to the lab "
-            f"instrument named {device_name!r}. Read only the display physically on the same "
-            "instrument body as the highlighted marker. Do not use a reading from an adjacent, "
-            "overlapping, or nearby instrument. Return only the displayed meter reading including "
-            "its unit. Return UNKNOWN if the highlighted marker and display are not clearly part "
-            "of the same device, or if the reading is unreadable."
+            "Read exactly one target lab instrument. The solid magenta polygon covers the "
+            f"{marker.marker_type.value} marker {marker.value!r} mapped to {device_name!r}. "
+            "First locate the physical instrument housing or panel to which that magenta marker "
+            "is visibly attached. A display is valid only when the image clearly shows that the "
+            "display and the magenta marker belong to that same continuous housing or panel, with "
+            "no device boundary between them. Proximity, alignment, a shared table or rack, or the "
+            "fact that it is the only readable display in the image is not evidence of ownership. "
+            "Ignore every unhighlighted QR or ArUco marker and every display on an adjacent, "
+            "overlapping, or nearby device. If the target housing has no visible readable display, "
+            "return UNKNOWN even when another device has a clear reading. If ownership is at all "
+            "ambiguous, return UNKNOWN. Otherwise return only the target display's reading and unit, "
+            "with no explanation."
         )
 
     @staticmethod
