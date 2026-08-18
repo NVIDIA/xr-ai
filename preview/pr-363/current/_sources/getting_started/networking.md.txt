@@ -78,13 +78,14 @@ ssh -L 8092:127.0.0.1:8092 user@xr-host
 
 Then open `http://127.0.0.1:8092` locally.
 
-For direct access on a trusted private network, explicitly change the worker
-configuration in `agent-samples/simple-vlm-example/yaml/simple_vlm_example_worker.yaml`
-or `agent-samples/xr-render-demo/yaml/xr_render_demo_worker.yaml`:
+For direct access on a trusted private network, configure the application-owned
+viewer explicitly when registering it with the runtime:
 
-```yaml
-web_events_host: 0.0.0.0
-web_events_port: 8092
+```python
+viewer = runtime.register(
+    "web-events",
+    WebEventsAgent(host="0.0.0.0", port=8092),
+)
 ```
 
 Restrict the firewall rule to the client subnet instead of opening the port to
@@ -100,6 +101,7 @@ Apply the equivalent source-restricted rule to the cloud security group when
 the host is behind a provider firewall. The viewer rejects unrecognized HTTP
 `Host` names to prevent DNS rebinding. Connect using a literal server address;
 an authenticated reverse proxy can instead rewrite `Host` to `127.0.0.1`.
+The listener currently accepts IPv4 addresses only.
 
 ```{warning}
 The live event viewer does not provide authentication or TLS, and its payloads

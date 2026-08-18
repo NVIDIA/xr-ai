@@ -90,7 +90,7 @@ Package Contents
    .. py:attribute:: payload
       :type:  dict[str, pydantic.JsonValue]
 
-      JSON-compatible application payload rendered by the browser.
+      JSON-compatible application payload, limited to 16 KiB when serialized.
 
 
 

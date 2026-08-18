@@ -510,11 +510,12 @@ from a development machine, keep the loopback binding and use an SSH tunnel:</p>
 </pre></div>
 </div>
 <p>Then open <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code> locally.</p>
-<p>For direct access on a trusted private network, explicitly change the worker
-configuration in <code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/yaml/simple_vlm_example_worker.yaml</span></code>
-or <code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/yaml/xr_render_demo_worker.yaml</span></code>:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">web_events_host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0.0.0</span>
-<span class="nt">web_events_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8092</span>
+<p>For direct access on a trusted private network, configure the application-owned
+viewer explicitly when registering it with the runtime:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">viewer</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+    <span class="s2">"web-events"</span><span class="p">,</span>
+    <span class="n">WebEventsAgent</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s2">"0.0.0.0"</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">8092</span><span class="p">),</span>
+<span class="p">)</span>
 </pre></div>
 </div>
 <p>Restrict the firewall rule to the client subnet instead of opening the port to
@@ -527,7 +528,8 @@ sudo<span class="w"> </span>ufw<span class="w"> </span>reload
 <p>Apply the equivalent source-restricted rule to the cloud security group when
 the host is behind a provider firewall. The viewer rejects unrecognized HTTP
 <code class="docutils literal notranslate"><span class="pre">Host</span></code> names to prevent DNS rebinding. Connect using a literal server address;
-an authenticated reverse proxy can instead rewrite <code class="docutils literal notranslate"><span class="pre">Host</span></code> to <code class="docutils literal notranslate"><span class="pre">127.0.0.1</span></code>.</p>
+an authenticated reverse proxy can instead rewrite <code class="docutils literal notranslate"><span class="pre">Host</span></code> to <code class="docutils literal notranslate"><span class="pre">127.0.0.1</span></code>.
+The listener currently accepts IPv4 addresses only.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>The live event viewer does not provide authentication or TLS, and its payloads
