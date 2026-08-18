@@ -349,6 +349,8 @@
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../../index.html">API Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="../../xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 current active has-children"><a class="reference internal" href="../index.html">xr_ai_tools</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l3"><a class="reference internal" href="../async_tools/index.html">xr_ai_tools.async_tools</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../current_frame/index.html">xr_ai_tools.current_frame</a></li>
@@ -373,6 +375,9 @@
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../../xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 </ul>
 </details></li>
 </ul>
@@ -719,7 +724,7 @@
 <span class="sig-prename descclassname"><span class="pre">xr_ai_tools.tool_calling.</span></span><span class="sig-name descname"><span class="pre">tool_definitions</span></span><span class="sig-paren">(</span>
 
 <dl>
-<dd><em class="sig-param"><span class="n"><span class="pre">tools</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Iterable</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../tools/index.html#xr_ai_tools.tools.Tool" title="xr_ai_tools.tools.Tool"><span class="pre">xr_ai_tools.tools.Tool</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="../tools/index.html#xr_ai_tools.tools.ToolSet" title="xr_ai_tools.tools.ToolSet"><span class="pre">xr_ai_tools.tools.ToolSet</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">tools</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Iterable</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../index.html#xr_ai_tools.Tool" title="xr_ai_tools.Tool"><span class="pre">xr_ai_tools.Tool</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="../index.html#xr_ai_tools.ToolSet" title="xr_ai_tools.ToolSet"><span class="pre">xr_ai_tools.ToolSet</span></a></span></em>,</dd>
 </dl>
 
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ToolDef" title="xr_ai_models.ToolDef"><span class="pre">xr_ai_models.ToolDef</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ellipsis</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#xr_ai_tools.tool_calling.tool_definitions" title="Link to this definition">#</a></dt>
@@ -732,7 +737,7 @@
 
 <dl>
 <dd><em class="sig-param"><span class="n"><span class="pre">call</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ToolCall" title="xr_ai_models.ToolCall"><span class="pre">xr_ai_models.ToolCall</span></a></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">tools</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../tools/index.html#xr_ai_tools.tools.ToolSet" title="xr_ai_tools.tools.ToolSet"><span class="pre">xr_ai_tools.tools.ToolSet</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">tools</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../index.html#xr_ai_tools.ToolSet" title="xr_ai_tools.ToolSet"><span class="pre">xr_ai_tools.ToolSet</span></a></span></em>,</dd>
 </dl>
 
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolCallResult" title="xr_ai_tools.tool_calling.ToolCallResult"><span class="pre">ToolCallResult</span></a></span></span><a class="headerlink" href="#xr_ai_tools.tool_calling.handle_tool_call" title="Link to this definition">#</a></dt>
@@ -745,7 +750,7 @@
 
 <dl>
 <dd><em class="sig-param"><span class="n"><span class="pre">messages</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ChatMessage" title="xr_ai_models.ChatMessage"><span class="pre">xr_ai_models.ChatMessage</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">tools</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../tools/index.html#xr_ai_tools.tools.ToolSet" title="xr_ai_tools.tools.ToolSet"><span class="pre">xr_ai_tools.tools.ToolSet</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">tools</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../index.html#xr_ai_tools.ToolSet" title="xr_ai_tools.ToolSet"><span class="pre">xr_ai_tools.ToolSet</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">call_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ModelCallback</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">max_iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em>,</dd>

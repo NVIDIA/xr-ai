@@ -168,7 +168,7 @@ Package Contents
 
 
 
-   .. py:method:: publish(topic: xr_ai_runtime.events.Topic[MessageT], message: MessageT | dict[str, Any], *, participant_id: str | None = None, source: str = 'application') -> None
+   .. py:method:: publish(topic: xr_ai_runtime.Topic[MessageT], message: MessageT | dict[str, Any], *, participant_id: str | None = None, source: str = 'application') -> None
       :async:
 
 
@@ -191,7 +191,7 @@ Package Contents
    Raised when work is submitted to a runtime that is not running.
 
 
-.. py:class:: RuntimeContext(runtime: AgentRuntime, agent_name: str, metadata: xr_ai_runtime.events.MessageMetadata)
+.. py:class:: RuntimeContext(runtime: AgentRuntime, agent_name: str, metadata: xr_ai_runtime.MessageMetadata)
 
    Runtime operations available during a subscription delivery.
 
@@ -205,14 +205,14 @@ Package Contents
 
 
    .. py:property:: metadata
-      :type: xr_ai_runtime.events.MessageMetadata
+      :type: xr_ai_runtime.MessageMetadata
 
 
       Return metadata for the current subscription delivery.
 
 
 
-   .. py:method:: publish(topic: xr_ai_runtime.events.Topic[MessageT], message: MessageT | dict[str, Any], *, participant_id: str | None = None) -> None
+   .. py:method:: publish(topic: xr_ai_runtime.Topic[MessageT], message: MessageT | dict[str, Any], *, participant_id: str | None = None) -> None
       :async:
 
 

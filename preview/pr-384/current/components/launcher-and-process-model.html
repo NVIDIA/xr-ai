@@ -326,6 +326,8 @@
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
@@ -350,6 +352,9 @@
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 </ul>
 </details></li>
 </ul>
@@ -571,7 +576,9 @@ entry-point command — exactly like the <code class="docutils literal notransla
 <p>The orchestrator’s process management and several cross-cutting concerns live
 in single-purpose packages under <code class="docutils literal notranslate"><span class="pre">utils/</span></code>. Each is small and narrowly scoped,
 and most are deliberately dependency-light so they can be added to any
-sub-project without dragging in a heavy dependency chain.</p>
+sub-project without dragging in a heavy dependency chain. Their public names,
+signatures, types, defaults, fields, and method behavior are generated in the
+<a class="reference internal" href="../reference/python/index.html"><span class="doc">Python API reference</span></a>.</p>
 <p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code></strong> — process management for the xr-ai stack: the <code class="docutils literal notranslate"><span class="pre">Process</span></code>,
 <code class="docutils literal notranslate"><span class="pre">Parallel</span></code>, and <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> API described above, plus helpers for CloudXR
 environment setup, credential loading, and GPU detection. Intentionally
@@ -601,16 +608,6 @@ an NGC container), chosen per-server via <code class="docutils literal notransla
 service YAML. Both paths honor identical configuration keys; only the runtime hosting
 vllm differs. Stdlib-only by contract, so the docker path stays light even when
 pip vllm is not installed.</p>
-<p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-nemo-runtime</span></code></strong> — opt-in NGC NeMo container backend for the in-process
-NeMo servers (the STT server and the Magpie TTS server). The NeMo servers load
-torch+NeMo in the wrapper’s venv and inherit the host’s cuDNN/CUDA via
-<code class="docutils literal notranslate"><span class="pre">LD_LIBRARY_PATH</span></code>, which aborts at torch import on hosts whose system cuDNN
-differs from torch’s bundled one. This runs the same FastAPI server inside an
-NGC NeMo image instead — so torch, NeMo, and cuDNN all come from the container
-and the host’s libraries are irrelevant — opted into per-server via
-<code class="docutils literal notranslate"><span class="pre">backend:</span> <span class="pre">docker</span></code> in the service YAML (default <code class="docutils literal notranslate"><span class="pre">pip</span></code> keeps the in-venv
-behavior). It is a bespoke NeMo docker path, deliberately separate from
-<code class="docutils literal notranslate"><span class="pre">xr-ai-vllm</span></code>, and is stdlib-only by contract.</p>
 </section>
 </section>
 

@@ -39,7 +39,7 @@ subproject, then renders them verbatim. Narrative docs should cover only
 workflows, operational decisions, credentials, and process relationships.
 
 After a `pyproject.toml` change, run
-`python3 .github/scripts/generate_dependency_map.py`. The pre-commit hook
+`uv run --script .github/scripts/generate_dependency_map.py`. The pre-commit hook
 normally regenerates the Python inventory in `DEPENDENCIES.md` automatically,
 and CI rejects drift. Do not edit that generated section by hand. Regenerate the
 affected project's gitignored `uv.lock` locally. New source files require an

@@ -322,6 +322,8 @@
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
@@ -346,6 +348,9 @@
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 </ul>
 </details></li>
 </ul>
@@ -408,11 +413,11 @@
 -->
 <section id="contributing-and-conventions">
 <h1>Contributing and conventions<a class="headerlink" href="#contributing-and-conventions" title="Link to this heading">#</a></h1>
-<p>The root <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/bf7aa9a22dd2228b301aba4ca0ad7086882e7dc6/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
+<p>The root <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/611b3d1780026f0b841de3589b3e876250efaf66/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
 explains setup, testing, pull requests, and DCO sign-off.
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/bf7aa9a22dd2228b301aba4ca0ad7086882e7dc6/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> contains the
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/611b3d1780026f0b841de3589b3e876250efaf66/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> contains the
 architecture and change constraints used by both humans and coding agents.
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/bf7aa9a22dd2228b301aba4ca0ad7086882e7dc6/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/611b3d1780026f0b841de3589b3e876250efaf66/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
 is the package dependency map.</p>
 <p>For a Python change:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>&lt;affected-project&gt;
@@ -436,7 +441,7 @@ a top-level sample’s <code class="docutils literal notranslate"><span class="p
 subproject, then renders them verbatim. Narrative docs should cover only
 workflows, operational decisions, credentials, and process relationships.</p>
 <p>After a <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> change, run
-<code class="docutils literal notranslate"><span class="pre">python3</span> <span class="pre">.github/scripts/generate_dependency_map.py</span></code>. The pre-commit hook
+<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--script</span> <span class="pre">.github/scripts/generate_dependency_map.py</span></code>. The pre-commit hook
 normally regenerates the Python inventory in <code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code> automatically,
 and CI rejects drift. Do not edit that generated section by hand. Regenerate the
 affected project’s gitignored <code class="docutils literal notranslate"><span class="pre">uv.lock</span></code> locally. New source files require an
