@@ -57,11 +57,12 @@ class VoiceAggregationAgent(Agent):
     """Serialize and coalesce candidate speech independently per participant.
 
     A lone finite contribution passes through without a model call after the
-    short coalescing window. Multiple finite contributions in that window are
-    rewritten into one response. A lone incremental response streams through
-    immediately; other contributions wait until that stream ends. An urgent
-    contribution interrupts the active stream and is combined with pending
-    finite updates.
+    short coalescing window. The aggregator keeps that response open for its
+    estimated spoken duration, so updates arriving while it is being spoken
+    wait and coalesce instead of building a speech queue. Multiple pending
+    finite contributions are rewritten into one response. A lone incremental
+    response streams through immediately and uses the same playback estimate
+    after its final chunk. An urgent contribution interrupts the active output.
     """
 
     def __init__(
@@ -75,6 +76,8 @@ class VoiceAggregationAgent(Agent):
         max_tokens: int = 192,
         stream_idle_timeout_s: float = 15.0,
         participant_idle_timeout_s: float = 60.0,
+        speech_rate_wpm: float = 150.0,
+        minimum_playback_s: float = 0.4,
     ) -> None:
         if not prompt.strip():
             raise ValueError("voice aggregation prompt must not be empty")
@@ -90,6 +93,10 @@ class VoiceAggregationAgent(Agent):
             raise ValueError("voice stream idle timeout must be positive")
         if participant_idle_timeout_s <= 0:
             raise ValueError("voice participant idle timeout must be positive")
+        if speech_rate_wpm <= 0:
+            raise ValueError("voice aggregation speech rate must be positive")
+        if minimum_playback_s < 0:
+            raise ValueError("voice aggregation minimum playback must not be negative")
         super().__init__()
         self._llm = llm
         self._prompt = prompt.strip()
@@ -99,6 +106,8 @@ class VoiceAggregationAgent(Agent):
         self._max_tokens = max_tokens
         self._stream_idle_timeout_s = stream_idle_timeout_s
         self._participant_idle_timeout_s = participant_idle_timeout_s
+        self._speech_rate_wpm = speech_rate_wpm
+        self._minimum_playback_s = minimum_playback_s
         self._states: dict[str, _ParticipantState] = {}
         self._stopping = False
 
@@ -176,7 +185,7 @@ class VoiceAggregationAgent(Agent):
                 await self._forward_stream(participant_id, state, contribution)
                 continue
             batch = await self._finite_batch(state, contribution)
-            await self._speak_batch(participant_id, batch)
+            await self._speak_batch(participant_id, state, batch)
 
     async def _next(self, state: _ParticipantState) -> _Contribution:
         if state.backlog:
@@ -224,6 +233,8 @@ class VoiceAggregationAgent(Agent):
         input_key = first.stream_key
         assert input_key is not None
         output_id = uuid.uuid4().hex
+        started_at = asyncio.get_running_loop().time()
+        spoken_text = first.output.text
         await self._publish_stream(first, output_id, interrupt=first.output.interrupt)
 
         while True:
@@ -252,8 +263,20 @@ class VoiceAggregationAgent(Agent):
                         input_key[0],
                         input_key[1],
                     )
-                await self._publish_stream(contribution, output_id, interrupt=False)
+                spoken_text += contribution.output.text
+                await self._publish_stream(
+                    contribution,
+                    output_id,
+                    interrupt=False,
+                    final=False,
+                )
                 if contribution.output.final:
+                    elapsed = asyncio.get_running_loop().time() - started_at
+                    remaining = max(0.0, self._playback_duration(spoken_text) - elapsed)
+                    if await self._hold_output(state, remaining):
+                        state.discarded_streams.add(input_key)
+                        return
+                    await self._publish_stream_end(first, output_id)
                     return
                 continue
 
@@ -269,6 +292,7 @@ class VoiceAggregationAgent(Agent):
         response_id: str,
         *,
         interrupt: bool,
+        final: bool | None = None,
     ) -> None:
         try:
             await contribution.ctx.publish(
@@ -276,7 +300,7 @@ class VoiceAggregationAgent(Agent):
                 VoiceOutput(
                     text=contribution.output.text,
                     response_id=response_id,
-                    final=contribution.output.final,
+                    final=contribution.output.final if final is None else final,
                     interrupt=interrupt,
                     timestamp_us=contribution.output.timestamp_us,
                 ),
@@ -303,6 +327,7 @@ class VoiceAggregationAgent(Agent):
     async def _speak_batch(
         self,
         participant_id: str,
+        state: _ParticipantState,
         batch: list[_Contribution],
     ) -> None:
         text = (
@@ -320,20 +345,59 @@ class VoiceAggregationAgent(Agent):
             ),
             default=None,
         )
-        try:
-            await batch[0].ctx.publish(
-                VOICE_OUTPUT_TOPIC,
-                VoiceOutput(
-                    text=text,
-                    interrupt=any(
-                        contribution.output.interrupt
-                        for contribution in batch
-                    ),
-                    timestamp_us=timestamp_us,
+        output_id = uuid.uuid4().hex
+        output = _Contribution(
+            output=VoiceOutput(
+                text=text,
+                response_id=output_id,
+                final=False,
+                interrupt=any(
+                    contribution.output.interrupt
+                    for contribution in batch
                 ),
-            )
-        except RuntimeClosedError:
+                timestamp_us=timestamp_us,
+            ),
+            ctx=batch[0].ctx,
+            participant_id=batch[0].participant_id,
+            source=batch[0].source,
+        )
+        await self._publish_stream(
+            output,
+            output_id,
+            interrupt=output.output.interrupt,
+        )
+        if await self._hold_output(state, self._playback_duration(text)):
             return
+        await self._publish_stream_end(output, output_id)
+
+    async def _hold_output(
+        self,
+        state: _ParticipantState,
+        duration_s: float,
+    ) -> bool:
+        """Buffer new updates while the current response is expected to play."""
+
+        deadline = asyncio.get_running_loop().time() + duration_s
+        while True:
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                return False
+            try:
+                contribution = await asyncio.wait_for(
+                    state.queue.get(),
+                    timeout=remaining,
+                )
+            except TimeoutError:
+                return False
+            if contribution.output.interrupt:
+                state.backlog.appendleft(contribution)
+                return True
+            state.backlog.append(contribution)
+
+    def _playback_duration(self, text: str) -> float:
+        words = len(text.split())
+        estimated_s = words * 60.0 / self._speech_rate_wpm
+        return min(30.0, max(self._minimum_playback_s, estimated_s))
 
     async def _rewrite(
         self,
