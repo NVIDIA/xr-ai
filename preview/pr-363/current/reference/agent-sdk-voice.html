@@ -59,7 +59,7 @@
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Command-line reference" href="command-line.html" />
+    <link rel="next" title="xr-ai-web-events" href="agent-sdk-web-events.html" />
     <link rel="prev" title="xr-ai-tools" href="agent-sdk-tools.html" />
 
 
@@ -318,6 +318,7 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
@@ -356,6 +357,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_logging/index.html">xr_ai_logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
 </ul>
 </details></li>
 </ul>
@@ -493,6 +495,11 @@ publishes the final response to <code class="docutils literal notranslate"><span
         <span class="k">await</span> <span class="n">aggregation</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
 </pre></div>
 </div>
+<p>Applications should call <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">aggregation.release(participant_id)</span></code> from
+their participant-left subscriber so buffered speech and stream state are
+discarded as soon as that participant departs. The application owns its
+lifecycle topic; the shared aggregator therefore exposes cleanup directly
+rather than subscribing to one hard-coded topic name.</p>
 <p>Aggregation is participant-scoped. A lone finite contribution passes through
 without an LLM call after the short coalescing window. Two or more finite
 contributions in one batch are rewritten into a single concise utterance. The
@@ -624,11 +631,11 @@ after a comma, semicolon, or within ordinary prose does not activate the gate.</
       </div>
     </a>
     <a class="right-next"
-       href="command-line.html"
+       href="agent-sdk-web-events.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Command-line reference</p>
+        <p class="prev-next-title">xr-ai-web-events</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

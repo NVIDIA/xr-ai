@@ -318,6 +318,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
@@ -356,6 +357,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
 </ul>
 </details></li>
 </ul>
@@ -449,13 +451,18 @@ installation.</p>
 <td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_voice</span></code></p></td>
 <td><p>Voice agent, transport, and private media pipeline</p></td>
 </tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-web-events</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_web_events</span></code></p></td>
+<td><p>Bounded live browser views over selected application events</p></td>
+</tr>
 </tbody>
 </table>
 </div>
 <p>Package guides are versioned with this site:
 <a class="reference internal" href="../reference/agent-sdk-hub.html"><span class="doc">xr-ai-hub</span></a>, <a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>,
-<a class="reference internal" href="../reference/agent-sdk-runtime.html"><span class="doc">xr-ai-runtime</span></a>, <a class="reference internal" href="../reference/agent-sdk-tools.html"><span class="doc">xr-ai-tools</span></a>, and
-<a class="reference internal" href="../reference/agent-sdk-voice.html"><span class="doc">xr-ai-voice</span></a>. The generated <a class="reference internal" href="../reference/python/index.html"><span class="doc">API Reference</span></a>
+<a class="reference internal" href="../reference/agent-sdk-runtime.html"><span class="doc">xr-ai-runtime</span></a>, <a class="reference internal" href="../reference/agent-sdk-tools.html"><span class="doc">xr-ai-tools</span></a>,
+<a class="reference internal" href="../reference/agent-sdk-voice.html"><span class="doc">xr-ai-voice</span></a>, and <a class="reference internal" href="../reference/agent-sdk-web-events.html"><span class="doc">xr-ai-web-events</span></a>.
+The generated <a class="reference internal" href="../reference/python/index.html"><span class="doc">API Reference</span></a>
 is the source of truth for public names, signatures, types, defaults, fields,
 and method-level behavior.</p>
 <section id="ownership-boundaries">
@@ -491,6 +498,10 @@ for its estimated spoken duration, and publishes only the result to
 <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>. This policy remains outside the private media
 pipeline so applications opt in explicitly and retain ownership of which
 events should become speech.</p>
+<p>Applications may publish selected compact payloads to <code class="docutils literal notranslate"><span class="pre">WEB_EVENT_TOPIC</span></code> for a
+<code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code> to display. The viewer owns only a bounded live history and a
+loopback HTTP listener. It is not persistence, does not inspect every runtime
+topic, and does not enter model, voice, media, or hub authentication paths.</p>
 <p><code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> is the minimal agent-side hub boundary. It receives data,
 audio, frame signals, and participant events and sends participant-routed return
 traffic. Video tools acquire frames on demand; raw pixels and media stay on the

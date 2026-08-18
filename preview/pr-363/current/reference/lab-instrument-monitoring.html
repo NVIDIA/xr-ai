@@ -318,6 +318,7 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Lab instrument monitoring — building marker-associated visual agents</a></li>
@@ -356,6 +357,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_logging/index.html">xr_ai_logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
 </ul>
 </details></li>
 </ul>
@@ -508,6 +510,14 @@ appear in the worker’s agent contracts.</p>
 <td><p>Session files, JSONL records, recent visual-history tool</p></td>
 <td><p>Agent decisions</p></td>
 </tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">WebEventsAdapterAgent</span></code></p></td>
+<td><p>Explicit sample-event projection into browser topics</p></td>
+<td><p>HTTP serving or durable history</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code></p></td>
+<td><p>Bounded in-memory history and read-only HTTP page</p></td>
+<td><p>Application topic selection or persistence</p></td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -518,7 +528,11 @@ releases its own state.</p>
 <code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code>: <code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code> selects one frame and
 <code class="docutils literal notranslate"><span class="pre">StreamingImageQueryTool</span></code> publishes chunks to participant voice. The tool is a
 direct return, so the completed visual answer does not incur a second language
-model call.</p>
+model call. A dedicated current-view system prompt applies visible-evidence,
+plain-speech, and response-length rules directly to the streaming VLM output.
+The default voice gate accepts <code class="docutils literal notranslate"><span class="pre">agent</span></code> and <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span></code>, plays a listening chime,
+and allows a five-second follow-up. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> mirrors spoken text to the
+client’s <code class="docutils literal notranslate"><span class="pre">agent.response</span></code> topic so the same output can be rendered as captions.</p>
 </section>
 <section id="source-map">
 <h2>Source map<a class="headerlink" href="#source-map" title="Link to this heading">#</a></h2>
@@ -570,11 +584,15 @@ model call.</p>
 <td><p>JSONL persistence and recent-history access</p></td>
 <td><p>Publish records to a customer backend</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_map.yaml</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">web_events.py</span></code></p></td>
+<td><p>Explicit runtime-topic projections for the browser viewer</p></td>
+<td><p>Select or rename live presentation topics</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_map.yaml</span></code></p></td>
 <td><p>Sample identity data</p></td>
 <td><p>Map real marker IDs to domain objects</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">sample-markers/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">sample-markers/</span></code></p></td>
 <td><p>Five QR and five ArUco examples</p></td>
 <td><p>Print or replace with deployment markers</p></td>
 </tr>
@@ -684,6 +702,19 @@ perception or tracking agents.</p>
 enabled during development and be removed independently for production. Use a
 typed msgpack/ZMQ service when the backend boundary is a separate process.</p>
 </section>
+<section id="live-event-viewer">
+<h2>Live event viewer<a class="headerlink" href="#live-event-viewer" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">WebEventsAdapterAgent</span></code> subscribes explicitly to monitor, instrument change,
+tracking-loss, state, foreground, transcript, and participant lifecycle topics.
+It publishes compact <code class="docutils literal notranslate"><span class="pre">WebEvent</span></code> projections to the shared <code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code>; it
+does not tail JSONL files or subscribe by wildcard. The page at
+<a class="reference external" href="http://127.0.0.1:8092">http://127.0.0.1:8092</a> groups those events by participant and presentation
+topic while the JSONL files remain the durable record.</p>
+<p>The viewer is read-only and bounded by <code class="docutils literal notranslate"><span class="pre">web_events_max_events</span></code>. Its listener has
+no participant authentication or TLS, so the sample keeps it on loopback. Use
+an SSH tunnel for remote development or put an authenticated TLS reverse proxy
+in front of it before any remote exposure.</p>
+</section>
 <section id="adapting-the-sample">
 <h2>Adapting the sample<a class="headerlink" href="#adapting-the-sample" title="Link to this heading">#</a></h2>
 <section id="track-another-measured-object">
@@ -722,8 +753,8 @@ tools, one owned task per participant, current-frame selection, a dedicated
 <h2>Lifecycle invariants<a class="headerlink" href="#lifecycle-invariants" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p>A participant join creates fresh output and application state.</p></li>
-<li><p>A participant leave cancels foreground and background work before image
-resources are released.</p></li>
+<li><p>Participant-leave subscribers run concurrently. Each handler must tolerate
+another subscriber cancelling work or releasing image references first.</p></li>
 <li><p>A superseding foreground query cancels the previous participant turn.</p></li>
 <li><p>Agent tasks fork the Relay context so tool execution remains traceable.</p></li>
 <li><p>Model and tool cancellation propagates; it is not converted into a result.</p></li>
@@ -739,7 +770,8 @@ and cross-participant bugs come from changing ownership without moving cleanup.<
 <li><p>Unit-test deterministic state normalization, change detection, last-seen
 policy, and device-map resolution.</p></li>
 <li><p>Decode every checked-in marker and verify its resolved device name.</p></li>
-<li><p>Evaluate foreground routing separately from visual-reading quality.</p></li>
+<li><p>Evaluate foreground routing separately from the monitor and instrument VLM
+prompt contracts in <code class="docutils literal notranslate"><span class="pre">eval/visual_eval.py</span></code>.</p></li>
 </ol>
 <p>For manual pipeline testing, enable <code class="docutils literal notranslate"><span class="pre">capture_marker_scans</span></code> and inspect the saved
 marker-scan image first. It is
@@ -815,6 +847,7 @@ another concrete application needs exactly the same behavior.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#visual-identification-and-reading">Visual identification and reading</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stateful-monitoring">Stateful monitoring</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#connecting-a-backend">Connecting a backend</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#live-event-viewer">Live event viewer</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adapting-the-sample">Adapting the sample</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#track-another-measured-object">Track another measured object</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#add-an-alert-rule">Add an alert rule</a></li>
