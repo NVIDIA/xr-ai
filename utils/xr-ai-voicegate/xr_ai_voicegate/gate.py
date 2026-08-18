@@ -28,11 +28,11 @@ from .config import AudioSink, TTSLike, VoiceGateConfig
 logger = logging.getLogger("xr_ai_voicegate")
 
 
-QueryHandler             = Callable[[str, str, bool], Awaitable[None]]   # (pid, query, fresh_match)
-StopHandler              = Callable[[str], Awaitable[None]]
-PhraseOnlyHandler        = Callable[[str], Awaitable[None]]
-DropHandler              = Callable[[str, str], Awaitable[None]]
-ParticipantJoinedHandler = Callable[[str], Awaitable[None]]
+_QueryHandler = Callable[[str, str, bool], Awaitable[None]]
+_StopHandler = Callable[[str], Awaitable[None]]
+_PhraseOnlyHandler = Callable[[str], Awaitable[None]]
+_DropHandler = Callable[[str, str], Awaitable[None]]
+_ParticipantJoinedHandler = Callable[[str], Awaitable[None]]
 
 
 class VoiceGate:
@@ -89,42 +89,48 @@ class VoiceGate:
         self._followup_until: dict[str, float] = {}
         self._followup_started: set[str] = set()
 
-        self._on_query_h:               QueryHandler | None             = None
-        self._on_stop_h:                StopHandler | None              = None
-        self._on_phrase_only_h:         PhraseOnlyHandler | None        = None
-        self._on_drop_h:                DropHandler | None              = None
-        self._on_participant_joined_h:  ParticipantJoinedHandler | None = None
+        self._on_query_h: _QueryHandler | None = None
+        self._on_stop_h: _StopHandler | None = None
+        self._on_phrase_only_h: _PhraseOnlyHandler | None = None
+        self._on_drop_h: _DropHandler | None = None
+        self._on_participant_joined_h: _ParticipantJoinedHandler | None = None
 
     # ── handler registration ──────────────────────────────────────────────────
 
-    def on_query(self, h: QueryHandler) -> None:
+    def on_query(
+        self,
+        h: Callable[[str, str, bool], Awaitable[None]],
+    ) -> None:
         """Register the handler for accepted user queries."""
         self._on_query_h = h
 
-    def on_stop(self, h: StopHandler) -> None:
+    def on_stop(self, h: Callable[[str], Awaitable[None]]) -> None:
         """Register the handler for stop commands."""
         self._on_stop_h = h
 
-    def on_phrase_only(self, h: PhraseOnlyHandler) -> None:
+    def on_phrase_only(self, h: Callable[[str], Awaitable[None]]) -> None:
         """Register the handler for a wake phrase without a query payload."""
         self._on_phrase_only_h = h
 
-    def on_drop(self, h: DropHandler) -> None:
+    def on_drop(self, h: Callable[[str, str], Awaitable[None]]) -> None:
         """Register the handler for transcripts rejected by the gate."""
         self._on_drop_h = h
 
-    def on_participant_joined(self, h: ParticipantJoinedHandler) -> None:
+    def on_participant_joined(
+        self,
+        h: Callable[[str], Awaitable[None]],
+    ) -> None:
         """Register the handler for participant-joined notifications."""
         self._on_participant_joined_h = h
 
     def bind(
         self,
         *,
-        on_query: QueryHandler,
-        on_stop: StopHandler,
-        on_phrase_only: PhraseOnlyHandler | None = None,
-        on_drop: DropHandler | None = None,
-        on_participant_joined: ParticipantJoinedHandler | None = None,
+        on_query: Callable[[str, str, bool], Awaitable[None]],
+        on_stop: Callable[[str], Awaitable[None]],
+        on_phrase_only: Callable[[str], Awaitable[None]] | None = None,
+        on_drop: Callable[[str, str], Awaitable[None]] | None = None,
+        on_participant_joined: Callable[[str], Awaitable[None]] | None = None,
     ) -> None:
         """Register every handler in one call.
 

@@ -92,7 +92,11 @@ class Process:
     """
 
     port:                int | None = None
-    """Optional service port used to stop a persistent process."""
+    """Optional service port metadata.
+
+    The launcher stores but does not inspect this value or stop persistent
+    services by port.
+    """
 
     quiet_native_output: bool = False
     """Route unformatted native output to DEBUG instead of the terminal.

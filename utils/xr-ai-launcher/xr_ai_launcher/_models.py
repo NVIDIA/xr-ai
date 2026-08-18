@@ -21,13 +21,13 @@ class ModelDeployment:
     profile_path: Path
     """Resolved path of the selected model profile."""
 
-    services: dict[str, LaunchMode]
+    services: dict[str, Literal["own", "reuse"]]
     """Launcher ownership mode keyed by managed service name."""
 
     required_credentials: tuple[str, ...]
     """Environment-variable names required by configured model endpoints."""
 
-    def launch_mode(self, service: str) -> LaunchMode | None:
+    def launch_mode(self, service: str) -> Literal["own", "reuse"] | None:
         """Return the configured ownership mode for *service*, if managed."""
         return self.services.get(service)
 

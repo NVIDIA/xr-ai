@@ -20,7 +20,7 @@ class VoiceGateConfig:
     """Sentence-boundary opt-in phrases.
 
     A match is valid at transcript start or after ``.``, ``?``, or ``!``.
-    An empty tuple dispatches every STT transcript.
+    An empty tuple dispatches every non-STOP STT transcript.
     """
 
     followup_grace_s: float           = 5.0
