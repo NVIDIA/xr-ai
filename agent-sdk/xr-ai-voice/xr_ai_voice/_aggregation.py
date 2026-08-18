@@ -385,6 +385,10 @@ class VoiceAggregationAgent(Agent):
                 continue
             if key is not None and not contribution.output.final:
                 state.pending.appendleft(contribution)
+                urgent = self._pop_finite_interrupt(state)
+                if urgent is not None:
+                    self._restore_batch(state, batch)
+                    return [urgent]
                 state.changed.set()
                 break
             if contribution.output.interrupt:
@@ -667,6 +671,14 @@ class VoiceAggregationAgent(Agent):
     def _pop_interrupt(state: _ParticipantState) -> _Contribution | None:
         for index, contribution in enumerate(state.pending):
             if contribution.output.interrupt:
+                del state.pending[index]
+                return contribution
+        return None
+
+    @staticmethod
+    def _pop_finite_interrupt(state: _ParticipantState) -> _Contribution | None:
+        for index, contribution in enumerate(state.pending):
+            if contribution.output.interrupt and (contribution.stream_key is None or contribution.output.final):
                 del state.pending[index]
                 return contribution
         return None

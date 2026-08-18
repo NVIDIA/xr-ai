@@ -71,8 +71,8 @@ alert replaces the oldest pending routine update or, if necessary, the oldest
 alert. Urgent output bypasses coalescing and rewriting, retains displaced
 routine work encountered during coalescing or rewrite for a later batch, and
 interrupts active speech. Interrupted stream IDs remain quarantined through
-their terminator or idle expiry, and the
-agent enforces its rewrite deadline independently of the model transport. This
+their terminator or idle expiry, and the agent enforces its rewrite deadline
+independently of the model transport. This
 policy remains outside the private media pipeline so applications opt in
 explicitly and retain ownership of which events should become speech.
 

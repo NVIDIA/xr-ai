@@ -734,6 +734,54 @@ async def test_urgent_batch_speaks_alert_first_and_retains_routine_order() -> No
     )
 
 
+async def test_stream_boundary_does_not_hide_queued_urgent_output() -> None:
+    llm = _LLM()
+    runtime, aggregator, recorder = await _start(
+        llm,
+        coalesce_window_s=0.05,
+    )
+    try:
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Routine."),
+            participant_id="alice",
+            source="monitor",
+        )
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Stream start", response_id="foreground", final=False),
+            participant_id="alice",
+            source="foreground",
+        )
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Move now.", interrupt=True),
+            participant_id="alice",
+            source="safety",
+        )
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Stream end", response_id="foreground"),
+            participant_id="alice",
+            source="foreground",
+        )
+        await recorder.wait_for(7)
+    finally:
+        await _stop(runtime, aggregator)
+
+    assert [output.text for output, _metadata in recorder.outputs] == [
+        "Move now.",
+        "",
+        "Routine.",
+        "",
+        "Stream start",
+        "Stream end",
+        "",
+    ]
+    assert recorder.outputs[0][0].interrupt is True
+    assert llm.calls == []
+
+
 async def test_urgent_first_contribution_skips_coalescing_delay() -> None:
     llm = _LLM()
     runtime, aggregator, recorder = await _start(
