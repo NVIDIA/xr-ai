@@ -422,7 +422,7 @@ model-backed tools use injected <code class="docutils literal notranslate"><span
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatMessage</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tool</span><span class="p">,</span> <span class="n">ToolSet</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.tool_calling</span><span class="w"> </span><span class="kn">import</span> <span class="n">handle_tool_call</span><span class="p">,</span> <span class="n">tool_definitions</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.tool_calling</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_tool_loop</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">LookupRequest</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
@@ -447,29 +447,47 @@ model-backed tools use injected <code class="docutils literal notranslate"><span
 <span class="n">tools</span> <span class="o">=</span> <span class="p">(</span><span class="n">lookup_tool</span><span class="p">,)</span>
 <span class="n">tool_set</span> <span class="o">=</span> <span class="n">ToolSet</span><span class="p">(</span><span class="n">tools</span><span class="p">)</span>
 
-<span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="n">tool_definitions</span><span class="p">(</span><span class="n">tools</span><span class="p">))</span>
-<span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-    <span class="n">ChatMessage</span><span class="p">(</span>
-        <span class="n">role</span><span class="o">=</span><span class="s2">"assistant"</span><span class="p">,</span>
-        <span class="n">content</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
-        <span class="n">tool_calls</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">tool_calls</span><span class="p">,</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">call_model</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">definitions</span><span class="p">):</span>
+    <span class="c1"># The caller owns model parameters, headers, timeouts, and retry policy.</span>
+    <span class="k">return</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span>
+        <span class="n">messages</span><span class="p">,</span>
+        <span class="n">tools</span><span class="o">=</span><span class="n">definitions</span><span class="p">,</span>
+        <span class="n">max_tokens</span><span class="o">=</span><span class="mi">1024</span><span class="p">,</span>
+        <span class="n">temperature</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
     <span class="p">)</span>
+
+
+<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">run_tool_loop</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">ChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">"user"</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">"look up the current answer"</span><span class="p">)],</span>
+    <span class="n">tool_set</span><span class="p">,</span>
+    <span class="n">call_model</span><span class="p">,</span>
+    <span class="n">max_iterations</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+    <span class="n">max_tool_calls</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="k">for</span> <span class="n">call</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">tool_calls</span> <span class="ow">or</span> <span class="p">():</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">handle_tool_call</span><span class="p">(</span><span class="n">call</span><span class="p">,</span> <span class="n">tool_set</span><span class="p">)</span>
-    <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">message</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">return_direct</span><span class="p">:</span>
-        <span class="n">final_answer</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span>
-        <span class="k">break</span>
+<span class="n">final_answer</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">content</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">tool_definitions(...)</span></code> adapts native tools to <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> <code class="docutils literal notranslate"><span class="pre">ToolDef</span></code> values.
-<code class="docutils literal notranslate"><span class="pre">handle_tool_call(...)</span></code> validates and invokes one model-produced <code class="docutils literal notranslate"><span class="pre">ToolCall</span></code>, then
-returns a tool-role <code class="docutils literal notranslate"><span class="pre">ChatMessage</span></code> plus its <code class="docutils literal notranslate"><span class="pre">return_direct</span></code> hint. The application
-or agent owns prompts, model calls, conversation state, iteration policy, and
-whether calls run sequentially or concurrently. A unary side-effect tool uses
-<code class="docutils literal notranslate"><span class="pre">result_model=None</span></code>, returns <code class="docutils literal notranslate"><span class="pre">None</span></code>, and produces <code class="docutils literal notranslate"><span class="pre">null</span></code> as its model-visible
-result.</p>
+<p><code class="docutils literal notranslate"><span class="pre">run_tool_loop(...)</span></code> is a stateless bounded turn runner. It passes an immutable
+transcript and the current <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code> definitions to the supplied model callback,
+executes emitted calls sequentially, and returns the complete transcript and a
+structured tool-call audit. Unknown tools and invalid Pydantic arguments are
+returned to the model for repair. Iteration exhaustion, tool-call budget
+exhaustion, empty or truncated responses, and unsafe mixed <code class="docutils literal notranslate"><span class="pre">return_direct</span></code>
+batches raise typed errors carrying the partial transcript and audit. Blank or
+non-string or duplicate tool-call IDs are rejected before executing their batch.
+Error <code class="docutils literal notranslate"><span class="pre">messages</span></code> contain only a valid, resumable transcript; the rejected model
+turn remains available separately as <code class="docutils literal notranslate"><span class="pre">rejected_response</span></code> for diagnostics.</p>
+<p>The application or agent continues to own prompts, conversation history, model
+parameters, retries, participant context, cancellation, and background tasks.
+The loop never retries an executed tool. A direct-return tool must be the only
+call in its model batch, so the loop can reject an ambiguous batch before any
+side effect occurs.</p>
+<p>The lower-level <code class="docutils literal notranslate"><span class="pre">tool_definitions(...)</span></code> and <code class="docutils literal notranslate"><span class="pre">handle_tool_call(...)</span></code> helpers
+remain available for specialized loops. The former adapts native tools to
+<code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> <code class="docutils literal notranslate"><span class="pre">ToolDef</span></code> values. The latter validates and invokes one
+model-produced <code class="docutils literal notranslate"><span class="pre">ToolCall</span></code>, then returns a tool-role <code class="docutils literal notranslate"><span class="pre">ChatMessage</span></code> plus its
+<code class="docutils literal notranslate"><span class="pre">return_direct</span></code> hint. A unary side-effect tool uses <code class="docutils literal notranslate"><span class="pre">result_model=None</span></code>, returns
+<code class="docutils literal notranslate"><span class="pre">None</span></code>, and produces <code class="docutils literal notranslate"><span class="pre">null</span></code> as its model-visible result.</p>
 <p>Tool catalogs can assign model-visible aliases without wrapping or changing the
 underlying tools:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tools</span> <span class="o">=</span> <span class="n">ToolSet</span><span class="p">({</span><span class="s2">"camera_status"</span><span class="p">:</span> <span class="n">vision</span><span class="o">.</span><span class="n">status</span><span class="p">})</span>
@@ -584,7 +602,10 @@ all derived pixels together.</p>
 QR codes with ZXing-C++ and ArUco markers with OpenCV. Its typed result
 distinguishes an unavailable frame from a valid frame with no marker. Every
 marker has the same <code class="docutils literal notranslate"><span class="pre">marker_type</span></code>, <code class="docutils literal notranslate"><span class="pre">value</span></code>, and four-corner contract: <code class="docutils literal notranslate"><span class="pre">value</span></code>
-is decoded text for QR codes and the decimal marker ID for ArUco markers.</p>
+is decoded text for QR codes and the decimal marker ID for ArUco markers.
+Both detectors scan the complete frame at native resolution and at one bounded
+enlarged resolution so small markers remain readable without discarding context.
+Results from both scans are deduplicated and use source-frame coordinates.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.marker_tracking</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">MarkerTrackingRequest</span><span class="p">,</span>
     <span class="n">MarkerTrackingTool</span><span class="p">,</span>

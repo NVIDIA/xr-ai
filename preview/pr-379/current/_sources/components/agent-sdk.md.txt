@@ -28,10 +28,13 @@ and method-level behavior.
 
 An `Agent` owns its state, resources, background tasks, lifecycle, and
 concurrency policy. It exposes ordinary `Tool` or `AsyncTool` instances for
-direct execution and model tool-call loops. `AgentRuntime` owns only typed
-publication and delivery tasks; it does not own model loops, planning, memory,
-media, or agent-created work. A publication waits for its subscribers, so a
-subscriber that performs lengthy work should hand it to its own bounded queue.
+direct execution and model tool-call loops. Bounded turns use `ToolSet` and
+`run_tool_loop()`; callers retain model configuration, conversation policy,
+retries, participant context, cancellation, and task ownership. `AgentRuntime`
+owns only typed publication and delivery tasks; it does not own model loops,
+planning, memory, media, or agent-created work. A publication waits for its
+subscribers, so a subscriber that performs lengthy work should hand it to its
+own bounded queue.
 
 Workers construct model clients with the factories in `xr_ai_models` and depend
 on the corresponding typed service protocols. Adapter behavior, endpoint
