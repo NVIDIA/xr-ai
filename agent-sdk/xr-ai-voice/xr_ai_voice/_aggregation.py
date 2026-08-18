@@ -49,8 +49,8 @@ class _Contribution:
 class _ParticipantState:
     pending: deque[_Contribution] = field(default_factory=deque)
     changed: asyncio.Event = field(default_factory=asyncio.Event)
-    discarded_streams: set[tuple[str, str]] = field(default_factory=set)
-    active_stream: tuple[str, str] | None = None
+    discarded_streams: dict[tuple[str, str], float] = field(default_factory=dict)
+    in_flight_count: int = 0
     task: asyncio.Task[None] | None = None
 
 
@@ -103,9 +103,7 @@ class VoiceAggregationAgent(Agent):
         if maximum_playback_s <= 0:
             raise ValueError("voice aggregation maximum playback must be positive")
         if minimum_playback_s > maximum_playback_s:
-            raise ValueError(
-                "voice aggregation minimum playback must not exceed maximum playback"
-            )
+            raise ValueError("voice aggregation minimum playback must not exceed maximum playback")
         if rewrite_timeout_s <= 0:
             raise ValueError("voice aggregation rewrite timeout must be positive")
         super().__init__()
@@ -217,16 +215,22 @@ class VoiceAggregationAgent(Agent):
         state: _ParticipantState,
         contribution: _Contribution,
     ) -> None:
+        state.in_flight_count = 1
         key = contribution.stream_key
-        if key is not None and key in state.discarded_streams:
-            if contribution.output.final:
-                state.discarded_streams.discard(key)
-            return
-        if key is not None and not contribution.output.final:
-            await self._forward_stream(participant_id, state, contribution)
-            return
-        batch = await self._finite_batch(state, contribution)
-        await self._speak_batch(participant_id, state, batch)
+        try:
+            if key is not None and self._discarded_stream_fragment(
+                state,
+                key,
+                final=contribution.output.final,
+            ):
+                return
+            if key is not None and not contribution.output.final:
+                await self._forward_stream(participant_id, state, contribution)
+                return
+            batch = await self._finite_batch(state, contribution)
+            await self._speak_batch(participant_id, state, batch)
+        finally:
+            state.in_flight_count = 0
 
     def _enqueue(
         self,
@@ -235,44 +239,91 @@ class VoiceAggregationAgent(Agent):
     ) -> None:
         if len(state.pending) >= self._queue_capacity:
             victim_index = next(
-                (
-                    index
-                    for index, pending in enumerate(state.pending)
-                    if not pending.output.interrupt
-                    and pending.stream_key != state.active_stream
-                ),
-                0,
+                (index for index, pending in enumerate(state.pending) if not pending.output.interrupt),
+                None,
             )
+            if victim_index is None and not contribution.output.interrupt:
+                self._drop_contribution(state, contribution, incoming=True)
+                return
+            if victim_index is None:
+                victim_index = 0
             victim = state.pending[victim_index]
             del state.pending[victim_index]
-            victim_key = victim.stream_key
-            if victim_key is not None and (
-                not victim.output.final or victim_key == state.active_stream
-            ):
-                self._discard_stream(state, victim_key)
-            logger.warning(
-                "dropped oldest pending voice contribution pid={!r} source={!r} "
-                "response_id={!r} capacity={}",
-                victim.participant_id,
-                victim.source,
-                victim.output.response_id,
-                self._queue_capacity,
-            )
+            self._drop_contribution(state, victim, incoming=False)
         state.pending.append(contribution)
         state.changed.set()
+
+    def _drop_contribution(
+        self,
+        state: _ParticipantState,
+        contribution: _Contribution,
+        *,
+        incoming: bool,
+    ) -> None:
+        key = contribution.stream_key
+        if key is not None:
+            self._discard_stream(state, key)
+        logger.warning(
+            "dropped {} voice contribution pid={!r} source={!r} response_id={!r} interrupt={} capacity={}",
+            "incoming" if incoming else "oldest pending",
+            contribution.participant_id,
+            contribution.source,
+            contribution.output.response_id,
+            contribution.output.interrupt,
+            self._queue_capacity,
+        )
 
     def _discard_stream(
         self,
         state: _ParticipantState,
         stream_key: tuple[str, str],
     ) -> None:
-        if (
-            stream_key not in state.discarded_streams
-            and len(state.discarded_streams) >= self._queue_capacity
-        ):
-            state.discarded_streams.pop()
-        state.discarded_streams.add(stream_key)
+        now = asyncio.get_running_loop().time()
+        self._prune_expired_streams(state, now)
+        state.discarded_streams[stream_key] = now + self._stream_idle_timeout_s
         state.changed.set()
+
+    @staticmethod
+    def _prune_expired_streams(
+        state: _ParticipantState,
+        now: float,
+    ) -> None:
+        for key, expires_at in tuple(state.discarded_streams.items()):
+            if expires_at <= now:
+                state.discarded_streams.pop(key, None)
+
+    def _discarded_stream_fragment(
+        self,
+        state: _ParticipantState,
+        stream_key: tuple[str, str],
+        *,
+        final: bool,
+    ) -> bool:
+        now = asyncio.get_running_loop().time()
+        expires_at = state.discarded_streams.get(stream_key)
+        if expires_at is None:
+            return False
+        if expires_at <= now:
+            state.discarded_streams.pop(stream_key, None)
+            return False
+        if final:
+            state.discarded_streams.pop(stream_key, None)
+        else:
+            state.discarded_streams[stream_key] = now + self._stream_idle_timeout_s
+        return True
+
+    def _stream_is_discarded(
+        self,
+        state: _ParticipantState,
+        stream_key: tuple[str, str],
+    ) -> bool:
+        expires_at = state.discarded_streams.get(stream_key)
+        if expires_at is None:
+            return False
+        if expires_at <= asyncio.get_running_loop().time():
+            state.discarded_streams.pop(stream_key, None)
+            return False
+        return True
 
     @staticmethod
     def _pop_next(state: _ParticipantState) -> _Contribution | None:
@@ -296,6 +347,8 @@ class VoiceAggregationAgent(Agent):
         state: _ParticipantState,
         first: _Contribution,
     ) -> list[_Contribution]:
+        if first.output.interrupt:
+            return [first]
         if self._coalesce_window_s:
             await asyncio.sleep(self._coalesce_window_s)
         batch = [first]
@@ -304,14 +357,20 @@ class VoiceAggregationAgent(Agent):
             if contribution is None:
                 break
             key = contribution.stream_key
-            if key is not None and key in state.discarded_streams:
-                if contribution.output.final:
-                    state.discarded_streams.discard(key)
+            if key is not None and self._discarded_stream_fragment(
+                state,
+                key,
+                final=contribution.output.final,
+            ):
                 continue
             if key is not None and not contribution.output.final:
                 state.pending.appendleft(contribution)
                 state.changed.set()
                 break
+            if contribution.output.interrupt:
+                state.pending.extendleft(reversed(batch))
+                state.changed.set()
+                return [contribution]
             batch.append(contribution)
         return batch
 
@@ -326,9 +385,9 @@ class VoiceAggregationAgent(Agent):
         output_id = uuid.uuid4().hex
         started_at = asyncio.get_running_loop().time()
         spoken_text = first.output.text
-        state.active_stream = input_key
         try:
             await self._publish_stream(first, output_id, interrupt=first.output.interrupt)
+            state.in_flight_count = 0
 
             while True:
                 try:
@@ -338,8 +397,7 @@ class VoiceAggregationAgent(Agent):
                     )
                 except TimeoutError:
                     logger.warning(
-                        "voice contribution stream timed out pid={!r} source={!r} "
-                        "response_id={!r}",
+                        "voice contribution stream timed out pid={!r} source={!r} response_id={!r}",
                         participant_id,
                         input_key[0],
                         input_key[1],
@@ -361,12 +419,14 @@ class VoiceAggregationAgent(Agent):
                             input_key[1],
                         )
                     spoken_text += contribution.output.text
+                    state.in_flight_count = 1
                     await self._publish_stream(
                         contribution,
                         output_id,
                         interrupt=False,
                         final=False,
                     )
+                    state.in_flight_count = 0
                     if contribution.output.final:
                         elapsed = asyncio.get_running_loop().time() - started_at
                         remaining = max(
@@ -386,11 +446,11 @@ class VoiceAggregationAgent(Agent):
                     continue
 
                 self._discard_stream(state, input_key)
+                state.in_flight_count = 1
                 await self._dispatch_urgent(participant_id, state, contribution)
                 return
         finally:
-            if state.active_stream == input_key:
-                state.active_stream = None
+            state.in_flight_count = 0
 
     async def _wait_for_stream_contribution(
         self,
@@ -398,13 +458,13 @@ class VoiceAggregationAgent(Agent):
         input_key: tuple[str, str],
     ) -> _Contribution | None:
         while True:
-            if input_key in state.discarded_streams:
+            if self._stream_is_discarded(state, input_key):
                 return None
             contribution = self._pop_stream_contribution(state, input_key)
             if contribution is not None:
                 return contribution
             state.changed.clear()
-            if input_key in state.discarded_streams:
+            if self._stream_is_discarded(state, input_key):
                 return None
             contribution = self._pop_stream_contribution(state, input_key)
             if contribution is not None:
@@ -466,6 +526,7 @@ class VoiceAggregationAgent(Agent):
         state: _ParticipantState,
         batch: list[_Contribution],
     ) -> None:
+        state.in_flight_count = len(batch)
         interrupts = any(contribution.output.interrupt for contribution in batch)
         if len(batch) == 1:
             text = batch[0].output.text.strip()
@@ -487,12 +548,14 @@ class VoiceAggregationAgent(Agent):
                     return_when=asyncio.FIRST_COMPLETED,
                 )
                 if urgent in done:
+                    state.in_flight_count += 1
                     logger.debug(
                         "urgent voice contribution preempted rewrite pid={!r}",
                         participant_id,
                     )
                     rewrite.cancel()
                     await asyncio.gather(rewrite, return_exceptions=True)
+                    state.in_flight_count = 1
                     await self._dispatch_urgent(
                         participant_id,
                         state,
@@ -506,6 +569,7 @@ class VoiceAggregationAgent(Agent):
                         task.cancel()
                 await asyncio.gather(rewrite, urgent, return_exceptions=True)
         if not text:
+            state.in_flight_count = 0
             return
         timestamp_us = min(
             (
@@ -533,6 +597,7 @@ class VoiceAggregationAgent(Agent):
             output_id,
             interrupt=output.output.interrupt,
         )
+        state.in_flight_count = 0
         urgent_contribution = await self._hold_output(
             state,
             self._playback_duration(text),
@@ -591,6 +656,7 @@ class VoiceAggregationAgent(Agent):
         state: _ParticipantState,
         contribution: _Contribution,
     ) -> None:
+        state.in_flight_count = 1
         key = contribution.stream_key
         if key is not None and not contribution.output.final:
             await self._forward_stream(participant_id, state, contribution)
@@ -607,11 +673,7 @@ class VoiceAggregationAgent(Agent):
 
     @staticmethod
     def _fallback_text(batch: list[_Contribution]) -> str:
-        return " ".join(
-            contribution.output.text.strip()
-            for contribution in batch
-            if contribution.output.text.strip()
-        )
+        return " ".join(contribution.output.text.strip() for contribution in batch if contribution.output.text.strip())
 
     async def _rewrite(
         self,
@@ -630,20 +692,20 @@ class VoiceAggregationAgent(Agent):
         if len(updates) < 2:
             return fallback
         try:
-            response = await self._llm.chat(
-                (
-                    ChatMessage(role="system", content=self._prompt),
-                    ChatMessage(
-                        role="user",
-                        content="Pending spoken updates:\n"
-                        + json.dumps(updates, ensure_ascii=False),
+            async with asyncio.timeout(self._rewrite_timeout_s):
+                response = await self._llm.chat(
+                    (
+                        ChatMessage(role="system", content=self._prompt),
+                        ChatMessage(
+                            role="user",
+                            content="Pending spoken updates:\n" + json.dumps(updates, ensure_ascii=False),
+                        ),
                     ),
-                ),
-                max_tokens=self._max_tokens,
-                temperature=0.0,
-                enable_thinking=False,
-                timeout=self._rewrite_timeout_s,
-            )
+                    max_tokens=self._max_tokens,
+                    temperature=0.0,
+                    enable_thinking=False,
+                    timeout=self._rewrite_timeout_s,
+                )
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -668,10 +730,10 @@ class VoiceAggregationAgent(Agent):
         *,
         reason: str,
     ) -> None:
-        count = len(state.pending)
+        count = len(state.pending) + state.in_flight_count
         if count:
             logger.warning(
-                "discarded pending voice contributions pid={!r} count={} reason={}",
+                "discarded accepted voice contributions pid={!r} count={} reason={}",
                 participant_id,
                 count,
                 reason,

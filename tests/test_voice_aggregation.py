@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from loguru import logger
 from xr_ai_models import ChatMessage, ChatResponse
 from xr_ai_runtime import Agent, AgentRuntime, MessageMetadata, RuntimeContext, subscribe
 from xr_ai_voice import (
@@ -48,16 +49,19 @@ class _LLM:
 
 
 class _Recorder(Agent):
-    def __init__(self) -> None:
+    def __init__(self, gate: asyncio.Event | None = None) -> None:
         super().__init__()
         self.outputs: list[tuple[VoiceOutput, MessageMetadata]] = []
         self.changed = asyncio.Condition()
+        self.gate = gate
 
     @subscribe(VOICE_OUTPUT_TOPIC)
     async def record(self, output: VoiceOutput, ctx: RuntimeContext) -> None:
         async with self.changed:
             self.outputs.append((output, ctx.metadata))
             self.changed.notify_all()
+        if self.gate is not None:
+            await self.gate.wait()
 
     async def wait_for(self, count: int) -> None:
         async with self.changed:
@@ -69,21 +73,23 @@ class _Recorder(Agent):
 
 async def _start(
     llm: _LLM,
+    *,
+    output_gate: asyncio.Event | None = None,
     **kwargs,
 ) -> tuple[AgentRuntime, VoiceAggregationAgent, _Recorder]:
     kwargs.setdefault("speech_rate_wpm", 60_000.0)
     kwargs.setdefault("minimum_playback_s", 0.0)
+    kwargs.setdefault("coalesce_window_s", 0.01)
     runtime = AgentRuntime()
     aggregator = runtime.register(
         "voice-aggregation",
         VoiceAggregationAgent(
             llm=llm,  # type: ignore[arg-type]
-            coalesce_window_s=0.01,
             participant_idle_timeout_s=1.0,
             **kwargs,
         ),
     )
-    recorder = runtime.register("recorder", _Recorder())
+    recorder = runtime.register("recorder", _Recorder(output_gate))
     await runtime.start()
     return runtime, aggregator, recorder
 
@@ -177,10 +183,10 @@ async def test_participants_aggregate_independently() -> None:
     finally:
         await _stop(runtime, aggregator)
 
-    assert {
-        (metadata.participant_id, output.text)
-        for output, metadata in recorder.outputs
-    } == {("alice", "Alice update."), ("bob", "Bob update.")}
+    assert {(metadata.participant_id, output.text) for output, metadata in recorder.outputs} == {
+        ("alice", "Alice update."),
+        ("bob", "Bob update."),
+    }
     assert llm.calls == []
 
 
@@ -218,9 +224,7 @@ async def test_lone_stream_passes_through_while_pending_updates_coalesce() -> No
     finally:
         await _stop(runtime, aggregator)
 
-    first, second, stream_end, third, batch_end = [
-        output for output, _metadata in recorder.outputs
-    ]
+    first, second, stream_end, third, batch_end = [output for output, _metadata in recorder.outputs]
     assert first.text == "I can see "
     assert first.final is False
     assert first.response_id
@@ -351,9 +355,7 @@ async def test_updates_during_estimated_playback_coalesce_after_current_output()
     finally:
         await _stop(runtime, aggregator)
 
-    first, first_end, combined, combined_end = [
-        output for output, _metadata in recorder.outputs
-    ]
+    first, first_end, combined, combined_end = [output for output, _metadata in recorder.outputs]
     assert first.text == "This response remains active while it is spoken."
     assert first.final is False
     assert first_end == VoiceOutput(response_id=first.response_id)
@@ -393,6 +395,205 @@ async def test_pending_capacity_drops_oldest_across_all_buffered_work() -> None:
         ]
     finally:
         await _stop(runtime, aggregator)
+
+
+async def test_pending_capacity_preserves_urgent_work() -> None:
+    gate = asyncio.Event()
+    llm = _LLM()
+    runtime, aggregator, recorder = await _start(
+        llm,
+        output_gate=gate,
+        queue_capacity=2,
+    )
+    try:
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Blocked output."),
+            participant_id="alice",
+            source="foreground",
+        )
+        await recorder.wait_for(1)
+        for text in ("Urgent one.", "Urgent two."):
+            await runtime.publish(
+                VOICE_CONTRIBUTION_TOPIC,
+                VoiceOutput(text=text, interrupt=True),
+                participant_id="alice",
+                source="safety",
+            )
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Routine stream.", response_id="routine", final=False),
+            participant_id="alice",
+            source="monitor",
+        )
+
+        state = aggregator._states["alice"]
+        assert [item.output.text for item in state.pending] == [
+            "Urgent one.",
+            "Urgent two.",
+        ]
+        assert ("monitor", "routine") in state.discarded_streams
+
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Urgent three.", interrupt=True),
+            participant_id="alice",
+            source="safety",
+        )
+        assert [item.output.text for item in state.pending] == [
+            "Urgent two.",
+            "Urgent three.",
+        ]
+    finally:
+        gate.set()
+        await _stop(runtime, aggregator)
+
+
+async def test_discarded_stream_does_not_resume_after_other_interrupts() -> None:
+    llm = _LLM()
+    runtime, aggregator, recorder = await _start(
+        llm,
+        queue_capacity=1,
+        stream_idle_timeout_s=0.2,
+    )
+    try:
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="A-start", response_id="A", final=False),
+            participant_id="alice",
+            source="stream",
+        )
+        await recorder.wait_for(1)
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(
+                text="B-start",
+                response_id="B",
+                final=False,
+                interrupt=True,
+            ),
+            participant_id="alice",
+            source="stream",
+        )
+        await recorder.wait_for(2)
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(
+                text="C-start",
+                response_id="C",
+                final=False,
+                interrupt=True,
+            ),
+            participant_id="alice",
+            source="stream",
+        )
+        await recorder.wait_for(3)
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="C-end", response_id="C"),
+            participant_id="alice",
+            source="stream",
+        )
+        await recorder.wait_for(5)
+
+        state = aggregator._states["alice"]
+        a_key = ("stream", "A")
+        old_expiry = state.discarded_streams[a_key]
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="A-stale-tail", response_id="A", final=False),
+            participant_id="alice",
+            source="stream",
+        )
+        await asyncio.sleep(0.02)
+        assert len(recorder.outputs) == 5
+        assert state.discarded_streams[a_key] > old_expiry
+
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(response_id="A"),
+            participant_id="alice",
+            source="stream",
+        )
+        for _ in range(100):
+            if a_key not in state.discarded_streams:
+                break
+            await asyncio.sleep(0.001)
+        assert a_key not in state.discarded_streams
+    finally:
+        await _stop(runtime, aggregator)
+
+    assert [output.text for output, _metadata in recorder.outputs] == [
+        "A-start",
+        "B-start",
+        "C-start",
+        "C-end",
+        "",
+    ]
+
+
+async def test_discarded_stream_can_restart_after_idle_expiry() -> None:
+    llm = _LLM()
+    runtime, aggregator, recorder = await _start(
+        llm,
+        queue_capacity=1,
+        stream_idle_timeout_s=0.03,
+    )
+    try:
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="A-old", response_id="A", final=False),
+            participant_id="alice",
+            source="stream",
+        )
+        await recorder.wait_for(1)
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(
+                text="B-start",
+                response_id="B",
+                final=False,
+                interrupt=True,
+            ),
+            participant_id="alice",
+            source="stream",
+        )
+        await recorder.wait_for(2)
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="B-end", response_id="B"),
+            participant_id="alice",
+            source="stream",
+        )
+        await recorder.wait_for(4)
+        await asyncio.sleep(0.04)
+
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="A-new", response_id="A", final=False),
+            participant_id="alice",
+            source="stream",
+        )
+        await recorder.wait_for(5)
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="A-end", response_id="A"),
+            participant_id="alice",
+            source="stream",
+        )
+        await recorder.wait_for(7)
+    finally:
+        await _stop(runtime, aggregator)
+
+    assert [output.text for output, _metadata in recorder.outputs] == [
+        "A-old",
+        "B-start",
+        "B-end",
+        "",
+        "A-new",
+        "A-end",
+        "",
+    ]
 
 
 async def test_release_cancels_only_departed_participant_state() -> None:
@@ -461,15 +662,21 @@ async def test_urgent_contribution_interrupts_active_stream() -> None:
     assert llm.calls == []
 
 
-async def test_urgent_batch_bypasses_rewrite() -> None:
-    llm = _LLM("This must not be used.")
+async def test_urgent_batch_speaks_alert_first_and_retains_routine_order() -> None:
+    llm = _LLM("Routine one, then routine two.")
     runtime, aggregator, recorder = await _start(llm)
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Routine update."),
+            VoiceOutput(text="Routine one."),
             participant_id="alice",
             source="monitor",
+        )
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Routine two."),
+            participant_id="alice",
+            source="timer",
         )
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
@@ -477,13 +684,44 @@ async def test_urgent_batch_bypasses_rewrite() -> None:
             participant_id="alice",
             source="safety",
         )
-        await recorder.wait_for(1)
+        await recorder.wait_for(4)
     finally:
         await _stop(runtime, aggregator)
 
-    assert recorder.outputs[0][0].text == "Routine update. Move away."
+    assert [output.text for output, _metadata in recorder.outputs] == [
+        "Move away.",
+        "",
+        "Routine one, then routine two.",
+        "",
+    ]
     assert recorder.outputs[0][0].interrupt is True
-    assert llm.calls == []
+    assert len(llm.calls) == 1
+    assert "Routine one." in str(llm.calls[0][0][-1].content)
+    assert "Routine two." in str(llm.calls[0][0][-1].content)
+    assert str(llm.calls[0][0][-1].content).index("Routine one.") < str(llm.calls[0][0][-1].content).index(
+        "Routine two."
+    )
+
+
+async def test_urgent_first_contribution_skips_coalescing_delay() -> None:
+    llm = _LLM()
+    runtime, aggregator, recorder = await _start(
+        llm,
+        coalesce_window_s=0.5,
+    )
+    try:
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Move away.", interrupt=True),
+            participant_id="alice",
+            source="safety",
+        )
+        await asyncio.wait_for(recorder.wait_for(1), timeout=0.2)
+    finally:
+        await _stop(runtime, aggregator)
+
+    assert recorder.outputs[0][0].text == "Move away."
+    assert recorder.outputs[0][0].interrupt is True
 
 
 async def test_urgent_contribution_cancels_in_flight_rewrite() -> None:
@@ -540,6 +778,74 @@ async def test_rewrite_failure_preserves_all_updates() -> None:
         await _stop(runtime, aggregator)
 
     assert recorder.outputs[0][0].text == "First update. Second update."
+
+
+async def test_rewrite_timeout_is_enforced_around_service_call() -> None:
+    gate = asyncio.Event()
+    llm = _LLM(gate=gate)
+    runtime, aggregator, recorder = await _start(
+        llm,
+        rewrite_timeout_s=0.02,
+    )
+    try:
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="First update."),
+            participant_id="alice",
+            source="one",
+        )
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Second update."),
+            participant_id="alice",
+            source="two",
+        )
+        await recorder.wait_for(1)
+    finally:
+        await _stop(runtime, aggregator)
+
+    assert llm.cancelled is True
+    assert recorder.outputs[0][0].text == "First update. Second update."
+    assert llm.calls[0][1]["timeout"] == 0.02
+
+
+@pytest.mark.parametrize("release", [False, True])
+async def test_shutdown_logs_prepublication_in_flight_work(release: bool) -> None:
+    gate = asyncio.Event()
+    llm = _LLM(gate=gate)
+    runtime, aggregator, _recorder = await _start(llm)
+    messages: list[str] = []
+    handler_id = logger.add(lambda message: messages.append(str(message)), level="WARNING")
+    try:
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="First update."),
+            participant_id="alice",
+            source="one",
+        )
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Second update."),
+            participant_id="alice",
+            source="two",
+        )
+        await asyncio.wait_for(llm.started.wait(), 1.0)
+
+        if release:
+            await aggregator.release("alice")
+        else:
+            await aggregator.stop()
+    finally:
+        logger.remove(handler_id)
+        await aggregator.stop()
+        await runtime.stop()
+
+    reason = "participant release" if release else "shutdown"
+    assert any(
+        "discarded accepted voice contributions" in message and "count=2" in message and f"reason={reason}" in message
+        for message in messages
+    )
+    assert llm.cancelled is True
 
 
 async def test_contribution_after_stop_is_dropped_without_publisher_error() -> None:

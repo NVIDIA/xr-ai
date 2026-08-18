@@ -104,25 +104,37 @@ pacing rather than a client playback acknowledgement. An estimate that is too
 short moves queuing downstream into TTS; one that is too long creates silence.
 Tune all three playback settings for the selected TTS voice.
 
-Rewrites have the explicit `rewrite_timeout_s` deadline. If a rewrite fails or
-times out, the original text is joined so updates are not lost. The earliest
-input timestamp is preserved. An `interrupt=True` contribution bypasses an LLM
-rewrite, cancels a rewrite already in progress, and replaces active speech
-without model latency. `queue_capacity` bounds all pending contributions for one
-participant, including chunks waiting behind another stream. When the bound is
-reached, the oldest non-urgent pending contribution is dropped with a warning
-so new output cannot grow stale in an unbounded buffer. Batches also have a
-bounded size; retained contributions remain ordered for following batches.
+Rewrites have an aggregator-enforced `rewrite_timeout_s` deadline, which is also
+passed to the model service. If a rewrite fails or times out, the original text
+is joined so updates are not lost. The earliest input timestamp is preserved.
+An `interrupt=True` contribution bypasses the coalescing delay and LLM rewrite,
+cancels a rewrite already in progress, and replaces active speech without model
+latency. Routine updates already collected in its batch remain ordered for the
+next batch. `queue_capacity` bounds all pending contributions for one
+participant, including chunks waiting behind another stream. At capacity,
+routine input replaces the oldest routine contribution but never an urgent one.
+Urgent input replaces the oldest routine contribution when possible, otherwise
+the oldest urgent contribution, so the freshest alert wins. Every drop is
+logged, and dropping a stream fragment quarantines that stream ID. Batches also
+have a bounded size; retained contributions remain ordered for following
+batches.
 
 A lone incremental contribution starts streaming immediately with a new
 aggregator-owned response ID. Other contributions wait behind that stream;
 finite updates that accumulated while it ran are coalesced when it finishes.
 An urgent contribution interrupts the active stream. A stream that stops
 producing chunks is closed after `stream_idle_timeout_s`, allowing pending
-updates to proceed. Call `stop()` before shutting down the runtime so the agent
-can cancel its participant-owned tasks. Contributions published after shutdown
-starts are logged and dropped; shutdown logs the number of accepted pending
-contributions it discards.
+updates to proceed. An interrupted or dropped stream ID remains quarantined
+until its terminator arrives. Each ignored fragment refreshes the quarantine;
+after a full `stream_idle_timeout_s` without another fragment, the ID may begin
+a new stream. This expiry bounds stale stream state independently from pending
+queue capacity.
+
+Call `stop()` before shutting down the runtime so the agent can cancel its
+participant-owned tasks. Contributions published after shutdown starts are
+logged and dropped. Shutdown and participant release log accepted contributions
+that are still pending or in pre-publication processing. Output already handed
+to the voice pipeline during the playback hold is not counted as discarded.
 
 ## Voice tuning and data echo
 
