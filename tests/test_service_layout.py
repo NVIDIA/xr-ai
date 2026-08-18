@@ -33,7 +33,7 @@ _MODEL_SERVICES = {
     "llama-nemotron-llm": (
         "llama-nemotron-llm-server",
         "llama_nemotron_llm_server",
-        8110,
+        8106,
     ),
     "magpie-tts": ("magpie-tts-server", "magpie_tts_server", 8104),
     "nemotron-omni-llm": (
