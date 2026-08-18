@@ -10,6 +10,14 @@
 Agentic AI for XR — an open-source foundation for multi-modal, real-time
 conversational AI within the CloudXR ecosystem.
 
+**Using a coding agent?** Paste this to it:
+
+```text
+Set up xr-ai for me: fetch
+https://raw.githubusercontent.com/NVIDIA/xr-ai/main/skills/getting-started/SKILL.md,
+install it as a skill (or just follow it), and walk me through the setup.
+```
+
 ## Public Beta Notice
 
 This project is publicly available in beta and is under active development.
@@ -528,6 +536,7 @@ For engineers and agents working in the repo:
 | [`AGENTS.md`](AGENTS.md) | Working contract — hard rules every change must satisfy |
 | [`DEPENDENCIES.md`](DEPENDENCIES.md) | Authoritative dependency map (update with every `pyproject.toml` change) |
 | [Versioned documentation](https://nvidia.github.io/xr-ai/) | Latest release by default, plus `main` development and release-tag documentation |
+| [`skills/README.md`](skills/README.md) | Skill bank: setup skills for coding agents |
 | [`docs/source/overview/architecture.md`](docs/source/overview/architecture.md) | Hub ↔ transport ↔ agent boundaries; known limitations |
 | [`docs/source/components/launcher-and-process-model.md`](docs/source/components/launcher-and-process-model.md) | `Process` / `run_stack` mechanics; ready-file protocol |
 | [`docs/source/components/ai-services.md`](docs/source/components/ai-services.md) | VLM / STT / TTS / LLM / embedding server reference + worker call examples |
