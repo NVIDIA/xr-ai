@@ -553,7 +553,7 @@ Package Contents
 
 
 
-.. py:class:: OpenAICompatLLM(base_url: str, model_name: str, *, capabilities: xr_ai_models._protocols.Capabilities | None = None, reasoning_field: str | None = None, default_extras: dict[str, Any] | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, client: httpx.AsyncClient | None = None)
+.. py:class:: OpenAICompatLLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, reasoning_field: str | None = None, default_extras: dict[str, Any] | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, client: httpx.AsyncClient | None = None)
 
    OpenAI-compatible ``/v1/chat/completions`` client.
 
@@ -575,7 +575,7 @@ Package Contents
 
 
 
-   .. py:method:: chat(messages: Sequence[xr_ai_models._protocols.ChatMessage], *, tools: Sequence[xr_ai_models._protocols.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models._protocols.ChatResponse
+   .. py:method:: chat(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
       :async:
 
 
@@ -587,7 +587,7 @@ Package Contents
 
 
 
-   .. py:method:: stream(messages: Sequence[xr_ai_models._protocols.ChatMessage], *, tools: Sequence[xr_ai_models._protocols.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
+   .. py:method:: stream(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
       :async:
 
 
@@ -747,7 +747,7 @@ Package Contents
 
 
 
-.. py:class:: OpenAICompatVLM(base_url: str, model_name: str, *, capabilities: xr_ai_models._protocols.Capabilities | None = None, default_extras: dict[str, Any] | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, client: httpx.AsyncClient | None = None)
+.. py:class:: OpenAICompatVLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, default_extras: dict[str, Any] | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, client: httpx.AsyncClient | None = None)
 
    OpenAI-compatible client for image- and video-bearing chat requests.
 
@@ -757,7 +757,7 @@ Package Contents
 
 
    .. py:property:: capabilities
-      :type: xr_ai_models._protocols.Capabilities
+      :type: xr_ai_models.Capabilities
 
 
       Return the features declared for the underlying chat endpoint.
@@ -772,7 +772,7 @@ Package Contents
 
 
 
-   .. py:method:: ask_image(image: xr_ai_models._protocols.ImageInput, question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models._protocols.ChatResponse
+   .. py:method:: ask_image(image: xr_ai_models.ImageInput, question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
       :async:
 
 
@@ -780,7 +780,7 @@ Package Contents
 
 
 
-   .. py:method:: ask_images(images: Sequence[xr_ai_models._protocols.ImageInput], question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models._protocols.ChatResponse
+   .. py:method:: ask_images(images: Sequence[xr_ai_models.ImageInput], question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
       :async:
 
 
@@ -790,7 +790,7 @@ Package Contents
 
 
 
-   .. py:method:: ask_video(video: xr_ai_models._protocols.VideoInput, question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models._protocols.ChatResponse
+   .. py:method:: ask_video(video: xr_ai_models.VideoInput, question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
       :async:
 
 
@@ -801,7 +801,7 @@ Package Contents
 
 
 
-   .. py:method:: stream(image: xr_ai_models._protocols.ImageInput, question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
+   .. py:method:: stream(image: xr_ai_models.ImageInput, question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
       :async:
 
 
@@ -809,7 +809,7 @@ Package Contents
 
 
 
-   .. py:method:: stream_images(images: Sequence[xr_ai_models._protocols.ImageInput], question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
+   .. py:method:: stream_images(images: Sequence[xr_ai_models.ImageInput], question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
       :async:
 
 
@@ -1183,7 +1183,7 @@ Package Contents
    originate from a file.
 
 
-.. py:function:: make_embedding(config: xr_ai_models._config.ModelsConfig, name: str) -> xr_ai_models._protocols.EmbeddingService
+.. py:function:: make_embedding(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.EmbeddingService
 
    Construct the embedding service for the named configuration entry.
 
@@ -1192,7 +1192,7 @@ Package Contents
    adapter kind.
 
 
-.. py:function:: make_llm(config: xr_ai_models._config.ModelsConfig, name: str) -> xr_ai_models._protocols.LLMService
+.. py:function:: make_llm(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.LLMService
 
    Construct the text chat service for the named configuration entry.
 
@@ -1201,7 +1201,7 @@ Package Contents
    adapter kind.
 
 
-.. py:function:: make_stt(config: xr_ai_models._config.ModelsConfig, name: str) -> xr_ai_models._protocols.STTService
+.. py:function:: make_stt(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.STTService
 
    Construct the speech-to-text service for the named configuration entry.
 
@@ -1210,7 +1210,7 @@ Package Contents
    adapter kind.
 
 
-.. py:function:: make_tts(config: xr_ai_models._config.ModelsConfig, name: str) -> xr_ai_models._protocols.TTSService
+.. py:function:: make_tts(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.TTSService
 
    Construct the text-to-speech service for the named configuration entry.
 
@@ -1219,7 +1219,7 @@ Package Contents
    adapter kind.
 
 
-.. py:function:: make_vlm(config: xr_ai_models._config.ModelsConfig, name: str) -> xr_ai_models._protocols.VLMService
+.. py:function:: make_vlm(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.VLMService
 
    Construct the visual chat service for the named configuration entry.
 
