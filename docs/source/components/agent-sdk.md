@@ -16,11 +16,13 @@ installation.
 | `xr-ai-runtime` | `xr_ai_runtime` | Agent registration and typed participant-scoped fan-out |
 | `xr-ai-tools` | `xr_ai_tools` | Relay-managed tools and model tool-call helpers |
 | `xr-ai-voice` | `xr_ai_voice` | Voice agent, transport, and private media pipeline |
+| `xr-ai-web-events` | `xr_ai_web_events` | Bounded live browser views over selected application events |
 
 Package guides are versioned with this site:
 {doc}`/reference/agent-sdk-hub`, {doc}`/reference/agent-sdk-models`,
-{doc}`/reference/agent-sdk-runtime`, {doc}`/reference/agent-sdk-tools`, and
-{doc}`/reference/agent-sdk-voice`. The generated {doc}`/reference/python/index`
+{doc}`/reference/agent-sdk-runtime`, {doc}`/reference/agent-sdk-tools`,
+{doc}`/reference/agent-sdk-voice`, and {doc}`/reference/agent-sdk-web-events`.
+The generated {doc}`/reference/python/index`
 is the source of truth for public names, signatures, types, defaults, fields,
 and method-level behavior.
 
@@ -62,6 +64,11 @@ drop-oldest policy, while urgent output bypasses or cancels rewriting and
 interrupts active speech. This policy remains outside the private media
 pipeline so applications opt in explicitly and retain ownership of which
 events should become speech.
+
+Applications may publish selected compact payloads to `WEB_EVENT_TOPIC` for a
+`WebEventsAgent` to display. The viewer owns only a bounded live history and a
+loopback HTTP listener. It is not persistence, does not inspect every runtime
+topic, and does not enter model, voice, media, or hub authentication paths.
 
 `ProcessorEndpoint` is the minimal agent-side hub boundary. It receives data,
 audio, frame signals, and participant events and sends participant-routed return

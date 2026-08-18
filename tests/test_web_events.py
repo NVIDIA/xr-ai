@@ -1,0 +1,152 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+from __future__ import annotations
+
+import asyncio
+import json
+import socket
+from urllib.error import HTTPError
+from urllib.request import urlopen
+
+import pytest
+from pydantic import ValidationError
+from xr_ai_runtime import AgentRuntime
+from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent, WebEventsAgent
+
+
+def _request(url: str) -> tuple[int, dict[str, str], bytes]:
+    with urlopen(url, timeout=2) as response:  # noqa: S310
+        return response.status, dict(response.headers.items()), response.read()
+
+
+async def _get(url: str) -> tuple[int, dict[str, str], bytes]:
+    return await asyncio.to_thread(_request, url)
+
+
+def test_web_event_contract_is_strict_and_untraced() -> None:
+    event = WebEvent(topic=" monitor.changes ", title=" Changes ", payload={"changed": True})
+
+    assert event.topic == "monitor.changes"
+    assert event.title == "Changes"
+    assert WEB_EVENT_TOPIC.message_type is WebEvent
+    assert WEB_EVENT_TOPIC.telemetry == "none"
+    with pytest.raises(ValidationError):
+        WebEvent(topic=" ")
+    with pytest.raises(ValidationError):
+        WebEvent(topic="ok", unexpected=True)
+
+
+async def test_viewer_serves_runtime_events_and_reports_rollover() -> None:
+    runtime = AgentRuntime()
+    viewer = runtime.register(
+        "web-events",
+        WebEventsAgent(port=0, max_events=2, title="Test events"),
+    )
+
+    async with viewer:
+        async with runtime:
+            for value in (1, 2, 3):
+                await runtime.publish(
+                    WEB_EVENT_TOPIC,
+                    WebEvent(
+                        topic="instruments.reading",
+                        title="Readings",
+                        payload={"value": value},
+                    ),
+                    participant_id="glasses-1",
+                    source="instrument-monitor",
+                )
+
+            status, headers, body = await _get(f"{viewer.url}/api/events?after=0")
+            result = json.loads(body)
+            assert status == 200
+            assert result["title"] == "Test events"
+            assert result["cursor"] == 3
+            assert result["oldest"] == 2
+            assert result["reset"] is True
+            assert [event["sequence"] for event in result["events"]] == [2, 3]
+            assert [event["payload"] for event in result["events"]] == [
+                {"value": 2},
+                {"value": 3},
+            ]
+            last = result["events"][-1]
+            assert last["topic"] == "instruments.reading"
+            assert last["title"] == "Readings"
+            assert last["participant_id"] == "glasses-1"
+            assert last["source"] == "instrument-monitor"
+            assert last["message_id"] == last["correlation_id"]
+            assert last["parent_message_id"] is None
+            assert last["timestamp_us"] > 0
+            assert headers["Cache-Control"] == "no-store"
+            assert "default-src 'self'" in headers["Content-Security-Policy"]
+
+            _, _, body = await _get(f"{viewer.url}/api/events?after=2")
+            incremental = json.loads(body)
+            assert incremental["reset"] is False
+            assert [event["sequence"] for event in incremental["events"]] == [3]
+
+            _, _, body = await _get(f"{viewer.url}/api/events?after=99")
+            future = json.loads(body)
+            assert future["reset"] is True
+            assert [event["sequence"] for event in future["events"]] == [2, 3]
+
+
+async def test_viewer_serves_health_and_packaged_page() -> None:
+    viewer = WebEventsAgent(port=0)
+
+    async with viewer:
+        assert viewer.running
+        status, headers, body = await _get(f"{viewer.url}/healthz")
+        assert status == 200
+        assert json.loads(body) == {"status": "ok"}
+        assert headers["X-Content-Type-Options"] == "nosniff"
+
+        status, headers, body = await _get(f"{viewer.url}/")
+        assert status == 200
+        assert headers["Content-Type"].startswith("text/html")
+        assert b'id="topic-grid"' in body
+
+        status, _, body = await _get(f"{viewer.url}/app.js")
+        assert status == 200
+        assert b"/api/events?after=" in body
+
+        with pytest.raises(HTTPError) as invalid:
+            await _get(f"{viewer.url}/api/events?after=invalid")
+        assert invalid.value.code == 400
+
+    assert not viewer.running
+
+
+async def test_viewer_lifecycle_is_idempotent_and_bind_failure_is_visible() -> None:
+    viewer = WebEventsAgent(port=0)
+    await viewer.start()
+    first_url = viewer.url
+    await viewer.start()
+    assert viewer.url == first_url
+    await viewer.stop()
+    await viewer.stop()
+
+    with socket.socket() as occupied:
+        occupied.bind(("127.0.0.1", 0))
+        occupied.listen()
+        port = occupied.getsockname()[1]
+        blocked = WebEventsAgent(port=port)
+        with pytest.raises(OSError):
+            await blocked.start()
+        assert not blocked.running
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"host": " "}, "host"),
+        ({"port": -1}, "port"),
+        ({"port": 65_536}, "port"),
+        ({"max_events": 0}, "max_events"),
+        ({"title": " "}, "title"),
+    ],
+)
+def test_viewer_rejects_invalid_configuration(kwargs: dict[str, object], message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        WebEventsAgent(**kwargs)
