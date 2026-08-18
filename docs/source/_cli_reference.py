@@ -12,6 +12,18 @@ from typing import Any
 
 import tomllib
 
+_VALUE_ACTIONS = {None, "append", "extend", "store"}
+_NO_VALUE_ACTIONS = {
+    "append_const",
+    "count",
+    "help",
+    "store_const",
+    "store_false",
+    "store_true",
+    "version",
+}
+_SUPPORTED_NARGS = {"?", "*", "+"}
+
 
 @dataclass(frozen=True)
 class CliArgument:
@@ -20,30 +32,60 @@ class CliArgument:
     flags: tuple[str, ...]
     help: str
     action: str | None = None
-    choices: tuple[Any, ...] = ()
+    choices: tuple[Any, ...] | None = None
     metavar: str | None = None
+    nargs: str | int | None = None
     required: bool = False
 
     @property
+    def is_positional(self) -> bool:
+        """Return whether this declaration is a positional argument."""
+
+        return not self.flags[0].startswith("-")
+
+    @property
+    def _metavar(self) -> str:
+        if self.choices is not None:
+            return "{" + ",".join(str(choice) for choice in self.choices) + "}"
+        if self.metavar is not None:
+            return self.metavar
+        if self.is_positional:
+            return self.flags[0]
+        return self.flags[-1].lstrip("-").replace("-", "_").upper()
+
+    @property
+    def _value_usage(self) -> str:
+        if self.action in _NO_VALUE_ACTIONS:
+            return ""
+
+        metavar = self._metavar
+        if self.nargs is None or self.nargs == 1:
+            return metavar
+        if isinstance(self.nargs, int):
+            return " ".join(metavar for _ in range(self.nargs))
+        if self.nargs == "?":
+            return f"[{metavar}]"
+        if self.nargs == "*":
+            return f"[{metavar} ...]"
+        return f"{metavar} [{metavar} ...]"
+
+    @property
     def label(self) -> str:
-        """Return the option spelling shown in the generated reference."""
+        """Return the spelling shown in the generated definition list."""
+
+        if self.is_positional:
+            return self._metavar
 
         value = ", ".join(self.flags)
-        if self.action in {"store_true", "store_false", "count", "help"}:
-            return value
-        metavar = self.metavar
-        if self.choices:
-            metavar = "{" + ",".join(str(choice) for choice in self.choices) + "}"
-        if metavar is None:
-            metavar = self.flags[-1].lstrip("-").replace("-", "_").upper()
-        return f"{value} {metavar}"
+        return f"{value} {self._value_usage}" if self._value_usage else value
 
     @property
     def usage(self) -> str:
         """Return this argument's fragment of the command synopsis."""
 
-        label = self.label
-        return label if self.required or not self.flags[0].startswith("-") else f"[{label}]"
+        if self.is_positional:
+            return self._value_usage
+        return self.label if self.required else f"[{self.label}]"
 
 
 @dataclass(frozen=True)
@@ -84,14 +126,48 @@ def _extract_arguments(path: Path) -> tuple[CliArgument, ...]:
         flags = tuple(_literal(argument, path=path, label="argument name") for argument in node.args)
         if not flags or not all(isinstance(flag, str) for flag in flags):
             raise ValueError(f"{path}: add_argument names must be literal strings")
+        positional = not flags[0].startswith("-")
+        if positional and (len(flags) != 1 or any(flag.startswith("-") for flag in flags)):
+            raise ValueError(f"{path}: positional arguments must have exactly one name")
+        if not positional and not all(flag.startswith("-") for flag in flags):
+            raise ValueError(f"{path}: option declarations cannot mix names and flags")
         keywords = {keyword.arg: keyword.value for keyword in node.keywords if keyword.arg}
         help_text = _literal(keywords.get("help"), path=path, label="argument help")
         if not isinstance(help_text, str) or not help_text.strip():
             raise ValueError(f"{path}: {flags[-1]} must have literal help text")
         action = _literal(keywords.get("action"), path=path, label="argument action")
-        choices = _literal(keywords.get("choices"), path=path, label="argument choices")
+        if not isinstance(action, (str, type(None))) or action not in (
+            _VALUE_ACTIONS | _NO_VALUE_ACTIONS
+        ):
+            raise ValueError(f"{path}: {flags[-1]} uses unsupported action {action!r}")
+        choices_value = _literal(keywords.get("choices"), path=path, label="argument choices")
+        if choices_value is not None and not isinstance(choices_value, (list, tuple)):
+            raise ValueError(f"{path}: {flags[-1]} choices must be a literal list or tuple")
+        choices = tuple(choices_value) if choices_value is not None else None
         metavar = _literal(keywords.get("metavar"), path=path, label="argument metavar")
-        required = _literal(keywords.get("required"), path=path, label="argument required")
+        if metavar is not None and not isinstance(metavar, str):
+            raise ValueError(f"{path}: {flags[-1]} metavar must be a literal string")
+        nargs = _literal(keywords.get("nargs"), path=path, label="argument nargs")
+        valid_nargs = (
+            nargs is None
+            or (isinstance(nargs, str) and nargs in _SUPPORTED_NARGS)
+            or (isinstance(nargs, int) and not isinstance(nargs, bool) and nargs >= 1)
+        )
+        if not valid_nargs:
+            raise ValueError(f"{path}: {flags[-1]} uses unsupported nargs {nargs!r}")
+        if action in _NO_VALUE_ACTIONS and (
+            positional or nargs is not None or choices is not None or metavar is not None
+        ):
+            raise ValueError(
+                f"{path}: {flags[-1]} no-value action cannot use positional, nargs, choices, or metavar"
+            )
+        required_value = _literal(
+            keywords.get("required"), path=path, label="argument required"
+        )
+        if required_value is not None and not isinstance(required_value, bool):
+            raise ValueError(f"{path}: {flags[-1]} required must be a literal boolean")
+        if positional and "required" in keywords:
+            raise ValueError(f"{path}: {flags[-1]} positional cannot set required")
         arguments.append(
             (
                 node.lineno,
@@ -99,9 +175,10 @@ def _extract_arguments(path: Path) -> tuple[CliArgument, ...]:
                     flags=flags,
                     help=" ".join(help_text.split()),
                     action=action,
-                    choices=tuple(choices or ()),
+                    choices=choices,
                     metavar=metavar,
-                    required=bool(required),
+                    nargs=nargs,
+                    required=bool(required_value),
                 ),
             )
         )
@@ -154,18 +231,39 @@ def _directive_type():
                 literal["language"] = "console"
                 section += literal
                 if command.arguments:
-                    section += nodes.rubric(text="Options")
-                    definitions = nodes.definition_list()
-                    for argument in command.arguments:
-                        term = nodes.term()
-                        term += nodes.literal(text=argument.label)
-                        definition = nodes.definition()
-                        definition += nodes.paragraph(text=argument.help)
-                        item = nodes.definition_list_item()
-                        item += term
-                        item += definition
-                        definitions += item
-                    section += definitions
+                    groups = (
+                        (
+                            "Positional arguments",
+                            tuple(
+                                argument
+                                for argument in command.arguments
+                                if argument.is_positional
+                            ),
+                        ),
+                        (
+                            "Options",
+                            tuple(
+                                argument
+                                for argument in command.arguments
+                                if not argument.is_positional
+                            ),
+                        ),
+                    )
+                    for title, arguments in groups:
+                        if not arguments:
+                            continue
+                        section += nodes.rubric(text=title)
+                        definitions = nodes.definition_list()
+                        for argument in arguments:
+                            term = nodes.term()
+                            term += nodes.literal(text=argument.label)
+                            definition = nodes.definition()
+                            definition += nodes.paragraph(text=argument.help)
+                            item = nodes.definition_list_item()
+                            item += term
+                            item += definition
+                            definitions += item
+                        section += definitions
                 else:
                     section += nodes.paragraph(text="This command has no sample-specific options.")
                 container += section
