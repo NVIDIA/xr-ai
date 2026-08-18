@@ -63,6 +63,7 @@ Functions
    xr_ai_launcher.require_credentials
    xr_ai_launcher.warn_if_missing
    xr_ai_launcher.detect_gpu_config
+   xr_ai_launcher.load_deployment_profile
    xr_ai_launcher.load_model_deployment
    xr_ai_launcher.ManagedProcess
    xr_ai_launcher.run_stack
@@ -186,6 +187,11 @@ Package Contents
 
       Return the configured ownership mode for *service*, if managed.
 
+
+
+.. py:function:: load_deployment_profile(profile_path: pathlib.Path) -> ModelDeployment
+
+   Load a JSON deployment profile directly (no worker YAML indirection).
 
 
 .. py:function:: load_model_deployment(worker_config: pathlib.Path) -> ModelDeployment

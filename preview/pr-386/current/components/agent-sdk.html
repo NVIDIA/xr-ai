@@ -493,14 +493,18 @@ details.</p>
 finite or incremental responses to <code class="docutils literal notranslate"><span class="pre">voice.contribution</span></code>; the aggregator owns
 participant-scoped ordering, preserves a lone stream, coalesces simultaneous
 finite updates through the configured <code class="docutils literal notranslate"><span class="pre">LLMService</span></code>, holds an active response
-for its estimated spoken duration, and publishes only the result to
-<code class="docutils literal notranslate"><span class="pre">voice.output</span></code>. This policy remains outside the private media
+for a bounded, open-loop estimate of its spoken duration, and publishes only
+the result to <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>. Pending work is capacity-bounded with a
+drop-oldest policy, while urgent output bypasses or cancels rewriting and
+interrupts active speech. This policy remains outside the private media
 pipeline so applications opt in explicitly and retain ownership of which
 events should become speech.</p>
 <p>Applications may publish selected compact payloads to <code class="docutils literal notranslate"><span class="pre">WEB_EVENT_TOPIC</span></code> for a
 <code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code> to display. The viewer owns only a bounded live history and a
 loopback HTTP listener. It is not persistence, does not inspect every runtime
-topic, and does not enter model, voice, media, or hub authentication paths.</p>
+topic, and does not enter model, voice, media, or hub authentication paths. The
+<code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code> and <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code> workers are concrete consumers: each
+selects its application-level requests and response chunks for the viewer.</p>
 <p><code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> is the minimal agent-side hub boundary. It receives data,
 audio, frame signals, and participant events and sends participant-routed return
 traffic. Video tools acquire frames on demand; raw pixels and media stay on the

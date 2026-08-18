@@ -477,6 +477,96 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 </pre></div>
 </div>
 </section>
+<section id="config-model-servers-yaml-96g-blackwell-nim-llm-server-yaml">
+<h3>yaml/96G_blackwell/nim_llm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-nim-llm-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Self-hosted NIM: LLM (serves both the `llm` and `agent_llm` roles).</span>
+<span class="c1"># Nemotron-3-Nano is the same agent model the local vlm_llm profile runs;</span>
+<span class="c1"># its A3B MoE decode is fast enough to cover the reactive role too. Swap in</span>
+<span class="c1"># any LLM NIM from https://catalog.ngc.nvidia.com.</span>
+<span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
+<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano:2.0.10</span>
+<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8110</span>
+
+<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
+
+<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
+<span class="nt">env</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"32768"</span>
+<span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.4"</span>
+<span class="w">  </span><span class="c1"># nemotron_v3 is the parser built into this NIM (nano_v3 is absent);</span>
+<span class="w">  </span><span class="c1"># without tool-calling flags the agentic loop gets no tool calls.</span>
+<span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
+</pre></div>
+</div>
+</section>
+<section id="config-model-servers-yaml-96g-blackwell-nim-stt-server-yaml">
+<h3>yaml/96G_blackwell/nim_stt_server.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-nim-stt-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Self-hosted NIM: Riva ASR (parakeet). Workers reach the gRPC port via the</span>
+<span class="c1"># riva_grpc model kind; http_port serves /v1/health/ready only.</span>
+<span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
+<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/parakeet-tdt-0.6b-v2:1.2.0</span>
+<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9010</span>
+<span class="nt">grpc_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50051</span>
+
+<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
+
+<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
+<span class="nt">env</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Single-process inference: the default multiprocessing mode runs two</span>
+<span class="w">  </span><span class="c1"># CUDA processes; one is plenty for demo traffic. ~14 GB VRAM either way.</span>
+<span class="w">  </span><span class="nt">NIM_USE_MULTIPROCESSING_FOR_INFERENCE</span><span class="p">:</span><span class="w"> </span><span class="s">"false"</span>
+</pre></div>
+</div>
+</section>
+<section id="config-model-servers-yaml-96g-blackwell-nim-tts-server-yaml">
+<h3>yaml/96G_blackwell/nim_tts_server.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-nim-tts-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Self-hosted NIM: Riva TTS (magpie). Workers reach the gRPC port via the</span>
+<span class="c1"># riva_grpc model kind; http_port serves /v1/health/ready only.</span>
+<span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
+<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/magpie-tts-multilingual:1.9.0</span>
+<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9011</span>
+<span class="nt">grpc_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50052</span>
+
+<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
+
+<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
+</pre></div>
+</div>
+</section>
+<section id="config-model-servers-yaml-96g-blackwell-nim-vlm-server-yaml">
+<h3>yaml/96G_blackwell/nim_vlm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-nim-vlm-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Self-hosted NIM: VLM, the same Cosmos model the local vlm-server runs.</span>
+<span class="c1"># Swap in any vision NIM from https://catalog.ngc.nvidia.com, but check its</span>
+<span class="c1"># engine accepts a full image prompt: the nemotron-nano-vl NIM builds a</span>
+<span class="c1"># 3200-token input cap on this class of GPU, below its own ~3330-token</span>
+<span class="c1"># per-image cost, so every image request 500s.</span>
+<span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
+<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/cosmos-reason1-7b:1.4.1</span>
+<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8100</span>
+
+<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
+
+<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
+<span class="nt">env</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"16384"</span>
+<span class="w">  </span><span class="c1"># Fraction of total GPU memory despite the PERCENT name (0..1]; leaves</span>
+<span class="w">  </span><span class="c1"># headroom for whatever shares the GPU.</span>
+<span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.2"</span>
+</pre></div>
+</div>
+</section>
 <section id="config-model-servers-yaml-96g-blackwell-stt-server-yaml">
 <h3>yaml/96G_blackwell/stt_server.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-stt-server-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
@@ -579,6 +669,119 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 </pre></div>
 </div>
 </section>
+<section id="config-model-servers-yaml-dual-48g-ada-nim-llm-server-yaml">
+<h3>yaml/dual_48G_ada/nim_llm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-nim-llm-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Self-hosted NIM: LLM (serves both the `llm` and `agent_llm` roles).</span>
+<span class="c1"># Nemotron-3-Nano is the same agent model the local vlm_llm profile runs;</span>
+<span class="c1"># its A3B MoE decode is fast enough to cover the reactive role too. Swap in</span>
+<span class="c1"># any LLM NIM from https://catalog.ngc.nvidia.com.</span>
+<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano:2.0.10</span>
+<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8110</span>
+
+<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
+
+<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"1"</span>
+<span class="nt">env</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"32768"</span>
+<span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.8"</span>
+<span class="w">  </span><span class="c1"># nemotron_v3 is the parser built into this NIM (nano_v3 is absent);</span>
+<span class="w">  </span><span class="c1"># without tool-calling flags the agentic loop gets no tool calls.</span>
+<span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
+</pre></div>
+</div>
+</section>
+<section id="config-model-servers-yaml-dual-48g-ada-nim-stt-server-yaml">
+<h3>yaml/dual_48G_ada/nim_stt_server.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-nim-stt-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Self-hosted NIM: Riva ASR (parakeet). Workers reach the gRPC port via the</span>
+<span class="c1"># riva_grpc model kind; http_port serves /v1/health/ready only.</span>
+<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/parakeet-tdt-0.6b-v2:1.2.0</span>
+<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9010</span>
+<span class="nt">grpc_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50051</span>
+
+<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
+
+<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
+<span class="nt">env</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Single-process inference: the default multiprocessing mode runs two</span>
+<span class="w">  </span><span class="c1"># CUDA processes; one is plenty for demo traffic. ~14 GB VRAM either way.</span>
+<span class="w">  </span><span class="nt">NIM_USE_MULTIPROCESSING_FOR_INFERENCE</span><span class="p">:</span><span class="w"> </span><span class="s">"false"</span>
+</pre></div>
+</div>
+</section>
+<section id="config-model-servers-yaml-dual-48g-ada-nim-tts-server-yaml">
+<h3>yaml/dual_48G_ada/nim_tts_server.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-nim-tts-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Self-hosted NIM: Riva TTS (magpie). Workers reach the gRPC port via the</span>
+<span class="c1"># riva_grpc model kind; http_port serves /v1/health/ready only.</span>
+<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/magpie-tts-multilingual:1.9.0</span>
+<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9011</span>
+<span class="nt">grpc_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50052</span>
+
+<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
+
+<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
+</pre></div>
+</div>
+</section>
+<section id="config-model-servers-yaml-dual-48g-ada-nim-vlm-server-yaml">
+<h3>yaml/dual_48G_ada/nim_vlm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-nim-vlm-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Self-hosted NIM: VLM, the same Cosmos model the local vlm-server runs.</span>
+<span class="c1"># Swap in any vision NIM from https://catalog.ngc.nvidia.com, but check its</span>
+<span class="c1"># engine accepts a full image prompt: the nemotron-nano-vl NIM builds a</span>
+<span class="c1"># 3200-token input cap on this class of GPU, below its own ~3330-token</span>
+<span class="c1"># per-image cost, so every image request 500s.</span>
+<span class="c1"># GPU 0 with the embedding server and a demo's CloudXR + LOVR; the</span>
+<span class="c1"># Nemotron NIM and local STT share GPU 1.</span>
+<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/cosmos-reason1-7b:1.4.1</span>
+<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8100</span>
+
+<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
+
+<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
+<span class="nt">env</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"16384"</span>
+<span class="w">  </span><span class="c1"># Fraction of total GPU memory despite the PERCENT name (0..1]; leaves</span>
+<span class="w">  </span><span class="c1"># headroom for whatever shares the GPU.</span>
+<span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.7"</span>
+</pre></div>
+</div>
+</section>
+<section id="config-model-servers-yaml-dual-48g-ada-nim-vlm-server-vlm-speech-nim-yaml">
+<h3>yaml/dual_48G_ada/nim_vlm_server_vlm_speech_nim.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-nim-vlm-server-vlm-speech-nim-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Self-hosted NIM: VLM, the same Cosmos model the local vlm-server runs.</span>
+<span class="c1"># Swap in any vision NIM from https://catalog.ngc.nvidia.com, but check its</span>
+<span class="c1"># engine accepts a full image prompt: the nemotron-nano-vl NIM builds a</span>
+<span class="c1"># 3200-token input cap on this class of GPU, below its own ~3330-token</span>
+<span class="c1"># per-image cost, so every image request 500s.</span>
+<span class="c1"># vlm_speech_nim placement: Riva speech NIMs own GPU 0, Cosmos gets GPU 1.</span>
+<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/cosmos-reason1-7b:1.4.1</span>
+<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8100</span>
+
+<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
+
+<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"1"</span>
+<span class="nt">env</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"16384"</span>
+<span class="w">  </span><span class="c1"># Fraction of total GPU memory despite the PERCENT name (0..1]; leaves</span>
+<span class="w">  </span><span class="c1"># headroom for whatever shares the GPU.</span>
+<span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.85"</span>
+</pre></div>
+</div>
+</section>
 <section id="config-model-servers-yaml-dual-48g-ada-stt-server-yaml">
 <h3>yaml/dual_48G_ada/stt_server.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-stt-server-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
@@ -654,6 +857,247 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 </pre></div>
 </div>
 </section>
+<section id="config-model-servers-yaml-models-default-json">
+<h3>yaml/models.default.json<a class="headerlink" href="#config-model-servers-yaml-models-default-json" title="Link to this heading">#</a></h3>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"stt"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"parakeet_stt"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8103"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stt"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8108"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"omni"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"agent_llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8108"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"omni"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"cosmos3_nano_reasoner"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8100"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"embedding"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_embedding"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8109"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"embedding"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="config-model-servers-yaml-models-vlm-llm-nim-json">
+<h3>yaml/models.vlm_llm_nim.json<a class="headerlink" href="#config-model-servers-yaml-models-vlm-llm-nim-json" title="Link to this heading">#</a></h3>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"stt"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"parakeet_stt"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8103"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stt"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvidia/nemotron-3-nano"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">"tool_calls"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">"default_extras"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">"chat_template_kwargs"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">"enable_thinking"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span>
+<span class="w">          </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8110"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"health_path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/v1/health/ready"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm-nim"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"credentials"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">          </span><span class="s2">"NGC_API_KEY"</span>
+<span class="w">        </span><span class="p">]</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvidia/cosmos-reason1-7b"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">"streaming"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">"vision"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8100"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"health_path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/v1/health/ready"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm-nim"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"credentials"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">          </span><span class="s2">"NGC_API_KEY"</span>
+<span class="w">        </span><span class="p">]</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"embedding"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_embedding"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8109"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"embedding"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="config-model-servers-yaml-models-vlm-speech-nim-json">
+<h3>yaml/models.vlm_speech_nim.json<a class="headerlink" href="#config-model-servers-yaml-models-vlm-speech-nim-json" title="Link to this heading">#</a></h3>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"stt"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stt"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"riva_grpc"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"language"</span><span class="p">:</span><span class="w"> </span><span class="s2">"en-US"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"localhost:50051"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stt-nim"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"credentials"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">          </span><span class="s2">"NGC_API_KEY"</span>
+<span class="w">        </span><span class="p">]</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"tts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tts"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"riva_grpc"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"voice"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Magpie-Multilingual.EN-US.Sofia"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"language"</span><span class="p">:</span><span class="w"> </span><span class="s2">"en-US"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"localhost:50052"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tts-nim"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"credentials"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">          </span><span class="s2">"NGC_API_KEY"</span>
+<span class="w">        </span><span class="p">]</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvidia/cosmos-reason1-7b"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">"streaming"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">"vision"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8100"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"health_path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/v1/health/ready"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm-nim"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"credentials"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">          </span><span class="s2">"NGC_API_KEY"</span>
+<span class="w">        </span><span class="p">]</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"embedding"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_embedding"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8109"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"embedding"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
 <section id="config-model-servers-yaml-spark-embedding-server-yaml">
 <h3>yaml/spark/embedding_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-embedding-server-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
@@ -700,6 +1144,96 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
 <span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vllm/vllm-openai:v0.20.0</span>
 <span class="nt">extra_pip</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+</pre></div>
+</div>
+</section>
+<section id="config-model-servers-yaml-spark-nim-llm-server-yaml">
+<h3>yaml/spark/nim_llm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-nim-llm-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Self-hosted NIM: LLM (serves both the `llm` and `agent_llm` roles).</span>
+<span class="c1"># Nemotron-3-Nano is the same agent model the local vlm_llm profile runs;</span>
+<span class="c1"># its A3B MoE decode is fast enough to cover the reactive role too. Swap in</span>
+<span class="c1"># any LLM NIM from https://catalog.ngc.nvidia.com.</span>
+<span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
+<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano:2.0.10</span>
+<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8110</span>
+
+<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
+
+<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
+<span class="nt">env</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"32768"</span>
+<span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.35"</span>
+<span class="w">  </span><span class="c1"># nemotron_v3 is the parser built into this NIM (nano_v3 is absent);</span>
+<span class="w">  </span><span class="c1"># without tool-calling flags the agentic loop gets no tool calls.</span>
+<span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
+</pre></div>
+</div>
+</section>
+<section id="config-model-servers-yaml-spark-nim-stt-server-yaml">
+<h3>yaml/spark/nim_stt_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-nim-stt-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Self-hosted NIM: Riva ASR (parakeet). Workers reach the gRPC port via the</span>
+<span class="c1"># riva_grpc model kind; http_port serves /v1/health/ready only.</span>
+<span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
+<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/parakeet-tdt-0.6b-v2:1.2.0</span>
+<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9010</span>
+<span class="nt">grpc_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50051</span>
+
+<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
+
+<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
+<span class="nt">env</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Single-process inference: the default multiprocessing mode runs two</span>
+<span class="w">  </span><span class="c1"># CUDA processes; one is plenty for demo traffic. ~14 GB VRAM either way.</span>
+<span class="w">  </span><span class="nt">NIM_USE_MULTIPROCESSING_FOR_INFERENCE</span><span class="p">:</span><span class="w"> </span><span class="s">"false"</span>
+</pre></div>
+</div>
+</section>
+<section id="config-model-servers-yaml-spark-nim-tts-server-yaml">
+<h3>yaml/spark/nim_tts_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-nim-tts-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Self-hosted NIM: Riva TTS (magpie). Workers reach the gRPC port via the</span>
+<span class="c1"># riva_grpc model kind; http_port serves /v1/health/ready only.</span>
+<span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
+<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/magpie-tts-multilingual:1.9.0</span>
+<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9011</span>
+<span class="nt">grpc_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50052</span>
+
+<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
+
+<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
+</pre></div>
+</div>
+</section>
+<section id="config-model-servers-yaml-spark-nim-vlm-server-yaml">
+<h3>yaml/spark/nim_vlm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-nim-vlm-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Self-hosted NIM: VLM, the same Cosmos model the local vlm-server runs.</span>
+<span class="c1"># Swap in any vision NIM from https://catalog.ngc.nvidia.com, but check its</span>
+<span class="c1"># engine accepts a full image prompt: the nemotron-nano-vl NIM builds a</span>
+<span class="c1"># 3200-token input cap on this class of GPU, below its own ~3330-token</span>
+<span class="c1"># per-image cost, so every image request 500s.</span>
+<span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
+<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/cosmos-reason1-7b:1.4.1</span>
+<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8100</span>
+
+<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
+
+<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
+<span class="nt">env</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"16384"</span>
+<span class="w">  </span><span class="c1"># Fraction of total GPU memory despite the PERCENT name (0..1]; leaves</span>
+<span class="w">  </span><span class="c1"># headroom for whatever shares the GPU.</span>
+<span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.15"</span>
 </pre></div>
 </div>
 </section>
@@ -843,6 +1377,121 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 </pre></div>
 </div>
 </section>
+<section id="config-simple-vlm-example-yaml-models-vlm-llm-nim-json">
+<h3>yaml/models.vlm_llm_nim.json<a class="headerlink" href="#config-simple-vlm-example-yaml-models-vlm-llm-nim-json" title="Link to this heading">#</a></h3>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"stt"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"parakeet_stt"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8103"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stt"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"tts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"piper_tts"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8105"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tts"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvidia/cosmos-reason1-7b"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">"streaming"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">"vision"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8100"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"health_path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/v1/health/ready"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm-nim"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="config-simple-vlm-example-yaml-models-vlm-speech-nim-json">
+<h3>yaml/models.vlm_speech_nim.json<a class="headerlink" href="#config-simple-vlm-example-yaml-models-vlm-speech-nim-json" title="Link to this heading">#</a></h3>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"stt"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stt"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"riva_grpc"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"language"</span><span class="p">:</span><span class="w"> </span><span class="s2">"en-US"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"localhost:50051"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stt-nim"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"tts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tts"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"riva_grpc"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"voice"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Magpie-Multilingual.EN-US.Sofia"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"language"</span><span class="p">:</span><span class="w"> </span><span class="s2">"en-US"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"localhost:50052"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tts-nim"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvidia/cosmos-reason1-7b"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">"streaming"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">"vision"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8100"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"health_path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/v1/health/ready"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm-nim"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
 <section id="config-simple-vlm-example-yaml-piper-tts-server-yaml">
 <h3>yaml/piper_tts_server.yaml<a class="headerlink" href="#config-simple-vlm-example-yaml-piper-tts-server-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
@@ -871,7 +1520,11 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 
 <span class="c1"># Model deployment profile, resolved relative to this file. The local profile</span>
 <span class="c1"># starts STT, VLM, and TTS; models.hosted.json uses NVIDIA NIM for the VLM;</span>
-<span class="c1"># models.omni.json reuses a Nemotron-Omni server on port 8108.</span>
+<span class="c1"># models.omni.json reuses a Nemotron-Omni server on port 8108;</span>
+<span class="c1"># models.vlm_llm_nim.json reuses the model-servers nim stack (VLM as a NIM</span>
+<span class="c1"># container, shared STT, own piper TTS); models.vlm_speech_nim.json reuses the</span>
+<span class="c1"># vlm_speech_nim stack (VLM + Riva speech NIM containers). Start the matching</span>
+<span class="c1"># stack first: `model_servers --models vlm_llm_nim` / `--models vlm_speech_nim`.</span>
 <span class="nt">models_config</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">models.local.json</span>
 
 <span class="c1"># Path to the voice-gate config (resolved relative to this file's</span>
@@ -898,6 +1551,11 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="c1"># (e.g. 300 for 5 min) to opt in; the worker then tears the pipeline down</span>
 <span class="c1"># after that long idle. Applied by VoiceAgent.</span>
 <span class="nt">idle_timeout_secs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+
+<span class="c1"># Live conversation event viewer. Keep the default loopback binding and use an</span>
+<span class="c1"># SSH tunnel for remote development; see docs/source/getting_started/networking.md.</span>
+<span class="nt">web_events_host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">127.0.0.1</span>
+<span class="nt">web_events_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8092</span>
 </pre></div>
 </div>
 </section>
@@ -1065,104 +1723,265 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 </pre></div>
 </div>
 </section>
-<section id="config-xr-render-demo-yaml-models-nim-yaml">
-<h3>yaml/models.nim.yaml<a class="headerlink" href="#config-xr-render-demo-yaml-models-nim-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># NIM backend for xr-render-demo — the LLMs and VLM run on hosted NVIDIA NIM</span>
-<span class="c1"># (https://build.nvidia.com) instead of local vLLM; STT and TTS stay local.</span>
-<span class="c1">#</span>
-<span class="c1"># To activate, set ONE key in xr_render_demo_worker.yaml:</span>
-<span class="c1">#   model_backend: nim</span>
-<span class="c1"># The worker loads this file for its native model-backed tools. Provide an</span>
-<span class="c1"># NGC API key (env NGC_API_KEY, or</span>
-<span class="c1"># the launcher credential prompt) — see docs/source/getting_started/credentials.md.</span>
-<span class="c1"># Do not run model_servers because it starts local Omni and Cosmos; start only</span>
-<span class="c1"># STT separately. The demo starts local TTS. Full guide:</span>
-<span class="c1"># docs/source/components/ai-services.md "Hosting models on NVIDIA NIM".</span>
-<span class="c1">#</span>
-<span class="c1"># Model ids below are examples — confirm the exact slugs for your account at</span>
-<span class="c1"># https://build.nvidia.com. The agentic loop is tuned for the local Nemotron</span>
-<span class="c1"># stack; a hosted model that supports tool calling (and, for agent_llm,</span>
-<span class="c1"># reasoning) gives the closest behaviour.</span>
-
-<span class="c1"># Fast reactive model (quick-ack / still-working). No tool calling needed.</span>
-<span class="nt">llm</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">        </span><span class="l l-Scalar l-Scalar-Plain">openai_compat</span>
-<span class="w">  </span><span class="nt">category</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">llm</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">https://integrate.api.nvidia.com</span>
-<span class="w">  </span><span class="nt">model_name</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">meta/llama-3.1-8b-instruct</span>
-<span class="w">  </span><span class="nt">api_key_env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">NGC_API_KEY</span>
-<span class="w">  </span><span class="nt">health_check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-
-<span class="c1"># Agentic tool-calling loop. Needs a hosted model with function calling.</span>
-<span class="nt">agent_llm</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">        </span><span class="l l-Scalar l-Scalar-Plain">openai_compat</span>
-<span class="w">  </span><span class="nt">category</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">llm</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">https://integrate.api.nvidia.com</span>
-<span class="w">  </span><span class="nt">model_name</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">meta/llama-3.1-70b-instruct</span>
-<span class="w">  </span><span class="nt">api_key_env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">NGC_API_KEY</span>
-<span class="w">  </span><span class="nt">health_check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-<span class="w">  </span><span class="nt">capabilities</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">tool_calls</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">    </span><span class="nt">reasoning</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-
-<span class="c1"># Visual question answering used by native vision tools. The hosted model is</span>
-<span class="c1"># the Cosmos3 Nano Reasoner, matching the local VLM service; it is not the</span>
-<span class="c1"># separate Cosmos3 Generator.</span>
-<span class="nt">vlm</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">        </span><span class="l l-Scalar l-Scalar-Plain">openai_compat</span>
-<span class="w">  </span><span class="nt">category</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">vlm</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">https://integrate.api.nvidia.com</span>
-<span class="w">  </span><span class="nt">model_name</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">nvidia/cosmos3-nano-reasoner</span>
-<span class="w">  </span><span class="nt">api_key_env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">NGC_API_KEY</span>
-<span class="w">  </span><span class="nt">health_check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-<span class="w">  </span><span class="nt">capabilities</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">streaming</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">    </span><span class="nt">vision</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-
-<span class="c1"># STT and TTS remain local — hosted NIM speech (Riva) is not OpenAI</span>
-<span class="c1"># /v1/audio-compatible.</span>
-<span class="nt">stt</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">preset:parakeet_stt</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8103</span>
-
-<span class="nt">tts</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">preset:piper_tts</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8105</span>
+<section id="config-xr-render-demo-yaml-models-hosted-json">
+<h3>yaml/models.hosted.json<a class="headerlink" href="#config-xr-render-demo-yaml-models-hosted-json" title="Link to this heading">#</a></h3>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"meta/llama-3.1-8b-instruct"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://integrate.api.nvidia.com"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"none"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"external"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"agent_llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"meta/llama-3.1-70b-instruct"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">"tool_calls"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">"reasoning"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://integrate.api.nvidia.com"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"none"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"external"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"stt"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"parakeet_stt"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8103"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stt"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"tts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"piper_tts"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8105"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tts"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvidia/cosmos3-nano-reasoner"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">"streaming"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">"vision"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://integrate.api.nvidia.com"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"none"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"external"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
 </pre></div>
 </div>
 </section>
-<section id="config-xr-render-demo-yaml-models-yaml">
-<h3>yaml/models.yaml<a class="headerlink" href="#config-xr-render-demo-yaml-models-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># xr-render-demo model configuration.</span>
-<span class="c1"># Each entry maps a logical name to a preset + base_url.</span>
-<span class="c1"># Presets live in agent-sdk/xr-ai-models/xr_ai_models/presets/.</span>
-
-<span class="c1"># llm and agent_llm share Nemotron-3-Nano-Omni; vision stays on Cosmos.</span>
-<span class="nt">llm</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">preset:nemotron_omni</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8108</span>
-
-<span class="nt">agent_llm</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">preset:nemotron_omni</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8108</span>
-
-<span class="nt">stt</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">preset:parakeet_stt</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8103</span>
-
-<span class="nt">tts</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">preset:piper_tts</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8105</span>
-
-<span class="nt">vlm</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">preset:cosmos3_nano_reasoner</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8100</span>
+<section id="config-xr-render-demo-yaml-models-local-json">
+<h3>yaml/models.local.json<a class="headerlink" href="#config-xr-render-demo-yaml-models-local-json" title="Link to this heading">#</a></h3>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8108"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"omni"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"agent_llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8108"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"omni"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"stt"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"parakeet_stt"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8103"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stt"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"tts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"piper_tts"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8105"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tts"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"cosmos3_nano_reasoner"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8100"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="config-xr-render-demo-yaml-models-vlm-llm-nim-json">
+<h3>yaml/models.vlm_llm_nim.json<a class="headerlink" href="#config-xr-render-demo-yaml-models-vlm-llm-nim-json" title="Link to this heading">#</a></h3>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvidia/nemotron-3-nano"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"default_extras"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">"chat_template_kwargs"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">"enable_thinking"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span>
+<span class="w">          </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8110"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"health_path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/v1/health/ready"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm-nim"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"agent_llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvidia/nemotron-3-nano"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">"tool_calls"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">"default_extras"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">"chat_template_kwargs"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">"enable_thinking"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span>
+<span class="w">          </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8110"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"health_path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/v1/health/ready"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm-nim"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"stt"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"parakeet_stt"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8103"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stt"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"tts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"piper_tts"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8105"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tts"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvidia/cosmos-reason1-7b"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">"streaming"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">"vision"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8100"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"health_path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/v1/health/ready"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm-nim"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
 </pre></div>
 </div>
 </section>
@@ -1187,6 +2006,22 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="nt">voice</span><span class="p">:</span><span class="w">       </span><span class="l l-Scalar l-Scalar-Plain">en_US-lessac-medium</span>
 <span class="nt">port</span><span class="p">:</span><span class="w">        </span><span class="l l-Scalar l-Scalar-Plain">8105</span>
 <span class="nt">use_cuda</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">    </span><span class="c1"># CPU is fast enough (~100 ms/sentence)</span>
+<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../models</span>
+</pre></div>
+</div>
+</section>
+<section id="config-xr-render-demo-yaml-stt-server-yaml">
+<h3>yaml/stt_server.yaml<a class="headerlink" href="#config-xr-render-demo-yaml-stt-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># STT server configuration for xr-render-demo. Used when a profile marks the</span>
+<span class="c1"># stt service `managed` (models.vlm_llm_nim.json); the default profile reuses</span>
+<span class="c1"># the model-servers stack's STT instead.</span>
+
+<span class="nt">model</span><span class="p">:</span><span class="w">       </span><span class="l l-Scalar l-Scalar-Plain">nvidia/parakeet-tdt-0.6b-v3</span>
+<span class="nt">device</span><span class="p">:</span><span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">auto</span>
+<span class="nt">port</span><span class="p">:</span><span class="w">        </span><span class="l l-Scalar l-Scalar-Plain">8103</span>
 <span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../models</span>
 </pre></div>
 </div>
@@ -1284,19 +2119,31 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="c1"># Paths resolve relative to this file's directory.</span>
 
 <span class="c1"># ── AI model services ─────────────────────────────────────────────────────────</span>
-<span class="c1"># Model backend: where the LLM and VLM run.</span>
-<span class="c1">#   local — local vLLM model-servers (default)</span>
-<span class="c1">#   nim   — hosted NVIDIA NIM (build.nvidia.com); the worker loads</span>
-<span class="c1">#           models.nim.yaml. Requires NGC_API_KEY (docs/source/getting_started/credentials.md).</span>
-<span class="c1">#           STT/TTS stay local. This is the ONLY change needed — no main.py edit.</span>
-<span class="nt">model_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
-
-<span class="c1"># Model endpoints (URLs, presets, timeouts) are declared in models.yaml and</span>
-<span class="c1"># loaded via xr-ai-models.  Edit that file to change which model runs where.</span>
-<span class="c1"># Path is resolved relative to THIS file's directory (`yaml/`), so the bare</span>
-<span class="c1"># `models.yaml` here points at `agent-samples/xr-render-demo/yaml/models.yaml`.</span>
-<span class="c1"># Used by the LOCAL backend; ignored when model_backend is "nim".</span>
-<span class="nt">models_yaml</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">models.yaml</span>
+<span class="c1"># Model deployment profile, resolved relative to this file. Each entry's</span>
+<span class="c1"># deployment.ownership decides what the orchestrator does: `managed` entries</span>
+<span class="c1"># it launches itself, `reused` entries it expects already running, `external`</span>
+<span class="c1"># entries need no local process. Managed model servers persist across stack</span>
+<span class="c1"># restarts (docs/source/components/ai-services.md "Model-server persistence");</span>
+<span class="c1"># on a profile</span>
+<span class="c1"># switch the incoming server evicts whatever held its port. Shipped presets:</span>
+<span class="c1">#   models.local.json     — reuses the model-servers stack for STT, LLMs,</span>
+<span class="c1">#                           and VLM (start model-servers first); owns piper</span>
+<span class="c1">#                           TTS.</span>
+<span class="c1">#   models.hosted.json    — LLMs and VLM on hosted NVIDIA NIM</span>
+<span class="c1">#                           (build.nvidia.com); owns local speech. Nothing</span>
+<span class="c1">#                           to pre-start.</span>
+<span class="c1">#   models.vlm_llm_nim.json — LLMs and VLM reused from the model-servers vlm_llm_nim</span>
+<span class="c1">#                           stack (`model_servers --models vlm_llm_nim`; start it</span>
+<span class="c1">#                           first); owns local piper TTS. Riva speech NIMs</span>
+<span class="c1">#                           don't fit next to CloudXR + LOVR + the LLM/VLM</span>
+<span class="c1">#                           NIMs on 2x48 GB; see the model-servers</span>
+<span class="c1">#                           vlm_speech_nim profile for capable boxes.</span>
+<span class="c1"># Only hosted needs a sample-side NGC_API_KEY</span>
+<span class="c1"># (see docs/source/getting_started/credentials.md);</span>
+<span class="c1"># the NIM stacks carry their own credentials in model-servers. Entries</span>
+<span class="c1"># mix freely; copy a preset under any name and select it here. This is the</span>
+<span class="c1"># only change needed to switch.</span>
+<span class="nt">models_config</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">models.local.json</span>
 
 <span class="c1"># ── Voice gate ────────────────────────────────────────────────────────────────</span>
 <span class="c1"># Magic-phrase opt-in gate; see voice_gate.yaml for the schema.  Ships with</span>
@@ -1327,6 +2174,11 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="c1"># (e.g. 300 for 5 min) to opt in; the worker then tears the pipeline down</span>
 <span class="c1"># after that long idle. VoiceAgent owns the timeout.</span>
 <span class="nt">idle_timeout_secs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+
+<span class="c1"># Live request/response event viewer. Keep the default loopback binding and use</span>
+<span class="c1"># an SSH tunnel for remote development; see docs/source/getting_started/networking.md.</span>
+<span class="nt">web_events_host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">127.0.0.1</span>
+<span class="nt">web_events_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8092</span>
 </pre></div>
 </div>
 </section>
@@ -1385,14 +2237,30 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers">model-servers</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-embedding-server-yaml">yaml/96G_blackwell/embedding_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-nemotron-omni-llm-server-yaml">yaml/96G_blackwell/nemotron_omni_llm_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-nim-llm-server-yaml">yaml/96G_blackwell/nim_llm_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-nim-stt-server-yaml">yaml/96G_blackwell/nim_stt_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-nim-tts-server-yaml">yaml/96G_blackwell/nim_tts_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-nim-vlm-server-yaml">yaml/96G_blackwell/nim_vlm_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-stt-server-yaml">yaml/96G_blackwell/stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-vlm-server-yaml">yaml/96G_blackwell/vlm_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-embedding-server-yaml">yaml/dual_48G_ada/embedding_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-nemotron-omni-llm-server-yaml">yaml/dual_48G_ada/nemotron_omni_llm_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-nim-llm-server-yaml">yaml/dual_48G_ada/nim_llm_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-nim-stt-server-yaml">yaml/dual_48G_ada/nim_stt_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-nim-tts-server-yaml">yaml/dual_48G_ada/nim_tts_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-nim-vlm-server-yaml">yaml/dual_48G_ada/nim_vlm_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-nim-vlm-server-vlm-speech-nim-yaml">yaml/dual_48G_ada/nim_vlm_server_vlm_speech_nim.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-stt-server-yaml">yaml/dual_48G_ada/stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-vlm-server-yaml">yaml/dual_48G_ada/vlm_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-models-default-json">yaml/models.default.json</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-models-vlm-llm-nim-json">yaml/models.vlm_llm_nim.json</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-models-vlm-speech-nim-json">yaml/models.vlm_speech_nim.json</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-embedding-server-yaml">yaml/spark/embedding_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-nemotron-omni-llm-server-yaml">yaml/spark/nemotron_omni_llm_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-nim-llm-server-yaml">yaml/spark/nim_llm_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-nim-stt-server-yaml">yaml/spark/nim_stt_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-nim-tts-server-yaml">yaml/spark/nim_tts_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-nim-vlm-server-yaml">yaml/spark/nim_vlm_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-stt-server-yaml">yaml/spark/stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-vlm-server-yaml">yaml/spark/vlm_server.yaml</a></li>
 </ul>
@@ -1401,6 +2269,8 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-models-hosted-json">yaml/models.hosted.json</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-models-local-json">yaml/models.local.json</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-models-omni-json">yaml/models.omni.json</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-models-vlm-llm-nim-json">yaml/models.vlm_llm_nim.json</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-models-vlm-speech-nim-json">yaml/models.vlm_speech_nim.json</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-piper-tts-server-yaml">yaml/piper_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-simple-vlm-example-worker-yaml">yaml/simple_vlm_example_worker.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-stt-server-yaml">yaml/stt_server.yaml</a></li>
@@ -1412,10 +2282,12 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo">xr-render-demo</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-scene-scene-service-yaml">scene/scene_service.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-cloudxr-runtime-yaml">yaml/cloudxr_runtime.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-models-nim-yaml">yaml/models.nim.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-models-yaml">yaml/models.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-models-hosted-json">yaml/models.hosted.json</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-models-local-json">yaml/models.local.json</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-models-vlm-llm-nim-json">yaml/models.vlm_llm_nim.json</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-openxr-service-yaml">yaml/openxr_service.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-piper-tts-server-yaml">yaml/piper_tts_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-stt-server-yaml">yaml/stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-video-memory-service-yaml">yaml/video_memory_service.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-voice-gate-yaml">yaml/voice_gate.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-xr-media-hub-yaml">yaml/xr_media_hub.yaml</a></li>

@@ -491,10 +491,13 @@ docker path stays light even when pip vllm is not installed.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_vllm.setup_hf_env" title="xr_ai_vllm.setup_hf_env"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup_hf_env</span></code></a>(→ str | None)</p></td>
 <td><p>Apply the shared HuggingFace / CUDA env block.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_vllm.serve" title="xr_ai_vllm.serve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serve</span></code></a>(→ None)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_vllm.serve_nim" title="xr_ai_vllm.serve_nim"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serve_nim</span></code></a>(→ None)</p></td>
+<td><p>Pull (if needed) and run a NIM container, blocking until stopped.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_vllm.serve" title="xr_ai_vllm.serve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serve</span></code></a>(→ None)</p></td>
 <td><p>Launch vLLM via <em>backend</em> (<cite>&quot;pip&quot;</cite> or <cite>&quot;docker&quot;</cite>).</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_vllm.stop_persistent_servers" title="xr_ai_vllm.stop_persistent_servers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop_persistent_servers</span></code></a>(→ bool)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_vllm.stop_persistent_servers" title="xr_ai_vllm.stop_persistent_servers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop_persistent_servers</span></code></a>(→ bool)</p></td>
 <td><p>Stop persisted servers and report whether every discovered server stopped.</p></td>
 </tr>
 </tbody>
@@ -558,6 +561,30 @@ YAML value to take priority must unset the env var before calling.
 third-party libraries that have not yet adopted the <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> superset.</p>
 <p>Returns the resolved <code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> string (or <code class="docutils literal notranslate"><span class="pre">None</span></code>) so
 callers that run GPU detection can confirm the device filter is applied.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_vllm.serve_nim">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_vllm.</span></span><span class="sig-name descname"><span class="pre">serve_nim</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">image</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">container_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">log_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">http_port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">grpc_port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">nim_cache</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">cuda_visible_devices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">extra_env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">ready_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_vllm.serve_nim" title="Link to this definition">#</a></dt>
+<dd><p>Pull (if needed) and run a NIM container, blocking until stopped.</p>
+<p>Readiness is <code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code> on <em>http_port</em>. First start includes
+the NGC engine download (multi-GB), so expect a long cold start; the
+mounted <em>nim_cache</em> makes subsequent starts fast.</p>
 </dd></dl>
 
 <dl class="py data">
@@ -695,6 +722,7 @@ identified as xr-ai services fail closed without sending a signal.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.load_config"><code class="docutils literal notranslate"><span class="pre">load_config()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.resolve_model_cache"><code class="docutils literal notranslate"><span class="pre">resolve_model_cache()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.setup_hf_env"><code class="docutils literal notranslate"><span class="pre">setup_hf_env()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.serve_nim"><code class="docutils literal notranslate"><span class="pre">serve_nim()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.DEFAULT_IMAGE"><code class="docutils literal notranslate"><span class="pre">DEFAULT_IMAGE</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.serve"><code class="docutils literal notranslate"><span class="pre">serve()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.stop_persistent_servers"><code class="docutils literal notranslate"><span class="pre">stop_persistent_servers()</span></code></a></li>

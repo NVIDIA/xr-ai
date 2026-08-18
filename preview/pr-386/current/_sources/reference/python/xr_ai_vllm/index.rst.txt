@@ -61,6 +61,7 @@ Functions
    xr_ai_vllm.load_config
    xr_ai_vllm.resolve_model_cache
    xr_ai_vllm.setup_hf_env
+   xr_ai_vllm.serve_nim
    xr_ai_vllm.serve
    xr_ai_vllm.stop_persistent_servers
 
@@ -109,6 +110,15 @@ Package Contents
 
    Returns the resolved ``cuda_visible_devices`` string (or ``None``) so
    callers that run GPU detection can confirm the device filter is applied.
+
+
+.. py:function:: serve_nim(*, image: str, container_name: str, log_prefix: str, http_port: int, grpc_port: int | None = None, nim_cache: pathlib.Path, cuda_visible_devices: str | None = None, extra_env: dict[str, str] | None = None, ready_file: pathlib.Path | None = None) -> None
+
+   Pull (if needed) and run a NIM container, blocking until stopped.
+
+   Readiness is ``/v1/health/ready`` on *http_port*. First start includes
+   the NGC engine download (multi-GB), so expect a long cold start; the
+   mounted *nim_cache* makes subsequent starts fast.
 
 
 .. py:data:: DEFAULT_IMAGE
