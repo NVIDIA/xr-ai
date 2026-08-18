@@ -28,12 +28,14 @@ api-check:
 
 html: api-check
 	@$(CURRENTENV) $(SPHINXBUILD) -b html $(SPHINXOPTS) "$(SOURCEDIR)" "$(CURRENTBUILDDIR)"
+	@python3 "$(SOURCEDIR)/_api_reference_check.py" "$(CURRENTBUILDDIR)"
 
 versions:
 	@$(SMVENV) $(SPHINXMULTIVERSION) $(SPHINXOPTS) "$(SOURCEDIR)" "$(BUILDDIR)"
 
 strict: api-check
 	@$(CURRENTENV) $(SPHINXBUILD) -W --keep-going -b html $(SPHINXOPTS) "$(SOURCEDIR)" "$(CURRENTBUILDDIR)"
+	@python3 "$(SOURCEDIR)/_api_reference_check.py" "$(CURRENTBUILDDIR)"
 
 strict-versions: api-check
 	@$(SMVENV) $(SPHINXMULTIVERSION) -W --keep-going $(SPHINXOPTS) "$(SOURCEDIR)" "$(BUILDDIR)"

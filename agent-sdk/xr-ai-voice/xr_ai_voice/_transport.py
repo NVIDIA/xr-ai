@@ -359,7 +359,7 @@ class XRMediaHubOutputTransport(BaseOutputTransport):
 # ── Transport wrapper ─────────────────────────────────────────────────────────
 
 class HubVoiceTransport(BaseTransport):
-    """Owns the ProcessorEndpoint + bidirectional Pipecat transports."""
+    """Own the hub endpoint and bidirectional voice media transport."""
 
     def __init__(
         self,

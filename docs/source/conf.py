@@ -68,7 +68,6 @@ autoapi_add_toctree_entry = True
 autoapi_keep_files = False
 autoapi_options = [
     "members",
-    "show-inheritance",
     "show-module-summary",
     "imported-members",
 ]
@@ -113,13 +112,21 @@ html_css_files = ["css/custom.css"]
 html_sidebars = {"**": ["versioning.html", "sidebar-nav-bs"]}
 
 
-def _skip_api_submodules(_app, what, _name, _obj, _skip, _options):
-    """Hide implementation-module pages while retaining facade reexports."""
+_PRIVATE_API_MEMBER_SUFFIXES = (
+    ".HubVoiceTransport.input",
+    ".HubVoiceTransport.output",
+)
 
-    return True if what == "module" else None
+
+def _skip_private_api_details(_app, what, name, _obj, _skip, _options):
+    """Hide implementation modules and transport-adapter accessors."""
+
+    if what == "module" or name.endswith(_PRIVATE_API_MEMBER_SUFFIXES):
+        return True
+    return None
 
 
 def setup(app):
     app.connect("source-read", _rewrite_github_links)
-    app.connect("autoapi-skip-member", _skip_api_submodules)
+    app.connect("autoapi-skip-member", _skip_private_api_details)
     return {"parallel_read_safe": True, "parallel_write_safe": True}

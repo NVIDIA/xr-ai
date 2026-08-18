@@ -4,7 +4,7 @@
 """Public voice runtime for XR agents.
 
 Applications configure and register :class:`VoiceAgent`; media sessions,
-Pipecat, audio framing, and pipeline processors are implementation details.
+audio framing, and pipeline processors are implementation details.
 """
 
 from ._processors import VadConfig
