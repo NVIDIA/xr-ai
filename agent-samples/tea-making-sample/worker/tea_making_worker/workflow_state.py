@@ -15,9 +15,7 @@ from typing import Any
 
 from .spec import StateField, Step, Workflow
 
-_TOKEN = re.compile(
-    r"{{\s*([a-z][a-z0-9_-]*)\s*(?:\|\s*([a-z][a-z0-9_-]*))?\s*}}"
-)
+_TOKEN = re.compile(r"{{\s*([a-z][a-z0-9_-]*)\s*(?:\|\s*([a-z][a-z0-9_-]*))?\s*}}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,9 +135,7 @@ class WorkflowStore:
             return f"{self.workflow.name} guidance is idle."
         step = self.workflow.step(session.step_id)
         suffix = (
-            " Complete; say next when ready."
-            if step.is_complete(session.state)
-            else ""
+            " Complete; say next when ready." if step.is_complete(session.state) else ""
         )
         return f"Current step: {step.title}.{suffix}"
 
@@ -149,24 +145,22 @@ class WorkflowStore:
         step = self.active_step(session)
         complete = step.is_complete(session.state)
         if not complete and not skip:
-            message = (
-                f"{step.title} is not complete yet. "
-                "Say skip if you want to move on anyway."
-            )
+            message = f"{step.title} is not complete yet. Say skip if you want to move on anyway."
             self._event(session, "workflow.advance_blocked", message)
             return message
+        skipping = skip and not complete
         candidate = copy.deepcopy(session.state)
-        if skip:
+        if skipping:
             invalid = self._invalid_skip_patch(step.state_on_skip)
             if invalid:
                 raise ValueError(f"invalid skip state for {step.id}: {invalid}")
             candidate.update(copy.deepcopy(step.state_on_skip))
-        next_step = None if skip and step.complete_on_skip else step.next_step
+        next_step = None if skipping and step.complete_on_skip else step.next_step
         transition = self._transition_message(next_step, candidate)
         session.state = candidate
         session.revision += 1
         self._apply_transition(session, next_step, transition)
-        if not skip:
+        if not skipping:
             self._event(session, "workflow.advanced", transition)
             return transition
         message = " ".join(
@@ -201,9 +195,7 @@ class WorkflowStore:
             session,
             "step.evidence",
             (
-                f"matched={str(matched).lower()} "
-                f"consecutive={session.evidence_hits}/"
-                f"{step.evidence.consecutive}"
+                f"matched={str(matched).lower()} consecutive={session.evidence_hits}/{step.evidence.consecutive}"
             ),
         )
 
@@ -241,10 +233,7 @@ class WorkflowStore:
             and step.is_complete(candidate)
             and session.evidence_hits < step.evidence.consecutive
         ):
-            reason = (
-                "completion evidence "
-                f"{session.evidence_hits}/{step.evidence.consecutive}"
-            )
+            reason = f"completion evidence {session.evidence_hits}/{step.evidence.consecutive}"
             self._event(session, "step.commit_rejected", reason)
             return CommitResult(False, False, reason, session.revision)
         if not changes:
@@ -252,9 +241,7 @@ class WorkflowStore:
             return CommitResult(True, False, "state unchanged", session.revision)
         complete = step.is_complete(candidate)
         notice = (
-            self._render_state(step.complete_message, candidate)
-            if complete
-            else ""
+            self._render_state(step.complete_message, candidate) if complete else ""
         )
         session.state.update(copy.deepcopy(changes))
         session.revision += 1
@@ -400,9 +387,7 @@ def _duration(seconds: int) -> str:
     if minutes:
         parts.append(f"{minutes} minute" + ("s" if minutes != 1 else ""))
     if remainder or not parts:
-        parts.append(
-            f"{remainder} second" + ("s" if remainder != 1 else "")
-        )
+        parts.append(f"{remainder} second" + ("s" if remainder != 1 else ""))
     return " and ".join(parts)
 
 
@@ -412,16 +397,7 @@ def _number(value: Any) -> str:
 
 
 def _valid_type(field: StateField, value: Any) -> bool:
-    if field.type == "boolean":
-        return isinstance(value, bool)
-    if field.type == "integer":
-        return isinstance(value, int) and not isinstance(value, bool)
-    if field.type == "number":
-        return (
-            isinstance(value, (int, float))
-            and not isinstance(value, bool)
-        )
-    return isinstance(value, str)
+    return field.accepts(value)
 
 
 def monotonic_now() -> float:

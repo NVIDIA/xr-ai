@@ -60,6 +60,9 @@ accepted speech / typed query          ├─> GuidanceAgent observation loop
 `VoiceAgent` publishes participant-scoped queries, transcripts, and lifecycle
 events. The runtime fans typed events out to peer agents. Agents call peer
 tools directly, and each background agent owns its participant tasks.
+Wake-word gating is the sample default; callers can explicitly select
+always-on speech. Every spoken response is also sent to the connection client
+on `agent.response` so the client can render accessible text alongside audio.
 
 ## Agent responsibilities
 
@@ -273,6 +276,8 @@ reaches `VoiceAgent`.
 - Participant join starts a fresh workflow and output session.
 - Participant leave cancels foreground, observation, and background tasks
   before image resources are released.
+- Participant leave also releases queued voice-aggregation state, so a later
+  connection reusing the participant ID cannot inherit stale speech.
 - Record-producing agents publish cleanup-complete events after cancellation;
   `FileOutputAgent` closes the session only after every producer has finished.
 - A superseding query cancels the participant's prior foreground turn.

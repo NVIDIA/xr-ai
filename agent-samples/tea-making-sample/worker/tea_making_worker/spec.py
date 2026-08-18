@@ -26,6 +26,17 @@ class StateField:
     initial: Any = None
     initialized: bool = False
 
+    def accepts(self, value: Any) -> bool:
+        """Return whether a value satisfies this field's declared type."""
+
+        if self.type == "boolean":
+            return isinstance(value, bool)
+        if self.type == "integer":
+            return isinstance(value, int) and not isinstance(value, bool)
+        if self.type == "number":
+            return isinstance(value, (int, float)) and not isinstance(value, bool)
+        return isinstance(value, str)
+
 
 @dataclass(frozen=True, slots=True)
 class Trigger:
@@ -83,8 +94,7 @@ class Step:
         """Evaluate the declarative completion predicate."""
 
         return bool(self.complete_when) and all(
-            state.get(name) == value
-            for name, value in self.complete_when.items()
+            state.get(name) == value for name, value in self.complete_when.items()
         )
 
 
@@ -166,15 +176,16 @@ def _fields(raw: dict[str, Any]) -> dict[str, StateField]:
         item = _mapping(value, f"state.{name}")
         kind = str(item.get("type", "string"))
         if kind not in _TYPES:
-            raise ValueError(
-                f"state.{name}.type must be one of {sorted(_TYPES)}"
-            )
-        fields[str(name)] = StateField(
+            raise ValueError(f"state.{name}.type must be one of {sorted(_TYPES)}")
+        field = StateField(
             type=kind,
             description=str(item.get("description", "")).strip(),
             initial=copy.deepcopy(item.get("initial")),
             initialized="initial" in item,
         )
+        if field.initialized and not field.accepts(field.initial):
+            raise ValueError(f"state.{name}.initial must be {kind}")
+        fields[str(name)] = field
     return fields
 
 
@@ -198,15 +209,22 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
         f"steps.{step_id}.state_on_skip",
     )
     unknown = (
-        set(reads)
-        | set(writes)
-        | completion.keys()
-        | state_on_skip.keys()
+        set(reads) | set(writes) | completion.keys() | state_on_skip.keys()
     ) - fields.keys()
     if unknown:
         raise ValueError(
             f"step {step_id!r} references unknown state: {sorted(unknown)}"
         )
+    _validate_state_values(
+        completion,
+        fields,
+        f"steps.{step_id}.complete_when",
+    )
+    _validate_state_values(
+        state_on_skip,
+        fields,
+        f"steps.{step_id}.state_on_skip",
+    )
     trigger = _mapping(raw.get("trigger"), f"steps.{step_id}.trigger")
     agent = _mapping(raw.get("agent"), f"steps.{step_id}.agent")
     voice = _mapping(raw.get("voice"), f"steps.{step_id}.voice")
@@ -216,9 +234,7 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
     )
     interval = float(trigger.get("interval_s", 0))
     if interval <= 0:
-        raise ValueError(
-            f"step {step_id!r} trigger interval must be positive"
-        )
+        raise ValueError(f"step {step_id!r} trigger interval must be positive")
     return Step(
         id=step_id,
         title=str(raw.get("title", step_id)).strip(),
@@ -232,9 +248,7 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
                 f"steps.{step_id}.trigger.arguments",
             ),
             result_field=(
-                str(trigger["result_field"])
-                if trigger.get("result_field")
-                else None
+                str(trigger["result_field"]) if trigger.get("result_field") else None
             ),
         ),
         agent=AgentPolicy(
@@ -253,11 +267,7 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
         ),
         evidence=_evidence(raw.get("evidence"), step_id),
         complete_when=dict(completion),
-        next_step=(
-            str(raw["next"])
-            if raw.get("next") is not None
-            else None
-        ),
+        next_step=(str(raw["next"]) if raw.get("next") is not None else None),
         complete_on_skip=bool(raw.get("complete_on_skip", False)),
         state_on_skip=dict(state_on_skip),
         enter_message=str(messages.get("enter", "")).strip(),
@@ -285,6 +295,17 @@ def _evidence(value: Any, step_id: str) -> Evidence | None:
     return Evidence(pattern=pattern, consecutive=consecutive)
 
 
+def _validate_state_values(
+    values: dict[str, Any],
+    fields: dict[str, StateField],
+    label: str,
+) -> None:
+    for name, value in values.items():
+        field = fields[name]
+        if not field.accepts(value):
+            raise ValueError(f"{label}.{name} must be {field.type}")
+
+
 def _mapping(value: Any, label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"{label} must be a mapping")
@@ -293,8 +314,7 @@ def _mapping(value: Any, label: str) -> dict[str, Any]:
 
 def _names(value: Any, label: str) -> tuple[str, ...]:
     if not isinstance(value, list) or not all(
-        isinstance(item, str) and item
-        for item in value
+        isinstance(item, str) and item for item in value
     ):
         raise ValueError(f"{label} must be a list of names")
     return tuple(value)

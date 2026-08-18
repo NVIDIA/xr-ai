@@ -11,19 +11,31 @@ import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 import yaml
 from xr_ai_models import ChatResponse, ToolCall
 from xr_ai_runtime import AgentRuntime
-from xr_ai_tools.image import ImageRegistry
-from xr_ai_voice import VoiceParticipantJoined, VoiceParticipantLeft
+from xr_ai_tools.image import ImageReference, ImageRegistry
+from xr_ai_tools.vision import ImageQueryChunk, ImageQueryResult
+from xr_ai_voice import (
+    VOICE_CONTRIBUTION_TOPIC,
+    UserQuery,
+    VoiceOutput,
+    VoiceParticipantJoined,
+    VoiceParticipantLeft,
+)
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SAMPLE = _ROOT / "agent-samples" / "tea-making-sample"
 _WORKER = _SAMPLE / "worker"
 sys.path.insert(0, str(_WORKER))
 
+from tea_making_worker.app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    _CLIENT_TEXT_TOPIC,
+    _ParticipantVoiceAggregationAgent,
+)
 from tea_making_worker.background_context import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     BackgroundContextAgent,
 )
@@ -31,21 +43,25 @@ from tea_making_worker.change_watch import ChangeWatchAgent  # noqa: E402  # pyr
 from tea_making_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.events import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     FOREGROUND_RECORD_TOPIC,
+    GUIDANCE_NOTICE_TOPIC,
     GUIDANCE_RECORD_TOPIC,
     PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     ForegroundRecord,
+    GuidanceNotice,
     GuidanceRecord,
     ParticipantCleanupComplete,
 )
 from tea_making_worker.file_output import FileOutputAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.foreground import ForegroundAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.images import ParticipantImageAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.spec import load_workflow  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.transcript import TranscriptAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.video_log import VideoLogAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.workflow import GuidanceAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.workflow_state import WorkflowStore  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.workflow_tools import CurrentViewRequest  # noqa: E402  # pyright: ignore[reportMissingImports]
 
 
 def _load_main():
@@ -58,9 +74,7 @@ def _load_main():
 
 
 def test_omni_supplies_both_language_and_vision() -> None:
-    models = json.loads((_SAMPLE / "yaml/models.local.json").read_text())[
-        "models"
-    ]
+    models = json.loads((_SAMPLE / "yaml/models.local.json").read_text())["models"]
 
     assert models["llm"]["deployment"]["service"] == "omni"
     assert models["vlm"]["deployment"]["service"] == "omni"
@@ -89,6 +103,33 @@ def test_launcher_declares_one_omni_and_no_monitoring_ui(tmp_path: Path) -> None
     assert "vlm" not in names
     assert "activity-viewer" not in names
     assert "rag" in names
+
+
+def test_launcher_defaults_to_wake_word_and_allows_always_on() -> None:
+    sample_main = _load_main()
+
+    default = sample_main._parse_args(["--tts-mode", "piper"])
+    explicit = sample_main._parse_args(
+        ["--voice-mode", "always-on", "--tts-mode", "piper"]
+    )
+
+    assert default is not None and default.voice_mode == "wake-word"
+    assert explicit is not None and explicit.voice_mode == "always-on"
+    assert _CLIENT_TEXT_TOPIC == "agent.response"
+
+
+@pytest.mark.asyncio
+async def test_participant_leave_releases_voice_aggregation_state() -> None:
+    aggregation = object.__new__(_ParticipantVoiceAggregationAgent)
+    aggregation.release = AsyncMock()
+    ctx = SimpleNamespace(metadata=SimpleNamespace(participant_id="participant-voice"))
+
+    await aggregation.participant_left(
+        VoiceParticipantLeft(),
+        ctx,  # type: ignore[arg-type]
+    )
+
+    aggregation.release.assert_awaited_once_with("participant-voice")
 
 
 def test_published_guide_covers_architecture_and_adaptation() -> None:
@@ -142,6 +183,34 @@ def test_workflow_rejects_incomplete_completion_and_transitions_atomically() -> 
     assert session.step_id == "fill_water"
     assert session.state["water_filled"] is False
     assert session.revision == revision
+
+
+def test_skipping_completed_step_preserves_verified_state() -> None:
+    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
+    store = WorkflowStore(workflow)
+    session = store.get("participant-verified")
+    store.start(session)
+    store.observe(session, "Twinings Earl Grey label")
+    accepted = store.commit(
+        session,
+        {
+            "tea_name": "Twinings Earl Grey",
+            "target_temperature_c": 100,
+            "steep_duration_s": 180,
+            "guidance_source": "package",
+            "tea_ready": True,
+        },
+        "",
+    )
+    assert accepted.complete is True
+
+    message = store.advance(session, skip=True)
+
+    assert session.step_id == "fill_water"
+    assert session.state["tea_name"] == "Twinings Earl Grey"
+    assert session.state["target_temperature_c"] == 100
+    assert session.state["guidance_source"] == "package"
+    assert "generic" not in message.lower()
 
 
 def test_skipping_steeping_detection_also_skips_the_timer() -> None:
@@ -375,13 +444,7 @@ async def test_active_workflow_keeps_background_stop_and_status_tools() -> None:
 
     active_tools = guidance.active_tools("participant-controls")
     assert active_tools is not None
-    current_view = foreground._replace_current_view(
-        active_tools,
-        "participant-controls",
-        query="What do you see?",
-        ctx=None,
-        timestamp_us=None,
-    ).get("current_view")
+    current_view = active_tools.get("current_view")
 
     assert {
         "change_watch__stop",
@@ -391,7 +454,209 @@ async def test_active_workflow_keeps_background_stop_and_status_tools() -> None:
         "video_log__stop",
         "video_log__status",
     } <= observed_tools
-    assert current_view is not None and current_view.return_direct is True
+    assert current_view is not None and current_view.return_direct is False
+
+
+@pytest.mark.asyncio
+async def test_active_current_view_preserves_structured_question() -> None:
+    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
+    observed: list[str] = []
+
+    class CurrentFrame:
+        async def execute(self, _request):
+            return SimpleNamespace(image=ImageReference(uri="frame.jpg"))
+
+    class ImageQuery:
+        async def execute(self, request):
+            observed.append(request.query)
+            return ImageQueryResult(text="The display reads 85 Celsius.")
+
+    guidance = GuidanceAgent(
+        workflow=workflow,
+        llm=SimpleNamespace(),  # type: ignore[arg-type]
+        current_frame=CurrentFrame(),  # type: ignore[arg-type]
+        image_query=ImageQuery(),  # type: ignore[arg-type]
+        rag=SimpleNamespace(),  # type: ignore[arg-type]
+    )
+    guidance.store.start(guidance.store.get("participant-question"))
+    active_tools = guidance.active_tools("participant-question")
+    assert active_tools is not None
+    current_view = active_tools.get("current_view")
+    assert current_view is not None
+
+    result = await current_view.handler(
+        CurrentViewRequest(question="Read only the kettle temperature and unit.")
+    )
+
+    assert result.text == "The display reads 85 Celsius."
+    assert observed == ["Read only the kettle temperature and unit."]
+    assert current_view.return_direct is False
+
+
+@pytest.mark.asyncio
+async def test_streaming_current_view_uses_question_and_times_out() -> None:
+    observed: list[str] = []
+    published: list[VoiceOutput] = []
+
+    class CurrentFrame:
+        async def execute(self, _request):
+            return SimpleNamespace(image=ImageReference(uri="frame.jpg"))
+
+    class Vision:
+        def stream(self, request):
+            observed.append(request.query)
+
+            async def chunks():
+                await asyncio.sleep(1)
+                yield ImageQueryChunk(text="late")
+
+            return chunks()
+
+    class Context:
+        metadata = SimpleNamespace(message_id="view-timeout")
+
+        async def publish(self, topic, message):
+            assert topic is VOICE_CONTRIBUTION_TOPIC
+            published.append(message)
+
+    foreground = object.__new__(ForegroundAgent)
+    foreground._images = SimpleNamespace(get_current_frame=CurrentFrame())
+    foreground._vision = Vision()
+    foreground._vlm_timeout_s = 0.01
+    tool = foreground._current_view_tool(
+        "participant-timeout",
+        ctx=Context(),  # type: ignore[arg-type]
+        timestamp_us=42,
+    )
+
+    result = await tool.handler(
+        CurrentViewRequest(question="What number is on the display?")
+    )
+
+    assert result.available is False
+    assert "vision timeout" in result.text
+    assert observed == ["What number is on the display?"]
+    assert published[0].text == result.text
+    assert published[0].interrupt is True
+    assert published[-1].text == ""
+    assert published[-1].final is True
+
+
+@pytest.mark.asyncio
+async def test_foreground_record_failure_does_not_suppress_speech() -> None:
+    published: list[tuple[object, object]] = []
+
+    class Context:
+        metadata = SimpleNamespace(
+            participant_id="participant-disk-full",
+            message_id="query-1",
+        )
+
+        async def publish(self, topic, message):
+            if topic is FOREGROUND_RECORD_TOPIC:
+                raise OSError("disk full")
+            published.append((topic, message))
+
+    foreground = object.__new__(ForegroundAgent)
+
+    async def answer(*_args, **_kwargs):
+        return "Your water is ready.", ["clock__timer"], False
+
+    foreground._answer = answer
+    await foreground._run_turn(
+        UserQuery(text="Is it ready?", timestamp_us=50),
+        Context(),  # type: ignore[arg-type]
+    )
+
+    assert len(published) == 1
+    topic, message = published[0]
+    assert topic is VOICE_CONTRIBUTION_TOPIC
+    assert isinstance(message, VoiceOutput)
+    assert message.text == "Your water is ready."
+
+
+@pytest.mark.asyncio
+async def test_guidance_record_failure_does_not_suppress_notice() -> None:
+    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
+    guidance = GuidanceAgent(
+        workflow=workflow,
+        llm=SimpleNamespace(),  # type: ignore[arg-type]
+        current_frame=SimpleNamespace(),  # type: ignore[arg-type]
+        image_query=SimpleNamespace(),  # type: ignore[arg-type]
+        rag=SimpleNamespace(),  # type: ignore[arg-type]
+    )
+    session = guidance.store.get("participant-guidance-disk-full")
+    guidance.store.start(session)
+    session.notices.append("The tea package is identified.")
+    delivered: list[tuple[object, object]] = []
+
+    class Runtime:
+        running = True
+
+        async def publish(self, topic, message, **_kwargs):
+            delivered.append((topic, message))
+            raise OSError("disk full")
+
+    guidance._runtime = Runtime()  # type: ignore[assignment]
+
+    await guidance._flush(session)
+
+    assert delivered
+    assert delivered[0][0] is GUIDANCE_NOTICE_TOPIC
+    assert isinstance(delivered[0][1], GuidanceNotice)
+    assert any(topic is GUIDANCE_RECORD_TOPIC for topic, _message in delivered)
+    assert guidance.store.drain_notices(session) == ()
+    assert guidance.store.drain_events(session) == ()
+
+
+@pytest.mark.asyncio
+async def test_images_release_after_every_producer_finishes_cleanup() -> None:
+    released: list[str] = []
+    images = object.__new__(ParticipantImageAgent)
+    images._cleanup = {}
+    images.get_current_frame = SimpleNamespace(release=released.append)
+    ctx = SimpleNamespace(metadata=SimpleNamespace(participant_id="participant-images"))
+    producers = (
+        "guidance",
+        "foreground",
+        "change_watch",
+        "transcript",
+        "video_log",
+    )
+
+    for producer in producers[:-1]:
+        await images.participant_cleanup_complete(
+            ParticipantCleanupComplete(producer=producer),
+            ctx,  # type: ignore[arg-type]
+        )
+    assert released == []
+
+    await images.participant_cleanup_complete(
+        ParticipantCleanupComplete(producer=producers[-1]),
+        ctx,  # type: ignore[arg-type]
+    )
+
+    assert released == ["participant-images"]
+    assert images._cleanup == {}
+
+
+@pytest.mark.parametrize("case", ["initial", "complete_when", "state_on_skip"])
+def test_workflow_rejects_mistyped_declared_state_values(
+    tmp_path: Path,
+    case: str,
+) -> None:
+    raw = yaml.safe_load((_SAMPLE / "yaml/workflow.yaml").read_text())
+    if case == "initial":
+        raw["state"]["water_filled"]["initial"] = "false"
+    elif case == "complete_when":
+        raw["steps"][1]["complete_when"]["water_filled"] = "true"
+    else:
+        raw["steps"][0]["state_on_skip"]["target_temperature_c"] = "93"
+    path = tmp_path / "workflow.yaml"
+    path.write_text(yaml.safe_dump(raw))
+
+    with pytest.raises(ValueError, match="must be"):
+        load_workflow(path)
 
 
 @pytest.mark.asyncio
@@ -466,12 +731,14 @@ async def test_file_output_writes_session_bounded_jsonl(tmp_path: Path) -> None:
 def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:
     config = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
     prompt_dir = _WORKER / "tea_making_worker/prompts"
-    assert config.foreground_prompt == (
-        prompt_dir / "foreground_prompt.txt"
-    ).read_text().strip()
-    assert config.video_delta_prompt == (
-        prompt_dir / "video_delta_prompt.txt"
-    ).read_text().strip()
+    assert (
+        config.foreground_prompt
+        == (prompt_dir / "foreground_prompt.txt").read_text().strip()
+    )
+    assert (
+        config.video_delta_prompt
+        == (prompt_dir / "video_delta_prompt.txt").read_text().strip()
+    )
 
     override = tmp_path / "worker.yaml"
     override.write_text("foreground_prompt: Explicit override\n")

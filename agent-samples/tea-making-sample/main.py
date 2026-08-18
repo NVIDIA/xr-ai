@@ -34,16 +34,16 @@ def _parser() -> argparse.ArgumentParser:
         description="Tea-making guidance with native XR agents.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""example:
-  tea_making_sample --voice-mode wake-word --tts-mode piper
+  tea_making_sample --tts-mode piper
 
 The LLM and VLM roles both use Nemotron-3-Nano-Omni on port 8108.
 """,
     )
     parser.add_argument(
         "--voice-mode",
-        required=True,
+        default="wake-word",
         choices=("wake-word", "always-on"),
-        help="wake-word: require Agent/Hey Agent; always-on: accept every utterance",
+        help=("wake-word (default): require Agent/Hey Agent; always-on: accept every utterance"),
     )
     parser.add_argument(
         "--tts-mode",

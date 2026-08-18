@@ -38,7 +38,6 @@ Then start the tea stack from the repository root:
 
 ```bash
 uv run --project agent-samples/tea-making-sample tea_making_sample \
-  --voice-mode wake-word \
   --tts-mode piper
 ```
 
@@ -53,15 +52,18 @@ Agent, start watching for spills.
 Agent, start recording the transcript.
 ```
 
-The launcher requires both behavior choices:
+Wake-word mode is enabled by default:
 
-- `--voice-mode wake-word` requires the configured wake phrase and allows a
-  short follow-up window. `always-on` dispatches every finalized utterance.
+- The default `--voice-mode wake-word` requires the configured wake phrase and
+  allows a short follow-up window. Pass `--voice-mode always-on` explicitly to
+  dispatch every finalized utterance.
 - `--tts-mode piper` runs lightweight CPU speech on port 8105. `magpie` runs
   neural speech on port 8104 and uses CUDA when available.
 
 The connection page is provided by XR-Media-Hub and remains part of the sample.
 Only the old monitoring-specific UI is omitted.
+Spoken agent responses are also published on the connection client's
+`agent.response` text channel so the page can display accessible captions.
 
 ## Behavior
 

@@ -73,6 +73,10 @@ class _TriggerResult(BaseModel):
     detail: str = ""
 
 
+class _StaleObservation(RuntimeError):
+    """Stop an observation turn after its workflow revision changes."""
+
+
 class GuidanceAgent(Agent):
     """Own participant workflow state, tools, and periodic observations."""
 
@@ -99,9 +103,7 @@ class GuidanceAgent(Agent):
         self._observation_prompt = _OBSERVATION_PROMPT.read_text(
             encoding="utf-8"
         ).strip()
-        self._voice_prompt = _VOICE_PROMPT.read_text(
-            encoding="utf-8"
-        ).strip()
+        self._voice_prompt = _VOICE_PROMPT.read_text(encoding="utf-8").strip()
         self._runtime: AgentRuntime | None = None
         self._connected: set[str] = set()
         self._tasks: dict[str, asyncio.Task[None]] = {}
@@ -361,9 +363,7 @@ class GuidanceAgent(Agent):
                 self._image_query,
                 timeout_s=self._vlm_timeout_s,
             )
-            result = await tool.execute(
-                CurrentViewRequest.model_validate(arguments)
-            )
+            result = await tool.execute(CurrentViewRequest.model_validate(arguments))
             if not result.available:
                 return _TriggerResult(
                     available=False,
@@ -378,9 +378,7 @@ class GuidanceAgent(Agent):
             if step.trigger.result_field is not None:
                 value = value[step.trigger.result_field]
             return _TriggerResult(available=True, value=value)
-        raise ValueError(
-            f"unsupported workflow trigger: {step.trigger.function!r}"
-        )
+        raise ValueError(f"unsupported workflow trigger: {step.trigger.function!r}")
 
     async def _observe(
         self,
@@ -424,13 +422,17 @@ class GuidanceAgent(Agent):
             messages: tuple[ChatMessage, ...],
             definitions: tuple[ToolDef, ...],
         ):
-            return await self._llm.chat(
+            response = await self._llm.chat(
                 messages,
                 tools=definitions,
                 max_tokens=512,
                 temperature=0.0,
                 enable_thinking=False,
             )
+            async with session.lock:
+                if not self._current(session, step, revision):
+                    raise _StaleObservation
+            return response
 
         try:
             result = await run_tool_loop(
@@ -443,6 +445,8 @@ class GuidanceAgent(Agent):
                 max_iterations=3,
                 max_tool_calls=3,
             )
+        except _StaleObservation:
+            return
         except ToolLoopError as exc:
             async with session.lock:
                 if self._current(session, step, revision):
@@ -507,8 +511,26 @@ class GuidanceAgent(Agent):
             async with session.lock:
                 events = self.store.drain_events(session)
                 notices = self.store.drain_notices(session)
-            try:
-                for event in events:
+            for text in notices:
+                try:
+                    await runtime.publish(
+                        GUIDANCE_NOTICE_TOPIC,
+                        GuidanceNotice(
+                            timestamp_us=_timestamp_us(),
+                            text=text,
+                        ),
+                        participant_id=session.participant_id,
+                        source="guidance",
+                    )
+                except RuntimeClosedError:
+                    return
+                except Exception:
+                    logger.opt(exception=True).error(
+                        "tea guidance notice failed pid={!r}",
+                        session.participant_id,
+                    )
+            for event in events:
+                try:
                     await runtime.publish(
                         GUIDANCE_RECORD_TOPIC,
                         GuidanceRecord(
@@ -521,18 +543,13 @@ class GuidanceAgent(Agent):
                         participant_id=session.participant_id,
                         source="guidance",
                     )
-                for text in notices:
-                    await runtime.publish(
-                        GUIDANCE_NOTICE_TOPIC,
-                        GuidanceNotice(
-                            timestamp_us=_timestamp_us(),
-                            text=text,
-                        ),
-                        participant_id=session.participant_id,
-                        source="guidance",
+                except RuntimeClosedError:
+                    return
+                except Exception:
+                    logger.opt(exception=True).error(
+                        "tea guidance record failed pid={!r}",
+                        session.participant_id,
                     )
-            except RuntimeClosedError:
-                return
 
     @staticmethod
     def _participant(ctx: RuntimeContext) -> str:
@@ -558,14 +575,12 @@ def _resolve(value: Any, state: dict[str, Any]) -> Any:
 def _state_contract(workflow: Workflow, step: Step) -> str:
     writes = "; ".join(
         (
-            f"{name}:{workflow.state_fields[name].type} — "
-            f"{workflow.state_fields[name].description.rstrip('.')}"
+            f"{name}:{workflow.state_fields[name].type} — {workflow.state_fields[name].description.rstrip('.')}"
         )
         for name in step.writes
     )
     completion = ", ".join(
-        f"{name}={json.dumps(value)}"
-        for name, value in step.complete_when.items()
+        f"{name}={json.dumps(value)}" for name, value in step.complete_when.items()
     )
     return f"Writable state: {writes}. Completion requires {completion}."
 

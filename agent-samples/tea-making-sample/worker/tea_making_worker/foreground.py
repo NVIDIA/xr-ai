@@ -66,7 +66,10 @@ class ForegroundAgent(Agent):
         transcript: TranscriptAgent,
         video_log: VideoLogAgent,
         prompt: str,
+        vlm_timeout_s: float = 15.0,
     ) -> None:
+        if vlm_timeout_s <= 0:
+            raise ValueError("vlm_timeout_s must be positive")
         self._vision = StreamingImageQueryTool(images=images.images, vlm=vlm)
         super().__init__((self._vision,))
         self._llm = llm
@@ -78,6 +81,7 @@ class ForegroundAgent(Agent):
         self._transcript = transcript
         self._video_log = video_log
         self._prompt = prompt.strip()
+        self._vlm_timeout_s = vlm_timeout_s
         self._tasks: dict[str, asyncio.Task[None]] = {}
 
     @subscribe(USER_QUERY_TOPIC)
@@ -148,15 +152,6 @@ class ForegroundAgent(Agent):
                 tools = []
                 spoken = False
             try:
-                await ctx.publish(
-                    FOREGROUND_RECORD_TOPIC,
-                    ForegroundRecord(
-                        timestamp_us=query.timestamp_us,
-                        query=query.text,
-                        response=response,
-                        tools=tools,
-                    ),
-                )
                 if not spoken:
                     await ctx.publish(
                         VOICE_CONTRIBUTION_TOPIC,
@@ -168,6 +163,22 @@ class ForegroundAgent(Agent):
                     )
             except RuntimeClosedError:
                 return
+            try:
+                await ctx.publish(
+                    FOREGROUND_RECORD_TOPIC,
+                    ForegroundRecord(
+                        timestamp_us=query.timestamp_us,
+                        query=query.text,
+                        response=response,
+                        tools=tools,
+                    ),
+                )
+            except RuntimeClosedError:
+                return
+            except Exception:
+                logger.opt(exception=True).error(
+                    "tea foreground record failed pid={!r}", participant_id
+                )
 
     async def _answer(
         self,
@@ -181,7 +192,6 @@ class ForegroundAgent(Agent):
         if active_context is None:
             tools = self._root_tools(
                 participant_id,
-                query=query,
                 ctx=ctx,
                 timestamp_us=timestamp_us,
             )
@@ -192,13 +202,7 @@ class ForegroundAgent(Agent):
             if active_tools is None:
                 raise RuntimeError("active tea context has no active tool set")
             tools = _merge_tool_sets(
-                self._replace_current_view(
-                    active_tools,
-                    participant_id,
-                    query=query,
-                    ctx=ctx,
-                    timestamp_us=timestamp_us,
-                ),
+                active_tools,
                 self._background_tools(participant_id),
             )
             system_prompt = f"{self._prompt}\n\nActive tea guide:\n{active_context}"
@@ -256,13 +260,11 @@ class ForegroundAgent(Agent):
         self,
         participant_id: str,
         *,
-        query: str,
         ctx: RuntimeContext | None,
         timestamp_us: int | None,
     ) -> ToolSet:
         current_view = self._current_view_tool(
             participant_id,
-            query=query,
             ctx=ctx,
             timestamp_us=timestamp_us,
         )
@@ -272,41 +274,18 @@ class ForegroundAgent(Agent):
             self._background_tools(participant_id),
         )
 
-    def _replace_current_view(
-        self,
-        tools: ToolSet,
-        participant_id: str,
-        *,
-        query: str,
-        ctx: RuntimeContext | None,
-        timestamp_us: int | None,
-    ) -> ToolSet:
-        current_view = self._current_view_tool(
-            participant_id,
-            query=query,
-            ctx=ctx,
-            timestamp_us=timestamp_us,
-        )
-        return ToolSet(
-            {
-                name: current_view if name == "current_view" else tool
-                for name, tool in tools.items()
-            }
-        )
-
     def _current_view_tool(
         self,
         participant_id: str,
         *,
-        query: str,
         ctx: RuntimeContext | None,
         timestamp_us: int | None,
     ) -> Tool[CurrentViewRequest, ImageQueryResult]:
-        async def inspect(_request: CurrentViewRequest) -> ImageQueryResult:
+        async def inspect(request: CurrentViewRequest) -> ImageQueryResult:
             if ctx is None:
                 raise RuntimeError("current-view streaming requires a runtime context")
             return await self._stream_current_view(
-                query,
+                request.question,
                 participant_id,
                 ctx,
                 timestamp_us=timestamp_us,
@@ -336,49 +315,66 @@ class ForegroundAgent(Agent):
         cancelled = False
         chunks: list[str] = []
         try:
-            try:
-                frame = await self._images.get_current_frame.execute(
-                    CurrentFrameRequest(participant_id=participant_id)
-                )
-            except (FrameUnavailable, RuntimeError) as exc:
-                unavailable = _frame_unavailable_message(exc)
-                if unavailable is None:
-                    raise
-                await ctx.publish(
-                    VOICE_CONTRIBUTION_TOPIC,
-                    VoiceOutput(
-                        text=unavailable,
-                        response_id=response_id,
-                        final=False,
-                        interrupt=True,
-                        timestamp_us=timestamp_us,
-                    ),
-                )
-                opened = True
-                return ImageQueryResult(text=unavailable, available=False)
-            stream = self._vision.stream(
-                ImageQueryRequest(image=frame.image, query=query)
-            )
-            try:
-                async for chunk in stream:
-                    chunks.append(chunk.text)
+            async with asyncio.timeout(self._vlm_timeout_s):
+                try:
+                    frame = await self._images.get_current_frame.execute(
+                        CurrentFrameRequest(participant_id=participant_id)
+                    )
+                except (FrameUnavailable, RuntimeError) as exc:
+                    unavailable = _frame_unavailable_message(exc)
+                    if unavailable is None:
+                        raise
                     await ctx.publish(
                         VOICE_CONTRIBUTION_TOPIC,
                         VoiceOutput(
-                            text=chunk.text,
+                            text=unavailable,
                             response_id=response_id,
                             final=False,
-                            interrupt=first,
+                            interrupt=True,
                             timestamp_us=timestamp_us,
                         ),
                     )
-                    first = False
                     opened = True
-            finally:
-                close = getattr(stream, "aclose", None)
-                if close is not None:
-                    await close()
+                    return ImageQueryResult(text=unavailable, available=False)
+                stream = self._vision.stream(
+                    ImageQueryRequest(image=frame.image, query=query)
+                )
+                try:
+                    async for chunk in stream:
+                        chunks.append(chunk.text)
+                        await ctx.publish(
+                            VOICE_CONTRIBUTION_TOPIC,
+                            VoiceOutput(
+                                text=chunk.text,
+                                response_id=response_id,
+                                final=False,
+                                interrupt=first,
+                                timestamp_us=timestamp_us,
+                            ),
+                        )
+                        first = False
+                        opened = True
+                finally:
+                    close = getattr(stream, "aclose", None)
+                    if close is not None:
+                        await close()
             return ImageQueryResult(text="".join(chunks))
+        except TimeoutError:
+            unavailable = (
+                "Unable to inspect the current frame before the vision timeout."
+            )
+            await ctx.publish(
+                VOICE_CONTRIBUTION_TOPIC,
+                VoiceOutput(
+                    text=unavailable,
+                    response_id=response_id,
+                    final=False,
+                    interrupt=first,
+                    timestamp_us=timestamp_us,
+                ),
+            )
+            opened = True
+            return ImageQueryResult(text=unavailable, available=False)
         except asyncio.CancelledError:
             cancelled = True
             raise

@@ -14,10 +14,16 @@ import nemo_relay
 from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_llm, make_stt, make_tts, make_vlm
-from xr_ai_runtime import AgentRuntime
+from xr_ai_runtime import AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools.rag import RAGTools
 from xr_ai_tools.vision import ImageQueryTool
-from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent, VoiceAggregationAgent
+from xr_ai_voice import (
+    HubVoiceTransport,
+    VadConfig,
+    VoiceAgent,
+    VoiceAggregationAgent,
+    VoiceParticipantLeft,
+)
 from xr_ai_voicegate import load_voice_gate_config
 
 from .background_context import BackgroundContextAgent
@@ -37,6 +43,22 @@ from .spec import load_workflow
 from .transcript import TranscriptAgent
 from .video_log import VideoLogAgent
 from .workflow import GuidanceAgent
+
+_CLIENT_TEXT_TOPIC = "agent.response"
+
+
+class _ParticipantVoiceAggregationAgent(VoiceAggregationAgent):
+    """Release sample-scoped aggregation state with its voice participant."""
+
+    @subscribe(PARTICIPANT_LEFT_TOPIC)
+    async def participant_left(
+        self,
+        _event: VoiceParticipantLeft,
+        ctx: RuntimeContext,
+    ) -> None:
+        participant_id = ctx.metadata.participant_id
+        if participant_id is not None:
+            await self.release(participant_id)
 
 
 @asynccontextmanager
@@ -91,7 +113,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         probes={"llm": llm.health, "vlm": vlm.health, "rag": rag.health},
         ready_file=ready_file,
         closeables=(llm, vlm, rag),
-        text_topic="",
+        text_topic=_CLIENT_TEXT_TOPIC,
         idle_timeout_secs=config.idle_timeout_secs,
         transport=transport,
         participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
@@ -176,12 +198,13 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             transcript=transcript,
             video_log=video_log,
             prompt=config.foreground_prompt,
+            vlm_timeout_s=config.vlm_timeout_s,
         ),
     )
     runtime.register("guidance-voice", GuidanceVoiceAgent())
     voice_aggregation = runtime.register(
         "voice-aggregation",
-        VoiceAggregationAgent(llm=llm),
+        _ParticipantVoiceAggregationAgent(llm=llm),
     )
     runtime.register("voice", voice)
 

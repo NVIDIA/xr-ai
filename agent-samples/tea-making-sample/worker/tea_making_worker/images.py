@@ -9,9 +9,15 @@ from xr_ai_hub import ProcessorEndpoint
 from xr_ai_runtime import Agent, RuntimeContext, subscribe
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
-from xr_ai_voice import VoiceParticipantLeft
 
-from .events import PARTICIPANT_LEFT_TOPIC
+from .events import (
+    PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
+    ParticipantCleanupComplete,
+)
+
+_CLEANUP_PRODUCERS = frozenset(
+    {"guidance", "foreground", "change_watch", "transcript", "video_log"}
+)
 
 
 class ParticipantImageAgent(Agent):
@@ -31,21 +37,28 @@ class ParticipantImageAgent(Agent):
             frame_max_age_s=frame_max_age_s,
             frame_timeout_s=frame_timeout_s,
         )
+        self._cleanup: dict[str, set[str]] = {}
         super().__init__((self.get_current_frame,))
 
-    @subscribe(PARTICIPANT_LEFT_TOPIC)
-    async def participant_left(
+    @subscribe(PARTICIPANT_CLEANUP_COMPLETE_TOPIC)
+    async def participant_cleanup_complete(
         self,
-        _event: VoiceParticipantLeft,
+        event: ParticipantCleanupComplete,
         ctx: RuntimeContext,
     ) -> None:
         participant_id = ctx.metadata.participant_id
-        if participant_id is not None:
+        if participant_id is None:
+            return
+        completed = self._cleanup.setdefault(participant_id, set())
+        completed.add(event.producer)
+        if _CLEANUP_PRODUCERS <= completed:
+            self._cleanup.pop(participant_id, None)
             self.get_current_frame.release(participant_id)
 
     async def stop(self) -> None:
         """Release every retained image when the application stops."""
 
+        self._cleanup.clear()
         self.images.clear()
 
 
