@@ -59,4 +59,6 @@ ssh -L 8092:127.0.0.1:8092 user@xr-host
 
 Do not bind it to `0.0.0.0` on an untrusted network. A remotely exposed viewer
 needs an authenticated TLS reverse proxy chosen by the deployment owner; it
-does not reuse the media hub's participant credentials.
+does not reuse the media hub's participant credentials. The server also rejects
+unrecognized HTTP `Host` names. A reverse proxy must preserve a configured host,
+use a literal listener address, or rewrite `Host` to `127.0.0.1`.

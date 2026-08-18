@@ -96,7 +96,9 @@ sudo ufw reload
 ```
 
 Apply the equivalent source-restricted rule to the cloud security group when
-the host is behind a provider firewall.
+the host is behind a provider firewall. The viewer rejects unrecognized HTTP
+`Host` names to prevent DNS rebinding. Connect using a literal server address;
+an authenticated reverse proxy can instead rewrite `Host` to `127.0.0.1`.
 
 ```{warning}
 The live event viewer does not provide authentication or TLS, and its payloads

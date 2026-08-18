@@ -10,7 +10,7 @@ from xr_ai_runtime import Topic
 class WebEvent(BaseModel):
     """One application event selected for the live browser view."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     topic: str = Field(min_length=1, max_length=160)
     """Stable presentation topic used to group the event in the browser."""

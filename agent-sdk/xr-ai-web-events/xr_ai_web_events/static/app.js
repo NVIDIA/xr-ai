@@ -14,6 +14,8 @@ const viewerTitle = document.querySelector('#viewer-title');
 const MAX_BROWSER_EVENTS = 2000;
 let events = [];
 let cursor = 0;
+const paneKeys = new WeakMap();
+const scrollPositions = new Map();
 
 function participantName(event) {
   return event.participant_id || 'Global';
@@ -43,6 +45,16 @@ function topicKey(event) {
 
 function render() {
   refreshParticipantOptions();
+  if (!follow.checked) {
+    grid.querySelectorAll('.topic-pane').forEach((pane) => {
+      const key = paneKeys.get(pane);
+      if (key) scrollPositions.set(key, pane.querySelector('.feed').scrollTop);
+    });
+  }
+  const retainedKeys = new Set(events.map(topicKey));
+  for (const key of scrollPositions.keys()) {
+    if (!retainedKeys.has(key)) scrollPositions.delete(key);
+  }
   grid.querySelectorAll('.topic-pane').forEach((pane) => pane.remove());
   const selected = participantFilter.value;
   const visible = selected === '*' ? events : events.filter((event) => participantName(event) === selected);
@@ -54,9 +66,10 @@ function render() {
   });
   empty.hidden = groups.size > 0;
 
-  [...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).forEach(([, topicEvents]) => {
+  [...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).forEach(([key, topicEvents]) => {
     const latest = topicEvents[topicEvents.length - 1];
     const pane = topicTemplate.content.firstElementChild.cloneNode(true);
+    paneKeys.set(pane, key);
     pane.querySelector('h2').textContent = latest.title || latest.topic;
     pane.querySelector('.count').textContent = String(topicEvents.length);
     const feed = pane.querySelector('.feed');
@@ -69,12 +82,13 @@ function render() {
       feed.append(node);
     });
     grid.append(pane);
-    if (follow.checked) feed.scrollTop = feed.scrollHeight;
+    feed.scrollTop = follow.checked ? feed.scrollHeight : (scrollPositions.get(key) || 0);
   });
 }
 
 document.querySelector('#clear').addEventListener('click', () => {
   events = [];
+  scrollPositions.clear();
   render();
 });
 participantFilter.addEventListener('change', render);

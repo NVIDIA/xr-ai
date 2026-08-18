@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import socket
 from urllib.error import HTTPError
-from urllib.request import urlopen
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 import pytest
 from pydantic import ValidationError
@@ -15,13 +17,22 @@ from xr_ai_runtime import AgentRuntime
 from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent, WebEventsAgent
 
 
-def _request(url: str) -> tuple[int, dict[str, str], bytes]:
-    with urlopen(url, timeout=2) as response:  # noqa: S310
+def _request(
+    url: str, *, host: str | None = None
+) -> tuple[int, dict[str, str], bytes]:
+    request = Request(url, headers={"Host": host}) if host is not None else url
+    with urlopen(request, timeout=2) as response:  # noqa: S310
         return response.status, dict(response.headers.items()), response.read()
 
 
 async def _get(url: str) -> tuple[int, dict[str, str], bytes]:
     return await asyncio.to_thread(_request, url)
+
+
+async def _get_with_host(
+    url: str, host: str
+) -> tuple[int, dict[str, str], bytes]:
+    return await asyncio.to_thread(_request, url, host=host)
 
 
 def test_web_event_contract_is_strict_and_untraced() -> None:
@@ -35,6 +46,19 @@ def test_web_event_contract_is_strict_and_untraced() -> None:
         WebEvent(topic=" ")
     with pytest.raises(ValidationError):
         WebEvent(topic="ok", unexpected=True)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"value": math.nan},
+        {"value": math.inf},
+        {"nested": [{"value": -math.inf}]},
+    ],
+)
+def test_web_event_rejects_non_finite_json_numbers(payload: dict) -> None:
+    with pytest.raises(ValidationError, match="finite number"):
+        WebEvent(topic="measurements", payload=payload)
 
 
 async def test_viewer_serves_runtime_events_and_reports_rollover() -> None:
@@ -116,6 +140,29 @@ async def test_viewer_serves_health_and_packaged_page() -> None:
         assert invalid.value.code == 400
 
     assert not viewer.running
+
+
+async def test_viewer_rejects_unrecognized_host_before_serving_routes() -> None:
+    viewer = WebEventsAgent(port=0)
+
+    async with viewer:
+        port = urlparse(viewer.url).port
+        assert port is not None
+        for host in (
+            "localhost",
+            f"localhost:{port}",
+            "127.0.0.1",
+            f"127.0.0.1:{port}",
+            "[::1]",
+            f"[::1]:{port}",
+        ):
+            status, _, _ = await _get_with_host(f"{viewer.url}/healthz", host)
+            assert status == 200
+
+        for path in ("/healthz", "/api/events?after=0", "/"):
+            with pytest.raises(HTTPError) as rejected:
+                await _get_with_host(f"{viewer.url}{path}", "rebind.example")
+            assert rejected.value.code == 400
 
 
 async def test_viewer_lifecycle_is_idempotent_and_bind_failure_is_visible() -> None:
