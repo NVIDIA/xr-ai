@@ -6,11 +6,10 @@
 from __future__ import annotations
 
 import ast
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
-import tomllib
 
 _VALUE_ACTIONS = {None, "append", "extend", "store"}
 _NO_VALUE_ACTIONS = {
