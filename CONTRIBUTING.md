@@ -60,7 +60,7 @@ Language-specific toolchains are pinned in each client project:
 - Keep code, tests, dependency metadata, and user-facing docs in the same
   change.
 - After changing a `pyproject.toml`, run
-  `python3 .github/scripts/generate_dependency_map.py` and regenerate the
+  `uv run --script .github/scripts/generate_dependency_map.py` and regenerate the
   affected project's gitignored `uv.lock` locally. Do not hand-edit the
   generated dependency inventory; pre-commit updates it and CI rejects drift.
 - Add the repository SPDX header to new source files. See

@@ -102,7 +102,7 @@ See [Adding a sample](docs/source/guides/adding-a-sample.md) and the
   and adjacent YAML comments. Files under a top-level sample's `yaml/` tree or
   beside a direct capability subproject are generated into the config reference.
 - After any `pyproject.toml` change, run
-  `python3 .github/scripts/generate_dependency_map.py`; the pre-commit hook
+  `uv run --script .github/scripts/generate_dependency_map.py`; the pre-commit hook
   normally regenerates the Python inventory automatically and CI rejects drift.
   Do not hand-edit the generated section in `DEPENDENCIES.md`. Regenerate the
   affected project's gitignored `uv.lock` locally to verify resolution.

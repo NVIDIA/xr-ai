@@ -24,7 +24,7 @@ repos:
           Regenerates the Python project inventory from pyproject.toml files.
           Pre-commit aborts when the generated document changes so the operator
           can review and re-stage it.
-        entry: python3 .github/scripts/generate_dependency_map.py
+        entry: uv run --script .github/scripts/generate_dependency_map.py
         language: system
         pass_filenames: false
         files: >-

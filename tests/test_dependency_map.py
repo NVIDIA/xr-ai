@@ -31,7 +31,7 @@ def _write_project(
     scripts: dict[str, str] | None = None,
 ) -> None:
     project = root / relative_directory
-    project.mkdir(parents=True)
+    project.mkdir(parents=True, exist_ok=True)
     lines = [
         "[build-system]",
         "requires = ['hatchling>=1.0']",
@@ -114,6 +114,42 @@ def test_internal_source_must_target_the_named_project(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="expected agent-sdk/library"):
         dependency_map.discover_projects(tmp_path)
+
+
+def test_unused_source_is_rejected(tmp_path: Path) -> None:
+    _write_project(
+        tmp_path,
+        "agent-samples/demo",
+        name="demo",
+        sources="unused = { path = '../../agent-sdk/unused' }",
+    )
+
+    with pytest.raises(ValueError, match="entries are not dependencies: unused"):
+        dependency_map.discover_projects(tmp_path)
+
+
+def test_internal_source_cannot_escape_repository(tmp_path: Path) -> None:
+    _write_project(tmp_path, "agent-sdk/library", name="library")
+    _write_project(
+        tmp_path,
+        "agent-samples/demo",
+        name="demo",
+        dependencies=("library",),
+        sources="library = { path = '../../../outside' }",
+    )
+
+    with pytest.raises(ValueError, match="escapes the repository"):
+        dependency_map.discover_projects(tmp_path)
+
+
+def test_root_project_is_supported(tmp_path: Path) -> None:
+    _write_project(tmp_path, "", name="root-project")
+    document = _write_document(tmp_path)
+
+    generated = dependency_map.generate_document(tmp_path, document)
+
+    assert "### Repository root" in generated
+    assert "#### `root-project` — [`./`](./)" in generated
 
 
 def test_duplicate_project_names_are_rejected(tmp_path: Path) -> None:

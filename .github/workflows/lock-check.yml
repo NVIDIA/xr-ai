@@ -32,8 +32,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3.2.4
+
       - name: Check generated dependency map
-        run: python3 .github/scripts/generate_dependency_map.py --check
+        run: uv run --script .github/scripts/generate_dependency_map.py --check
 
   uv-lock:
     name: uv lock (every project)

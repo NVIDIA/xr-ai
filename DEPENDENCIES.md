@@ -10,7 +10,7 @@ The exact Python project inventory below is generated from the repository's
 renaming, or changing a Python project, run:
 
 ```bash
-python3 .github/scripts/generate_dependency_map.py
+uv run --script .github/scripts/generate_dependency_map.py
 ```
 
 The local pre-commit hook normally regenerates it automatically, and CI rejects
