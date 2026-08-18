@@ -1,0 +1,15 @@
+API Reference
+=============
+
+This page contains auto-generated API reference documentation [#f1]_.
+
+.. toctree::
+   :titlesonly:
+
+   /reference/python/xr_ai_hub/index
+   /reference/python/xr_ai_tools/index
+   /reference/python/xr_ai_voice/index
+   /reference/python/xr_ai_models/index
+   /reference/python/xr_ai_runtime/index
+
+.. [#f1] Created with `sphinx-autoapi <https://github.com/readthedocs/sphinx-autoapi>`_
