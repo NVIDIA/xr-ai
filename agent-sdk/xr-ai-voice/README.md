@@ -89,8 +89,13 @@ async with runtime:
 
 Aggregation is participant-scoped. A lone finite contribution passes through
 without an LLM call after the short coalescing window. Two or more finite
-contributions in one batch are rewritten into a single concise utterance; if
-the rewrite fails, their original text is joined so updates are not lost. The
+contributions in one batch are rewritten into a single concise utterance. The
+aggregator keeps each output open for an estimated spoken duration, based on
+`speech_rate_wpm`, so updates produced while that output is playing form the
+next batch instead of becoming separate queued utterances. This is pacing
+rather than a client playback acknowledgement, so applications can tune the
+speech-rate estimate for their selected TTS voice. If the rewrite fails, their
+original text is joined so updates are not lost. The
 earliest input timestamp is preserved, and an interrupt on any contribution
 makes the combined response interrupt active speech. Queue capacity provides
 bounded ingress, and batches have a bounded size; additional contributions

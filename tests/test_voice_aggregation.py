@@ -55,6 +55,8 @@ async def _start(
     llm: _LLM,
     **kwargs,
 ) -> tuple[AgentRuntime, VoiceAggregationAgent, _Recorder]:
+    kwargs.setdefault("speech_rate_wpm", 60_000.0)
+    kwargs.setdefault("minimum_playback_s", 0.0)
     runtime = AgentRuntime()
     aggregator = runtime.register(
         "voice-aggregation",
@@ -90,7 +92,10 @@ async def test_single_contribution_bypasses_llm() -> None:
         await _stop(runtime, aggregator)
 
     output, metadata = recorder.outputs[0]
-    assert output == VoiceOutput(text="The timer is done.", timestamp_us=11)
+    assert output.text == "The timer is done."
+    assert output.timestamp_us == 11
+    assert output.final is False
+    assert output.response_id
     assert metadata.participant_id == "alice"
     assert metadata.source == "voice-aggregation"
     assert llm.calls == []
@@ -116,11 +121,12 @@ async def test_simultaneous_contributions_are_rewritten_once() -> None:
     finally:
         await _stop(runtime, aggregator)
 
-    assert recorder.outputs[0][0] == VoiceOutput(
-        text="Temperature rose to 24 degrees, and the timer is done.",
-        interrupt=True,
-        timestamp_us=10,
-    )
+    output = recorder.outputs[0][0]
+    assert output.text == "Temperature rose to 24 degrees, and the timer is done."
+    assert output.interrupt is True
+    assert output.timestamp_us == 10
+    assert output.final is False
+    assert output.response_id
     assert len(llm.calls) == 1
     messages, kwargs = llm.calls[0]
     assert "instrument-monitor" in str(messages[-1].content)
@@ -191,17 +197,70 @@ async def test_lone_stream_passes_through_while_pending_updates_coalesce() -> No
             participant_id="alice",
             source="foreground",
         )
-        await recorder.wait_for(3)
+        await recorder.wait_for(5)
     finally:
         await _stop(runtime, aggregator)
 
-    first, second, third = [output for output, _metadata in recorder.outputs]
+    first, second, stream_end, third, batch_end = [
+        output for output, _metadata in recorder.outputs
+    ]
     assert first.text == "I can see "
     assert first.final is False
     assert first.response_id
     assert first.response_id != "view"
-    assert second == VoiceOutput(text="a beaker.", response_id=first.response_id)
-    assert third == VoiceOutput(text="Temperature changed, and the timer completed.")
+    assert second == VoiceOutput(
+        text="a beaker.",
+        response_id=first.response_id,
+        final=False,
+    )
+    assert stream_end == VoiceOutput(response_id=first.response_id)
+    assert third.text == "Temperature changed, and the timer completed."
+    assert third.final is False
+    assert third.response_id
+    assert batch_end == VoiceOutput(response_id=third.response_id)
+    assert len(llm.calls) == 1
+
+
+async def test_updates_during_estimated_playback_coalesce_after_current_output() -> None:
+    llm = _LLM("Temperature changed, and the timer completed.")
+    runtime, aggregator, recorder = await _start(
+        llm,
+        speech_rate_wpm=6_000.0,
+        minimum_playback_s=0.1,
+    )
+    try:
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="This response remains active while it is spoken."),
+            participant_id="alice",
+            source="foreground",
+        )
+        await recorder.wait_for(1)
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Temperature changed."),
+            participant_id="alice",
+            source="instrument-monitor",
+        )
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="The timer completed."),
+            participant_id="alice",
+            source="timer",
+        )
+        await recorder.wait_for(4)
+    finally:
+        await _stop(runtime, aggregator)
+
+    first, first_end, combined, combined_end = [
+        output for output, _metadata in recorder.outputs
+    ]
+    assert first.text == "This response remains active while it is spoken."
+    assert first.final is False
+    assert first_end == VoiceOutput(response_id=first.response_id)
+    assert combined.text == "Temperature changed, and the timer completed."
+    assert combined.final is False
+    assert combined_end == VoiceOutput(response_id=combined.response_id)
     assert len(llm.calls) == 1
 
 
@@ -274,6 +333,8 @@ async def test_rewrite_failure_preserves_all_updates() -> None:
         ({"max_tokens": 0}, "token limit"),
         ({"stream_idle_timeout_s": 0}, "stream idle timeout"),
         ({"participant_idle_timeout_s": 0}, "participant idle timeout"),
+        ({"speech_rate_wpm": 0}, "speech rate"),
+        ({"minimum_playback_s": -1}, "minimum playback"),
     ],
 )
 def test_configuration_validation(kwargs: dict, message: str) -> None:
