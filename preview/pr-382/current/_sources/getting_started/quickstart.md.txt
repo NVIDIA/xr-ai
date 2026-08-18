@@ -192,8 +192,10 @@ connect. In wake-word mode, begin with “Agent” or “Hey Agent.” Use
 
 The tea workflow changes steps only after an explicit user command. Visual
 observations can satisfy the current step's evidence requirements, but never
-advance the workflow silently. Refer to the sample README for background-task
-commands, configuration, and artifact details.
+advance the workflow silently. Refer to the
+{doc}`tea-making architecture guide </reference/tea-making-sample>` for
+reusable workflow patterns, background-agent contracts, backend integration,
+and adaptation recipes.
 
 ## XR render demo (voice-driven sphere in CloudXR)
 
