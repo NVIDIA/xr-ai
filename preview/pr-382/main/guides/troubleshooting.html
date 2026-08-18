@@ -738,8 +738,8 @@ restarts so model weights stay loaded across worker crashes and debug
 restarts. See <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> → <em>vLLM model
 persistence</em>.</p>
 <p><strong>Fix:</strong> to fully release VRAM:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>xr-ai/agent-samples/xr-render-demo
-uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo<span class="w"> </span>--stop
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>xr-ai
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
 <p>For pip-mode servers this sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> to each persisted process, waits up

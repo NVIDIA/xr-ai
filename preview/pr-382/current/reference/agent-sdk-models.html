@@ -562,7 +562,11 @@ orchestrator can call <code class="docutils literal notranslate"><span class="pr
 <code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code> to map <code class="docutils literal notranslate"><span class="pre">managed</span></code> to <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;own&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">reused</span></code> to
 <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;reuse&quot;</span></code>, and <code class="docutils literal notranslate"><span class="pre">external</span></code> to no local process. Credentials used by
 the launcher must be declared explicitly as <code class="docutils literal notranslate"><span class="pre">endpoint.api_key_env</span></code>; launcher
-profiles do not inherit credentials from adapter presets.</p>
+profiles do not inherit credentials from adapter presets. A deployment may
+additionally list <code class="docutils literal notranslate"><span class="pre">credentials</span></code> the launched service itself needs (e.g.
+<code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> for a NIM container’s <a class="reference external" href="http://nvcr.io">nvcr.io</a> pull and engine download) even
+when the endpoint takes no API key; only the launcher collects these, and
+<code class="docutils literal notranslate"><span class="pre">ModelsConfig.required_credentials</span></code> stays endpoint keys only.</p>
 <p>The launcher validates the <code class="docutils literal notranslate"><span class="pre">.json</span></code> suffix before reading a profile; selecting a
 YAML profile is supported only for worker-side <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> loading. Model
 roles compose <code class="docutils literal notranslate"><span class="pre">AdapterSpec</span></code>, <code class="docutils literal notranslate"><span class="pre">EndpointSpec</span></code>, and <code class="docutils literal notranslate"><span class="pre">DeploymentSpec</span></code>, while their
@@ -613,6 +617,32 @@ without that route use <code class="docutils literal notranslate"><span class="p
 <code class="docutils literal notranslate"><span class="pre">health()</span></code> return <code class="docutils literal notranslate"><span class="pre">True</span></code> without a request — otherwise a worker’s readiness
 gate would block forever. See
 <code class="docutils literal notranslate"><span class="pre">docs/source/components/ai-services.md</span></code> for hosted endpoint operation.</p>
+</section>
+<section id="riva-grpc-speech-nim-stt-tts">
+<h2>Riva gRPC speech (NIM STT/TTS)<a class="headerlink" href="#riva-grpc-speech-nim-stt-tts" title="Link to this heading">#</a></h2>
+<p>NIM speech is Riva over gRPC, not OpenAI <code class="docutils literal notranslate"><span class="pre">/v1/audio</span></code>. The <code class="docutils literal notranslate"><span class="pre">riva_grpc</span></code> kind
+covers it, for self-hosted Riva/NIM speech containers and for hosted NVCF
+endpoints alike. It requires the <code class="docutils literal notranslate"><span class="pre">riva</span></code> extra (<code class="docutils literal notranslate"><span class="pre">xr-ai-models[riva]</span></code> →
+<code class="docutils literal notranslate"><span class="pre">nvidia-riva-client</span></code>); the import is deferred to <code class="docutils literal notranslate"><span class="pre">make_stt</span></code>/<code class="docutils literal notranslate"><span class="pre">make_tts</span></code> so
+the base install stays gRPC-free.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">stt</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">riva_grpc</span>
+<span class="w">  </span><span class="nt">category</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">stt</span>
+<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">localhost:50051</span><span class="w">   </span><span class="c1"># self-hosted container's gRPC port</span>
+<span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">en-US</span>
+</pre></div>
+</div>
+<p>STT input must be 16-bit PCM: <code class="docutils literal notranslate"><span class="pre">transcribe</span></code> accepts a 16-bit PCM WAV (any
+other sample width raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>, since the frames go to Riva labelled
+LINEAR_PCM and would transcribe as garbage) or raw int16 PCM with an
+explicit <code class="docutils literal notranslate"><span class="pre">sample_rate=</span></code>.</p>
+<p>TTS additionally takes <code class="docutils literal notranslate"><span class="pre">voice:</span></code> and <code class="docutils literal notranslate"><span class="pre">sample_rate:</span></code> (default 44100).
+<code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">true</span></code> (the default) runs a gRPC channel-ready probe. For a
+hosted NVCF endpoint, set <code class="docutils literal notranslate"><span class="pre">base_url:</span> <span class="pre">grpc.nvcf.nvidia.com:443</span></code>,
+<code class="docutils literal notranslate"><span class="pre">use_ssl:</span> <span class="pre">true</span></code>, <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>, the model’s <code class="docutils literal notranslate"><span class="pre">function_id:</span></code> from
+<a class="reference external" href="http://build.nvidia.com">build.nvidia.com</a>, and <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">false</span></code> (no health surface).</p>
+<p>Future non-OpenAI-compat backends (LiteLLM, vendor SDKs) plug in as new
+<code class="docutils literal notranslate"><span class="pre">kind</span></code>s in <code class="docutils literal notranslate"><span class="pre">_factory.py::make_*</span></code>; the protocols and callers do not change.</p>
 </section>
 <section id="tests">
 <h2>Tests<a class="headerlink" href="#tests" title="Link to this heading">#</a></h2>
@@ -676,6 +706,7 @@ gate would block forever. See
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deployment-profiles">Deployment profiles</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocols">Protocols</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#remote-hosted-nim-endpoints">Remote / hosted-NIM endpoints</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#riva-grpc-speech-nim-stt-tts">Riva gRPC speech (NIM STT/TTS)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tests">Tests</a></li>
 </ul>
   </nav></div>

@@ -58,8 +58,10 @@ Applications with multiple speech producers may place
 finite or incremental responses to `voice.contribution`; the aggregator owns
 participant-scoped ordering, preserves a lone stream, coalesces simultaneous
 finite updates through the configured `LLMService`, holds an active response
-for its estimated spoken duration, and publishes only the result to
-`voice.output`. This policy remains outside the private media
+for a bounded, open-loop estimate of its spoken duration, and publishes only
+the result to `voice.output`. Pending work is capacity-bounded with a
+drop-oldest policy, while urgent output bypasses or cancels rewriting and
+interrupts active speech. This policy remains outside the private media
 pipeline so applications opt in explicitly and retain ownership of which
 events should become speech.
 

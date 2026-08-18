@@ -56,7 +56,7 @@ Package Contents
    Candidate spoken output consumed by :class:`VoiceAggregationAgent`.
 
 
-.. py:class:: VoiceAggregationAgent(*, llm: xr_ai_models.LLMService, prompt: str = _DEFAULT_PROMPT, coalesce_window_s: float = 0.15, queue_capacity: int = 64, max_batch_size: int = 8, max_tokens: int = 192, stream_idle_timeout_s: float = 15.0, participant_idle_timeout_s: float = 60.0, speech_rate_wpm: float = 150.0, minimum_playback_s: float = 0.4)
+.. py:class:: VoiceAggregationAgent(*, llm: xr_ai_models.LLMService, prompt: str = _DEFAULT_PROMPT, coalesce_window_s: float = 0.15, queue_capacity: int = 64, max_batch_size: int = 8, max_tokens: int = 192, stream_idle_timeout_s: float = 15.0, participant_idle_timeout_s: float = 60.0, speech_rate_wpm: float = 150.0, minimum_playback_s: float = 0.4, maximum_playback_s: float = 30.0, rewrite_timeout_s: float = 5.0)
 
 
 

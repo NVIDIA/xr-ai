@@ -202,6 +202,7 @@ The LLM and VLM can run on [NVIDIA NIM](https://build.nvidia.com) instead of
 local vLLM — NIM exposes the same OpenAI-compatible `/v1/chat/completions`
 API, so this is a model-profile change with no worker code edits. STT and TTS
 stay local: hosted NIM speech (Riva) is not OpenAI `/v1/audio`-compatible.
+Self-hosted speech NIMs are covered below.
 
 A hosted entry uses an environment-variable reference for its credential,
 disables endpoint health probing, and declares external ownership:
@@ -237,37 +238,95 @@ disables endpoint health probing, and declares external ownership:
   hosted service.
 - **`model_name`** is the hosted model id from [build.nvidia.com](https://build.nvidia.com).
 
-For `simple-vlm-example`, set `models_config: models.hosted.json` in the worker
-YAML. This wrapped JSON profile is consumed by both the worker and orchestrator,
-so the local VLM process is omitted and `NGC_API_KEY` is requested
-automatically. Select `models.local.json` to switch back.
+Set `models_config: models.hosted.json` in the worker YAML. This wrapped
+JSON profile is consumed by both the worker and orchestrator, so the local
+VLM process is omitted and `NGC_API_KEY` is requested automatically. Select
+`models.local.json` to switch back.
 
-`xr-render-demo` retains its `model_backend: nim` selector and
-`models.nim.yaml` overlay. Provide `NGC_API_KEY` and do not run
-`model_servers`, whose single topology starts both local `omni` and `vlm`.
-Instead, start only the local STT service from the repository root, setting
-`GPU_PROFILE` to `dual_48G_ada`, `spark`, or `96G_blackwell`:
+### Self-hosted NIM containers (`models.vlm_llm_nim.json`)
+
+The same models can be pulled from NGC and served as **optimized NIM
+containers on your own GPUs**: same APIs as hosted NIM, no network hop, and
+speech included. Self-hosted Riva speech NIMs are reached through the
+`riva_grpc` model kind (requires the `xr-ai-models[riva]` extra, already a
+dependency of the sample workers).
+
+The NIM containers are owned by the shared model-servers stack, exactly
+like the local vLLM servers. Its deployment profiles pick the mix: every
+`managed` entry launches as a `nim_server` process (`services/nim-server`, a
+generic wrapper; the per-GPU-profile `nim_<role>_server.yaml` picks the
+image and ports) or as a local server:
 
 ```bash
-GPU_PROFILE=dual_48G_ada
-uv run --project services/stt-server stt_server \
-  --config "agent-samples/model-servers/yaml/${GPU_PROFILE}/stt_server.yaml"
+uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim
 ```
 
-Then start `xr_render_demo` in another terminal. Its orchestrator reuses STT,
-routes LLM and VLM requests to hosted NIM, and starts local TTS itself.
+- `vlm_llm_nim`: the LLM and VLM as NIM containers, STT and embedding local. Pairs
+  with each sample's `models.vlm_llm_nim.json` (the sample marks the NIM
+  services `reused` and owns only its piper TTS).
+- `vlm_speech_nim`: Riva speech NIM containers plus the Cosmos NIM. Pairs with
+  simple-vlm-example's `models.vlm_speech_nim.json`. Mutually exclusive with
+  `vlm_llm_nim` on 2x48 GB: Riva speech NIMs don't fit next to CloudXR + LOVR + the
+  LLM/VLM NIMs there.
 
-**Self-hosted NIM containers** work the same way: point `base_url` at the
-container (e.g. `http://localhost:8000`), set `readiness: health`, and choose
-`managed` or `reused` ownership if the launcher owns that service. Legacy flat
-profiles may continue to set `health_check: true` when it
-exposes `/v1/health`.
+The container `image:` is the model, so swapping models is a
+`nim_<role>_server.yaml` edit plus the matching profile entry. Selection is
+per entry, not per profile: each model role independently picks a local
+server, a self-hosted NIM container, or a hosted endpoint through its own
+`adapter`/`endpoint`/`deployment` sections. The shipped profiles are
+presets, not a closed set; a mixed setup is a copy of a shipped profile
+with the relevant entries changed, saved under any name and selected with
+`--models` (model-servers) or `models_config` (workers). When mixing, mind
+port overlaps: give a NIM container a free port or drop the overlapping
+local server from the profile.
 
-## vLLM model persistence
+A self-hosted speech entry uses the Riva gRPC kind:
+
+```yaml
+stt:
+  kind:      riva_grpc
+  category:  stt
+  base_url:  localhost:50051   # the container's gRPC port
+  language:  en-US
+```
+
+TTS additionally takes `voice:` (a Riva voice name) and `sample_rate:`
+(default 44100). `health_check: true` (the default) runs a gRPC
+channel-ready probe.
+
+Requirements: docker + NVIDIA Container Toolkit, `NGC_API_KEY` (used for the
+`nvcr.io` image pull *and* by the container itself to download the
+GPU-matched optimized engine from NGC on first start; multi-GB, cached
+under `models/nim/` for later runs), and GPU capacity for every container.
+`cuda_visible_devices` placement lives in the per-GPU-profile
+`nim_*_server.yaml` files (dual_48G_ada values are live-validated; the
+other profiles ship estimates). Readiness gates on each container's
+`/v1/health/ready`.
+
+A NIM container serving something the samples don't ship is the same
+mechanism by hand: point an `openai_compat` entry's `base_url` at its port
+(its health route is `/v1/health/ready`, so keep `health_check: false` and
+let the container gate readiness), or a `riva_grpc` entry at its gRPC port.
+With `ownership: external` (you run the container yourself) that is the
+whole change. For an orchestrator to launch or expect it, the entry's
+`deployment.service` must name a process row in that orchestrator's service
+table (`_MODEL_SERVICES` in model-servers, `_MODEL_PROCESSES` in a sample);
+a service name with no row fails fast at startup, and adding one row plus
+its config YAML is the only orchestrator edit the profile system ever
+needs.
+
+## Model-server persistence
 
 The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
 `nemotron3_nano_llm_server`, `nemotron_omni_llm_server`, `embedding_server`)
-**survive stack restarts by design**. Each persistent wrapper script checks its
+and self-hosted NIM containers (`nim_server`)
+**survive stack restarts by design**, including when a deployment profile
+marks them `managed`: the stack starts them, but a clean shutdown leaves them
+serving so the next start reuses hot weights. `model_servers --stop` is the
+teardown. Switching profiles needs no manual teardown: at startup a wrapper
+that finds a *different* persistent xr-ai container holding its port (found
+by the `xr-ai-vllm.port=<port>` label) stops and removes it before launching
+its own. Each persistent wrapper script checks its
 health endpoint before spawning vLLM:
 
 - **Already running with a matching launch fingerprint** → touch the ready
@@ -296,10 +355,10 @@ launcher-controlled Docker contract. This prevents a failed container created
 by one sample profile—or by older launcher behavior—from being restarted later
 with stale memory limits, entrypoint, setup commands, or model arguments.
 
-**Stopping the persisted servers** — run from the sample directory:
+**Stopping the persisted servers**, from the repo root:
 
 ```bash
-uv run xr_render_demo --stop
+uv run --project agent-samples/model-servers model_servers --stop
 ```
 
 Cleanup locates labelled Docker containers before inspecting ports, then
@@ -374,7 +433,7 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
 
 ### Cleanup
 
-`uv run xr_render_demo --stop` works for both modes. Cleanup locates labelled
+`model_servers --stop` works for both modes. Cleanup locates labelled
 Docker containers before inspecting ports, then stops them with `docker stop`
 (escalating to `docker kill` after 20 s). Pip-mode processes carry an
 `xr-ai-vllm` ownership marker; unknown listeners and failed inspection abort
