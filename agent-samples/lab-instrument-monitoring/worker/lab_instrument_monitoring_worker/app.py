@@ -14,8 +14,14 @@ import nemo_relay
 from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_llm, make_stt, make_tts, make_vlm
-from xr_ai_runtime import AgentRuntime
-from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent, VoiceAggregationAgent
+from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
+from xr_ai_voice import (
+    HubVoiceTransport,
+    VadConfig,
+    VoiceAgent,
+    VoiceAggregationAgent,
+    VoiceParticipantLeft,
+)
 from xr_ai_voicegate import load_voice_gate_config
 
 from .config import WorkerConfig
@@ -32,6 +38,22 @@ from .instrument_alerts import InstrumentAlertAgent
 from .instrument_monitor import InstrumentMonitorAgent
 from .instruments import LabInstrumentAgent
 from .monitor import MonitorAgent
+
+
+class _VoiceAggregationLifecycleAgent(Agent):
+    def __init__(self, voice_aggregation: VoiceAggregationAgent) -> None:
+        super().__init__()
+        self._voice_aggregation = voice_aggregation
+
+    @subscribe(PARTICIPANT_LEFT_TOPIC)
+    async def participant_left(
+        self,
+        _event: VoiceParticipantLeft,
+        ctx: RuntimeContext,
+    ) -> None:
+        participant_id = ctx.metadata.participant_id
+        if participant_id is not None:
+            await self._voice_aggregation.release(participant_id)
 
 
 @asynccontextmanager
@@ -85,7 +107,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         probes={"llm": llm.health, "vlm": vlm.health},
         ready_file=ready_file,
         closeables=(llm, vlm),
-        text_topic="",
+        text_topic="agent.response",
         idle_timeout_secs=config.idle_timeout_secs,
         transport=transport,
         participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
@@ -125,11 +147,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             images=images,
             vlm=vlm,
             device_map=config.device_map,
-            debug_dir=(
-                config.artifacts_dir / "marker-scans"
-                if config.capture_marker_scans
-                else None
-            ),
+            debug_dir=(config.artifacts_dir / "marker-scans" if config.capture_marker_scans else None),
         ),
     )
     instrument_monitor = runtime.register(
@@ -158,6 +176,10 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     voice_aggregation = runtime.register(
         "voice-aggregation",
         VoiceAggregationAgent(llm=llm),
+    )
+    runtime.register(
+        "voice-aggregation-lifecycle",
+        _VoiceAggregationLifecycleAgent(voice_aggregation),
     )
     runtime.register("voice", voice)
 

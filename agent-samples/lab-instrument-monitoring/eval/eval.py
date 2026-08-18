@@ -9,7 +9,10 @@ import asyncio
 from pathlib import Path
 
 import yaml
-from lab_instrument_monitoring_worker.foreground import FOREGROUND_TOOL_DEFS
+from lab_instrument_monitoring_worker.foreground import (
+    FOREGROUND_TOOL_DEFS,
+    FOREGROUND_TOOL_REQUEST_MODELS,
+)
 from xr_ai_models import ChatMessage, load_models_config, make_llm
 
 _SAMPLE = Path(__file__).resolve().parents[1]
@@ -41,15 +44,27 @@ async def main() -> None:
                 enable_thinking=False,
             )
             calls = response.tool_calls or []
-            call = calls[0] if calls else None
-            actual_tool = call.name if call else None
             expected_tool = case["expected_tool"]
-            passed = actual_tool == expected_tool
+            actual_tools = [call.name for call in calls]
+            expected_tools = [] if expected_tool is None else [expected_tool]
+            errors: list[str] = []
+            for call in calls:
+                request_model = FOREGROUND_TOOL_REQUEST_MODELS.get(call.name)
+                if request_model is None:
+                    errors.append(f"unknown tool {call.name!r}")
+                    continue
+                try:
+                    request_model.model_validate_json(call.arguments)
+                except ValueError as exc:
+                    errors.append(f"invalid {call.name!r} arguments: {exc}")
+            passed = actual_tools == expected_tools and not errors
             label = "PASS" if passed else "FAIL"
-            print(f"{label} {case['name']}: tool={actual_tool!r}")
+            print(f"{label} {case['name']}: tools={actual_tools!r}")
             if not passed:
                 print(f"  content={response.content!r}")
-                failures.append(f"{case['name']}: expected {expected_tool!r}, received {actual_tool!r}")
+                failures.append(
+                    f"{case['name']}: expected {expected_tools!r}, received {actual_tools!r}; errors={errors!r}"
+                )
     finally:
         await llm.close()
     if failures:

@@ -77,7 +77,11 @@ For a `current_view` selection, `ForegroundAgent` uses the same direct path as
 `simple-vlm-example`: `CurrentFrameTool` selects one frame and
 `StreamingImageQueryTool` publishes chunks to participant voice. The tool is a
 direct return, so the completed visual answer does not incur a second language
-model call.
+model call. A dedicated current-view system prompt applies visible-evidence,
+plain-speech, and response-length rules directly to the streaming VLM output.
+The default voice gate accepts `agent` and `hey agent`, plays a listening chime,
+and allows a five-second follow-up. `VoiceAgent` mirrors spoken text to the
+client's `agent.response` topic so the same output can be rendered as captions.
 
 ## Source map
 
@@ -239,8 +243,8 @@ tools, one owned task per participant, current-frame selection, a dedicated
 ## Lifecycle invariants
 
 - A participant join creates fresh output and application state.
-- A participant leave cancels foreground and background work before image
-  resources are released.
+- Participant-leave subscribers run concurrently. Each handler must tolerate
+  another subscriber cancelling work or releasing image references first.
 - A superseding foreground query cancels the previous participant turn.
 - Agent tasks fork the Relay context so tool execution remains traceable.
 - Model and tool cancellation propagates; it is not converted into a result.
@@ -256,7 +260,8 @@ Use three layers:
 1. Unit-test deterministic state normalization, change detection, last-seen
    policy, and device-map resolution.
 2. Decode every checked-in marker and verify its resolved device name.
-3. Evaluate foreground routing separately from visual-reading quality.
+3. Evaluate foreground routing separately from the monitor and instrument VLM
+   prompt contracts in `eval/visual_eval.py`.
 
 For manual pipeline testing, enable `capture_marker_scans` and inspect the saved
 marker-scan image first. It is

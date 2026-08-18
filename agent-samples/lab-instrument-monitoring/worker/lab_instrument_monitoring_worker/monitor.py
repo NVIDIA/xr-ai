@@ -99,7 +99,11 @@ class MonitorAgent(Agent):
         if interval_s <= 0:
             raise ValueError("interval_s must be positive")
         self._images = images
-        self.query_image = ImageQueryTool(images=images.images, vlm=vlm)
+        self.query_image = ImageQueryTool(
+            images=images.images,
+            vlm=vlm,
+            system_prompt=prompt.strip(),
+        )
         self.start_monitoring = Tool(
             "start_monitoring",
             "Start background visual monitoring for one participant.",
@@ -135,7 +139,6 @@ class MonitorAgent(Agent):
                 self.monitoring_status,
             )
         )
-        self._prompt = prompt.strip()
         self._interval_s = interval_s
         self._runtime: AgentRuntime | None = None
         self._tasks: dict[str, asyncio.Task[None]] = {}
@@ -262,8 +265,13 @@ class MonitorAgent(Agent):
         now_us = time.time_ns() // 1_000
         previous = self._previous.get(participant_id)
         instruction = self._instructions.get(participant_id, _DEFAULT_FOCUS)
-        previous_text = json.dumps(previous, ensure_ascii=False) if previous else "null"
-        query = f"{self._prompt}\nMonitoring focus: {instruction}\nPrevious caption: {previous_text}"
+        query = json.dumps(
+            {
+                "monitoring_focus": instruction,
+                "previous_caption": previous,
+            },
+            ensure_ascii=False,
+        )
         try:
             frame = await self._images.get_current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
             result = await self.query_image.execute(ImageQueryRequest(image=frame.image, query=query))

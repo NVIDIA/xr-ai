@@ -78,7 +78,9 @@ Return-direct monitor controls end the turn immediately.
 When the model selects `current_view`, the sample follows the
 `simple-vlm-example` path: it acquires one frame and publishes
 `StreamingImageQueryTool` chunks directly to voice. The visual answer is not
-sent back through the foreground LLM for rewriting.
+sent back through the foreground LLM for rewriting. A dedicated current-view
+prompt applies visible-evidence, plain-speech, and response-length rules on this
+direct path.
 
 ## Run
 
@@ -110,8 +112,11 @@ or stopped.
 
 Every non-empty final STT result is written to `transcript.jsonl` before voice
 gating, including ambient speech rejected by a configured wake phrase. The
-default gate is always on, so every final STT turn also reaches the foreground
-as a `UserQuery`. Typed text reaches the foreground but is not an STT transcript.
+default gate accepts `agent` and `hey agent`, plays a listening chime, and
+allows one follow-up utterance for five seconds. Accepted speech reaches the
+foreground as a `UserQuery`. Typed text reaches the foreground but is not an
+STT transcript. Spoken agent text is also published to the client
+`agent.response` topic for captions and other accessibility presentation.
 
 ## File outputs
 
@@ -151,9 +156,12 @@ adapters, endpoints, readiness, and deployment ownership live in
 ## Foreground routing eval
 
 The eval checks whether the LLM selects current vision, monitoring history,
-background controls, or no tool. It requires `agent-llm` to be running.
+background controls, or no tool, and validates every tool call against its
+runtime request model. It requires the configured `llm` role to be running; the
+default profile provides it through `model-servers`.
 
 ```bash
 cd agent-samples/lab-instrument-monitoring
 uv run --project worker python eval/eval.py
+uv run --project worker python eval/visual_eval.py
 ```

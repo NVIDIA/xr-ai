@@ -12,7 +12,17 @@ LLM. Start `model-servers`, then run from the sample root:
 uv run --project worker python eval/eval.py
 ```
 
-The eval checks the first model action. Current visible facts must select the
-live-frame tool, recent events must select monitoring history, and ordinary
-conversation or general knowledge must not select a tool. Background monitoring
-requests must select its start, stop, or status control.
+The eval checks the complete first model action, including the exact tool-call
+count and validation of every call against the worker's request model. Current
+visible facts must select the argument-free live-frame tool; the worker passes
+the original user request to the VLM. Recent events must select monitoring history, and ordinary conversation or general
+knowledge must not select a tool. Background monitoring requests must select
+its start, stop, or status control.
+
+`visual_cases.yaml` exercises the VLM-facing prompts with generated images. It
+covers monitor baseline, changed, unchanged, adversarial focus and visible
+instruction text, plus same-device and ambiguous instrument-display association:
+
+```bash
+uv run --project worker python eval/visual_eval.py
+```

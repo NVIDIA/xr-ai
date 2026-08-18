@@ -316,11 +316,11 @@ class InstrumentMonitorAgent(Agent):
                 previous.last_seen_monotonic = seen_at
                 previous.state.last_seen_us = reading.timestamp_us
                 previous.state.tracking = True
-                previous.unit = unit
                 previous.state.meter_reading = display
-                if value == previous.value:
+                if (value, unit) == (previous.value, previous.unit):
                     continue
                 previous.value = value
+                previous.unit = unit
                 changes.append(
                     InstrumentChange(
                         timestamp_us=reading.timestamp_us,

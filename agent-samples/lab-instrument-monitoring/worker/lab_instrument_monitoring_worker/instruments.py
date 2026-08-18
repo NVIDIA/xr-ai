@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
+from collections import Counter
 from pathlib import Path
 
 from loguru import logger
@@ -102,11 +104,12 @@ class LabInstrumentAgent(Agent):
                     message=tracked.message or "The camera frame could not be scanned.",
                 )
             markers = tracked.markers
+            marker_families = Counter(marker.marker_type.value for marker in markers)
             logger.info(
-                "instrument marker scan pid={!r} image={} markers={}",
+                "instrument marker scan pid={!r} image={} marker_families={}",
                 request.participant_id,
                 scan_path,
-                [f"{marker.marker_type.value}:{marker.value}" for marker in markers],
+                dict(marker_families),
             )
         except asyncio.CancelledError:
             raise
@@ -132,9 +135,9 @@ class LabInstrumentAgent(Agent):
                 raise
             except Exception:
                 logger.opt(exception=True).warning(
-                    "instrument display read failed pid={!r} marker={!r}",
+                    "instrument display read failed pid={!r} marker={}",
                     request.participant_id,
-                    marker.value,
+                    _marker_log_id(marker),
                 )
                 continue
             if reading is not None:
@@ -172,9 +175,8 @@ class LabInstrumentAgent(Agent):
         identity = self._device_map.resolve(marker.marker_type, marker.value)
         if identity is None:
             logger.warning(
-                "ignoring unmapped instrument marker type={} id={!r}",
-                marker.marker_type.value,
-                marker.value,
+                "ignoring unmapped instrument marker marker={}",
+                _marker_log_id(marker),
             )
             return None
         marked = await self._fill_polygon.execute(
@@ -219,6 +221,11 @@ class LabInstrumentAgent(Agent):
         if not result.readings:
             return result.message or "No lab instrument readings were available."
         return "; ".join(f"{reading.device_name}: {reading.meter_reading}" for reading in result.readings)
+
+
+def _marker_log_id(marker: TrackedMarker) -> str:
+    digest = hashlib.sha256(marker.value.encode("utf-8", errors="replace")).hexdigest()[:12]
+    return f"{marker.marker_type.value}:{digest}"
 
 
 __all__ = [

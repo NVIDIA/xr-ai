@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
+from pathlib import Path
 
 import nemo_relay
 from loguru import logger
@@ -66,6 +67,9 @@ LAB_INSTRUMENTS_START_TOOL = "lab_instruments__start"
 LAB_INSTRUMENTS_STOP_TOOL = "lab_instruments__stop"
 LAB_INSTRUMENTS_STATUS_TOOL = "lab_instruments__status"
 _MAX_TOOL_ROUNDS = 4
+_CURRENT_VIEW_PROMPT = (
+    Path(__file__).with_name("prompts").joinpath("current_view_prompt.txt").read_text(encoding="utf-8").strip()
+)
 
 _CURRENT_VIEW_DESCRIPTION = (
     "Inspect the glasses camera for the assistant's present visual field and any current "
@@ -91,11 +95,6 @@ _LAB_INSTRUMENTS_STATUS_DESCRIPTION = (
 
 class _CurrentFrameArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
-    question: str = Field(
-        min_length=1,
-        description="A specific question about the current camera frame.",
-    )
 
 
 class _HistoryArgs(BaseModel):
@@ -171,6 +170,18 @@ FOREGROUND_TOOL_DEFS = (
     ),
 )
 
+FOREGROUND_TOOL_REQUEST_MODELS: dict[str, type[BaseModel]] = {
+    CURRENT_VIEW_TOOL: _CurrentFrameArgs,
+    RECENT_VISUAL_HISTORY_TOOL: _HistoryArgs,
+    VISUAL_MONITOR_START_TOOL: _StartMonitoringArgs,
+    VISUAL_MONITOR_STOP_TOOL: _ControlArgs,
+    VISUAL_MONITOR_STATUS_TOOL: _ControlArgs,
+    LAB_INSTRUMENTS_READ_TOOL: _ControlArgs,
+    LAB_INSTRUMENTS_START_TOOL: _ControlArgs,
+    LAB_INSTRUMENTS_STOP_TOOL: _ControlArgs,
+    LAB_INSTRUMENTS_STATUS_TOOL: _ControlArgs,
+}
+
 
 class ForegroundAgent(Agent):
     """Answer accepted queries with a bounded model-selected tool loop."""
@@ -188,7 +199,11 @@ class ForegroundAgent(Agent):
         prompt: str,
     ) -> None:
         self._images = images
-        self._vision = StreamingImageQueryTool(images=images.images, vlm=vlm)
+        self._vision = StreamingImageQueryTool(
+            images=images.images,
+            vlm=vlm,
+            system_prompt=_CURRENT_VIEW_PROMPT,
+        )
         super().__init__((self._vision,))
         self._llm = llm
         self._files = files
@@ -509,9 +524,7 @@ class ForegroundAgent(Agent):
         chunks: list[str] = []
         try:
             try:
-                frame = await self._images.get_current_frame.execute(
-                    CurrentFrameRequest(participant_id=participant_id)
-                )
+                frame = await self._images.get_current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
             except (FrameUnavailable, RuntimeError) as exc:
                 unavailable = _frame_unavailable_message(exc)
                 if unavailable is None:
@@ -528,9 +541,7 @@ class ForegroundAgent(Agent):
                 )
                 opened = True
                 return ImageQueryResult(text=unavailable, available=False)
-            stream = self._vision.stream(
-                ImageQueryRequest(image=frame.image, query=query)
-            )
+            stream = self._vision.stream(ImageQueryRequest(image=frame.image, query=query))
             try:
                 async for chunk in stream:
                     chunks.append(chunk.text)
@@ -610,6 +621,7 @@ def _frame_unavailable_message(error: BaseException) -> str | None:
 __all__ = [
     "CURRENT_VIEW_TOOL",
     "FOREGROUND_TOOL_DEFS",
+    "FOREGROUND_TOOL_REQUEST_MODELS",
     "LAB_INSTRUMENTS_READ_TOOL",
     "LAB_INSTRUMENTS_START_TOOL",
     "LAB_INSTRUMENTS_STATUS_TOOL",
