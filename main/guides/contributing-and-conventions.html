@@ -337,6 +337,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -448,6 +449,9 @@ change therefore updates the code, its co-located documentation, and tests; the
 strict documentation build rejects unresolved or undocumented exports. Update
 a README or narrative page when concepts, workflows, operations, or
 architecture change, and add a migration entry for a breaking change.</p>
+<p>The user-facing command catalog is generated from top-level sample
+<code class="docutils literal notranslate"><span class="pre">[project.scripts]</span></code> entries and literal <code class="docutils literal notranslate"><span class="pre">argparse</span></code> declarations. Keep option
+descriptions in <code class="docutils literal notranslate"><span class="pre">help=</span></code> and do not repeat flag tables in narrative pages.</p>
 <p>A <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> change also requires a <code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code> update; regenerate
 the affected project’s gitignored <code class="docutils literal notranslate"><span class="pre">uv.lock</span></code> locally. New source files require
 an SPDX header; see <a class="reference internal" href="spdx-headers.html"><span class="std std-doc">SPDX headers</span></a>.</p>
