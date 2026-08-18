@@ -979,7 +979,9 @@ OpenAI-compatible HTTP contract as the other LLM servers — swap the port to
 swap backends. Hosting backend is selectable per YAML (refer to <em>Choosing the
 vLLM runtime</em>); persists across stack restarts in both pip and docker modes.</p></li>
 <li><p><strong>stt-server</strong> loads parakeet-tdt-0.6b-v3 via NeMo ASR in-process.
-English-only; the <code class="docutils literal notranslate"><span class="pre">language</span></code> and <code class="docutils literal notranslate"><span class="pre">temperature</span></code> form fields are accepted but ignored.</p></li>
+English-only; the <code class="docutils literal notranslate"><span class="pre">language</span></code> and <code class="docutils literal notranslate"><span class="pre">temperature</span></code> form fields are accepted but
+ignored. Set <code class="docutils literal notranslate"><span class="pre">startup_timeout_s</span></code> to a positive finite number to override the
+600-second cold-start budget.</p></li>
 <li><p><strong>magpie-tts</strong> loads magpie_tts_multilingual_357m via NeMo TTS in-process.</p></li>
 <li><p><strong>piper-tts</strong> serves any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
 All inference runs in a thread pool so the asyncio loop is never blocked.</p></li>
