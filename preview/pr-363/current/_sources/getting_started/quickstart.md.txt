@@ -187,9 +187,10 @@ uv run lab_instrument_monitoring
 
 Connect an existing glasses or platform client using the authenticated URL,
 room, and token printed by the hub. The token and signaling routes remain
-available on port 8080 even though no static application is served. Refer to
-the sample README for output schemas, configuration, and the foreground
-tool-routing eval.
+available on port 8080 together with the shared connection web client. Refer to
+the {doc}`lab instrument architecture guide </reference/lab-instrument-monitoring>`
+for reusable agent patterns, marker setup, output contracts, and adaptation
+recipes.
 
 ## XR render demo (voice-driven sphere in CloudXR)
 
