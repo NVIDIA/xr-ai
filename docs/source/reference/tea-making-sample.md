@@ -118,6 +118,10 @@ participant has an active step.
 
 There is exactly one model loop. The foreground agent does not ask one model to
 route to another agent, and background agents never capture a foreground turn.
+`current_view` is a direct-return exception within that loop: after the route is
+selected, `CurrentFrameTool` and `StreamingImageQueryTool` use the same streamed
+voice path as `simple-vlm-example`, without a second language-model pass over
+the visual answer.
 Each turn contains the system prompt, current query, and current workflow
 context—no accumulated conversation history.
 

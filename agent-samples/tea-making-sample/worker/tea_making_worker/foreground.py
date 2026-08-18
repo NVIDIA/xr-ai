@@ -10,12 +10,18 @@ from contextlib import suppress
 
 import nemo_relay
 from loguru import logger
+from xr_ai_hub import FrameUnavailable
 from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef, VLMService
 from xr_ai_runtime import Agent, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
+from xr_ai_tools.current_frame import CurrentFrameRequest
 from xr_ai_tools.rag import RAGTools
 from xr_ai_tools.tool_calling import ToolLoopIterationLimitError, run_tool_loop
-from xr_ai_tools.vision import ImageQueryTool
+from xr_ai_tools.vision import (
+    ImageQueryRequest,
+    ImageQueryResult,
+    StreamingImageQueryTool,
+)
 from xr_ai_voice import (
     VOICE_CONTRIBUTION_TOPIC,
     UserQuery,
@@ -39,7 +45,7 @@ from .images import ParticipantImageAgent
 from .transcript import TranscriptAgent
 from .video_log import VideoLogAgent
 from .workflow import GuidanceAgent
-from .workflow_tools import participant_current_view_tool, rag_lookup_tool
+from .workflow_tools import CurrentViewRequest, rag_lookup_tool
 
 _MAX_TOOL_ROUNDS = 4
 
@@ -60,10 +66,9 @@ class ForegroundAgent(Agent):
         transcript: TranscriptAgent,
         video_log: VideoLogAgent,
         prompt: str,
-        vlm_timeout_s: float,
     ) -> None:
-        self.query_image = ImageQueryTool(images=images.images, vlm=vlm)
-        super().__init__((self.query_image,))
+        self._vision = StreamingImageQueryTool(images=images.images, vlm=vlm)
+        super().__init__((self._vision,))
         self._llm = llm
         self._images = images
         self._rag = rag
@@ -73,7 +78,6 @@ class ForegroundAgent(Agent):
         self._transcript = transcript
         self._video_log = video_log
         self._prompt = prompt.strip()
-        self._vlm_timeout_s = vlm_timeout_s
         self._tasks: dict[str, asyncio.Task[None]] = {}
 
     @subscribe(USER_QUERY_TOPIC)
@@ -128,7 +132,12 @@ class ForegroundAgent(Agent):
         participant_id = self._participant(ctx)
         with nemo_relay.use_scope_stack(nemo_relay.create_scope_stack()):
             try:
-                response, tools = await self._answer(query.text, participant_id)
+                response, tools, spoken = await self._answer(
+                    query.text,
+                    participant_id,
+                    ctx,
+                    timestamp_us=query.timestamp_us,
+                )
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -137,6 +146,7 @@ class ForegroundAgent(Agent):
                 )
                 response = "I couldn't complete that request. Please try again."
                 tools = []
+                spoken = False
             try:
                 await ctx.publish(
                     FOREGROUND_RECORD_TOPIC,
@@ -147,21 +157,34 @@ class ForegroundAgent(Agent):
                         tools=tools,
                     ),
                 )
-                await ctx.publish(
-                    VOICE_CONTRIBUTION_TOPIC,
-                    VoiceOutput(
-                        text=response,
-                        interrupt=True,
-                        timestamp_us=query.timestamp_us,
-                    ),
-                )
+                if not spoken:
+                    await ctx.publish(
+                        VOICE_CONTRIBUTION_TOPIC,
+                        VoiceOutput(
+                            text=response,
+                            interrupt=True,
+                            timestamp_us=query.timestamp_us,
+                        ),
+                    )
             except RuntimeClosedError:
                 return
 
-    async def _answer(self, query: str, participant_id: str) -> tuple[str, list[str]]:
+    async def _answer(
+        self,
+        query: str,
+        participant_id: str,
+        ctx: RuntimeContext | None = None,
+        *,
+        timestamp_us: int | None = None,
+    ) -> tuple[str, list[str], bool]:
         active_context = self._guidance.active_context(participant_id)
         if active_context is None:
-            tools = self._root_tools(participant_id)
+            tools = self._root_tools(
+                participant_id,
+                query=query,
+                ctx=ctx,
+                timestamp_us=timestamp_us,
+            )
             system_prompt = self._prompt
             route = "root"
         else:
@@ -169,7 +192,13 @@ class ForegroundAgent(Agent):
             if active_tools is None:
                 raise RuntimeError("active tea context has no active tool set")
             tools = _merge_tool_sets(
-                active_tools,
+                self._replace_current_view(
+                    active_tools,
+                    participant_id,
+                    query=query,
+                    ctx=ctx,
+                    timestamp_us=timestamp_us,
+                ),
                 self._background_tools(participant_id),
             )
             system_prompt = f"{self._prompt}\n\nActive tea guide:\n{active_context}"
@@ -213,25 +242,156 @@ class ForegroundAgent(Agent):
             return (
                 "I couldn't finish that request within the tool limit.",
                 [record.call.name for record in exc.tool_calls],
+                False,
             )
         fallback = "Done." if result.return_direct else "I don't have an answer."
+        calls = [record.call.name for record in result.tool_calls]
         return (
             result.content.strip() or fallback,
-            [record.call.name for record in result.tool_calls],
+            calls,
+            result.return_direct and calls == ["current_view"],
         )
 
-    def _root_tools(self, participant_id: str) -> ToolSet:
-        current_view = participant_current_view_tool(
+    def _root_tools(
+        self,
+        participant_id: str,
+        *,
+        query: str,
+        ctx: RuntimeContext | None,
+        timestamp_us: int | None,
+    ) -> ToolSet:
+        current_view = self._current_view_tool(
             participant_id,
-            self._images.get_current_frame,
-            self.query_image,
-            timeout_s=self._vlm_timeout_s,
+            query=query,
+            ctx=ctx,
+            timestamp_us=timestamp_us,
         )
         return _merge_tool_sets(
             ToolSet((current_view, rag_lookup_tool(self._rag))),
             self._guidance.root_tools(participant_id),
             self._background_tools(participant_id),
         )
+
+    def _replace_current_view(
+        self,
+        tools: ToolSet,
+        participant_id: str,
+        *,
+        query: str,
+        ctx: RuntimeContext | None,
+        timestamp_us: int | None,
+    ) -> ToolSet:
+        current_view = self._current_view_tool(
+            participant_id,
+            query=query,
+            ctx=ctx,
+            timestamp_us=timestamp_us,
+        )
+        return ToolSet(
+            {
+                name: current_view if name == "current_view" else tool
+                for name, tool in tools.items()
+            }
+        )
+
+    def _current_view_tool(
+        self,
+        participant_id: str,
+        *,
+        query: str,
+        ctx: RuntimeContext | None,
+        timestamp_us: int | None,
+    ) -> Tool[CurrentViewRequest, ImageQueryResult]:
+        async def inspect(_request: CurrentViewRequest) -> ImageQueryResult:
+            if ctx is None:
+                raise RuntimeError("current-view streaming requires a runtime context")
+            return await self._stream_current_view(
+                query,
+                participant_id,
+                ctx,
+                timestamp_us=timestamp_us,
+            )
+
+        return Tool(
+            "current_view",
+            "Inspect this participant's current camera frame for a specific visible fact.",
+            CurrentViewRequest,
+            ImageQueryResult,
+            inspect,
+            return_direct=True,
+            render_result=lambda result: result.text,
+        )
+
+    async def _stream_current_view(
+        self,
+        query: str,
+        participant_id: str,
+        ctx: RuntimeContext,
+        *,
+        timestamp_us: int | None,
+    ) -> ImageQueryResult:
+        response_id = ctx.metadata.message_id
+        first = True
+        opened = False
+        cancelled = False
+        chunks: list[str] = []
+        try:
+            try:
+                frame = await self._images.get_current_frame.execute(
+                    CurrentFrameRequest(participant_id=participant_id)
+                )
+            except (FrameUnavailable, RuntimeError) as exc:
+                unavailable = _frame_unavailable_message(exc)
+                if unavailable is None:
+                    raise
+                await ctx.publish(
+                    VOICE_CONTRIBUTION_TOPIC,
+                    VoiceOutput(
+                        text=unavailable,
+                        response_id=response_id,
+                        final=False,
+                        interrupt=True,
+                        timestamp_us=timestamp_us,
+                    ),
+                )
+                opened = True
+                return ImageQueryResult(text=unavailable, available=False)
+            stream = self._vision.stream(
+                ImageQueryRequest(image=frame.image, query=query)
+            )
+            try:
+                async for chunk in stream:
+                    chunks.append(chunk.text)
+                    await ctx.publish(
+                        VOICE_CONTRIBUTION_TOPIC,
+                        VoiceOutput(
+                            text=chunk.text,
+                            response_id=response_id,
+                            final=False,
+                            interrupt=first,
+                            timestamp_us=timestamp_us,
+                        ),
+                    )
+                    first = False
+                    opened = True
+            finally:
+                close = getattr(stream, "aclose", None)
+                if close is not None:
+                    await close()
+            return ImageQueryResult(text="".join(chunks))
+        except asyncio.CancelledError:
+            cancelled = True
+            raise
+        finally:
+            if opened and not cancelled:
+                with suppress(RuntimeClosedError):
+                    await ctx.publish(
+                        VOICE_CONTRIBUTION_TOPIC,
+                        VoiceOutput(
+                            response_id=response_id,
+                            timestamp_us=timestamp_us,
+                        ),
+                    )
 
     def _background_tools(self, participant_id: str) -> ToolSet:
         return _merge_tool_sets(
@@ -265,6 +425,24 @@ class ForegroundAgent(Agent):
         if participant_id is None:
             raise ValueError("foreground queries require a participant")
         return participant_id
+
+
+def _frame_unavailable_message(error: BaseException) -> str | None:
+    """Recover a camera error from native or Relay-scrubbed exceptions."""
+
+    relay_prefix = "internal error: FrameUnavailable:"
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        if isinstance(current, FrameUnavailable):
+            return str(current)
+        if isinstance(current, RuntimeError):
+            message = str(current)
+            if message.startswith(relay_prefix):
+                return message.removeprefix(relay_prefix).strip()
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return None
 
 
 def _merge_tool_sets(*catalogs: ToolSet) -> ToolSet:

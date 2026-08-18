@@ -71,6 +71,11 @@ retrieve tea references, control the tea workflow, or start and stop background
 tasks. Participant identity is injected by the application and is never exposed
 as a model-selected argument.
 
+When that loop selects `current_view`, the sample uses the same direct streaming
+path as `simple-vlm-example`: one current frame goes to
+`StreamingImageQueryTool`, whose chunks go straight to participant voice. Omni's
+visual response is not passed back through the foreground LLM for rewriting.
+
 The tea workflow advances only after explicit user commands. Visual observations
 may update evidence-backed state, but they do not silently move to the next step.
 Participant joins create fresh state; leaving cancels participant-owned work.

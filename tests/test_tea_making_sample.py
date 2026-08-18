@@ -369,10 +369,19 @@ async def test_active_workflow_keeps_background_stop_and_status_tools() -> None:
         transcript=transcript,
         video_log=video_log,
         prompt="Route.",
-        vlm_timeout_s=15.0,
     )
 
     await foreground._answer("Is recording running?", "participant-controls")
+
+    active_tools = guidance.active_tools("participant-controls")
+    assert active_tools is not None
+    current_view = foreground._replace_current_view(
+        active_tools,
+        "participant-controls",
+        query="What do you see?",
+        ctx=None,
+        timestamp_us=None,
+    ).get("current_view")
 
     assert {
         "change_watch__stop",
@@ -382,6 +391,7 @@ async def test_active_workflow_keeps_background_stop_and_status_tools() -> None:
         "video_log__stop",
         "video_log__status",
     } <= observed_tools
+    assert current_view is not None and current_view.return_direct is True
 
 
 @pytest.mark.asyncio
