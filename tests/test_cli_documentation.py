@@ -22,6 +22,7 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
     assert set(commands) == {"model_servers", "simple_vlm_example", "xr_render_demo"}
     assert [argument.flags for argument in commands["model_servers"].arguments] == [
         ("--stop",),
+        ("--models",),
         ("--allow-anonymous",),
     ]
     assert [argument.flags for argument in commands["simple_vlm_example"].arguments] == [
@@ -34,7 +35,8 @@ def test_catalog_builds_repository_root_invocation() -> None:
     commands = {command.program: command for command in load_cli_catalog(_ROOT)}
 
     assert commands["model_servers"].invocation == (
-        "uv run --project agent-samples/model-servers model_servers [--stop] [--allow-anonymous]"
+        "uv run --project agent-samples/model-servers model_servers "
+        "[--stop] [--models NAME_OR_PATH] [--allow-anonymous]"
     )
 
 
