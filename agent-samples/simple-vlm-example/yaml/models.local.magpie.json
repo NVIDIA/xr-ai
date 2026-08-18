@@ -1,0 +1,19 @@
+{
+  "models": {
+    "stt": {
+      "adapter": {"preset": "parakeet_stt"},
+      "endpoint": {"base_url": "http://localhost:8103", "readiness": "health"},
+      "deployment": {"ownership": "managed", "service": "stt"}
+    },
+    "vlm": {
+      "adapter": {"preset": "cosmos3_nano_reasoner"},
+      "endpoint": {"base_url": "http://localhost:8100", "readiness": "health"},
+      "deployment": {"ownership": "managed", "service": "vlm-magpie"}
+    },
+    "tts": {
+      "adapter": {"preset": "magpie_tts_nim"},
+      "endpoint": {"base_url": "http://localhost:9000", "readiness": "health"},
+      "deployment": {"ownership": "managed", "service": "tts-magpie"}
+    }
+  }
+}

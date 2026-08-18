@@ -1,11 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unified service protocols and OpenAI-compatible clients for XR AI models.
+"""Unified service protocols and typed HTTP clients for XR AI models.
 
 Repository code talks to the typed ``*Service`` protocols. The concrete
-``OpenAICompat*`` clients cover every in-tree backend and external
-OpenAI-compatible endpoints.
+clients cover OpenAI-compatible endpoints and NVIDIA Speech TTS NIM.
 """
 from ._protocols import (
     Capabilities,
@@ -17,14 +16,17 @@ from ._protocols import (
     ImagePart,
     LLMService,
     STTService,
+    StreamingTTSService,
     TextPart,
     ToolCall,
     ToolDef,
     TTSService,
+    TTSAudioChunk,
     VideoInput,
     VideoPart,
     VLMService,
 )
+from ._nvidia_tts_nim import NvidiaTTSNIM
 from ._openai_compat import (
     OpenAICompatLLM,
     OpenAICompatEmbedding,
@@ -38,6 +40,7 @@ from ._config import (
     DeploymentSpec,
     EmbeddingSpec,
     EndpointSpec,
+    KIND_NVIDIA_TTS_NIM,
     KIND_OPENAI_COMPAT,
     LLMSpec,
     ModelKind,
@@ -61,10 +64,12 @@ __all__ = [
     "ImagePart",
     "LLMService",
     "STTService",
+    "StreamingTTSService",
     "TextPart",
     "ToolCall",
     "ToolDef",
     "TTSService",
+    "TTSAudioChunk",
     "VideoInput",
     "VideoPart",
     "VLMService",
@@ -73,11 +78,13 @@ __all__ = [
     "OpenAICompatSTT",
     "OpenAICompatTTS",
     "OpenAICompatVLM",
+    "NvidiaTTSNIM",
     "AdapterSpec",
     "Category",
     "DeploymentSpec",
     "EmbeddingSpec",
     "EndpointSpec",
+    "KIND_NVIDIA_TTS_NIM",
     "KIND_OPENAI_COMPAT",
     "LLMSpec",
     "ModelKind",

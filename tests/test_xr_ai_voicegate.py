@@ -591,6 +591,19 @@ async def test_play_chime_after_observe_tts_wav_emits_built_chime():
 
 
 @pytest.mark.asyncio
+async def test_play_chime_after_streaming_sample_rate_emits_built_chime():
+    gate, sink, _ = _gate(phrases=("agent",), listening_chime=True)
+
+    gate.observe_tts_sample_rate(22_050)
+    await gate.play_chime("p1")
+
+    assert len(sink.plays) == 1
+    pid, wav = sink.plays[0]
+    assert pid == "p1"
+    assert read_wav_sample_rate(wav) == 22_050
+
+
+@pytest.mark.asyncio
 async def test_play_chime_disabled_when_listening_chime_false():
     """Case 27: listening_chime=False disables the chime even after a TTS
     WAV is observed."""

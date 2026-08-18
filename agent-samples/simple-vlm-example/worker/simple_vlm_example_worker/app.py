@@ -87,6 +87,7 @@ async def run_app(
         ready_file=ready_file,
         closeables=(vlm,),
         text_topic="vlm.response",
+        inter_sentence_pause_ms=config.inter_sentence_pause_ms,
         idle_timeout_secs=config.idle_timeout_secs,
         transport=transport,
         participant_left_topic=PARTICIPANT_LEFT_TOPIC,

@@ -26,6 +26,7 @@ class WorkerConfig:
     silence_duration: float
     min_speech: float
     silero_threshold: float
+    inter_sentence_pause_ms: int
     idle_timeout_secs: float | None
 
 
@@ -64,6 +65,9 @@ def load_config(path: Path | None) -> WorkerConfig:
     data = _read_config(path)
     models_name = str(data.get("models_config", "models.local.json"))
     idle_timeout = data.get("idle_timeout_secs")
+    inter_sentence_pause_ms = int(data.get("inter_sentence_pause_ms", 0))
+    if inter_sentence_pause_ms < 0:
+        raise ValueError("inter_sentence_pause_ms must be non-negative")
 
     return WorkerConfig(
         models_config=_resolve(path, models_name),
@@ -77,5 +81,6 @@ def load_config(path: Path | None) -> WorkerConfig:
         silence_duration=float(data.get("silence_duration", 0.4)),
         min_speech=float(data.get("min_speech", 0.1)),
         silero_threshold=float(data.get("silero_threshold", 0.5)),
+        inter_sentence_pause_ms=inter_sentence_pause_ms,
         idle_timeout_secs=float(idle_timeout) if idle_timeout else None,
     )

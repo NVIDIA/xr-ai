@@ -17,6 +17,7 @@ from .cosmos3_nano_reasoner import COSMOS3_NANO_REASONER
 from .cosmos_vlm      import COSMOS_VLM
 from .llama_nemotron  import LLAMA_NEMOTRON
 from .magpie_tts      import MAGPIE_TTS
+from .magpie_tts_nim  import MAGPIE_TTS_NIM
 from .nemotron3_nano  import NEMOTRON3_NANO
 from .nemotron_omni   import NEMOTRON_OMNI
 from .nemotron_embedding import NEMOTRON_EMBEDDING
@@ -29,6 +30,7 @@ _PRESETS: dict[str, dict[str, Any]] = {
     "cosmos_vlm":     COSMOS_VLM,
     "llama_nemotron": LLAMA_NEMOTRON,
     "magpie_tts":     MAGPIE_TTS,
+    "magpie_tts_nim": MAGPIE_TTS_NIM,
     "nemotron3_nano": NEMOTRON3_NANO,
     "nemotron_omni":  NEMOTRON_OMNI,
     "nemotron_embedding": NEMOTRON_EMBEDDING,

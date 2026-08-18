@@ -230,6 +230,25 @@ class TTSService(Protocol):
     async def close(self) -> None: pass
 
 
+@dataclass(frozen=True)
+class TTSAudioChunk:
+    """One block of signed 16-bit interleaved PCM from streaming TTS."""
+
+    data: bytes
+    sample_rate: int
+    channels: int = 1
+
+
+@runtime_checkable
+class StreamingTTSService(TTSService, Protocol):
+    def stream_synthesize(
+        self,
+        text: str,
+        *,
+        timeout: float | None = None,
+    ) -> AsyncIterator[TTSAudioChunk]: pass
+
+
 @runtime_checkable
 class EmbeddingService(Protocol):
     async def embed(

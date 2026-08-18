@@ -51,6 +51,7 @@ class _VoiceSession:
         ready_file: Path | None = None,
         closeables: Iterable[Any] = (),
         text_topic: str = "agent.response",
+        inter_sentence_pause_ms: int = 0,
         idle_timeout_secs: float | None = None,
         transport: HubVoiceTransport | None = None,
     ) -> None:
@@ -62,6 +63,7 @@ class _VoiceSession:
         self.ready_file = ready_file
         self.closeables = tuple(closeables)
         self.text_topic = text_topic
+        self.inter_sentence_pause_ms = inter_sentence_pause_ms
         self.idle_timeout_secs = idle_timeout_secs
         self._transport = transport
         self._io_processor: _VoiceIOProcessor | None = None
@@ -132,6 +134,7 @@ class _VoiceSession:
             voice_gate_cfg=self.voice_gate,
             on_final_transcript=on_transcript,
             text_topic=self.text_topic,
+            inter_sentence_pause_ms=self.inter_sentence_pause_ms,
             idle_timeout_secs=self.idle_timeout_secs,
         )
         loop = asyncio.get_running_loop()

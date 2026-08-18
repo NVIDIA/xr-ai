@@ -102,7 +102,12 @@ def test_effectively_empty_profile_selection_uses_default(
 
 @pytest.mark.parametrize(
     "profile_name",
-    ["models.local.json", "models.hosted.json", "models.omni.json"],
+    [
+        "models.local.json",
+        "models.local.magpie.json",
+        "models.hosted.json",
+        "models.omni.json",
+    ],
 )
 def test_bundled_simple_vlm_profiles_have_launcher_sdk_parity(
     tmp_path, profile_name
@@ -198,10 +203,16 @@ def test_bundled_simple_vlm_profiles_select_expected_ownership(tmp_path) -> None
         return load_model_deployment(config)
 
     local = load("models.local.json")
+    magpie = load("models.local.magpie.json")
     hosted = load("models.hosted.json")
     omni = load("models.omni.json")
 
     assert local.services == {"stt": "own", "vlm": "own", "tts": "own"}
+    assert magpie.services == {
+        "stt": "own",
+        "vlm-magpie": "own",
+        "tts-magpie": "own",
+    }
     assert hosted.services == {"stt": "own", "tts": "own"}
     assert hosted.required_credentials == ("NGC_API_KEY",)
     assert omni.services == {"stt": "own", "vlm-omni": "reuse", "tts": "own"}

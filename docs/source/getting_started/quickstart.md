@@ -62,21 +62,35 @@ uv run model_servers --stop
 
 End-to-end voice + vision sample. Speak into the mic or type into the data
 channel; both routes use the same VLM pipeline against the latest video frame.
-Replies arrive as streaming Piper TTS audio plus a `vlm.response` text message.
+Replies arrive as TTS audio plus a `vlm.response` text message. Piper remains
+the default, and Magpie NIM adds online PCM streaming.
 
 Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. Refer to
 {doc}`AI services </components/ai-services>` for runtime-selection details.
 
 There are two ways to run it:
 
-**Standalone** (~23 GB VRAM) — starts its own VLM and STT, owns them for the
-session, and stops them when you exit:
+**Standalone with Piper** (~23 GB VRAM) — starts its own VLM and STT, owns them
+for the session, and stops them when you exit:
 
 ```bash
 cd agent-samples/simple-vlm-example
 uv sync
-uv run simple_vlm_example
+uv run main.py --piper
 ```
+
+**Standalone with streaming Magpie** (~82 GB VRAM on the supplied profile) —
+starts Magpie Multilingual NIM 1.9.0 and sends its online PCM chunks to the
+client without waiting for a complete sentence waveform:
+
+```bash
+uv run main.py --magpie
+```
+
+Magpie requires Docker, NVIDIA Container Toolkit, and `NGC_API_KEY`. The first
+launch downloads the NIM image and exports an optimized model store under
+`models/nim-magpie-tts/`; allow about 20 minutes. Warm starts normally take
+under a minute. The mode inserts a 240 ms gap between sentence requests.
 
 On the very first run weights download from HuggingFace (tens of GB; can take
 several minutes). `HF_TOKEN` is required by default; pass `--allow-anonymous`
@@ -90,7 +104,7 @@ When you exit, those services keep running.
 ### Step 1 — Start the server
 
 ```bash
-uv run simple_vlm_example
+uv run main.py --piper
 ```
 
 The XR-Media-Hub, VLM, STT, and TTS start together (or reuse running services).

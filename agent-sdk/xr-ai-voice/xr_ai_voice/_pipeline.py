@@ -38,6 +38,7 @@ def _build_voice_pipeline(
     voice_gate_cfg: VoiceGateConfig,
     on_final_transcript: Callable[[str, str, int], Awaitable[None]] | None = None,
     text_topic: str = "agent.response",
+    inter_sentence_pause_ms: int = 0,
     idle_timeout_secs: float | None = None,
 ) -> tuple[Pipeline, PipelineWorker]:
     """Assemble the unified voice pipeline.
@@ -69,6 +70,7 @@ def _build_voice_pipeline(
         voice_gate = voice_gate_proc.gate,
         transport  = transport,
         text_topic = text_topic,
+        inter_sentence_pause_ms = inter_sentence_pause_ms,
     )
     vad_stt = VadSttProcessor(
         stt=stt,

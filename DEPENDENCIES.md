@@ -93,9 +93,9 @@ xr-ai-models  (agent-sdk/xr-ai-models/)
     └── httpx >=0.27
     └── pyyaml >=6.0
     Unified service protocols (LLMService, VLMService, STTService, TTSService,
-    EmbeddingService)
-    and OpenAI-compatible HTTP clients that cover every in-tree model backend
-    (vLLM-served VLM/LLMs, NeMo Parakeet STT, Piper/Magpie TTS).  Per-model
+    StreamingTTSService, EmbeddingService) and typed HTTP clients that cover
+    every in-tree model backend (vLLM-served VLM/LLMs, NeMo Parakeet STT,
+    Piper/Magpie TTS, and NVIDIA Speech TTS NIM). Per-model
     profiles separate adapter behavior, endpoint connectivity/readiness, and
     launcher-facing deployment ownership. Relay may pass controlled per-call
     context headers; configured model credentials remain non-overridable.
@@ -313,6 +313,14 @@ magpie-tts-server  (services/magpie-tts/)
     └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
     Model: nvidia/magpie_tts_multilingual_357m (NeMo TTS, in-process)
 
+magpie-tts-nim-server  (services/magpie-tts-nim/)
+    └── pyyaml >=6.0
+    └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
+    Launcher-only wrapper around the pinned
+    nvcr.io/nim/nvidia/magpie-tts-multilingual:1.9.0 container. Docker and
+    NVIDIA Container Toolkit provide the runtime; NGC_API_KEY authorizes image
+    access. The wrapper exports and reuses the optimized NIM model store.
+
 llama-nemotron-llm-server  (services/llama-nemotron-llm/)
     └── vllm >=0.12.0
     └── hf-transfer >=0.1.4
@@ -373,6 +381,7 @@ piper-tts-server  (services/piper-tts/)
 | `services/vlm-server/` | `vlm-server` | `vlm_server` | 8100 | Cosmos3 Nano Reasoner | vLLM (pip or docker) |
 | `services/stt-server/` | `stt-server` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `services/magpie-tts/` | `magpie-tts-server` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
+| `services/magpie-tts-nim/` | `magpie-tts-nim-server` | `magpie_tts_nim_server` | 9000 | Magpie TTS Multilingual 1.9.0 | NVIDIA Speech NIM container |
 | `services/piper-tts/` | `piper-tts-server` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
 | `services/llama-nemotron-llm/` | `llama-nemotron-llm-server` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `services/nemotron3-nano-llm/` | `nemotron3-nano-llm-server` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} (GPU-selected) | vLLM (pip or docker) |
@@ -433,7 +442,7 @@ serving any web sample runs that script once:
 Vision Q&A driven by voice or text: audio → STT → query; text → query.
 Each query runs against
 the latest video frame via streaming VLM and replies with both
-`vlm.response` text and sentence-batched Piper TTS audio.
+`vlm.response` text and sentence-batched Piper or streaming Magpie NIM audio.
 
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
@@ -455,9 +464,11 @@ behavior (magic phrases, follow-up grace, listening chime, stop acknowledgement)
 VAD/STT, and sentence-batched TTS remain provided by the shared voice runtime.
 The sample has no MCP or legacy agent-framework dependency.
 
-Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
-(8105) over HTTP via `xr-ai-models` SDK — no model weights loaded
-in-process. The `models_config` key selects a structured deployment profile:
+Worker calls stt-server (8103), vlm-server (8100), and the selected TTS service
+over HTTP via `xr-ai-models` SDK — no model weights loaded in-process.
+`--piper` selects piper-tts-server (8105); `--magpie` selects the Magpie TTS NIM
+(9000), online PCM streaming, a 240 ms sentence gap, and a lower-memory VLM
+profile. The `models_config` key selects a structured deployment profile:
 `models.local.json` manages the default Cosmos3 Nano Reasoner service,
 `models.hosted.json` uses the hosted Cosmos3 Nano Reasoner NIM, and
 `models.omni.json` reuses Nemotron-Omni on port 8108. These profiles separate
@@ -538,7 +549,9 @@ Keep non-obvious fan-out in the same change:
   out of the wrapper's venv).
 - `agent-sdk/xr-ai-hub/` (`xr-ai-hub-client`) — only `pyzmq` + `msgpack`. No server-side packages.
 - `agent-sdk/xr-ai-models/` — `xr-ai-logging` + `httpx` + `pyyaml` only. No
-  vendor SDKs (no `openai`, no `anthropic`, no `litellm`). All in-tree backends speak OpenAI-compatible HTTP.
+  vendor SDKs (no `openai`, no `anthropic`, no `litellm`). In-tree services
+  use OpenAI-compatible HTTP except NVIDIA Speech NIM, whose typed offline and
+  online TTS endpoints are isolated in the same package.
 - `agent-sdk/xr-ai-tools/` — native tool contracts and only capability-specific
   optional dependencies. Spatial math remains CPU-only.
 - Agent workers — `xr-ai-hub-client` + `xr-ai-models` + task-specific libs (numpy,

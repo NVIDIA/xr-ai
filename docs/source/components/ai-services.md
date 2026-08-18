@@ -10,8 +10,9 @@ orchestrator pattern that wires servers into a sample, refer to
 {doc}`/guides/adding-a-sample`.
 
 Multiple reusable HTTP servers are available as launchable peers of
-`services/xr-media-hub/`. All expose an OpenAI-compatible REST API so agent workers
-can call them with any OpenAI SDK client or plain `httpx` or `requests`.
+`services/xr-media-hub/`. Workers consume them through the typed adapters in
+`xr-ai-models`; most expose OpenAI-compatible REST, while Magpie TTS NIM uses
+NVIDIA Speech NIM's offline and online synthesis endpoints.
 Reference services cover vision-language reasoning, speech recognition,
 text-to-speech, embeddings, and large language models. The projects are direct
 children of the repository's `services/README.md` source index;
@@ -23,6 +24,7 @@ trade-offs documented below.
 | `services/vlm-server/` | `vlm_server` | 8100 | Cosmos3 Nano Reasoner | vLLM (pip or docker) |
 | `services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `services/magpie-tts/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
+| `services/magpie-tts-nim/` | `magpie_tts_nim_server` | 9000 | Magpie TTS Multilingual 1.9.0 | NVIDIA Speech NIM container |
 | `services/piper-tts/` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
 | `services/llama-nemotron-llm/` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
@@ -36,15 +38,16 @@ and resolved relative to the YAML file (every `models/` tree is excluded from
 version control). The model-servers profiles share `models/` at the
 repository root; the exact layout per launch style is below.
 
-## Two HuggingFace cache roots
+## Model cache roots
 
-The servers use two different `HF_HOME` values, so HuggingFace weights live in
-two separate trees under the service's resolved `model_cache`:
+Host model servers use two different `HF_HOME` values. Magpie NIM manages its
+own cache and exported engine store:
 
-| Consumer | `HF_HOME` | Hub cache |
+| Consumer | Cache root | Weight or artifact location |
 |---|---|---|
 | vLLM-backed servers (pip and docker) | `<model_cache>/` | `<model_cache>/hub/` |
 | STT and Magpie TTS (NeMo host processes) | `<model_cache>/huggingface/` | `<model_cache>/huggingface/hub/` |
+| Magpie TTS NIM | `models/nim-magpie-tts/` | NIM cache plus `export/` model store |
 
 (The NeMo servers additionally cache non-HF artifacts under `<model_cache>/nemo/`.)
 
@@ -111,15 +114,17 @@ PROCESSES = [
     # Pick one TTS server
     Process("tts",    "../../services/piper-tts",                 "piper_tts_server"),
     # Process("tts",  "../../services/magpie-tts",                "magpie_tts_server"),
+    # Process("tts",  "../../services/magpie-tts-nim",            "magpie_tts_nim_server"),
     Process("worker", "worker",                                   "my_agent_worker"),
 ]
 ```
 
-The agent samples in this repository (`simple-vlm-example` and `xr-render-demo`)
-default to Piper TTS — it runs on CPU with ~100 ms/sentence latency and avoids
-the NeMo dep tree. Magpie is still a supported NVIDIA TTS option with better
-voice quality and multilingual support when GPU is available; swap the
-`Process` row and YAML.
+The agent samples default to Piper TTS — it runs on CPU with ~100 ms/sentence
+latency and avoids the NeMo dependency tree. `simple-vlm-example --magpie`
+selects the NIM service and streams raw PCM from
+`/v1/audio/synthesize_online`; the voice pipeline can start forwarding audio
+before NIM finishes the sentence. The HuggingFace/NeMo Magpie service remains
+available for complete-WAV synthesis.
 
 **2 — Copy the reference YAML to your sample's `yaml/` directory:**
 
@@ -135,6 +140,8 @@ cp ../../services/rag-service/rag_service.yaml ./yaml/rag_service.yaml
 cp ../../services/piper-tts/piper_tts_server.yaml ./yaml/piper_tts_server.yaml
 # Or for Magpie (multilingual, GPU, ~2-5 s/sentence):
 cp ../../services/magpie-tts/magpie_tts_server.yaml ./yaml/magpie_tts_server.yaml
+# Or for streaming Magpie NIM (NGC_API_KEY and substantial GPU memory required):
+cp ../../services/magpie-tts-nim/magpie_tts_nim_server.yaml ./yaml/magpie_tts_nim_server.yaml
 cp ../../services/video-memory-service/video_memory_service.yaml ./yaml/video_memory_service.yaml
 ```
 
@@ -430,6 +437,10 @@ cleanup.
 - **stt-server** loads parakeet-tdt-0.6b-v3 via NeMo ASR in-process.
   English-only; the `language` and `temperature` form fields are accepted but ignored.
 - **magpie-tts** loads magpie_tts_multilingual_357m via NeMo TTS in-process.
+- **magpie-tts-nim** launches the pinned Magpie Multilingual 1.9.0 NIM image.
+  Its first run exports an optimized model store and can take about 20 minutes;
+  warm starts reuse that store. It exposes streaming signed-16-bit PCM through
+  `/v1/audio/synthesize_online` and offline WAV through `/v1/audio/synthesize`.
 - **piper-tts** serves any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
   All inference runs in a thread pool so the asyncio loop is never blocked.
 - **video-memory-service** owns recorded chunk queries, NVDEC, and PNG output

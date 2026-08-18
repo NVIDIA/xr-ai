@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Simple VLM worker configuration for streaming Magpie TTS NIM.
+models_config: models.local.magpie.json
+voice_gate_yaml: voice_gate.yaml
+
+# Frame freshness — tune if the agent sees stale frames.
+frame_max_age_s: 5.0
+frame_timeout_s: 5.0
+
+# Voice Activity Detection — Silero VAD (ONNX backend).
+silero_threshold: 0.5
+silence_duration: 0.4
+min_speech: 0.1
+
+# Silence between separately synthesized sentences; the first sentence is not delayed.
+inter_sentence_pause_ms: 240
+
+idle_timeout_secs: 0

@@ -13,6 +13,7 @@ from xr_ai_models import (
     Category,
     DeploymentSpec,
     EndpointSpec,
+    KIND_NVIDIA_TTS_NIM,
     KIND_OPENAI_COMPAT,
     LLMSpec,
     ModelKind,
@@ -37,17 +38,19 @@ from xr_ai_models.presets import available_presets, get_preset
 
 def test_package_root_exports_complete_config_surface() -> None:
     assert KIND_OPENAI_COMPAT == "openai_compat"
-    assert get_args(ModelKind) == ("openai_compat",)
+    assert KIND_NVIDIA_TTS_NIM == "nvidia_tts_nim"
+    assert get_args(ModelKind) == ("openai_compat", "nvidia_tts_nim")
     assert set(get_args(Category)) == {"llm", "vlm", "stt", "tts", "embedding"}
     assert LLMSpec in get_args(Spec)
 
 
-def test_nine_presets_registered() -> None:
+def test_ten_presets_registered() -> None:
     assert set(available_presets()) == {
         "cosmos3_nano_reasoner",
         "cosmos_vlm",
         "llama_nemotron",
         "magpie_tts",
+        "magpie_tts_nim",
         "nemotron3_nano",
         "nemotron_omni",
         "parakeet_stt",
@@ -352,6 +355,43 @@ tts:
         await vlm.close()
         await stt.close()
         await tts.close()
+
+
+async def test_magpie_nim_preset_and_factory(tmp_path) -> None:
+    cfg = load_models_config(_write(tmp_path, """
+tts:
+  kind: preset:magpie_tts_nim
+  base_url: http://localhost:9000
+"""))
+    spec = cfg.tts("tts")
+    assert spec.kind == "nvidia_tts_nim"
+    assert spec.language_code == "en-US"
+    assert spec.voice == "Magpie-Multilingual.EN-US.Mia"
+    assert spec.sample_rate == 22050
+
+    tts = make_tts(cfg, "tts")
+    try:
+        assert tts.health_url == "http://localhost:9000/v1/health/ready"
+    finally:
+        await tts.close()
+
+
+def test_magpie_nim_requires_voice_and_positive_sample_rate(tmp_path) -> None:
+    with pytest.raises(ValueError, match="requires language_code and voice"):
+        load_models_config(_write(tmp_path, """
+tts:
+  category: tts
+  kind: nvidia_tts_nim
+  base_url: http://localhost:9000
+"""))
+
+    with pytest.raises(ValueError, match="sample_rate must be positive"):
+        load_models_config(_write(tmp_path, """
+tts:
+  kind: preset:magpie_tts_nim
+  base_url: http://localhost:9000
+  sample_rate: 0
+"""))
 
 
 async def test_embedding_preset_and_factory(tmp_path) -> None:

@@ -20,7 +20,8 @@ local GPU is required for the agent or XR-Media-Hub.
 | Sample | Local VRAM needed |
 |---|---|
 | model-servers (all models) | ~55 GB |
-| simple-vlm-example (standalone) | ~23 GB |
+| simple-vlm-example (`--piper`) | ~23 GB |
+| simple-vlm-example (`--magpie`) | ~82 GB |
 | xr-render-demo (requires model-servers) | ~55 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 
@@ -32,7 +33,7 @@ local GPU is required for the agent or XR-Media-Hub.
 | Python | 3.11 or 3.12 | 3.10 and 3.13 are not supported |
 | [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
 | NVIDIA driver | 570+ | required for local model inference |
-| Docker | 24+ | required: all vLLM-backed services (LLM, VLM) run in `nvcr.io/nvidia/vllm` containers |
+| Docker | 24+ | required: vLLM-backed services and Magpie NIM run in NVIDIA containers |
 | NVIDIA Container Toolkit | latest | required: gives Docker access to the GPU. Without it, `model_servers` fails with `failed to discover GPU vendor from CDI: no known GPU vendor found` |
 | npm | 18+ | required for xr-render-demo: the orchestrator builds the web vendor bundle on first run |
 

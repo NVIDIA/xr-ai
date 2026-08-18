@@ -187,6 +187,7 @@ class VoiceAgent(Agent):
         ready_file: Path | None = None,
         closeables: Iterable[Any] = (),
         text_topic: str = "agent.response",
+        inter_sentence_pause_ms: int = 0,
         idle_timeout_secs: float | None = None,
         transport: HubVoiceTransport | None = None,
         response_capacity: int = 32,
@@ -207,6 +208,7 @@ class VoiceAgent(Agent):
             ready_file=ready_file,
             closeables=closeables,
             text_topic=text_topic,
+            inter_sentence_pause_ms=inter_sentence_pause_ms,
             idle_timeout_secs=idle_timeout_secs,
             transport=transport,
         )

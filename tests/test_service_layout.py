@@ -18,6 +18,7 @@ _REQUIRED_SERVICES = {
     "embedding-server",
     "llama-nemotron-llm",
     "magpie-tts",
+    "magpie-tts-nim",
     "nemotron-omni-llm",
     "nemotron3-nano-llm",
     "openxr-service",
@@ -36,6 +37,11 @@ _MODEL_SERVICES = {
         8106,
     ),
     "magpie-tts": ("magpie-tts-server", "magpie_tts_server", 8104),
+    "magpie-tts-nim": (
+        "magpie-tts-nim-server",
+        "magpie_tts_nim_server",
+        9000,
+    ),
     "nemotron-omni-llm": (
         "nemotron-omni-llm-server",
         "nemotron_omni_llm_server",
@@ -213,9 +219,14 @@ def test_model_service_projects_preserve_their_public_contracts() -> None:
         assert metadata["project"]["name"] == package
         assert command in metadata["project"]["scripts"]
         assert config["port"] == port
-        assert (project / config["model_cache"]).resolve() == _ROOT / "models"
+        expected_cache = (
+            _ROOT / "models" / "nim-magpie-tts"
+            if directory == "magpie-tts-nim"
+            else _ROOT / "models"
+        )
+        assert (project / config["model_cache"]).resolve() == expected_cache
         default = _model_cache_default(project / command / "__main__.py")
-        assert (project / default).resolve() == _ROOT / "models"
+        assert (project / default).resolve() == expected_cache
 
 
 def test_xr_media_hub_preserves_its_package_and_command() -> None:

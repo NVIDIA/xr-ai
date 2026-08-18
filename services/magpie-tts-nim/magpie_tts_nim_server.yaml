@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+image: nvcr.io/nim/nvidia/magpie-tts-multilingual:1.9.0
+container_name: xr-ai-magpie-tts-nim
+profile: name=magpie-tts-multilingual,batch_size=8
+gpu_device: "0"
+shm_size: 8g
+host: 127.0.0.1
+port: 9000
+model_cache: ../../models/nim-magpie-tts
+model_export: ../../models/nim-magpie-tts/export

@@ -42,6 +42,7 @@ from pipecat.pipeline.worker import PipelineWorker
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.workers.runner import WorkerRunner
 
+from xr_ai_models import TTSAudioChunk
 from xr_ai_voice import VadConfig
 from xr_ai_voice._types import VoiceQuery
 from xr_ai_voice._pipeline import _build_voice_pipeline
@@ -179,6 +180,20 @@ class _FakeTts:
 
     async def close(self) -> None:
         pass
+
+
+class _FakeStreamingTts(_FakeTts):
+    """StreamingTTSService double emitting two raw PCM chunks."""
+
+    def __init__(self, sample_rate: int = 22050) -> None:
+        super().__init__(sample_rate)
+        self.stream_calls: list[str] = []
+
+    async def stream_synthesize(self, text: str, *, timeout=None):
+        self.stream_calls.append(text)
+        yield TTSAudioChunk(b"\x01\x00" * 8, self.sample_rate)
+        await asyncio.sleep(0)
+        yield TTSAudioChunk(b"\x02\x00" * 4, self.sample_rate)
 
 
 class _NullSink:
@@ -1799,6 +1814,70 @@ async def test_streaming_tts_sentence_boundary_triggers_synth():
 
 
 @pytest.mark.asyncio
+async def test_streaming_tts_consumes_pcm_without_waiting_for_wav():
+    tts = _FakeStreamingTts(sample_rate=22050)
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    proc = StreamingTtsProcessor(tts=tts, voice_gate=gate)
+
+    sink = await _run_chain(proc, sends=[TextFrame(text="hello world. ")])
+
+    assert tts.stream_calls == ["hello world."]
+    assert tts.calls == []
+    audio = [f for f in sink.frames if isinstance(f, OutputAudioRawFrame)]
+    assert [f.audio for f in audio] == [b"\x01\x00" * 8, b"\x02\x00" * 4]
+    assert all(f.sample_rate == 22050 and f.num_channels == 1 for f in audio)
+
+
+@pytest.mark.asyncio
+async def test_streaming_tts_inserts_silence_between_streamed_sentences():
+    tts = _FakeStreamingTts(sample_rate=22050)
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    proc = StreamingTtsProcessor(
+        tts=tts,
+        voice_gate=gate,
+        inter_sentence_pause_ms=240,
+    )
+
+    sink = await _run_chain(
+        proc,
+        sends=[TextFrame(text="First sentence. Second sentence. ")],
+    )
+
+    audio = [f for f in sink.frames if isinstance(f, OutputAudioRawFrame)]
+    silent = [f for f in audio if not any(f.audio)]
+    assert tts.stream_calls == ["First sentence.", "Second sentence."]
+    assert len(silent) == 12
+    assert sum(len(f.audio) for f in silent) == 22050 * 240 // 1000 * 2
+    assert audio[:2][0].audio.startswith(b"\x01\x00")
+    assert audio[2:14] == silent
+    assert audio[14].audio.startswith(b"\x01\x00")
+
+
+@pytest.mark.asyncio
+async def test_streaming_tts_does_not_pause_before_next_response():
+    tts = _FakeStreamingTts(sample_rate=22050)
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    proc = StreamingTtsProcessor(
+        tts=tts,
+        voice_gate=gate,
+        inter_sentence_pause_ms=240,
+    )
+
+    sink = await _run_chain(
+        proc,
+        sends=[
+            TextFrame(text="First response. "),
+            AssistantResponseEndFrame(pid="", text="First response.", pts_us=0),
+            TextFrame(text="Second response. "),
+            AssistantResponseEndFrame(pid="", text="Second response.", pts_us=1),
+        ],
+    )
+
+    audio = [f for f in sink.frames if isinstance(f, OutputAudioRawFrame)]
+    assert not any(not any(f.audio) for f in audio)
+
+
+@pytest.mark.asyncio
 async def test_streaming_tts_parallel_synth_keeps_order():
     """Out-of-order completion of synth tasks must NOT reorder the
     output audio: the ordered sender awaits in FIFO. ``call_starts``
@@ -3050,6 +3129,7 @@ async def test_private_pipeline_assembly_routes_text_through_streaming_tts(monke
             vad_cfg        = VadConfig(),
             voice_gate_cfg = VoiceGateConfig(),
             text_topic     = "vlm.response",
+            inter_sentence_pause_ms = 240,
         )
         # The streaming-tts processor lives at index 5 in the wrapped
         # pipeline (source, input, vad_stt, voice_gate, assistant, tts, output, sink).
@@ -3057,6 +3137,7 @@ async def test_private_pipeline_assembly_routes_text_through_streaming_tts(monke
         assert isinstance(streaming_tts, StreamingTtsProcessor)
         assert streaming_tts._text_topic == "vlm.response"
         assert streaming_tts._transport is transport
+        assert streaming_tts._inter_sentence_pause_ms == 240
     finally:
         transport.shutdown()
 

@@ -348,13 +348,21 @@ class VoiceGate:
             return
         try:
             sr = read_wav_sample_rate(wav_bytes)
-            self._chime_wav = build_chime_wav(sr)
-            logger.info("listening chime ready (sr=%d Hz)", sr)
-        except ValueError:
-            logger.exception("listening chime disabled (sample rate out of range)")
-            self._chime_enabled = False
         except Exception:
             logger.exception("listening chime disabled (bad TTS wav header)")
+            self._chime_enabled = False
+            return
+        self.observe_tts_sample_rate(sr)
+
+    def observe_tts_sample_rate(self, sample_rate: int) -> None:
+        """Build the chime from streaming TTS metadata instead of a WAV header."""
+        if self._chime_wav is not None or not self._chime_enabled:
+            return
+        try:
+            self._chime_wav = build_chime_wav(sample_rate)
+            logger.info("listening chime ready (sr=%d Hz)", sample_rate)
+        except ValueError:
+            logger.exception("listening chime disabled (sample rate out of range)")
             self._chime_enabled = False
 
     # ── handler dispatch ──────────────────────────────────────────────────────

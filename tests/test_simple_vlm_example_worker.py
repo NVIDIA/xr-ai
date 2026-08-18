@@ -286,6 +286,7 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
     assert "If the user" not in prompt
     assert config.frame_max_age_s == 5.0
     assert config.frame_timeout_s == 5.0
+    assert config.inter_sentence_pause_ms == 0
     assert config.idle_timeout_secs is None
     assert "system_prompt_file" not in raw
 
@@ -298,6 +299,7 @@ def test_config_without_a_file_uses_packaged_defaults(tmp_path) -> None:
         assert config.system_prompt == prompt
         expected_parent = Path() if config_path is None else tmp_path
         assert config.models_config == expected_parent / "models.local.json"
+        assert config.inter_sentence_pause_ms == 0
 
 
 def test_blank_inline_prompt_uses_packaged_default(tmp_path) -> None:
@@ -325,6 +327,23 @@ def test_config_keeps_deployment_profile_and_inline_prompt_compatibility(
     assert config.voice_gate_yaml == tmp_path / "gate.yaml"
     assert config.system_prompt == "custom prompt"
     assert config.idle_timeout_secs == 30.0
+
+
+def test_magpie_config_selects_streaming_profile_and_sentence_pause() -> None:
+    config = load_config(
+        _SAMPLE_DIR / "yaml" / "simple_vlm_example_worker.magpie.yaml"
+    )
+
+    assert config.models_config == _SAMPLE_DIR / "yaml" / "models.local.magpie.json"
+    assert config.inter_sentence_pause_ms == 240
+
+
+def test_config_rejects_negative_sentence_pause(tmp_path) -> None:
+    config_path = tmp_path / "worker.yaml"
+    config_path.write_text("inter_sentence_pause_ms: -1\n")
+
+    with pytest.raises(ValueError, match="must be non-negative"):
+        load_config(config_path)
 
 
 def test_config_rejects_a_non_mapping_yaml_document(tmp_path) -> None:
@@ -585,6 +604,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert stt.close_calls == tts.close_calls == vlm.close_calls == 1
     assert transport.shutdown_calls == 1
     assert sessions[0].text_topic == "vlm.response"
+    assert sessions[0].inter_sentence_pause_ms == config.inter_sentence_pause_ms
     assert _CurrentFrameTool.instances[0].kwargs["endpoint"] is transport.endpoint
     assert _CurrentFrameTool.instances[0].kwargs["frame_max_age_s"] == (config.frame_max_age_s)
     assert _CurrentFrameTool.instances[0].kwargs["frame_timeout_s"] == (config.frame_timeout_s)

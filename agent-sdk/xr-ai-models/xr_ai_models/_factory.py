@@ -4,7 +4,8 @@
 """``make_*`` constructors that dispatch a :class:`Spec` to a concrete client."""
 from __future__ import annotations
 
-from ._config import KIND_OPENAI_COMPAT, ModelsConfig
+from ._config import KIND_NVIDIA_TTS_NIM, KIND_OPENAI_COMPAT, ModelsConfig
+from ._nvidia_tts_nim import NvidiaTTSNIM
 from ._openai_compat import (
     OpenAICompatEmbedding,
     OpenAICompatLLM,
@@ -84,6 +85,16 @@ def make_tts(config: ModelsConfig, name: str) -> TTSService:
     if adapter.kind == KIND_OPENAI_COMPAT:
         return OpenAICompatTTS(
             base_url=endpoint.base_url,
+            api_key_env=endpoint.api_key_env,
+            timeout=endpoint.timeout,
+            health_check=endpoint.health_check,
+        )
+    if adapter.kind == KIND_NVIDIA_TTS_NIM:
+        return NvidiaTTSNIM(
+            base_url=endpoint.base_url,
+            language_code=adapter.language_code,
+            voice=adapter.voice,
+            sample_rate=adapter.sample_rate,
             api_key_env=endpoint.api_key_env,
             timeout=endpoint.timeout,
             health_check=endpoint.health_check,

@@ -61,6 +61,12 @@ hub data channel. Its default is `"agent.response"`; set it to `""` when the
 application publishes its own response data so each turn is delivered only
 once. This setting does not disable TTS or Relay telemetry.
 
+When the configured TTS object implements `StreamingTTSService`, the media
+pipeline forwards each signed-16-bit PCM chunk as it arrives. Other TTS
+services keep the complete-WAV path. `VoiceAgent.inter_sentence_pause_ms`
+inserts silence only before the second and later synthesized sentences in one
+response; it never delays the first sentence and defaults to `0`.
+
 Each non-empty final STT result is published on `VOICE_TRANSCRIPT_TOPIC` as a
 `VoiceTranscript` before wake-phrase filtering. It therefore includes speech
 that the gate later rejects. The participant ID and `voice` source are runtime
@@ -117,7 +123,7 @@ timestamp, and completion status.
 
 The media pipeline also emits one `voice.stt` function scope per final or
 bounded partial-probe transcription and one `voice.tts` function scope per
-sentence synthesis. STT inputs contain only byte count, duration, and sample
+sentence TTS request. STT inputs contain only byte count, duration, and sample
 rate; a nested `voice.stt.result` mark carries the transcript. TTS inputs carry
 the sentence being synthesized. Raw audio is never written to Relay events.
 These scopes measure provider work and downstream handoff, not client playback.

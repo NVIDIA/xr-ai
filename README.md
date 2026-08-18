@@ -50,7 +50,8 @@ endpoint and no local GPU is required for the agent or hub.
 | Sample | Local VRAM needed |
 |---|---|
 | model-servers (shared models) | ~58 GB |
-| simple-vlm-example (standalone) | ~23 GB |
+| simple-vlm-example (`--piper`) | ~23 GB |
+| simple-vlm-example (`--magpie`) | ~82 GB |
 | xr-render-demo (requires model-servers) | ~55 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 
@@ -62,7 +63,7 @@ endpoint and no local GPU is required for the agent or hub.
 | Python | 3.11 or 3.12 | 3.10 and 3.13 are not supported |
 | [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
 | NVIDIA driver | 570+ | required for local model inference |
-| Docker | 24+ | required: all vLLM-backed services (LLM, VLM) run in `nvcr.io/nvidia/vllm` containers |
+| Docker | 24+ | required: vLLM-backed services and Magpie NIM run in NVIDIA containers |
 | NVIDIA Container Toolkit | latest | required: gives Docker access to the GPU.  Without it, `model_servers` fails with `failed to discover GPU vendor from CDI: no known GPU vendor found` |
 
 `uv` handles all Python dependencies per-sample — no global `pip install`
@@ -132,8 +133,8 @@ the demo itself: start `model-servers` once, then run the demo as many times
 as you like without reloading weights.
 
 Every sample worker depends on `agent-sdk/xr-ai-models` — one SDK that
-abstracts the OpenAI-compatible HTTP wire format for LLM / VLM / STT / TTS /
-embeddings behind typed service protocols. Model profiles name the logical roles
+abstracts model HTTP wire formats for LLM / VLM / STT / TTS / embeddings
+behind typed service protocols. Model profiles name the logical roles
 (`llm`, `vlm`, `stt`, …) and separate adapter behavior, endpoint connectivity,
 and deployment ownership. Presets pre-fill model-specific quirks
 (reasoning-field aliasing, `chat_template_kwargs`, served-model-name strings).
@@ -199,7 +200,8 @@ uv run model_servers --stop
 
 End-to-end voice + vision sample. Speak into the mic or type into the data
 channel; both routes use the same VLM pipeline against the latest video frame.
-Replies arrive as streaming Piper TTS audio plus a `vlm.response` text message.
+Replies arrive as TTS audio plus a `vlm.response` text message. Piper is the
+default; streaming Magpie NIM is available as a launch option.
 
 The packaged worker uses `CurrentFrameTool` to select an image, then passes its
 lightweight reference to `StreamingImageQueryTool` inside `SimpleVlmAgent` and
@@ -215,14 +217,23 @@ runtime-selection details.
 
 There are two ways to run it:
 
-**Standalone** (~23 GB VRAM) — starts its own VLM and STT, owns them for the
-session, and stops them when you exit:
+**Standalone** — starts its own VLM and STT, owns them for the session, and
+stops them when you exit. Use Piper for the existing CPU TTS path:
 
 ```bash
 cd agent-samples/simple-vlm-example
 uv sync
-uv run simple_vlm_example
+uv run main.py --piper
 ```
+
+Or use streaming Magpie TTS NIM on a 96 GB GPU:
+
+```bash
+uv run main.py --magpie
+```
+
+Magpie requires `NGC_API_KEY`. Its first NIM model-store export can take about
+20 minutes; later launches reuse `models/nim-magpie-tts/`.
 
 On the very first run weights download from HuggingFace (tens of GB; can take
 several minutes).  `HF_TOKEN` is required by default; pass
@@ -236,7 +247,7 @@ When you exit, those services keep running.
 #### Step 1 — Start the server
 
 ```bash
-uv run simple_vlm_example
+uv run main.py --piper
 ```
 
 The hub, VLM, STT, and TTS start together (or reuse running services).

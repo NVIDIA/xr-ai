@@ -5,11 +5,11 @@
 
 # xr-ai-models
 
-Unified service protocols and OpenAI-compatible HTTP clients for the xr-ai
-model layer. Worker code depends on the typed protocols `LLMService`,
-`VLMService`, `STTService`, `TTSService`, and `EmbeddingService`, and constructs
-concrete clients from a model deployment profile — no hand-rolled httpx calls
-in callers, no model quirks leaking out of this package.
+Unified service protocols and typed HTTP clients for the xr-ai model layer.
+Worker code depends on `LLMService`, `VLMService`, `STTService`, `TTSService`,
+`StreamingTTSService`, and `EmbeddingService`, and constructs concrete clients
+from a model deployment profile — no hand-rolled HTTP calls in callers and no
+model quirks leaking out of this package.
 
 ## Contract
 
@@ -60,6 +60,7 @@ Built-in presets — see `xr_ai_models/presets/`:
 | `parakeet_stt`   | stt-server               | |
 | `piper_tts`      | tts/piper                | |
 | `magpie_tts`     | tts/magpie               | |
+| `magpie_tts_nim` | magpie-tts-nim            | online signed-16-bit PCM plus offline WAV; English voice defaults to Mia |
 
 ## Profile contract
 
@@ -169,6 +170,10 @@ class TTSService(Protocol):
     async def synthesize(self, text: str, *, response_format="wav",
                          timeout=None) -> bytes: ...
     async def health(self) -> bool: ...
+
+class StreamingTTSService(TTSService, Protocol):
+    def stream_synthesize(self, text: str, *,
+                          timeout=None) -> AsyncIterator[TTSAudioChunk]: ...
 
 class EmbeddingService(Protocol):
     async def embed(self, texts, *, timeout=None) -> list[list[float]]: ...

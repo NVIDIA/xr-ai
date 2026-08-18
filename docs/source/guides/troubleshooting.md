@@ -367,7 +367,7 @@ to run while the stack is down.
 
 ### First run downloads models silently
 
-**Symptom:** `uv run simple_vlm_example` appears to hang at startup the first
+**Symptom:** `uv run main.py --piper` appears to hang at startup the first
 time.
 
 **Cause:** model weights are downloading from HuggingFace into `models/` at
@@ -378,3 +378,9 @@ the repository root (gitignored; the Cosmos3 checkpoint alone is tens of GB).
 downloads (runs started with `--allow-anonymous`) are rate-limited and can
 stall indefinitely; set `HF_TOKEN` and restart
 (see {doc}`/getting_started/credentials`).
+
+For `uv run main.py --magpie`, the first start also downloads the Magpie NIM
+image and exports an optimized model store. This can take about 20 minutes;
+later starts reuse `models/nim-magpie-tts/` and normally become ready in under
+a minute. Check the per-run `tts.log` and Docker output if the export exits
+instead of completing.

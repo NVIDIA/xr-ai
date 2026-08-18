@@ -16,11 +16,12 @@ from ._utils import merge_dicts
 
 
 Category = Literal["llm", "vlm", "stt", "tts", "embedding"]
-ModelKind = Literal["openai_compat"]
+ModelKind = Literal["openai_compat", "nvidia_tts_nim"]
 Readiness = Literal["health", "none"]
 Ownership = Literal["managed", "reused", "external"]
 
 KIND_OPENAI_COMPAT: ModelKind = "openai_compat"
+KIND_NVIDIA_TTS_NIM: ModelKind = "nvidia_tts_nim"
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,9 @@ class AdapterSpec:
     reasoning_field: str | None = None
     capabilities: dict[str, Any] = field(default_factory=dict)
     default_extras: dict[str, Any] = field(default_factory=dict)
+    language_code: str = "en-US"
+    voice: str = ""
+    sample_rate: int = 22050
 
 
 @dataclass(frozen=True)
@@ -81,6 +85,18 @@ class _RoleSpec:
     @property
     def default_extras(self) -> dict[str, Any]:
         return self.adapter.default_extras
+
+    @property
+    def language_code(self) -> str:
+        return self.adapter.language_code
+
+    @property
+    def voice(self) -> str:
+        return self.adapter.voice
+
+    @property
+    def sample_rate(self) -> int:
+        return self.adapter.sample_rate
 
     @property
     def base_url(self) -> str:
@@ -314,6 +330,9 @@ class TTSSpec(_RoleSpec):
         health_check: bool = True,
         deployment: DeploymentSpec | None = None,
         *,
+        language_code: str = "en-US",
+        voice: str = "",
+        sample_rate: int = 22050,
         adapter: AdapterSpec | None = None,
         endpoint: EndpointSpec | None = None,
     ) -> None:
@@ -330,11 +349,19 @@ class TTSSpec(_RoleSpec):
                 api_key_env=api_key_env is not None,
                 timeout=timeout != 30.0,
                 health_check=health_check is not True,
+                language_code=language_code != "en-US",
+                voice=bool(voice),
+                sample_rate=sample_rate != 22050,
             )
             self._set_specs(*structured)
             return
         self._set_specs(
-            AdapterSpec(kind=kind),
+            AdapterSpec(
+                kind=kind,
+                language_code=language_code,
+                voice=voice,
+                sample_rate=sample_rate,
+            ),
             EndpointSpec(
                 base_url=base_url,
                 api_key_env=api_key_env,
@@ -553,8 +580,19 @@ def _resolve_preset(body: dict[str, Any]) -> tuple[dict[str, Any], Category | No
 
 def _construct(category: Category, body: dict[str, Any]) -> Spec:
     kind = body.get("kind", KIND_OPENAI_COMPAT)
-    if kind != KIND_OPENAI_COMPAT:
+    supported_kinds = {KIND_OPENAI_COMPAT, KIND_NVIDIA_TTS_NIM}
+    if kind not in supported_kinds:
         raise ValueError(f"unsupported adapter kind: {kind!r}")
+    if kind == KIND_NVIDIA_TTS_NIM and category != "tts":
+        raise ValueError("nvidia_tts_nim is supported only for TTS")
+
+    sample_rate = int(body.get("sample_rate", 22050))
+    if sample_rate <= 0:
+        raise ValueError("sample_rate must be positive")
+    language_code = str(body.get("language_code", "en-US"))
+    voice = str(body.get("voice", ""))
+    if kind == KIND_NVIDIA_TTS_NIM and (not language_code or not voice):
+        raise ValueError("nvidia_tts_nim requires language_code and voice")
 
     endpoint = EndpointSpec(
         base_url=_require_str(body, "base_url"),
@@ -563,7 +601,7 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
         readiness=_readiness(body),
     )
     adapter = AdapterSpec(
-        kind=KIND_OPENAI_COMPAT,
+        kind=kind,
         model_name=(
             _require_str(body, "model_name")
             if category in ("llm", "vlm", "embedding")
@@ -572,6 +610,9 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
         reasoning_field=_optional_str(body, "reasoning_field"),
         capabilities=_mapping(body, "capabilities"),
         default_extras=_mapping(body, "default_extras"),
+        language_code=language_code,
+        voice=voice,
+        sample_rate=sample_rate,
     )
     deployment = _deployment(body.get("deployment", {}))
 
