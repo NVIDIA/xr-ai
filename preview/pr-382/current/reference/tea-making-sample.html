@@ -461,7 +461,7 @@ accepted speech / typed query          ├─&gt; GuidanceAgent observation loop
                                       │
                                       v
                                 typed runtime events
-                                      ├─&gt; GuidanceVoiceAgent ─&gt; voice
+                                      ├─&gt; GuidanceVoiceAgent ─&gt; voice aggregation
                                       ├─&gt; BackgroundContextAgent
                                       ├─&gt; FileOutputAgent ─────&gt; JSONL
                                       └─&gt; customer backend agent
@@ -513,7 +513,11 @@ tools directly, and each background agent owns its participant tasks.</p>
 <td><p>Which guidance notices are spoken</p></td>
 <td><p>Workflow decisions</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">FileOutputAgent</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code></p></td>
+<td><p>Participant speech pacing, ordering, and coalescing</p></td>
+<td><p>Workflow decisions</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">FileOutputAgent</span></code></p></td>
 <td><p>Participant session files and JSONL records</p></td>
 <td><p>Agent policy</p></td>
 </tr>
@@ -621,6 +625,10 @@ workflow controls and compact sparse state.</p></li>
 </ul>
 <p>There is exactly one model loop. The foreground agent does not ask one model to
 route to another agent, and background agents never capture a foreground turn.
+<code class="docutils literal notranslate"><span class="pre">current_view</span></code> is a direct-return exception within that loop: after the route is
+selected, <code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code> and <code class="docutils literal notranslate"><span class="pre">StreamingImageQueryTool</span></code> use the same streamed
+voice path as <code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code>, without a second language-model pass over
+the visual answer.
 Each turn contains the system prompt, current query, and current workflow
 context—no accumulated conversation history.</p>
 <p>This makes routing easy to reason about: application state decides which
@@ -757,7 +765,10 @@ or voice by accident.</p>
 <h3>Change voice policy<a class="headerlink" href="#change-voice-policy" title="Link to this heading">#</a></h3>
 <p><code class="docutils literal notranslate"><span class="pre">GuidanceVoiceAgent</span></code> is intentionally separate from <code class="docutils literal notranslate"><span class="pre">GuidanceAgent</span></code>. Add,
 suppress, batch, or redirect notices there. Background applications remain
-text/event producers unless a dedicated voice subscriber chooses otherwise.</p>
+text/event producers unless a dedicated voice subscriber chooses otherwise.
+Foreground responses and guidance notices publish to <code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code>,
+which combines non-urgent output produced during an active utterance before it
+reaches <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>.</p>
 </section>
 </section>
 <section id="lifecycle-invariants">
