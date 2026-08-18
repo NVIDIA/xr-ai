@@ -34,7 +34,6 @@ Module Contents
 
 .. py:class:: AddTranscriptRequest
 
-   Bases: :py:obj:`xr_ai_tools.types.StrictRequest`
 
 
    One timestamped transcript segment to persist.
@@ -71,7 +70,6 @@ Module Contents
 
 .. py:class:: AddTranscriptResult
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    Confirmation that a transcript segment was persisted.
@@ -88,7 +86,6 @@ Module Contents
 
 .. py:class:: TranscriptSegment
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    Persisted transcript text at a point in time.
@@ -110,7 +107,6 @@ Module Contents
 
 .. py:class:: QueryTranscriptsRequest
 
-   Bases: :py:obj:`xr_ai_tools.types.StrictRequest`
 
 
    Source and inclusive time window for a transcript query.
@@ -139,7 +135,6 @@ Module Contents
 
 .. py:class:: QueryTranscriptsResult
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    Transcript segments selected from one source and time window.
@@ -154,7 +149,6 @@ Module Contents
 
 .. py:class:: ListTranscriptSourcesResult
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    Persistent source identifiers known to text memory.
@@ -169,7 +163,6 @@ Module Contents
 
 .. py:class:: TranscriptStatsRequest
 
-   Bases: :py:obj:`xr_ai_tools.types.StrictRequest`
 
 
    Select one transcript source for statistics.
@@ -184,7 +177,6 @@ Module Contents
 
 .. py:class:: TranscriptStatsResult
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    Aggregate storage and time-range statistics for one source.
@@ -227,7 +219,6 @@ Module Contents
 
 .. py:class:: RecallConversationRequest
 
-   Bases: :py:obj:`xr_ai_tools.types.StrictRequest`
 
 
    Participant and inclusive time window for conversation recall.
@@ -256,7 +247,6 @@ Module Contents
 
 .. py:class:: ConversationEntry
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    One timestamped user or agent turn in a recalled conversation.
@@ -285,7 +275,6 @@ Module Contents
 
 .. py:class:: RecallConversationResult
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    Chronological user and agent turns recalled for a participant.
@@ -300,7 +289,6 @@ Module Contents
 
 .. py:class:: TextMemoryTool(directory: str | pathlib.Path | _TranscriptStore)
 
-   Bases: :py:obj:`xr_ai_tools.tools.Tool`\ [\ :py:obj:`AddTranscriptRequest`\ , :py:obj:`AddTranscriptResult`\ ]
 
 
    Append timestamped text to participant-scoped JSONL storage.

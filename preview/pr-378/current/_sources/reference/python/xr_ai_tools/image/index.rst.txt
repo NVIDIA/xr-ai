@@ -24,7 +24,6 @@ Module Contents
 
 .. py:class:: ImageReference
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    A lightweight reference to image bytes, a local path, or an HTTP URL.
@@ -47,7 +46,6 @@ Module Contents
 
 .. py:class:: TimedImage
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    An image reference positioned on a microsecond timeline.

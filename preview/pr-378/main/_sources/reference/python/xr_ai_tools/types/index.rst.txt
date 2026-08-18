@@ -25,7 +25,6 @@ Module Contents
 
 .. py:class:: StrictRequest
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    Base model for tool requests that rejects undeclared arguments.
@@ -33,7 +32,6 @@ Module Contents
 
 .. py:class:: EmptyRequest
 
-   Bases: :py:obj:`StrictRequest`
 
 
    Request model for a tool that accepts no arguments.
@@ -41,7 +39,6 @@ Module Contents
 
 .. py:class:: Vector3
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    A three-dimensional Cartesian vector or position.
@@ -70,7 +67,6 @@ Module Contents
 
 .. py:class:: SpatialFrame
 
-   Bases: :py:obj:`pydantic.BaseModel`
 
 
    An origin and orthogonal orientation axes in world space.
