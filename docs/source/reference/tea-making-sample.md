@@ -54,6 +54,7 @@ accepted speech / typed query          ├─> GuidanceAgent observation loop
                                       ├─> GuidanceVoiceAgent ─> voice aggregation
                                       ├─> BackgroundContextAgent
                                       ├─> FileOutputAgent ─────> JSONL
+                                      ├─> TeaWebEventsAgent ───> live browser
                                       └─> customer backend agent
 ```
 
@@ -78,6 +79,8 @@ on `agent.response` so the client can render accessible text alongside audio.
 | `GuidanceVoiceAgent` | Which guidance notices are spoken | Workflow decisions |
 | `VoiceAggregationAgent` | Participant speech pacing, ordering, and coalescing | Workflow decisions |
 | `FileOutputAgent` | Participant session files and JSONL records | Agent policy |
+| `TeaWebEventsAgent` | Explicit compact projections for the generic live viewer | Durable storage or file polling |
+| `WebEventsAgent` | Bounded loopback HTTP presentation grouped by participant and topic | Application event selection |
 
 The runtime delivers events but does not absorb application state or
 concurrency. Moving a task to another agent also means moving its cancellation,
@@ -101,6 +104,7 @@ locks, and participant cleanup.
 | `video_log.py` | Periodic caption and delta observer | Build a visual journal |
 | `guidance_voice.py` | Guidance notice speech policy | Add another presentation channel |
 | `file_output.py` | Participant JSONL artifacts | Replace files with backend persistence |
+| `web_events.py` | Explicit typed event-to-view projections | Select or reshape live presentation topics |
 | `prompts/` | Default model instructions | Tune one agent without duplicating prompts in YAML |
 | `yaml/workflow.yaml` | Five-step procedure and evidence contract | Define a different guided task |
 | `rag-documents/` | Sample retrieval corpus | Replace with domain documents or a backend |
@@ -195,6 +199,20 @@ Each publishes its durable record topic. Important compact results also become
 participant-local window and exposes `application_context__query` to the
 foreground. Thus background work can inform a later question without becoming
 conversation history or taking ownership of the response.
+
+## Live inspection and durable output
+
+The worker starts a generic event viewer at `http://127.0.0.1:8092` before it
+announces voice readiness. `TeaWebEventsAgent` explicitly subscribes to the
+foreground, guidance, background, transcript, video-log, and participant
+lifecycle topics and publishes compact `WebEvent` payloads. There is no runtime
+wildcard subscription and no file tailing.
+
+The viewer keeps only a bounded in-memory history for the current process. The
+participant JSONL files under `artifacts/` remain the durable record and include
+events that may not be selected for live presentation. The loopback listener is
+read-only but unauthenticated; use an SSH tunnel for remote development instead
+of binding it to an untrusted network.
 
 ## Connecting a backend
 

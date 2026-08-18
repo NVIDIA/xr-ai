@@ -39,6 +39,9 @@ class WorkerConfig:
     min_speech: float
     silero_threshold: float
     idle_timeout_secs: float | None
+    web_events_host: str
+    web_events_port: int
+    web_events_max_events: int
 
 
 def _resolve(config_path: Path | None, raw: str) -> Path:
@@ -86,6 +89,15 @@ def load_config(path: Path | None) -> WorkerConfig:
     if history_size <= 0:
         raise ValueError("background_history_size must be positive")
     idle_timeout = float(data.get("idle_timeout_secs", 0.0))
+    web_events_host = str(data.get("web_events_host", "127.0.0.1")).strip()
+    if not web_events_host:
+        raise ValueError("web_events_host must not be empty")
+    web_events_port = int(data.get("web_events_port", 8092))
+    if not 0 <= web_events_port <= 65_535:
+        raise ValueError("web_events_port must be between 0 and 65535")
+    web_events_max_events = int(data.get("web_events_max_events", 5_000))
+    if web_events_max_events <= 0:
+        raise ValueError("web_events_max_events must be positive")
     return WorkerConfig(
         models_config=_resolve(path, str(data.get("models_config", "models.local.json"))),
         workflow_config=_resolve(path, str(data.get("workflow_config", "workflow.yaml"))),
@@ -115,6 +127,9 @@ def load_config(path: Path | None) -> WorkerConfig:
         min_speech=_positive(data, "min_speech", 0.15),
         silero_threshold=_positive(data, "silero_threshold", 0.3),
         idle_timeout_secs=idle_timeout if idle_timeout > 0 else None,
+        web_events_host=web_events_host,
+        web_events_port=web_events_port,
+        web_events_max_events=web_events_max_events,
     )
 
 

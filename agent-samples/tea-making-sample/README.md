@@ -23,8 +23,8 @@ and forwards interrupting output immediately.
 The sample uses native `xr_ai_runtime` agents and `xr_ai_tools`; it does not use
 NAT, PydanticAI, or MCP. Nemotron-3-Nano-Omni on port 8108 supplies both language
 reasoning and visual inference. STT, embedding, and RAG remain separate typed
-services. There is no monitoring dashboard: operational records are written as
-JSON Lines files under `artifacts/`.
+services. Selected runtime events appear in a generic live browser viewer while
+durable operational records remain JSON Lines files under `artifacts/`.
 
 ## Run it
 
@@ -43,6 +43,9 @@ uv run --project agent-samples/tea-making-sample tea_making_sample \
 
 Open `https://localhost:8080`, accept the self-signed certificate on first use,
 allow microphone and camera access, and connect.
+Open `http://127.0.0.1:8092` to watch selected foreground, guidance,
+background, and participant events grouped by topic. The viewer is loopback-only
+and starts with the worker; it does not read or tail the JSONL files.
 In wake-word mode, begin commands with “Agent” or “Hey Agent.” For example:
 
 ```text
@@ -94,12 +97,18 @@ participant-specific file. The files are the integration boundary for manual
 inspection and can be replaced by typed runtime subscribers in a downstream
 application.
 
+The browser viewer is an independent, bounded in-memory presentation of
+selected events. It is useful while a session is live but is not durable and
+does not replace the JSONL artifacts. Its loopback listener has no application
+authentication; use an SSH tunnel rather than exposing it directly.
+
 ## Configuration
 
 - `yaml/models.local.json` maps both `llm` and `vlm` to Omni on port 8108 and
   declares STT, embedding, and TTS endpoints.
 - `yaml/tea_making_worker.yaml` controls VAD, frame timeouts, observation
-  intervals, artifact output, RAG, and workflow paths.
+  intervals, artifact output, the loopback web-events host/port/history, RAG,
+  and workflow paths.
 - `yaml/workflow.yaml` defines the tea steps, typed state, evidence gates, and
   user-facing messages.
 - `worker/tea_making_worker/prompts/` is the default source for model prompts;

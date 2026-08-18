@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock
 import pytest
 import yaml
 from xr_ai_models import ChatResponse, ToolCall
-from xr_ai_runtime import AgentRuntime
+from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools.image import ImageReference, ImageRegistry
 from xr_ai_tools.vision import ImageQueryChunk, ImageQueryResult
 from xr_ai_voice import (
@@ -26,6 +26,7 @@ from xr_ai_voice import (
     VoiceParticipantJoined,
     VoiceParticipantLeft,
 )
+from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent, WebEventsAgent
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SAMPLE = _ROOT / "agent-samples" / "tea-making-sample"
@@ -42,16 +43,24 @@ from tea_making_worker.background_context import (  # noqa: E402  # pyright: ign
 from tea_making_worker.change_watch import ChangeWatchAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.events import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    BACKGROUND_FACT_TOPIC,
+    CHANGE_WATCH_RECORD_TOPIC,
     FOREGROUND_RECORD_TOPIC,
     GUIDANCE_NOTICE_TOPIC,
     GUIDANCE_RECORD_TOPIC,
     PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
+    TRANSCRIPT_RECORD_TOPIC,
+    VIDEO_LOG_RECORD_TOPIC,
+    BackgroundFact,
+    ChangeWatchRecord,
     ForegroundRecord,
     GuidanceNotice,
     GuidanceRecord,
     ParticipantCleanupComplete,
+    TranscriptRecord,
+    VideoLogRecord,
 )
 from tea_making_worker.file_output import FileOutputAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.foreground import ForegroundAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
@@ -59,6 +68,7 @@ from tea_making_worker.images import ParticipantImageAgent  # noqa: E402  # pyri
 from tea_making_worker.spec import load_workflow  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.transcript import TranscriptAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.video_log import VideoLogAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.web_events import TeaWebEventsAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.workflow import GuidanceAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.workflow_state import WorkflowStore  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.workflow_tools import CurrentViewRequest  # noqa: E402  # pyright: ignore[reportMissingImports]
@@ -118,6 +128,128 @@ def test_launcher_defaults_to_wake_word_and_allows_always_on() -> None:
     assert _CLIENT_TEXT_TOPIC == "agent.response"
 
 
+def test_web_event_config_defaults_and_validation(tmp_path: Path) -> None:
+    config = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
+
+    assert config.web_events_host == "127.0.0.1"
+    assert config.web_events_port == 8092
+    assert config.web_events_max_events == 5_000
+
+    invalid = tmp_path / "invalid-web-events.yaml"
+    invalid.write_text("web_events_host: ''\n")
+    with pytest.raises(ValueError, match="web_events_host"):
+        load_config(invalid)
+    invalid.write_text("web_events_port: 70000\n")
+    with pytest.raises(ValueError, match="web_events_port"):
+        load_config(invalid)
+    invalid.write_text("web_events_max_events: 0\n")
+    with pytest.raises(ValueError, match="web_events_max_events"):
+        load_config(invalid)
+
+
+@pytest.mark.asyncio
+async def test_typed_events_are_projected_to_web_topics() -> None:
+    captured: list[tuple[WebEvent, str | None]] = []
+
+    class Capture(Agent):
+        def __init__(self) -> None:
+            super().__init__()
+
+        @subscribe(WEB_EVENT_TOPIC)
+        async def event(self, event: WebEvent, ctx: RuntimeContext) -> None:
+            captured.append((event, ctx.metadata.participant_id))
+
+    runtime = AgentRuntime()
+    runtime.register("web-event-adapter", TeaWebEventsAgent())
+    runtime.register("capture", Capture())
+    participant_id = "participant-web"
+    publications = (
+        (
+            FOREGROUND_RECORD_TOPIC,
+            ForegroundRecord(timestamp_us=1, query="What now?", response="Pour."),
+        ),
+        (
+            GUIDANCE_RECORD_TOPIC,
+            GuidanceRecord(
+                timestamp_us=2,
+                event="step.enter",
+                message="Fill the kettle.",
+            ),
+        ),
+        (
+            GUIDANCE_NOTICE_TOPIC,
+            GuidanceNotice(timestamp_us=3, text="The water is ready."),
+        ),
+        (
+            BACKGROUND_FACT_TOPIC,
+            BackgroundFact(
+                timestamp_us=4,
+                application="transcript",
+                text="User mentioned Earl Grey.",
+            ),
+        ),
+        (
+            CHANGE_WATCH_RECORD_TOPIC,
+            ChangeWatchRecord(timestamp_us=5, record_type="started"),
+        ),
+        (
+            TRANSCRIPT_RECORD_TOPIC,
+            TranscriptRecord(
+                timestamp_us=6,
+                record_type="utterance",
+                text="Start steeping.",
+            ),
+        ),
+        (
+            VIDEO_LOG_RECORD_TOPIC,
+            VideoLogRecord(timestamp_us=7, record_type="observation", caption="A cup."),
+        ),
+        (PARTICIPANT_JOINED_TOPIC, VoiceParticipantJoined()),
+        (PARTICIPANT_LEFT_TOPIC, VoiceParticipantLeft()),
+    )
+
+    async with runtime:
+        for topic, event in publications:
+            await runtime.publish(topic, event, participant_id=participant_id)
+
+    assert [event.topic for event, _participant in captured] == [
+        "foreground",
+        "guidance.events",
+        "guidance.notices",
+        "background.facts",
+        "background.change-watch",
+        "background.transcript",
+        "background.video-log",
+        "participant.lifecycle",
+        "participant.lifecycle",
+    ]
+    assert {participant for _event, participant in captured} == {participant_id}
+    assert captured[-2][0].payload == {"event": "joined"}
+    assert captured[-1][0].payload == {"event": "left"}
+
+
+@pytest.mark.asyncio
+async def test_web_viewer_surrounds_runtime_lifecycle() -> None:
+    runtime = AgentRuntime()
+    viewer = runtime.register(
+        "web-events",
+        WebEventsAgent(host="127.0.0.1", port=0, max_events=8),
+    )
+    runtime.register("web-event-adapter", TeaWebEventsAgent())
+
+    assert not viewer.running
+    async with viewer:
+        assert viewer.running
+        async with runtime:
+            await runtime.publish(
+                PARTICIPANT_JOINED_TOPIC,
+                VoiceParticipantJoined(),
+                participant_id="participant-live",
+            )
+        assert viewer.running
+    assert not viewer.running
+
+
 @pytest.mark.asyncio
 async def test_participant_leave_releases_voice_aggregation_state() -> None:
     aggregation = object.__new__(_ParticipantVoiceAggregationAgent)
@@ -138,10 +270,12 @@ def test_published_guide_covers_architecture_and_adaptation() -> None:
     assert "## Architecture" in guide
     assert "## Source map" in guide
     assert "## Connecting a backend" in guide
+    assert "## Live inspection and durable output" in guide
     assert "## Adapting the sample" in guide
     assert "## Lifecycle invariants" in guide
     assert "GuidanceAgent" in guide
     assert "BackgroundContextAgent" in guide
+    assert "TeaWebEventsAgent" in guide
 
 
 def test_workflow_requires_explicit_advancement() -> None:

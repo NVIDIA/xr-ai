@@ -25,6 +25,7 @@ from xr_ai_voice import (
     VoiceParticipantLeft,
 )
 from xr_ai_voicegate import load_voice_gate_config
+from xr_ai_web_events import WebEventsAgent
 
 from .background_context import BackgroundContextAgent
 from .change_watch import ChangeWatchAgent
@@ -42,6 +43,7 @@ from .images import ParticipantImageAgent
 from .spec import load_workflow
 from .transcript import TranscriptAgent
 from .video_log import VideoLogAgent
+from .web_events import TeaWebEventsAgent
 from .workflow import GuidanceAgent
 
 _CLIENT_TEXT_TOPIC = "agent.response"
@@ -123,6 +125,16 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     )
 
     runtime = AgentRuntime()
+    web_events = runtime.register(
+        "web-events",
+        WebEventsAgent(
+            host=config.web_events_host,
+            port=config.web_events_port,
+            max_events=config.web_events_max_events,
+            title="Tea-making agent events",
+        ),
+    )
+    runtime.register("web-event-adapter", TeaWebEventsAgent())
     files = runtime.register(
         "file-output",
         FileOutputAgent(
@@ -211,22 +223,24 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     logger.info("file outputs → {}", config.artifacts_dir)
     logger.info("tea-making starting with Omni for language and vision")
     async with _relay_event_log(config.artifacts_dir):
-        async with runtime:
-            guidance.bind_runtime(runtime)
-            change_watch.bind_runtime(runtime)
-            transcript.bind_runtime(runtime)
-            video_log.bind_runtime(runtime)
-            try:
-                await voice.run(runtime)
-            finally:
-                await foreground.stop()
-                await guidance.stop()
-                await change_watch.stop()
-                await transcript.stop()
-                await video_log.stop()
-                await images.stop()
-                await files.stop()
-                await voice_aggregation.stop()
+        async with web_events:
+            logger.info("live events → {}", web_events.url)
+            async with runtime:
+                guidance.bind_runtime(runtime)
+                change_watch.bind_runtime(runtime)
+                transcript.bind_runtime(runtime)
+                video_log.bind_runtime(runtime)
+                try:
+                    await voice.run(runtime)
+                finally:
+                    await foreground.stop()
+                    await guidance.stop()
+                    await change_watch.stop()
+                    await transcript.stop()
+                    await video_log.stop()
+                    await images.stop()
+                    await files.stop()
+                    await voice_aggregation.stop()
     logger.info("tea-making stopped")
 
 
