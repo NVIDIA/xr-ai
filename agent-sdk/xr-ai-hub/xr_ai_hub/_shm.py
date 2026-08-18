@@ -205,8 +205,13 @@ class ShmRingBuffer:
             pass
 
     def unlink(self) -> None:
-        """Remove the shared-memory segment; call once from its creating owner."""
-        self._shm.unlink()
+        """Remove the segment, tolerating repeated cleanup by this process."""
+        try:
+            self._shm.unlink()
+        except FileNotFoundError:
+            # The creating owner can reach cleanup more than once. Unrelated
+            # processes must not unlink a segment they did not create.
+            pass
 
     def __enter__(self):
         """Return this ring buffer from a context manager."""
