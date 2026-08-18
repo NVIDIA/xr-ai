@@ -21,7 +21,7 @@
       "deployment": {"ownership": "managed", "service": "tts"}
     },
     "vlm": {
-      "adapter": {"preset": "cosmos_vlm"},
+      "adapter": {"preset": "cosmos3_nano_reasoner"},
       "endpoint": {"base_url": "http://localhost:8100", "readiness": "health"},
       "deployment": {"ownership": "reused", "service": "vlm"}
     }

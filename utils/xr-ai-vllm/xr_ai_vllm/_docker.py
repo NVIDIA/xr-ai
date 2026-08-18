@@ -17,6 +17,7 @@ are not overwritten.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -29,6 +30,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 from . import _lifecycle
 
@@ -36,9 +38,27 @@ log = logging.getLogger(__name__)
 
 _DOCKER_CONFIG = Path.home() / ".docker" / "config.json"
 _LOGIN_DONE: set[str] = set()
+_CONFIG_LABEL = "xr-ai-vllm.config"
+_LAUNCH_CONTRACT_VERSION = 1
 
 
 # ── docker run argv builder ──────────────────────────────────────────────────
+
+
+def launch_fingerprint(payload: dict[str, Any]) -> str:
+    """Digest of a container's complete launch contract.
+
+    Stamped as the ``xr-ai-vllm.config`` label at creation and compared on
+    reuse, so a container created under any different configuration (image
+    pin, GPU placement, env, argv) is replaced instead of silently reused.
+    """
+    versioned = {"launch_contract_version": _LAUNCH_CONTRACT_VERSION, **payload}
+    encoded = json.dumps(
+        versioned,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()[:20]
 
 
 def build_run_argv(
@@ -67,6 +87,16 @@ def build_run_argv(
     # caller needing to know the container name — implementation detail stays
     # inside this module.
     argv += ["--label", f"xr-ai-vllm.port={port}"]
+    fingerprint = launch_fingerprint({
+        "image": image,
+        "port": port,
+        "model_cache": str(model_cache),
+        "cuda_visible_devices": cuda_visible_devices,
+        "extra_env": extra_env or {},
+        "extra_pip": extra_pip or [],
+        "vllm_argv": vllm_argv,
+    })
+    argv += ["--label", f"{_CONFIG_LABEL}={fingerprint}"]
     argv += ["--network", "host"]
     # vLLM workers communicate via /dev/shm; the default 64 MiB tmpfs is too
     # small for the KV cache shards.  --ipc host gives them the host's larger
@@ -188,44 +218,46 @@ def remove_container(name: str) -> bool:
         return False
 
 
-def _requested_env(argv: list[str]) -> dict[str, str]:
-    """KEY=VALUE pairs requested via ``-e`` (name-only forwards excluded)."""
-    env: dict[str, str] = {}
-    for i, arg in enumerate(argv[:-1]):
-        if arg == "-e" and "=" in argv[i + 1]:
-            key, _, value = argv[i + 1].partition("=")
-            env[key] = value
-    return env
-
-
-def _container_config_matches(name: str, argv: list[str], image: str) -> bool:
-    """True iff *name* was created from *image* with every requested KEY=VALUE.
-
-    Fail-open: if the container cannot be inspected, reuse proceeds and the
-    health gate decides; the warning makes the unverified reuse visible.
-    """
-    requested = _requested_env(argv)
+def container_label(name: str, label: str) -> str | None:
+    """Return one Docker container label, or ``None`` when unavailable."""
     try:
-        out = subprocess.run(
-            ["docker", "inspect", "--format",
-             "{{.Config.Image}}\n{{range .Config.Env}}{{println .}}{{end}}",
-             name],
-            capture_output=True, text=True, timeout=10, check=True,
-        ).stdout
-    except (FileNotFoundError, subprocess.TimeoutExpired,
-            subprocess.CalledProcessError):
-        log.warning(
-            "could not inspect container %s; reusing it WITHOUT verifying "
-            "its image and configuration match the current YAML", name,
+        raw = subprocess.check_output(
+            [
+                "docker",
+                "inspect",
+                "--format",
+                f'{{{{ index .Config.Labels "{label}" }}}}',
+                name,
+            ],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        return raw or None
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+
+
+def _requested_fingerprint(argv: list[str]) -> str | None:
+    """The ``xr-ai-vllm.config`` label value carried by a ``docker run`` argv."""
+    prefix = f"{_CONFIG_LABEL}="
+    for i, arg in enumerate(argv[:-1]):
+        if arg == "--label" and argv[i + 1].startswith(prefix):
+            return argv[i + 1][len(prefix):]
+    return None
+
+
+def start_container(name: str) -> bool:
+    """Start one stopped container without attaching its output."""
+    try:
+        subprocess.run(
+            ["docker", "start", name],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
         return True
-    lines = out.splitlines()
-    if not lines or lines[0] != image:
+    except (FileNotFoundError, subprocess.CalledProcessError):
         return False
-    actual = dict(
-        line.partition("=")[::2] for line in lines[1:] if "=" in line
-    )
-    return all(actual.get(key) == value for key, value in requested.items())
 
 
 def evict_local_listener(port: int, log_prefix: str) -> None:
@@ -659,34 +691,45 @@ def run_container(
         # it too can answer the health probe and be mistaken for ours.
         evict_local_listener(port, log_prefix)
 
-    # A running same-name container may have been created under a different
-    # configuration (a profile switch that moves GPUs, an edited YAML, or a
-    # bumped image pin); its creation-time config is immutable, so recreate
-    # on mismatch.
-    if container_running(container_name) and not _container_config_matches(
-        container_name, argv, image,
-    ):
+    # A same-name container is reusable only when its complete launch
+    # contract (the creation-time xr-ai-vllm.config fingerprint) matches this
+    # run's; anything else — image pin bump, GPU move, edited YAML — gets
+    # replaced, because a container's creation-time config is immutable.
+    fingerprint = _requested_fingerprint(argv)
+    existing = container_exists(container_name)
+    running = existing and container_running(container_name)
+    matching = existing and (
+        container_label(container_name, _CONFIG_LABEL) == fingerprint
+    )
+
+    if _lifecycle.health_ok(health_url):
+        if not running:
+            log.error(
+                "port %d is healthy, but expected container %s is not "
+                "running; refusing to reuse an unowned listener",
+                port,
+                container_name,
+            )
+            sys.exit(1)
+        if matching:
+            print(f"[{log_prefix}] {reuse_banner}", flush=True)
+            if ready_file:
+                ready_file.touch()
+            signal.signal(signal.SIGINT,  orig_int)
+            signal.signal(signal.SIGTERM, orig_term)
+            _lifecycle.idle_until_stopped(health_url, log_prefix)
+            return
         print(
             f"[{log_prefix}] container {container_name} is running with a "
             f"different configuration; recreating",
             flush=True,
         )
-        stop_container(container_name)
-        if not remove_container(container_name):
-            log.error("could not remove outdated container %s", container_name)
+        if not stop_container(container_name) or not remove_container(container_name):
+            log.error("could not replace outdated container %s", container_name)
             sys.exit(1)
+        existing = running = False
 
-    # Reuse a container that survived a wrapper restart (weight persistence).
-    if _lifecycle.health_ok(health_url):
-        print(f"[{log_prefix}] {reuse_banner}", flush=True)
-        if ready_file:
-            ready_file.touch()
-        signal.signal(signal.SIGINT,  orig_int)
-        signal.signal(signal.SIGTERM, orig_term)
-        _lifecycle.idle_until_stopped(health_url, log_prefix)
-        return
-
-    if container_running(container_name):
+    if running and matching:
         # Running but not yet healthy — e.g. started by a wrapper that died,
         # or a NIM mid engine-download. Adopt it instead of a doomed
         # `docker run` (the name is taken).
@@ -696,17 +739,30 @@ def run_container(
             flush=True,
         )
         proc = None
+    elif existing and matching:
+        # Same launch contract, so `docker start` is safe and keeps the
+        # container's in-image setup (pip installs) from the first run.
+        print(
+            f"[{log_prefix}] Restarting matching stopped container "
+            f"{container_name}",
+            flush=True,
+        )
+        if not start_container(container_name):
+            log.error("could not restart container %s", container_name)
+            sys.exit(1)
+        proc = None
     else:
-        if container_exists(container_name):
-            # A container's command and entrypoint are immutable. Recreate
-            # failed containers so launcher fixes and changed service
-            # arguments take effect.
+        if existing:
             print(
-                f"[{log_prefix}] Recreating stopped container {container_name}",
+                f"[{log_prefix}] Container configuration changed — "
+                f"recreating {container_name}",
                 flush=True,
             )
+            if running and not stop_container(container_name):
+                log.error("could not stop outdated container %s", container_name)
+                sys.exit(1)
             if not remove_container(container_name):
-                log.error("Could not remove stopped container %s", container_name)
+                log.error("could not remove outdated container %s", container_name)
                 sys.exit(1)
 
         _maybe_ngc_login(image)

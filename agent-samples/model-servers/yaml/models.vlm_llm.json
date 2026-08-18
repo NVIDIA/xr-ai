@@ -28,7 +28,7 @@
     },
     "vlm": {
       "adapter": {
-        "preset": "cosmos_vlm"
+        "preset": "cosmos3_nano_reasoner"
       },
       "endpoint": {
         "base_url": "http://localhost:8100",

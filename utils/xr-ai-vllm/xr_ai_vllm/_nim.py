@@ -46,6 +46,15 @@ def build_nim_run_argv(
     argv: list[str] = ["docker", "run"]
     argv += ["--name", container_name]
     argv += ["--label", f"xr-ai-vllm.port={http_port}"]
+    fingerprint = _docker.launch_fingerprint({
+        "image": image,
+        "http_port": http_port,
+        "grpc_port": grpc_port,
+        "nim_cache": str(nim_cache),
+        "cuda_visible_devices": cuda_visible_devices,
+        "extra_env": extra_env or {},
+    })
+    argv += ["--label", f"{_docker._CONFIG_LABEL}={fingerprint}"]
     # Bridge networking with explicit -p maps to each family's documented
     # internal defaults. Env-var port overrides (NIM_HTTP_API_PORT) are
     # honored inconsistently across NIM images, and host networking makes the
