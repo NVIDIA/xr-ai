@@ -163,6 +163,15 @@ class VoiceAggregationAgent(Agent):
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
+    async def release(self, participant_id: str) -> None:
+        """Cancel and release one departed participant's aggregation state."""
+
+        state = self._states.pop(participant_id, None)
+        if state is None or state.task is None:
+            return
+        state.task.cancel()
+        await asyncio.gather(state.task, return_exceptions=True)
+
     async def _run_participant(
         self,
         participant_id: str,
