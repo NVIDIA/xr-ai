@@ -14,12 +14,13 @@ Accepts --config <path>.yaml (auto-passed by xr-ai-launcher).
 
 Config keys
 -----------
-    model:        str   NeMo / HuggingFace model name (required)
-    device:       str   "cuda" | "cpu" | "auto" (default: "auto")
-    port:         int   HTTP port (default: 8103)
-    host:         str   Bind address (default: "0.0.0.0")
-    model_cache:  str   NeMo + HF weight cache.  Resolved relative to this YAML.
-                        Default: ../../models
+    model:             str    NeMo / HuggingFace model name (required)
+    device:            str    "cuda" | "cpu" | "auto" (default: "auto")
+    port:              int    HTTP port (default: 8103)
+    host:              str    Bind address (default: "0.0.0.0")
+    startup_timeout_s: float  Seconds allowed for a cold start (default: 900)
+    model_cache:       str    NeMo + HF weight cache.  Resolved relative to this YAML.
+                              Default: ../../models
 """
 import argparse
 import asyncio
@@ -48,7 +49,9 @@ import yaml
 from loguru import logger
 from xr_ai_logging import setup_logging
 
-_DEFAULT_PORT = 8103
+_DEFAULT_PORT              = 8103
+_DEFAULT_STARTUP_TIMEOUT_S = 900.0
+_PROCESS_STOP_TIMEOUT_S    = 10.0
 
 
 def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
@@ -181,9 +184,13 @@ def _build_app(cfg: dict, model_cache: Path):
 
 def _health_ok(port: int) -> bool:
     """Return True if an STT server is already answering /health on *port*."""
+    return _health_url_ok(f"http://127.0.0.1:{port}/health")
+
+
+def _health_url_ok(health_url: str) -> bool:
+    """Return True if *health_url* answers successfully."""
     try:
-        import urllib.request
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2) as r:
+        with urllib.request.urlopen(health_url, timeout=2) as r:
             return r.status == 200
     except Exception:
         return False
@@ -240,15 +247,98 @@ async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> Non
     logger.info("Stopped.")
 
 
-def _idle_until_stopped(health_url: str) -> None:
+def _wait_until_healthy(
+    process: subprocess.Popen,
+    health_url: str,
+    timeout_s: float,
+    poll_s: float = 1.0,
+) -> None:
+    """Wait for health while reporting a detached server crash immediately."""
+    deadline = time.monotonic() + timeout_s
+    while True:
+        returncode = process.poll()
+        if returncode is not None:
+            raise RuntimeError(
+                f"server exited with status {returncode} before becoming healthy"
+            )
+        if _health_url_ok(health_url):
+            return
+
+        remaining_s = deadline - time.monotonic()
+        if remaining_s <= 0:
+            raise TimeoutError(
+                f"server did not become healthy within {timeout_s:g} seconds"
+            )
+
+        # Waiting on the process, rather than sleeping blindly, wakes the
+        # wrapper as soon as a failed import, download, or CUDA load exits.
+        try:
+            returncode = process.wait(timeout=min(poll_s, remaining_s))
+        except subprocess.TimeoutExpired:
+            continue
+        raise RuntimeError(
+            f"server exited with status {returncode} before becoming healthy"
+        )
+
+
+def _terminate_process(
+    process: subprocess.Popen,
+    timeout_s: float = _PROCESS_STOP_TIMEOUT_S,
+) -> None:
+    """Terminate and reap a detached server, escalating if it does not stop."""
+    if process.poll() is not None:
+        return
+    try:
+        process.terminate()
+    except ProcessLookupError:
+        pass
+    try:
+        process.wait(timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        try:
+            process.kill()
+        except ProcessLookupError:
+            pass
+        process.wait()
+
+
+def _start_persistent_server(
+    cmd: list[str],
+    health_url: str,
+    startup_timeout_s: float,
+) -> subprocess.Popen:
+    """Start the detached server and return it once its health check passes."""
+    process = subprocess.Popen(cmd, start_new_session=True)
+    try:
+        _wait_until_healthy(process, health_url, startup_timeout_s)
+    except TimeoutError:
+        _terminate_process(process)
+        raise
+    return process
+
+
+def _idle_until_stopped(
+    health_url: str,
+    process: subprocess.Popen | None = None,
+    poll_s: float = 5.0,
+) -> None:
     """Keep the wrapper alive while the persisted server is still running."""
     while True:
-        time.sleep(5)
-        try:
-            with urllib.request.urlopen(health_url, timeout=2) as r:
-                if r.status != 200:
-                    return
-        except Exception:
+        if process is None:
+            time.sleep(poll_s)
+        else:
+            try:
+                returncode = process.wait(timeout=poll_s)
+            except subprocess.TimeoutExpired:
+                pass
+            else:
+                if returncode != 0:
+                    raise SystemExit(
+                        f"[stt_server] persistent server exited with status {returncode}"
+                    )
+                return
+
+        if not _health_url_ok(health_url):
             # Any urlopen failure — connection refused, timeout, socket
             # error — means the persisted server is gone; exit so the
             # wrapper subprocess can be reaped.
@@ -281,15 +371,15 @@ def run() -> None:
         return
 
     # ── wrapper mode ──────────────────────────────────────────────────────────
-    port       = int(cfg.get("port", _DEFAULT_PORT))
-    health_url = f"http://127.0.0.1:{port}/health"
+    port              = int(cfg.get("port", _DEFAULT_PORT))
+    startup_timeout_s = float(cfg.get("startup_timeout_s", _DEFAULT_STARTUP_TIMEOUT_S))
+    health_url        = f"http://127.0.0.1:{port}/health"
+
+    if startup_timeout_s <= 0:
+        sys.exit("[stt_server] 'startup_timeout_s' must be greater than zero")
 
     # Reuse an already-running server (survived a previous stack shutdown).
-    try:
-        with urllib.request.urlopen(health_url, timeout=3) as r:
-            already_up = r.status == 200
-    except Exception:
-        already_up = False
+    already_up = _health_url_ok(health_url)
 
     if already_up:
         print(f"[stt_server] already running on port {port} — reusing", flush=True)
@@ -303,28 +393,20 @@ def run() -> None:
     cmd = [sys.executable, "-m", "stt_server", "--_serve"]
     if ns.config:
         cmd += ["--config", str(ns.config)]
-    subprocess.Popen(cmd, start_new_session=True)
-
-    # Poll until healthy (model load takes ~20 s).
-    print(f"[stt_server] starting persistent server on port {port}…", flush=True)
-    for _ in range(120):
-        time.sleep(1)
-        try:
-            with urllib.request.urlopen(health_url, timeout=2) as r:
-                if r.status == 200:
-                    break
-        except Exception:
-            # Server still coming up — connection refused / timeout is the
-            # expected case for the first ~20s while NeMo loads. Retry
-            # silently; the for/else below handles the hard timeout.
-            pass
-    else:
-        sys.exit("[stt_server] timed out waiting for server to become healthy")
+    print(
+        f"[stt_server] starting persistent server on port {port} "
+        f"(startup timeout: {startup_timeout_s:g}s)…",
+        flush=True,
+    )
+    try:
+        process = _start_persistent_server(cmd, health_url, startup_timeout_s)
+    except (RuntimeError, TimeoutError) as exc:
+        raise SystemExit(f"[stt_server] {exc}") from exc
 
     print(f"[stt_server] Ready  →  http://localhost:{port}/v1", flush=True)
     if ns.ready_file:
         ns.ready_file.touch()
-    _idle_until_stopped(health_url)
+    _idle_until_stopped(health_url, process)
 
 
 if __name__ == "__main__":

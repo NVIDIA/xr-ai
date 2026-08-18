@@ -16,5 +16,9 @@ device: auto
 port: 8103
 host: "0.0.0.0"
 
+# A cold start imports NeMo, downloads weights when absent, initializes CUDA,
+# and loads the model before /health opens. Increase this on slow links.
+startup_timeout_s: 900
+
 # NeMo + HuggingFace weight cache — resolved relative to this YAML file.
 model_cache: ../../models
