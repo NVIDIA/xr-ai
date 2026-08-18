@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# The launcher materializes these three paths for the selected runtime modes.
+models_config: models.local.json
+workflow_config: workflow.yaml
+voice_gate_yaml: voice_gate.yaml
+
+rag_endpoint: tcp://127.0.0.1:8340
+artifacts_dir: ../artifacts
+
+frame_max_age_s: 3.0
+frame_timeout_s: 5.0
+vlm_timeout_s: 15.0
+
+change_watch_interval_s: 2.0
+transcript_summary_interval_s: 120.0
+video_log_interval_s: 2.0
+background_history_size: 50
+
+change_watch_default_instruction: >-
+  important changes involving people, objects, actions, or possible hazards
+change_watch_caption_prompt: >-
+  Describe only visible facts relevant to the requested watch. Include enough
+  scene context to compare the current image with earlier observations.
+change_watch_event_prompt: >-
+  Compare the current caption with recent captions and the requested watch.
+  Report one short factual sentence only when a relevant material change is
+  newly visible. Ignore wording, viewpoint, and lighting differences.
+transcript_summary_prompt: >-
+  Summarize the supplied new utterances in one or two short factual sentences.
+  Do not add facts that were not spoken.
+video_caption_prompt: >-
+  Describe visible people, objects, actions, readable text, and notable scene
+  conditions. Report only visible facts and do not infer.
+video_delta_prompt: >-
+  Compare the current caption with recent captions. State only material visible
+  information unique to the current observation. If nothing material changed,
+  say that there was no meaningful visual change.
+
+silero_threshold: 0.3
+silence_duration: 1.2
+min_speech: 0.15
+idle_timeout_secs: 0

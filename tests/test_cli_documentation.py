@@ -23,6 +23,7 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         "lab_instrument_monitoring",
         "model_servers",
         "simple_vlm_example",
+        "tea_making_sample",
         "xr_render_demo",
     }
     assert [argument.flags for argument in commands["lab_instrument_monitoring"].arguments] == [
@@ -37,6 +38,14 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
     ]
     assert [argument.flags for argument in commands["simple_vlm_example"].arguments] == [
         ("--allow-anonymous",),
+    ]
+    assert [argument.flags for argument in commands["tea_making_sample"].arguments] == [
+        ("--voice-mode",),
+        ("--tts-mode",),
+    ]
+    assert [argument.flags for argument in commands["tea_making_sample"].arguments] == [
+        ("--voice-mode",),
+        ("--tts-mode",),
     ]
     assert commands["xr_render_demo"].arguments == ()
 

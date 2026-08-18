@@ -1,0 +1,4 @@
+Compare the current caption with the recent captions. Call video_log__commit
+exactly once with only the material visible information unique to the current
+caption. If nothing material changed, use "No meaningful visual change." Do not
+infer facts that are absent from the captions.

@@ -115,11 +115,12 @@ PROCESSES = [
 ]
 ```
 
-The agent samples in this repository (`simple-vlm-example` and `xr-render-demo`)
-default to Piper TTS — it runs on CPU with ~100 ms/sentence latency and avoids
-the NeMo dep tree. Magpie is still a supported NVIDIA TTS option with better
-voice quality and multilingual support when GPU is available; swap the
-`Process` row and YAML.
+The agent samples in this repository (`simple-vlm-example`,
+`tea-making-sample`, and `xr-render-demo`) support Piper TTS — it runs on CPU
+with ~100 ms/sentence latency and avoids the NeMo dep tree. Magpie is still a
+supported NVIDIA TTS option with better voice quality and multilingual support
+when GPU is available; select the corresponding process and YAML. The tea
+sample exposes this choice through `--tts-mode`.
 
 **2 — Copy the reference YAML to your sample's `yaml/` directory:**
 

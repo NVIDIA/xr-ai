@@ -146,6 +146,10 @@ starts everything. Heavier samples (`lab-instrument-monitoring` and
 `model-servers` once, then run either sample as many times as you like without
 reloading weights.
 
+The [tea-making guidance sample](agent-samples/tea-making-sample/README.md)
+combines a deterministic foreground workflow with file-backed transcript and
+visual background tasks, using Nemotron-3-Nano-Omni for both language and vision.
+
 Every sample worker depends on `agent-sdk/xr-ai-models` — one SDK that
 abstracts the OpenAI-compatible HTTP wire format for LLM / VLM / STT / TTS /
 embeddings behind typed service protocols. Model profiles name the logical roles

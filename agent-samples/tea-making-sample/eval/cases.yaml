@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+- query: Hello there.
+  expected_tool: null
+- query: Help me make a cup of tea.
+  expected_tool: workflow__start
+- query: What am I holding right now?
+  expected_tool: current_view
+- query: What temperature is generally recommended for white tea?
+  expected_tool: rag_lookup
+- query: Start watching for a spill near the kettle.
+  expected_tool: change_watch__start
+- query: Start recording our conversation.
+  expected_tool: transcript__start
+- query: Start a general visual activity log.
+  expected_tool: video_log__start
+- query: What did the background watchers report recently?
+  expected_tool: application_context__query
