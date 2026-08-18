@@ -664,7 +664,8 @@ table, and the profile contract are in
 <p>The LLM and VLM can run on <a class="reference external" href="https://build.nvidia.com">NVIDIA NIM</a> instead of
 local vLLM — NIM exposes the same OpenAI-compatible <code class="docutils literal notranslate"><span class="pre">/v1/chat/completions</span></code>
 API, so this is a model-profile change with no worker code edits. STT and TTS
-stay local: hosted NIM speech (Riva) is not OpenAI <code class="docutils literal notranslate"><span class="pre">/v1/audio</span></code>-compatible.</p>
+stay local: hosted NIM speech (Riva) is not OpenAI <code class="docutils literal notranslate"><span class="pre">/v1/audio</span></code>-compatible.
+Self-hosted speech NIMs are covered below.</p>
 <p>A hosted entry uses an environment-variable reference for its credential,
 disables endpoint health probing, and declares external ownership:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
@@ -698,33 +699,88 @@ subprocess (refer to <a class="reference internal" href="../getting_started/cred
 hosted service.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">model_name</span></code></strong> is the hosted model id from <a class="reference external" href="https://build.nvidia.com">build.nvidia.com</a>.</p></li>
 </ul>
-<p>For <code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code>, set <code class="docutils literal notranslate"><span class="pre">models_config:</span> <span class="pre">models.hosted.json</span></code> in the worker
-YAML. This wrapped JSON profile is consumed by both the worker and orchestrator,
-so the local VLM process is omitted and <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is requested
-automatically. Select <code class="docutils literal notranslate"><span class="pre">models.local.json</span></code> to switch back.</p>
-<p><code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code> retains its <code class="docutils literal notranslate"><span class="pre">model_backend:</span> <span class="pre">nim</span></code> selector and
-<code class="docutils literal notranslate"><span class="pre">models.nim.yaml</span></code> overlay. Provide <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> and do not run
-<code class="docutils literal notranslate"><span class="pre">model_servers</span></code>, whose single topology starts both local <code class="docutils literal notranslate"><span class="pre">omni</span></code> and <code class="docutils literal notranslate"><span class="pre">vlm</span></code>.
-Instead, start only the local STT service from the repository root, setting
-<code class="docutils literal notranslate"><span class="pre">GPU_PROFILE</span></code> to <code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, or <code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">GPU_PROFILE</span><span class="o">=</span>dual_48G_ada
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/stt-server<span class="w"> </span>stt_server<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--config<span class="w"> </span><span class="s2">"agent-samples/model-servers/yaml/</span><span class="si">${</span><span class="nv">GPU_PROFILE</span><span class="si">}</span><span class="s2">/stt_server.yaml"</span>
+<p>Set <code class="docutils literal notranslate"><span class="pre">models_config:</span> <span class="pre">models.hosted.json</span></code> in the worker YAML. This wrapped
+JSON profile is consumed by both the worker and orchestrator, so the local
+VLM process is omitted and <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is requested automatically. Select
+<code class="docutils literal notranslate"><span class="pre">models.local.json</span></code> to switch back.</p>
+<section id="self-hosted-nim-containers-models-vlm-llm-nim-json">
+<h3>Self-hosted NIM containers (<code class="docutils literal notranslate"><span class="pre">models.vlm_llm_nim.json</span></code>)<a class="headerlink" href="#self-hosted-nim-containers-models-vlm-llm-nim-json" title="Link to this heading">#</a></h3>
+<p>The same models can be pulled from NGC and served as <strong>optimized NIM
+containers on your own GPUs</strong>: same APIs as hosted NIM, no network hop, and
+speech included. Self-hosted Riva speech NIMs are reached through the
+<code class="docutils literal notranslate"><span class="pre">riva_grpc</span></code> model kind (requires the <code class="docutils literal notranslate"><span class="pre">xr-ai-models[riva]</span></code> extra, already a
+dependency of the sample workers).</p>
+<p>The NIM containers are owned by the shared model-servers stack, exactly
+like the local vLLM servers. Its deployment profiles pick the mix: every
+<code class="docutils literal notranslate"><span class="pre">managed</span></code> entry launches as a <code class="docutils literal notranslate"><span class="pre">nim_server</span></code> process (<code class="docutils literal notranslate"><span class="pre">services/nim-server</span></code>, a
+generic wrapper; the per-GPU-profile <code class="docutils literal notranslate"><span class="pre">nim_&lt;role&gt;_server.yaml</span></code> picks the
+image and ports) or as a local server:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--models<span class="w"> </span>vlm_llm_nim
 </pre></div>
 </div>
-<p>Then start <code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code> in another terminal. Its orchestrator reuses STT,
-routes LLM and VLM requests to hosted NIM, and starts local TTS itself.</p>
-<p><strong>Self-hosted NIM containers</strong> work the same way: point <code class="docutils literal notranslate"><span class="pre">base_url</span></code> at the
-container (e.g. <code class="docutils literal notranslate"><span class="pre">http://localhost:8000</span></code>), set <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">health</span></code>, and choose
-<code class="docutils literal notranslate"><span class="pre">managed</span></code> or <code class="docutils literal notranslate"><span class="pre">reused</span></code> ownership if the launcher owns that service. Legacy flat
-profiles may continue to set <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">true</span></code> when it
-exposes <code class="docutils literal notranslate"><span class="pre">/v1/health</span></code>.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code>: the LLM and VLM as NIM containers, STT and embedding local. Pairs
+with each sample’s <code class="docutils literal notranslate"><span class="pre">models.vlm_llm_nim.json</span></code> (the sample marks the NIM
+services <code class="docutils literal notranslate"><span class="pre">reused</span></code> and owns only its piper TTS).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">vlm_speech_nim</span></code>: Riva speech NIM containers plus the Cosmos NIM. Pairs with
+simple-vlm-example’s <code class="docutils literal notranslate"><span class="pre">models.vlm_speech_nim.json</span></code>. Mutually exclusive with
+<code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code> on 2x48 GB: Riva speech NIMs don’t fit next to CloudXR + LOVR + the
+LLM/VLM NIMs there.</p></li>
+</ul>
+<p>The container <code class="docutils literal notranslate"><span class="pre">image:</span></code> is the model, so swapping models is a
+<code class="docutils literal notranslate"><span class="pre">nim_&lt;role&gt;_server.yaml</span></code> edit plus the matching profile entry. Selection is
+per entry, not per profile: each model role independently picks a local
+server, a self-hosted NIM container, or a hosted endpoint through its own
+<code class="docutils literal notranslate"><span class="pre">adapter</span></code>/<code class="docutils literal notranslate"><span class="pre">endpoint</span></code>/<code class="docutils literal notranslate"><span class="pre">deployment</span></code> sections. The shipped profiles are
+presets, not a closed set; a mixed setup is a copy of a shipped profile
+with the relevant entries changed, saved under any name and selected with
+<code class="docutils literal notranslate"><span class="pre">--models</span></code> (model-servers) or <code class="docutils literal notranslate"><span class="pre">models_config</span></code> (workers). When mixing, mind
+port overlaps: give a NIM container a free port or drop the overlapping
+local server from the profile.</p>
+<p>A self-hosted speech entry uses the Riva gRPC kind:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">stt</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">riva_grpc</span>
+<span class="w">  </span><span class="nt">category</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">stt</span>
+<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">localhost:50051</span><span class="w">   </span><span class="c1"># the container's gRPC port</span>
+<span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">en-US</span>
+</pre></div>
+</div>
+<p>TTS additionally takes <code class="docutils literal notranslate"><span class="pre">voice:</span></code> (a Riva voice name) and <code class="docutils literal notranslate"><span class="pre">sample_rate:</span></code>
+(default 44100). <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">true</span></code> (the default) runs a gRPC
+channel-ready probe.</p>
+<p>Requirements: docker + NVIDIA Container Toolkit, <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> (used for the
+<code class="docutils literal notranslate"><span class="pre">nvcr.io</span></code> image pull <em>and</em> by the container itself to download the
+GPU-matched optimized engine from NGC on first start; multi-GB, cached
+under <code class="docutils literal notranslate"><span class="pre">models/nim/</span></code> for later runs), and GPU capacity for every container.
+<code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> placement lives in the per-GPU-profile
+<code class="docutils literal notranslate"><span class="pre">nim_*_server.yaml</span></code> files (dual_48G_ada values are live-validated; the
+other profiles ship estimates). Readiness gates on each container’s
+<code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>.</p>
+<p>A NIM container serving something the samples don’t ship is the same
+mechanism by hand: point an <code class="docutils literal notranslate"><span class="pre">openai_compat</span></code> entry’s <code class="docutils literal notranslate"><span class="pre">base_url</span></code> at its port
+(its health route is <code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>, so keep <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">false</span></code> and
+let the container gate readiness), or a <code class="docutils literal notranslate"><span class="pre">riva_grpc</span></code> entry at its gRPC port.
+With <code class="docutils literal notranslate"><span class="pre">ownership:</span> <span class="pre">external</span></code> (you run the container yourself) that is the
+whole change. For an orchestrator to launch or expect it, the entry’s
+<code class="docutils literal notranslate"><span class="pre">deployment.service</span></code> must name a process row in that orchestrator’s service
+table (<code class="docutils literal notranslate"><span class="pre">_MODEL_SERVICES</span></code> in model-servers, <code class="docutils literal notranslate"><span class="pre">_MODEL_PROCESSES</span></code> in a sample);
+a service name with no row fails fast at startup, and adding one row plus
+its config YAML is the only orchestrator edit the profile system ever
+needs.</p>
 </section>
-<section id="vllm-model-persistence">
-<h2>vLLM model persistence<a class="headerlink" href="#vllm-model-persistence" title="Link to this heading">#</a></h2>
+</section>
+<section id="model-server-persistence">
+<h2>Model-server persistence<a class="headerlink" href="#model-server-persistence" title="Link to this heading">#</a></h2>
 <p>The persistent vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">llama_nemotron_llm_server</span></code>,
 <code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">embedding_server</span></code>)
-<strong>survive stack restarts by design</strong>. Each persistent wrapper script checks its
+and self-hosted NIM containers (<code class="docutils literal notranslate"><span class="pre">nim_server</span></code>)
+<strong>survive stack restarts by design</strong>, including when a deployment profile
+marks them <code class="docutils literal notranslate"><span class="pre">managed</span></code>: the stack starts them, but a clean shutdown leaves them
+serving so the next start reuses hot weights. <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> is the
+teardown. Switching profiles needs no manual teardown: at startup a wrapper
+that finds a <em>different</em> persistent xr-ai container holding its port (found
+by the <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm.port=&lt;port&gt;</span></code> label) stops and removes it before launching
+its own. Each persistent wrapper script checks its
 health endpoint before spawning vLLM:</p>
 <ul class="simple">
 <li><p><strong>Already running with a matching launch fingerprint</strong> → touch the ready
@@ -751,8 +807,8 @@ cache, environment, bootstrap packages, complete vLLM command, and a versioned
 launcher-controlled Docker contract. This prevents a failed container created
 by one sample profile—or by older launcher behavior—from being restarted later
 with stale memory limits, entrypoint, setup commands, or model arguments.</p>
-<p><strong>Stopping the persisted servers</strong> — run from the sample directory:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo<span class="w"> </span>--stop
+<p><strong>Stopping the persisted servers</strong>, from the repo root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
 <p>Cleanup locates labelled Docker containers before inspecting ports, then
@@ -842,7 +898,7 @@ like their pip-mode <code class="docutils literal notranslate"><span class="pre"
 </section>
 <section id="cleanup">
 <h3>Cleanup<a class="headerlink" href="#cleanup" title="Link to this heading">#</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">xr_render_demo</span> <span class="pre">--stop</span></code> works for both modes. Cleanup locates labelled
+<p><code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> works for both modes. Cleanup locates labelled
 Docker containers before inspecting ports, then stops them with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span></code>
 (escalating to <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">kill</span></code> after 20 s). Pip-mode processes carry an
 <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm</span></code> ownership marker; unknown listeners and failed inspection abort
@@ -876,7 +932,7 @@ wire format (<code class="docutils literal notranslate"><span class="pre">finish
 <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">on&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">off&quot;</span></code> in a system or user
 message; reasoning preamble is <strong>not</strong> stripped server-side. Hosting backend
 is selectable per YAML (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/df69e7639481324cd1fa50d4357e1ee8ec27b9e6/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/209368cbaaa7c06b0d9d36ea33ee8fbfedf9c42a/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
 for the full HTTP contract and tuning knobs.</p></li>
 <li><p><strong>nemotron3-nano-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</span></code> (auto-selected by GPU compute
@@ -887,7 +943,7 @@ FlashInfer FP4 MoE kernels. Requires a Blackwell-class GPU (B200 or RTX PRO
 <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> by default to avoid the silent 3–8 min CUDA graph and
 FlashInfer autotune on cold start. Hosting backend is selectable per YAML
 (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/df69e7639481324cd1fa50d4357e1ee8ec27b9e6/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/209368cbaaa7c06b0d9d36ea33ee8fbfedf9c42a/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
 for the vLLM flags it forwards and Blackwell prerequisites.</p></li>
 <li><p><strong>nemotron-omni-llm</strong> is a vLLM-backed multimodal LLM serving
 <code class="docutils literal notranslate"><span class="pre">Nemotron-3-Nano-Omni-30B-A3B-Reasoning</span></code> (text + video input) at port 8108.
@@ -976,8 +1032,11 @@ Copy them to your sample’s <code class="docutils literal notranslate"><span cl
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#migrating-model-caches-from-ai-services">Migrating model caches from <code class="docutils literal notranslate"><span class="pre">ai-services/</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-a-server-to-a-sample">Adding a server to a sample</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#calling-these-from-a-worker">Calling these from a worker</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hosting-models-on-nvidia-nim">Hosting models on NVIDIA NIM</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vllm-model-persistence">vLLM model persistence</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hosting-models-on-nvidia-nim">Hosting models on NVIDIA NIM</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#self-hosted-nim-containers-models-vlm-llm-nim-json">Self-hosted NIM containers (<code class="docutils literal notranslate"><span class="pre">models.vlm_llm_nim.json</span></code>)</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#model-server-persistence">Model-server persistence</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#choosing-the-vllm-runtime-pip-vs-docker">Choosing the vLLM runtime (pip vs Docker)</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#docker-mode-prerequisites">docker mode — prerequisites</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#docker-mode-runtime-details">docker mode — runtime details</a></li>

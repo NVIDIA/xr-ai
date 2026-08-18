@@ -558,14 +558,15 @@ the XR compositor and the agentic LLM do not share a card.</p>
 </section>
 <section id="worker-configuration">
 <h2>Worker configuration<a class="headerlink" href="#worker-configuration" title="Link to this heading">#</a></h2>
-<p>The worker reads two YAML files:</p>
+<p>The worker reads two config files:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">yaml/xr_render_demo_worker.yaml</span></code> — native capability endpoints, text-memory directory, and VAD tunables.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">yaml/models.yaml</span></code> (path set by <code class="docutils literal notranslate"><span class="pre">models_yaml:</span></code> in the worker YAML) — model
-endpoint declarations consumed by <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code>.  Each entry maps a logical
-name (<code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm</span></code>) to a <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">preset:&lt;name&gt;</span></code>
-and a <code class="docutils literal notranslate"><span class="pre">base_url</span></code>.  Edit this file to change which model runs where without
-touching the worker code.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code> (deployment profile set by <code class="docutils literal notranslate"><span class="pre">models_config:</span></code> in the
+worker YAML): model endpoint and deployment declarations consumed by
+<code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> and the orchestrator.  Each entry maps a logical name
+(<code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm</span></code>) to an adapter (preset or explicit
+spec), an endpoint, and a deployment.  Edit this file to change which model
+runs where without touching the worker code.</p></li>
 </ul>
 </section>
 <section id="the-llm-server">

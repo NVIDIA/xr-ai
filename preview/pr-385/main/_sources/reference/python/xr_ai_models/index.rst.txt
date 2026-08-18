@@ -68,6 +68,8 @@ Classes
    xr_ai_models.STTSpec
    xr_ai_models.TTSSpec
    xr_ai_models.VLMSpec
+   xr_ai_models.RivaSTT
+   xr_ai_models.RivaTTS
 
 
 Functions
@@ -553,7 +555,7 @@ Package Contents
 
 
 
-.. py:class:: OpenAICompatLLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, reasoning_field: str | None = None, default_extras: dict[str, Any] | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, client: httpx.AsyncClient | None = None)
+.. py:class:: OpenAICompatLLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, reasoning_field: str | None = None, default_extras: dict[str, Any] | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
 
    OpenAI-compatible ``/v1/chat/completions`` client.
 
@@ -617,18 +619,12 @@ Package Contents
 
 
 
-.. py:class:: OpenAICompatEmbedding(base_url: str, model_name: str, *, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, client: httpx.AsyncClient | None = None)
+.. py:class:: OpenAICompatEmbedding(base_url: str, model_name: str, *, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
 
    OpenAI-compatible ``/v1/embeddings`` client.
 
    The API key is read once from ``api_key_env`` during construction. An
    injected HTTP client remains owned by the caller and is not closed here.
-
-
-   .. py:attribute:: health_url
-
-      The URL used to check endpoint readiness.
-
 
 
    .. py:method:: embed(texts: Sequence[str], *, timeout: float | None = None) -> list[list[float]]
@@ -661,18 +657,12 @@ Package Contents
 
 
 
-.. py:class:: OpenAICompatSTT(base_url: str, *, api_key_env: str | None = None, timeout: float = 30.0, health_check: bool = True, client: httpx.AsyncClient | None = None)
+.. py:class:: OpenAICompatSTT(base_url: str, *, api_key_env: str | None = None, timeout: float = 30.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
 
    OpenAI-compatible ``/v1/audio/transcriptions`` client.
 
    The API key is read once from ``api_key_env`` during construction. An
    injected HTTP client remains owned by the caller and is not closed here.
-
-
-   .. py:attribute:: health_url
-
-      The URL used to check endpoint readiness.
-
 
 
    .. py:method:: transcribe(audio: bytes, *, sample_rate: int | None = None, channels: int = 1, timeout: float | None = None) -> str
@@ -706,18 +696,12 @@ Package Contents
 
 
 
-.. py:class:: OpenAICompatTTS(base_url: str, *, api_key_env: str | None = None, timeout: float = 30.0, health_check: bool = True, client: httpx.AsyncClient | None = None)
+.. py:class:: OpenAICompatTTS(base_url: str, *, api_key_env: str | None = None, timeout: float = 30.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
 
    OpenAI-compatible ``/v1/audio/speech`` client.
 
    The API key is read once from ``api_key_env`` during construction. An
    injected HTTP client remains owned by the caller and is not closed here.
-
-
-   .. py:attribute:: health_url
-
-      The URL used to check endpoint readiness.
-
 
 
    .. py:method:: synthesize(text: str, *, response_format: str = 'wav', timeout: float | None = None) -> bytes
@@ -747,7 +731,7 @@ Package Contents
 
 
 
-.. py:class:: OpenAICompatVLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, default_extras: dict[str, Any] | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, client: httpx.AsyncClient | None = None)
+.. py:class:: OpenAICompatVLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, default_extras: dict[str, Any] | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
 
    OpenAI-compatible client for image- and video-bearing chat requests.
 
@@ -839,6 +823,10 @@ Package Contents
 
    API dialect and model-specific request/response behavior.
 
+   The ``riva_grpc`` speech fields ride here: ``function_id`` (hosted NVCF
+   selects the model by function-id metadata), ``use_ssl``, ``language``,
+   and the TTS-only ``voice`` and ``sample_rate``.
+
 
    .. py:attribute:: kind
       :type:  ModelKind
@@ -881,6 +869,51 @@ Package Contents
 
 
 
+   .. py:attribute:: function_id
+      :type:  str | None
+      :value: None
+
+
+      NVCF function id for hosted Riva speech endpoints.
+
+
+
+   .. py:attribute:: use_ssl
+      :type:  bool
+      :value: False
+
+
+      Whether the Riva gRPC channel uses TLS.
+
+
+
+   .. py:attribute:: language
+      :type:  str
+      :value: 'en-US'
+
+
+      BCP-47 language code for Riva speech recognition and synthesis.
+
+
+
+   .. py:attribute:: voice
+      :type:  str
+      :value: ''
+
+
+      Riva TTS voice name; the service default when empty.
+
+
+
+   .. py:attribute:: sample_rate
+      :type:  int
+      :value: 44100
+
+
+      Riva TTS output sample rate in Hz.
+
+
+
 .. py:data:: Category
 
    A model role supported by :class:`ModelsConfig`.
@@ -889,6 +922,10 @@ Package Contents
 .. py:class:: DeploymentSpec
 
    Process ownership for the endpoint that serves a model role.
+
+   ``credentials`` names keys the launched service itself needs (e.g.
+   NGC_API_KEY for a NIM container's nvcr.io pull and engine download)
+   even when the endpoint takes no API key.
 
 
    .. py:attribute:: ownership
@@ -906,6 +943,15 @@ Package Contents
 
 
       The launcher service name for managed or reused deployments.
+
+
+
+   .. py:attribute:: credentials
+      :type:  tuple[str, Ellipsis]
+      :value: ()
+
+
+      Environment keys the launched service needs (collected by the launcher).
 
 
 
@@ -975,6 +1021,15 @@ Package Contents
 
 
       How the client determines whether the endpoint is ready.
+
+
+
+   .. py:attribute:: health_path
+      :type:  str
+      :value: '/health'
+
+
+      Endpoint path probed for readiness (NIM containers use /v1/health/ready).
 
 
 
@@ -1226,5 +1281,64 @@ Package Contents
    Raises :class:`KeyError` when *name* is absent, :class:`TypeError` when it
    names a different model role, and :class:`ValueError` for an unsupported
    adapter kind.
+
+
+.. py:class:: RivaSTT(base_url: str, *, api_key_env: str | None = None, function_id: str | None = None, use_ssl: bool = False, language: str = 'en-US', timeout: float = 30.0, health_check: bool = True)
+
+   Riva ASR client: offline (batch) recognition over gRPC.
+
+
+   .. py:method:: transcribe(audio: bytes, *, sample_rate: int | None = None, channels: int = 1, timeout: float | None = None) -> str
+      :async:
+
+
+      Recognize *audio* (WAV or raw 16-bit PCM) and return the transcript.
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Whether the Riva gRPC channel is ready (assumed when probing is off).
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Close the underlying gRPC channel.
+
+
+
+.. py:class:: RivaTTS(base_url: str, *, api_key_env: str | None = None, function_id: str | None = None, use_ssl: bool = False, voice: str = '', language: str = 'en-US', sample_rate: int = 44100, timeout: float = 30.0, health_check: bool = True)
+
+   Riva TTS client: streaming synthesis over gRPC, concatenated to one
+   WAV (or raw PCM) result.
+
+
+   .. py:method:: synthesize(text: str, *, response_format: str = 'wav', timeout: float | None = None) -> bytes
+      :async:
+
+
+      Synthesize *text* and return WAV bytes (or raw 16-bit PCM).
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Whether the Riva gRPC channel is ready (assumed when probing is off).
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Close the underlying gRPC channel.
+
 
 
