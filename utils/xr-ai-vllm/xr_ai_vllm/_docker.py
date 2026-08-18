@@ -46,10 +46,17 @@ _LAUNCH_CONTRACT_VERSION = 1
 
 
 def credential_digest(value: str | None) -> str | None:
-    """One-way digest so a credential can join a fingerprint without exposure."""
+    """One-way digest so a credential can join a fingerprint without exposure.
+
+    The salt is a fixed application constant: fingerprints must be
+    deterministic across processes and machines for the container label
+    comparison to work.
+    """
     if not value:
         return None
-    return hashlib.sha256(value.encode()).hexdigest()[:12]
+    return hashlib.pbkdf2_hmac(
+        "sha256", value.encode(), b"xr-ai-vllm.launch-contract", 600_000
+    ).hex()[:12]
 
 
 def launch_fingerprint(payload: dict[str, Any]) -> str:
