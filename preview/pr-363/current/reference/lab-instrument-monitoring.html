@@ -672,9 +672,11 @@ VLM prompt or voice agent.</p>
 <p>Only marker identities present in <code class="docutils literal notranslate"><span class="pre">device_map.yaml</span></code> are treated as instruments.
 Unknown QR payloads and ArUco IDs are logged and ignored, preventing detector
 false positives from becoming names such as <code class="docutils literal notranslate"><span class="pre">ArUco</span> <span class="pre">17</span></code>. The one-frame reader
-also instructs the VLM to use only a display on the same physical instrument
-body as the highlighted marker and to return <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code> when an adjacent display
-cannot be excluded.</p>
+requires visible evidence that the highlighted marker and display share one
+continuous physical instrument housing. Proximity, alignment, or being the only
+readable display does not establish ownership. The reader returns <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code>
+when the target housing has no readable display or an adjacent display cannot
+be excluded.</p>
 </section>
 <section id="connecting-a-backend">
 <h2>Connecting a backend<a class="headerlink" href="#connecting-a-backend" title="Link to this heading">#</a></h2>

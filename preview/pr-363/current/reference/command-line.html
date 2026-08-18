@@ -420,10 +420,14 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 <section id="lab-instrument-monitoring">
 <h2>lab_instrument_monitoring<a class="headerlink" href="#lab-instrument-monitoring" title="Link to this heading">#</a></h2>
 <p>Launch lab instrument monitoring, voice, hub, and model dependencies.</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/lab-instrument-monitoring<span class="w"> </span>lab_instrument_monitoring
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/lab-instrument-monitoring<span class="w"> </span>lab_instrument_monitoring<span class="w"> </span><span class="o">[</span>--vlm-mode<span class="w"> </span><span class="o">{</span>cosmos,omni<span class="o">}]</span>
 </pre></div>
 </div>
-<p>This command has no sample-specific options.</p>
+<p class="rubric">Options</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">--vlm-mode</span> <span class="pre">{cosmos,omni}</span></code></dt><dd><p>cosmos (default): use Cosmos for vision; omni: use the existing Nemotron Omni service for both language and vision</p>
+</dd>
+</dl>
 </section>
 <section id="model-servers">
 <h2>model_servers<a class="headerlink" href="#model-servers" title="Link to this heading">#</a></h2>

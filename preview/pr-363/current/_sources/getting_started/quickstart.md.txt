@@ -192,6 +192,9 @@ cd agent-samples/lab-instrument-monitoring
 uv sync
 uv sync --project worker
 uv run lab_instrument_monitoring
+
+# Optional: use Nemotron Omni instead of Cosmos for visual inference.
+uv run lab_instrument_monitoring --vlm-mode omni
 ```
 
 Connect an existing glasses or platform client using the authenticated URL,

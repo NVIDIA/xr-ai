@@ -180,9 +180,11 @@ VLM prompt or voice agent.
 Only marker identities present in `device_map.yaml` are treated as instruments.
 Unknown QR payloads and ArUco IDs are logged and ignored, preventing detector
 false positives from becoming names such as `ArUco 17`. The one-frame reader
-also instructs the VLM to use only a display on the same physical instrument
-body as the highlighted marker and to return `UNKNOWN` when an adjacent display
-cannot be excluded.
+requires visible evidence that the highlighted marker and display share one
+continuous physical instrument housing. Proximity, alignment, or being the only
+readable display does not establish ownership. The reader returns `UNKNOWN`
+when the target housing has no readable display or an adjacent display cannot
+be excluded.
 
 ## Connecting a backend
 
