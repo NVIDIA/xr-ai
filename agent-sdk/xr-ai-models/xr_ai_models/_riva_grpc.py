@@ -128,6 +128,7 @@ class RivaSTT:
         channels: int = 1,
         timeout: float | None = None,
     ) -> str:
+        """Recognize *audio* (WAV or raw 16-bit PCM) and return the transcript."""
         if sample_rate is None:
             sample_rate, channels, audio = _parse_wav(audio)
         config = self._rc.RecognitionConfig(
@@ -148,9 +149,11 @@ class RivaSTT:
         )
 
     async def health(self) -> bool:
+        """Whether the Riva gRPC channel is ready (assumed when probing is off)."""
         return await _channel_ready(self._auth, self._health_check)
 
     async def close(self) -> None:
+        """Close the underlying gRPC channel."""
         self._auth.channel.close()
 
     async def __aenter__(self) -> "RivaSTT":
@@ -197,6 +200,7 @@ class RivaTTS:
         response_format: str = "wav",
         timeout: float | None = None,
     ) -> bytes:
+        """Synthesize *text* and return WAV bytes (or raw 16-bit PCM)."""
         if response_format not in ("wav", "pcm"):
             raise ValueError(
                 f"riva_grpc TTS supports response_format 'wav' or 'pcm', "
@@ -226,9 +230,11 @@ class RivaTTS:
         return _pcm_to_wav(pcm, self._sample_rate, 1)
 
     async def health(self) -> bool:
+        """Whether the Riva gRPC channel is ready (assumed when probing is off)."""
         return await _channel_ready(self._auth, self._health_check)
 
     async def close(self) -> None:
+        """Close the underlying gRPC channel."""
         self._auth.channel.close()
 
     async def __aenter__(self) -> "RivaTTS":

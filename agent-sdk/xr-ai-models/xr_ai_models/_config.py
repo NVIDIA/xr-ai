@@ -16,7 +16,6 @@ from ._utils import merge_dicts
 
 
 Category = Literal["llm", "vlm", "stt", "tts", "embedding"]
-Category = Literal["llm", "vlm", "stt", "tts", "embedding"]
 """A model role supported by :class:`ModelsConfig`."""
 
 ModelKind = Literal["openai_compat", "riva_grpc"]
@@ -25,7 +24,6 @@ ModelKind = Literal["openai_compat", "riva_grpc"]
 Readiness = Literal["health", "none"]
 Ownership = Literal["managed", "reused", "external"]
 
-KIND_OPENAI_COMPAT: ModelKind = "openai_compat"
 KIND_OPENAI_COMPAT: ModelKind = "openai_compat"
 """The adapter kind for OpenAI-compatible HTTP endpoints."""
 KIND_RIVA_GRPC: ModelKind = "riva_grpc"
@@ -57,10 +55,19 @@ class AdapterSpec:
     """Model-specific fields merged into every request payload."""
 
     function_id: str | None = None
+    """NVCF function id for hosted Riva speech endpoints."""
+
     use_ssl: bool = False
+    """Whether the Riva gRPC channel uses TLS."""
+
     language: str = "en-US"
+    """BCP-47 language code for Riva speech recognition and synthesis."""
+
     voice: str = ""
+    """Riva TTS voice name; the service default when empty."""
+
     sample_rate: int = 44100
+    """Riva TTS output sample rate in Hz."""
 
 
 @dataclass(frozen=True)
@@ -80,6 +87,7 @@ class EndpointSpec:
     """How the client determines whether the endpoint is ready."""
 
     health_path: str = "/health"
+    """Endpoint path probed for readiness (NIM containers use /v1/health/ready)."""
 
     @property
     def health_check(self) -> bool:
@@ -104,6 +112,7 @@ class DeploymentSpec:
     """The launcher service name for managed or reused deployments."""
 
     credentials: tuple[str, ...] = ()
+    """Environment keys the launched service needs (collected by the launcher)."""
 
 
 class _RoleSpec:
