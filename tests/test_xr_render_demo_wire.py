@@ -1255,6 +1255,8 @@ async def test_worker_main_resolves_models_from_config_path(monkeypatch) -> None
 
     monkeypatch.setattr(worker_main, "_make_model_services", _capture)
     monkeypatch.setattr(worker_main, "setup_logging", lambda *_a, **_k: None)
+    # main() registers a process-global trace sink; keep it out of the test run.
+    monkeypatch.setattr(worker_main.logger, "add", lambda *_a, **_k: 0)
     with pytest.raises(_Abort):
         await worker_main.main(cfg, config_path=config_path)
     assert seen == [config_path]
