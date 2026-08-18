@@ -44,9 +44,12 @@ operational guidance.
 
 `VoiceAgent` owns readiness, hub transport, voice gating, its private media
 pipeline, signal handling, and cleanup. It publishes final pre-gate transcripts
-separately from gate-accepted user queries and consumes typed voice output.
-Application agents subscribe to the events they own and clean up their own
-participant state. Pipecat and the media session remain implementation details.
+separately from gate-accepted user queries, optionally publishes typed
+participant lifecycle events, and consumes typed voice output. Join and leave
+publication stays non-blocking for the media pipeline while preserving order per
+participant. Application agents subscribe to the events they own and clean up
+their own participant state. Pipecat and the media session remain implementation
+details.
 
 `ProcessorEndpoint` is the minimal agent-side hub boundary. It receives data,
 audio, frame signals, and participant events and sends participant-routed return

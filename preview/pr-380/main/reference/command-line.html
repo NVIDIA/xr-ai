@@ -9,7 +9,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>xr-ai-voice &#8212; XR AI</title>
+    <title>Command-line reference &#8212; XR AI</title>
   
   
   
@@ -52,15 +52,15 @@
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/agent-sdk-voice';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/command-line';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
 
     <link rel="icon" href="../_static/favicon.png"/>
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Command-line reference" href="command-line.html" />
-    <link rel="prev" title="xr-ai-tools" href="agent-sdk-tools.html" />
+    <link rel="next" title="Release migration" href="migrations.html" />
+    <link rel="prev" title="xr-ai-voice" href="agent-sdk-voice.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -199,10 +199,6 @@
   
 
   
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
 </div>
 
     </header>
@@ -276,6 +272,29 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
+
+
+<div class="version-switcher">
+  <label for="version-select" class="version-switcher__label">Version</label>
+  <select id="version-select" class="version-switcher__select">
+    <option value="0" >v0.1.0-beta</option>
+    <option value="1" selected>main (development)</option>
+  </select>
+</div>
+<script>
+  (function () {
+    // Navigate by index into a build-time list, never by reading the URL back
+    // out of the DOM, so page text can never become a navigation target.
+    var urls = ["../../v0.1.0-beta/index.html", "command-line.html"];
+    var select = document.getElementById("version-select");
+    select.addEventListener("change", function () {
+      var url = urls[select.selectedIndex];
+      if (url) {
+        window.location.assign(url);
+      }
+    });
+  })();
+</script>
 </div>
         <div class="sidebar-primary-item">
 
@@ -317,9 +336,8 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-models.html">xr-ai-models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">xr-ai-voice</a></li>
-<li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
-<li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -389,7 +407,7 @@
     
     <li class="breadcrumb-item"><a href="index.html" class="nav-link">Reference</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">xr-ai-voice</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Command-line reference</span></li>
   </ul>
 </nav>
 </div>
@@ -406,138 +424,48 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <!--
-  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-  SPDX-License-Identifier: Apache-2.0
--->
-<section id="xr-ai-voice">
-<h1>xr-ai-voice<a class="headerlink" href="#xr-ai-voice" title="Link to this heading">#</a></h1>
-<p>The voice runtime for XR agents. Pipecat implements the media pipeline, but
-applications work with XR concepts rather than Pipecat modules:</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes every final pre-gate STT result on <code class="docutils literal notranslate"><span class="pre">voice.transcript</span></code>
-and accepted speech, text, participant lifecycle, and interruption on typed
-topics; it subscribes to <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> privately owns readiness, hub transport, pipeline assembly,
-signals, execution, and cleanup.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code> is available when an application needs to share one transport explicitly.</p></li>
-</ul>
-<section id="usage">
-<h2>Usage<a class="headerlink" href="#usage" title="Link to this heading">#</a></h2>
-<p>Applications register one <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> with the shared runtime:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">Topic</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">UserQuery</span><span class="p">,</span>
-    <span class="n">VadConfig</span><span class="p">,</span>
-    <span class="n">VoiceAgent</span><span class="p">,</span>
-    <span class="n">VoiceInterrupted</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voicegate</span><span class="w"> </span><span class="kn">import</span> <span class="n">VoiceGateConfig</span>
-
-<span class="n">queries</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"my-sample.user-query"</span><span class="p">,</span> <span class="n">UserQuery</span><span class="p">)</span>
-<span class="n">interruptions</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"my-sample.interrupted"</span><span class="p">,</span> <span class="n">VoiceInterrupted</span><span class="p">)</span>
-<span class="n">voice</span> <span class="o">=</span> <span class="n">VoiceAgent</span><span class="p">(</span>
-    <span class="n">query_topic</span><span class="o">=</span><span class="n">queries</span><span class="p">,</span>
-    <span class="n">stt</span><span class="o">=</span><span class="n">stt</span><span class="p">,</span>
-    <span class="n">tts</span><span class="o">=</span><span class="n">tts</span><span class="p">,</span>
-    <span class="n">vad</span><span class="o">=</span><span class="n">VadConfig</span><span class="p">(),</span>
-    <span class="n">voice_gate</span><span class="o">=</span><span class="n">VoiceGateConfig</span><span class="p">(),</span>
-    <span class="n">interrupted_topic</span><span class="o">=</span><span class="n">interruptions</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"voice"</span><span class="p">,</span> <span class="n">voice</span><span class="p">)</span>
-
-<span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
-    <span class="k">await</span> <span class="n">voice</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runtime</span><span class="p">)</span>
+  <section id="command-line-reference">
+<h1>Command-line reference<a class="headerlink" href="#command-line-reference" title="Link to this heading">#</a></h1>
+<p>This reference is generated from the installed commands in each top-level
+sample’s <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> and the literal <code class="docutils literal notranslate"><span class="pre">argparse</span></code> declarations in its
+entry-point module. Worker and service commands are launcher-managed process
+protocols, so they are intentionally excluded from the user-facing catalog.</p>
+<div class="xr-ai-cli-reference docutils container">
+<section id="model-servers">
+<h2>model_servers<a class="headerlink" href="#model-servers" title="Link to this heading">#</a></h2>
+<p>model-servers orchestrator — starts one shared AI inference stack and exits.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span><span class="o">[</span>--stop<span class="o">]</span><span class="w"> </span><span class="o">[</span>--allow-anonymous<span class="o">]</span>
 </pre></div>
 </div>
+<p class="rubric">Options</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">--stop</span></code></dt><dd><p>Stop every persisted model service and exit.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code></dt><dd><p>Start without HF_TOKEN (unauthenticated downloads of the multi-GB checkpoints may stall indefinitely).</p>
+</dd>
+</dl>
 </section>
-<section id="voice-tuning-and-data-echo">
-<h2>Voice tuning and data echo<a class="headerlink" href="#voice-tuning-and-data-echo" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">VadConfig</span></code> controls utterance boundaries and bounded early transcription:
-the generated Python reference lists every field, type, default, and description.
-Set <code class="docutils literal notranslate"><span class="pre">stop_probe_after_s</span></code> to <code class="docutils literal notranslate"><span class="pre">0</span></code> or less to disable early probes.</p>
-<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent.text_topic</span></code> controls the completed-response echo sent through the
-hub data channel. Its default is <code class="docutils literal notranslate"><span class="pre">&quot;agent.response&quot;</span></code>; set it to <code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> when the
-application publishes its own response data so each turn is delivered only
-once. This setting does not disable TTS or Relay telemetry.</p>
-<p>Each non-empty final STT result is published on <code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code> as a
-<code class="docutils literal notranslate"><span class="pre">VoiceTranscript</span></code> before wake-phrase filtering. It therefore includes speech
-that the gate later rejects. The participant ID and <code class="docutils literal notranslate"><span class="pre">voice</span></code> source are runtime
-metadata. Early wake/STOP probes are internal and are not published as final
-transcripts. Accepted speech continues separately as <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>, with any
-matched wake phrase and preceding background speech removed by the gate.</p>
-<p>Transcript publication uses one private bounded FIFO owned by <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>, so
-a slow runtime subscriber cannot delay STT, voice gating, or accepted queries.
-The queue preserves order and drops its oldest pending transcript when full;
-shutdown cancels the active delivery and discards pending transcripts. Runtime
-subscribers should enqueue long-running work internally and return promptly.</p>
-<p>Accepted speech, typed text, participant lifecycle, and interruption remain on
-application-named topics. Pass <code class="docutils literal notranslate"><span class="pre">participant_joined_topic</span></code> and/or
-<code class="docutils literal notranslate"><span class="pre">participant_left_topic</span></code> to publish <code class="docutils literal notranslate"><span class="pre">VoiceParticipantJoined</span></code> and
-<code class="docutils literal notranslate"><span class="pre">VoiceParticipantLeft</span></code>; participant identity is runtime metadata rather than
-event payload. Join publication occurs after the voice gate handles its greeting.
-The hub suppresses duplicate roster joins while a participant remains connected
-and emits a new join after a leave/reconnect. Application agents subscribe to the
-events they own, perform cleanup in their own subscriber methods, and may publish
-finite or incremental <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code> messages:</p>
-<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> consumes only untopiced client data when <code class="docutils literal notranslate"><span class="pre">text_input=True</span></code>; named
-application and control messages are never interpreted as user queries. The
-hub preserves the original data-channel topic for every processor.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">VOICE_OUTPUT_TOPIC</span><span class="p">,</span> <span class="n">VoiceOutput</span>
-
-<span class="k">await</span> <span class="n">runtime</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span>
-    <span class="n">VOICE_OUTPUT_TOPIC</span><span class="p">,</span>
-    <span class="n">VoiceOutput</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"Move your hand away."</span><span class="p">,</span> <span class="n">interrupt</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
-    <span class="n">participant_id</span><span class="o">=</span><span class="s2">"alice"</span><span class="p">,</span>
-    <span class="n">source</span><span class="o">=</span><span class="s2">"safety-monitor"</span><span class="p">,</span>
-<span class="p">)</span>
+<section id="simple-vlm-example">
+<h2>simple_vlm_example<a class="headerlink" href="#simple-vlm-example" title="Link to this heading">#</a></h2>
+<p>simple-vlm-example orchestrator — vision Q&amp;A over voice or text.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/simple-vlm-example<span class="w"> </span>simple_vlm_example<span class="w"> </span><span class="o">[</span>--allow-anonymous<span class="o">]</span>
 </pre></div>
 </div>
-<p>Incremental producers reuse a <code class="docutils literal notranslate"><span class="pre">response_id</span></code>, set <code class="docutils literal notranslate"><span class="pre">final=False</span></code> while more
-chunks remain, and end with <code class="docutils literal notranslate"><span class="pre">final=True</span></code>. Aggregation is private to voice/TTS,
-and producer identity is part of the response key so independent agents cannot
-merge output accidentally. Output is serialized per participant; urgent output
-sets <code class="docutils literal notranslate"><span class="pre">interrupt=True</span></code> to replace active and queued speech. Producers may copy
-the originating query’s <code class="docutils literal notranslate"><span class="pre">timestamp_us</span></code> into <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code> so the TTS response
-preserves the input timestamp. <code class="docutils literal notranslate"><span class="pre">VoiceStreamClosedError</span></code> identifies an empty final
-chunk for a stream that voice already closed, including when wrapped in the
-runtime publication exception group.</p>
-<p>Lifecycle publication runs on <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>-owned tasks, so participant cleanup
-cannot block the shared media processor. Join and leave publications are
-serialized per participant, preserving lifecycle order even when a subscriber
-is slow; different participants remain independent. The agent cancels and
-awaits those tasks during shutdown.</p>
-<p>Relay telemetry treats <code class="docutils literal notranslate"><span class="pre">voice.output</span></code> as a high-cardinality transport topic and
-does not emit runtime scopes per fragment. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> instead emits one
-<code class="docutils literal notranslate"><span class="pre">voice.response</span></code> agent scope for each finite response or completed incremental
-stream. Its input contains the combined text, streaming flag, fragment count,
-and interrupt flag; metadata identifies the participant, producer, response,
-timestamp, and completion status.</p>
-<p>The media pipeline also emits one <code class="docutils literal notranslate"><span class="pre">voice.stt</span></code> function scope per final or
-bounded partial-probe transcription and one <code class="docutils literal notranslate"><span class="pre">voice.tts</span></code> function scope per
-sentence synthesis. STT inputs contain only byte count, duration, and sample
-rate; a nested <code class="docutils literal notranslate"><span class="pre">voice.stt.result</span></code> mark carries the transcript. TTS inputs carry
-the sentence being synthesized. Raw audio is never written to Relay events.
-These scopes measure provider work and downstream handoff, not client playback.</p>
-<p>The media session is private to <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>. The agent manages readiness,
-VAD/STT, voice gating, TTS, typed-text ingress, signals, and cleanup; it does not
-execute application handlers. Applications that already need the public
-<code class="docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code> for frames or status publication construct it explicitly
-and pass it to <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>; the agent does not expose its private session or
-transport.</p>
-<p>When wake phrases and the listening chime are enabled, the VAD/STT stage probes
-the opening audio on a fixed cadence while the user is still speaking. Probe
-audio includes a short silent tail so offline STT can finalize the wake word. A
-recognized phrase emits the chime immediately, while only the final transcript
-enters the voice gate as a query. An in-flight probe gets a short grace period
-before final STT and is then cancelled, so a slow probe cannot stall the audio
-pipeline. A missed probe never inserts a late chime in front of response speech.
-STOP commands use the same early-probe path for immediate interruption.</p>
-<p>The final transcript accepts a wake phrase at its beginning or after
-sentence-final <code class="docutils literal notranslate"><span class="pre">.</span></code>, <code class="docutils literal notranslate"><span class="pre">?</span></code>, or <code class="docutils literal notranslate"><span class="pre">!</span></code> punctuation followed by whitespace or a closing
-quote. Text before that boundary and the matched phrase are discarded. A phrase
-after a comma, semicolon, or within ordinary prose does not activate the gate.</p>
+<p class="rubric">Options</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code></dt><dd><p>Start without HF_TOKEN (unauthenticated checkpoint downloads may stall indefinitely).</p>
+</dd>
+</dl>
 </section>
+<section id="xr-render-demo">
+<h2>xr_render_demo<a class="headerlink" href="#xr-render-demo" title="Link to this heading">#</a></h2>
+<p>xr-render-demo orchestrator. Runs the process stack for this sample.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo<span class="w"> </span>xr_render_demo
+</pre></div>
+</div>
+<p>This command has no sample-specific options.</p>
+</section>
+</div>
 </section>
 
 
@@ -551,20 +479,20 @@ after a comma, semicolon, or within ordinary prose does not activate the gate.</
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="agent-sdk-tools.html"
+       href="agent-sdk-voice.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">xr-ai-tools</p>
+        <p class="prev-next-title">xr-ai-voice</p>
       </div>
     </a>
     <a class="right-next"
-       href="command-line.html"
+       href="migrations.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Command-line reference</p>
+        <p class="prev-next-title">Release migration</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -575,26 +503,9 @@ after a comma, semicolon, or within ordinary prose does not activate the gate.</
             
             
 
-
-              
-                <dialog id="pst-secondary-sidebar-modal"></dialog>
-                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+<div class="bd-sidebar-secondary"></div>
 
 
-  <div class="sidebar-secondary-item">
-<div
-    id="pst-page-navigation-heading-2"
-    class="page-toc tocsection onthispage">
-    <i class="fa-solid fa-list"></i> On this page
-  </div>
-  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
-    <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#usage">Usage</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-tuning-and-data-echo">Voice tuning and data echo</a></li>
-</ul>
-  </nav></div>
-
-</div></div>
               
             
 

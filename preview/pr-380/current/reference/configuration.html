@@ -199,6 +199,10 @@
   
 
   
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
 </div>
 
     </header>
@@ -413,7 +417,6 @@ the generated page preserves those comments verbatim.</p>
 <p>Public typed model configuration fields are also available in the generated
 <a class="reference internal" href="python/xr_ai_models/index.html"><span class="doc">Python API reference</span></a>. Operational choices,
 credentials, and deployment workflows remain in the handwritten guides.</p>
-<div class="xr-ai-config-reference docutils container">
 <section id="config-model-servers">
 <h2>model-servers<a class="headerlink" href="#config-model-servers" title="Link to this heading">#</a></h2>
 <section id="config-model-servers-yaml-96g-blackwell-embedding-server-yaml">
@@ -432,42 +435,6 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
 <span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.04-py3</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-96g-blackwell-nemotron3-nano-llm-server-yaml">
-<h3>yaml/96G_blackwell/nemotron3_nano_llm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-nemotron3-nano-llm-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Nemotron-3-Nano — single Blackwell 96 GB.</span>
-<span class="c1"># NVFP4 model auto-selected for Blackwell (SM10+).</span>
-<span class="c1">#</span>
-<span class="c1"># agent-llm is FIRST in load order on Blackwell so FlashInfer MoE JIT</span>
-<span class="c1"># compilation runs with the full GPU free.</span>
-<span class="c1">#</span>
-<span class="c1"># free_at_startup ≈ 96 GiB.</span>
-<span class="c1"># 0.35 × 96 = 33.6 GiB cap: ~15-20 GiB NVFP4 weights + ~14 GiB KV.</span>
-<span class="c1">#</span>
-<span class="c1"># Total budget (agent-llm 0.35 + vlm 0.20):</span>
-<span class="c1">#   0.55 × 96 ≈ 53 GiB — leaves ~43 GiB for STT, LOVR, drivers, overhead.</span>
-
-<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
-<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8107</span>
-<span class="nt">hf_token</span><span class="p">:</span><span class="w"> </span><span class="s">""</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
-
-<span class="nt">max_num_seqs</span><span class="p">:</span><span class="w">         </span><span class="l l-Scalar l-Scalar-Plain">8</span>
-<span class="nt">tensor_parallel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<span class="nt">max_model_len</span><span class="p">:</span><span class="w">        </span><span class="l l-Scalar l-Scalar-Plain">32768</span>
-
-<span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.35</span>
-<span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-
-<span class="c1"># vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).</span>
-<span class="c1"># See services/nemotron3-nano-llm/nemotron3_nano_llm_server.yaml for full docs.</span>
-<span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.04-py3</span>
 </pre></div>
 </div>
 </section>
@@ -524,8 +491,8 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 
 <span class="c1"># VLM server — single Blackwell 96 GB.</span>
 <span class="c1">#</span>
-<span class="c1"># vlm is SECOND in load order: agent-llm → vlm.</span>
-<span class="c1"># free_at_startup ≈ 96 − 34 (agent-llm) − 2 (STT) ≈ 60 GiB.</span>
+<span class="c1"># vlm is THIRD in load order: STT → Omni → vlm.</span>
+<span class="c1"># free_at_startup ≈ 96 − 34 (Omni) − 2 (STT) ≈ 60 GiB.</span>
 <span class="c1"># 0.23 × 96 = 22.1 GiB cap: 16.8 GiB measured Reasoner weights plus</span>
 <span class="c1"># multimodal encoder profiling, runtime overhead, and KV cache.</span>
 <span class="c1"># hf_overrides selects the Reasoner runtime; details are documented in</span>
@@ -572,40 +539,6 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
 <span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.04-py3</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-dual-48g-ada-nemotron3-nano-llm-server-yaml">
-<h3>yaml/dual_48G_ada/nemotron3_nano_llm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-nemotron3-nano-llm-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Nemotron-3-Nano — dual 48 GB ADA config.</span>
-<span class="c1"># GPU 1 (cuda:1), shared with STT; the VLM stays on GPU 0.</span>
-<span class="c1"># FP8 model auto-selected by nemotron3_nano_llm_server for ADA (SM8.x).</span>
-
-<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
-<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8107</span>
-<span class="nt">hf_token</span><span class="p">:</span><span class="w"> </span><span class="s">""</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
-
-<span class="nt">max_num_seqs</span><span class="p">:</span><span class="w">         </span><span class="l l-Scalar l-Scalar-Plain">8</span>
-<span class="nt">tensor_parallel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<span class="nt">max_model_len</span><span class="p">:</span><span class="w">        </span><span class="l l-Scalar l-Scalar-Plain">32768</span>
-
-<span class="c1"># GPU 1 only — leave GPU 0 free for the VLM.</span>
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"1"</span>
-<span class="c1"># FP8 weights ~30 GiB; 0.78 × 47 GiB ≈ 36.7 GiB leaves ~10 GiB for KV cache.</span>
-<span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.78</span>
-
-<span class="c1"># enforce_eager: false for development — skips the 3-8 min CUDA graph compile.</span>
-<span class="c1"># Set to false in production for ~2× token throughput.</span>
-<span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-
-<span class="c1"># vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).</span>
-<span class="c1"># See services/nemotron3-nano-llm/nemotron3_nano_llm_server.yaml for full docs.</span>
-<span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.04-py3</span>
 </pre></div>
 </div>
 </section>
@@ -733,46 +666,6 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 </pre></div>
 </div>
 </section>
-<section id="config-model-servers-yaml-spark-nemotron3-nano-llm-server-yaml">
-<h3>yaml/spark/nemotron3_nano_llm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-nemotron3-nano-llm-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Nemotron-3-Nano — DGX Spark (GB10).</span>
-<span class="c1"># NVFP4 model auto-selected for Blackwell (SM10+).</span>
-<span class="c1">#</span>
-<span class="c1"># agent-llm is FIRST in load order so FlashInfer MoE JIT compilation runs</span>
-<span class="c1"># with the full GPU free.  Compiled kernels are cached after the first run.</span>
-<span class="c1">#</span>
-<span class="c1"># GB10 has ~96 GiB of physical HBM (pinned).  The KV cache is pinned memory,</span>
-<span class="c1"># so caps must fit in physical HBM even though CUDA reports 119.67 GiB unified</span>
-<span class="c1"># virtual (which extends to CPU RAM).  At 0.35 cap the KV cache alone was</span>
-<span class="c1"># 21.93 GiB pinned, leaving too little physical HBM for the LLM CUDA context.</span>
-<span class="c1">#</span>
-<span class="c1"># 0.25 × 119.67 = 29.9 GiB cap: ~18.7 GiB NVFP4 weights + ~9 GiB KV cache.</span>
-<span class="c1">#</span>
-<span class="c1"># Physical budget:  agent-llm ~30 + vlm ~24 + STT ~2 + overhead ~8</span>
-<span class="c1">#   ≈ 64 GiB of 96 GiB physical — leaves ~32 GiB headroom for LOVR/drivers.</span>
-
-<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
-<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8107</span>
-<span class="nt">hf_token</span><span class="p">:</span><span class="w"> </span><span class="s">""</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
-
-<span class="nt">max_num_seqs</span><span class="p">:</span><span class="w">         </span><span class="l l-Scalar l-Scalar-Plain">8</span>
-<span class="nt">tensor_parallel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<span class="nt">max_model_len</span><span class="p">:</span><span class="w">        </span><span class="l l-Scalar l-Scalar-Plain">32768</span>
-
-<span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.25</span>
-<span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-
-<span class="c1"># vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).</span>
-<span class="c1"># See services/nemotron3-nano-llm/nemotron3_nano_llm_server.yaml for full docs.</span>
-<span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.04-py3</span>
-</pre></div>
-</div>
-</section>
 <section id="config-model-servers-yaml-spark-nemotron-omni-llm-server-yaml">
 <h3>yaml/spark/nemotron_omni_llm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-nemotron-omni-llm-server-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
@@ -824,8 +717,8 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 
 <span class="c1"># VLM server — DGX Spark (GB10, ~120 GiB GPU-visible HBM).</span>
 <span class="c1">#</span>
-<span class="c1"># vlm is SECOND in load order: agent-llm → vlm.</span>
-<span class="c1"># free_at_startup ≈ 120 − 42 (agent-llm) − 2 (STT) ≈ 76 GiB.</span>
+<span class="c1"># vlm is THIRD in load order: STT → Omni → vlm.</span>
+<span class="c1"># free_at_startup ≈ 120 − 30 (Omni) − 2 (STT) ≈ 88 GiB.</span>
 <span class="c1"># 0.20 × 120 = 24 GiB cap: ~16 GiB Cosmos3 Reasoner weights + ~8 GiB KV.</span>
 <span class="c1"># hf_overrides selects the Reasoner runtime; details are documented in</span>
 <span class="c1"># docs/source/components/ai-services.md#per-server-notes.</span>
@@ -1082,6 +975,7 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="c1"># See services/xr-media-hub/xr_media_hub.yaml for all available options.</span>
 
 <span class="c1"># ── LiveKit server ────────────────────────────────────────────────────────────</span>
+<span class="c1"># Development-only placeholders. Replace both values outside local samples.</span>
 <span class="nt">api_key</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">devkey</span>
 <span class="nt">api_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">devsecret-xr-livekit-prototype-2026</span>
 <span class="nt">room_name</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">xr-room</span>
@@ -1337,6 +1231,7 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="c1"># See services/xr-media-hub/xr_media_hub.yaml for all available options.</span>
 
 <span class="c1"># ── LiveKit server ────────────────────────────────────────────────────────────</span>
+<span class="c1"># Development-only placeholders. Replace both values outside local samples.</span>
 <span class="nt">api_key</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">devkey</span>
 <span class="nt">api_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">devsecret-xr-livekit-prototype-2026</span>
 <span class="nt">room_name</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">xr-room</span>
@@ -1429,7 +1324,6 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 </div>
 </section>
 </section>
-</div>
 </section>
 
 
@@ -1467,9 +1361,64 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
             
             
 
-<div class="bd-sidebar-secondary"></div>
+
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
 
 
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers">model-servers</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-embedding-server-yaml">yaml/96G_blackwell/embedding_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-nemotron-omni-llm-server-yaml">yaml/96G_blackwell/nemotron_omni_llm_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-stt-server-yaml">yaml/96G_blackwell/stt_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-vlm-server-yaml">yaml/96G_blackwell/vlm_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-embedding-server-yaml">yaml/dual_48G_ada/embedding_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-nemotron-omni-llm-server-yaml">yaml/dual_48G_ada/nemotron_omni_llm_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-stt-server-yaml">yaml/dual_48G_ada/stt_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-vlm-server-yaml">yaml/dual_48G_ada/vlm_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-embedding-server-yaml">yaml/spark/embedding_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-nemotron-omni-llm-server-yaml">yaml/spark/nemotron_omni_llm_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-stt-server-yaml">yaml/spark/stt_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-vlm-server-yaml">yaml/spark/vlm_server.yaml</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example">simple-vlm-example</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-models-hosted-json">yaml/models.hosted.json</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-models-local-json">yaml/models.local.json</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-models-omni-json">yaml/models.omni.json</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-piper-tts-server-yaml">yaml/piper_tts_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-simple-vlm-example-worker-yaml">yaml/simple_vlm_example_worker.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-stt-server-yaml">yaml/stt_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-vlm-server-yaml">yaml/vlm_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-voice-gate-yaml">yaml/voice_gate.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-xr-media-hub-yaml">yaml/xr_media_hub.yaml</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo">xr-render-demo</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-scene-scene-service-yaml">scene/scene_service.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-cloudxr-runtime-yaml">yaml/cloudxr_runtime.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-models-nim-yaml">yaml/models.nim.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-models-yaml">yaml/models.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-openxr-service-yaml">yaml/openxr_service.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-piper-tts-server-yaml">yaml/piper_tts_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-video-memory-service-yaml">yaml/video_memory_service.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-voice-gate-yaml">yaml/voice_gate.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-xr-media-hub-yaml">yaml/xr_media_hub.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-xr-render-demo-worker-yaml">yaml/xr_render_demo_worker.yaml</a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+</div></div>
               
             
 
