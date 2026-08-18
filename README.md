@@ -338,7 +338,7 @@ tool-calling agent. The foreground agent can start, stop, or inspect the
 monitor without giving up the foreground, inspect the current view, or query
 recent monitor history. Accepted STT and typed queries, monitoring records,
 foreground turns, and Relay telemetry are written as JSONL under `artifacts/`;
-served.
+the shared connection web client remains available on port 8080.
 
 Start `model-servers`, then run:
 

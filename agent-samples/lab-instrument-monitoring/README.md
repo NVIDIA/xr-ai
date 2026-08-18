@@ -5,6 +5,9 @@
 
 # Lab instrument monitoring
 
+For an adaptation-oriented architecture guide, see
+[`docs/source/reference/lab-instrument-monitoring.md`](../../docs/source/reference/lab-instrument-monitoring.md).
+
 This sample writes monitoring output only to files and keeps one visual monitor
 available for every connected participant while a separate foreground agent answers voice or typed queries.
 Monitoring stays dormant until the foreground model calls the matching

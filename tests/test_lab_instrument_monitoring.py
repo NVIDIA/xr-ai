@@ -201,6 +201,18 @@ def test_sample_uses_named_native_agents_and_shared_connection_client() -> None:
     assert not any(path.name == "web" for path in _SAMPLE.iterdir())
 
 
+def test_published_guide_covers_architecture_and_adaptation() -> None:
+    guide = (_REPO / "docs/source/reference/lab-instrument-monitoring.md").read_text()
+
+    assert "## Architecture" in guide
+    assert "## Source map" in guide
+    assert "## Connecting a backend" in guide
+    assert "## Adapting the sample" in guide
+    assert "## Lifecycle invariants" in guide
+    assert "ParticipantImageAgent" in guide
+    assert "InstrumentMonitorAgent" in guide
+
+
 def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     config = load_config(_SAMPLE / "yaml" / "lab_instrument_monitoring_worker.yaml")
     models = json.loads(config.models_config.read_text())
