@@ -129,7 +129,7 @@ Package Contents
    Raised when a fresh camera frame cannot be obtained before the timeout.
 
 
-.. py:class:: LiveFrameSource(endpoint: xr_ai_hub._processor.ProcessorEndpoint, *, max_age_s: float = 2.0, timeout_s: float = 5.0)
+.. py:class:: LiveFrameSource(endpoint: xr_ai_hub.ProcessorEndpoint, *, max_age_s: float = 2.0, timeout_s: float = 5.0)
 
    Track frame signals and fetch fresh pixels through ``ProcessorEndpoint``.
 
@@ -152,7 +152,7 @@ Package Contents
 
 
 
-   .. py:method:: get(participant_id: str) -> xr_ai_hub._types.FrameData
+   .. py:method:: get(participant_id: str) -> xr_ai_hub.FrameData
       :async:
 
 
@@ -325,7 +325,7 @@ Package Contents
 
 
 
-   .. py:method:: send_return_data(msg: xr_ai_hub._types.DataMessage) -> None
+   .. py:method:: send_return_data(msg: xr_ai_hub.DataMessage) -> None
       :async:
 
 
@@ -333,7 +333,7 @@ Package Contents
 
 
 
-   .. py:method:: send_return_audio(chunk: xr_ai_hub._types.AudioChunk) -> None
+   .. py:method:: send_return_audio(chunk: xr_ai_hub.AudioChunk) -> None
       :async:
 
 
@@ -421,7 +421,7 @@ Package Contents
 
 
 
-   .. py:method:: request_frame(signal: xr_ai_hub._types.FrameSignal, timeout: float = _FRAME_REQUEST_TIMEOUT) -> xr_ai_hub._types.FrameData | None
+   .. py:method:: request_frame(signal: xr_ai_hub.FrameSignal, timeout: float = _FRAME_REQUEST_TIMEOUT) -> xr_ai_hub.FrameData | None
       :async:
 
 
@@ -536,7 +536,7 @@ Package Contents
        one. The creator is responsible for eventually calling :meth:`unlink`.
 
 
-   .. py:method:: write_frame(data: bytes | memoryview, width: int, height: int, fmt: xr_ai_hub._types.PixelFormat, pts_us: int, seq: int) -> int
+   .. py:method:: write_frame(data: bytes | memoryview, width: int, height: int, fmt: xr_ai_hub.PixelFormat, pts_us: int, seq: int) -> int
 
       Write a frame into the next free slot and return its index.
 
@@ -548,7 +548,7 @@ Package Contents
 
 
 
-   .. py:method:: read_slot(signal: xr_ai_hub._types.FrameSignal) -> SlotView
+   .. py:method:: read_slot(signal: xr_ai_hub.FrameSignal) -> SlotView
 
       Return a zero-copy view of a ready slot's pixel data.
 
@@ -595,7 +595,7 @@ Package Contents
 
 
    .. py:attribute:: signal
-      :type:  xr_ai_hub._types.FrameSignal
+      :type:  xr_ai_hub.FrameSignal
 
       Metadata identifying and describing the occupied slot.
 
