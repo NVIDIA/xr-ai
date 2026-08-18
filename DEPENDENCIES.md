@@ -126,6 +126,17 @@ change, even when an individual dependency publishes newer Python wheels.
 - Optional dependency groups: none
 - Commands: none
 
+#### `xr-ai-web-events` — [`agent-sdk/xr-ai-web-events/`](agent-sdk/xr-ai-web-events/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `pydantic>=2.10`
+  - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
+- Optional dependency groups: none
+- Commands: none
+
 ### Utilities
 
 #### `xr-ai-launcher` — [`utils/xr-ai-launcher/`](utils/xr-ai-launcher/)
@@ -514,6 +525,7 @@ change, even when an individual dependency publishes newer Python wheels.
   - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-tools[frames,image-editing,marker-tracking,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
+  - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
   - `xr-media-hub` → [`xr-media-hub`](services/xr-media-hub/) (local, editable)
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
