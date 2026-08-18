@@ -17,324 +17,51 @@ installation.
 | `xr-ai-tools` | `xr_ai_tools` | Relay-managed tools and model tool-call helpers |
 | `xr-ai-voice` | `xr_ai_voice` | Voice agent, transport, and private media pipeline |
 
-The complete package references are versioned with this site:
+Package guides are versioned with this site:
 {doc}`/reference/agent-sdk-hub`, {doc}`/reference/agent-sdk-models`,
 {doc}`/reference/agent-sdk-runtime`, {doc}`/reference/agent-sdk-tools`, and
-{doc}`/reference/agent-sdk-voice`.
+{doc}`/reference/agent-sdk-voice`. The generated {doc}`/reference/python/index`
+is the source of truth for public names, signatures, types, defaults, fields,
+and method-level behavior.
 
-## Runtime and tools
+## Ownership boundaries
 
-An `Agent` owns state and exposes ordinary `Tool` or `AsyncTool` instances.
-Direct callers use `execute()` or `stream()`; model loops expose the same
-tools through `ToolSet` and `handle_tool_call()`. `AgentRuntime` registers
-agents and publishes typed messages to participant-scoped subscribers. It does
-not own model loops, planning, memory, raw media, agent resources, or
-agent-created background tasks.
+An `Agent` owns its state, resources, background tasks, lifecycle, and
+concurrency policy. It exposes ordinary `Tool` or `AsyncTool` instances for
+direct execution and model tool-call loops. Bounded turns use `ToolSet` and
+`run_tool_loop()`; callers retain model configuration, conversation policy,
+retries, participant context, cancellation, and task ownership. `AgentRuntime`
+owns only typed publication and delivery tasks; it does not own model loops,
+planning, memory, media, or agent-created work. A publication waits for its
+subscribers, so a subscriber that performs lengthy work should hand it to its
+own bounded queue.
 
-```python
-from pydantic import BaseModel
-from xr_ai_runtime import Agent, AgentRuntime, Topic
-from xr_ai_tools import Tool
+Workers construct model clients with the factories in `xr_ai_models` and depend
+on the corresponding typed service protocols. Adapter behavior, endpoint
+connectivity, deployment ownership, credentials, and model-specific wire
+details remain inside that package. See {doc}`ai-services` for deployment and
+operational guidance.
 
+`VoiceAgent` owns readiness, hub transport, voice gating, its private media
+pipeline, signal handling, and cleanup. It publishes final pre-gate transcripts
+separately from gate-accepted user queries, optionally publishes typed
+participant lifecycle events, and consumes typed voice output. Join and leave
+publication stays non-blocking for the media pipeline while preserving order per
+participant. Application agents subscribe to the events they own and clean up
+their own participant state. Pipecat and the media session remain implementation
+details.
 
-class EchoRequest(BaseModel):
-    text: str
+`ProcessorEndpoint` is the minimal agent-side hub boundary. It receives data,
+audio, frame signals, and participant events and sends participant-routed return
+traffic. Video tools acquire frames on demand; raw pixels and media stay on the
+hub path rather than entering agent APIs.
 
+## Documentation boundary
 
-class EchoResponse(BaseModel):
-    text: str
-
-
-class EchoAgent(Agent):
-    def __init__(self) -> None:
-        self.echo = Tool(
-            "echo",
-            "Echo text.",
-            EchoRequest,
-            EchoResponse,
-            self._echo,
-        )
-        super().__init__((self.echo,))
-
-    async def _echo(self, request: EchoRequest) -> EchoResponse:
-        return EchoResponse(text=request.text)
-
-
-runtime = AgentRuntime()
-agent = runtime.register("echo", EchoAgent())
-async with runtime:
-    result = await agent.echo.execute(EchoRequest(text="hello"))
-```
-
-Agents protect shared mutable state with their own lock or queue. They also
-create, cancel, and await their own tasks. `publish()` waits for all deliveries
-and then propagates subscriber failures.
-
-Image tools share bounded `ImageRegistry` references so model-visible results
-do not contain raw pixels. Install `xr-ai-tools[image-editing]` to use
-`ImagePolygonFillTool`, which copies an image, fills the area enclosed by at
-least three ordered pixel coordinates with magenta, and returns a new lossless
-PNG reference. The source reference remains unchanged, and the edited reference
-inherits its owner so lifecycle cleanup releases both images. It can be passed
-directly to the single-image or multi-image VLM query tools. Invalid polygons
-and unavailable source references return recoverable unavailable results.
-
-Relay records publications, subscriber callbacks, tool calls, and model calls
-as nested scopes. `Topic.telemetry` controls event volume without changing
-delivery: use `"full"` for semantic events and `"none"` for high-volume
-fragments that a consumer summarizes into one operation. Voice uses this model
-to record one response per completed output, separate STT scopes, and
-sentence-level TTS scopes without storing audio payloads.
-
-## Models
-
-Workers construct clients from a model profile with `make_llm`, `make_vlm`,
-`make_stt`, `make_tts`, or `make_embedding`. Callers depend on the
-corresponding service protocol, so endpoint and model-specific behavior stays
-inside `xr_ai_models`.
-
-```python
-from xr_ai_models import ChatMessage, load_models_config, make_llm
-
-config = load_models_config("yaml/models.local.json")
-async with make_llm(config, "agent_llm") as llm:
-    response = await llm.chat([ChatMessage(role="user", content="hello")])
-```
-
-A structured profile separates adapter behavior, endpoint connectivity, and
-deployment ownership. See {doc}`ai-services` for supported services, presets,
-and deployment configuration.
-
-## Voice
-
-Every non-empty final STT result is published before wake-phrase filtering
-on `VOICE_TRANSCRIPT_TOPIC` as `VoiceTranscript`. This includes speech that the
-gate rejects because it contains no wake phrase. Early wake/STOP probes remain
-private and are not published as final transcripts. Accepted speech is
-published separately as `UserQuery` after the gate removes the wake phrase and
-any preceding background speech.
-
-`VoiceAgent` publishes transcripts through a private bounded FIFO so slow
-runtime subscribers cannot delay STT, voice gating, or accepted queries. The
-queue preserves order, drops the oldest pending transcript when full, and is
-cancelled with pending entries discarded during shutdown. Subscribers should
-hand off lengthy work to their own bounded queues and return promptly.
-
-Accepted speech and typed text are published as `UserQuery` events, participant
-and interruption lifecycle events use application-named topics, and voice
-consumes `voice.output`. `VoiceAgent` privately owns model readiness, hub
-transport, voice gating, the media pipeline, signal handling, and cleanup.
-Pipecat and the media session remain implementation details.
-Voice consumes only untopiced client data when `text_input=True`; named
-application and control messages are not user queries. The hub preserves the
-original data-channel topic for all processors.
-
-```python
-class LLMService(Protocol):
-    capabilities: Capabilities
-    async def chat(self, messages, *, tools=None, max_tokens=None,
-                   temperature=None, enable_thinking=False,
-                   thinking_budget=None, timeout=None,
-                   headers=None) -> ChatResponse: ...
-    def stream(self, messages, *, ...) -> AsyncIterator[str]: ...
-    async def health(self) -> bool: ...
-    async def close(self) -> None: ...
-
-class VLMService(Protocol):
-    capabilities: Capabilities
-    async def ask_image(self, image, question, *, system_prompt="",
-                        max_tokens=None, temperature=None,
-                        timeout=None, headers=None) -> ChatResponse: ...
-    async def ask_video(self, video, question, *, system_prompt="",
-                        max_tokens=None, temperature=None,
-                        timeout=None, headers=None) -> ChatResponse: ...
-    def stream(self, image, question, *, system_prompt="",
-               max_tokens=None, temperature=None,
-               timeout=None, headers=None) -> AsyncIterator[str]: ...
-    async def health(self) -> bool: ...
-
-class STTService(Protocol):
-    async def transcribe(self, audio: bytes, *, sample_rate=None,
-                         channels=1, timeout=None) -> str: ...
-    async def health(self) -> bool: ...
-
-class TTSService(Protocol):
-    async def synthesize(self, text: str, *, response_format="wav",
-                         timeout=None) -> bytes: ...
-    async def health(self) -> bool: ...
-```
-
-`ChatResponse.reasoning` is the canonical reasoning field — the
-`reasoning_field` knob normalizes `reasoning_content` (the nemotron_v3 parser)
-into the same surface.
-
-### Remote and hosted-NIM endpoints
-
-Cloud and remote endpoints (e.g. hosted [NVIDIA NIM](https://build.nvidia.com))
-are a configuration change — point `base_url` at the OpenAI-compatible URL and set
-`api_key_env`:
-
-```yaml
-vlm:
-  kind:        openai_compat
-  category:    vlm
-  base_url:    https://integrate.api.nvidia.com
-  model_name:  nvidia/cosmos-reason1-7b
-  api_key_env: NGC_API_KEY    # → Authorization: Bearer <env value>
-  health_check: false         # remote endpoints have no local /health route
-```
-
-`api_key_env` names the environment variable holding the API key; its value is
-sent as an `Authorization: Bearer <value>` header on every request.
-
-`health_check` (default `true`) gates whether `health()` probes
-`base_url/health`. Remote endpoints don't expose that route, so `false` makes
-`health()` return `True` without a request — otherwise a worker's readiness
-gate would block forever.
-
-NIM speech (Riva over gRPC, not OpenAI `/v1/audio`) is covered by the
-`riva_grpc` STT/TTS kind. It requires the `riva` extra (`xr-ai-models[riva]`)
-and serves self-hosted Riva/NIM speech containers as well as hosted NVCF
-endpoints (via `function_id:`). Its STT input must be 16-bit PCM: a 16-bit
-PCM WAV (any other sample width raises `ValueError`) or raw int16 PCM with
-an explicit `sample_rate=`.
-
-Non-OpenAI-compatible backends can be added as new `kind`s without changing the
-protocols or callers.
-
-### Tests
-
-The clients can be exercised without a GPU.
-
----
-
-## Native tools and model tool calls
-
-`xr-ai-tools` is the native migration target for model-driven XR composition.
-`Tool` declares Pydantic request and response boundaries and executes its
-handler through NeMo Relay. `tool_definitions(...)` adapts a native catalog to
-`xr-ai-models` definitions; `handle_tool_call(...)` invokes one model-selected
-call and returns the tool-role message.
-
-The package does not implement an agent, model loop, Hub transport, or implicit
-conversation store. Applications own prompts, LLM calls, history, iteration,
-foreground selection, workflow state, and background work.
-
-`xr_ai_tools.live_vision.LiveVisionTool` is the finite current-frame tool; it
-returns one complete observation through Relay's managed tool and LLM
-boundaries. `xr_ai_tools.streaming_vision.StreamingVisionTool` is a separate
-`AsyncTool` that yields typed chunks around Relay's managed streaming LLM
-boundary. It has no voice or output-transport dependency. Both tools own their
-own frame sources and redact inline camera data from Relay events without
-changing provider input.
-
-Applications place native tools and model loops inside an agent to group tools
-with their state, and register the agent with `xr-ai-agent-runtime` when they
-need pub/sub. Relay remains responsible for tool and model execution; the
-runtime does not duplicate the tool loop or model boundary.
-
----
-
-## xr-ai-voice
-
-Native voice applications work with participant-aware runtime topics rather
-than Pipecat processors. `VoiceAgent` owns `VoiceSession`, publishes accepted
-input and lifecycle events with voice-owned schemas on application-named
-topics, and subscribes to `voice.output`:
-
-```python
-from xr_ai_runtime import Topic
-from xr_ai_voice import (
-    UserQuery,
-    VadConfig,
-    VoiceAgent,
-    VoiceParticipantLeft,
-    VoiceSession,
-)
-
-session = VoiceSession(
-    stt=stt,
-    tts=tts,
-    vad=VadConfig(),
-    voice_gate=voice_gate_config,
-    probes={"vlm": vlm.health},
-    ready_file=ready_file,
-    closeables=(vlm,),
-)
-queries = Topic("my-sample.user-query", UserQuery)
-participant_left = Topic("my-sample.participant-left", VoiceParticipantLeft)
-voice = VoiceAgent(
-    query_topic=queries,
-    stt=stt,
-    tts=tts,
-    vad=VadConfig(),
-    voice_gate=voice_gate_config,
-    probes={"vlm": vlm.health},
-    ready_file=ready_file,
-    closeables=(vlm,),
-    participant_left_topic=participant_left,
-)
-runtime.register("voice", voice)
-
-async with runtime:
-    await voice.run(runtime)
-```
-
-The private session opens its hub transport only after readiness probes succeed
-and touches the ready file after its receive loop starts. Applications that
-already need the public `HubVoiceTransport` for frames or status publication
-construct it explicitly and pass it to `VoiceAgent`; the agent does not expose
-its private session or transport. The agent preserves participant routing,
-cancels superseded or interrupted output, and closes transports and model
-clients. Application agents subscribe to lifecycle events and clean up their
-own participant state.
-
-## Hub IPC
-
-`ProcessorEndpoint` receives data, audio, frame signals, and participant
-events through hub PUB IPC and sends participant-routed return data and audio
-through PUSH IPC. The `xr-ai-hub-client` distribution depends only on
-`pyzmq` and `msgpack`; server, model, and voice dependencies stay out.
-
-```python
-from xr_ai_hub import DataMessage, ProcessorEndpoint, Subscribe
-
-endpoint = ProcessorEndpoint(
-    sub_addr="ipc:///tmp/xr_hub_pub",
-    push_addr="ipc:///tmp/xr_hub_in",
-    filter=Subscribe.DATA | Subscribe.VIDEO,
-)
-
-async def on_data(message: DataMessage) -> None:
-    print(message.participant_id, message.topic)
-
-endpoint.on_data(on_data)
-await endpoint.run()
-```
-
-Video pixels are pulled on demand with `request_frame()` or
-`LiveFrameSource`; frame signals do not copy pixels. Readiness participation
-is opt-in and scoped to subscribed participants. The hub aggregates each
-responsible agent's status and gates readiness on confirmed subscriptions.
-
-## Marker tracking
-
-`xr_ai_tools.marker_tracking.MarkerTrackingTool` is an optional finite tool for
-QR and ArUco detection. It acquires a participant's current frame, runs enabled
-detectors off the event loop, and returns every marker through one
-`marker_type`, `value`, and four-corner contract. QR values are ZXing-C++
-decoded text; ArUco values are decimal IDs detected with a configured OpenCV
-predefined dictionary. Install `xr-ai-tools[marker-tracking]` to use it.
-Both detectors scan the complete frame at native resolution and once at a
-bounded enlarged resolution. Duplicate detections are removed, and all returned
-corners remain in source-frame coordinates.
-
-QR and ArUco are enabled by default. Initialization may select either family
-and choose the ArUco dictionary without changing the model-visible
-`track_markers` request or result schema.
-
-The `xr-ai-tools` package also includes
-`xr_ai_tools/utilities/generate_marker.py`, a standalone `uv run` utility for
-generating QR and ArUco PNGs for testing. The script declares its own inline
-dependencies, supports OpenCV predefined ArUco dictionaries, and does not add
-an agent-facing API.
+Public API membership comes from literal `__all__` declarations. Sphinx parses
+the source without importing SDK packages, then renders co-located docstrings,
+annotations, and defaults. Package READMEs retain installation, quickstarts,
+and cross-call behavioral guidance; this component page records only shared
+architecture and ownership. Guides, troubleshooting, and migrations remain
+handwritten because they describe workflows and decisions rather than API
+shape.
