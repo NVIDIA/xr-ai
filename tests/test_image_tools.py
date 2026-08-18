@@ -3,6 +3,7 @@
 
 """CPU-only contracts for image selection and image-input VLM tools."""
 
+import asyncio
 import base64
 import io
 import time
@@ -260,6 +261,45 @@ async def test_image_query_consumes_selected_bytes_and_redacts_relay_events() ->
     assert llm_events
     assert any("<redacted:image>" in event for event in llm_events)
     assert all("jpeg bytes" not in event for event in llm_events)
+
+
+async def test_image_query_can_repeat_within_one_relay_scope() -> None:
+    images = ImageRegistry()
+    image = images.put(b"jpeg bytes", owner="alice")
+    vlm = _Vlm()
+    tool = ImageQueryTool(
+        images=images,
+        vlm=cast(VLMService, vlm),
+        system_prompt="Answer briefly.",
+    )
+
+    with nemo_relay.scope.scope("repeated-vision", nemo_relay.ScopeType.Agent):
+        first = await tool.execute(ImageQueryRequest(image=image, query="What is shown?"))
+        second = await tool.execute(ImageQueryRequest(image=image, query="What is shown now?"))
+
+    assert first.text == "a blue square"
+    assert second.text == "a blue square"
+    assert len(vlm.calls) == 2
+
+
+async def test_image_query_can_overlap_within_one_relay_scope() -> None:
+    images = ImageRegistry()
+    image = images.put(b"jpeg bytes", owner="alice")
+    vlm = _Vlm()
+    tool = ImageQueryTool(
+        images=images,
+        vlm=cast(VLMService, vlm),
+        system_prompt="Answer briefly.",
+    )
+
+    with nemo_relay.scope.scope("overlapping-vision", nemo_relay.ScopeType.Agent):
+        results = await asyncio.gather(
+            tool.execute(ImageQueryRequest(image=image, query="What is shown?")),
+            tool.execute(ImageQueryRequest(image=image, query="What is shown now?")),
+        )
+
+    assert [result.text for result in results] == ["a blue square", "a blue square"]
+    assert len(vlm.calls) == 2
 
 
 @pytest.mark.parametrize(

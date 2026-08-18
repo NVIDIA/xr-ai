@@ -17,8 +17,8 @@ from xr_ai_models import VLMService
 from ._relay import headers_from_relay
 from ._vision import (
     VLM_CALL_NAME,
+    image_sanitizer,
     openai_response,
-    register_image_sanitizer,
     relay_request,
     response_text,
     stream_text,
@@ -125,19 +125,19 @@ class _ImageInference:
                 available=False,
             )
         try:
-            register_image_sanitizer()
-            response = await nemo_relay.llm.execute(
-                VLM_CALL_NAME,
-                relay_request(
-                    self.system_prompt,
-                    [(image.uri, timestamp_us) for image, timestamp_us in inputs],
-                    query,
-                ),
-                self._ask_vlm,
-                model_name=VLM_CALL_NAME,
-                codec=OpenAIChatCodec(),
-                response_codec=OpenAIChatCodec(),
-            )
+            with image_sanitizer():
+                response = await nemo_relay.llm.execute(
+                    VLM_CALL_NAME,
+                    relay_request(
+                        self.system_prompt,
+                        [(image.uri, timestamp_us) for image, timestamp_us in inputs],
+                        query,
+                    ),
+                    self._ask_vlm,
+                    model_name=VLM_CALL_NAME,
+                    codec=OpenAIChatCodec(),
+                    response_codec=OpenAIChatCodec(),
+                )
             text = visible_text(response_text(response))
             if not text:
                 return ImageQueryResult(
@@ -167,26 +167,26 @@ class _ImageInference:
             yield ImageQueryChunk(text="Image input unavailable — please select it again.")
             return
         try:
-            register_image_sanitizer()
-            stream = await nemo_relay.llm.stream_execute(
-                VLM_CALL_NAME,
-                relay_request(
-                    self.system_prompt,
-                    [(image.uri, timestamp_us) for image, timestamp_us in inputs],
-                    query,
-                ),
-                self._stream_vlm,
-                lambda chunk: fragments.append(stream_text(chunk)),
-                lambda: openai_response("".join(fragments)),
-                model_name=VLM_CALL_NAME,
-                codec=OpenAIChatCodec(),
-                response_codec=OpenAIChatCodec(),
-            )
-            async for chunk in stream:
-                text = stream_text(chunk)
-                if text:
-                    emitted_output = True
-                    yield ImageQueryChunk(text=text)
+            with image_sanitizer():
+                stream = await nemo_relay.llm.stream_execute(
+                    VLM_CALL_NAME,
+                    relay_request(
+                        self.system_prompt,
+                        [(image.uri, timestamp_us) for image, timestamp_us in inputs],
+                        query,
+                    ),
+                    self._stream_vlm,
+                    lambda chunk: fragments.append(stream_text(chunk)),
+                    lambda: openai_response("".join(fragments)),
+                    model_name=VLM_CALL_NAME,
+                    codec=OpenAIChatCodec(),
+                    response_codec=OpenAIChatCodec(),
+                )
+                async for chunk in stream:
+                    text = stream_text(chunk)
+                    if text:
+                        emitted_output = True
+                        yield ImageQueryChunk(text=text)
         except Exception:
             _LOGGER.exception("Image VLM stream failed")
             if not emitted_output:

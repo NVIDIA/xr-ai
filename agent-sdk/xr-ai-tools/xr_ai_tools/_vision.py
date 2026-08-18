@@ -7,24 +7,34 @@ from __future__ import annotations
 
 import copy
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from itertools import count
 from typing import Any
 
 import nemo_relay
 
 VLM_CALL_NAME = "xr-ai-vlm"
 _IMAGE_REDACTION = "<redacted:image>"
+_IMAGE_SANITIZER_IDS = count()
 
 
-def register_image_sanitizer() -> None:
-    """Redact image locations from VLM events in the active tool scope."""
+@contextmanager
+def image_sanitizer() -> Iterator[None]:
+    """Redact image locations for one VLM call in the active tool scope."""
 
+    handle = nemo_relay.scope.get_handle()
+    name = f"xr-ai-image-{next(_IMAGE_SANITIZER_IDS)}"
     nemo_relay.scope_local.register_llm_sanitize_request(
-        nemo_relay.scope.get_handle(),
-        "xr-ai-image",
+        handle,
+        name,
         0,
         _sanitize_images,
     )
+    try:
+        yield
+    finally:
+        nemo_relay.scope_local.deregister_llm_sanitize_request(handle, name)
 
 
 def relay_request(
