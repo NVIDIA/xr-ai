@@ -1221,9 +1221,8 @@ def test_scene_loop_bounds_participant_state_as_one_lru_unit() -> None:
 
 
 async def test_worker_builds_model_services_from_shipped_config() -> None:
-    # Regression: main() must construct every model client from the shipped
-    # worker YAML via load_models(config_path) (a stale WorkerConfig field
-    # reference here once crashed the worker at startup).
+    # The worker must construct every model client from the profile selected
+    # by its worker YAML.
     from xr_render_demo_worker.__main__ import _make_model_services
 
     config_path = (
@@ -1238,3 +1237,24 @@ async def test_worker_builds_model_services_from_shipped_config() -> None:
         await asyncio.gather(
             *(service.close() for service in services), return_exceptions=True
         )
+
+
+async def test_worker_main_resolves_models_from_config_path(monkeypatch) -> None:
+    from xr_render_demo_worker import __main__ as worker_main
+
+    config_path = _WORKER_DIR.parent / "yaml" / "xr_render_demo_worker.yaml"
+    cfg = worker_main.load_config(config_path)
+    seen: list[object] = []
+
+    class _Abort(Exception):
+        pass
+
+    def _capture(path):
+        seen.append(path)
+        raise _Abort
+
+    monkeypatch.setattr(worker_main, "_make_model_services", _capture)
+    monkeypatch.setattr(worker_main, "setup_logging", lambda *_a, **_k: None)
+    with pytest.raises(_Abort):
+        await worker_main.main(cfg, config_path=config_path)
+    assert seen == [config_path]
