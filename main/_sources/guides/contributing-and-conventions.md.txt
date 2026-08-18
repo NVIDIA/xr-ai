@@ -32,6 +32,12 @@ The user-facing command catalog is generated from top-level sample
 `[project.scripts]` entries and literal `argparse` declarations. Keep option
 descriptions in `help=` and do not repeat flag tables in narrative pages.
 
+Sample configuration examples and field-level guidance live in checked-in
+YAML/JSON and adjacent YAML comments. The generated catalog enrolls files under
+a top-level sample's `yaml/` tree and files beside a direct capability
+subproject, then renders them verbatim. Narrative docs should cover only
+workflows, operational decisions, credentials, and process relationships.
+
 A `pyproject.toml` change also requires a `DEPENDENCIES.md` update; regenerate
 the affected project's gitignored `uv.lock` locally. New source files require
 an SPDX header; see [SPDX headers](spdx-headers.md).
