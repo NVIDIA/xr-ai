@@ -327,6 +327,8 @@
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
@@ -351,6 +353,9 @@
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 </ul>
 </details></li>
 </ul>
@@ -585,11 +590,15 @@ locks, and participant cleanup.</p>
 <td><p>Participant JSONL artifacts</p></td>
 <td><p>Replace files with backend persistence</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/workflow.yaml</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">prompts/</span></code></p></td>
+<td><p>Default model instructions</p></td>
+<td><p>Tune one agent without duplicating prompts in YAML</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/workflow.yaml</span></code></p></td>
 <td><p>Five-step procedure and evidence contract</p></td>
 <td><p>Define a different guided task</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rag-documents/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rag-documents/</span></code></p></td>
 <td><p>Sample retrieval corpus</p></td>
 <td><p>Replace with domain documents or a backend</p></td>
 </tr>
@@ -629,7 +638,7 @@ capabilities exist, and the model decides how to use only those capabilities.</p
 <li><p>completion conditions and skip values;</p></li>
 <li><p>enter, complete, and skip messages.</p></li>
 </ul>
-<p><code class="docutils literal notranslate"><span class="pre">WorkflowState</span></code> enforces the contract. An observation can update only fields
+<p><code class="docutils literal notranslate"><span class="pre">WorkflowStore</span></code> enforces the contract. An observation can update only fields
 listed in the active step’s <code class="docutils literal notranslate"><span class="pre">writes</span></code>. Updates are atomic, validated against
 their declared types, and ignored after the step is complete. Completion emits
 a notice but never moves to the next step. Only explicit next, skip, reset, or
@@ -653,6 +662,10 @@ workflow step is active, the task:</p>
 <p>Unavailable frames, invalid observations, and service failures record an error
 and retry on a later tick. They do not kill the participant session. A leave
 event cancels the task and releases the session.</p>
+<p>Completed steps pause this loop until the user explicitly advances. Trigger and
+model I/O run outside the participant state lock; the resulting commit is
+accepted only when the captured step and revision still match. Reset, restart,
+status, and advance controls therefore remain responsive during slow inference.</p>
 <p>To use audio, sensor, or backend evidence, add another deterministic trigger
 that returns a typed result. Keep evidence collection separate from state
 mutation so the same workflow rules remain testable without the live source.</p>
@@ -753,6 +766,8 @@ text/event producers unless a dedicated voice subscriber chooses otherwise.</p>
 <li><p>Participant join starts a fresh workflow and output session.</p></li>
 <li><p>Participant leave cancels foreground, observation, and background tasks
 before image resources are released.</p></li>
+<li><p>Record-producing agents publish cleanup-complete events after cancellation;
+<code class="docutils literal notranslate"><span class="pre">FileOutputAgent</span></code> closes the session only after every producer has finished.</p></li>
 <li><p>A superseding query cancels the participant’s prior foreground turn.</p></li>
 <li><p>Each participant has independent workflow state and locks.</p></li>
 <li><p>Agent tasks fork the Relay context for traceable native tool execution.</p></li>

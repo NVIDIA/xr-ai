@@ -97,6 +97,7 @@ locks, and participant cleanup.
 | `video_log.py` | Periodic caption and delta observer | Build a visual journal |
 | `guidance_voice.py` | Guidance notice speech policy | Add another presentation channel |
 | `file_output.py` | Participant JSONL artifacts | Replace files with backend persistence |
+| `prompts/` | Default model instructions | Tune one agent without duplicating prompts in YAML |
 | `yaml/workflow.yaml` | Five-step procedure and evidence contract | Define a different guided task |
 | `rag-documents/` | Sample retrieval corpus | Replace with domain documents or a backend |
 
@@ -134,7 +135,7 @@ capabilities exist, and the model decides how to use only those capabilities.
 - completion conditions and skip values;
 - enter, complete, and skip messages.
 
-`WorkflowState` enforces the contract. An observation can update only fields
+`WorkflowStore` enforces the contract. An observation can update only fields
 listed in the active step's `writes`. Updates are atomic, validated against
 their declared types, and ignored after the step is complete. Completion emits
 a notice but never moves to the next step. Only explicit next, skip, reset, or
@@ -159,6 +160,11 @@ workflow step is active, the task:
 Unavailable frames, invalid observations, and service failures record an error
 and retry on a later tick. They do not kill the participant session. A leave
 event cancels the task and releases the session.
+
+Completed steps pause this loop until the user explicitly advances. Trigger and
+model I/O run outside the participant state lock; the resulting commit is
+accepted only when the captured step and revision still match. Reset, restart,
+status, and advance controls therefore remain responsive during slow inference.
 
 To use audio, sensor, or backend evidence, add another deterministic trigger
 that returns a typed result. Keep evidence collection separate from state
@@ -259,6 +265,8 @@ text/event producers unless a dedicated voice subscriber chooses otherwise.
 - Participant join starts a fresh workflow and output session.
 - Participant leave cancels foreground, observation, and background tasks
   before image resources are released.
+- Record-producing agents publish cleanup-complete events after cancellation;
+  `FileOutputAgent` closes the session only after every producer has finished.
 - A superseding query cancels the participant's prior foreground turn.
 - Each participant has independent workflow state and locks.
 - Agent tasks fork the Relay context for traceable native tool execution.

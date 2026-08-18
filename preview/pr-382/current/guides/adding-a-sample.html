@@ -327,6 +327,8 @@
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
@@ -351,6 +353,9 @@
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 </ul>
 </details></li>
 </ul>
@@ -611,7 +616,7 @@ packages = ["&lt;snake_name&gt;_worker"]
 <p>Use this template when the worker talks directly to <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code>. Native
 voice workers keep argument parsing in <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code> and delegate composition
 to sibling <code class="docutils literal notranslate"><span class="pre">app.py</span></code> and <code class="docutils literal notranslate"><span class="pre">config.py</span></code> modules; see
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/9ac8035e9f11e5ec5541f15f120c4a0171708eeb/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/b2364f5cfde8fc18aaa33e9038622e3fee630ab9/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
 for that shape. Fill in the sections marked <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">←</span> <span class="pre">FILL</span> <span class="pre">IN</span></code>.</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>"""
 &lt;Name&gt; agent worker — &lt;one-line description&gt;.

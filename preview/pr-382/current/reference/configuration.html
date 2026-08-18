@@ -327,6 +327,8 @@
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
@@ -351,6 +353,9 @@
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 </ul>
 </details></li>
 </ul>
@@ -1120,23 +1125,6 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 
 <span class="nt">change_watch_default_instruction</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
 <span class="w">  </span><span class="no">important changes involving people, objects, actions, or possible hazards</span>
-<span class="nt">change_watch_caption_prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">  </span><span class="no">Describe only visible facts relevant to the requested watch. Include enough</span>
-<span class="w">  </span><span class="no">scene context to compare the current image with earlier observations.</span>
-<span class="nt">change_watch_event_prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">  </span><span class="no">Compare the current caption with recent captions and the requested watch.</span>
-<span class="w">  </span><span class="no">Report one short factual sentence only when a relevant material change is</span>
-<span class="w">  </span><span class="no">newly visible. Ignore wording, viewpoint, and lighting differences.</span>
-<span class="nt">transcript_summary_prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">  </span><span class="no">Summarize the supplied new utterances in one or two short factual sentences.</span>
-<span class="w">  </span><span class="no">Do not add facts that were not spoken.</span>
-<span class="nt">video_caption_prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">  </span><span class="no">Describe visible people, objects, actions, readable text, and notable scene</span>
-<span class="w">  </span><span class="no">conditions. Report only visible facts and do not infer.</span>
-<span class="nt">video_delta_prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">  </span><span class="no">Compare the current caption with recent captions. State only material visible</span>
-<span class="w">  </span><span class="no">information unique to the current observation. If nothing material changed,</span>
-<span class="w">  </span><span class="no">say that there was no meaningful visual change.</span>
 
 <span class="nt">silero_threshold</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.3</span>
 <span class="nt">silence_duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.2</span>
@@ -1378,11 +1366,12 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">current_view</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">complete_when</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">steeping_started</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
 <span class="w">    </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">steep_timer</span>
-<span class="w">    </span><span class="nt">state_on_skip</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">steeping_started_at_us</span><span class="p">:</span><span class="w"> </span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="nt"> steeping_started</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">complete_on_skip</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">state_on_skip</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">steeping_started</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
 <span class="w">    </span><span class="nt">messages</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">enter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Put the tea in the water; I will start the timer when I see it immersed.</span>
 <span class="w">      </span><span class="nt">complete</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Steeping timer started. Say next to monitor it.</span>
-<span class="w">      </span><span class="nt">skip</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Steeping detection skipped.</span>
+<span class="w">      </span><span class="nt">skip</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Steeping detection and the timer were skipped.</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">steep_timer</span>
 <span class="w">    </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Wait for steeping</span>
