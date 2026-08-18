@@ -215,6 +215,10 @@ class VoiceAggregationAgent(Agent):
         state: _ParticipantState,
         contribution: _Contribution,
     ) -> None:
+        self._prune_expired_streams(
+            state,
+            asyncio.get_running_loop().time(),
+        )
         state.in_flight_count = 1
         key = contribution.stream_key
         try:
@@ -272,6 +276,22 @@ class VoiceAggregationAgent(Agent):
             contribution.output.interrupt,
             self._queue_capacity,
         )
+
+    def _restore_batch(
+        self,
+        state: _ParticipantState,
+        batch: list[_Contribution],
+    ) -> None:
+        state.pending.extendleft(reversed(batch))
+        while len(state.pending) > self._queue_capacity:
+            victim_index = next(
+                (index for index, pending in enumerate(state.pending) if not pending.output.interrupt),
+                0,
+            )
+            victim = state.pending[victim_index]
+            del state.pending[victim_index]
+            self._drop_contribution(state, victim, incoming=False)
+        state.changed.set()
 
     def _discard_stream(
         self,
@@ -555,6 +575,7 @@ class VoiceAggregationAgent(Agent):
                     )
                     rewrite.cancel()
                     await asyncio.gather(rewrite, return_exceptions=True)
+                    self._restore_batch(state, batch)
                     state.in_flight_count = 1
                     await self._dispatch_urgent(
                         participant_id,

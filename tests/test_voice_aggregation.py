@@ -596,6 +596,37 @@ async def test_discarded_stream_can_restart_after_idle_expiry() -> None:
     ]
 
 
+async def test_expired_discarded_streams_are_pruned_by_finite_work() -> None:
+    llm = _LLM()
+    runtime, aggregator, recorder = await _start(
+        llm,
+        stream_idle_timeout_s=0.02,
+    )
+    try:
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Current status."),
+            participant_id="alice",
+            source="monitor",
+        )
+        await recorder.wait_for(1)
+        state = aggregator._states["alice"]
+        state.discarded_streams[("stream", "stale")] = asyncio.get_running_loop().time() + 0.01
+        await asyncio.sleep(0.02)
+
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Updated status."),
+            participant_id="alice",
+            source="monitor",
+        )
+        await recorder.wait_for(3)
+
+        assert state.discarded_streams == {}
+    finally:
+        await _stop(runtime, aggregator)
+
+
 async def test_release_cancels_only_departed_participant_state() -> None:
     llm = _LLM()
     runtime, aggregator, recorder = await _start(
@@ -749,12 +780,18 @@ async def test_urgent_contribution_cancels_in_flight_rewrite() -> None:
             source="safety",
         )
         await recorder.wait_for(1)
+        gate.set()
+        await recorder.wait_for(3)
     finally:
         await _stop(runtime, aggregator)
 
     assert llm.cancelled is True
     assert recorder.outputs[0][0].text == "Move away now."
     assert recorder.outputs[0][0].interrupt is True
+    assert recorder.outputs[2][0].text == "Combined update."
+    assert len(llm.calls) == 2
+    assert "First routine update." in str(llm.calls[1][0][-1].content)
+    assert "Second routine update." in str(llm.calls[1][0][-1].content)
 
 
 async def test_rewrite_failure_preserves_all_updates() -> None:
