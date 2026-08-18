@@ -12,8 +12,8 @@ from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_models import make_llm, make_stt, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime
-from xr_ai_tools.historical_vision import HistoricalVisionTool
-from xr_ai_tools.live_vision import LiveVisionTool
+from xr_ai_tools.current_frame import CurrentFrameTool
+from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.text_memory import TextMemoryTools
 from xr_ai_tools.tracking import TrackingTools
 from xr_ai_tools.video_memory import VideoMemoryTools
@@ -65,13 +65,11 @@ async def run_app(
     tracking = TrackingTools(config.openxr_endpoint)
     text_memory = TextMemoryTools(config.text_memory_dir)
     video = VideoMemoryTools(config.video_memory_endpoint)
-    live_vision = LiveVisionTool(
+    images = ImageRegistry(allow_external=True)
+    current_frame = CurrentFrameTool(
         endpoint=session.transport.endpoint,
-        vlm=vlm,
-        system_prompt="Answer directly from the visible camera image in one short plain-English sentence.",
-        manage_status=False,
+        images=images,
     )
-    past_vision = HistoricalVisionTool(video=video, vlm=vlm)
 
     try:
         supervisor = SceneSupervisor(
@@ -79,13 +77,14 @@ async def run_app(
             scene=scene,
             tracking=tracking,
             text_memory=text_memory,
-            live_vision=live_vision,
-            past_vision=past_vision,
+            vlm=vlm,
+            images=images,
+            current_frame=current_frame,
         )
 
         render = RenderAgent(
             supervisor,
-            on_participant_left=live_vision.release,
+            on_participant_left=current_frame.release,
         )
         voice = VoiceAgent(
             session,

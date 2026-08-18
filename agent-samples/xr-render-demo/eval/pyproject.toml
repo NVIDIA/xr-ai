@@ -13,7 +13,7 @@ dependencies = [
     "xr-render-demo-worker",
     "xr-render-scene",
     "xr-ai-models",
-    "xr-ai-tools[live-vision,services]",
+    "xr-ai-tools[frames,vision,services]",
     "pyyaml>=6.0",
 ]
 

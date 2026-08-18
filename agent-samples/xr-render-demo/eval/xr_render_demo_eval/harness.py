@@ -90,30 +90,39 @@ class _FakeTextMemoryTools:
         self.add_transcript = Tool("add_transcript", "Add.", EmptyRequest, None, _noop_transcript)
 
 
-class _FakeLiveVisionTool:
+class _FakeCurrentFrameTool:
+    """Fake CurrentFrameTool: returns a sentinel frame object."""
+
     def __init__(self, fake: "FakeScene") -> None:
         self._fake = fake
 
     async def execute(self, request: Any) -> Any:
-        from xr_ai_tools._vision import VisionResponse
+        from xr_ai_tools.current_frame import ImageFrame
+        from xr_ai_tools.image import ImageReference
+        return ImageFrame(
+            image=ImageReference(uri="fake://frame"),
+            timestamp_us=0, width=1, height=1, sequence=0,
+            participant_id=getattr(request, "participant_id", "eval-user"),
+        )
 
+    def release(self, participant_id: str) -> None:
+        pass
+
+
+class _FakeImageQueryTool:
+    """Fake ImageQueryTool: records the call and returns the vision answer."""
+
+    def __init__(self, fake: "FakeScene") -> None:
+        self._fake = fake
+
+    async def execute(self, request: Any) -> Any:
+        from xr_ai_tools.vision import ImageQueryResult
         self._fake.calls.append(("look_at_current_frame", {"question": request.query}))
         if self._fake.vision_error:
-            return VisionResponse(text=self._fake.vision_error, available=False)
-        return VisionResponse(text=self._fake.vision_answer or "Nothing notable is visible.", available=True)
-
-
-class _FakePastVisionTool:
-    def __init__(self, fake: "FakeScene") -> None:
-        self._fake = fake
-
-    async def execute(self, request: Any) -> Any:
-        from xr_ai_tools.historical_vision import VisionResult
-
-        self._fake.calls.append(("look_at_past_frame", {"question": request.query}))
-        if self._fake.vision_error:
-            raise RuntimeError(self._fake.vision_error)
-        return VisionResult(text=self._fake.vision_answer or "Nothing notable is visible.")
+            return ImageQueryResult(text=self._fake.vision_error, available=False)
+        return ImageQueryResult(
+            text=self._fake.vision_answer or "Nothing notable is visible.", available=True
+        )
 
 
 @dataclass(frozen=True)
@@ -247,6 +256,86 @@ CASES = (
         forbidden_tools=frozenset({"look_at_current_frame", "look_at_past_frame"}),
     ),
     Case(
+        name="create_above_xr_object_no_vision",
+        request="Put a magenta sphere above the white cylinder.",
+        scene=(
+            {
+                "id": "cylinder-0",
+                "type": "cylinder",
+                "position": {"x": 0.0, "y": 1.5, "z": -1.3},
+                "color": {"r": 1, "g": 1, "b": 1},
+                "size": 0.1,
+            },
+        ),
+        required_tools=frozenset({"add_primitive"}),
+        forbidden_tools=frozenset({"look_at_current_frame", "look_at_past_frame"}),
+        expected_call_counts=(("add_primitive", 1),),
+    ),
+    Case(
+        name="xr_color_match_no_vision",
+        request="Make the white cylinder the same color as the teal capsule.",
+        scene=(
+            {
+                "id": "cylinder-0",
+                "type": "cylinder",
+                "position": {"x": -0.4, "y": 1.5, "z": -1.3},
+                "color": {"r": 1, "g": 1, "b": 1},
+                "size": 0.1,
+            },
+            {
+                "id": "capsule-0",
+                "type": "capsule",
+                "position": {"x": 0.4, "y": 1.5, "z": -1.3},
+                "color": {"r": 0, "g": 0.8, "b": 0.8},
+                "size": 0.1,
+            },
+        ),
+        required_tools=frozenset({"update_primitive"}),
+        forbidden_tools=frozenset({"look_at_current_frame", "look_at_past_frame", "add_primitive"}),
+        expected_colors=(("cylinder-0", (0.0, 0.8, 0.8)),),
+    ),
+    Case(
+        name="create_between_two_xr_objects",
+        request="Put a green sphere between the red box and the blue capsule.",
+        scene=(
+            {
+                "id": "box-0",
+                "type": "box",
+                "position": {"x": -1.0, "y": 1.6, "z": -1.5},
+                "color": {"r": 1, "g": 0, "b": 0},
+                "size": 0.1,
+            },
+            {
+                "id": "capsule-0",
+                "type": "capsule",
+                "position": {"x": 1.0, "y": 1.6, "z": -1.5},
+                "color": {"r": 0, "g": 0.4, "b": 1},
+                "size": 0.1,
+            },
+        ),
+        required_tools=frozenset({"add_primitive"}),
+        forbidden_tools=frozenset({"look_at_current_frame", "look_at_past_frame"}),
+        expected_call_counts=(("add_primitive", 1),),
+        expected_colors=(("sphere-0", (0.0, 0.8, 0.0)),),
+        expected_positions=(("sphere-0", (0.0, 1.6, -1.5)),),
+    ),
+    Case(
+        name="unusual_shape_existing_objects_untouched",
+        request="Add a purple pyramid next to the red sphere.",
+        scene=(
+            {
+                "id": "sphere-0",
+                "type": "sphere",
+                "position": {"x": 0.0, "y": 1.6, "z": -1.5},
+                "color": {"r": 1, "g": 0, "b": 0},
+                "size": 0.1,
+            },
+        ),
+        required_tools=frozenset({"add_primitive"}),
+        forbidden_tools=frozenset({"update_primitive", "remove_primitive"}),
+        expected_call_counts=(("add_primitive", 1),),
+    ),
+    Case(
         name="unavailable_live_camera",
         request="Read the maker's mark on the cup in front of me.",
         vision_error="No current camera frame is available.",
@@ -322,8 +411,8 @@ class FakeScene:
             _FakeSceneTools(self),
             _FakeTrackingTools(self.pose),
             _FakeTextMemoryTools(self),
-            _FakeLiveVisionTool(self),
-            _FakePastVisionTool(self),
+            _FakeCurrentFrameTool(self),
+            _FakeImageQueryTool(self),
         )
 
     async def add_primitive(self, request: AddPrimitiveRequest) -> AddPrimitiveResult:
@@ -469,19 +558,37 @@ def check_corpus(calls: list[tuple[str, dict[str, Any]]], case: dict[str, Any]) 
     return True, "ok"
 
 
+def _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
+                     fake_current_frame, fake_image_query) -> SceneSupervisor:
+    from xr_render_demo_worker.agents import (
+        make_appearance_agent,
+        make_memory_agent,
+        make_object_agent,
+        make_placement_agent,
+        make_vision_agent,
+    )
+    from xr_render_demo_worker.scene import SceneContext
+    context = SceneContext(fake_scene, fake_tracking)
+    subagent_tools = [
+        make_placement_agent(llm, fake_scene, fake_tracking, context),
+        make_appearance_agent(llm, fake_scene, context),
+        make_object_agent(llm, fake_scene, fake_tracking, context),
+        make_vision_agent(llm, fake_current_frame, fake_image_query, context),
+        make_memory_agent(llm, fake_text_memory),
+    ]
+    return SceneSupervisor(
+        llm=llm, scene=fake_scene, tracking=fake_tracking,
+        text_memory=fake_text_memory, subagent_tools=subagent_tools,
+    )
+
+
 async def run_corpus_case(case: dict[str, Any]) -> bool:
     scene = FakeScene.from_corpus_case(case)
     llm = make_llm(load_models_config(_CONFIG.models_yaml), "agent_llm")
     try:
-        fake_scene, fake_tracking, fake_text_memory, fake_live, fake_past = scene.make_tools()
-        supervisor = SceneSupervisor(
-            llm=llm,
-            scene=fake_scene,
-            tracking=fake_tracking,
-            text_memory=fake_text_memory,
-            live_vision=fake_live,
-            past_vision=fake_past,
-        )
+        fake_scene, fake_tracking, fake_text_memory, fake_current_frame, fake_image_query = scene.make_tools()
+        supervisor = _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
+                                      fake_current_frame, fake_image_query)
         if case.get("recent_moves"):
             supervisor._context._recent_moves[_PARTICIPANT] = [
                 f"{object_id}: previously at {before}, now at {after}"
@@ -744,15 +851,9 @@ async def run_case(case: Case) -> bool:
     scene = FakeScene.from_case(case)
     llm = make_llm(load_models_config(_CONFIG.models_yaml), "agent_llm")
     try:
-        fake_scene, fake_tracking, fake_text_memory, fake_live, fake_past = scene.make_tools()
-        supervisor = SceneSupervisor(
-            llm=llm,
-            scene=fake_scene,
-            tracking=fake_tracking,
-            text_memory=fake_text_memory,
-            live_vision=fake_live,
-            past_vision=fake_past,
-        )
+        fake_scene, fake_tracking, fake_text_memory, fake_current_frame, fake_image_query = scene.make_tools()
+        supervisor = _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
+                                      fake_current_frame, fake_image_query)
         try:
             reply = await supervisor.handle(
                 SceneRequest(

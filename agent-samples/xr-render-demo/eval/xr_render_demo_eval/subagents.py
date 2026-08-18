@@ -480,7 +480,10 @@ CASES = (
     ),
 )
 
-def _make_agent(case_agent, llm, fake_scene, fake_tracking, fake_text_memory, fake_live, fake_past, context):
+def _make_agent(
+    case_agent, llm, fake_scene, fake_tracking, fake_text_memory,
+    fake_current_frame, fake_image_query, context,
+):
     if case_agent == "placement":
         return make_placement_agent(llm, fake_scene, fake_tracking, context)
     if case_agent == "appearance":
@@ -488,7 +491,7 @@ def _make_agent(case_agent, llm, fake_scene, fake_tracking, fake_text_memory, fa
     if case_agent == "object":
         return make_object_agent(llm, fake_scene, fake_tracking, context)
     if case_agent == "vision":
-        return make_vision_agent(llm, fake_live, fake_past, context)
+        return make_vision_agent(llm, fake_current_frame, fake_image_query, context)
     if case_agent == "memory":
         return make_memory_agent(llm, fake_text_memory)
     raise ValueError(f"unknown agent: {case_agent!r}")
@@ -558,10 +561,13 @@ async def run_case(case: SubagentCase) -> bool:
     )
     llm = make_llm(load_models_config(harness._CONFIG.models_yaml), "agent_llm")
     try:
-        fake_scene, fake_tracking, fake_text_memory, fake_live, fake_past = scene.make_tools()
+        fake_scene, fake_tracking, fake_text_memory, fake_current_frame, fake_image_query = scene.make_tools()
         context = SceneContext(fake_scene, fake_tracking)
         context._recent_moves[_PARTICIPANT] = list(case.recent_moves)
-        agent = _make_agent(case.agent, llm, fake_scene, fake_tracking, fake_text_memory, fake_live, fake_past, context)
+        agent = _make_agent(
+            case.agent, llm, fake_scene, fake_tracking, fake_text_memory,
+            fake_current_frame, fake_image_query, context,
+        )
         try:
             reply = await agent.execute(
                 SubagentTask(

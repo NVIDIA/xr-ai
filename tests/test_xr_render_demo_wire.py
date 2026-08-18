@@ -1,9 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Wire-level checks for the xr-render-demo worker package: it builds, its
-prompts exist and stay within the eval audit's rules, and the worker config
-round-trips."""
+"""Wire-trace golden tests for the xr-render-demo model-service contracts.
 
 Exercises the worker's direct model calls against ``StubOpenAI`` without a
 real server or GPU. Asserts that the JSON bodies sent over the wire retain the
@@ -44,6 +42,9 @@ from xr_ai_tools import ToolSet
 from xr_ai_tools.tracking import TrackingTools
 from xr_ai_tools.tool_calling import tool_definitions
 
+_SAMPLE = Path(__file__).resolve().parent.parent / "agent-samples" / "xr-render-demo"
+_PACKAGE = _WORKER_DIR / "xr_render_demo_worker"
+
 # ── helpers ────────────────────────────────────────────────────────────────────
 
 _MODELS_PROFILE = (
@@ -51,16 +52,18 @@ _MODELS_PROFILE = (
     / "agent-samples" / "xr-render-demo" / "yaml" / "models.local.json"
 )
 
-_SAMPLE = Path(__file__).resolve().parent.parent / "agent-samples" / "xr-render-demo"
-_PACKAGE = _WORKER_DIR / "xr_render_demo_worker"
 
-
-def test_worker_config_loads_sample_yaml() -> None:
-    load_config(_SAMPLE / "yaml/xr_render_demo_worker.yaml")
-
-
-def test_all_agent_modules_export_descriptions() -> None:
-    from xr_render_demo_worker.agents import appearance, memory, object, placement, vision  # noqa: F401
+def _make_llm(stub: StubOpenAI, *, model_name: str = "llm",
+              reasoning_field: str | None = None,
+              default_extras: dict | None = None) -> OpenAICompatLLM:
+    """Build an LLM client wired to a StubOpenAI transport."""
+    return OpenAICompatLLM(
+        "http://stub",
+        model_name,
+        reasoning_field=reasoning_field,
+        default_extras=default_extras,
+        client=stub.client(),
+    )
 
 
 def _make_spec_llm(stub: StubOpenAI, name: str) -> OpenAICompatLLM:
@@ -72,6 +75,75 @@ def _make_spec_llm(stub: StubOpenAI, name: str) -> OpenAICompatLLM:
         reasoning_field=spec.reasoning_field,
         default_extras=spec.default_extras,
     )
+
+
+def test_worker_config_loads_sample_yaml() -> None:
+    config = load_config(_SAMPLE / "yaml/xr_render_demo_worker.yaml")
+    assert Path(config.voice_gate_yaml).exists()
+
+
+def test_all_agent_modules_export_descriptions() -> None:
+    from xr_render_demo_worker.agents import appearance, memory, object, placement, vision  # noqa: F401
+
+
+def test_prompt_files_exist_and_are_nonempty() -> None:
+    prompts = sorted(_PACKAGE.rglob("*prompt*.txt"))
+    assert len(prompts) == 6  # supervisor + five subagents
+    for prompt in prompts:
+        assert prompt.read_text(encoding="utf-8").strip(), prompt
+
+
+def test_models_round_trip() -> None:
+    request = SceneRequest(transcript="hi", participant_id="p", timestamp_us=1)
+    assert SceneRequest.model_validate(request.model_dump()) == request
+    task = SubagentTask(instruction="do", participant_id="p", reference_time_us=1)
+    assert SubagentTask.model_validate(task.model_dump()) == task
+    assert SceneReply(response="ok").response == "ok"
+    assert SubagentResult(result="ok").result == "ok"
+
+
+def test_supervisor_ledger_field_is_declared() -> None:
+    from xr_render_demo_worker.agents.object.agent import ObjectAgentConfig
+
+    assert "ledger" in ObjectAgentConfig.model_fields
+
+
+def test_prompt_audit_is_clean() -> None:
+    import io
+    from contextlib import redirect_stdout
+
+    from xr_render_demo_eval import harness
+
+    buffer = io.StringIO()
+    with redirect_stdout(buffer):
+        harness.audit_prompts()
+    warnings = [line for line in buffer.getvalue().splitlines() if line.startswith("AUDIT WARNING")]
+    assert not warnings, warnings
+
+
+@pytest.mark.parametrize("entry", ["xr_render_demo_worker.__main__"])
+def test_entry_module_imports(entry: str) -> None:
+    __import__(entry)
+
+
+def test_truncation_replies_resolve() -> None:
+    from xr_render_demo_worker.supervisor import _resolve_truncation_reply, _splice_completion
+
+    assert _splice_completion("Put the sphere on the", "On the box.") == "Put the sphere on the box."
+    assert _splice_completion("Put the sphere on the", "The box.") == "Put the sphere on the box."
+    assert _splice_completion("Move it towards", "The window.") == "Move it towards The window."
+    assert _resolve_truncation_reply("Put the sphere on the", "Never mind.") is None
+    assert _resolve_truncation_reply("Put the sphere on the", "Cancel") is None
+    fresh = _resolve_truncation_reply("Put the sphere on the", "Put the sphere on the box.")
+    assert fresh == "Put the sphere on the box."
+
+
+def test_truncated_transcripts_detected() -> None:
+    from xr_render_demo_worker.supervisor import _is_truncated, _truncated_reply
+
+    assert _is_truncated("Add a red sphere in")
+    assert not _is_truncated("Add a red sphere in front of me.")
+    assert _truncated_reply("Add a red sphere in") is not None
 
 
 # ── models profile round-trip ─────────────────────────────────────────────────
@@ -153,66 +225,89 @@ async def test_quick_ack_wire_golden() -> None:
         ChatMessage(role="system", content="You are a quick-ack classifier."),
         ChatMessage(role="user",   content="Add a red sphere in front of me"),
     ]
-    assert all(isinstance(text, str) and text for text in descriptions)
-    assert len(set(descriptions)) == len(descriptions)
+    resp = await llm.chat(messages, max_tokens=40, temperature=0.0)
+
+    body = stub.last_json()
+
+    assert body["model"]        == "llm"
+    assert body["max_tokens"]   == 40
+    assert body["temperature"]  == 0.0
+    assert "tools" not in body
+    assert body["chat_template_kwargs"] == {"enable_thinking": False}
+    assert len(body["messages"]) == 2
+    assert body["messages"][0]["role"] == "system"
+    assert body["messages"][1]["role"] == "user"
+
+    assert resp.content == '{"ack": "On it!", "think": false}'
+    assert resp.reasoning is None
+    assert resp.tool_calls is None
 
 
-def test_prompt_files_exist_and_are_nonempty() -> None:
-    prompts = sorted(_PACKAGE.rglob("*prompt*.txt"))
-    assert len(prompts) == 6  # supervisor + five subagents
-    for prompt in prompts:
-        assert prompt.read_text(encoding="utf-8").strip(), prompt
+# ── still-working wire golden ─────────────────────────────────────────────────
 
 
-def test_models_round_trip() -> None:
-    request = SceneRequest(transcript="hi", participant_id="p", timestamp_us=1)
-    assert SceneRequest.model_validate(request.model_dump()) == request
-    task = SubagentTask(instruction="do", participant_id="p", reference_time_us=1)
-    assert SubagentTask.model_validate(task.model_dump()) == task
-    assert SceneReply(response="ok").response == "ok"
-    assert SubagentResult(result="ok").result == "ok"
+async def test_still_working_wire_golden() -> None:
+    """still-working: max_tokens=24, temperature=0.9, no tools, thinking pinned off."""
+    stub = StubOpenAI()
+    stub.set_chat_message(content="Still calculating the position...")
+    llm = _make_spec_llm(stub, "llm")
+
+    messages = [
+        ChatMessage(role="system", content="Generate a short still-working message."),
+        ChatMessage(role="user",   content="User request: Add a sphere to my left"),
+    ]
+    resp = await llm.chat(messages, max_tokens=24, temperature=0.9)
+
+    body = stub.last_json()
+
+    assert body["model"]       == "llm"
+    assert body["max_tokens"]  == 24
+    assert body["temperature"] == 0.9
+    assert "tools" not in body
+    assert body["chat_template_kwargs"] == {"enable_thinking": False}
+
+    assert resp.content == "Still calculating the position..."
 
 
-def test_supervisor_ledger_field_is_declared() -> None:
-    # A supervisor-owned turn ledger silently dropped by pydantic is dead
-    # code; pin that the config actually declares the field.
-    from xr_render_demo_worker.agents.object.agent import ObjectAgentConfig
-
-    assert "ledger" in ObjectAgentConfig.model_fields
+# ── agentic-loop wire golden ──────────────────────────────────────────────────
 
 
-def test_prompt_audit_is_clean() -> None:
-    import io
-    from contextlib import redirect_stdout
+async def test_agentic_loop_wire_golden_thinking_on() -> None:
+    """agentic-loop with thinking enabled: tools, enable_thinking=True, thinking_budget=1024."""
+    stub = StubOpenAI()
+    stub.set_chat_message(content="Done — sphere added in front of you.")
 
-    from xr_render_demo_eval import harness
+    agent_llm = _make_spec_llm(stub, "agent_llm")
 
-    buffer = io.StringIO()
-    with redirect_stdout(buffer):
-        harness.audit_prompts()
-    warnings = [line for line in buffer.getvalue().splitlines() if line.startswith("AUDIT WARNING")]
-    assert not warnings, warnings
+    tools = [
+        ToolDef(
+            name="add_primitive",
+            description="Add a primitive object to the scene.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "type":  {"type": "string"},
+                    "x":     {"type": "number"},
+                    "y":     {"type": "number"},
+                    "z":     {"type": "number"},
+                    "color": {"type": "string"},
+                },
+            },
+        ),
+        ToolDef(
+            name="get_scene_state",
+            description="Return the current scene objects.",
+            parameters={"type": "object", "properties": {}},
+        ),
+    ]
 
-
-@pytest.mark.parametrize("entry", ["xr_render_demo_worker.__main__"])
-def test_entry_module_imports(entry: str) -> None:
-    __import__(entry)
-
-
-def test_truncation_replies_resolve() -> None:
-    from xr_render_demo_worker.supervisor import _resolve_truncation_reply, _splice_completion
-
-    assert _splice_completion("Put the sphere on the", "On the box.") == "Put the sphere on the box."
-    assert _splice_completion("Put the sphere on the", "The box.") == "Put the sphere on the box."
-    assert _splice_completion("Move it towards", "The window.") == "Move it towards The window."
-    assert _resolve_truncation_reply("Put the sphere on the", "Never mind.") is None
-    assert _resolve_truncation_reply("Put the sphere on the", "Cancel") is None
-    fresh = _resolve_truncation_reply("Put the sphere on the", "Put the sphere on the box.")
-    assert fresh == "Put the sphere on the box."
-
-
-def test_truncated_transcripts_detected() -> None:
-    from xr_render_demo_worker.supervisor import _is_truncated, _truncated_reply
+    messages = [
+        ChatMessage(role="system", content="You are a spatial AI assistant."),
+        ChatMessage(
+            role="user",
+            content="[Pre-fetched context]\nSCENE OBJECTS: (empty)\n\n[Request]\nAdd a blue sphere",
+        ),
+    ]
 
     resp = await agent_llm.chat(
         messages,

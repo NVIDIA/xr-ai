@@ -9,9 +9,9 @@ from loguru import logger
 from pydantic import BaseModel, Field
 from xr_ai_models import ChatMessage, LLMService
 from xr_ai_tools import Tool, ToolSet
-from xr_ai_tools.historical_vision import HistoricalVisionTool, VisionResult
-from xr_ai_tools.live_vision import LiveVisionTool, VisionResponse
+from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.tool_calling import tool_definitions
+from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult, ImageQueryTool
 
 from ..._loop import tool_loop
 from ...models import SubagentResult, SubagentTask
@@ -28,17 +28,13 @@ class _LiveQuestion(BaseModel):
     question: str = Field(min_length=1, description="Specific question about the live camera frame.")
 
 
-class _PastQuestion(BaseModel):
-    question: str = Field(min_length=1, description="Specific question about the recorded camera frame.")
-    second_ago: int = Field(gt=0, description="Positive offset from the utterance time in seconds.")
-
-
 _prompt_text = _PROMPT.read_text(encoding="utf-8").strip()
+
 
 def make_vision_agent(
     llm: LLMService,
-    live_vision: LiveVisionTool,
-    past_vision: HistoricalVisionTool,
+    current_frame: CurrentFrameTool,
+    image_query: ImageQueryTool,
     context: SceneContext | None = None,
 ) -> Tool:
     async def handle(request: SubagentTask) -> SubagentResult:
@@ -49,43 +45,25 @@ def make_vision_agent(
         participant_id = request.participant_id
         reference_time_us = request.reference_time_us
 
-        async def look(req: _LiveQuestion) -> BaseModel:
-            from xr_ai_tools._vision import VisionRequest
-            return await live_vision.execute(VisionRequest(
-                participant_id=participant_id,
-                query=req.question,
-            ))
-
-        async def look_past(req: _PastQuestion) -> BaseModel:
-            from xr_ai_tools.historical_vision import HistoricalVisionRequest
-            return await past_vision.execute(HistoricalVisionRequest(
-                participant_id=participant_id,
-                query=req.question,
-                second_ago=req.second_ago,
-                reference_time_us=reference_time_us,
-            ))
+        async def look(req: _LiveQuestion) -> ImageQueryResult:
+            from xr_ai_tools.current_frame import CurrentFrameRequest
+            frame = await current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
+            return await image_query.execute(ImageQueryRequest(image=frame.image, query=req.question))
 
         tools = [
             Tool(
                 "look_at_current_frame",
                 "Inspect the user's present physical view when a request explicitly requires a visible "
                 "fact. Do not use this tool to interpret conversation or inspect the virtual XR scene.",
-                _LiveQuestion, VisionResponse, look,
-            ),
-            Tool(
-                "look_at_past_frame",
-                "Inspect a recorded camera frame only for an explicitly historical question, using a "
-                "positive seconds offset from the user's utterance time.",
-                _PastQuestion, VisionResult, look_past,
+                _LiveQuestion, ImageQueryResult, look,
             ),
         ]
         toolset = ToolSet(tools)
-        prompt = _prompt_text
         scene_block = ""
         if context is not None:
             scene_block = f"{await context.describe(request.participant_id)}\n\n"
         messages = [
-            ChatMessage(role="system", content=prompt),
+            ChatMessage(role="system", content=_prompt_text),
             ChatMessage(role="user", content=(
                 f"Active participant: {participant_id}\n"
                 f"Utterance timestamp: {reference_time_us}\n"

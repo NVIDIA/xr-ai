@@ -210,6 +210,44 @@ CASES = (
         ),
         forbid_agents=("object_agent", "appearance_agent", "placement_agent"),
     ),
+    RoutingCase(
+        name="put_new_object_is_creation_not_move",
+        request="Put a blue square above the yellow square.",
+        scene=(
+            {"id": "box-0", "type": "box", "pos": [0.0, 1.6, -1.5], "color": [1, 1, 0], "size": 0.1},
+        ),
+        expect_agent="object_agent",
+        forbid_agents=("placement_agent",),
+    ),
+    RoutingCase(
+        name="xr_object_color_never_uses_vision",
+        request="Make the red box the same color as the green sphere.",
+        scene=(
+            {"id": "box-0", "type": "box", "pos": [0.0, 1.6, -1.5], "color": [1, 0, 0], "size": 0.1},
+            {"id": "sphere-0", "type": "sphere", "pos": [0.5, 1.6, -1.5], "color": [0, 0.8, 0], "size": 0.1},
+        ),
+        expect_agent="appearance_agent",
+        forbid_agents=("vision_agent",),
+    ),
+    RoutingCase(
+        name="new_object_above_xr_object_no_vision",
+        request="Put a blue sphere above the red capsule.",
+        scene=(
+            {"id": "capsule-0", "type": "capsule", "pos": [0.0, 1.5, -1.3], "color": [1, 0, 0], "size": 0.1},
+        ),
+        expect_agent="object_agent",
+        forbid_agents=("vision_agent", "placement_agent"),
+    ),
+    RoutingCase(
+        name="xr_object_position_never_uses_vision",
+        request="Move the sphere to just above the red cube.",
+        scene=(
+            {"id": "sphere-0", "type": "sphere", "pos": [0.0, 1.6, -1.5], "color": [0, 0, 1], "size": 0.1},
+            {"id": "box-0", "type": "box", "pos": [0.5, 1.2, -1.5], "color": [1, 0, 0], "size": 0.1},
+        ),
+        expect_agent="placement_agent",
+        forbid_agents=("vision_agent",),
+    ),
 )
 
 

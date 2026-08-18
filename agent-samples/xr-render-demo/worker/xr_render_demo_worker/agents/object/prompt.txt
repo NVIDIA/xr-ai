@@ -15,7 +15,9 @@ existing object; the supervisor will invoke appearance or placement separately.
 Quote the instruction's own shape word as prim_type, mangled spellings
 included; the tools map it to a renderer shape themselves. A shape word you
 do not recognize is still a creation, never a reason to anchor on or reuse
-an existing object.
+an existing object. If a tool rejects the shape as unknown, stop immediately
+and report the failure; never retry with a different shape, resize an existing
+object, or call any other tool.
 Creation always makes a new object with the stated shape. A request to change
 or turn an existing object into another shape is not creation: make one
 change_shape call with that object's id and the new shape. The creation tools
@@ -46,6 +48,13 @@ default distance.
   each new object on the previously created one with relation above and a
   distance of about the two sizes combined; never reuse one anchor for
   every layer.
+- "Between X and Y" uses create_object_relative with anchor_words set to the
+  first object's description and second_anchor_words set to the second
+  object's description. The tool computes the midpoint. Never use create_at
+  for this. Example: "Create a teal cone between the ivory capsule and the
+  lavender cylinder" → create_object_relative(prim_type="cone",
+  color_words="teal", anchor_words="ivory capsule",
+  second_anchor_words="lavender cylinder").
 - create_at is only for coordinates stated numerically in the instruction;
   with no numbers present, never call it. With no
   requested spatial relationship at all, use create_user_relative with

@@ -9,6 +9,7 @@ from typing import Any, Protocol
 from loguru import logger
 from pydantic import ValidationError
 from xr_ai_tools.rpc import RPCError
+from xr_ai_tools.tracking import HeadPose
 from xr_ai_tools.types import EmptyRequest
 
 
@@ -33,6 +34,8 @@ class OpenXRService:
     async def dispatch(self, operation: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if operation == "get_head_pose":
             self._validate(arguments)
+            if self._sim_pose is not None:
+                return self._sim_pose
             return await asyncio.to_thread(self._source.get_pose)
         if operation == "set_sim_pose" and self._allow_sim_pose:
             try:

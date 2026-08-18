@@ -5,15 +5,17 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
-from xr_ai_models import ChatMessage, LLMService
+from xr_ai_models import ChatMessage, LLMService, VLMService
 from xr_ai_tools import Tool, ToolSet
-from xr_ai_tools.historical_vision import HistoricalVisionTool
-from xr_ai_tools.live_vision import LiveVisionTool
+from xr_ai_tools.current_frame import CurrentFrameTool
+from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.text_memory import RecallConversationRequest, TextMemoryTools
 from xr_ai_tools.tool_calling import tool_definitions
 from xr_ai_tools.tracking import TrackingTools
+from xr_ai_tools.vision import ImageQueryTool
 from xr_render_scene import SceneTools
 
 from ._loop import tool_loop
@@ -93,20 +95,28 @@ class SceneSupervisor:
         scene: SceneTools,
         tracking: TrackingTools,
         text_memory: TextMemoryTools,
-        live_vision: LiveVisionTool | None = None,
-        past_vision: HistoricalVisionTool | None = None,
+        vlm: VLMService | None = None,
+        images: ImageRegistry | None = None,
+        current_frame: CurrentFrameTool | None = None,
         *,
         subagent_tools: list[Tool] | None = None,
     ) -> None:
         context = SceneContext(scene, tracking)
         if subagent_tools is None:
-            if live_vision is None or past_vision is None:
-                raise ValueError("live_vision and past_vision are required when subagent_tools is not provided")
+            if vlm is None or images is None or current_frame is None:
+                raise ValueError(
+                    "vlm, images, and current_frame are required when subagent_tools is not provided"
+                )
+            image_query = ImageQueryTool(
+                images=images,
+                vlm=vlm,
+                system_prompt="Answer directly from the visible camera image in one short plain-English sentence.",
+            )
             subagent_tools = [
                 make_placement_agent(llm, scene, tracking, context),
                 make_appearance_agent(llm, scene, context),
                 make_object_agent(llm, scene, tracking, context),
-                make_vision_agent(llm, live_vision, past_vision, context),
+                make_vision_agent(llm, current_frame, image_query, context),
                 make_memory_agent(llm, text_memory),
             ]
         self._llm = llm
@@ -177,6 +187,7 @@ class SceneSupervisor:
         delegated_any = self._context.take_delegated(request.participant_id)
         conversational = not delegated_any and str(output or "").rstrip().endswith("?")
 
+        await asyncio.sleep(0.15)  # let the scene RPC propagate before diffing
         if not conversational and not SceneContext.changes(before, await self._context.snapshot()):
             verification_messages = messages + [
                 ChatMessage(role="assistant", content=output or ""),

@@ -406,9 +406,22 @@ class _CreateUserRelativeRequest(BaseModel):
 
 class _CreateObjectRelativeRequest(BaseModel):
     prim_type: str = Field(description="The instruction's exact shape word, copied verbatim.")
-    anchor_words: str = Field(description="The instruction's exact words for the anchor object.")
-    relation: _AnchorRelation
-    color_words: str = Field(default="", description="The instruction's exact color word(s).")
+    anchor_words: str = Field(description="The instruction's exact words for the first (or only) anchor object.")
+    relation: _AnchorRelation = Field(default="above")
+    second_anchor_words: str = Field(
+        default="",
+        description=(
+            "The instruction's exact words for the second anchor object, only when the user says "
+            "'between X and Y'. Leave empty for all other relations."
+        ),
+    )
+    color_words: str = Field(
+        default="",
+        description=(
+            "The instruction's exact color word(s), copied verbatim; include whenever the instruction "
+            "names a color (e.g. 'blue square' → color_words='blue'). Leave empty only when truly unstated."
+        ),
+    )
     distance: float = Field(default=0.3, description="Distance from the anchor in metres.")
     size: float = Field(default=0.1, description="Sphere radius or box half-edge in metres.")
 
@@ -418,8 +431,15 @@ class _CreateAtRequest(BaseModel):
     x: float
     y: float
     z: float
-    color_words: str = Field(default="", description="The instruction's exact color word(s).")
+    color_words: str = Field(
+        default="",
+        description=(
+            "The instruction's exact color word(s), copied verbatim; include whenever the instruction "
+            "names a color. Leave empty only when truly unstated."
+        ),
+    )
     size: float = Field(default=0.1, description="Sphere radius or box half-edge in metres.")
+
 
 
 class _ChangeShapeRequest(_ObjRequest):
@@ -589,8 +609,6 @@ def make_object_tools(
         return await leaves.add(prim, spot, color, req.size)
 
     async def create_object_relative(req: _CreateObjectRelativeRequest) -> CreatedObject:
-        logger.debug("create_object_relative anchor={!r} relation={} distance={}",
-                     req.anchor_words, req.relation, req.distance)
         prim = leaves.shape(req.prim_type)
         color = await leaves.color(req.color_words)
         try:
@@ -600,11 +618,21 @@ def make_object_tools(
                 f"{error}. If the instruction names no existing object to anchor on, this is a bare "
                 "creation: call create_user_relative with direction front and distance 1.5 instead."
             ) from None
-        frame = await leaves.user_frame()
-        spot = await leaves.spot("compute_position_relative_to_anchor", {
-            "user_frame": frame.model_dump(), "anchor_position": anchor.position.model_dump(),
-            "relation_to_anchor": req.relation, "distance_meters": req.distance,
-        })
+        if req.second_anchor_words:
+            logger.debug("create_object_relative between={!r} and={!r}", req.anchor_words, req.second_anchor_words)
+            anchor_b = await leaves.find(req.second_anchor_words)
+            spot = await leaves.spot("compute_midpoint", {
+                "first_position": anchor.position.model_dump(),
+                "second_position": anchor_b.position.model_dump(),
+            })
+        else:
+            logger.debug("create_object_relative anchor={!r} relation={} distance={}",
+                         req.anchor_words, req.relation, req.distance)
+            frame = await leaves.user_frame()
+            spot = await leaves.spot("compute_position_relative_to_anchor", {
+                "user_frame": frame.model_dump(), "anchor_position": anchor.position.model_dump(),
+                "relation_to_anchor": req.relation, "distance_meters": req.distance,
+            })
         return await leaves.add(prim, spot, color, req.size)
 
     async def create_at(req: _CreateAtRequest) -> CreatedObject:
@@ -633,7 +661,9 @@ def make_object_tools(
     return [
         Tool("create_user_relative", "Create a new object at a point in a named direction from the user.",
              _CreateUserRelativeRequest, CreatedObject, create_user_relative),
-        Tool("create_object_relative", "Create a new object at a point in a named relation to an anchor object.",
+        Tool("create_object_relative",
+             "Create a new object relative to one anchor object, or at the midpoint between two anchor objects "
+             "(set second_anchor_words for 'between X and Y').",
              _CreateObjectRelativeRequest, CreatedObject, create_object_relative),
         Tool("create_at", "Create a new object at explicit world coordinates.",
              _CreateAtRequest, CreatedObject, create_at),

@@ -82,6 +82,54 @@ CASES = [
         "prompt": "Swap the sphere and the cube.",
         "check": lambda ids, o: abs(o[ids[0]].position.x + 1.0) < 0.15 and abs(o[ids[1]].position.x - 1.0) < 0.15,
     },
+    {
+        "name": "create_above_xr_object_no_vision",
+        "fixtures": [("cylinder", 0.0, 1.5, -1.3, 1, 1, 1, 0.1)],
+        "prompt": "Put a magenta sphere above the white cylinder.",
+        "check": lambda ids, o: any(
+            item.type == "sphere"
+            and item.color.r > 0.5 and item.color.b > 0.5 and item.color.g < 0.3
+            and item.position.y > o[ids[0]].position.y
+            for key, item in o.items() if key not in ids
+        ),
+    },
+    {
+        "name": "xr_color_match_no_vision",
+        "fixtures": [
+            ("cylinder", -0.4, 1.5, -1.3, 1, 1, 1, 0.1),
+            ("capsule", 0.4, 1.5, -1.3, 0, 0.8, 0.8, 0.1),
+        ],
+        "prompt": "Make the white cylinder the same color as the teal capsule.",
+        "check": lambda ids, o: (
+            o[ids[0]].color.g > 0.6 and o[ids[0]].color.b > 0.6 and o[ids[0]].color.r < 0.2
+            and abs(o[ids[1]].color.g - 0.8) < 0.1
+        ),
+    },
+    {
+        "name": "create_between_two_xr_objects",
+        "fixtures": [
+            ("box", -1.0, 1.6, -1.5, 1, 0, 0, 0.1),
+            ("capsule", 1.0, 1.6, -1.5, 0, 0.4, 1, 0.1),
+        ],
+        "prompt": "Put a green sphere between the red box and the blue capsule.",
+        "check": lambda ids, o: any(
+            item.type == "sphere"
+            and item.color.g > 0.5 and item.color.r < 0.3 and item.color.b < 0.3
+            and abs(item.position.x) < 0.3
+            and abs(item.position.z + 1.5) < 0.3
+            for key, item in o.items() if key not in ids
+        ),
+    },
+    {
+        "name": "unusual_shape_existing_objects_untouched",
+        "fixtures": [("sphere", 0.0, 1.6, -1.5, 1, 0, 0, 0.1)],
+        "prompt": "Add a purple pyramid next to the red sphere.",
+        "check": lambda ids, o: (
+            ids[0] in o and o[ids[0]].type == "sphere" and o[ids[0]].color.r > 0.8
+            and any(item.type == "pyramid" and item.color.r > 0.3 and item.color.b > 0.3
+                    for key, item in o.items() if key not in ids)
+        ),
+    },
 ]
 
 
