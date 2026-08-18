@@ -82,7 +82,9 @@ the XR compositor and the agentic LLM do not share a card.
 
 The worker reads two config files:
 
-- `yaml/xr_render_demo_worker.yaml` — native capability endpoints, text-memory directory, and VAD tunables.
+- `yaml/xr_render_demo_worker.yaml` — native capability endpoints, text-memory
+  directory, VAD tunables, and the `web_events_host` / `web_events_port` live
+  viewer listener.
 - `yaml/models.local.json` (deployment profile set by `models_config:` in the
   worker YAML): model endpoint and deployment declarations consumed by
   `xr-ai-models` and the orchestrator.  Each entry maps a logical name
@@ -240,6 +242,9 @@ On each accepted `xr-render.user-query` event or lifecycle notice:
    context in future turns so the model understands "fix that", "undo",
    "the one I just added". Final messages are also persisted through native
    text memory without model scratch output or tool traces.
+
+The worker mirrors accepted XR requests and non-empty `voice.output` chunks to
+its live event viewer at `http://127.0.0.1:8092` by default.
 
 ## Native capability composition
 

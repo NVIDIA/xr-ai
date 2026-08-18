@@ -13,14 +13,18 @@ from pathlib import Path
 from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_models import ChatMessage, load_models_config, make_llm, make_stt, make_tts, make_vlm
-from xr_ai_runtime import AgentRuntime
+from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools.tool_calling import tool_definitions
 from xr_ai_voice import (
+    VOICE_OUTPUT_TOPIC,
     HubVoiceTransport,
+    UserQuery,
     VadConfig,
     VoiceAgent,
+    VoiceOutput,
 )
 from xr_ai_voicegate import load_voice_gate_config
+from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent, WebEventsAgent
 
 from .agent import (
     INTERRUPTED_TOPIC,
@@ -41,6 +45,38 @@ from .tools import NativeCapabilities
 _TRACE_FILE = "/tmp/xr-agent-trace.log"
 
 _PROMPT_FILE = Path(__file__).resolve().parent / "prompts" / "system.txt"
+
+
+class _RenderWebEvents(Agent):
+    """Select XR requests and spoken agent output for the live viewer."""
+
+    @subscribe(USER_QUERY_TOPIC)
+    async def user_query(self, query: UserQuery, ctx: RuntimeContext) -> None:
+        await ctx.publish(
+            WEB_EVENT_TOPIC,
+            WebEvent(
+                topic="xr-render.query",
+                title="XR requests",
+                payload={"text": query.text},
+            ),
+        )
+
+    @subscribe(VOICE_OUTPUT_TOPIC)
+    async def assistant_output(
+        self,
+        output: VoiceOutput,
+        ctx: RuntimeContext,
+    ) -> None:
+        if not output.text:
+            return
+        await ctx.publish(
+            WEB_EVENT_TOPIC,
+            WebEvent(
+                topic="xr-render.response",
+                title="XR agent responses",
+                payload={"text": output.text, "final": output.final},
+            ),
+        )
 
 
 async def _probe_warmed_llm(llm, *, warmup: bool) -> bool:
@@ -159,6 +195,15 @@ async def main(
         runtime = AgentRuntime()
         runtime.register("voice", voice)
         render = runtime.register("xr-render", RenderAgent(scene_loop))
+        viewer = runtime.register(
+            "web-events",
+            WebEventsAgent(
+                host=cfg.web_events_host,
+                port=cfg.web_events_port,
+                title="XR render events",
+            ),
+        )
+        runtime.register("web-events-publisher", _RenderWebEvents())
         # The endpoint retains this bound callback for the worker lifetime.
         XRSessionLifecycle(
             transport=transport,
@@ -169,12 +214,14 @@ async def main(
         )
 
         logger.info("xr_render_demo starting")
-        async with runtime:
-            try:
-                voice_run_started = True
-                await voice.run(runtime)
-            finally:
-                await render.stop()
+        async with viewer:
+            logger.info("Web events → {}", viewer.url)
+            async with runtime:
+                try:
+                    voice_run_started = True
+                    await voice.run(runtime)
+                finally:
+                    await render.stop()
     finally:
         cleanup = [
             capabilities.close(),

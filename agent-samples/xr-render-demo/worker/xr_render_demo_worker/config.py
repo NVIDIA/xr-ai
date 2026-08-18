@@ -31,6 +31,9 @@ class WorkerConfig:
     # session is never cancelled for inactivity. A positive value opts in.
     idle_timeout_secs: float | None
 
+    web_events_host: str
+    web_events_port: int
+
 
 def load_models(path: pathlib.Path | None) -> ModelsConfig:
     """Effective models config for the worker YAML at ``path``.
@@ -64,6 +67,8 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
         # 0 / unset → disabled (None); a positive value opts into idle cancel.
         idle_timeout_secs = (float(data["idle_timeout_secs"])
                              if data.get("idle_timeout_secs") else None),
+        web_events_host = str(data.get("web_events_host", "127.0.0.1")),
+        web_events_port = int(data.get("web_events_port", 8092)),
     )
 
 

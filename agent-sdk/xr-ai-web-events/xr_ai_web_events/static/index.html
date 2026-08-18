@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XR AI Agent Events</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <div>
+      <p class="eyebrow">NVIDIA XR AI</p>
+      <h1 id="viewer-title">Agent events</h1>
+      <p class="subtitle">Live application output grouped by participant and topic</p>
+    </div>
+    <div class="controls">
+      <span class="connection"><span id="status-dot"></span><span id="status">Connecting</span></span>
+      <label>Participant <select id="participant-filter"><option value="*">All</option></select></label>
+      <label><input id="follow" type="checkbox" checked> Follow</label>
+      <button id="clear" type="button">Clear view</button>
+    </div>
+  </header>
+
+  <main id="topic-grid">
+    <div id="empty">Waiting for agent events</div>
+  </main>
+
+  <template id="topic-template">
+    <section class="topic-pane">
+      <div class="topic-head">
+        <div><span class="marker"></span><h2></h2></div>
+        <span class="count">0</span>
+      </div>
+      <div class="feed"></div>
+    </section>
+  </template>
+
+  <template id="event-template">
+    <article class="event">
+      <div class="event-head"><span class="participant"></span><time></time></div>
+      <p class="primary"></p>
+      <details>
+        <summary>Details</summary>
+        <pre></pre>
+      </details>
+    </article>
+  </template>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

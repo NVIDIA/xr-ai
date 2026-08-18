@@ -17,6 +17,7 @@ dependencies = [
     "xr-ai-models[riva]",
     "xr-ai-tools[frames,image-editing,marker-tracking,services,vision]",
     "xr-ai-voice",
+    "xr-ai-web-events",
     "xr-media-hub",
     "xr-ai-launcher",
     "xr-ai-logging",
@@ -42,6 +43,7 @@ xr-ai-hub-client           = { path = "../agent-sdk/xr-ai-hub",                 
 xr-ai-models          = { path = "../agent-sdk/xr-ai-models",           editable = true }
 xr-ai-tools           = { path = "../agent-sdk/xr-ai-tools",            editable = true }
 xr-ai-voice           = { path = "../agent-sdk/xr-ai-voice",            editable = true }
+xr-ai-web-events      = { path = "../agent-sdk/xr-ai-web-events",       editable = true }
 xr-media-hub          = { path = "../services/xr-media-hub",             editable = true }
 xr-ai-launcher        = { path = "../utils/xr-ai-launcher",             editable = true }
 xr-ai-logging         = { path = "../utils/xr-ai-logging",              editable = true }
