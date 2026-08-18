@@ -216,8 +216,8 @@ async def test_viewer_cancellation_finishes_listener_cleanup(monkeypatch) -> Non
     stop.cancel()
     allow_shutdown.set()
 
-    with pytest.raises(asyncio.CancelledError):
-        await stop
+    [stop_result] = await asyncio.gather(stop, return_exceptions=True)
+    assert isinstance(stop_result, asyncio.CancelledError)
 
     assert not viewer.running
     assert viewer._server is None  # noqa: SLF001
