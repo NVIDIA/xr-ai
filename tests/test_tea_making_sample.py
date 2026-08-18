@@ -307,7 +307,7 @@ async def test_slow_observation_does_not_block_reset() -> None:
         async with session.lock:
             guidance.store.reset(session)
     release.set()
-    await tick
+    await asyncio.wait_for(tick, timeout=1.0)
 
     assert session.active is False
     assert session.step_id is None
