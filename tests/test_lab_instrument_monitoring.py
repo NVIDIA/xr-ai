@@ -235,6 +235,7 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     assert config.device_map.resolve(MarkerType.ARUCO, "4").device_name == "Device5"
     assert config.device_map.resolve(MarkerType.ARUCO, "99").device_name == "ArUco 99"
     assert config.artifacts_dir == _SAMPLE / "artifacts"
+    assert config.capture_marker_scans is False
     assert config.monitor_interval_s == 5.0
     assert config.instrument_state_interval_s == 10.0
     assert config.instrument_lost_after_s == 30.0
@@ -330,6 +331,21 @@ def test_instrument_reading_normalization_retains_units() -> None:
         Decimal("12"),
         "V",
         "12 V",
+    )
+    assert normalize_meter_reading("1000 mV", previous_unit="V") == (
+        Decimal("1000"),
+        "mV",
+        "1000 mV",
+    )
+    assert normalize_meter_reading("1 A", previous_unit="V") == (
+        Decimal("1"),
+        "A",
+        "1 A",
+    )
+    assert normalize_meter_reading("22 Ω", previous_unit="V") == (
+        Decimal("22"),
+        "Ω",
+        "22 Ω",
     )
     assert normalize_meter_reading("UNKNOWN", previous_unit="V") is None
 

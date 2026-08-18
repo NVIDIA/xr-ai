@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import io
 import time
 from types import SimpleNamespace
 
@@ -15,6 +16,7 @@ from PIL import Image
 from pydantic import ValidationError
 from xr_ai_hub import FrameData, FrameSignal, PixelFormat
 from xr_ai_tools import marker_tracking as marker_tracking_module
+from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.marker_tracking import (
     MarkerTrackingRequest,
     MarkerTrackingTool,
@@ -223,6 +225,27 @@ async def test_marker_tool_detects_qr_and_aruco_with_uniform_schema() -> None:
     assert tool.frames.participants() == ["alice"]
     tool.release("alice")
     assert tool.frames.participants() == []
+
+
+@pytest.mark.asyncio
+async def test_marker_tool_scans_selected_image_instead_of_newer_live_frame() -> None:
+    endpoint = _Endpoint(np.full((200, 200), 255, dtype=np.uint8))
+    images = ImageRegistry()
+    encoded = io.BytesIO()
+    Image.fromarray(_qr_image()).save(encoded, format="PNG")
+    selected = images.put(encoded.getvalue(), owner="alice")
+    tool = MarkerTrackingTool(
+        endpoint=endpoint,
+        images=images,
+        marker_types=(MarkerType.QR_CODE,),
+    )
+    await endpoint.seed()
+
+    result = await tool.execute(
+        MarkerTrackingRequest(participant_id="alice", image=selected)
+    )
+
+    assert [marker.value for marker in result.markers] == ["XR AI QR tool"]
 
 
 @pytest.mark.asyncio

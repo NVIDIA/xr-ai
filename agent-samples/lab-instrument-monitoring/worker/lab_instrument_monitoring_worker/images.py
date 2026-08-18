@@ -34,6 +34,7 @@ class ParticipantImageAgent(Agent):
         )
         self.track_markers = MarkerTrackingTool(
             endpoint=endpoint,
+            images=self.images,
             frame_max_age_s=frame_max_age_s,
             frame_timeout_s=frame_timeout_s,
             manage_status=False,

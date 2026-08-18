@@ -44,8 +44,9 @@ current-view tool and calls the monitor's control tools directly, binding the
 participant before every operation.
 
 `FileOutputAgent` owns structured durable outputs and the bounded recent-history
-tool. `LabInstrumentAgent` performs reusable one-frame marker-associated reads
-and writes source-frame snapshots used to debug marker extraction. The shared
+tool. `LabInstrumentAgent` performs reusable one-frame marker-associated reads.
+It can optionally write source-frame snapshots used to debug marker extraction.
+The shared
 image agent uses `MarkerTrackingTool` for QR and ArUco markers. `device_map.yaml`
 maps each marker family and raw ID to the device name used in readings, state,
 logs, and voice alerts. Ready-to-print PNGs for every configured device and a
@@ -61,7 +62,7 @@ state every 10 seconds. `InstrumentAlertAgent` converts change and lost-device
 topics into voice notes; state snapshots are persisted without being spoken.
 
 Each foreground turn starts with only the system prompt and current request.
-Its native tool loop uses the tea-making sample's namespaced route catalog and
+Its native `run_tool_loop` integration uses a namespaced route catalog and
 four-iteration limit. The model selects from one fixed tool catalog; the worker
 does not apply a second lexical router or corrective prompt. It carries no
 conversation across requests.
@@ -106,8 +107,6 @@ Each connection writes to a new participant-scoped directory:
 
 ```text
 artifacts/
-├── marker-scans/
-│   └── <invocation>-<participant>-<frame>-<sequence>.jpg
 ├── relay-events.jsonl
 └── <participant>-<utc-session-stamp>/
     ├── monitor.jsonl
@@ -122,9 +121,10 @@ written. Monitor records contain a baseline, observations, unavailable-frame
 notices, or errors. Foreground records include the query, response, and
 model-selected tool names. Relay events contain prompts, responses, participant
 metadata, and tool lifecycles;
-live camera bytes are redacted by the shared vision tool. Every lab-instrument
-invocation saves the exact source JPEG under `marker-scans/`; the worker log
-records that path and decoded marker identifiers for debugging. Instrument monitoring
+live camera bytes are redacted by the shared vision tool. When
+`capture_marker_scans` is enabled, every lab-instrument invocation saves the
+exact source JPEG under `marker-scans/`; the worker log records that path and
+decoded marker identifiers for debugging. Instrument monitoring
 records contain discrete changes, one-time tracking-loss events, and complete
 state snapshots.
 

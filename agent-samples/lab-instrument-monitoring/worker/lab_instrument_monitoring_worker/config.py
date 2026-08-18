@@ -22,6 +22,7 @@ class WorkerConfig:
     voice_gate_yaml: Path
     device_map: DeviceMap
     artifacts_dir: Path
+    capture_marker_scans: bool
     foreground_prompt: str
     monitor_prompt: str
     monitor_interval_s: float
@@ -92,6 +93,7 @@ def load_config(path: Path | None) -> WorkerConfig:
         voice_gate_yaml=_resolve(path, str(data.get("voice_gate_yaml", "voice_gate.yaml"))),
         device_map=load_device_map(_resolve(path, str(data.get("device_map_yaml", "device_map.yaml")))),
         artifacts_dir=_resolve(path, str(data.get("artifacts_dir", "../artifacts"))),
+        capture_marker_scans=bool(data.get("capture_marker_scans", False)),
         foreground_prompt=_prompt(data, path, "foreground_prompt"),
         monitor_prompt=_prompt(data, path, "monitor_prompt"),
         monitor_interval_s=interval,

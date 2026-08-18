@@ -128,7 +128,8 @@ To add a foreground capability:
 `LabInstrumentAgent` implements a deterministic perception pipeline:
 
 1. Select one current participant frame.
-2. Save that exact source image under `artifacts/marker-scans/`.
+2. Optionally save that exact source image under `artifacts/marker-scans/` when
+   `capture_marker_scans` is enabled.
 3. Detect every QR and ArUco marker in the frame.
 4. Resolve each marker through `DeviceMap`.
 5. Create a derived image that marks the detected polygon.
@@ -243,7 +244,8 @@ Use three layers:
 2. Decode every checked-in marker and verify its resolved device name.
 3. Evaluate foreground routing separately from visual-reading quality.
 
-For manual pipeline testing, inspect the saved marker-scan image first. It is
+For manual pipeline testing, enable `capture_marker_scans` and inspect the saved
+marker-scan image first. It is
 the exact source frame used for the marker scan and separates camera/framing
 problems from detector or VLM problems. Then inspect Relay events and the
 participant JSONL files to follow the tool call, reading, state update, and

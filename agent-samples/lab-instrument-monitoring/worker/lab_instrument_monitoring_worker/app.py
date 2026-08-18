@@ -125,7 +125,11 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             images=images,
             vlm=vlm,
             device_map=config.device_map,
-            debug_dir=config.artifacts_dir / "marker-scans",
+            debug_dir=(
+                config.artifacts_dir / "marker-scans"
+                if config.capture_marker_scans
+                else None
+            ),
         ),
     )
     instrument_monitor = runtime.register(

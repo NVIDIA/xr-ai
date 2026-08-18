@@ -5,6 +5,7 @@ models_config: models.local.json
 voice_gate_yaml: voice_gate.yaml
 device_map_yaml: device_map.yaml
 artifacts_dir: ../artifacts
+capture_marker_scans: false
 
 monitor_interval_s: 5.0
 instrument_monitor_interval_s: 5.0

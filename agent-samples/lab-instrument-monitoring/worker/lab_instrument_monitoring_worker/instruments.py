@@ -91,7 +91,10 @@ class LabInstrumentAgent(Agent):
                 source,
             )
             tracked = await self._images.track_markers.execute(
-                MarkerTrackingRequest(participant_id=request.participant_id)
+                MarkerTrackingRequest(
+                    participant_id=request.participant_id,
+                    image=frame.image,
+                )
             )
             if not tracked.available:
                 return LabInstrumentReadResult(

@@ -123,15 +123,16 @@ frames are dropped if it is closed.
 | Models | `agent-sdk/xr-ai-models/` | Typed model protocols and OpenAI-compatible clients |
 | Voice | `agent-sdk/xr-ai-voice/` | Voice agent, session, transport, and pipeline |
 | Web events | `agent-sdk/xr-ai-web-events/` | Live participant/topic browser views over selected agent events |
-| Agent tools | `agent-sdk/xr-ai-tools/` | Toolkit-independent Relay-managed native tools, including QR-code extraction |
+| Agent tools | `agent-sdk/xr-ai-tools/` | Toolkit-independent Relay-managed native tools, including QR and ArUco marker tracking |
 | Reusable services | `services/` | Model-serving and typed capability processes |
 | Agent demos | `agent-samples/` | End-to-end agent pipelines |
 | Tests | `tests/` | Multi-client / multi-agent integration tests |
 
 Lightweight samples (`simple-vlm-example`) are self-contained — one command
-starts everything.  Heavier demos (`xr-render-demo`) split model loading from
-the demo itself: start `model-servers` once, then run the demo as many times
-as you like without reloading weights.
+starts everything. Heavier samples (`lab-instrument-monitoring` and
+`xr-render-demo`) split model loading from the sample itself: start
+`model-servers` once, then run either sample as many times as you like without
+reloading weights.
 
 Every sample worker depends on `agent-sdk/xr-ai-models` — one SDK that
 abstracts the OpenAI-compatible HTTP wire format for LLM / VLM / STT / TTS /

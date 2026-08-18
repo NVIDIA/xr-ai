@@ -179,10 +179,10 @@ Each sample has its own `xr_media_hub.yaml` controlling the hub; refer to
 
 This sample offers one on-demand background visual observation task per
 participant while a separate generic tool-calling agent answers voice or typed
-queries and controls that task. A separate QR instrument monitor tracks readings,
+queries and controls that task. A separate QR and ArUco instrument monitor tracks readings,
 speaks only discovered, changed, or long-missing device updates, and persists
 10-second full-state snapshots. The sample writes monitor, instrument,
-accepted-transcript, foreground-turn, and Relay JSONL files under `artifacts/`
+final pre-gate transcript, foreground-turn, and Relay JSONL files under `artifacts/`
 and intentionally serves no sample-specific monitoring web UI.
 
 Start `model-servers`, then run:

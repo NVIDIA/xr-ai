@@ -34,7 +34,7 @@ from .instruments import LabInstrumentAgent, ReadLabInstrumentsRequest
 from .monitor import MonitoringRequest, MonitoringState
 
 _NUMBER = re.compile(r"[+-]?(?:\d+(?:[.,]\d+)?|[.,]\d+)(?:[eE][+-]?\d+)?")
-_UNIT = re.compile(r"(?:°\s*)?[A-Za-zµμ%]+(?:\s*/\s*[A-Za-z]+)?")
+_UNIT = re.compile(r"(?:°\s*)?[A-Za-zµμΩ%]+(?:\s*/\s*[A-Za-z]+)?")
 _UNIT_ALIASES = {
     "amp": "A",
     "amps": "A",
@@ -106,14 +106,13 @@ def normalize_meter_reading(
     if not value.is_finite():
         return None
 
+    suffix = reading[match.end() :].strip(" :=-_")
+    unit_match = _UNIT.match(suffix)
     unit = previous_unit
-    if not unit:
-        suffix = reading[match.end() :].strip(" :=-_")
-        unit_match = _UNIT.match(suffix)
-        if unit_match is not None:
-            raw_unit = re.sub(r"\s+", " ", unit_match.group(0)).strip()
-            compact = raw_unit.replace(" ", "")
-            unit = _UNIT_ALIASES.get(raw_unit.casefold(), compact)
+    if unit_match is not None:
+        raw_unit = re.sub(r"\s+", " ", unit_match.group(0)).strip()
+        compact = raw_unit.replace(" ", "")
+        unit = _UNIT_ALIASES.get(raw_unit.casefold(), compact)
     parsed = _ReadingValue(value=value, unit=unit)
     return parsed.value, parsed.unit, parsed.display
 
