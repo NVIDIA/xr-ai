@@ -26,6 +26,7 @@ import argparse
 import asyncio
 import math
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -33,6 +34,7 @@ import threading
 import time
 import urllib.request
 import warnings
+from contextlib import suppress
 from pathlib import Path
 
 # Silence verbose third-party startup chatter that floods the launcher's
@@ -305,17 +307,13 @@ def _terminate_process(
     """Terminate and reap a detached server, escalating if it does not stop."""
     if process.poll() is not None:
         return
-    try:
+    with suppress(ProcessLookupError):
         process.terminate()
-    except ProcessLookupError:
-        pass
     try:
         process.wait(timeout=timeout_s)
     except subprocess.TimeoutExpired:
-        try:
+        with suppress(ProcessLookupError):
             process.kill()
-        except ProcessLookupError:
-            pass
         process.wait()
 
 
@@ -325,12 +323,40 @@ def _start_persistent_server(
     startup_timeout_s: float,
 ) -> subprocess.Popen:
     """Start the detached server and return it once its health check passes."""
-    process = subprocess.Popen(cmd, start_new_session=True)
+    process: subprocess.Popen | None = None
+    pending_signal: int | None = None
+
+    def _abort_startup(signum, _frame) -> None:
+        nonlocal pending_signal
+        # SystemExit is not swallowed by health probes that intentionally catch
+        # ordinary connection errors. Cleanup runs after the interrupted wait
+        # unwinds, so subprocess internals cannot be re-entered by this handler.
+        if pending_signal is not None:
+            return
+        pending_signal = signum
+        if process is not None:
+            raise SystemExit(128 + signum)
+
+    previous_handlers = {}
     try:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            previous_handlers[sig] = signal.signal(sig, _abort_startup)
+        process = subprocess.Popen(cmd, start_new_session=True)
+        if pending_signal is not None:
+            raise SystemExit(128 + pending_signal)
         _wait_until_healthy(process, health_url, startup_timeout_s)
-    except TimeoutError:
-        _terminate_process(process)
+    except (Exception, KeyboardInterrupt, SystemExit):
+        # Until readiness, every wrapper exit must take its detached child with
+        # it. Ignore repeated signals during the bounded cleanup; after this
+        # function returns, persistence is intentional.
+        pending_signal = pending_signal or 0
+        if process is not None:
+            _terminate_process(process)
         raise
+    finally:
+        for sig, handler in previous_handlers.items():
+            signal.signal(sig, handler)
+    assert process is not None
     return process
 
 

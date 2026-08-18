@@ -18,6 +18,7 @@ cuda_visible_devices: "1"
 
 port: 8103
 host: "0.0.0.0"
+startup_timeout_s: 600
 
 # NeMo + HuggingFace weight cache — resolved relative to this YAML file.
 model_cache: ../../../../models

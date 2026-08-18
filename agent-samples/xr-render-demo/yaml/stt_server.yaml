@@ -8,4 +8,5 @@
 model:       nvidia/parakeet-tdt-0.6b-v3
 device:      auto
 port:        8103
+startup_timeout_s: 600
 model_cache: ../../../models

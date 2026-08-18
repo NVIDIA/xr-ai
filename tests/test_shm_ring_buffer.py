@@ -10,14 +10,11 @@ from xr_ai_hub import ShmRingBuffer
 
 
 def test_unlink_tolerates_repeated_same_process_cleanup():
-    ring = ShmRingBuffer(
+    with ShmRingBuffer(
         name=f"xr_test_{uuid.uuid4().hex[:12]}",
         num_slots=1,
         max_frame_bytes=64,
         create=True,
-    )
-    try:
+    ) as ring:
         ring.unlink()
         ring.unlink()
-    finally:
-        ring.close()
