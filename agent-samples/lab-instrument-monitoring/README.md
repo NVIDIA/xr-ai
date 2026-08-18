@@ -75,6 +75,10 @@ four-iteration limit. The model selects from one fixed tool catalog; the worker
 does not apply a second lexical router or corrective prompt. It carries no
 conversation across requests.
 Return-direct monitor controls end the turn immediately.
+When the model selects `current_view`, the sample follows the
+`simple-vlm-example` path: it acquires one frame and publishes
+`StreamingImageQueryTool` chunks directly to voice. The visual answer is not
+sent back through the foreground LLM for rewriting.
 
 ## Run
 

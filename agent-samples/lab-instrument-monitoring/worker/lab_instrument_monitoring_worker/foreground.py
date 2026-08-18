@@ -17,7 +17,11 @@ from xr_ai_runtime import Agent, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameRequest
 from xr_ai_tools.tool_calling import ToolLoopIterationLimitError, run_tool_loop
-from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult, ImageQueryTool
+from xr_ai_tools.vision import (
+    ImageQueryRequest,
+    ImageQueryResult,
+    StreamingImageQueryTool,
+)
 from xr_ai_voice import (
     VOICE_CONTRIBUTION_TOPIC,
     UserQuery,
@@ -184,8 +188,8 @@ class ForegroundAgent(Agent):
         prompt: str,
     ) -> None:
         self._images = images
-        self.query_image = ImageQueryTool(images=images.images, vlm=vlm)
-        super().__init__((self.query_image,))
+        self._vision = StreamingImageQueryTool(images=images.images, vlm=vlm)
+        super().__init__((self._vision,))
         self._llm = llm
         self._files = files
         self._monitor = monitor
@@ -241,13 +245,19 @@ class ForegroundAgent(Agent):
         participant_id = self._participant(ctx)
         with nemo_relay.use_scope_stack(nemo_relay.create_scope_stack()):
             try:
-                response, tools = await self._answer(query.text, participant_id)
+                response, tools, spoken = await self._answer(
+                    query.text,
+                    participant_id,
+                    ctx,
+                    timestamp_us=query.timestamp_us,
+                )
             except asyncio.CancelledError:
                 raise
             except Exception:
                 logger.opt(exception=True).error("foreground query failed pid={!r}", participant_id)
                 response = "I couldn't complete that request. Please try again."
                 tools = []
+                spoken = False
             try:
                 await ctx.publish(
                     FOREGROUND_RECORD_TOPIC,
@@ -258,19 +268,32 @@ class ForegroundAgent(Agent):
                         tools=tools,
                     ),
                 )
-                await ctx.publish(
-                    VOICE_CONTRIBUTION_TOPIC,
-                    VoiceOutput(
-                        text=response,
-                        interrupt=True,
-                        timestamp_us=query.timestamp_us,
-                    ),
-                )
+                if not spoken:
+                    await ctx.publish(
+                        VOICE_CONTRIBUTION_TOPIC,
+                        VoiceOutput(
+                            text=response,
+                            interrupt=True,
+                            timestamp_us=query.timestamp_us,
+                        ),
+                    )
             except RuntimeClosedError:
                 return
 
-    async def _answer(self, query: str, participant_id: str) -> tuple[str, list[str]]:
-        tools = self._participant_tools(participant_id)
+    async def _answer(
+        self,
+        query: str,
+        participant_id: str,
+        ctx: RuntimeContext | None = None,
+        *,
+        timestamp_us: int | None = None,
+    ) -> tuple[str, list[str], bool]:
+        tools = self._participant_tools(
+            participant_id,
+            query=query,
+            ctx=ctx,
+            timestamp_us=timestamp_us,
+        )
         messages = [
             ChatMessage(role="system", content=self._prompt),
             ChatMessage(role="user", content=query),
@@ -310,20 +333,33 @@ class ForegroundAgent(Agent):
             return (
                 "I couldn't finish that request within the tool limit.",
                 [record.call.name for record in exc.tool_calls],
+                False,
             )
         fallback = "Done." if result.return_direct else "I don't have an answer."
+        calls = [record.call.name for record in result.tool_calls]
         return (
             result.content.strip() or fallback,
-            [record.call.name for record in result.tool_calls],
+            calls,
+            result.return_direct and calls == [CURRENT_VIEW_TOOL],
         )
 
-    def _participant_tools(self, participant_id: str) -> ToolSet:
-        async def inspect_current(request: _CurrentFrameArgs) -> ImageQueryResult:
-            try:
-                frame = await self._images.get_current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
-            except FrameUnavailable as exc:
-                return ImageQueryResult(text=str(exc), available=False)
-            return await self.query_image.execute(ImageQueryRequest(image=frame.image, query=request.question))
+    def _participant_tools(
+        self,
+        participant_id: str,
+        *,
+        query: str = "",
+        ctx: RuntimeContext | None = None,
+        timestamp_us: int | None = None,
+    ) -> ToolSet:
+        async def inspect_current(_request: _CurrentFrameArgs) -> ImageQueryResult:
+            if ctx is None:
+                raise RuntimeError("current-view streaming requires a runtime context")
+            return await self._stream_current_view(
+                query,
+                participant_id,
+                ctx,
+                timestamp_us=timestamp_us,
+            )
 
         async def read_history(request: _HistoryArgs) -> MonitoringHistoryResult:
             return await self._files.read_monitoring_history.execute(
@@ -382,6 +418,8 @@ class ForegroundAgent(Agent):
                     _CurrentFrameArgs,
                     ImageQueryResult,
                     inspect_current,
+                    return_direct=True,
+                    render_result=lambda result: result.text,
                 ),
                 Tool(
                     RECENT_VISUAL_HISTORY_TOOL,
@@ -456,6 +494,77 @@ class ForegroundAgent(Agent):
             )
         )
 
+    async def _stream_current_view(
+        self,
+        query: str,
+        participant_id: str,
+        ctx: RuntimeContext,
+        *,
+        timestamp_us: int | None,
+    ) -> ImageQueryResult:
+        response_id = ctx.metadata.message_id
+        first = True
+        opened = False
+        cancelled = False
+        chunks: list[str] = []
+        try:
+            try:
+                frame = await self._images.get_current_frame.execute(
+                    CurrentFrameRequest(participant_id=participant_id)
+                )
+            except (FrameUnavailable, RuntimeError) as exc:
+                unavailable = _frame_unavailable_message(exc)
+                if unavailable is None:
+                    raise
+                await ctx.publish(
+                    VOICE_CONTRIBUTION_TOPIC,
+                    VoiceOutput(
+                        text=unavailable,
+                        response_id=response_id,
+                        final=False,
+                        interrupt=True,
+                        timestamp_us=timestamp_us,
+                    ),
+                )
+                opened = True
+                return ImageQueryResult(text=unavailable, available=False)
+            stream = self._vision.stream(
+                ImageQueryRequest(image=frame.image, query=query)
+            )
+            try:
+                async for chunk in stream:
+                    chunks.append(chunk.text)
+                    await ctx.publish(
+                        VOICE_CONTRIBUTION_TOPIC,
+                        VoiceOutput(
+                            text=chunk.text,
+                            response_id=response_id,
+                            final=False,
+                            interrupt=first,
+                            timestamp_us=timestamp_us,
+                        ),
+                    )
+                    first = False
+                    opened = True
+            finally:
+                close = getattr(stream, "aclose", None)
+                if close is not None:
+                    await close()
+            return ImageQueryResult(text="".join(chunks))
+        except asyncio.CancelledError:
+            cancelled = True
+            raise
+        finally:
+            if opened and not cancelled:
+                with suppress(RuntimeClosedError):
+                    await ctx.publish(
+                        VOICE_CONTRIBUTION_TOPIC,
+                        VoiceOutput(
+                            response_id=response_id,
+                            timestamp_us=timestamp_us,
+                        ),
+                    )
+
     async def _cancel(self, participant_id: str) -> None:
         task = self._tasks.pop(participant_id, None)
         if task is None:
@@ -478,6 +587,24 @@ class ForegroundAgent(Agent):
         if participant_id is None:
             raise ValueError("foreground queries require a participant")
         return participant_id
+
+
+def _frame_unavailable_message(error: BaseException) -> str | None:
+    """Recover a camera error from native or Relay-scrubbed exceptions."""
+
+    relay_prefix = "internal error: FrameUnavailable:"
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        if isinstance(current, FrameUnavailable):
+            return str(current)
+        if isinstance(current, RuntimeError):
+            message = str(current)
+            if message.startswith(relay_prefix):
+                return message.removeprefix(relay_prefix).strip()
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return None
 
 
 __all__ = [

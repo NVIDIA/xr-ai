@@ -23,7 +23,6 @@ from xr_ai_tools import Tool
 from xr_ai_tools.current_frame import CurrentFrameRequest, ImageFrame
 from xr_ai_tools.image import ImageReference
 from xr_ai_tools.marker_tracking import MarkerPoint, MarkerType, TrackedMarker
-from xr_ai_tools.tool_calling import handle_tool_call, tool_definitions
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult
 from xr_ai_voice import (
     VOICE_CONTRIBUTION_TOPIC,
@@ -307,7 +306,7 @@ def test_monitor_and_foreground_share_participant_image_acquisition(tmp_path: Pa
         "track_markers",
     }
     assert set(images.track_markers.marker_types) == set(MarkerType)
-    assert monitor.query_image is not foreground.query_image
+    assert monitor.query_image is not foreground._vision
     assert {tool.name for tool in monitor.tools} == {
         "query_image",
         "start_monitoring",
@@ -320,7 +319,7 @@ def test_monitor_and_foreground_share_participant_image_acquisition(tmp_path: Pa
         "stop_instrument_monitoring",
         "instrument_monitoring_status",
     }
-    assert {tool.name for tool in foreground.tools} == {"query_image"}
+    assert {tool.name for tool in foreground.tools} == {"stream_image_query"}
 
 
 def test_instrument_reading_normalization_retains_units() -> None:
@@ -639,6 +638,7 @@ async def test_file_output_records_transcript_monitor_instruments_and_foreground
 async def test_foreground_injects_participant_into_current_frame_tool(tmp_path: Path) -> None:
     frame_requests: list[CurrentFrameRequest] = []
     image_requests: list[ImageQueryRequest] = []
+    published: list[VoiceOutput] = []
 
     async def select_frame(request: CurrentFrameRequest) -> ImageFrame:
         frame_requests.append(request)
@@ -651,9 +651,21 @@ async def test_foreground_injects_participant_into_current_frame_tool(tmp_path: 
             participant_id=request.participant_id,
         )
 
-    async def query_image(request: ImageQueryRequest) -> ImageQueryResult:
-        image_requests.append(request)
-        return ImageQueryResult(text="A blue notebook.")
+    class Vision:
+        def stream(self, request: ImageQueryRequest):
+            image_requests.append(request)
+
+            async def chunks():
+                for text in ("A blue ", "notebook."):
+                    yield SimpleNamespace(text=text)
+
+            return chunks()
+
+    class Context:
+        metadata = SimpleNamespace(message_id="turn-7")
+
+        async def publish(self, _topic, output: VoiceOutput) -> None:
+            published.append(output)
 
     images = _make_images()
     agent = ForegroundAgent(
@@ -666,27 +678,23 @@ async def test_foreground_injects_participant_into_current_frame_tool(tmp_path: 
         instrument_monitor=_make_instrument_monitor(),
         prompt="Answer briefly.",
     )
-    images.get_current_frame = Tool(
-        "get_current_frame",
-        "Select a frame.",
-        CurrentFrameRequest,
-        ImageFrame,
-        select_frame,
+    images.get_current_frame = SimpleNamespace(execute=select_frame)  # type: ignore[assignment]
+    agent._vision = Vision()  # type: ignore[assignment]
+    result = await agent._stream_current_view(
+        "Color?",
+        "participant-7",
+        Context(),  # type: ignore[arg-type]
+        timestamp_us=7,
     )
-    agent.query_image = Tool(
-        "query_image",
-        "Query an image.",
-        ImageQueryRequest,
-        ImageQueryResult,
-        query_image,
-    )
-    result = await handle_tool_call(
-        ToolCall(id="call-1", name=CURRENT_VIEW_TOOL, arguments='{"question":"Color?"}'),
-        agent._participant_tools("participant-7"),
-    )
+    current_view = agent._participant_tools(
+        "participant-7",
+        query="Color?",
+        ctx=Context(),  # type: ignore[arg-type]
+        timestamp_us=7,
+    ).get(CURRENT_VIEW_TOOL)
 
-    assert tool_definitions(agent._participant_tools("participant-7")) == FOREGROUND_TOOL_DEFS
-    assert json.loads(result.message.content)["text"] == "A blue notebook."
+    assert result == ImageQueryResult(text="A blue notebook.")
+    assert current_view is not None and current_view.return_direct is True
     assert frame_requests == [CurrentFrameRequest(participant_id="participant-7")]
     assert image_requests == [
         ImageQueryRequest(
@@ -694,6 +702,9 @@ async def test_foreground_injects_participant_into_current_frame_tool(tmp_path: 
             query="Color?",
         )
     ]
+    assert [output.text for output in published] == ["A blue ", "notebook.", ""]
+    assert [output.final for output in published] == [False, False, True]
+    assert {output.response_id for output in published} == {"turn-7"}
 
 
 @pytest.mark.asyncio
@@ -738,7 +749,7 @@ async def test_foreground_background_control_returns_direct(tmp_path: Path) -> N
             instrument_monitor=instrument_monitor,
             prompt="Route one request.",
         )
-        response, tools = await agent._answer(
+        response, tools, spoken = await agent._answer(
             "Watch the doorway.",
             "participant-2",
         )
@@ -746,6 +757,7 @@ async def test_foreground_background_control_returns_direct(tmp_path: Path) -> N
 
         assert response == "Background monitoring started. Monitoring: the doorway."
         assert tools == [VISUAL_MONITOR_START_TOOL]
+        assert spoken is False
         assert llm.calls == 1
         assert status.active is True
 
@@ -777,10 +789,11 @@ async def test_foreground_uses_one_unfiltered_tool_catalog(
         prompt="Route one request.",
     )
 
-    response, used = await agent._answer("To Peter.", "participant-2")
+    response, used, spoken = await agent._answer("To Peter.", "participant-2")
 
     assert response == "I heard you."
     assert used == []
+    assert spoken is False
     assert llm.tool_names == {tool.name for tool in FOREGROUND_TOOL_DEFS}
 
 
@@ -831,12 +844,16 @@ async def test_foreground_tool_loop_returns_model_answer_and_tool_audit(tmp_path
             VoiceParticipantJoined(),
             participant_id="participant-4",
         )
-        response, tools = await agent._answer("What changed?", "participant-4")
+        response, tools, spoken = await agent._answer(
+            "What changed?",
+            "participant-4",
+        )
     finally:
         await runtime.stop()
 
     assert response == "Nothing material changed."
     assert tools == [RECENT_VISUAL_HISTORY_TOOL]
+    assert spoken is False
 
 
 def test_foreground_prompt_has_non_overlapping_routing_eval_cases() -> None:

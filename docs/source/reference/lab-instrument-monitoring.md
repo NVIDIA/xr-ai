@@ -73,6 +73,12 @@ This ownership keeps periodic tasks and mutable state out of the runtime. The
 runtime delivers typed events; each agent cancels its own participant tasks and
 releases its own state.
 
+For a `current_view` selection, `ForegroundAgent` uses the same direct path as
+`simple-vlm-example`: `CurrentFrameTool` selects one frame and
+`StreamingImageQueryTool` publishes chunks to participant voice. The tool is a
+direct return, so the completed visual answer does not incur a second language
+model call.
+
 ## Source map
 
 | File | Purpose | Typical adaptation |
