@@ -55,8 +55,9 @@ Applications with multiple speech producers may place
 `VoiceAggregationAgent` before `VoiceAgent`. Producers publish candidate
 finite or incremental responses to `voice.contribution`; the aggregator owns
 participant-scoped ordering, preserves a lone stream, coalesces simultaneous
-finite updates through the configured `LLMService`, and publishes only the
-result to `voice.output`. This policy remains outside the private media
+finite updates through the configured `LLMService`, holds an active response
+for its estimated spoken duration, and publishes only the result to
+`voice.output`. This policy remains outside the private media
 pipeline so applications opt in explicitly and retain ownership of which
 events should become speech.
 

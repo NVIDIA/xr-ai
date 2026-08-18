@@ -56,18 +56,19 @@ Package Contents
    Candidate spoken output consumed by :class:`VoiceAggregationAgent`.
 
 
-.. py:class:: VoiceAggregationAgent(*, llm: xr_ai_models.LLMService, prompt: str = _DEFAULT_PROMPT, coalesce_window_s: float = 0.15, queue_capacity: int = 64, max_batch_size: int = 8, max_tokens: int = 192, stream_idle_timeout_s: float = 15.0, participant_idle_timeout_s: float = 60.0)
+.. py:class:: VoiceAggregationAgent(*, llm: xr_ai_models.LLMService, prompt: str = _DEFAULT_PROMPT, coalesce_window_s: float = 0.15, queue_capacity: int = 64, max_batch_size: int = 8, max_tokens: int = 192, stream_idle_timeout_s: float = 15.0, participant_idle_timeout_s: float = 60.0, speech_rate_wpm: float = 150.0, minimum_playback_s: float = 0.4)
 
 
 
    Serialize and coalesce candidate speech independently per participant.
 
    A lone finite contribution passes through without a model call after the
-   short coalescing window. Multiple finite contributions in that window are
-   rewritten into one response. A lone incremental response streams through
-   immediately; other contributions wait until that stream ends. An urgent
-   contribution interrupts the active stream and is combined with pending
-   finite updates.
+   short coalescing window. The aggregator keeps that response open for its
+   estimated spoken duration, so updates arriving while it is being spoken
+   wait and coalesce instead of building a speech queue. Multiple pending
+   finite contributions are rewritten into one response. A lone incremental
+   response streams through immediately and uses the same playback estimate
+   after its final chunk. An urgent contribution interrupts the active output.
 
 
    .. py:method:: contribute(output: xr_ai_voice.VoiceOutput, ctx: xr_ai_runtime.RuntimeContext) -> None
@@ -83,6 +84,14 @@ Package Contents
 
 
       Cancel and await all participant aggregation tasks.
+
+
+
+   .. py:method:: release(participant_id: str) -> None
+      :async:
+
+
+      Cancel and release one departed participant's aggregation state.
 
 
 
