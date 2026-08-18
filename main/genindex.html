@@ -334,6 +334,7 @@
 <li class="toctree-l2"><a class="reference internal" href="reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/migrations.html">Release migration</a></li>
@@ -371,6 +372,7 @@
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
 </ul>
 </details></li>
 </ul>
@@ -1265,6 +1267,8 @@
 </li>
         <li><a href="reference/python/xr_ai_voicegate/index.html#module-xr_ai_voicegate">xr_ai_voicegate</a>
 </li>
+        <li><a href="reference/python/xr_ai_web_events/index.html#module-xr_ai_web_events">xr_ai_web_events</a>
+</li>
       </ul></li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.MsgType">MsgType (class in xr_ai_hub)</a>
 </li>
@@ -1412,12 +1416,16 @@
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.LiveFrameSource.participants">participants() (xr_ai_hub.LiveFrameSource method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_tools/video_memory/index.html#xr_ai_tools.video_memory.RecordedVideoResult.path">path (xr_ai_tools.video_memory.RecordedVideoResult attribute)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ControlMessage.payload">payload (xr_ai_hub.ControlMessage attribute)</a>
+
+      <ul>
+        <li><a href="reference/python/xr_ai_web_events/index.html#xr_ai_web_events.WebEvent.payload">(xr_ai_web_events.WebEvent attribute)</a>
 </li>
+      </ul></li>
       <li><a href="reference/python/xr_ai_tools/tracking/index.html#xr_ai_tools.tracking.HeadPose.pitch_deg">pitch_deg (xr_ai_tools.tracking.HeadPose attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.PixelFormat">PixelFormat (class in xr_ai_hub)</a>
@@ -1647,7 +1655,11 @@
       <li><a href="reference/python/xr_ai_tools/tool_calling/index.html#xr_ai_tools.tool_calling.run_tool_loop">run_tool_loop() (in module xr_ai_tools.tool_calling)</a>
 </li>
       <li><a href="reference/python/xr_ai_runtime/index.html#xr_ai_runtime.AgentRuntime.running">running (xr_ai_runtime.AgentRuntime property)</a>
+
+      <ul>
+        <li><a href="reference/python/xr_ai_web_events/index.html#xr_ai_web_events.WebEventsAgent.running">(xr_ai_web_events.WebEventsAgent property)</a>
 </li>
+      </ul></li>
       <li><a href="reference/python/xr_ai_runtime/index.html#xr_ai_runtime.RuntimeClosedError">RuntimeClosedError</a>
 </li>
       <li><a href="reference/python/xr_ai_runtime/index.html#xr_ai_runtime.RuntimeContext">RuntimeContext (class in xr_ai_runtime)</a>
@@ -1750,16 +1762,20 @@
         <li><a href="reference/python/xr_ai_tools/text_memory/index.html#xr_ai_tools.text_memory.TranscriptStatsResult.source_id">(xr_ai_tools.text_memory.TranscriptStatsResult attribute)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_tools/text_memory/index.html#xr_ai_tools.text_memory.ListTranscriptSourcesResult.sources">sources (xr_ai_tools.text_memory.ListTranscriptSourcesResult attribute)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_tools/types/index.html#xr_ai_tools.types.SpatialFrame">SpatialFrame (class in xr_ai_tools.types)</a>
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.Spec">Spec (in module xr_ai_models)</a>
 </li>
       <li><a href="reference/python/xr_ai_runtime/index.html#xr_ai_runtime.AgentRuntime.start">start() (xr_ai_runtime.AgentRuntime method)</a>
+
+      <ul>
+        <li><a href="reference/python/xr_ai_web_events/index.html#xr_ai_web_events.WebEventsAgent.start">(xr_ai_web_events.WebEventsAgent method)</a>
 </li>
+      </ul></li>
       <li><a href="reference/python/xr_ai_tools/text_memory/index.html#xr_ai_tools.text_memory.QueryTranscriptsRequest.start_us">start_us (xr_ai_tools.text_memory.QueryTranscriptsRequest attribute)</a>
 
       <ul>
@@ -1782,6 +1798,8 @@
 
       <ul>
         <li><a href="reference/python/xr_ai_runtime/index.html#xr_ai_runtime.AgentRuntime.stop">(xr_ai_runtime.AgentRuntime method)</a>
+</li>
+        <li><a href="reference/python/xr_ai_web_events/index.html#xr_ai_web_events.WebEventsAgent.stop">(xr_ai_web_events.WebEventsAgent method)</a>
 </li>
       </ul></li>
       <li><a href="reference/python/xr_ai_vllm/index.html#xr_ai_vllm.stop_persistent_servers">stop_persistent_servers() (in module xr_ai_vllm)</a>
@@ -1910,6 +1928,8 @@
         <li><a href="reference/python/xr_ai_voice/index.html#xr_ai_voice.VoiceTranscript.timestamp_us">(xr_ai_voice.VoiceTranscript attribute)</a>
 </li>
       </ul></li>
+      <li><a href="reference/python/xr_ai_web_events/index.html#xr_ai_web_events.WebEvent.title">title (xr_ai_web_events.WebEvent attribute)</a>
+</li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ToolDef.to_openai">to_openai() (xr_ai_models.ToolDef method)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.SubscriptionProbe.token">token (xr_ai_hub.SubscriptionProbe attribute)</a>
@@ -1982,6 +2002,8 @@
 
       <ul>
         <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.DataMessage.topic">(xr_ai_hub.DataMessage attribute)</a>
+</li>
+        <li><a href="reference/python/xr_ai_web_events/index.html#xr_ai_web_events.WebEvent.topic">(xr_ai_web_events.WebEvent attribute)</a>
 </li>
       </ul></li>
       <li><a href="reference/python/xr_ai_tools/video_memory/index.html#xr_ai_tools.video_memory.VideoStatsResult.total_bytes">total_bytes (xr_ai_tools.video_memory.VideoStatsResult attribute)</a>
@@ -2062,6 +2084,8 @@
 
       <ul>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.VideoPart.url">(xr_ai_models.VideoPart attribute)</a>
+</li>
+        <li><a href="reference/python/xr_ai_web_events/index.html#xr_ai_web_events.WebEventsAgent.url">(xr_ai_web_events.WebEventsAgent property)</a>
 </li>
       </ul></li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.AdapterSpec.use_ssl">use_ssl (xr_ai_models.AdapterSpec attribute)</a>
@@ -2160,8 +2184,14 @@
 </li>
       <li><a href="reference/python/xr_ai_launcher/index.html#xr_ai_launcher.warn_if_missing">warn_if_missing() (in module xr_ai_launcher)</a>
 </li>
+      <li><a href="reference/python/xr_ai_web_events/index.html#xr_ai_web_events.WEB_EVENT_TOPIC">WEB_EVENT_TOPIC (in module xr_ai_web_events)</a>
+</li>
+      <li><a href="reference/python/xr_ai_web_events/index.html#xr_ai_web_events.WebEvent">WebEvent (class in xr_ai_web_events)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/python/xr_ai_web_events/index.html#xr_ai_web_events.WebEventsAgent">WebEventsAgent (class in xr_ai_web_events)</a>
+</li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FrameData.width">width (xr_ai_hub.FrameData attribute)</a>
 
       <ul>
@@ -2372,6 +2402,13 @@
 
       <ul>
         <li><a href="reference/python/xr_ai_voicegate/index.html#module-xr_ai_voicegate">module</a>
+</li>
+      </ul></li>
+      <li>
+    xr_ai_web_events
+
+      <ul>
+        <li><a href="reference/python/xr_ai_web_events/index.html#module-xr_ai_web_events">module</a>
 </li>
       </ul></li>
       <li><a href="reference/python/xr_ai_launcher/index.html#xr_ai_launcher.XR_RUNTIME_VAR">XR_RUNTIME_VAR (in module xr_ai_launcher)</a>
