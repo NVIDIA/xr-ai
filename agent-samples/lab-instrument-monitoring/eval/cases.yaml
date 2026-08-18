@@ -13,6 +13,18 @@
   query: What are you looking at?
   expected_tool: current_view
 
+- name: current-surroundings
+  query: Describe my surroundings right now.
+  expected_tool: current_view
+
+- name: current-scene-overview
+  query: Give me a visual rundown of the scene.
+  expected_tool: current_view
+
+- name: current-camera-context
+  query: Can you see anything interesting?
+  expected_tool: current_view
+
 - name: recent-change
   query: What changed around me during the last few minutes?
   expected_tool: recent_visual_history
