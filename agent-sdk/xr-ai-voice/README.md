@@ -105,8 +105,10 @@ chunk for a stream that voice already closed, including when wrapped in the
 runtime publication exception group.
 
 Lifecycle publication runs on `VoiceAgent`-owned tasks, so participant cleanup
-cannot block the shared media processor. The agent cancels and awaits those
-tasks during shutdown.
+cannot block the shared media processor. Join and leave publications are
+serialized per participant, preserving lifecycle order even when a subscriber
+is slow; different participants remain independent. The agent cancels and
+awaits those tasks during shutdown.
 
 Relay telemetry treats `voice.output` as a high-cardinality transport topic and
 does not emit runtime scopes per fragment. `VoiceAgent` instead emits one
