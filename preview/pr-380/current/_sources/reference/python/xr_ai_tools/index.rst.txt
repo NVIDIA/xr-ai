@@ -1,0 +1,136 @@
+xr_ai_tools
+===========
+
+.. py:module:: xr_ai_tools
+
+.. autoapi-nested-parse::
+
+   Toolkit-independent native XR tools.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /reference/python/xr_ai_tools/async_tools/index
+   /reference/python/xr_ai_tools/current_frame/index
+   /reference/python/xr_ai_tools/image/index
+   /reference/python/xr_ai_tools/image_polygon/index
+   /reference/python/xr_ai_tools/marker_tracking/index
+   /reference/python/xr_ai_tools/rag/index
+   /reference/python/xr_ai_tools/rpc/index
+   /reference/python/xr_ai_tools/spatial/index
+   /reference/python/xr_ai_tools/text_memory/index
+   /reference/python/xr_ai_tools/tool_calling/index
+   /reference/python/xr_ai_tools/tools/index
+   /reference/python/xr_ai_tools/tracking/index
+   /reference/python/xr_ai_tools/types/index
+   /reference/python/xr_ai_tools/video_memory/index
+   /reference/python/xr_ai_tools/vision/index
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_tools.AsyncTool
+   xr_ai_tools.Tool
+   xr_ai_tools.ToolInvocationResult
+   xr_ai_tools.ToolSet
+
+
+Package Contents
+----------------
+
+.. py:class:: AsyncTool(name: str, description: str, request_model: type[RequestT], chunk_model: type[ChunkT], handler: collections.abc.Callable[[RequestT], collections.abc.AsyncIterator[ChunkT]])
+
+   Bases: :py:obj:`Generic`\ [\ :py:obj:`RequestT`\ , :py:obj:`ChunkT`\ ]
+
+
+   A validated asynchronous tool independent of any output transport.
+
+
+   .. py:method:: stream(request: RequestT | collections.abc.Mapping[str, object]) -> collections.abc.AsyncIterator[ChunkT]
+      :async:
+
+
+      Validate and yield chunks produced in an isolated Relay tool scope.
+
+      The producer task owns the scope and handler cleanup; chunks are yielded
+      in the consumer's context. Parent scope-local registrations are not
+      transferred into the isolated context.
+
+
+
+.. py:class:: Tool(name: str, description: str, request_model: type[RequestT], result_model: type[pydantic.BaseModel] | None, handler: collections.abc.Callable[[RequestT], collections.abc.Awaitable[ResultT] | ResultT], *, return_direct: bool = False, render_result: collections.abc.Callable[[ResultT], str] | None = None)
+
+   Bases: :py:obj:`Generic`\ [\ :py:obj:`RequestT`\ , :py:obj:`ResultT`\ ]
+
+
+   A Pydantic-validated tool shared by agents, voice, and background triggers.
+
+
+   .. py:method:: execute(request: RequestT) -> ResultT
+      :async:
+
+
+      Run one validated request through the shared Relay tool lifecycle.
+
+
+
+   .. py:method:: invoke(arguments: str) -> ToolInvocationResult
+      :async:
+
+
+      Validate and run one model-supplied JSON argument payload.
+
+
+
+.. py:class:: ToolInvocationResult
+
+   A model-visible result from one local tool invocation.
+
+
+   .. py:attribute:: content
+      :type:  str
+
+      Model-visible serialized result or validation error.
+
+
+
+   .. py:attribute:: return_direct
+      :type:  bool
+
+      Whether the agent should return the content without another model turn.
+
+
+
+.. py:class:: ToolSet(tools: collections.abc.Iterable[Tool[Any, Any]] | collections.abc.Mapping[str, Tool[Any, Any]])
+
+   A native tool catalog with model-visible dispatch names.
+
+
+   .. py:method:: namespaced(namespaces: collections.abc.Mapping[str, collections.abc.Iterable[Tool[Any, Any]]]) -> ToolSet
+      :classmethod:
+
+
+      Build a catalog named ``<namespace>__<tool>`` for each group.
+
+
+
+   .. py:method:: get(name: str) -> Tool[Any, Any] | None
+
+      Return the named tool when this catalog owns it.
+
+
+
+   .. py:method:: items() -> tuple[tuple[str, Tool[Any, Any]], Ellipsis]
+
+      Return model-visible names paired with their underlying tools.
+
+
+

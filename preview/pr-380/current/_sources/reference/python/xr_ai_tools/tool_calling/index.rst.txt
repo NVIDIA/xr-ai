@@ -1,0 +1,62 @@
+xr_ai_tools.tool_calling
+========================
+
+.. py:module:: xr_ai_tools.tool_calling
+
+.. autoapi-nested-parse::
+
+   Helpers for dispatching model-selected native tool calls.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_tools.tool_calling.ToolCallResult
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   xr_ai_tools.tool_calling.tool_definitions
+   xr_ai_tools.tool_calling.handle_tool_call
+
+
+Module Contents
+---------------
+
+.. py:class:: ToolCallResult
+
+   One model-ready tool response and its control-flow hint.
+
+
+   .. py:attribute:: message
+      :type:  xr_ai_models.ChatMessage
+
+      Tool-role message to append to the model conversation.
+
+
+
+   .. py:attribute:: return_direct
+      :type:  bool
+
+      Whether the agent should return the tool result immediately.
+
+
+
+.. py:function:: tool_definitions(tools: collections.abc.Iterable[xr_ai_tools.tools.Tool[Any, Any]] | xr_ai_tools.tools.ToolSet) -> tuple[xr_ai_models.ToolDef, Ellipsis]
+
+   Return model-service definitions for native tools.
+
+
+.. py:function:: handle_tool_call(call: xr_ai_models.ToolCall, tools: xr_ai_tools.tools.ToolSet) -> ToolCallResult
+   :async:
+
+
+   Invoke one model-produced call and return its tool-role message.
+
+

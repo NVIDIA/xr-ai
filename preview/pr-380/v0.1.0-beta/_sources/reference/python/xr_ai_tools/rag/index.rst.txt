@@ -1,0 +1,174 @@
+xr_ai_tools.rag
+===============
+
+.. py:module:: xr_ai_tools.rag
+
+.. autoapi-nested-parse::
+
+   Native tools backed by the typed document-retrieval service.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_tools.rag.RetrieveRequest
+   xr_ai_tools.rag.RetrievedChunk
+   xr_ai_tools.rag.RetrieveResult
+   xr_ai_tools.rag.ListDocumentsResult
+   xr_ai_tools.rag.RAGHealthResult
+   xr_ai_tools.rag.RAGTools
+
+
+Module Contents
+---------------
+
+.. py:class:: RetrieveRequest
+
+   Bases: :py:obj:`xr_ai_tools.types.StrictRequest`
+
+
+   Search parameters for retrieving relevant document passages.
+
+
+   .. py:attribute:: query
+      :type:  str
+
+      Question or search phrase to retrieve context for.
+
+
+
+   .. py:attribute:: top_k
+      :type:  int
+
+      Maximum number of matching passages to return.
+
+
+
+   .. py:method:: query_must_not_be_blank(value: str) -> str
+      :classmethod:
+
+
+      Require visible text in the retrieval query.
+
+
+
+.. py:class:: RetrievedChunk
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   A document passage returned by similarity search.
+
+
+   .. py:attribute:: text
+      :type:  str
+
+      Retrieved document passage.
+
+
+
+   .. py:attribute:: source
+      :type:  str
+
+      Source path relative to the configured document directory.
+
+
+
+   .. py:attribute:: score
+      :type:  float
+
+      Cosine similarity between the query and passage.
+
+
+
+.. py:class:: RetrieveResult
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Ranked document passages returned for a retrieval request.
+
+
+   .. py:attribute:: results
+      :type:  list[RetrievedChunk]
+
+      Matching passages in service-defined relevance order.
+
+
+
+.. py:class:: ListDocumentsResult
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Documents currently indexed by the retrieval service.
+
+
+   .. py:attribute:: documents
+      :type:  list[str]
+
+      Source paths relative to the configured document directory.
+
+
+
+.. py:class:: RAGHealthResult
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Readiness and index statistics reported by the RAG service.
+
+
+   .. py:attribute:: ready
+      :type:  bool
+
+      Whether the service is ready to answer retrieval requests.
+
+
+
+   .. py:attribute:: document_count
+      :type:  int
+
+      Number of indexed documents.
+
+
+
+   .. py:attribute:: chunk_count
+      :type:  int
+
+      Number of indexed document passages.
+
+
+
+.. py:class:: RAGTools(endpoint: str, *, timeout_s: float = 30.0)
+
+   Own the RAG-service client and document retrieval tools.
+
+
+   .. py:method:: get_health() -> RAGHealthResult
+      :async:
+
+
+      Return detailed readiness and index statistics.
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Return whether the RAG service is reachable and ready.
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Close the underlying service connection.
+
+
+
