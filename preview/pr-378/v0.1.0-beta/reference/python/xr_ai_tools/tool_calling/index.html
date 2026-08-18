@@ -428,12 +428,58 @@
   <section id="module-xr_ai_tools.tool_calling">
 <span id="xr-ai-tools-tool-calling"></span><h1>xr_ai_tools.tool_calling<a class="headerlink" href="#module-xr_ai_tools.tool_calling" title="Link to this heading">#</a></h1>
 <p>Helpers for dispatching model-selected native tool calls.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_tools.tool_calling.ModelCallback" title="xr_ai_tools.tool_calling.ModelCallback"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelCallback</span></code></a></p></td>
+<td><p>Async model invocation supplied with the transcript and tool definitions.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="exceptions">
+<h2>Exceptions<a class="headerlink" href="#exceptions" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolLoopError" title="xr_ai_tools.tool_calling.ToolLoopError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolLoopError</span></code></a></p></td>
+<td><p>Base error for a turn that cannot safely produce a final answer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolLoopIterationLimitError" title="xr_ai_tools.tool_calling.ToolLoopIterationLimitError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolLoopIterationLimitError</span></code></a></p></td>
+<td><p>The model used every permitted iteration without a final answer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolLoopToolCallLimitError" title="xr_ai_tools.tool_calling.ToolLoopToolCallLimitError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolLoopToolCallLimitError</span></code></a></p></td>
+<td><p>A model batch would exceed the turn's total tool-call budget.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolLoopTruncatedResponseError" title="xr_ai_tools.tool_calling.ToolLoopTruncatedResponseError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolLoopTruncatedResponseError</span></code></a></p></td>
+<td><p>The model reported a truncated response that is unsafe to execute.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolLoopEmptyResponseError" title="xr_ai_tools.tool_calling.ToolLoopEmptyResponseError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolLoopEmptyResponseError</span></code></a></p></td>
+<td><p>The model returned neither a tool call nor a non-empty answer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolLoopDirectReturnError" title="xr_ai_tools.tool_calling.ToolLoopDirectReturnError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolLoopDirectReturnError</span></code></a></p></td>
+<td><p>A model batch mixed a direct-return tool with other calls.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolLoopMalformedResponseError" title="xr_ai_tools.tool_calling.ToolLoopMalformedResponseError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolLoopMalformedResponseError</span></code></a></p></td>
+<td><p>The model returned tool calls that cannot form a valid transcript.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
 <section id="classes">
 <h2>Classes<a class="headerlink" href="#classes" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolCallResult" title="xr_ai_tools.tool_calling.ToolCallResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolCallResult</span></code></a></p></td>
 <td><p>One model-ready tool response and its control-flow hint.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolCallRecord" title="xr_ai_tools.tool_calling.ToolCallRecord"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolCallRecord</span></code></a></p></td>
+<td><p>One model-requested call and the model-visible result it produced.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolLoopResult" title="xr_ai_tools.tool_calling.ToolLoopResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolLoopResult</span></code></a></p></td>
+<td><p>A completed turn with its full transcript and tool-call audit.</p></td>
 </tr>
 </tbody>
 </table>
@@ -448,6 +494,9 @@
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_tools.tool_calling.handle_tool_call" title="xr_ai_tools.tool_calling.handle_tool_call"><code class="xref py py-obj docutils literal notranslate"><span class="pre">handle_tool_call</span></code></a>(→ ToolCallResult)</p></td>
 <td><p>Invoke one model-produced call and return its tool-role message.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_tools.tool_calling.run_tool_loop" title="xr_ai_tools.tool_calling.run_tool_loop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_tool_loop</span></code></a>(→ ToolLoopResult)</p></td>
+<td><p>Run one stateless, bounded model turn over native tools.</p></td>
 </tr>
 </tbody>
 </table>
@@ -473,6 +522,191 @@
 
 </dd></dl>
 
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_tools.tool_calling.ToolCallRecord">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.tool_calling.</span></span><span class="sig-name descname"><span class="pre">ToolCallRecord</span></span><a class="headerlink" href="#xr_ai_tools.tool_calling.ToolCallRecord" title="Link to this definition">#</a></dt>
+<dd><p>One model-requested call and the model-visible result it produced.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_tools.tool_calling.ToolCallRecord.call">
+<span class="sig-name descname"><span class="pre">call</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ToolCall" title="xr_ai_models.ToolCall"><span class="pre">xr_ai_models.ToolCall</span></a></em><a class="headerlink" href="#xr_ai_tools.tool_calling.ToolCallRecord.call" title="Link to this definition">#</a></dt>
+<dd><p>Model-emitted tool call that was executed.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_tools.tool_calling.ToolCallRecord.message">
+<span class="sig-name descname"><span class="pre">message</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ChatMessage" title="xr_ai_models.ChatMessage"><span class="pre">xr_ai_models.ChatMessage</span></a></em><a class="headerlink" href="#xr_ai_tools.tool_calling.ToolCallRecord.message" title="Link to this definition">#</a></dt>
+<dd><p>Tool-role message produced for the model transcript.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_tools.tool_calling.ToolCallRecord.return_direct">
+<span class="sig-name descname"><span class="pre">return_direct</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#xr_ai_tools.tool_calling.ToolCallRecord.return_direct" title="Link to this definition">#</a></dt>
+<dd><p>Whether this call ended the loop without another model turn.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_tools.tool_calling.ToolLoopResult">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.tool_calling.</span></span><span class="sig-name descname"><span class="pre">ToolLoopResult</span></span><a class="headerlink" href="#xr_ai_tools.tool_calling.ToolLoopResult" title="Link to this definition">#</a></dt>
+<dd><p>A completed turn with its full transcript and tool-call audit.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_tools.tool_calling.ToolLoopResult.content">
+<span class="sig-name descname"><span class="pre">content</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_tools.tool_calling.ToolLoopResult.content" title="Link to this definition">#</a></dt>
+<dd><p>Final answer or direct-return tool content.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_tools.tool_calling.ToolLoopResult.messages">
+<span class="sig-name descname"><span class="pre">messages</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ChatMessage" title="xr_ai_models.ChatMessage"><span class="pre">xr_ai_models.ChatMessage</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ellipsis</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#xr_ai_tools.tool_calling.ToolLoopResult.messages" title="Link to this definition">#</a></dt>
+<dd><p>Complete resumable transcript for the turn.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_tools.tool_calling.ToolLoopResult.tool_calls">
+<span class="sig-name descname"><span class="pre">tool_calls</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolCallRecord" title="xr_ai_tools.tool_calling.ToolCallRecord"><span class="pre">ToolCallRecord</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ellipsis</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#xr_ai_tools.tool_calling.ToolLoopResult.tool_calls" title="Link to this definition">#</a></dt>
+<dd><p>Executed tool calls in model-emitted order.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_tools.tool_calling.ToolLoopResult.iterations">
+<span class="sig-name descname"><span class="pre">iterations</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#xr_ai_tools.tool_calling.ToolLoopResult.iterations" title="Link to this definition">#</a></dt>
+<dd><p>Number of model iterations consumed by the turn.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_tools.tool_calling.ToolLoopResult.return_direct">
+<span class="sig-name descname"><span class="pre">return_direct</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#xr_ai_tools.tool_calling.ToolLoopResult.return_direct" title="Link to this definition">#</a></dt>
+<dd><p>Whether the result came directly from a tool.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="xr_ai_tools.tool_calling.ToolLoopError">
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.tool_calling.</span></span><span class="sig-name descname"><span class="pre">ToolLoopError</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">messages</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ChatMessage" title="xr_ai_models.ChatMessage"><span class="pre">xr_ai_models.ChatMessage</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">tool_calls</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolCallRecord" title="xr_ai_tools.tool_calling.ToolCallRecord"><span class="pre">ToolCallRecord</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">rejected_response</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ChatResponse" title="xr_ai_models.ChatResponse"><span class="pre">xr_ai_models.ChatResponse</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_tools.tool_calling.ToolLoopError" title="Link to this definition">#</a></dt>
+<dd><p>Base error for a turn that cannot safely produce a final answer.</p>
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="xr_ai_tools.tool_calling.ToolLoopIterationLimitError">
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.tool_calling.</span></span><span class="sig-name descname"><span class="pre">ToolLoopIterationLimitError</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">messages</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ChatMessage" title="xr_ai_models.ChatMessage"><span class="pre">xr_ai_models.ChatMessage</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">tool_calls</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolCallRecord" title="xr_ai_tools.tool_calling.ToolCallRecord"><span class="pre">ToolCallRecord</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">rejected_response</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ChatResponse" title="xr_ai_models.ChatResponse"><span class="pre">xr_ai_models.ChatResponse</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_tools.tool_calling.ToolLoopIterationLimitError" title="Link to this definition">#</a></dt>
+<dd><p>The model used every permitted iteration without a final answer.</p>
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="xr_ai_tools.tool_calling.ToolLoopToolCallLimitError">
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.tool_calling.</span></span><span class="sig-name descname"><span class="pre">ToolLoopToolCallLimitError</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">messages</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ChatMessage" title="xr_ai_models.ChatMessage"><span class="pre">xr_ai_models.ChatMessage</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">tool_calls</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolCallRecord" title="xr_ai_tools.tool_calling.ToolCallRecord"><span class="pre">ToolCallRecord</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">rejected_response</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ChatResponse" title="xr_ai_models.ChatResponse"><span class="pre">xr_ai_models.ChatResponse</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_tools.tool_calling.ToolLoopToolCallLimitError" title="Link to this definition">#</a></dt>
+<dd><p>A model batch would exceed the turn’s total tool-call budget.</p>
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="xr_ai_tools.tool_calling.ToolLoopTruncatedResponseError">
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.tool_calling.</span></span><span class="sig-name descname"><span class="pre">ToolLoopTruncatedResponseError</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">messages</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ChatMessage" title="xr_ai_models.ChatMessage"><span class="pre">xr_ai_models.ChatMessage</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">tool_calls</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolCallRecord" title="xr_ai_tools.tool_calling.ToolCallRecord"><span class="pre">ToolCallRecord</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">rejected_response</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ChatResponse" title="xr_ai_models.ChatResponse"><span class="pre">xr_ai_models.ChatResponse</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_tools.tool_calling.ToolLoopTruncatedResponseError" title="Link to this definition">#</a></dt>
+<dd><p>The model reported a truncated response that is unsafe to execute.</p>
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="xr_ai_tools.tool_calling.ToolLoopEmptyResponseError">
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.tool_calling.</span></span><span class="sig-name descname"><span class="pre">ToolLoopEmptyResponseError</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">messages</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ChatMessage" title="xr_ai_models.ChatMessage"><span class="pre">xr_ai_models.ChatMessage</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">tool_calls</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolCallRecord" title="xr_ai_tools.tool_calling.ToolCallRecord"><span class="pre">ToolCallRecord</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">rejected_response</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ChatResponse" title="xr_ai_models.ChatResponse"><span class="pre">xr_ai_models.ChatResponse</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_tools.tool_calling.ToolLoopEmptyResponseError" title="Link to this definition">#</a></dt>
+<dd><p>The model returned neither a tool call nor a non-empty answer.</p>
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="xr_ai_tools.tool_calling.ToolLoopDirectReturnError">
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.tool_calling.</span></span><span class="sig-name descname"><span class="pre">ToolLoopDirectReturnError</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">messages</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ChatMessage" title="xr_ai_models.ChatMessage"><span class="pre">xr_ai_models.ChatMessage</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">tool_calls</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolCallRecord" title="xr_ai_tools.tool_calling.ToolCallRecord"><span class="pre">ToolCallRecord</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">rejected_response</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ChatResponse" title="xr_ai_models.ChatResponse"><span class="pre">xr_ai_models.ChatResponse</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_tools.tool_calling.ToolLoopDirectReturnError" title="Link to this definition">#</a></dt>
+<dd><p>A model batch mixed a direct-return tool with other calls.</p>
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="xr_ai_tools.tool_calling.ToolLoopMalformedResponseError">
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.tool_calling.</span></span><span class="sig-name descname"><span class="pre">ToolLoopMalformedResponseError</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">messages</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ChatMessage" title="xr_ai_models.ChatMessage"><span class="pre">xr_ai_models.ChatMessage</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">tool_calls</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolCallRecord" title="xr_ai_tools.tool_calling.ToolCallRecord"><span class="pre">ToolCallRecord</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">rejected_response</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ChatResponse" title="xr_ai_models.ChatResponse"><span class="pre">xr_ai_models.ChatResponse</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_tools.tool_calling.ToolLoopMalformedResponseError" title="Link to this definition">#</a></dt>
+<dd><p>The model returned tool calls that cannot form a valid transcript.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="xr_ai_tools.tool_calling.ModelCallback">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_tools.tool_calling.</span></span><span class="sig-name descname"><span class="pre">ModelCallback</span></span><a class="headerlink" href="#xr_ai_tools.tool_calling.ModelCallback" title="Link to this definition">#</a></dt>
+<dd><p>Async model invocation supplied with the transcript and tool definitions.</p>
+</dd></dl>
+
 <dl class="py function">
 <dt class="sig sig-object py" id="xr_ai_tools.tool_calling.tool_definitions">
 <span class="sig-prename descclassname"><span class="pre">xr_ai_tools.tool_calling.</span></span><span class="sig-name descname"><span class="pre">tool_definitions</span></span><span class="sig-paren">(</span>
@@ -496,6 +730,26 @@
 
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolCallResult" title="xr_ai_tools.tool_calling.ToolCallResult"><span class="pre">ToolCallResult</span></a></span></span><a class="headerlink" href="#xr_ai_tools.tool_calling.handle_tool_call" title="Link to this definition">#</a></dt>
 <dd><p>Invoke one model-produced call and return its tool-role message.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_tools.tool_calling.run_tool_loop">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_tools.tool_calling.</span></span><span class="sig-name descname"><span class="pre">run_tool_loop</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">messages</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../xr_ai_models/index.html#xr_ai_models.ChatMessage" title="xr_ai_models.ChatMessage"><span class="pre">xr_ai_models.ChatMessage</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">tools</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../tools/index.html#xr_ai_tools.tools.ToolSet" title="xr_ai_tools.tools.ToolSet"><span class="pre">xr_ai_tools.tools.ToolSet</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">call_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ModelCallback</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">max_iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">max_tool_calls</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">16</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_tools.tool_calling.ToolLoopResult" title="xr_ai_tools.tool_calling.ToolLoopResult"><span class="pre">ToolLoopResult</span></a></span></span><a class="headerlink" href="#xr_ai_tools.tool_calling.run_tool_loop" title="Link to this definition">#</a></dt>
+<dd><p>Run one stateless, bounded model turn over native tools.</p>
+<p>The callback owns all model parameters and retry policy. The loop only
+supplies the current immutable transcript and the current turn’s tool
+definitions. Calls in a model batch execute sequentially in emitted order.</p>
 </dd></dl>
 
 </section>
@@ -550,6 +804,8 @@
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#attributes">Attributes</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exceptions">Exceptions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#classes">Classes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#functions">Functions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#module-contents">Module Contents</a><ul class="nav section-nav flex-column">
@@ -558,8 +814,31 @@
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.ToolCallResult.return_direct"><code class="docutils literal notranslate"><span class="pre">return_direct</span></code></a></li>
 </ul>
 </li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.ToolCallRecord"><code class="docutils literal notranslate"><span class="pre">ToolCallRecord</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.ToolCallRecord.call"><code class="docutils literal notranslate"><span class="pre">call</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.ToolCallRecord.message"><code class="docutils literal notranslate"><span class="pre">message</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.ToolCallRecord.return_direct"><code class="docutils literal notranslate"><span class="pre">return_direct</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.ToolLoopResult"><code class="docutils literal notranslate"><span class="pre">ToolLoopResult</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.ToolLoopResult.content"><code class="docutils literal notranslate"><span class="pre">content</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.ToolLoopResult.messages"><code class="docutils literal notranslate"><span class="pre">messages</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.ToolLoopResult.tool_calls"><code class="docutils literal notranslate"><span class="pre">tool_calls</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.ToolLoopResult.iterations"><code class="docutils literal notranslate"><span class="pre">iterations</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.ToolLoopResult.return_direct"><code class="docutils literal notranslate"><span class="pre">return_direct</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.ToolLoopError"><code class="docutils literal notranslate"><span class="pre">ToolLoopError</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.ToolLoopIterationLimitError"><code class="docutils literal notranslate"><span class="pre">ToolLoopIterationLimitError</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.ToolLoopToolCallLimitError"><code class="docutils literal notranslate"><span class="pre">ToolLoopToolCallLimitError</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.ToolLoopTruncatedResponseError"><code class="docutils literal notranslate"><span class="pre">ToolLoopTruncatedResponseError</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.ToolLoopEmptyResponseError"><code class="docutils literal notranslate"><span class="pre">ToolLoopEmptyResponseError</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.ToolLoopDirectReturnError"><code class="docutils literal notranslate"><span class="pre">ToolLoopDirectReturnError</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.ToolLoopMalformedResponseError"><code class="docutils literal notranslate"><span class="pre">ToolLoopMalformedResponseError</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.ModelCallback"><code class="docutils literal notranslate"><span class="pre">ModelCallback</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.tool_definitions"><code class="docutils literal notranslate"><span class="pre">tool_definitions()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.handle_tool_call"><code class="docutils literal notranslate"><span class="pre">handle_tool_call()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.tool_calling.run_tool_loop"><code class="docutils literal notranslate"><span class="pre">run_tool_loop()</span></code></a></li>
 </ul>
 </li>
 </ul>

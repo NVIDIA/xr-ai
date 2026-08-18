@@ -454,10 +454,13 @@ and method-level behavior.</p>
 <h2>Ownership boundaries<a class="headerlink" href="#ownership-boundaries" title="Link to this heading">#</a></h2>
 <p>An <code class="docutils literal notranslate"><span class="pre">Agent</span></code> owns its state, resources, background tasks, lifecycle, and
 concurrency policy. It exposes ordinary <code class="docutils literal notranslate"><span class="pre">Tool</span></code> or <code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> instances for
-direct execution and model tool-call loops. <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code> owns only typed
-publication and delivery tasks; it does not own model loops, planning, memory,
-media, or agent-created work. A publication waits for its subscribers, so a
-subscriber that performs lengthy work should hand it to its own bounded queue.</p>
+direct execution and model tool-call loops. Bounded turns use <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code> and
+<code class="docutils literal notranslate"><span class="pre">run_tool_loop()</span></code>; callers retain model configuration, conversation policy,
+retries, participant context, cancellation, and task ownership. <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code>
+owns only typed publication and delivery tasks; it does not own model loops,
+planning, memory, media, or agent-created work. A publication waits for its
+subscribers, so a subscriber that performs lengthy work should hand it to its
+own bounded queue.</p>
 <p>Workers construct model clients with the factories in <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code> and depend
 on the corresponding typed service protocols. Adapter behavior, endpoint
 connectivity, deployment ownership, credentials, and model-specific wire
