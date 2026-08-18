@@ -38,7 +38,9 @@ tool catalog, and model callback for each turn. It executes model-emitted calls
 sequentially with explicit iteration and total-call limits. The caller retains
 model configuration, conversation policy, retries, participant context,
 cancellation, and task ownership. Typed failures expose the partial transcript
-and tool-call audit for application-specific recovery.
+and tool-call audit for application-specific recovery. Their `messages` remain
+safe to resume because a rejected model turn is exposed separately as
+`rejected_response` rather than appended to the transcript.
 
 ```python
 from pydantic import BaseModel

@@ -444,7 +444,9 @@ structured tool-call audit. Unknown tools and invalid Pydantic arguments are
 returned to the model for repair. Iteration exhaustion, tool-call budget
 exhaustion, empty or truncated responses, and unsafe mixed <code class="docutils literal notranslate"><span class="pre">return_direct</span></code>
 batches raise typed errors carrying the partial transcript and audit. Blank or
-duplicate tool-call IDs are rejected before executing their batch.</p>
+non-string or duplicate tool-call IDs are rejected before executing their batch.
+Error <code class="docutils literal notranslate"><span class="pre">messages</span></code> contain only a valid, resumable transcript; the rejected model
+turn remains available separately as <code class="docutils literal notranslate"><span class="pre">rejected_response</span></code> for diagnostics.</p>
 <p>The application or agent continues to own prompts, conversation history, model
 parameters, retries, participant context, cancellation, and background tasks.
 The loop never retries an executed tool. A direct-return tool must be the only
