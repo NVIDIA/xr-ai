@@ -17,7 +17,7 @@ from xr_ai_models import load_models_config, make_llm, make_stt, make_tts, make_
 from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.rag import RAGTools
 from xr_ai_tools.vision import ImageQueryTool
-from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent
+from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent, VoiceAggregationAgent
 from xr_ai_voicegate import load_voice_gate_config
 
 from .background_context import BackgroundContextAgent
@@ -180,6 +180,10 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         ),
     )
     runtime.register("guidance-voice", GuidanceVoiceAgent())
+    voice_aggregation = runtime.register(
+        "voice-aggregation",
+        VoiceAggregationAgent(llm=llm),
+    )
     runtime.register("voice", voice)
 
     logger.info("file outputs → {}", config.artifacts_dir)
@@ -200,6 +204,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                 await video_log.stop()
                 await images.stop()
                 await files.stop()
+                await voice_aggregation.stop()
     logger.info("tea-making stopped")
 
 

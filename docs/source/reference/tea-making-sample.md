@@ -51,7 +51,7 @@ accepted speech / typed query          ├─> GuidanceAgent observation loop
                                       │
                                       v
                                 typed runtime events
-                                      ├─> GuidanceVoiceAgent ─> voice
+                                      ├─> GuidanceVoiceAgent ─> voice aggregation
                                       ├─> BackgroundContextAgent
                                       ├─> FileOutputAgent ─────> JSONL
                                       └─> customer backend agent
@@ -73,6 +73,7 @@ tools directly, and each background agent owns its participant tasks.
 | `TranscriptAgent` | Opt-in transcript records and periodic summaries | Voice gating or STT transport |
 | `VideoLogAgent` | Periodic captions and material deltas | Workflow state |
 | `GuidanceVoiceAgent` | Which guidance notices are spoken | Workflow decisions |
+| `VoiceAggregationAgent` | Participant speech pacing, ordering, and coalescing | Workflow decisions |
 | `FileOutputAgent` | Participant session files and JSONL records | Agent policy |
 
 The runtime delivers events but does not absorb application state or
@@ -259,6 +260,9 @@ or voice by accident.
 `GuidanceVoiceAgent` is intentionally separate from `GuidanceAgent`. Add,
 suppress, batch, or redirect notices there. Background applications remain
 text/event producers unless a dedicated voice subscriber chooses otherwise.
+Foreground responses and guidance notices publish to `VoiceAggregationAgent`,
+which combines non-urgent output produced during an active utterance before it
+reaches `VoiceAgent`.
 
 ## Lifecycle invariants
 

@@ -15,6 +15,11 @@ participant. Background tasks can record transcripts, watch for requested visual
 changes, and write periodic video observations without replacing the active tea
 guide.
 
+Foreground replies and workflow notices publish candidate speech through
+`VoiceAggregationAgent`. It preserves one participant's active response,
+combines non-urgent updates that arrive while that response is being spoken,
+and forwards interrupting output immediately.
+
 The sample uses native `xr_ai_runtime` agents and `xr_ai_tools`; it does not use
 NAT, PydanticAI, or MCP. Nemotron-3-Nano-Omni on port 8108 supplies both language
 reasoning and visual inference. STT, embedding, and RAG remain separate typed
