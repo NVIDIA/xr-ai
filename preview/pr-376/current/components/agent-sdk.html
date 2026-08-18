@@ -528,7 +528,9 @@ hand off lengthy work to their own bounded queues and return promptly.</p>
 <p>Accepted speech and typed text are published as <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> events. Applications
 opt into typed <code class="docutils literal notranslate"><span class="pre">VoiceParticipantJoined</span></code>, <code class="docutils literal notranslate"><span class="pre">VoiceParticipantLeft</span></code>, and
 <code class="docutils literal notranslate"><span class="pre">VoiceInterrupted</span></code> lifecycle events on application-named topics; participant
-identity remains in runtime metadata. Voice consumes <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>.
+identity remains in runtime metadata. Join and leave publication stays
+non-blocking for the media pipeline while preserving order per participant.
+Voice consumes <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>.
 <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> privately owns model readiness, hub
 transport, voice gating, the media pipeline, signal handling, and cleanup.
 Pipecat and the media session remain implementation details.

@@ -503,8 +503,10 @@ preserves the input timestamp. <code class="docutils literal notranslate"><span 
 chunk for a stream that voice already closed, including when wrapped in the
 runtime publication exception group.</p>
 <p>Lifecycle publication runs on <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>-owned tasks, so participant cleanup
-cannot block the shared media processor. The agent cancels and awaits those
-tasks during shutdown.</p>
+cannot block the shared media processor. Join and leave publications are
+serialized per participant, preserving lifecycle order even when a subscriber
+is slow; different participants remain independent. The agent cancels and
+awaits those tasks during shutdown.</p>
 <p>Relay telemetry treats <code class="docutils literal notranslate"><span class="pre">voice.output</span></code> as a high-cardinality transport topic and
 does not emit runtime scopes per fragment. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> instead emits one
 <code class="docutils literal notranslate"><span class="pre">voice.response</span></code> agent scope for each finite response or completed incremental
