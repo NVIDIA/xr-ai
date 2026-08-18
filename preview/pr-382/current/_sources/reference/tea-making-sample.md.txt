@@ -54,12 +54,16 @@ accepted speech / typed query          ├─> GuidanceAgent observation loop
                                       ├─> GuidanceVoiceAgent ─> voice aggregation
                                       ├─> BackgroundContextAgent
                                       ├─> FileOutputAgent ─────> JSONL
+                                      ├─> TeaWebEventsAgent ───> live browser
                                       └─> customer backend agent
 ```
 
 `VoiceAgent` publishes participant-scoped queries, transcripts, and lifecycle
 events. The runtime fans typed events out to peer agents. Agents call peer
 tools directly, and each background agent owns its participant tasks.
+Wake-word gating is the sample default; callers can explicitly select
+always-on speech. Every spoken response is also sent to the connection client
+on `agent.response` so the client can render accessible text alongside audio.
 
 ## Agent responsibilities
 
@@ -75,6 +79,8 @@ tools directly, and each background agent owns its participant tasks.
 | `GuidanceVoiceAgent` | Which guidance notices are spoken | Workflow decisions |
 | `VoiceAggregationAgent` | Participant speech pacing, ordering, and coalescing | Workflow decisions |
 | `FileOutputAgent` | Participant session files and JSONL records | Agent policy |
+| `TeaWebEventsAgent` | Explicit compact projections for the generic live viewer | Durable storage or file polling |
+| `WebEventsAgent` | Bounded loopback HTTP presentation grouped by participant and topic | Application event selection |
 
 The runtime delivers events but does not absorb application state or
 concurrency. Moving a task to another agent also means moving its cancellation,
@@ -98,6 +104,7 @@ locks, and participant cleanup.
 | `video_log.py` | Periodic caption and delta observer | Build a visual journal |
 | `guidance_voice.py` | Guidance notice speech policy | Add another presentation channel |
 | `file_output.py` | Participant JSONL artifacts | Replace files with backend persistence |
+| `web_events.py` | Explicit typed event-to-view projections | Select or reshape live presentation topics |
 | `prompts/` | Default model instructions | Tune one agent without duplicating prompts in YAML |
 | `yaml/workflow.yaml` | Five-step procedure and evidence contract | Define a different guided task |
 | `rag-documents/` | Sample retrieval corpus | Replace with domain documents or a backend |
@@ -193,6 +200,20 @@ participant-local window and exposes `application_context__query` to the
 foreground. Thus background work can inform a later question without becoming
 conversation history or taking ownership of the response.
 
+## Live inspection and durable output
+
+The worker starts a generic event viewer at `http://127.0.0.1:8092` before it
+announces voice readiness. `TeaWebEventsAgent` explicitly subscribes to the
+foreground, guidance, background, transcript, video-log, and participant
+lifecycle topics and publishes compact `WebEvent` payloads. There is no runtime
+wildcard subscription and no file tailing.
+
+The viewer keeps only a bounded in-memory history for the current process. The
+participant JSONL files under `artifacts/` remain the durable record and include
+events that may not be selected for live presentation. The loopback listener is
+read-only but unauthenticated; use an SSH tunnel for remote development instead
+of binding it to an untrusted network.
+
 ## Connecting a backend
 
 Add a runtime subscriber for the stable domain events you need. Inject a typed
@@ -273,6 +294,8 @@ reaches `VoiceAgent`.
 - Participant join starts a fresh workflow and output session.
 - Participant leave cancels foreground, observation, and background tasks
   before image resources are released.
+- Participant leave also releases queued voice-aggregation state, so a later
+  connection reusing the participant ID cannot inherit stale speech.
 - Record-producing agents publish cleanup-complete events after cancellation;
   `FileOutputAgent` closes the session only after every producer has finished.
 - A superseding query cancels the participant's prior foreground turn.

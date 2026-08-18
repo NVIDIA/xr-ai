@@ -318,6 +318,7 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
@@ -356,6 +357,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_logging/index.html">xr_ai_logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
 </ul>
 </details></li>
 </ul>
@@ -464,12 +466,16 @@ accepted speech / typed query          ├─&gt; GuidanceAgent observation loop
                                       ├─&gt; GuidanceVoiceAgent ─&gt; voice aggregation
                                       ├─&gt; BackgroundContextAgent
                                       ├─&gt; FileOutputAgent ─────&gt; JSONL
+                                      ├─&gt; TeaWebEventsAgent ───&gt; live browser
                                       └─&gt; customer backend agent
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes participant-scoped queries, transcripts, and lifecycle
 events. The runtime fans typed events out to peer agents. Agents call peer
-tools directly, and each background agent owns its participant tasks.</p>
+tools directly, and each background agent owns its participant tasks.
+Wake-word gating is the sample default; callers can explicitly select
+always-on speech. Every spoken response is also sent to the connection client
+on <code class="docutils literal notranslate"><span class="pre">agent.response</span></code> so the client can render accessible text alongside audio.</p>
 </section>
 <section id="agent-responsibilities">
 <h2>Agent responsibilities<a class="headerlink" href="#agent-responsibilities" title="Link to this heading">#</a></h2>
@@ -520,6 +526,14 @@ tools directly, and each background agent owns its participant tasks.</p>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">FileOutputAgent</span></code></p></td>
 <td><p>Participant session files and JSONL records</p></td>
 <td><p>Agent policy</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">TeaWebEventsAgent</span></code></p></td>
+<td><p>Explicit compact projections for the generic live viewer</p></td>
+<td><p>Durable storage or file polling</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code></p></td>
+<td><p>Bounded loopback HTTP presentation grouped by participant and topic</p></td>
+<td><p>Application event selection</p></td>
 </tr>
 </tbody>
 </table>
@@ -594,15 +608,19 @@ locks, and participant cleanup.</p>
 <td><p>Participant JSONL artifacts</p></td>
 <td><p>Replace files with backend persistence</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">prompts/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">web_events.py</span></code></p></td>
+<td><p>Explicit typed event-to-view projections</p></td>
+<td><p>Select or reshape live presentation topics</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">prompts/</span></code></p></td>
 <td><p>Default model instructions</p></td>
 <td><p>Tune one agent without duplicating prompts in YAML</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/workflow.yaml</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/workflow.yaml</span></code></p></td>
 <td><p>Five-step procedure and evidence contract</p></td>
 <td><p>Define a different guided task</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rag-documents/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rag-documents/</span></code></p></td>
 <td><p>Sample retrieval corpus</p></td>
 <td><p>Replace with domain documents or a backend</p></td>
 </tr>
@@ -696,6 +714,19 @@ participant-local window and exposes <code class="docutils literal notranslate">
 foreground. Thus background work can inform a later question without becoming
 conversation history or taking ownership of the response.</p>
 </section>
+<section id="live-inspection-and-durable-output">
+<h2>Live inspection and durable output<a class="headerlink" href="#live-inspection-and-durable-output" title="Link to this heading">#</a></h2>
+<p>The worker starts a generic event viewer at <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code> before it
+announces voice readiness. <code class="docutils literal notranslate"><span class="pre">TeaWebEventsAgent</span></code> explicitly subscribes to the
+foreground, guidance, background, transcript, video-log, and participant
+lifecycle topics and publishes compact <code class="docutils literal notranslate"><span class="pre">WebEvent</span></code> payloads. There is no runtime
+wildcard subscription and no file tailing.</p>
+<p>The viewer keeps only a bounded in-memory history for the current process. The
+participant JSONL files under <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code> remain the durable record and include
+events that may not be selected for live presentation. The loopback listener is
+read-only but unauthenticated; use an SSH tunnel for remote development instead
+of binding it to an untrusted network.</p>
+</section>
 <section id="connecting-a-backend">
 <h2>Connecting a backend<a class="headerlink" href="#connecting-a-backend" title="Link to this heading">#</a></h2>
 <p>Add a runtime subscriber for the stable domain events you need. Inject a typed
@@ -777,6 +808,8 @@ reaches <code class="docutils literal notranslate"><span class="pre">VoiceAgent<
 <li><p>Participant join starts a fresh workflow and output session.</p></li>
 <li><p>Participant leave cancels foreground, observation, and background tasks
 before image resources are released.</p></li>
+<li><p>Participant leave also releases queued voice-aggregation state, so a later
+connection reusing the participant ID cannot inherit stale speech.</p></li>
 <li><p>Record-producing agents publish cleanup-complete events after cancellation;
 <code class="docutils literal notranslate"><span class="pre">FileOutputAgent</span></code> closes the session only after every producer has finished.</p></li>
 <li><p>A superseding query cancels the participant’s prior foreground turn.</p></li>
@@ -872,6 +905,7 @@ until another concrete application requires the same contract.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#workflow-contract">Workflow contract</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#visual-observation-loop">Visual observation loop</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#independent-background-agents">Independent background agents</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#live-inspection-and-durable-output">Live inspection and durable output</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#connecting-a-backend">Connecting a backend</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adapting-the-sample">Adapting the sample</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#replace-tea-making-with-another-procedure">Replace tea making with another procedure</a></li>

@@ -60,7 +60,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Sample configuration reference" href="configuration.html" />
-    <link rel="prev" title="xr-ai-voice" href="agent-sdk-voice.html" />
+    <link rel="prev" title="xr-ai-web-events" href="agent-sdk-web-events.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -314,6 +314,7 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
@@ -352,6 +353,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_logging/index.html">xr_ai_logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
 </ul>
 </details></li>
 </ul>
@@ -444,12 +446,12 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 <section id="tea-making-sample">
 <h2>tea_making_sample<a class="headerlink" href="#tea-making-sample" title="Link to this heading">#</a></h2>
 <p>Launch native tea guidance with explicit voice and speech modes.</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample<span class="w"> </span>tea_making_sample<span class="w"> </span>--voice-mode<span class="w"> </span><span class="o">{</span>wake-word,always-on<span class="o">}</span><span class="w"> </span>--tts-mode<span class="w"> </span><span class="o">{</span>piper,magpie<span class="o">}</span>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample<span class="w"> </span>tea_making_sample<span class="w"> </span><span class="o">[</span>--voice-mode<span class="w"> </span><span class="o">{</span>wake-word,always-on<span class="o">}]</span><span class="w"> </span>--tts-mode<span class="w"> </span><span class="o">{</span>piper,magpie<span class="o">}</span>
 </pre></div>
 </div>
 <p class="rubric">Options</p>
 <dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">--voice-mode</span> <span class="pre">{wake-word,always-on}</span></code></dt><dd><p>wake-word: require Agent/Hey Agent; always-on: accept every utterance</p>
+<dt><code class="docutils literal notranslate"><span class="pre">--voice-mode</span> <span class="pre">{wake-word,always-on}</span></code></dt><dd><p>wake-word (default): require Agent/Hey Agent; always-on: accept every utterance</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">--tts-mode</span> <span class="pre">{piper,magpie}</span></code></dt><dd><p>piper: lightweight CPU speech; magpie: neural speech on CUDA when available</p>
 </dd>
@@ -477,12 +479,12 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="agent-sdk-voice.html"
+       href="agent-sdk-web-events.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">xr-ai-voice</p>
+        <p class="prev-next-title">xr-ai-web-events</p>
       </div>
     </a>
     <a class="right-next"

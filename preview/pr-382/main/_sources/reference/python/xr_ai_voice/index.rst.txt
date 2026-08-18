@@ -87,6 +87,14 @@ Package Contents
 
 
 
+   .. py:method:: release(participant_id: str) -> None
+      :async:
+
+
+      Cancel and release one departed participant's aggregation state.
+
+
+
 .. py:class:: VadConfig
 
    Tuning knobs for the Silero-VAD utterance detector.

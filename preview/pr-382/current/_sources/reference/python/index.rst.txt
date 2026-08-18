@@ -16,5 +16,6 @@ This page contains auto-generated API reference documentation [#f1]_.
    /reference/python/xr_ai_logging/index
    /reference/python/xr_ai_launcher/index
    /reference/python/xr_ai_voicegate/index
+   /reference/python/xr_ai_web_events/index
 
 .. [#f1] Created with `sphinx-autoapi <https://github.com/readthedocs/sphinx-autoapi>`_

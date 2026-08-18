@@ -318,6 +318,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-runtime.html">xr-ai-runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-web-events.html">xr-ai-web-events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../migrations.html">Release migration</a></li>
@@ -356,6 +357,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_logging/index.html">xr_ai_logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_web_events/index.html">xr_ai_web_events</a></li>
 </ul>
 </details></li>
 </ul>
@@ -536,6 +538,12 @@ after its final chunk. An urgent contribution interrupts the active output.</p>
 <dt class="sig sig-object py" id="xr_ai_voice.VoiceAggregationAgent.stop">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">stop</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_voice.VoiceAggregationAgent.stop" title="Link to this definition">#</a></dt>
 <dd><p>Cancel and await all participant aggregation tasks.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_voice.VoiceAggregationAgent.release">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">release</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_voice.VoiceAggregationAgent.release" title="Link to this definition">#</a></dt>
+<dd><p>Cancel and release one departed participant’s aggregation state.</p>
 </dd></dl>
 
 </dd></dl>
@@ -854,6 +862,7 @@ ends. Set to <code class="docutils literal notranslate"><span class="pre">0</spa
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceAggregationAgent"><code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceAggregationAgent.contribute"><code class="docutils literal notranslate"><span class="pre">contribute()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceAggregationAgent.stop"><code class="docutils literal notranslate"><span class="pre">stop()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceAggregationAgent.release"><code class="docutils literal notranslate"><span class="pre">release()</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VadConfig"><code class="docutils literal notranslate"><span class="pre">VadConfig</span></code></a><ul class="nav section-nav flex-column">
