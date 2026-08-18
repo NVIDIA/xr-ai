@@ -31,8 +31,13 @@ class ToolCallRecord:
     """One model-requested call and the model-visible result it produced."""
 
     call: ToolCall
+    """Model-emitted tool call that was executed."""
+
     message: ChatMessage
+    """Tool-role message produced for the model transcript."""
+
     return_direct: bool
+    """Whether this call ended the loop without another model turn."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,10 +45,19 @@ class ToolLoopResult:
     """A completed turn with its full transcript and tool-call audit."""
 
     content: str
+    """Final answer or direct-return tool content."""
+
     messages: tuple[ChatMessage, ...]
+    """Complete resumable transcript for the turn."""
+
     tool_calls: tuple[ToolCallRecord, ...]
+    """Executed tool calls in model-emitted order."""
+
     iterations: int
+    """Number of model iterations consumed by the turn."""
+
     return_direct: bool
+    """Whether the result came directly from a tool."""
 
 
 class ToolLoopError(RuntimeError):
@@ -93,6 +107,7 @@ ModelCallback = Callable[
     [tuple[ChatMessage, ...], tuple[ToolDef, ...]],
     Awaitable[ChatResponse],
 ]
+"""Async model invocation supplied with the transcript and tool definitions."""
 
 
 def tool_definitions(
