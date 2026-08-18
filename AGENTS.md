@@ -98,6 +98,9 @@ See [Adding a sample](docs/source/guides/adding-a-sample.md) and the
   also require a migration entry.
 - Top-level sample commands and options live in their `[project.scripts]` and
   `argparse` declarations; Sphinx generates the user-facing CLI reference.
+- Sample configuration values and field guidance live in checked-in YAML/JSON
+  and adjacent YAML comments. Files under a top-level sample's `yaml/` tree or
+  beside a direct capability subproject are generated into the config reference.
 - Any `pyproject.toml` change must update `DEPENDENCIES.md`; regenerate the
   affected project's gitignored `uv.lock` locally to verify resolution.
 - Never put API keys or tokens in source files. Use environment variables or

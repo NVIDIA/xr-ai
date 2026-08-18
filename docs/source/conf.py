@@ -106,6 +106,7 @@ author = "NVIDIA"
 # -- General configuration ---------------------------------------------------
 extensions = [
     "_cli_reference",
+    "_config_reference",
     "autoapi.extension",
     "myst_parser",
     "sphinx_copybutton",
