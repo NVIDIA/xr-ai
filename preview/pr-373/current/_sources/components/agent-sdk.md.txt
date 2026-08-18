@@ -15,7 +15,7 @@ installation.
 | `xr-ai-models` | `xr_ai_models` | Typed model protocols, profiles, and OpenAI-compatible clients |
 | `xr-ai-runtime` | `xr_ai_runtime` | Agent registration and typed participant-scoped fan-out |
 | `xr-ai-tools` | `xr_ai_tools` | Relay-managed tools and model tool-call helpers |
-| `xr-ai-voice` | `xr_ai_voice` | Voice agent, session, transport, and pipeline |
+| `xr-ai-voice` | `xr_ai_voice` | Voice agent, transport, and private media pipeline |
 
 The complete package references are versioned with this site:
 {doc}`/reference/agent-sdk-hub`, {doc}`/reference/agent-sdk-models`,
@@ -107,24 +107,38 @@ and deployment configuration.
 
 ## Voice
 
-`VoiceAgent` publishes accepted speech and typed text as `UserQuery` events,
-publishes participant and interruption lifecycle events, and consumes
-`voice.output`. `VoiceSession` owns model readiness, hub transport, voice
-gating, the media pipeline, signal handling, and cleanup. Pipecat remains an
-implementation detail for current samples.
+Every non-empty final STT result is published before wake-phrase filtering
+on `VOICE_TRANSCRIPT_TOPIC` as `VoiceTranscript`. This includes speech that the
+gate rejects because it contains no wake phrase. Early wake/STOP probes remain
+private and are not published as final transcripts. Accepted speech is
+published separately as `UserQuery` after the gate removes the wake phrase and
+any preceding background speech.
+
+`VoiceAgent` publishes transcripts through a private bounded FIFO so slow
+runtime subscribers cannot delay STT, voice gating, or accepted queries. The
+queue preserves order, drops the oldest pending transcript when full, and is
+cancelled with pending entries discarded during shutdown. Subscribers should
+hand off lengthy work to their own bounded queues and return promptly.
+
+Accepted speech and typed text are published as `UserQuery` events, participant
+and interruption lifecycle events use application-named topics, and voice
+consumes `voice.output`. `VoiceAgent` privately owns model readiness, hub
+transport, voice gating, the media pipeline, signal handling, and cleanup.
+Pipecat and the media session remain implementation details.
+Voice consumes only untopiced client data when `text_input=True`; named
+application and control messages are not user queries. The hub preserves the
+original data-channel topic for all processors.
 
 ```python
 voice = VoiceAgent(
-    VoiceSession(
-        stt=stt,
-        tts=tts,
-        vad=VadConfig(),
-        voice_gate=voice_gate_config,
-        probes={"vlm": vlm.health},
-        ready_file=ready_file,
-        closeables=(vlm,),
-    ),
     query_topic=queries,
+    stt=stt,
+    tts=tts,
+    vad=VadConfig(),
+    voice_gate=voice_gate_config,
+    probes={"vlm": vlm.health},
+    ready_file=ready_file,
+    closeables=(vlm,),
     participant_left_topic=participant_left,
 )
 runtime.register("voice", voice)
@@ -133,8 +147,11 @@ async with runtime:
     await voice.run(runtime)
 ```
 
-The session opens hub transport only after readiness probes succeed and touches
-the ready file after its receive loop starts. It preserves participant routing,
+The private session opens its hub transport only after readiness probes succeed
+and touches the ready file after its receive loop starts. Applications that
+already need the public `HubVoiceTransport` for frames or status publication
+construct it explicitly and pass it to `VoiceAgent`; the agent does not expose
+its private session or transport. The agent preserves participant routing,
 cancels superseded or interrupted output, and closes transports and model
 clients. Application agents subscribe to lifecycle events and clean up their
 own participant state.

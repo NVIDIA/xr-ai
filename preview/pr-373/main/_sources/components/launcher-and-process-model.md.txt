@@ -54,8 +54,8 @@ def run() -> None:
   before workers and application processes after the services they call).
 - **Every process accepts `--ready-file <path>`** and must `Path(path).touch()`
   when it is fully initialized and ready to serve requests.
-- **Native voice workers** pass the ready file to the `VoiceSession` owned by
-  `VoiceAgent`; the session touches it only after the input transport's hub IPC
+- **Native voice workers** pass the ready file to `VoiceAgent`; its private
+  media session touches it only after the input transport's hub IPC
   receive loop has started.
 - `xr_media_hub` always runs as its own process — never embedded in-process.
 - The worker never imports anything from `xr_media_hub` or `xr_ai_launcher`.
