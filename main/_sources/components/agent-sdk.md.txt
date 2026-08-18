@@ -26,10 +26,21 @@ The complete package references are versioned with this site:
 
 An `Agent` owns state and exposes ordinary `Tool` or `AsyncTool` instances.
 Direct callers use `execute()` or `stream()`; model loops expose the same
-tools through `ToolSet` and `handle_tool_call()`. `AgentRuntime` registers
-agents and publishes typed messages to participant-scoped subscribers. It does
-not own model loops, planning, memory, raw media, agent resources, or
-agent-created background tasks.
+tools through `ToolSet`. Ordinary bounded turns use `run_tool_loop()`; custom
+loops can compose the lower-level `tool_definitions()` and
+`handle_tool_call()` helpers. `AgentRuntime` registers agents and publishes
+typed messages to participant-scoped subscribers. It does not own model loops,
+planning, memory, raw media, agent resources, or agent-created background
+tasks.
+
+`run_tool_loop()` is stateless: callers provide the initial messages, current
+tool catalog, and model callback for each turn. It executes model-emitted calls
+sequentially with explicit iteration and total-call limits. The caller retains
+model configuration, conversation policy, retries, participant context,
+cancellation, and task ownership. Typed failures expose the partial transcript
+and tool-call audit for application-specific recovery. Their `messages` remain
+safe to resume because a rejected model turn is exposed separately as
+`rejected_response` rather than appended to the transcript.
 
 ```python
 from pydantic import BaseModel
