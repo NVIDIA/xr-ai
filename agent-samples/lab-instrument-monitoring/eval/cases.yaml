@@ -9,6 +9,10 @@
   query: Is the doorway ahead of me open?
   expected_tool: current_view
 
+- name: current-visual-field
+  query: What are you looking at?
+  expected_tool: current_view
+
 - name: recent-change
   query: What changed around me during the last few minutes?
   expected_tool: recent_visual_history

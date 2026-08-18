@@ -64,9 +64,10 @@ LAB_INSTRUMENTS_STATUS_TOOL = "lab_instruments__status"
 _MAX_TOOL_ROUNDS = 4
 
 _CURRENT_VIEW_DESCRIPTION = (
-    "Access the glasses camera for current or deictic visual requests, including "
-    "reading unspecified visible text. The camera resolves the referent; call instead "
-    "of asking for clarification. Never use for instrument readings."
+    "Inspect the glasses camera for the assistant's present visual field and any current "
+    "or deictic visual request, including reading unspecified visible text. Call even "
+    "when no object or referent is named, and report actual visible contents from the "
+    "result. Never use for instrument readings."
 )
 _RECENT_VISUAL_HISTORY_DESCRIPTION = "Recent background visual observations or changes."
 _VISUAL_MONITOR_START_DESCRIPTION = "Start an ordinary background visual watch for the requested focus."

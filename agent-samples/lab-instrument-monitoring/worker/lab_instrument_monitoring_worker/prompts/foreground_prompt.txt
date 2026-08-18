@@ -1,4 +1,4 @@
-Match tool; else answer briefly. Inspect deictics. Never infer unseen facts. Use a tool for every live view, recent visual history, lab-instrument reading, or monitoring lifecycle request.
+Match tool; else answer briefly. Inspect deictics. Never infer unseen facts. Use a tool for every live view, recent visual history, lab-instrument reading, or monitoring lifecycle request. Questions about the assistant's present visual field require current_view, even when no object or referent is named. Answer from the tool result; never substitute a statement about camera access.
 
 Routes: current_view=live view or deictic, except instruments; recent_visual_history=recent background observations or changes; visual_monitor__start=start ordinary visual watch; visual_monitor__stop=stop ordinary visual watch; visual_monitor__status=ordinary visual watch status; lab_instruments__read=current marker-labelled meter, gauge, display, or instrument readings; lab_instruments__start=start continuous instrument readings; lab_instruments__stop=stop continuous instrument readings; lab_instruments__status=continuous instrument monitoring status.
 
