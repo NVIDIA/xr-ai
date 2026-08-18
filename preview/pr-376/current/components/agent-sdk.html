@@ -33,6 +33,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
@@ -321,6 +322,11 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+</ul>
+</details></li>
 </ul>
 </div>
 </nav></div>
@@ -423,10 +429,20 @@ installation.</p>
 <h2>Runtime and tools<a class="headerlink" href="#runtime-and-tools" title="Link to this heading">#</a></h2>
 <p>An <code class="docutils literal notranslate"><span class="pre">Agent</span></code> owns state and exposes ordinary <code class="docutils literal notranslate"><span class="pre">Tool</span></code> or <code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> instances.
 Direct callers use <code class="docutils literal notranslate"><span class="pre">execute()</span></code> or <code class="docutils literal notranslate"><span class="pre">stream()</span></code>; model loops expose the same
-tools through <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code> and <code class="docutils literal notranslate"><span class="pre">handle_tool_call()</span></code>. <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code> registers
-agents and publishes typed messages to participant-scoped subscribers. It does
-not own model loops, planning, memory, raw media, agent resources, or
-agent-created background tasks.</p>
+tools through <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code>. Ordinary bounded turns use <code class="docutils literal notranslate"><span class="pre">run_tool_loop()</span></code>; custom
+loops can compose the lower-level <code class="docutils literal notranslate"><span class="pre">tool_definitions()</span></code> and
+<code class="docutils literal notranslate"><span class="pre">handle_tool_call()</span></code> helpers. <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code> registers agents and publishes
+typed messages to participant-scoped subscribers. It does not own model loops,
+planning, memory, raw media, agent resources, or agent-created background
+tasks.</p>
+<p><code class="docutils literal notranslate"><span class="pre">run_tool_loop()</span></code> is stateless: callers provide the initial messages, current
+tool catalog, and model callback for each turn. It executes model-emitted calls
+sequentially with explicit iteration and total-call limits. The caller retains
+model configuration, conversation policy, retries, participant context,
+cancellation, and task ownership. Typed failures expose the partial transcript
+and tool-call audit for application-specific recovery. Their <code class="docutils literal notranslate"><span class="pre">messages</span></code> remain
+safe to resume because a rejected model turn is exposed separately as
+<code class="docutils literal notranslate"><span class="pre">rejected_response</span></code> rather than appended to the transcript.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">Agent</span><span class="p">,</span> <span class="n">AgentRuntime</span><span class="p">,</span> <span class="n">Topic</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tool</span>
@@ -579,7 +595,10 @@ QR and ArUco detection. It acquires a participant’s current frame, runs enable
 detectors off the event loop, and returns every marker through one
 <code class="docutils literal notranslate"><span class="pre">marker_type</span></code>, <code class="docutils literal notranslate"><span class="pre">value</span></code>, and four-corner contract. QR values are ZXing-C++
 decoded text; ArUco values are decimal IDs detected with a configured OpenCV
-predefined dictionary. Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[marker-tracking]</span></code> to use it.</p>
+predefined dictionary. Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[marker-tracking]</span></code> to use it.
+Both detectors scan the complete frame at native resolution and once at a
+bounded enlarged resolution. Duplicate detections are removed, and all returned
+corners remain in source-frame coordinates.</p>
 <p>QR and ArUco are enabled by default. Initialization may select either family
 and choose the ArUco dictionary without changing the model-visible
 <code class="docutils literal notranslate"><span class="pre">track_markers</span></code> request or result schema.</p>

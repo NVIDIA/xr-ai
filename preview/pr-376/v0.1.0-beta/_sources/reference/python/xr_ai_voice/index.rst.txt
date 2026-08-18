@@ -1,0 +1,313 @@
+xr_ai_voice
+===========
+
+.. py:module:: xr_ai_voice
+
+.. autoapi-nested-parse::
+
+   Public voice runtime for XR agents.
+
+   Applications configure and register :class:`VoiceAgent`; media sessions,
+   audio framing, and pipeline processors are implementation details.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   xr_ai_voice.VOICE_OUTPUT_TOPIC
+   xr_ai_voice.VOICE_TRANSCRIPT_TOPIC
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   xr_ai_voice.VoiceStreamClosedError
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_voice.VadConfig
+   xr_ai_voice.UserQuery
+   xr_ai_voice.VoiceAgent
+   xr_ai_voice.VoiceInterrupted
+   xr_ai_voice.VoiceOutput
+   xr_ai_voice.VoiceParticipantJoined
+   xr_ai_voice.VoiceParticipantLeft
+   xr_ai_voice.VoiceTranscript
+   xr_ai_voice.HubVoiceTransport
+
+
+Package Contents
+----------------
+
+.. py:class:: VadConfig
+
+   Tuning knobs for the Silero-VAD utterance detector.
+
+   Mirrors the constructor of :class:`xr_ai_vad.VadDetector`. Default
+   values match the in-tree samples' current behavior.
+
+   ``stop_probe_after_s`` — cadence in seconds for up to three STT probes of
+   the partial audio buffer. This gives STOP commands a fast interrupt path
+   and lets a configured wake phrase be acknowledged before the utterance
+   ends. Set to ``0`` or negative to disable probes.
+
+
+   .. py:attribute:: silence_duration
+      :type:  float
+      :value: 0.8
+
+
+      Seconds of silence that finalize an utterance.
+
+
+
+   .. py:attribute:: min_speech
+      :type:  float
+      :value: 0.15
+
+
+      Minimum speech duration accepted as an utterance.
+
+
+
+   .. py:attribute:: silero_threshold
+      :type:  float
+      :value: 0.5
+
+
+      Silero VAD speech-probability threshold.
+
+
+
+   .. py:attribute:: stop_probe_after_s
+      :type:  float
+      :value: 0.25
+
+
+      Cadence for bounded early wake and STOP transcription probes.
+
+
+
+.. py:data:: VOICE_OUTPUT_TOPIC
+
+   Finite or incremental responses consumed by :class:`VoiceAgent`.
+
+
+.. py:data:: VOICE_TRANSCRIPT_TOPIC
+
+   All final STT results, published before voice-gate filtering.
+
+
+.. py:class:: UserQuery
+
+
+
+   One accepted user query emitted by the voice input boundary.
+
+
+   .. py:attribute:: text
+      :type:  str
+
+      Gate-accepted speech or direct typed text.
+
+
+
+   .. py:attribute:: timestamp_us
+      :type:  int
+
+      Input presentation time as Unix microseconds.
+
+
+
+.. py:class:: VoiceAgent(*, query_topic: xr_ai_runtime.Topic[UserQuery], stt: xr_ai_models.STTService, tts: xr_ai_models.TTSService, vad: xr_ai_voice._processors.VadConfig, voice_gate: xr_ai_voicegate.VoiceGateConfig, probes: collections.abc.Mapping[str, xr_ai_voice._readiness.ProbeFn] | None = None, ready_file: pathlib.Path | None = None, closeables: collections.abc.Iterable[Any] = (), text_topic: str = 'agent.response', idle_timeout_secs: float | None = None, transport: xr_ai_voice._transport.HubVoiceTransport | None = None, response_capacity: int = 32, text_input: bool = True, participant_joined_topic: xr_ai_runtime.Topic[VoiceParticipantJoined] | None = None, participant_left_topic: xr_ai_runtime.Topic[VoiceParticipantLeft] | None = None, interrupted_topic: xr_ai_runtime.Topic[VoiceInterrupted] | None = None, interrupt_on_supersede: bool = False)
+
+
+
+   Own voice media lifecycle and bridge runtime input and output topics.
+
+
+   .. py:method:: run(runtime: xr_ai_runtime.AgentRuntime, *, source: str = 'voice') -> None
+      :async:
+
+
+      Run the owned voice session and bridge it to a running runtime.
+
+
+
+   .. py:method:: output(output: VoiceOutput, ctx: xr_ai_runtime.RuntimeContext) -> None
+      :async:
+
+
+      Send one voice message using participant and producer metadata.
+
+
+
+.. py:class:: VoiceInterrupted
+
+
+
+   Notification that participant-scoped or global voice work was interrupted.
+
+
+.. py:class:: VoiceOutput
+
+
+
+   One complete response or one chunk of an incremental voice response.
+
+
+   .. py:attribute:: text
+      :type:  str
+      :value: ''
+
+
+      Complete response text or one incremental fragment.
+
+
+
+   .. py:attribute:: response_id
+      :type:  str | None
+
+      Stable identifier shared by chunks of an incremental response.
+
+
+
+   .. py:attribute:: final
+      :type:  bool
+      :value: True
+
+
+      Whether this message completes the response.
+
+
+
+   .. py:attribute:: interrupt
+      :type:  bool
+      :value: False
+
+
+      Whether the first response message supersedes active voice output.
+
+
+
+   .. py:attribute:: timestamp_us
+      :type:  int | None
+
+      Optional originating input timestamp propagated to TTS.
+
+
+
+   .. py:method:: validate_boundary() -> VoiceOutput
+
+      Require identity for incremental output and text for finite output.
+
+
+
+.. py:class:: VoiceParticipantJoined
+
+
+
+   Notification that one participant joined the voice transport.
+
+
+.. py:class:: VoiceParticipantLeft
+
+
+
+   Notification that one participant left the voice transport.
+
+
+.. py:exception:: VoiceStreamClosedError
+
+
+
+   Raised when output targets a voice stream the consumer already closed.
+
+
+.. py:class:: VoiceTranscript
+
+
+
+   One final STT result emitted before voice-gate filtering.
+
+
+   .. py:attribute:: text
+      :type:  str
+
+      Final text returned by STT before voice-gate filtering.
+
+
+
+   .. py:attribute:: timestamp_us
+      :type:  int
+
+      Speech presentation time as Unix microseconds.
+
+
+
+.. py:class:: HubVoiceTransport(input_name: str | None = None, output_name: str | None = None)
+
+
+
+   Own the hub endpoint and bidirectional voice media transport.
+
+
+   .. py:property:: endpoint
+      :type: xr_ai_hub.ProcessorEndpoint
+
+
+      Return the owned hub processor endpoint.
+
+
+
+   .. py:method:: wait_until_started() -> None
+      :async:
+
+
+      Wait until the input transport has started its hub IPC receiver.
+
+
+
+   .. py:method:: send_return_data(msg: xr_ai_hub.DataMessage) -> None
+      :async:
+
+
+      Send participant-routed data through the hub.
+
+
+
+   .. py:property:: target_participant
+      :type: str
+
+
+      Return the participant currently selected for output.
+
+
+
+   .. py:method:: set_target_participant(pid: str) -> None
+
+      Select the participant that receives subsequent output.
+
+
+
+   .. py:method:: cleanup_participant(pid: str) -> None
+
+      Clear output routing when the selected participant leaves.
+
+
+
+   .. py:method:: shutdown() -> None
+
+      Stop and close the owned hub endpoint.
+
+
+
