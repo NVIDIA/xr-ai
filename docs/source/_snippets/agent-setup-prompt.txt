@@ -1,0 +1,5 @@
+Set up xr-ai for me: ask me whether to build against the latest release or
+main, then fetch skills/getting-started/SKILL.md at that ref from
+https://raw.githubusercontent.com/NVIDIA/xr-ai/ (fall back to the main copy
+if the ref predates it), install it as a skill (or just follow it), and walk
+me through the rest of the setup.

@@ -18,9 +18,11 @@ repo root, so clone before following them.
 Ask the user, then tailor the pointers below to the answers.
 
 1. **Stable or latest?** Build against the latest release tag (default) or
-   `main`. The answer selects both the git ref to check out and the version of
-   the docs site to read: <https://nvidia.github.io/xr-ai/> serves the released
-   version once one is published, with `main` and per-tag versions available.
+   `main`. This should match the ref this skill was fetched from; re-fetch the
+   skill from the chosen ref if it does not. The answer selects both the git
+   ref to check out and the version of the docs site to read:
+   <https://nvidia.github.io/xr-ai/> serves the released version once one is
+   published, with `main` and per-tag versions available.
 2. **Local or remote GPU?** Models on the local GPU, or a hosted/remote
    endpoint?
    - **Local:** the Requirements section of the root `README.md` applies,
@@ -33,8 +35,9 @@ Ask the user, then tailor the pointers below to the answers.
 ## Where everything is
 
 - **Repo:** `git clone https://github.com/NVIDIA/xr-ai.git`, then check out
-  the ref chosen above (latest release tag:
-  `git tag -l 'v*' --sort=-v:refname | head -1`).
+  the ref chosen above (latest release tag: `make -s -C docs latest-release`,
+  run in the clone; it prefers stable releases over prereleases, matching what
+  the docs site serves).
 - **Working contract:** read `AGENTS.md` first. Every change must satisfy it,
   and its canonical-references table routes deeper topics.
 - **Docs:** `docs/source/`; published versioned site at

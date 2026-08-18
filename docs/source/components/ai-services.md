@@ -348,6 +348,11 @@ In pip mode, vLLM is spawned with `start_new_session=True` so the launcher's
 container while the foreground `docker run` client uses its own session.
 Either way vLLM keeps running after the orchestrator exits.
 
+The STT server follows the same pattern without Docker: `stt_server` spawns
+its persistent process with `start_new_session=True`, reuses a healthy server
+that survived a previous stack run, and is stopped by the same
+`model_servers --stop` cleanup.
+
 Docker containers carry a fingerprint of their image, GPU assignment, model
 cache, environment, bootstrap packages, complete vLLM command, and a versioned
 launcher-controlled Docker contract. This prevents a failed container created

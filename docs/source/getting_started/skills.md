@@ -10,10 +10,8 @@ Skills are how a coding agent sets itself up to work with xr-ai: small
 that the agent installs and follows. This is the primary way to get started.
 Paste this to your agent:
 
-```text
-Set up xr-ai for me: fetch
-https://raw.githubusercontent.com/NVIDIA/xr-ai/main/skills/getting-started/SKILL.md,
-install it as a skill (or just follow it), and walk me through the setup.
+```{literalinclude} /_snippets/agent-setup-prompt.txt
+:language: text
 ```
 
 The skill has the agent ask two setup questions (latest release or `main`;

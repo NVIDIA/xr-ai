@@ -13,9 +13,11 @@ conversational AI within the CloudXR ecosystem.
 **Using a coding agent?** Paste this to it:
 
 ```text
-Set up xr-ai for me: fetch
-https://raw.githubusercontent.com/NVIDIA/xr-ai/main/skills/getting-started/SKILL.md,
-install it as a skill (or just follow it), and walk me through the setup.
+Set up xr-ai for me: ask me whether to build against the latest release or
+main, then fetch skills/getting-started/SKILL.md at that ref from
+https://raw.githubusercontent.com/NVIDIA/xr-ai/ (fall back to the main copy
+if the ref predates it), install it as a skill (or just follow it), and walk
+me through the rest of the setup.
 ```
 
 ## Public Beta Notice
@@ -252,7 +254,7 @@ several minutes).  `HF_TOKEN` is required by default; pass
 
 In both modes the VLM and STT keep running after you exit so the next run
 skips the model reload (see
-[vLLM model persistence](docs/source/components/ai-services.md#vllm-model-persistence)); free
+[model-server persistence](docs/source/components/ai-services.md#model-server-persistence)); free
 the VRAM with `cd agent-samples/model-servers && uv run model_servers --stop`.
 
 #### Step 1 — Start the server
@@ -272,9 +274,9 @@ The hub prints:
 ```
 
 This banner appears as soon as the hub itself is ready, while the model
-services and worker are still starting.  The stack accepts clients once the
-launcher prints its `All processes ready` banner; a client connected before
-that gets a session with no agent responding.
+services and worker are still starting.  Clients can connect as soon as it
+appears, but the agent answers queries only after the launcher prints its
+`All processes ready` banner.
 
 #### Step 2 — Connect a client
 

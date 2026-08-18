@@ -21,8 +21,9 @@ Download the skill into your agent's skills directory:
 
 ```bash
 : "${SKILLS_DIR:?Set SKILLS_DIR to your agent's skills directory}"
+REF=main  # or the release tag you will build against, e.g. v0.3.0
 curl -fsSL --create-dirs -o "$SKILLS_DIR/getting-started/SKILL.md" \
-  https://raw.githubusercontent.com/NVIDIA/xr-ai/main/skills/getting-started/SKILL.md
+  "https://raw.githubusercontent.com/NVIDIA/xr-ai/$REF/skills/getting-started/SKILL.md"
 ```
 
 No skills mechanism? Read
