@@ -33,6 +33,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
@@ -339,6 +340,11 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+</ul>
+</details></li>
 </ul>
 </div>
 </nav></div>
@@ -502,7 +508,7 @@ started.</p>
 <p><strong>Hosted NVIDIA NIM</strong> — run the VLM on hosted NIM
 (<a class="reference external" href="https://build.nvidia.com">build.nvidia.com</a>) instead of locally (STT/TTS stay
 local) by setting <strong>one key</strong> in <code class="docutils literal notranslate"><span class="pre">simple_vlm_example_worker.yaml</span></code>:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">model_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nim</span><span class="w">     </span><span class="c1"># default is &quot;local&quot;</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">model_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nim</span><span class="w">     </span><span class="c1"># default is "local"</span>
 </pre></div>
 </div>
 <p>The worker then loads the ready-made <code class="docutils literal notranslate"><span class="pre">yaml/models.nim.yaml</span></code> overlay and the
@@ -582,7 +588,7 @@ uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w
 <p><strong>Hosted NVIDIA NIM</strong> — run the LLMs and VLM on hosted NIM
 (<a class="reference external" href="https://build.nvidia.com">build.nvidia.com</a>) instead of local vLLM (STT/TTS
 stay local) by setting <strong>one key</strong> in <code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.yaml</span></code>:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">model_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nim</span><span class="w">     </span><span class="c1"># default is &quot;local&quot;</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">model_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nim</span><span class="w">     </span><span class="c1"># default is "local"</span>
 </pre></div>
 </div>
 <p>The worker loads <code class="docutils literal notranslate"><span class="pre">yaml/models.nim.yaml</span></code> and the orchestrator points <code class="docutils literal notranslate"><span class="pre">vlm-mcp</span></code> at

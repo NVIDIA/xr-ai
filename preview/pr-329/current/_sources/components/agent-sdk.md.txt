@@ -15,7 +15,7 @@ installation.
 | `xr-ai-models` | `xr_ai_models` | Typed model protocols, profiles, and OpenAI-compatible clients |
 | `xr-ai-runtime` | `xr_ai_runtime` | Agent registration and typed participant-scoped fan-out |
 | `xr-ai-tools` | `xr_ai_tools` | Relay-managed tools and model tool-call helpers |
-| `xr-ai-voice` | `xr_ai_voice` | Voice agent, session, transport, and pipeline |
+| `xr-ai-voice` | `xr_ai_voice` | Voice agent, transport, and private media pipeline |
 
 The complete package references are versioned with this site:
 {doc}`/reference/agent-sdk-hub`, {doc}`/reference/agent-sdk-models`,
@@ -70,6 +70,15 @@ Agents protect shared mutable state with their own lock or queue. They also
 create, cancel, and await their own tasks. `publish()` waits for all deliveries
 and then propagates subscriber failures.
 
+Image tools share bounded `ImageRegistry` references so model-visible results
+do not contain raw pixels. Install `xr-ai-tools[image-editing]` to use
+`ImagePolygonFillTool`, which copies an image, fills the area enclosed by at
+least three ordered pixel coordinates with magenta, and returns a new lossless
+PNG reference. The source reference remains unchanged, and the edited reference
+inherits its owner so lifecycle cleanup releases both images. It can be passed
+directly to the single-image or multi-image VLM query tools. Invalid polygons
+and unavailable source references return recoverable unavailable results.
+
 Relay records publications, subscriber callbacks, tool calls, and model calls
 as nested scopes. `Topic.telemetry` controls event volume without changing
 delivery: use `"full"` for semantic events and `"none"` for high-volume
@@ -98,11 +107,27 @@ and deployment configuration.
 
 ## Voice
 
-`VoiceAgent` publishes accepted speech and typed text as `UserQuery` events,
-publishes participant and interruption lifecycle events, and consumes
-`voice.output`. `VoiceSession` owns model readiness, hub transport, voice
-gating, the media pipeline, signal handling, and cleanup. Pipecat remains an
-implementation detail for current samples.
+Every non-empty final STT result is published before wake-phrase filtering
+on `VOICE_TRANSCRIPT_TOPIC` as `VoiceTranscript`. This includes speech that the
+gate rejects because it contains no wake phrase. Early wake/STOP probes remain
+private and are not published as final transcripts. Accepted speech is
+published separately as `UserQuery` after the gate removes the wake phrase and
+any preceding background speech.
+
+`VoiceAgent` publishes transcripts through a private bounded FIFO so slow
+runtime subscribers cannot delay STT, voice gating, or accepted queries. The
+queue preserves order, drops the oldest pending transcript when full, and is
+cancelled with pending entries discarded during shutdown. Subscribers should
+hand off lengthy work to their own bounded queues and return promptly.
+
+Accepted speech and typed text are published as `UserQuery` events, participant
+and interruption lifecycle events use application-named topics, and voice
+consumes `voice.output`. `VoiceAgent` privately owns model readiness, hub
+transport, voice gating, the media pipeline, signal handling, and cleanup.
+Pipecat and the media session remain implementation details.
+Voice consumes only untopiced client data when `text_input=True`; named
+application and control messages are not user queries. The hub preserves the
+original data-channel topic for all processors.
 
 ```python
 class LLMService(Protocol):
@@ -239,16 +264,14 @@ session = VoiceSession(
 queries = Topic("my-sample.user-query", UserQuery)
 participant_left = Topic("my-sample.participant-left", VoiceParticipantLeft)
 voice = VoiceAgent(
-    VoiceSession(
-        stt=stt,
-        tts=tts,
-        vad=VadConfig(),
-        voice_gate=voice_gate_config,
-        probes={"vlm": vlm.health},
-        ready_file=ready_file,
-        closeables=(vlm,),
-    ),
     query_topic=queries,
+    stt=stt,
+    tts=tts,
+    vad=VadConfig(),
+    voice_gate=voice_gate_config,
+    probes={"vlm": vlm.health},
+    ready_file=ready_file,
+    closeables=(vlm,),
     participant_left_topic=participant_left,
 )
 runtime.register("voice", voice)
@@ -257,8 +280,11 @@ async with runtime:
     await voice.run(runtime)
 ```
 
-The session opens hub transport only after readiness probes succeed and touches
-the ready file after its receive loop starts. It preserves participant routing,
+The private session opens its hub transport only after readiness probes succeed
+and touches the ready file after its receive loop starts. Applications that
+already need the public `HubVoiceTransport` for frames or status publication
+construct it explicitly and pass it to `VoiceAgent`; the agent does not expose
+its private session or transport. The agent preserves participant routing,
 cancels superseded or interrupted output, and closes transports and model
 clients. Application agents subscribe to lifecycle events and clean up their
 own participant state.
@@ -290,3 +316,25 @@ Video pixels are pulled on demand with `request_frame()` or
 `LiveFrameSource`; frame signals do not copy pixels. Readiness participation
 is opt-in and scoped to subscribed participants. The hub aggregates each
 responsible agent's status and gates readiness on confirmed subscriptions.
+
+## Marker tracking
+
+`xr_ai_tools.marker_tracking.MarkerTrackingTool` is an optional finite tool for
+QR and ArUco detection. It acquires a participant's current frame, runs enabled
+detectors off the event loop, and returns every marker through one
+`marker_type`, `value`, and four-corner contract. QR values are ZXing-C++
+decoded text; ArUco values are decimal IDs detected with a configured OpenCV
+predefined dictionary. Install `xr-ai-tools[marker-tracking]` to use it.
+Both detectors scan the complete frame at native resolution and once at a
+bounded enlarged resolution. Duplicate detections are removed, and all returned
+corners remain in source-frame coordinates.
+
+QR and ArUco are enabled by default. Initialization may select either family
+and choose the ArUco dictionary without changing the model-visible
+`track_markers` request or result schema.
+
+The `xr-ai-tools` package also includes
+`xr_ai_tools/utilities/generate_marker.py`, a standalone `uv run` utility for
+generating QR and ArUco PNGs for testing. The script declares its own inline
+dependencies, supports OpenCV predefined ArUco dictionaries, and does not add
+an agent-facing API.

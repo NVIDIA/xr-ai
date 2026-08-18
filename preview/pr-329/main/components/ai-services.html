@@ -33,6 +33,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
@@ -344,6 +345,11 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+</ul>
+</details></li>
 </ul>
 </div>
 </nav></div>
@@ -428,7 +434,7 @@ trade-offs documented below.</p>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/vlm-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">vlm_server</span></code></p></td>
 <td><p>8100</p></td>
-<td><p>Cosmos-Reason1-7B</p></td>
+<td><p>Cosmos3 Nano Reasoner</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/stt-server/</span></code></p></td>
@@ -522,7 +528,7 @@ Both the model-servers profiles and the standalone service YAMLs resolve it to
 match the consumer:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># vLLM-served model, launched via a model-servers profile</span>
 <span class="c1"># (model_cache resolves to models/ at the repository root):</span>
-<span class="nv">HF_HOME</span><span class="o">=</span>models<span class="w"> </span>hf<span class="w"> </span>download<span class="w"> </span>nvidia/Cosmos-Reason1-7B
+<span class="nv">HF_HOME</span><span class="o">=</span>models<span class="w"> </span>hf<span class="w"> </span>download<span class="w"> </span>nvidia/Cosmos3-Nano
 
 <span class="c1"># NeMo STT server launched from its standalone YAML:</span>
 <span class="nv">HF_HOME</span><span class="o">=</span>models/huggingface<span class="w"> </span>hf<span class="w"> </span>download<span class="w"> </span>nvidia/parakeet-tdt-0.6b-v3
@@ -555,22 +561,22 @@ start successfully without network access. Recreate project environments with
 <h2>Adding a server to a sample<a class="headerlink" href="#adding-a-server-to-a-sample" title="Link to this heading">#</a></h2>
 <p><strong>1 — Add the process to the orchestrator:</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;hub&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/xr-media-hub&quot;</span><span class="p">,</span>                    <span class="s2">&quot;xr_media_hub&quot;</span><span class="p">),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;vlm&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/vlm-server&quot;</span><span class="p">,</span>               <span class="s2">&quot;vlm_server&quot;</span><span class="p">),</span>   <span class="c1"># ← add as needed</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/xr-media-hub"</span><span class="p">,</span>                    <span class="s2">"xr_media_hub"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"vlm"</span><span class="p">,</span>    <span class="s2">"../../services/vlm-server"</span><span class="p">,</span>               <span class="s2">"vlm_server"</span><span class="p">),</span>   <span class="c1"># ← add as needed</span>
     <span class="c1"># Pick ONE LLM backend per sample — they bind different default ports</span>
     <span class="c1"># (8106 / 8107) so running more than one at once is allowed but</span>
     <span class="c1"># usually unnecessary.</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;llm&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/llama-nemotron-llm&quot;</span><span class="p">,</span>       <span class="s2">&quot;llama_nemotron_llm_server&quot;</span><span class="p">),</span>
-    <span class="c1"># Process(&quot;llm&quot;,  &quot;../../services/nemotron3-nano-llm&quot;,       &quot;nemotron3_nano_llm_server&quot;),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;stt&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/stt-server&quot;</span><span class="p">,</span>               <span class="s2">&quot;stt_server&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"llm"</span><span class="p">,</span>    <span class="s2">"../../services/llama-nemotron-llm"</span><span class="p">,</span>       <span class="s2">"llama_nemotron_llm_server"</span><span class="p">),</span>
+    <span class="c1"># Process("llm",  "../../services/nemotron3-nano-llm",       "nemotron3_nano_llm_server"),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"stt"</span><span class="p">,</span>    <span class="s2">"../../services/stt-server"</span><span class="p">,</span>               <span class="s2">"stt_server"</span><span class="p">),</span>
     <span class="c1"># Add these together when the application uses native document retrieval.</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;embedding&quot;</span><span class="p">,</span> <span class="s2">&quot;../../services/embedding-server&quot;</span><span class="p">,</span>      <span class="s2">&quot;embedding_server&quot;</span><span class="p">),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;rag&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/rag-service&quot;</span><span class="p">,</span>               <span class="s2">&quot;rag_service&quot;</span><span class="p">,</span>
-            <span class="n">config</span><span class="o">=</span><span class="s2">&quot;yaml/rag_service.yaml&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"embedding"</span><span class="p">,</span> <span class="s2">"../../services/embedding-server"</span><span class="p">,</span>      <span class="s2">"embedding_server"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"rag"</span><span class="p">,</span>    <span class="s2">"../../services/rag-service"</span><span class="p">,</span>               <span class="s2">"rag_service"</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/rag_service.yaml"</span><span class="p">),</span>
     <span class="c1"># Pick one TTS server</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;tts&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/piper-tts&quot;</span><span class="p">,</span>                 <span class="s2">&quot;piper_tts_server&quot;</span><span class="p">),</span>
-    <span class="c1"># Process(&quot;tts&quot;,  &quot;../../services/magpie-tts&quot;,                &quot;magpie_tts_server&quot;),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;worker&quot;</span><span class="p">,</span> <span class="s2">&quot;worker&quot;</span><span class="p">,</span>                                   <span class="s2">&quot;my_agent_worker&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span>    <span class="s2">"../../services/piper-tts"</span><span class="p">,</span>                 <span class="s2">"piper_tts_server"</span><span class="p">),</span>
+    <span class="c1"># Process("tts",  "../../services/magpie-tts",                "magpie_tts_server"),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span>                                   <span class="s2">"my_agent_worker"</span><span class="p">),</span>
 <span class="p">]</span>
 </pre></div>
 </div>
@@ -615,10 +621,10 @@ aliasing, <code class="docutils literal notranslate"><span class="pre">chat_temp
 never branch on backend.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_models_config</span><span class="p">,</span> <span class="n">make_llm</span><span class="p">,</span> <span class="n">ChatMessage</span>
 
-<span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">&quot;yaml/models.local.json&quot;</span><span class="p">)</span>
-<span class="k">async</span> <span class="k">with</span> <span class="n">make_llm</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">&quot;agent_llm&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">llm</span><span class="p">:</span>
+<span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">"yaml/models.local.json"</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">with</span> <span class="n">make_llm</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">"agent_llm"</span><span class="p">)</span> <span class="k">as</span> <span class="n">llm</span><span class="p">:</span>
     <span class="n">resp</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span>
-        <span class="p">[</span><span class="n">ChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">&quot;hello&quot;</span><span class="p">)],</span>
+        <span class="p">[</span><span class="n">ChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">"user"</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">"hello"</span><span class="p">)],</span>
         <span class="n">max_tokens</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span>
         <span class="n">enable_thinking</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span>
@@ -628,12 +634,12 @@ never branch on backend.</p>
 <p>A model profile separates adapter behavior, endpoint connectivity, and
 deployment ownership:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;models&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;agent_llm&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;category&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;llm&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;adapter&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;preset&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nemotron3_nano&quot;</span><span class="p">},</span>
-<span class="w">      </span><span class="nt">&quot;endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;base_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8107&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;readiness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;health&quot;</span><span class="p">},</span>
-<span class="w">      </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;ownership&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;reused&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;service&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;agent-llm&quot;</span><span class="p">}</span>
+<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"agent_llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8108"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"omni"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
@@ -655,20 +661,20 @@ stay local: hosted NIM speech (Riva) is not OpenAI <code class="docutils literal
 <p>A hosted entry uses an environment-variable reference for its credential,
 disables endpoint health probing, and declares external ownership:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;models&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;vlm&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;category&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;vlm&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;adapter&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openai_compat&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;model_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nvidia/cosmos-reason1-7b&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;capabilities&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;vision&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;streaming&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">}</span>
+<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvidia/cosmos3-nano-reasoner"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"vision"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"streaming"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">}</span>
 <span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">&quot;endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;base_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://integrate.api.nvidia.com&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;api_key_env&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;NGC_API_KEY&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;readiness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;none&quot;</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://integrate.api.nvidia.com"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"none"</span>
 <span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;ownership&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;external&quot;</span><span class="p">}</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"external"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
@@ -690,8 +696,17 @@ YAML. This wrapped JSON profile is consumed by both the worker and orchestrator,
 so the local VLM process is omitted and <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is requested
 automatically. Select <code class="docutils literal notranslate"><span class="pre">models.local.json</span></code> to switch back.</p>
 <p><code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code> retains its <code class="docutils literal notranslate"><span class="pre">model_backend:</span> <span class="pre">nim</span></code> selector and
-<code class="docutils literal notranslate"><span class="pre">models.nim.yaml</span></code> overlay. Run it without the local <code class="docutils literal notranslate"><span class="pre">agent-llm</span></code> / <code class="docutils literal notranslate"><span class="pre">vlm</span></code>
-model-servers and provide <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">models.nim.yaml</span></code> overlay. Provide <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> and do not run
+<code class="docutils literal notranslate"><span class="pre">model_servers</span></code>, whose single topology starts both local <code class="docutils literal notranslate"><span class="pre">omni</span></code> and <code class="docutils literal notranslate"><span class="pre">vlm</span></code>.
+Instead, start only the local STT service from the repository root, setting
+<code class="docutils literal notranslate"><span class="pre">GPU_PROFILE</span></code> to <code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, or <code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">GPU_PROFILE</span><span class="o">=</span>dual_48G_ada
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/stt-server<span class="w"> </span>stt_server<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--config<span class="w"> </span><span class="s2">"agent-samples/model-servers/yaml/</span><span class="si">${</span><span class="nv">GPU_PROFILE</span><span class="si">}</span><span class="s2">/stt_server.yaml"</span>
+</pre></div>
+</div>
+<p>Then start <code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code> in another terminal. Its orchestrator reuses STT,
+routes LLM and VLM requests to hosted NIM, and starts local TTS itself.</p>
 <p><strong>Self-hosted NIM containers</strong> work the same way: point <code class="docutils literal notranslate"><span class="pre">base_url</span></code> at the
 container (e.g. <code class="docutils literal notranslate"><span class="pre">http://localhost:8000</span></code>), set <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">health</span></code>, and choose
 <code class="docutils literal notranslate"><span class="pre">managed</span></code> or <code class="docutils literal notranslate"><span class="pre">reused</span></code> ownership if the launcher owns that service. Legacy flat
@@ -705,15 +720,30 @@ exposes <code class="docutils literal notranslate"><span class="pre">/v1/health<
 <strong>survive stack restarts by design</strong>. Each persistent wrapper script checks its
 health endpoint before spawning vLLM:</p>
 <ul class="simple">
-<li><p><strong>Already running</strong> → touch the ready file immediately, then idle. Stack is
-ready in seconds; no model reload.</p></li>
-<li><p><strong>Not running</strong> → spawn vLLM normally, wait for <code class="docutils literal notranslate"><span class="pre">/health</span></code>, touch ready file.</p></li>
+<li><p><strong>Already running with a matching launch fingerprint</strong> → touch the ready
+file immediately, then idle. Stack is ready in seconds; no model reload.</p></li>
+<li><p><strong>Matching container still starting</strong> → attach to its lifecycle and keep
+waiting for <code class="docutils literal notranslate"><span class="pre">/health</span></code> instead of issuing a conflicting second <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span></code>.</p></li>
+<li><p><strong>Already running with changed or legacy configuration</strong> → stop, remove, and
+recreate the repository-owned container from the current YAML.</p></li>
+<li><p><strong>Healthy endpoint without the expected running container</strong> → fail without
+stopping the unowned listener.</p></li>
+<li><p><strong>Stopped Docker container with matching launch fingerprint</strong> → restart it,
+wait for <code class="docutils literal notranslate"><span class="pre">/health</span></code>, then touch the ready file.</p></li>
+<li><p><strong>Stopped Docker container with changed or legacy configuration</strong> → remove
+and recreate it from the current YAML before waiting for <code class="docutils literal notranslate"><span class="pre">/health</span></code>.</p></li>
+<li><p><strong>Not running</strong> → spawn vLLM normally, wait for <code class="docutils literal notranslate"><span class="pre">/health</span></code>, then touch the
+ready file.</p></li>
 </ul>
 <p>In pip mode, vLLM is spawned with <code class="docutils literal notranslate"><span class="pre">start_new_session=True</span></code> so the launcher’s
-<code class="docutils literal notranslate"><span class="pre">killpg()</span></code> does not reach it on shutdown. In docker mode, the container is
-launched detached (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span> <span class="pre">-d</span> <span class="pre">--name</span> <span class="pre">xr-ai-vllm-&lt;service&gt;</span></code>) so it
-similarly outlives the wrapper. Either way the wrapper exits cleanly and
-vLLM keeps running.</p>
+<code class="docutils literal notranslate"><span class="pre">killpg()</span></code> does not reach it on shutdown. In docker mode, Docker owns the
+container while the foreground <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span></code> client uses its own session.
+Either way vLLM keeps running after the orchestrator exits.</p>
+<p>Docker containers carry a fingerprint of their image, GPU assignment, model
+cache, environment, bootstrap packages, complete vLLM command, and a versioned
+launcher-controlled Docker contract. This prevents a failed container created
+by one sample profile—or by older launcher behavior—from being restarted later
+with stale memory limits, entrypoint, setup commands, or model arguments.</p>
 <p><strong>Stopping the persisted servers</strong> — run from the sample directory:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo<span class="w"> </span>--stop
 </pre></div>
@@ -755,12 +785,15 @@ sending a signal; absent servers are silently skipped.</p>
 </div>
 <p>Both modes honor identical configuration keys — same model, same port, same vLLM
 flags. The dispatcher lives in <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-vllm/</span></code>. Switching is one YAML edit:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.04-py3</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># vlm-server (Cosmos3)</span>
+<span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
+<span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.07-py3</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">vllm_image:</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.04-py3</span></code>; override to pin
-another tag, an internal mirror, or a custom build.</p>
+<p><code class="docutils literal notranslate"><span class="pre">vllm_image:</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.07-py3</span></code> for vlm-server,
+whose Cosmos3 support requires vLLM 0.23 or newer. The other wrappers retain
+their <code class="docutils literal notranslate"><span class="pre">26.04-py3</span></code> default. Override either to pin another tag, an internal
+mirror, or a custom build.</p>
 <section id="docker-mode-prerequisites">
 <h3>docker mode — prerequisites<a class="headerlink" href="#docker-mode-prerequisites" title="Link to this heading">#</a></h3>
 <ul>
@@ -772,7 +805,7 @@ must succeed without <code class="docutils literal notranslate"><span class="pre
 <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">login</span> <span class="pre">nvcr.io</span></code> if <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is in the environment (loaded by
 <code class="docutils literal notranslate"><span class="pre">load_credentials()</span></code> from <code class="docutils literal notranslate"><span class="pre">~/.config/xr-ai/credentials.json</span></code> per
 <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>). Otherwise, log in manually once:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>login<span class="w"> </span>nvcr.io<span class="w"> </span>-u<span class="w"> </span><span class="s1">&#39;$oauthtoken&#39;</span><span class="w"> </span>-p<span class="w"> </span><span class="nv">$NGC_API_KEY</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>login<span class="w"> </span>nvcr.io<span class="w"> </span>-u<span class="w"> </span><span class="s1">'$oauthtoken'</span><span class="w"> </span>-p<span class="w"> </span><span class="nv">$NGC_API_KEY</span>
 </pre></div>
 </div>
 </li>
@@ -816,10 +849,18 @@ cleanup.</p>
 <section id="per-server-notes">
 <h2>Per-server notes<a class="headerlink" href="#per-server-notes" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><strong>vlm-server</strong> is a thin launcher around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for Cosmos-Reason1-7B
-(or any Qwen2.5-VL-compatible VLM). vLLM handles weight loading, image
-decoding, and the OpenAI-compatible HTTP API. Hosting backend is selectable
-per YAML — refer to <em>Choosing the vLLM runtime</em> above.</p></li>
+<li><p><strong>vlm-server</strong> defaults to the Cosmos3 Nano Reasoner. Hugging Face publishes
+Reasoner and Generator weights in the unified <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos3-Nano</span></code>
+checkpoint. The required <code class="docutils literal notranslate"><span class="pre">Cosmos3ForConditionalGeneration</span></code> architecture
+override selects vLLM’s native Reasoner loader: despite its generic class
+name, it maps only the understanding tower and vision encoder and drops the
+Generator weights. The Generator requires vLLM’s separate <code class="docutils literal notranslate"><span class="pre">--omni</span></code> path,
+which xr-ai intentionally does not enable. The checkpoint’s official chat
+template emits the assistant answer directly and has no <code class="docutils literal notranslate"><span class="pre">enable_thinking</span></code>
+branch or <code class="docutils literal notranslate"><span class="pre">&lt;think&gt;</span></code> delimiters, so the client preset needs no reasoning-field
+mapping. Cosmos-Reason1 remains available by pairing
+<code class="docutils literal notranslate"><span class="pre">model:</span> <span class="pre">nvidia/Cosmos-Reason1-7B</span></code> with the <code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code> client preset. Hosting
+backend is selectable per YAML — refer to <em>Choosing the vLLM runtime</em> above.</p></li>
 <li><p><strong>llama-nemotron-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">Llama-3.1-Nemotron-Nano-8B-v1</span></code>. vLLM handles native Llama-3.1 tool calling
 via the <code class="docutils literal notranslate"><span class="pre">llama3_json</span></code> parser — <code class="docutils literal notranslate"><span class="pre">tools=[...]</span></code> in the request is rendered via
@@ -857,7 +898,15 @@ All inference runs in a thread pool so the asyncio loop is never blocked.</p></l
 <li><p><strong>video-memory-service</strong> owns recorded chunk queries, NVDEC, and PNG output
 behind typed msgpack/ZMQ on port 8310. Set <code class="docutils literal notranslate"><span class="pre">recordings_dir</span></code> in its YAML to
 enable recorded-video operations; the path must match the hub’s
-<code class="docutils literal notranslate"><span class="pre">video_recording.out_dir</span></code>. Current frames stay with the caller’s hub client.</p></li>
+<code class="docutils literal notranslate"><span class="pre">video_recording.out_dir</span></code>. Latest video and sampling windows end at the
+newest recorded timestamp and require only a duration. Historical frame,
+video, and sampling requests share an absolute <code class="docutils literal notranslate"><span class="pre">start_us</span></code>; video windows add
+a duration. Sampling also accepts a hard total frame budget, decodes each
+selected chunk once, skips unavailable or corrupt chunks when other frames
+remain, and can bound exported PNG dimensions. The sampled timestamps are
+estimates interpolated from chunk metadata. The selection budget may be up
+to 256, but the shipped Cosmos VLM accepts no more than four selected images
+per inference request. Current frames stay with the caller’s hub client.</p></li>
 <li><p>Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).</p></li>
 <li><p><strong>Sample YAMLs</strong> for each service ship in their own service directory.
 Copy them to your sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory and set <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> to

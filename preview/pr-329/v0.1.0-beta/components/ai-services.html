@@ -33,6 +33,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
@@ -339,6 +340,11 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+</ul>
+</details></li>
 </ul>
 </div>
 </nav></div>
@@ -489,18 +495,18 @@ YAML file.</p>
 <h2>Adding a server to a sample<a class="headerlink" href="#adding-a-server-to-a-sample" title="Link to this heading">#</a></h2>
 <p><strong>1 — Add the process to the orchestrator:</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;hub&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../server-runtime&quot;</span><span class="p">,</span>                     <span class="s2">&quot;xr_media_hub&quot;</span><span class="p">),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;vlm&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../ai-services/vlm-server&quot;</span><span class="p">,</span>             <span class="s2">&quot;vlm_server&quot;</span><span class="p">),</span>   <span class="c1"># ← add as needed</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../server-runtime"</span><span class="p">,</span>                     <span class="s2">"xr_media_hub"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"vlm"</span><span class="p">,</span>    <span class="s2">"../../ai-services/vlm-server"</span><span class="p">,</span>             <span class="s2">"vlm_server"</span><span class="p">),</span>   <span class="c1"># ← add as needed</span>
     <span class="c1"># Pick ONE LLM backend per sample — they bind different default ports</span>
     <span class="c1"># (8106 / 8107) so running more than one at once is allowed but</span>
     <span class="c1"># usually unnecessary.</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;llm&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../ai-services/llm/llama_nemotron&quot;</span><span class="p">,</span>     <span class="s2">&quot;llama_nemotron_llm_server&quot;</span><span class="p">),</span>
-    <span class="c1"># Process(&quot;llm&quot;,  &quot;../../ai-services/llm/nemotron3_nano&quot;,     &quot;nemotron3_nano_llm_server&quot;),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;stt&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../ai-services/stt-server&quot;</span><span class="p">,</span>             <span class="s2">&quot;stt_server&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"llm"</span><span class="p">,</span>    <span class="s2">"../../ai-services/llm/llama_nemotron"</span><span class="p">,</span>     <span class="s2">"llama_nemotron_llm_server"</span><span class="p">),</span>
+    <span class="c1"># Process("llm",  "../../ai-services/llm/nemotron3_nano",     "nemotron3_nano_llm_server"),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"stt"</span><span class="p">,</span>    <span class="s2">"../../ai-services/stt-server"</span><span class="p">,</span>             <span class="s2">"stt_server"</span><span class="p">),</span>
     <span class="c1"># Pick one TTS server</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;tts&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../ai-services/tts/piper&quot;</span><span class="p">,</span>    <span class="s2">&quot;piper_tts_server&quot;</span><span class="p">),</span>
-    <span class="c1"># Process(&quot;tts&quot;,    &quot;../../ai-services/tts/magpie&quot;,             &quot;magpie_tts_server&quot;),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;worker&quot;</span><span class="p">,</span> <span class="s2">&quot;worker&quot;</span><span class="p">,</span>                                   <span class="s2">&quot;my_agent_worker&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span>    <span class="s2">"../../ai-services/tts/piper"</span><span class="p">,</span>    <span class="s2">"piper_tts_server"</span><span class="p">),</span>
+    <span class="c1"># Process("tts",    "../../ai-services/tts/magpie",             "magpie_tts_server"),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span>                                   <span class="s2">"my_agent_worker"</span><span class="p">),</span>
 <span class="p">]</span>
 </pre></div>
 </div>
@@ -538,10 +544,10 @@ aliasing, <code class="docutils literal notranslate"><span class="pre">chat_temp
 never branch on backend.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_models_config</span><span class="p">,</span> <span class="n">make_llm</span><span class="p">,</span> <span class="n">ChatMessage</span>
 
-<span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">&quot;yaml/models.yaml&quot;</span><span class="p">)</span>
-<span class="k">async</span> <span class="k">with</span> <span class="n">make_llm</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">&quot;agent_llm&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">llm</span><span class="p">:</span>
+<span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">"yaml/models.yaml"</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">with</span> <span class="n">make_llm</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">"agent_llm"</span><span class="p">)</span> <span class="k">as</span> <span class="n">llm</span><span class="p">:</span>
     <span class="n">resp</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span>
-        <span class="p">[</span><span class="n">ChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">&quot;hello&quot;</span><span class="p">)],</span>
+        <span class="p">[</span><span class="n">ChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">"user"</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">"hello"</span><span class="p">)],</span>
         <span class="n">max_tokens</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span>
         <span class="n">enable_thinking</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span>
@@ -689,7 +695,7 @@ must succeed without <code class="docutils literal notranslate"><span class="pre
 <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">login</span> <span class="pre">nvcr.io</span></code> if <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is in the environment (loaded by
 <code class="docutils literal notranslate"><span class="pre">load_credentials()</span></code> from <code class="docutils literal notranslate"><span class="pre">~/.config/xr-ai/credentials.json</span></code> per
 <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/docs/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/credentials.md</span></code></a>). Otherwise, log in manually once:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>login<span class="w"> </span>nvcr.io<span class="w"> </span>-u<span class="w"> </span><span class="s1">&#39;$oauthtoken&#39;</span><span class="w"> </span>-p<span class="w"> </span><span class="nv">$NGC_API_KEY</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>login<span class="w"> </span>nvcr.io<span class="w"> </span>-u<span class="w"> </span><span class="s1">'$oauthtoken'</span><span class="w"> </span>-p<span class="w"> </span><span class="nv">$NGC_API_KEY</span>
 </pre></div>
 </div>
 </li>

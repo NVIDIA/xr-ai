@@ -33,6 +33,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
@@ -58,6 +59,7 @@
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="API Reference" href="python/index.html" />
     <link rel="prev" title="Release migration" href="migrations.html" />
 
 
@@ -320,6 +322,11 @@
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+</ul>
+</details></li>
 </ul>
 </div>
 </nav></div>
@@ -418,15 +425,15 @@ exit terminates the whole stack.</p>
 <td><p><code class="docutils literal notranslate"><span class="pre">piper_tts_server</span></code></p></td>
 <td><p>8105</p></td>
 </tr>
-<tr class="row-even"><td><p>vlm</p></td>
+<tr class="row-even"><td><p>omni</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron-omni-llm/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code></p></td>
+<td><p>8108 (LLM)</p></td>
+</tr>
+<tr class="row-odd"><td><p>vlm</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">services/vlm-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">vlm_server</span></code></p></td>
-<td><p>8100</p></td>
-</tr>
-<tr class="row-odd"><td><p>agent-llm</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code></p></td>
-<td><p>8107</p></td>
+<td><p>8100 (Cosmos VLM)</p></td>
 </tr>
 <tr class="row-even"><td><p>video-memory</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
@@ -511,21 +518,18 @@ runs where without touching the worker code.</p></li>
 </section>
 <section id="the-llm-server">
 <h2>The LLM server<a class="headerlink" href="#the-llm-server" title="Link to this heading">#</a></h2>
-<section id="nvidia-nemotron-3-nano-30b-a3b-nvfp4-port-8107">
-<h3>NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 — port 8107<a class="headerlink" href="#nvidia-nemotron-3-nano-30b-a3b-nvfp4-port-8107" title="Link to this heading">#</a></h3>
+<section id="nemotron-3-nano-omni-30b-a3b-reasoning-port-8108">
+<h3>Nemotron-3-Nano-Omni-30B-A3B-Reasoning — port 8108<a class="headerlink" href="#nemotron-3-nano-omni-30b-a3b-reasoning-port-8108" title="Link to this heading">#</a></h3>
 <p>A vLLM <code class="docutils literal notranslate"><span class="pre">execvp</span></code> shim — a small Python wrapper that reads YAML configuration,
 sets <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> and token environment variables, then <code class="docutils literal notranslate"><span class="pre">os.execvp</span></code>s into <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code>. The
 Python process is replaced by vLLM; vLLM owns the HTTP API, weight loading,
 and tool calling from that point on.</p>
-<p><code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> with <code class="docutils literal notranslate"><span class="pre">--tool-call-parser</span> <span class="pre">qwen3_coder</span></code> and
-<code class="docutils literal notranslate"><span class="pre">--reasoning-parser</span> <span class="pre">nano_v3</span></code> (plugin auto-fetched from the model card into
-<code class="docutils literal notranslate"><span class="pre">model_cache</span></code>). <code class="docutils literal notranslate"><span class="pre">enforce_eager</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">true</span></code> — CUDA graph capture +
-FlashInfer FP4 MoE autotune silently takes 3–8 minutes on cold start without
-it. Requires a Blackwell GPU (B200, RTX PRO 6000, or Jetson Thor) for native
-FP4; swap to the BF16 variant for Hopper or Ampere.</p>
-<p>One server backs both logical models in <code class="docutils literal notranslate"><span class="pre">yaml/models.yaml</span></code>: <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> runs
-the multi-step tool-calling loop, and <code class="docutils literal notranslate"><span class="pre">llm</span></code> serves two cheap, latency-sensitive
-calls (thinking stays off):</p>
+<p><code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> uses <code class="docutils literal notranslate"><span class="pre">--tool-call-parser</span> <span class="pre">qwen3_coder</span></code> and
+<code class="docutils literal notranslate"><span class="pre">--reasoning-parser</span> <span class="pre">nemotron_v3</span></code>. The launcher selects NVFP4 on Blackwell and
+FP8 on Ada, Hopper, or Ampere, with BF16 available as an explicit fallback.</p>
+<p>One server backs both LLM roles in <code class="docutils literal notranslate"><span class="pre">yaml/models.yaml</span></code>: <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> runs the
+multi-step tool-calling loop and <code class="docutils literal notranslate"><span class="pre">llm</span></code> serves two cheap, latency-sensitive
+calls. Thinking stays off unless a call explicitly enables it.</p>
 <ul class="simple">
 <li><p><strong>Quick-ack</strong> — awaited before the agentic loop starts, the moment an
 utterance lands. Returns <code class="docutils literal notranslate"><span class="pre">{&quot;ack&quot;:</span> <span class="pre">&quot;On</span> <span class="pre">it!&quot;,</span> <span class="pre">&quot;think&quot;:</span> <span class="pre">false}</span></code> — a 3–6 word
@@ -543,35 +547,39 @@ to avoid stacking up in the TTS queue behind the real response.</p></li>
 </ul>
 </section>
 </section>
-<section id="vlm-cosmos-reason1-7b">
-<h2>VLM — Cosmos-Reason1-7B<a class="headerlink" href="#vlm-cosmos-reason1-7b" title="Link to this heading">#</a></h2>
-<p>Port 8100 (<code class="docutils literal notranslate"><span class="pre">vlm-server</span></code>).</p>
-<p>Loaded in-process by <code class="docutils literal notranslate"><span class="pre">vlm-server</span></code> via HuggingFace transformers
-(Qwen2.5-VL architecture). <code class="docutils literal notranslate"><span class="pre">&lt;think&gt;…&lt;/think&gt;</span></code> blocks are stripped before
-returning. Native vision tools read recorded images or acquire a current
-participant frame, encode it as an image URL, and invoke the shared
-<code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> VLM service.</p>
-<p>There is a deliberate startup ordering constraint: <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> readiness
+<section id="vlm-cosmos3-nano-reasoner">
+<h2>VLM — Cosmos3 Nano Reasoner<a class="headerlink" href="#vlm-cosmos3-nano-reasoner" title="Link to this heading">#</a></h2>
+<p>Port 8100 (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>).</p>
+<p>The render agent first selects a current or recorded frame and passes its
+<code class="docutils literal notranslate"><span class="pre">ImageReference</span></code> to <code class="docutils literal notranslate"><span class="pre">query_image</span></code>. Its native capability set also
+includes <code class="docutils literal notranslate"><span class="pre">query_images</span></code> for ordered collections and <code class="docutils literal notranslate"><span class="pre">query_video</span></code> for
+timestamped frame sequences; all use the same <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> multi-image VLM
+path. These raw
+selectors and query tools are internal composition primitives; the reasoning
+model sees only participant-safe perception facades. Recorded selection is
+grouped into latest tools, whose windows end at the newest recording, and
+historical tools, whose frame or video window begins at one absolute <code class="docutils literal notranslate"><span class="pre">start_us</span></code>.
+Recorded-frame timestamps are estimates interpolated from chunk metadata.</p>
+<p>There is a deliberate startup ordering constraint: <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> readiness
 blocks on the VLM’s <code class="docutils literal notranslate"><span class="pre">/health</span></code> endpoint, which
-returns 200 only after weights are fully loaded. This ensures GPU 0 memory
-has settled before LOVR starts its Vulkan device, preventing a transient
-OOM race.</p>
+returns 200 only after weights are fully loaded. This ensures model memory has
+settled before LOVR starts its Vulkan device, preventing a transient OOM race.</p>
 </section>
 <section id="stt-parakeet-tdt-0-6b-v3">
 <h2>STT — parakeet-tdt-0.6b-v3<a class="headerlink" href="#stt-parakeet-tdt-0-6b-v3" title="Link to this heading">#</a></h2>
 <p>Port 8103. NeMo ASR in-process. English-only, ~1.5 GB VRAM.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceSession
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceAgent
   → VAD/STT
       pre-roll buffer    last 10 chunks (~320 ms) kept at all times;
                          prepended to the utterance buffer on speech onset
-                         so the first word&#39;s attack isn&#39;t clipped
+                         so the first word's attack isn't clipped
       VAD                Silero (ONNX, 512-sample / 32 ms windows,
                          probability threshold) via shared xr-ai-vad util
       accumulates        audio while speaking
       finalizes when     silence ≥ 0.8s AND speech ≥ 0.15s
                          OR max utterance length (30s) hit
       filler filter      drops single- and multi-word filler utterances
-                         (&quot;um&quot;, &quot;uh&quot;, &quot;yeah&quot;, &quot;okay&quot;, &quot;mm-hmm&quot;, etc.)
+                         ("um", "uh", "yeah", "okay", "mm-hmm", etc.)
       STT call           POST multipart/form-data WAV → stt-server :8103
   → accepted participant query
 </pre></div>
@@ -584,13 +592,13 @@ one is in-flight.</p>
 <p>Port 8105. <code class="docutils literal notranslate"><span class="pre">rhasspy/piper-voices</span></code> ONNX. Runs on CPU, ~100 ms per sentence. All
 synthesis runs in a thread pool so the asyncio loop is never blocked.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>voice.output topic (agentic-loop quick-ack or final response)
-  → VoiceAgent → private VoiceSession TTS
+  → VoiceAgent → private media-session TTS
       sentence-batched synthesis
       POST text → tts-server :8105 → WAV bytes
-      RETURN_AUDIO IPC → hub → LiveKit → participant&#39;s headphones
+      RETURN_AUDIO IPC → hub → LiveKit → participant's headphones
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns interruption handling. A new utterance while TTS is playing
+<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns interruption handling. A new utterance while TTS is playing
 triggers <code class="docutils literal notranslate"><span class="pre">ReturnAudioFlush</span></code>, so the hub clears the LiveKit audio queue for that
 participant. Its interruption callback also cancels the participant’s active
 render-agent task without waiting on its cleanup in the media processor. A
@@ -600,10 +608,11 @@ the old stream before the replacement starts.</p>
 </section>
 <section id="agent-runtime-and-voice-topology">
 <h2>Agent runtime and voice topology<a class="headerlink" href="#agent-runtime-and-voice-topology" title="Link to this heading">#</a></h2>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>VoiceAgent → private VoiceSession → VAD/STT + VoiceGate ─┐
-           → typed hub text ingress ──────────┴→ xr-render.user-query topic
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>VoiceAgent → private media session → VAD/STT ─→ voice.transcript topic
+                                  └→ VoiceGate ─┐
+           → typed hub text ingress ────────────┴→ xr-render.user-query topic
   → RenderAgent → SceneModelLoop → voice.output topic
-  → VoiceAgent → private VoiceSession TTS → hub return audio
+  → VoiceAgent → private media-session TTS → hub return audio
 </pre></div>
 </div>
 <p>Pipecat is an internal implementation detail of <code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code>; application
@@ -620,13 +629,13 @@ instances into a <code class="docutils literal notranslate"><span class="pre">To
 remain worker-managed lifecycle operations.</p>
 <p>On each accepted <code class="docutils literal notranslate"><span class="pre">xr-render.user-query</span></code> event or lifecycle notice:</p>
 <ol class="arabic simple">
-<li><p><strong>Quick-ack</strong> runs first (<code class="docutils literal notranslate"><span class="pre">llm</span></code> :8107, awaited before the loop).</p></li>
+<li><p><strong>Quick-ack</strong> runs first (<code class="docutils literal notranslate"><span class="pre">llm</span></code> :8108, awaited before the loop).</p></li>
 <li><p><strong>Still-working timer</strong> starts (fires at 5s, repeats every 10s, data
 channel only).</p></li>
 <li><p><strong>Pre-fetch</strong> (concurrent): <code class="docutils literal notranslate"><span class="pre">get_scene_state</span></code> + <code class="docutils literal notranslate"><span class="pre">get_head_pose</span></code> +
 <code class="docutils literal notranslate"><span class="pre">position_ahead(1.5)</span></code> — results injected into the user message so the
 model skips those tool calls and goes straight to the operation.</p></li>
-<li><p><strong>Nemotron-30B :8107</strong> runs with <code class="docutils literal notranslate"><span class="pre">tools=[…]</span></code>, up to 10 iterations:</p>
+<li><p><strong>Nemotron-Omni :8108</strong> runs with <code class="docutils literal notranslate"><span class="pre">tools=[…]</span></code>, up to 10 iterations:</p>
 <ul class="simple">
 <li><p>Model emits <code class="docutils literal notranslate"><span class="pre">tool_calls</span></code> → <code class="docutils literal notranslate"><span class="pre">handle_tool_call(...)</span></code> validates and invokes
 the matching native tool → its tool-role message is appended → next iteration.</p></li>
@@ -731,13 +740,13 @@ hammered: every move emits one math-tool call followed by exactly one
 <p>CloudXR returns <code class="docutils literal notranslate"><span class="pre">XR_ERROR_FORM_FACTOR_UNAVAILABLE</span></code> from <code class="docutils literal notranslate"><span class="pre">xrGetSystem</span></code> until
 a streaming client connects. LOVR cannot start before then.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>1. User opens https://&lt;host&gt;:8080, grants mic + XR permissions
-2. User clicks &quot;Launch XR&quot;
+2. User clicks "Launch XR"
 3. Client sends `xr.session.started` data message → hub IPC → worker
 4. Worker invokes native `start_xr`
    → scene process spawns LOVR + waits for CloudXR in a background task
 5. Worker polls `get_health` every 500 ms (up to 120s)
    lovr_started: true  → send `render.ready` to client → XR session unlocked
-   spawn_error: &quot;...&quot;  → log + abort
+   spawn_error: "..."  → log + abort
 6. On reconnect / refresh: `xr.session.started` arrives again
    → `_xr_started` is already True → skip spawn, send `render.ready`
    immediately
@@ -750,7 +759,7 @@ a streaming client connects. LOVR cannot start before then.</p>
 It derives schemas from the worker’s native tools and evaluates tool
 effects against deterministic fixtures, so the live LOVR scene is not mutated.
 Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/ee9d65914c4669b66dc3fca57c53b9a5ab881565/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/58bdcb2aad9865923d9c21cc8fb034975286f987/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
 for the case format and the watch-mode loop. Run with:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo/worker<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>python<span class="w"> </span>agent-samples/xr-render-demo/eval/eval.py
@@ -787,6 +796,15 @@ cases overfitting to the prompt’s worked examples.</p>
         <p class="prev-next-title">Release migration</p>
       </div>
     </a>
+    <a class="right-next"
+       href="python/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">API Reference</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
 </div>
                 </footer>
               
@@ -813,10 +831,10 @@ cases overfitting to the prompt’s worked examples.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gpu-pinning-for-the-xr-side">GPU pinning for the XR side</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#worker-configuration">Worker configuration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-llm-server">The LLM server</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvidia-nemotron-3-nano-30b-a3b-nvfp4-port-8107">NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 — port 8107</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemotron-3-nano-omni-30b-a3b-reasoning-port-8108">Nemotron-3-Nano-Omni-30B-A3B-Reasoning — port 8108</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vlm-cosmos-reason1-7b">VLM — Cosmos-Reason1-7B</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vlm-cosmos3-nano-reasoner">VLM — Cosmos3 Nano Reasoner</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stt-parakeet-tdt-0-6b-v3">STT — parakeet-tdt-0.6b-v3</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tts-piper">TTS — Piper</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-runtime-and-voice-topology">Agent runtime and voice topology</a></li>

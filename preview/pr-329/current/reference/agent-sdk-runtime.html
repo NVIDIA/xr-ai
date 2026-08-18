@@ -33,6 +33,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
@@ -317,6 +318,11 @@
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+</ul>
+</details></li>
 </ul>
 </div>
 </nav></div>
@@ -405,15 +411,15 @@ buffering the complete result.</p>
 <span class="k">class</span><span class="w"> </span><span class="nc">TextAgent</span><span class="p">(</span><span class="n">Agent</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">echo</span> <span class="o">=</span> <span class="n">Tool</span><span class="p">(</span>
-            <span class="s2">&quot;echo&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;Echo the supplied text.&quot;</span><span class="p">,</span>
+            <span class="s2">"echo"</span><span class="p">,</span>
+            <span class="s2">"Echo the supplied text."</span><span class="p">,</span>
             <span class="n">TextRequest</span><span class="p">,</span>
             <span class="n">TextResponse</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_echo</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">uppercase</span> <span class="o">=</span> <span class="n">Tool</span><span class="p">(</span>
-            <span class="s2">&quot;uppercase&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;Uppercase the supplied text.&quot;</span><span class="p">,</span>
+            <span class="s2">"uppercase"</span><span class="p">,</span>
+            <span class="s2">"Uppercase the supplied text."</span><span class="p">,</span>
             <span class="n">TextRequest</span><span class="p">,</span>
             <span class="n">TextResponse</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_uppercase</span><span class="p">,</span>
@@ -428,10 +434,10 @@ buffering the complete result.</p>
 
 
 <span class="n">runtime</span> <span class="o">=</span> <span class="n">AgentRuntime</span><span class="p">()</span>
-<span class="n">text</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="n">TextAgent</span><span class="p">())</span>
+<span class="n">text</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"text"</span><span class="p">,</span> <span class="n">TextAgent</span><span class="p">())</span>
 
 <span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">text</span><span class="o">.</span><span class="n">uppercase</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">TextRequest</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;hello&quot;</span><span class="p">))</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">text</span><span class="o">.</span><span class="n">uppercase</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">TextRequest</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"hello"</span><span class="p">))</span>
 </pre></div>
 </div>
 <p>Another agent receives the concrete tools it needs and calls them normally.
@@ -454,7 +460,8 @@ participant-scoped or global events. An agent that owns resources or background
 work is responsible for controlling them, including creating, cancelling, and
 awaiting its own tasks. The runtime neither knows nor controls whether an
 agent’s internal work is running. <code class="docutils literal notranslate"><span class="pre">publish()</span></code> waits for every fan-out delivery
-to settle before propagating any subscriber failures.</p>
+to settle before propagating any subscriber failures. Subscriber callbacks
+should hand off lengthy work to agent-owned bounded queues and return promptly.</p>
 <p>Topics default to <code class="docutils literal notranslate"><span class="pre">telemetry=&quot;full&quot;</span></code>. High-cardinality transport topics use
 <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> when their consumer aggregates fragments and records one semantic
 operation scope. Delivery and failure behavior remains unchanged. Keeping the
@@ -466,8 +473,11 @@ state is shared between them owns the appropriate synchronization, such as an
 head-of-line blocking on unrelated or streaming tools.</p>
 <p>Domain controls such as <code class="docutils literal notranslate"><span class="pre">start_monitoring</span></code>, <code class="docutils literal notranslate"><span class="pre">stop_monitoring</span></code>, and <code class="docutils literal notranslate"><span class="pre">status</span></code> are
 ordinary tools. Agent lifetime itself is not a model tool. Model loops,
-planning, memory, and model clients remain agent implementations. Raw audio and
-video stay on the XR-Media-Hub path.</p>
+planning, memory, and model clients remain agent implementations. Raw video
+stays on the XR-Media-Hub path. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes final pre-gate STT
+results on <code class="docutils literal notranslate"><span class="pre">voice.transcript</span></code> for explicit subscribers. Its media session is
+private, and its bounded transcript-delivery queue prevents slow subscribers
+from delaying STT or command gating.</p>
 </section>
 
 

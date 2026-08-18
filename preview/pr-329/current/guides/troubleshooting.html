@@ -33,6 +33,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
@@ -321,6 +322,11 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+</ul>
+</details></li>
 </ul>
 </div>
 </nav></div>
@@ -462,8 +468,8 @@ loads the wrong runtime and aborts.</p>
 <code class="docutils literal notranslate"><span class="pre">LD_LIBRARY_PATH</span></code> before spawning (logged once as a WARNING), so the
 venv-bundled cuDNN is used. If you hit this running a service <strong>directly</strong>
 (outside the launcher), clear the conflicting path yourself first:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Inspect what&#39;s on the path</span>
-<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$LD_LIBRARY_PATH</span><span class="s2">&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Inspect what's on the path</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">"</span><span class="nv">$LD_LIBRARY_PATH</span><span class="s2">"</span>
 <span class="c1"># Run the service without the host cuDNN shadowing the venv copy</span>
 env<span class="w"> </span>-u<span class="w"> </span>LD_LIBRARY_PATH<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>&lt;command&gt;
 </pre></div>
@@ -482,20 +488,20 @@ env<span class="w"> </span>-u<span class="w"> </span>LD_LIBRARY_PATH<span class=
 NGC vLLM container.</p>
 <p><strong>Fix:</strong> log in with your NGC API key once. Get a key from
 <a class="reference external" href="https://ngc.nvidia.com/setup/api-key">https://ngc.nvidia.com/setup/api-key</a> and run:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>login<span class="w"> </span>nvcr.io<span class="w"> </span>-u<span class="w"> </span><span class="s1">&#39;$oauthtoken&#39;</span><span class="w"> </span>-p<span class="w"> </span><span class="nv">$NGC_API_KEY</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>login<span class="w"> </span>nvcr.io<span class="w"> </span>-u<span class="w"> </span><span class="s1">'$oauthtoken'</span><span class="w"> </span>-p<span class="w"> </span><span class="nv">$NGC_API_KEY</span>
 </pre></div>
 </div>
 <p>The credential is cached in <code class="docutils literal notranslate"><span class="pre">~/.docker/config.json</span></code> and reused on subsequent
 runs. Alternatively, save the key into the xr-ai credential cache so the
 wrapper can auto-login:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">"</span>
 <span class="s2">import json, os, pathlib</span>
-<span class="s2">p = pathlib.Path.home() / &#39;.config/xr-ai/credentials.json&#39;</span>
+<span class="s2">p = pathlib.Path.home() / '.config/xr-ai/credentials.json'</span>
 <span class="s2">d = json.loads(p.read_text()) if p.exists() else {}</span>
-<span class="s2">d[&#39;NGC_API_KEY&#39;] = os.environ[&#39;NGC_API_KEY&#39;]</span>
+<span class="s2">d['NGC_API_KEY'] = os.environ['NGC_API_KEY']</span>
 <span class="s2">p.parent.mkdir(parents=True, exist_ok=True)</span>
 <span class="s2">p.write_text(json.dumps(d, indent=2))</span>
-<span class="s2">&quot;</span>
+<span class="s2">"</span>
 </pre></div>
 </div>
 <p>The orchestrator’s <code class="docutils literal notranslate"><span class="pre">load_credentials()</span></code> injects <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> into the
@@ -512,8 +518,9 @@ environment before each wrapper runs; the docker backend uses it to run
 <p>and the per-run log file under <code class="docutils literal notranslate"><span class="pre">/tmp/log_&lt;sample&gt;_&lt;timestamp&gt;/&lt;service&gt;.log</span></code>
 contains only wrapper messages — nothing from inside the container.</p>
 <p><strong>Health probe</strong> — confirm vLLM never reached the <code class="docutils literal notranslate"><span class="pre">/health</span></code> endpoint:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8107/health<span class="w">   </span><span class="c1"># nemotron3_nano (agent-llm)</span>
-curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8100/health<span class="w">   </span><span class="c1"># vlm_server</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8108/health<span class="w">   </span><span class="c1"># nemotron_omni (default LLM)</span>
+curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8100/health<span class="w">   </span><span class="c1"># vlm_server (default Cosmos VLM)</span>
+curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8107/health<span class="w">   </span><span class="c1"># superseded nemotron3_nano</span>
 </pre></div>
 </div>
 <p><strong>Container post-mortem</strong> — the wrapper streams <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">logs</span> <span class="pre">-f</span></code> into the
@@ -564,12 +571,12 @@ device nodes) when starting the container.</p></li>
 <h3>Voice session drops or agent goes silent after a few minutes idle<a class="headerlink" href="#voice-session-drops-or-agent-goes-silent-after-a-few-minutes-idle" title="Link to this heading">#</a></h3>
 <p><strong>Cause:</strong> an idle-timeout that auto-cancels the voice pipeline after a stretch
 with no user or bot speech.</p>
-<p><strong>Status:</strong> disabled by default. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> leaves its private Pipecat idle
+<p><strong>Status:</strong> disabled by default. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> leaves its private Pipecat idle
 timeout disabled, so a quiet session stays connected indefinitely.</p>
 <p><strong>If you want it:</strong> set <code class="docutils literal notranslate"><span class="pre">idle_timeout_secs:</span> <span class="pre">&lt;seconds&gt;</span></code> (e.g. <code class="docutils literal notranslate"><span class="pre">300</span></code> for 5 min)
 in the sample’s worker YAML (<code class="docutils literal notranslate"><span class="pre">simple_vlm_example_worker.yaml</span></code> /
 <code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.yaml</span></code>); <code class="docutils literal notranslate"><span class="pre">0</span></code> or unset keeps it disabled. The knob is
-owned by <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.VoiceSession</span></code>.</p>
+owned by <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.VoiceAgent</span></code>.</p>
 </section>
 <section id="browser-client-connects-but-no-audio-or-no-video">
 <h3>Browser client connects but no audio or no video<a class="headerlink" href="#browser-client-connects-but-no-audio-or-no-video" title="Link to this heading">#</a></h3>
@@ -658,19 +665,21 @@ the IWER emulator built into the web client itself for desktop dev.</p>
 </section>
 <section id="vllm-cold-start-takes-38-minutes">
 <h3>vLLM cold start takes 3–8 minutes<a class="headerlink" href="#vllm-cold-start-takes-38-minutes" title="Link to this heading">#</a></h3>
-<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">vlm_server</span></code> or <code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code> weight load is fast,
+<p><strong>Symptom:</strong> a vLLM server’s weight load is fast,
 but the server then sits silent for several minutes before becoming healthy.</p>
 <p><strong>Cause:</strong> CUDA graph capture + FlashInfer FP4 MoE autotune happen on first
 run after weight load. They are silent.</p>
-<p><strong>Fix:</strong> the shipped YAMLs default to <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> which avoids both.
-Eager mode is 10–20% slower per token but starts in ~5 s after weight load —
-imperceptible at &lt;250 tokens/turn where STT+VAD+TTS dominate latency. Don’t
-flip <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">false</span></code> unless you have a measured reason.</p>
+<p><strong>Fix:</strong> the default Omni profiles set <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">false</span></code> to enable CUDA
+graph capture and maximize steady-state throughput, so this startup delay is
+expected. For development, set <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> in the active model YAML
+to skip CUDA graph capture. Eager mode starts faster but can reduce per-token
+throughput; keep the default when steady-state performance matters more than
+cold-start time.</p>
 </section>
 <section id="xr-render-demo-exits-but-vram-is-still-pinned">
 <h3><code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code> exits but VRAM is still pinned<a class="headerlink" href="#xr-render-demo-exits-but-vram-is-still-pinned" title="Link to this heading">#</a></h3>
-<p><strong>By design.</strong> The vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>,
-<code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>) survive stack
+<p><strong>By design.</strong> The vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code>,
+<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>, and <code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>) survive stack
 restarts so model weights stay loaded across worker crashes and debug
 restarts. See <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> → <em>vLLM model
 persistence</em>.</p>
@@ -689,7 +698,7 @@ to run while the stack is down.</p>
 <p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">simple_vlm_example</span></code> appears to hang at startup the first
 time.</p>
 <p><strong>Cause:</strong> model weights are downloading from HuggingFace into <code class="docutils literal notranslate"><span class="pre">models/</span></code> at
-the repository root (gitignored, ~16 GB for Cosmos-Reason1-7B alone).</p>
+the repository root (gitignored; the Cosmos3 checkpoint alone is tens of GB).</p>
 <p><strong>Fix:</strong> wait. Subsequent runs use the cached weights and start in
 ~30–60 s. If the download makes no progress, note that unauthenticated
 downloads (runs started with <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code>) are rate-limited and can

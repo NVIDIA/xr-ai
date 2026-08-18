@@ -33,6 +33,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
@@ -344,6 +345,11 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+</ul>
+</details></li>
 </ul>
 </div>
 </nav></div>
@@ -414,6 +420,16 @@ on startup.</p>
 immediately — the services keep running in the background with weights hot.
 Start this once before running <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>, or whenever you want to
 pre-warm models:</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>After updating, stop any existing model servers before starting this stack:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--stop
+</pre></div>
+</div>
+<p>Persisted vLLM processes or containers may otherwise keep serving the previous
+models and images even though the checked-in configuration now selects
+Nemotron-3 Nano Omni and Cosmos3 Nano Reasoner.</p>
+</div>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/model-servers
 uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>model_servers
@@ -422,17 +438,12 @@ uv<span class="w"> </span>run<span class="w"> </span>model_servers
 <p>GPU profiles are auto-detected (<code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, <code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>). These
 are presets for common configurations; to run on a different GPU, refer to
 <a class="reference internal" href="requirements.html"><span class="doc">Running on other GPUs</span></a>.
-On first run each model downloads from HuggingFace (~50 GB total; can take
+On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.</p>
-<p>The default <code class="docutils literal notranslate"><span class="pre">--vlm-llm-stack</span></code> starts Nemotron-3 Nano (8107), Cosmos (8100),
-STT (8103), and embeddings (8109). Use <code class="docutils literal notranslate"><span class="pre">--omni-stack</span></code> to replace Nano and
-Cosmos with Nemotron-3 Nano Omni (8108); STT and embeddings remain available.
-Switching stacks stops the incompatible persistent models first and aborts if
-they cannot be stopped, avoiding GPU overcommit.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--omni-stack
-</pre></div>
-</div>
-<p><code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default: without it the ~50 GB first-run download
+<p>The stack starts Nemotron-3 Nano Omni for LLM requests (8108), Cosmos3 Nano
+Reasoner for vision requests (8100), STT (8103), and embeddings (8109).
+Starting it stops the superseded Nano text server on port 8107 first.</p>
+<p><code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default: without it the large first-run download
 can stall indefinitely. Refer to the
 <a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a> for how to set it, or
 pass <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code> to run without one.</p>
@@ -440,15 +451,15 @@ pass <code class="docutils literal notranslate"><span class="pre">--allow-anonym
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">--stop</span></code> always stops both stack variants, so it takes no stack-selection flag.</p>
+<p><code class="docutils literal notranslate"><span class="pre">--stop</span></code> stops every persisted model service in the shared topology.</p>
 </section>
 <section id="simple-vlm-example-vision-q-a-over-voice-text">
 <h2>Simple VLM example (vision Q&amp;A over voice + text)<a class="headerlink" href="#simple-vlm-example-vision-q-a-over-voice-text" title="Link to this heading">#</a></h2>
-<p>End-to-end voice + vision sample. Speak into the mic, type into the data
-channel, or send the literal text <code class="docutils literal notranslate"><span class="pre">&quot;ping&quot;</span></code> — all routes go through the same VLM
-pipeline against the latest video frame. Replies arrive as streaming Piper TTS
-audio plus a <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> text message.</p>
-<p>Uses <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos-Reason1-7B</span></code> (NVIDIA Open Model License + Apache 2.0).</p>
+<p>End-to-end voice + vision sample. Speak into the mic or type into the data
+channel; both routes use the same VLM pipeline against the latest video frame.
+Replies arrive as streaming Piper TTS audio plus a <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> text message.</p>
+<p>Uses the text-output Reasoner from <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos3-Nano</span></code> by default. Refer to
+<a class="reference internal" href="../components/ai-services.html"><span class="doc">AI services</span></a> for runtime-selection details.</p>
 <p>There are two ways to run it:</p>
 <p><strong>Standalone</strong> (~23 GB VRAM) — starts its own VLM and STT, owns them for the
 session, and stops them when you exit:</p>
@@ -457,13 +468,13 @@ uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example
 </pre></div>
 </div>
-<p>On the very first run weights download from HuggingFace (~23 GB; can take
+<p>On the very first run weights download from HuggingFace (tens of GB; can take
 several minutes). <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default; pass <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code>
 to run without one (refer to the
 <a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a>).</p>
-<p><strong>With model-servers pre-running</strong> — if VLM (port 8100) and STT (port 8103) are
-already up from <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>, the demo detects them at startup and reuses
-them. No extra flags needed. When you exit, those services keep running.</p>
+<p><strong>With model-servers pre-running</strong> — start <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> to pre-warm VLM
+(port 8100) and STT (port 8103). The demo detects and reuses them.
+When you exit, those services keep running.</p>
 <section id="step-1-start-the-server">
 <h3>Step 1 — Start the server<a class="headerlink" href="#step-1-start-the-server" title="Link to this heading">#</a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example
@@ -490,7 +501,6 @@ trusting the certificate permanently or running over plain HTTP instead.</p>
 automatically. Click <strong>Connect</strong>.</p>
 <p>You are now live in the XR session. To test the agent:</p>
 <ul class="simple">
-<li><p>Type <code class="docutils literal notranslate"><span class="pre">ping</span></code> in the data channel → the agent describes what the camera sees.</p></li>
 <li><p>Type any question → sent verbatim to the VLM.</p></li>
 <li><p>Speak into your mic → speech is transcribed and sent as a query.</p></li>
 </ul>
@@ -498,11 +508,13 @@ automatically. Click <strong>Connect</strong>.</p>
 a moment, and you hear the reply through your speakers.</p>
 <p><strong>Local model</strong> — override the model weights or GPU settings by editing
 <code class="docutils literal notranslate"><span class="pre">vlm_server.yaml</span></code> in the sample directory.</p>
+<p>To use Cosmos-Reason1 instead, set <code class="docutils literal notranslate"><span class="pre">model:</span> <span class="pre">nvidia/Cosmos-Reason1-7B</span></code> in that
+file and select <code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code> as the VLM adapter preset in <code class="docutils literal notranslate"><span class="pre">models.local.json</span></code>.</p>
 <p><strong>Remote model</strong> — copy <code class="docutils literal notranslate"><span class="pre">yaml/models.hosted.json</span></code>, point its VLM endpoint at
 your server, and select it in the worker config:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;base_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://your-remote-vlm.example.com&quot;</span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;ownership&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;external&quot;</span><span class="p">}</span>
+<span class="w">  </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://your-remote-vlm.example.com"</span><span class="p">},</span>
+<span class="w">  </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"external"</span><span class="p">}</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -595,14 +607,22 @@ uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w
 <p><strong>Hosted NVIDIA NIM</strong> — run the LLMs and VLM on hosted NIM
 (<a class="reference external" href="https://build.nvidia.com">build.nvidia.com</a>) instead of local vLLM (STT/TTS
 stay local) by setting <strong>one key</strong> in <code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.yaml</span></code>:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">model_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nim</span><span class="w">     </span><span class="c1"># default is &quot;local&quot;</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">model_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nim</span><span class="w">     </span><span class="c1"># default is "local"</span>
 </pre></div>
 </div>
 <p>The worker loads <code class="docutils literal notranslate"><span class="pre">yaml/models.nim.yaml</span></code> for native model-backed Functions.
-Provide an
-<code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> as an <strong>environment variable</strong> (or via the launcher credential
-prompt — not in YAML) and just don’t start the local <code class="docutils literal notranslate"><span class="pre">agent-llm</span></code> / <code class="docutils literal notranslate"><span class="pre">vlm</span></code>
-model-servers. Refer to the AI-services guide.</p>
+Provide an <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> as an <strong>environment variable</strong> (or via the launcher
+credential prompt — not in YAML). Do not run <code class="docutils literal notranslate"><span class="pre">model_servers</span></code>, because its
+single topology starts both local <code class="docutils literal notranslate"><span class="pre">omni</span></code> and <code class="docutils literal notranslate"><span class="pre">vlm</span></code>. Start STT by itself from
+the repository root, setting <code class="docutils literal notranslate"><span class="pre">GPU_PROFILE</span></code> to <code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">GPU_PROFILE</span><span class="o">=</span>dual_48G_ada
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/stt-server<span class="w"> </span>stt_server<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--config<span class="w"> </span><span class="s2">"agent-samples/model-servers/yaml/</span><span class="si">${</span><span class="nv">GPU_PROFILE</span><span class="si">}</span><span class="s2">/stt_server.yaml"</span>
+</pre></div>
+</div>
+<p>Then start <code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code> in another terminal. Refer to the AI-services
+guide.</p>
 </section>
 </section>
 <section id="hub-only-standalone">

@@ -20,7 +20,7 @@ trade-offs documented below.
 
 | Server | Command | Port | Model | Backend |
 |---|---|---|---|---|
-| `services/vlm-server/` | `vlm_server` | 8100 | Cosmos-Reason1-7B | vLLM (pip or docker) |
+| `services/vlm-server/` | `vlm_server` | 8100 | Cosmos3 Nano Reasoner | vLLM (pip or docker) |
 | `services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `services/magpie-tts/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `services/piper-tts/` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
@@ -56,7 +56,7 @@ match the consumer:
 ```bash
 # vLLM-served model, launched via a model-servers profile
 # (model_cache resolves to models/ at the repository root):
-HF_HOME=models hf download nvidia/Cosmos-Reason1-7B
+HF_HOME=models hf download nvidia/Cosmos3-Nano
 
 # NeMo STT server launched from its standalone YAML:
 HF_HOME=models/huggingface hf download nvidia/parakeet-tdt-0.6b-v3
@@ -180,9 +180,9 @@ deployment ownership:
   "models": {
     "agent_llm": {
       "category": "llm",
-      "adapter": {"preset": "nemotron3_nano"},
-      "endpoint": {"base_url": "http://localhost:8107", "readiness": "health"},
-      "deployment": {"ownership": "reused", "service": "agent-llm"}
+      "adapter": {"preset": "nemotron_omni"},
+      "endpoint": {"base_url": "http://localhost:8108", "readiness": "health"},
+      "deployment": {"ownership": "reused", "service": "omni"}
     }
   }
 }
@@ -212,7 +212,7 @@ disables endpoint health probing, and declares external ownership:
       "category": "vlm",
       "adapter": {
         "kind": "openai_compat",
-        "model_name": "nvidia/cosmos-reason1-7b",
+        "model_name": "nvidia/cosmos3-nano-reasoner",
         "capabilities": {"vision": true, "streaming": true}
       },
       "endpoint": {
@@ -242,8 +242,19 @@ so the local VLM process is omitted and `NGC_API_KEY` is requested
 automatically. Select `models.local.json` to switch back.
 
 `xr-render-demo` retains its `model_backend: nim` selector and
-`models.nim.yaml` overlay. Run it without the local `agent-llm` / `vlm`
-model-servers and provide `NGC_API_KEY`.
+`models.nim.yaml` overlay. Provide `NGC_API_KEY` and do not run
+`model_servers`, whose single topology starts both local `omni` and `vlm`.
+Instead, start only the local STT service from the repository root, setting
+`GPU_PROFILE` to `dual_48G_ada`, `spark`, or `96G_blackwell`:
+
+```bash
+GPU_PROFILE=dual_48G_ada
+uv run --project services/stt-server stt_server \
+  --config "agent-samples/model-servers/yaml/${GPU_PROFILE}/stt_server.yaml"
+```
+
+Then start `xr_render_demo` in another terminal. Its orchestrator reuses STT,
+routes LLM and VLM requests to hosted NIM, and starts local TTS itself.
 
 **Self-hosted NIM containers** work the same way: point `base_url` at the
 container (e.g. `http://localhost:8000`), set `readiness: health`, and choose
@@ -258,15 +269,31 @@ The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
 **survive stack restarts by design**. Each persistent wrapper script checks its
 health endpoint before spawning vLLM:
 
-- **Already running** → touch the ready file immediately, then idle. Stack is
-  ready in seconds; no model reload.
-- **Not running** → spawn vLLM normally, wait for `/health`, touch ready file.
+- **Already running with a matching launch fingerprint** → touch the ready
+  file immediately, then idle. Stack is ready in seconds; no model reload.
+- **Matching container still starting** → attach to its lifecycle and keep
+  waiting for `/health` instead of issuing a conflicting second `docker run`.
+- **Already running with changed or legacy configuration** → stop, remove, and
+  recreate the repository-owned container from the current YAML.
+- **Healthy endpoint without the expected running container** → fail without
+  stopping the unowned listener.
+- **Stopped Docker container with matching launch fingerprint** → restart it,
+  wait for `/health`, then touch the ready file.
+- **Stopped Docker container with changed or legacy configuration** → remove
+  and recreate it from the current YAML before waiting for `/health`.
+- **Not running** → spawn vLLM normally, wait for `/health`, then touch the
+  ready file.
 
 In pip mode, vLLM is spawned with `start_new_session=True` so the launcher's
-`killpg()` does not reach it on shutdown. In docker mode, the container is
-launched detached (`docker run -d --name xr-ai-vllm-<service>`) so it
-similarly outlives the wrapper. Either way the wrapper exits cleanly and
-vLLM keeps running.
+`killpg()` does not reach it on shutdown. In docker mode, Docker owns the
+container while the foreground `docker run` client uses its own session.
+Either way vLLM keeps running after the orchestrator exits.
+
+Docker containers carry a fingerprint of their image, GPU assignment, model
+cache, environment, bootstrap packages, complete vLLM command, and a versioned
+launcher-controlled Docker contract. This prevents a failed container created
+by one sample profile—or by older launcher behavior—from being restarted later
+with stale memory limits, entrypoint, setup commands, or model arguments.
 
 **Stopping the persisted servers** — run from the sample directory:
 
@@ -298,12 +325,15 @@ Both modes honor identical configuration keys — same model, same port, same vL
 flags. The dispatcher lives in `utils/xr-ai-vllm/`. Switching is one YAML edit:
 
 ```yaml
+# vlm-server (Cosmos3)
 vllm_backend: docker
-vllm_image:   nvcr.io/nvidia/vllm:26.04-py3
+vllm_image:   nvcr.io/nvidia/vllm:26.07-py3
 ```
 
-`vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.04-py3`; override to pin
-another tag, an internal mirror, or a custom build.
+`vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.07-py3` for vlm-server,
+whose Cosmos3 support requires vLLM 0.23 or newer. The other wrappers retain
+their `26.04-py3` default. Override either to pin another tag, an internal
+mirror, or a custom build.
 
 ### docker mode — prerequisites
 
@@ -356,10 +386,18 @@ cleanup.
 
 ## Per-server notes
 
-- **vlm-server** is a thin launcher around `vllm serve` for Cosmos-Reason1-7B
-  (or any Qwen2.5-VL-compatible VLM). vLLM handles weight loading, image
-  decoding, and the OpenAI-compatible HTTP API. Hosting backend is selectable
-  per YAML — refer to *Choosing the vLLM runtime* above.
+- **vlm-server** defaults to the Cosmos3 Nano Reasoner. Hugging Face publishes
+  Reasoner and Generator weights in the unified `nvidia/Cosmos3-Nano`
+  checkpoint. The required `Cosmos3ForConditionalGeneration` architecture
+  override selects vLLM's native Reasoner loader: despite its generic class
+  name, it maps only the understanding tower and vision encoder and drops the
+  Generator weights. The Generator requires vLLM's separate `--omni` path,
+  which xr-ai intentionally does not enable. The checkpoint's official chat
+  template emits the assistant answer directly and has no `enable_thinking`
+  branch or `<think>` delimiters, so the client preset needs no reasoning-field
+  mapping. Cosmos-Reason1 remains available by pairing
+  `model: nvidia/Cosmos-Reason1-7B` with the `cosmos_vlm` client preset. Hosting
+  backend is selectable per YAML — refer to *Choosing the vLLM runtime* above.
 - **llama-nemotron-llm** is a thin wrapper around `vllm serve` for
   `Llama-3.1-Nemotron-Nano-8B-v1`. vLLM handles native Llama-3.1 tool calling
   via the `llama3_json` parser — `tools=[...]` in the request is rendered via
@@ -397,7 +435,15 @@ cleanup.
 - **video-memory-service** owns recorded chunk queries, NVDEC, and PNG output
   behind typed msgpack/ZMQ on port 8310. Set `recordings_dir` in its YAML to
   enable recorded-video operations; the path must match the hub's
-  `video_recording.out_dir`. Current frames stay with the caller's hub client.
+  `video_recording.out_dir`. Latest video and sampling windows end at the
+  newest recorded timestamp and require only a duration. Historical frame,
+  video, and sampling requests share an absolute `start_us`; video windows add
+  a duration. Sampling also accepts a hard total frame budget, decodes each
+  selected chunk once, skips unavailable or corrupt chunks when other frames
+  remain, and can bound exported PNG dimensions. The sampled timestamps are
+  estimates interpolated from chunk metadata. The selection budget may be up
+  to 256, but the shipped Cosmos VLM accepts no more than four selected images
+  per inference request. Current frames stay with the caller's hub client.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
 - **Sample YAMLs** for each service ship in their own service directory.
   Copy them to your sample's `yaml/` directory and set `model_cache` to

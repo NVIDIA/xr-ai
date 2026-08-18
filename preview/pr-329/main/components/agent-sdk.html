@@ -33,6 +33,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
@@ -344,6 +345,11 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+</ul>
+</details></li>
 </ul>
 </div>
 </nav></div>
@@ -433,7 +439,7 @@ installation.</p>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_voice</span></code></p></td>
-<td><p>Voice agent, session, transport, and pipeline</p></td>
+<td><p>Voice agent, transport, and private media pipeline</p></td>
 </tr>
 </tbody>
 </table>
@@ -466,8 +472,8 @@ agent-created background tasks.</p>
 <span class="k">class</span><span class="w"> </span><span class="nc">EchoAgent</span><span class="p">(</span><span class="n">Agent</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">echo</span> <span class="o">=</span> <span class="n">Tool</span><span class="p">(</span>
-            <span class="s2">&quot;echo&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;Echo text.&quot;</span><span class="p">,</span>
+            <span class="s2">"echo"</span><span class="p">,</span>
+            <span class="s2">"Echo text."</span><span class="p">,</span>
             <span class="n">EchoRequest</span><span class="p">,</span>
             <span class="n">EchoResponse</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_echo</span><span class="p">,</span>
@@ -479,14 +485,22 @@ agent-created background tasks.</p>
 
 
 <span class="n">runtime</span> <span class="o">=</span> <span class="n">AgentRuntime</span><span class="p">()</span>
-<span class="n">agent</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;echo&quot;</span><span class="p">,</span> <span class="n">EchoAgent</span><span class="p">())</span>
+<span class="n">agent</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"echo"</span><span class="p">,</span> <span class="n">EchoAgent</span><span class="p">())</span>
 <span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">agent</span><span class="o">.</span><span class="n">echo</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">EchoRequest</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;hello&quot;</span><span class="p">))</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">agent</span><span class="o">.</span><span class="n">echo</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">EchoRequest</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"hello"</span><span class="p">))</span>
 </pre></div>
 </div>
 <p>Agents protect shared mutable state with their own lock or queue. They also
 create, cancel, and await their own tasks. <code class="docutils literal notranslate"><span class="pre">publish()</span></code> waits for all deliveries
 and then propagates subscriber failures.</p>
+<p>Image tools share bounded <code class="docutils literal notranslate"><span class="pre">ImageRegistry</span></code> references so model-visible results
+do not contain raw pixels. Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[image-editing]</span></code> to use
+<code class="docutils literal notranslate"><span class="pre">ImagePolygonFillTool</span></code>, which copies an image, fills the area enclosed by at
+least three ordered pixel coordinates with magenta, and returns a new lossless
+PNG reference. The source reference remains unchanged, and the edited reference
+inherits its owner so lifecycle cleanup releases both images. It can be passed
+directly to the single-image or multi-image VLM query tools. Invalid polygons
+and unavailable source references return recoverable unavailable results.</p>
 <p>Relay records publications, subscriber callbacks, tool calls, and model calls
 as nested scopes. <code class="docutils literal notranslate"><span class="pre">Topic.telemetry</span></code> controls event volume without changing
 delivery: use <code class="docutils literal notranslate"><span class="pre">&quot;full&quot;</span></code> for semantic events and <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> for high-volume
@@ -502,9 +516,9 @@ corresponding service protocol, so endpoint and model-specific behavior stays
 inside <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code>.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatMessage</span><span class="p">,</span> <span class="n">load_models_config</span><span class="p">,</span> <span class="n">make_llm</span>
 
-<span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">&quot;yaml/models.local.json&quot;</span><span class="p">)</span>
-<span class="k">async</span> <span class="k">with</span> <span class="n">make_llm</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">&quot;agent_llm&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">llm</span><span class="p">:</span>
-    <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">chat</span><span class="p">([</span><span class="n">ChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">&quot;hello&quot;</span><span class="p">)])</span>
+<span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">"yaml/models.local.json"</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">with</span> <span class="n">make_llm</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">"agent_llm"</span><span class="p">)</span> <span class="k">as</span> <span class="n">llm</span><span class="p">:</span>
+    <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">chat</span><span class="p">([</span><span class="n">ChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">"user"</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">"hello"</span><span class="p">)])</span>
 </pre></div>
 </div>
 <p>A structured profile separates adapter behavior, endpoint connectivity, and
@@ -513,32 +527,47 @@ and deployment configuration.</p>
 </section>
 <section id="voice">
 <h2>Voice<a class="headerlink" href="#voice" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes accepted speech and typed text as <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> events,
-publishes participant and interruption lifecycle events, and consumes
-<code class="docutils literal notranslate"><span class="pre">voice.output</span></code>. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns model readiness, hub transport, voice
-gating, the media pipeline, signal handling, and cleanup. Pipecat remains an
-implementation detail for current samples.</p>
+<p>Every non-empty final STT result is published before wake-phrase filtering
+on <code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code> as <code class="docutils literal notranslate"><span class="pre">VoiceTranscript</span></code>. This includes speech that the
+gate rejects because it contains no wake phrase. Early wake/STOP probes remain
+private and are not published as final transcripts. Accepted speech is
+published separately as <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> after the gate removes the wake phrase and
+any preceding background speech.</p>
+<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes transcripts through a private bounded FIFO so slow
+runtime subscribers cannot delay STT, voice gating, or accepted queries. The
+queue preserves order, drops the oldest pending transcript when full, and is
+cancelled with pending entries discarded during shutdown. Subscribers should
+hand off lengthy work to their own bounded queues and return promptly.</p>
+<p>Accepted speech and typed text are published as <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> events, participant
+and interruption lifecycle events use application-named topics, and voice
+consumes <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> privately owns model readiness, hub
+transport, voice gating, the media pipeline, signal handling, and cleanup.
+Pipecat and the media session remain implementation details.
+Voice consumes only untopiced client data when <code class="docutils literal notranslate"><span class="pre">text_input=True</span></code>; named
+application and control messages are not user queries. The hub preserves the
+original data-channel topic for all processors.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">voice</span> <span class="o">=</span> <span class="n">VoiceAgent</span><span class="p">(</span>
-    <span class="n">VoiceSession</span><span class="p">(</span>
-        <span class="n">stt</span><span class="o">=</span><span class="n">stt</span><span class="p">,</span>
-        <span class="n">tts</span><span class="o">=</span><span class="n">tts</span><span class="p">,</span>
-        <span class="n">vad</span><span class="o">=</span><span class="n">VadConfig</span><span class="p">(),</span>
-        <span class="n">voice_gate</span><span class="o">=</span><span class="n">voice_gate_config</span><span class="p">,</span>
-        <span class="n">probes</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;vlm&quot;</span><span class="p">:</span> <span class="n">vlm</span><span class="o">.</span><span class="n">health</span><span class="p">},</span>
-        <span class="n">ready_file</span><span class="o">=</span><span class="n">ready_file</span><span class="p">,</span>
-        <span class="n">closeables</span><span class="o">=</span><span class="p">(</span><span class="n">vlm</span><span class="p">,),</span>
-    <span class="p">),</span>
     <span class="n">query_topic</span><span class="o">=</span><span class="n">queries</span><span class="p">,</span>
+    <span class="n">stt</span><span class="o">=</span><span class="n">stt</span><span class="p">,</span>
+    <span class="n">tts</span><span class="o">=</span><span class="n">tts</span><span class="p">,</span>
+    <span class="n">vad</span><span class="o">=</span><span class="n">VadConfig</span><span class="p">(),</span>
+    <span class="n">voice_gate</span><span class="o">=</span><span class="n">voice_gate_config</span><span class="p">,</span>
+    <span class="n">probes</span><span class="o">=</span><span class="p">{</span><span class="s2">"vlm"</span><span class="p">:</span> <span class="n">vlm</span><span class="o">.</span><span class="n">health</span><span class="p">},</span>
+    <span class="n">ready_file</span><span class="o">=</span><span class="n">ready_file</span><span class="p">,</span>
+    <span class="n">closeables</span><span class="o">=</span><span class="p">(</span><span class="n">vlm</span><span class="p">,),</span>
     <span class="n">participant_left_topic</span><span class="o">=</span><span class="n">participant_left</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;voice&quot;</span><span class="p">,</span> <span class="n">voice</span><span class="p">)</span>
+<span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"voice"</span><span class="p">,</span> <span class="n">voice</span><span class="p">)</span>
 
 <span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
     <span class="k">await</span> <span class="n">voice</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runtime</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>The session opens hub transport only after readiness probes succeed and touches
-the ready file after its receive loop starts. It preserves participant routing,
+<p>The private session opens its hub transport only after readiness probes succeed
+and touches the ready file after its receive loop starts. Applications that
+already need the public <code class="docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code> for frames or status publication
+construct it explicitly and pass it to <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>; the agent does not expose
+its private session or transport. The agent preserves participant routing,
 cancels superseded or interrupted output, and closes transports and model
 clients. Application agents subscribe to lifecycle events and clean up their
 own participant state.</p>
@@ -552,8 +581,8 @@ through PUSH IPC. The <code class="docutils literal notranslate"><span class="pr
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_hub</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataMessage</span><span class="p">,</span> <span class="n">ProcessorEndpoint</span><span class="p">,</span> <span class="n">Subscribe</span>
 
 <span class="n">endpoint</span> <span class="o">=</span> <span class="n">ProcessorEndpoint</span><span class="p">(</span>
-    <span class="n">sub_addr</span><span class="o">=</span><span class="s2">&quot;ipc:///tmp/xr_hub_pub&quot;</span><span class="p">,</span>
-    <span class="n">push_addr</span><span class="o">=</span><span class="s2">&quot;ipc:///tmp/xr_hub_in&quot;</span><span class="p">,</span>
+    <span class="n">sub_addr</span><span class="o">=</span><span class="s2">"ipc:///tmp/xr_hub_pub"</span><span class="p">,</span>
+    <span class="n">push_addr</span><span class="o">=</span><span class="s2">"ipc:///tmp/xr_hub_in"</span><span class="p">,</span>
     <span class="nb">filter</span><span class="o">=</span><span class="n">Subscribe</span><span class="o">.</span><span class="n">DATA</span> <span class="o">|</span> <span class="n">Subscribe</span><span class="o">.</span><span class="n">VIDEO</span><span class="p">,</span>
 <span class="p">)</span>
 
@@ -568,6 +597,26 @@ through PUSH IPC. The <code class="docutils literal notranslate"><span class="pr
 <code class="docutils literal notranslate"><span class="pre">LiveFrameSource</span></code>; frame signals do not copy pixels. Readiness participation
 is opt-in and scoped to subscribed participants. The hub aggregates each
 responsible agent’s status and gates readiness on confirmed subscriptions.</p>
+</section>
+<section id="marker-tracking">
+<h2>Marker tracking<a class="headerlink" href="#marker-tracking" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">xr_ai_tools.marker_tracking.MarkerTrackingTool</span></code> is an optional finite tool for
+QR and ArUco detection. It acquires a participant’s current frame, runs enabled
+detectors off the event loop, and returns every marker through one
+<code class="docutils literal notranslate"><span class="pre">marker_type</span></code>, <code class="docutils literal notranslate"><span class="pre">value</span></code>, and four-corner contract. QR values are ZXing-C++
+decoded text; ArUco values are decimal IDs detected with a configured OpenCV
+predefined dictionary. Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[marker-tracking]</span></code> to use it.
+Both detectors scan the complete frame at native resolution and once at a
+bounded enlarged resolution. Duplicate detections are removed, and all returned
+corners remain in source-frame coordinates.</p>
+<p>QR and ArUco are enabled by default. Initialization may select either family
+and choose the ArUco dictionary without changing the model-visible
+<code class="docutils literal notranslate"><span class="pre">track_markers</span></code> request or result schema.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code> package also includes
+<code class="docutils literal notranslate"><span class="pre">xr_ai_tools/utilities/generate_marker.py</span></code>, a standalone <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span></code> utility for
+generating QR and ArUco PNGs for testing. The script declares its own inline
+dependencies, supports OpenCV predefined ArUco dictionaries, and does not add
+an agent-facing API.</p>
 </section>
 </section>
 
@@ -624,6 +673,7 @@ responsible agent’s status and gates readiness on confirmed subscriptions.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#models">Models</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice">Voice</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hub-ipc">Hub IPC</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#marker-tracking">Marker tracking</a></li>
 </ul>
   </nav></div>
 

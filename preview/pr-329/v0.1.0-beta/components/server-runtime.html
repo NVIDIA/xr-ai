@@ -33,6 +33,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
@@ -339,6 +340,11 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+</ul>
+</details></li>
 </ul>
 </div>
 </nav></div>
@@ -538,9 +544,9 @@ msgpack payloads.</p>
 <code class="docutils literal notranslate"><span class="pre">&quot;&lt;type&gt;.&lt;participant_id&gt;.&lt;track_or_topic&gt;&quot;</span></code> convention, and ZMQ’s byte-prefix
 subscription lets a consumer subscribe at any granularity:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>audio                    — all audio, all participants
-audio.alice              — all of alice&#39;s audio tracks
-audio.alice.TR_mic_001   — alice&#39;s specific mic track
-data.alice.chat          — alice&#39;s &quot;chat&quot; data channel only
+audio.alice              — all of alice's audio tracks
+audio.alice.TR_mic_001   — alice's specific mic track
+data.alice.chat          — alice's "chat" data channel only
 participant              — join/leave events
 </pre></div>
 </div>
