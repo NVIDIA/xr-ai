@@ -205,12 +205,12 @@ class ShmRingBuffer:
             pass
 
     def unlink(self) -> None:
-        """Remove the shared-memory segment, tolerating repeated cleanup."""
+        """Remove the segment, tolerating repeated cleanup by this process."""
         try:
             self._shm.unlink()
         except FileNotFoundError:
-            # Shutdown paths can converge after one owner has already removed
-            # the segment. Treat repeated cleanup as complete.
+            # The creating owner can reach cleanup more than once. Unrelated
+            # processes must not unlink a segment they did not create.
             pass
 
     def __enter__(self):

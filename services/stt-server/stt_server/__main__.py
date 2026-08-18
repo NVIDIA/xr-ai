@@ -24,6 +24,7 @@ Config keys
 """
 import argparse
 import asyncio
+import math
 import os
 import subprocess
 import sys
@@ -52,6 +53,22 @@ from xr_ai_logging import setup_logging
 _DEFAULT_PORT              = 8103
 _DEFAULT_STARTUP_TIMEOUT_S = 900.0
 _PROCESS_STOP_TIMEOUT_S    = 10.0
+_IDLE_HEALTH_FAILURE_LIMIT = 3
+
+
+def _parse_startup_timeout(value: object) -> float:
+    """Return a positive finite startup timeout from user configuration."""
+    try:
+        timeout_s = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "'startup_timeout_s' must be a finite number greater than zero"
+        ) from exc
+    if not math.isfinite(timeout_s) or timeout_s <= 0:
+        raise ValueError(
+            "'startup_timeout_s' must be a finite number greater than zero"
+        )
+    return timeout_s
 
 
 def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
@@ -323,6 +340,7 @@ def _idle_until_stopped(
     poll_s: float = 5.0,
 ) -> None:
     """Keep the wrapper alive while the persisted server is still running."""
+    health_failures = 0
     while True:
         if process is None:
             time.sleep(poll_s)
@@ -338,11 +356,28 @@ def _idle_until_stopped(
                     )
                 return
 
-        if not _health_url_ok(health_url):
-            # Any urlopen failure — connection refused, timeout, socket
-            # error — means the persisted server is gone; exit so the
-            # wrapper subprocess can be reaped.
+        if _health_url_ok(health_url):
+            health_failures = 0
+            continue
+
+        if process is None:
+            # A reused server has no child handle for this wrapper to manage.
             return
+
+        health_failures += 1
+        if health_failures < _IDLE_HEALTH_FAILURE_LIMIT:
+            print(
+                f"[stt_server] health endpoint unreachable "
+                f"({health_failures}/{_IDLE_HEALTH_FAILURE_LIMIT}); retrying",
+                flush=True,
+            )
+            continue
+
+        _terminate_process(process)
+        raise SystemExit(
+            f"[stt_server] persistent server failed "
+            f"{_IDLE_HEALTH_FAILURE_LIMIT} consecutive health checks; terminated"
+        )
 
 
 def run() -> None:
@@ -371,12 +406,14 @@ def run() -> None:
         return
 
     # ── wrapper mode ──────────────────────────────────────────────────────────
-    port              = int(cfg.get("port", _DEFAULT_PORT))
-    startup_timeout_s = float(cfg.get("startup_timeout_s", _DEFAULT_STARTUP_TIMEOUT_S))
-    health_url        = f"http://127.0.0.1:{port}/health"
-
-    if startup_timeout_s <= 0:
-        sys.exit("[stt_server] 'startup_timeout_s' must be greater than zero")
+    port = int(cfg.get("port", _DEFAULT_PORT))
+    try:
+        startup_timeout_s = _parse_startup_timeout(
+            cfg.get("startup_timeout_s", _DEFAULT_STARTUP_TIMEOUT_S)
+        )
+    except ValueError as exc:
+        raise SystemExit(f"[stt_server] {exc}") from exc
+    health_url = f"http://127.0.0.1:{port}/health"
 
     # Reuse an already-running server (survived a previous stack shutdown).
     already_up = _health_url_ok(health_url)

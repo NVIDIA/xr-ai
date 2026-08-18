@@ -9,7 +9,7 @@ import uuid
 from xr_ai_hub import ShmRingBuffer
 
 
-def test_unlink_tolerates_already_removed_segment():
+def test_unlink_tolerates_repeated_same_process_cleanup():
     ring = ShmRingBuffer(
         name=f"xr_test_{uuid.uuid4().hex[:12]}",
         num_slots=1,

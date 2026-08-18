@@ -9,7 +9,7 @@ boots the real model lives in test_gpu_stt_server.py.
 """
 from __future__ import annotations
 
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 import pytest
 from fastapi.testclient import TestClient
@@ -67,6 +67,31 @@ def test_default_startup_timeout_allows_cold_download():
     assert stt_main._DEFAULT_STARTUP_TIMEOUT_S >= 900
 
 
+@pytest.mark.parametrize(
+    "value",
+    [float("nan"), float("inf"), float("-inf"), "nan", "inf", "-inf"],
+)
+def test_startup_timeout_rejects_non_finite_values(value):
+    with pytest.raises(ValueError, match="finite number greater than zero"):
+        stt_main._parse_startup_timeout(value)
+
+
+def test_start_persistent_server_returns_healthy_child(monkeypatch):
+    process = Mock()
+    process.poll.return_value = None
+    popen = Mock(return_value=process)
+    monkeypatch.setattr(stt_main.subprocess, "Popen", popen)
+    monkeypatch.setattr(stt_main, "_health_url_ok", lambda _url: True)
+
+    result = stt_main._start_persistent_server(
+        ["stt", "--_serve"], "http://health", startup_timeout_s=900
+    )
+
+    assert result is process
+    popen.assert_called_once_with(["stt", "--_serve"], start_new_session=True)
+    process.wait.assert_not_called()
+
+
 def test_wait_until_healthy_reports_detached_child_exit(monkeypatch):
     process = Mock()
     process.poll.return_value = 17
@@ -97,6 +122,42 @@ def test_idle_reports_detached_child_crash_without_health_delay(monkeypatch):
     process.wait.assert_called_once_with(timeout=5)
 
 
+def test_idle_retries_transient_health_failures(monkeypatch):
+    process = Mock()
+    process.wait.side_effect = [
+        stt_main.subprocess.TimeoutExpired("stt", 5),
+        stt_main.subprocess.TimeoutExpired("stt", 5),
+        stt_main.subprocess.TimeoutExpired("stt", 5),
+        0,
+    ]
+    health = Mock(side_effect=[False, False, True])
+    terminate = Mock()
+    monkeypatch.setattr(stt_main, "_health_url_ok", health)
+    monkeypatch.setattr(stt_main, "_terminate_process", terminate)
+
+    stt_main._idle_until_stopped("http://health", process, poll_s=5)
+
+    assert health.call_count == 3
+    terminate.assert_not_called()
+
+
+def test_idle_terminates_child_after_consecutive_health_failures(monkeypatch):
+    process = Mock()
+    process.wait.side_effect = [
+        stt_main.subprocess.TimeoutExpired("stt", 5)
+        for _ in range(stt_main._IDLE_HEALTH_FAILURE_LIMIT)
+    ]
+    terminate = Mock()
+    monkeypatch.setattr(stt_main, "_health_url_ok", lambda _url: False)
+    monkeypatch.setattr(stt_main, "_terminate_process", terminate)
+
+    with pytest.raises(SystemExit, match="consecutive health checks; terminated"):
+        stt_main._idle_until_stopped("http://health", process, poll_s=5)
+
+    assert process.wait.call_count == stt_main._IDLE_HEALTH_FAILURE_LIMIT
+    terminate.assert_called_once_with(process)
+
+
 def test_startup_timeout_terminates_detached_child(monkeypatch):
     process = Mock()
     process.poll.return_value = None
@@ -115,3 +176,21 @@ def test_startup_timeout_terminates_detached_child(monkeypatch):
     popen.assert_called_once_with(["stt", "--_serve"], start_new_session=True)
     process.terminate.assert_called_once_with()
     process.wait.assert_called_once_with(timeout=stt_main._PROCESS_STOP_TIMEOUT_S)
+
+
+def test_terminate_process_escalates_to_kill():
+    process = Mock()
+    process.poll.return_value = None
+    process.wait.side_effect = [
+        stt_main.subprocess.TimeoutExpired("stt", stt_main._PROCESS_STOP_TIMEOUT_S),
+        0,
+    ]
+
+    stt_main._terminate_process(process)
+
+    process.terminate.assert_called_once_with()
+    process.kill.assert_called_once_with()
+    assert process.wait.call_args_list == [
+        call(timeout=stt_main._PROCESS_STOP_TIMEOUT_S),
+        call(),
+    ]
