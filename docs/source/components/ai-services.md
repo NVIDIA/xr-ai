@@ -488,7 +488,7 @@ cleanup.
   vLLM runtime*); persists across stack restarts in both pip and docker modes.
 - **stt-server** loads parakeet-tdt-0.6b-v3 via NeMo ASR in-process.
   English-only; the `language` and `temperature` form fields are accepted but
-  ignored. Its persistent wrapper allows 900 seconds for a cold start by
+  ignored. Its persistent wrapper allows 600 seconds for a cold start by
   default because that path can include importing NeMo, downloading weights,
   initializing CUDA, and loading the model. Set `startup_timeout_s` in the STT
   YAML to a positive finite number to tune the budget. A child that exits

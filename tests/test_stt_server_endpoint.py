@@ -64,7 +64,7 @@ def test_transcription_text_format_success(app_and_backend, monkeypatch):
 
 
 def test_default_startup_timeout_allows_cold_download():
-    assert stt_main._DEFAULT_STARTUP_TIMEOUT_S >= 900
+    assert stt_main._DEFAULT_STARTUP_TIMEOUT_S == 600
 
 
 @pytest.mark.parametrize(
@@ -84,7 +84,7 @@ def test_start_persistent_server_returns_healthy_child(monkeypatch):
     monkeypatch.setattr(stt_main, "_health_url_ok", lambda _url: True)
 
     result = stt_main._start_persistent_server(
-        ["stt", "--_serve"], "http://health", startup_timeout_s=900
+        ["stt", "--_serve"], "http://health", startup_timeout_s=600
     )
 
     assert result is process
@@ -102,7 +102,7 @@ def test_wait_until_healthy_reports_detached_child_exit(monkeypatch):
     )
 
     with pytest.raises(RuntimeError, match="exited with status 17"):
-        stt_main._wait_until_healthy(process, "http://health", timeout_s=900)
+        stt_main._wait_until_healthy(process, "http://health", timeout_s=600)
 
     process.wait.assert_not_called()
 
@@ -171,7 +171,7 @@ def test_startup_timeout_terminates_detached_child(monkeypatch):
     monkeypatch.setattr(stt_main, "_wait_until_healthy", _timeout)
 
     with pytest.raises(TimeoutError, match="cold start exceeded budget"):
-        stt_main._start_persistent_server(["stt", "--_serve"], "http://health", 900)
+        stt_main._start_persistent_server(["stt", "--_serve"], "http://health", 600)
 
     popen.assert_called_once_with(["stt", "--_serve"], start_new_session=True)
     process.terminate.assert_called_once_with()

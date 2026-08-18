@@ -18,7 +18,7 @@ Config keys
     device:            str    "cuda" | "cpu" | "auto" (default: "auto")
     port:              int    HTTP port (default: 8103)
     host:              str    Bind address (default: "0.0.0.0")
-    startup_timeout_s: float  Seconds allowed for a cold start (default: 900)
+    startup_timeout_s: float  Seconds allowed for a cold start (default: 600)
     model_cache:       str    NeMo + HF weight cache.  Resolved relative to this YAML.
                               Default: ../../models
 """
@@ -51,7 +51,7 @@ from loguru import logger
 from xr_ai_logging import setup_logging
 
 _DEFAULT_PORT              = 8103
-_DEFAULT_STARTUP_TIMEOUT_S = 900.0
+_DEFAULT_STARTUP_TIMEOUT_S = 600.0
 _PROCESS_STOP_TIMEOUT_S    = 10.0
 _IDLE_HEALTH_FAILURE_LIMIT = 3
 
