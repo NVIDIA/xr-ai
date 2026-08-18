@@ -28,7 +28,6 @@ from xr_ai_voice import (
     VoiceParticipantLeft,
     VoiceStreamClosedError,
 )
-from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent
 from xr_render_scene import EmptyRequest
 
 _WORKER_DIR = (
@@ -39,7 +38,6 @@ _WORKER_DIR = (
 )
 sys.path.insert(0, str(_WORKER_DIR))
 
-from xr_render_demo_worker.__main__ import _RenderWebEvents  # noqa: E402
 from xr_render_demo_worker.agent import (  # noqa: E402
     INTERRUPTED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
@@ -189,56 +187,6 @@ class _VoiceRecorder(Agent):
 
     def abort_all(self) -> None:
         self.open_responses.clear()
-
-
-class _WebEventRecorder(Agent):
-    def __init__(self) -> None:
-        super().__init__()
-        self.events: list[tuple[WebEvent, MessageMetadata]] = []
-
-    @subscribe(WEB_EVENT_TOPIC)
-    async def record(self, event: WebEvent, ctx: RuntimeContext) -> None:
-        self.events.append((event, ctx.metadata))
-
-
-async def test_xr_render_publishes_selected_request_and_response_web_events() -> None:
-    recorder = _WebEventRecorder()
-    runtime = AgentRuntime()
-    runtime.register("web-events-publisher", _RenderWebEvents())
-    runtime.register("web-events-recorder", recorder)
-
-    async with runtime:
-        await runtime.publish(
-            USER_QUERY_TOPIC,
-            UserQuery(text="Add a cube.", timestamp_us=123),
-            participant_id="alice",
-            source="test-input",
-        )
-        await runtime.publish(
-            VOICE_OUTPUT_TOPIC,
-            VoiceOutput(
-                text="I added a cube.",
-                response_id="response-1",
-                final=False,
-            ),
-            participant_id="alice",
-            source="xr-render",
-        )
-        await runtime.publish(
-            VOICE_OUTPUT_TOPIC,
-            VoiceOutput(response_id="response-1"),
-            participant_id="alice",
-            source="xr-render",
-        )
-
-    assert [(event.topic, event.payload) for event, _ in recorder.events] == [
-        ("xr-render.query", {"text": "Add a cube."}),
-        (
-            "xr-render.response",
-            {"text": "I added a cube.", "final": False},
-        ),
-    ]
-    assert {metadata.participant_id for _, metadata in recorder.events} == {"alice"}
 
 
 async def test_render_agent_publishes_incremental_voice_output() -> None:

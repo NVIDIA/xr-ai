@@ -43,9 +43,7 @@ uv run simple_vlm_example
 ```
 
 Open the web client shown in the hub banner, connect, and then speak or type a
-question. The worker also serves a live participant-aware conversation view at
-`http://127.0.0.1:8092`; `web_events_host` and `web_events_port` in
-`yaml/simple_vlm_example_worker.yaml` configure that listener.
+question.
 
 The worker and orchestrator consume the deployment profile selected by
 `models_config` in `yaml/simple_vlm_example_worker.yaml`:

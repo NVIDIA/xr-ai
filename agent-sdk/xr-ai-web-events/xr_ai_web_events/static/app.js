@@ -31,7 +31,7 @@ function participantOptionName(event) {
 
 function presentation(event) {
   const payload = event.payload;
-  const candidates = ['text', 'message', 'response', 'summary', 'caption', 'delta', 'meter_reading'];
+  const candidates = ['text', 'message', 'response', 'summary', 'caption', 'delta'];
   for (const key of candidates) {
     if (typeof payload[key] === 'string' && payload[key]) return payload[key];
   }

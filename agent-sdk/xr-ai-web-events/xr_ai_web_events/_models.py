@@ -3,8 +3,12 @@
 
 """Typed input accepted by the web-events viewer."""
 
+import json
+
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 from xr_ai_runtime import Topic
+
+_MAX_PAYLOAD_BYTES = 16 * 1024
 
 
 class WebEvent(BaseModel):
@@ -16,7 +20,7 @@ class WebEvent(BaseModel):
     """Stable presentation topic used to group the event in the browser."""
 
     payload: dict[str, JsonValue] = Field(default_factory=dict)
-    """JSON-compatible application payload rendered by the browser."""
+    """JSON-compatible application payload, limited to 16 KiB when serialized."""
 
     title: str | None = Field(default=None, min_length=1, max_length=120)
     """Optional human-readable title for the presentation topic."""
@@ -30,6 +34,19 @@ class WebEvent(BaseModel):
         if not stripped:
             raise ValueError("web event topic and title must not be blank")
         return stripped
+
+    @field_validator("payload")
+    @classmethod
+    def _bound_payload(cls, value: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        encoded = json.dumps(
+            value,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        if len(encoded) > _MAX_PAYLOAD_BYTES:
+            raise ValueError(f"web event payload must not exceed {_MAX_PAYLOAD_BYTES} UTF-8 bytes")
+        return value
 
 
 WEB_EVENT_TOPIC = Topic("web-events.event", WebEvent, telemetry="none")

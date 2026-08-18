@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from ipaddress import ip_address
 from types import TracebackType
 
 from xr_ai_runtime import Agent, RuntimeContext, subscribe
@@ -27,8 +28,15 @@ class WebEventsAgent(Agent):
         max_events: int = 5_000,
         title: str = "XR AI Agent Events",
     ) -> None:
-        if not host.strip():
+        normalized_host = host.strip()
+        if not normalized_host:
             raise ValueError("web-events host must not be empty")
+        try:
+            listener_address = ip_address(normalized_host.strip("[]"))
+        except ValueError:
+            listener_address = None
+        if listener_address is not None and listener_address.version != 4:
+            raise ValueError("web-events supports IPv4 listener addresses only")
         if not 0 <= port <= 65_535:
             raise ValueError("web-events port must be between 0 and 65535")
         if max_events <= 0:
@@ -36,7 +44,7 @@ class WebEventsAgent(Agent):
         if not title.strip():
             raise ValueError("web-events title must not be empty")
         super().__init__()
-        self.host = host.strip()
+        self.host = normalized_host
         self.port = port
         self.max_events = max_events
         self.title = title.strip()
@@ -106,7 +114,7 @@ class WebEventsAgent(Agent):
                 # The listener owns potentially sensitive in-memory data. Do
                 # not abandon its socket when the surrounding worker is being
                 # cancelled; finish cleanup before propagating cancellation.
-                await cleanup
+                await asyncio.gather(cleanup)
                 raise
             finally:
                 if cleanup.done():

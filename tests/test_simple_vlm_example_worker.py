@@ -9,7 +9,6 @@ import asyncio
 import sys
 import time
 from collections.abc import AsyncIterator
-from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -20,18 +19,11 @@ import tomllib
 import yaml
 from xr_ai_hub import FrameData, FrameSignal, FrameUnavailable, PixelFormat, ProcessorEndpoint
 from xr_ai_models import ChatResponse, VLMService
-from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
-from xr_ai_voice import (
-    VOICE_OUTPUT_TOPIC,
-    UserQuery,
-    VoiceAgent,
-    VoiceInterrupted,
-    VoiceOutput,
-)
+from xr_ai_runtime import AgentRuntime
+from xr_ai_voice import UserQuery, VoiceAgent, VoiceInterrupted, VoiceOutput
 from xr_ai_voice import _runtime as voice_runtime_module
 from xr_ai_voice._session import _VoiceSession as VoiceSession
 from xr_ai_voicegate import VoiceGateConfig
-from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _SAMPLE_DIR = _REPO_ROOT / "agent-samples" / "simple-vlm-example"
@@ -202,56 +194,6 @@ class _StreamingVlm:
             yield token
 
 
-class _WebEventRecorder(Agent):
-    def __init__(self) -> None:
-        super().__init__()
-        self.events: list[tuple[WebEvent, str | None]] = []
-
-    @subscribe(WEB_EVENT_TOPIC)
-    async def capture(self, event: WebEvent, ctx: RuntimeContext) -> None:
-        self.events.append((event, ctx.metadata.participant_id))
-
-
-async def test_simple_vlm_publishes_selected_conversation_web_events() -> None:
-    recorder = _WebEventRecorder()
-    runtime = AgentRuntime()
-    runtime.register("web-events-publisher", app._SimpleVlmWebEvents())  # noqa: SLF001
-    runtime.register("web-events-recorder", recorder)
-
-    async with runtime:
-        await runtime.publish(
-            USER_QUERY_TOPIC,
-            UserQuery(text="What is shown?", timestamp_us=123),
-            participant_id="alice",
-            source="test-input",
-        )
-        await runtime.publish(
-            VOICE_OUTPUT_TOPIC,
-            VoiceOutput(
-                text="A blue square.",
-                response_id="response-1",
-                final=False,
-            ),
-            participant_id="alice",
-            source="simple-vlm",
-        )
-        await runtime.publish(
-            VOICE_OUTPUT_TOPIC,
-            VoiceOutput(response_id="response-1"),
-            participant_id="alice",
-            source="simple-vlm",
-        )
-
-    assert [(event.topic, event.payload) for event, _ in recorder.events] == [
-        ("simple-vlm.query", {"text": "What is shown?"}),
-        (
-            "simple-vlm.response",
-            {"text": "A blue square.", "final": False},
-        ),
-    ]
-    assert {participant_id for _, participant_id in recorder.events} == {"alice"}
-
-
 def test_worker_is_a_package_with_module_and_console_entry_points() -> None:
     project = tomllib.loads((_WORKER_DIR / "pyproject.toml").read_text())
     package = _WORKER_DIR / "simple_vlm_example_worker"
@@ -276,10 +218,6 @@ def test_worker_is_a_package_with_module_and_console_entry_points() -> None:
     assert "xr-ai-tools[frames,vision]" in dependencies
     assert all("[vision" not in dependency and "[voice" not in dependency for dependency in dependencies)
     assert "xr-ai-voice" in dependencies
-    assert "xr-ai-web-events" in dependencies
-    assert project["tool"]["uv"]["sources"]["xr-ai-web-events"]["path"] == (
-        "../../../agent-sdk/xr-ai-web-events"
-    )
     assert "xr-ai-pipecat" not in dependencies
     assert all("mcp" not in dependency.lower() for dependency in dependencies)
     assert project["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == ["simple_vlm_example_worker"]
@@ -349,8 +287,6 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
     assert config.frame_max_age_s == 5.0
     assert config.frame_timeout_s == 5.0
     assert config.idle_timeout_secs is None
-    assert config.web_events_host == "127.0.0.1"
-    assert config.web_events_port == 8092
     assert "system_prompt_file" not in raw
 
 
@@ -557,10 +493,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     monkeypatch,
     tmp_path,
 ) -> None:
-    config = replace(
-        load_config(_SAMPLE_DIR / "yaml" / "simple_vlm_example_worker.yaml"),
-        web_events_port=0,
-    )
+    config = load_config(_SAMPLE_DIR / "yaml" / "simple_vlm_example_worker.yaml")
     ready_file = tmp_path / "ready"
     stt = _Service()
     vlm = _Service()

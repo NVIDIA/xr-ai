@@ -27,8 +27,6 @@ class WorkerConfig:
     min_speech: float
     silero_threshold: float
     idle_timeout_secs: float | None
-    web_events_host: str
-    web_events_port: int
 
 
 def _resolve(config_path: Path | None, raw: str) -> Path:
@@ -80,6 +78,4 @@ def load_config(path: Path | None) -> WorkerConfig:
         min_speech=float(data.get("min_speech", 0.1)),
         silero_threshold=float(data.get("silero_threshold", 0.5)),
         idle_timeout_secs=float(idle_timeout) if idle_timeout else None,
-        web_events_host=str(data.get("web_events_host", "127.0.0.1")),
-        web_events_port=int(data.get("web_events_port", 8092)),
     )

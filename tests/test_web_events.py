@@ -58,6 +58,16 @@ def test_web_event_rejects_non_finite_json_numbers(payload: dict) -> None:
         WebEvent(topic="measurements", payload=payload)
 
 
+def test_web_event_payload_limit_counts_serialized_utf8_bytes() -> None:
+    accepted = WebEvent(topic="measurements", payload={"text": "x" * 16_373})
+
+    assert len(accepted.payload["text"]) == 16_373
+    with pytest.raises(ValidationError, match="16384 UTF-8 bytes"):
+        WebEvent(topic="measurements", payload={"text": "x" * 16_374})
+    with pytest.raises(ValidationError, match="16384 UTF-8 bytes"):
+        WebEvent(topic="measurements", payload={"text": "€" * 5_458})
+
+
 async def test_viewer_serves_runtime_events_and_reports_rollover() -> None:
     runtime = AgentRuntime()
     viewer = runtime.register(
@@ -150,8 +160,6 @@ async def test_viewer_rejects_unrecognized_host_before_serving_routes() -> None:
             f"localhost:{port}",
             "127.0.0.1",
             f"127.0.0.1:{port}",
-            "[::1]",
-            f"[::1]:{port}",
         ):
             status, _, _ = await _get_with_host(f"{viewer.url}/healthz", host)
             assert status == 200
@@ -159,6 +167,11 @@ async def test_viewer_rejects_unrecognized_host_before_serving_routes() -> None:
         for path in ("/healthz", "/api/events?after=0", "/"):
             with pytest.raises(HTTPError) as rejected:
                 await _get_with_host(f"{viewer.url}{path}", "rebind.example")
+            assert rejected.value.code == 400
+
+        for host in ("[::1]", f"[::1]:{port}"):
+            with pytest.raises(HTTPError) as rejected:
+                await _get_with_host(f"{viewer.url}/healthz", host)
             assert rejected.value.code == 400
 
 
@@ -169,7 +182,8 @@ async def test_viewer_lifecycle_is_idempotent_and_bind_failure_is_visible() -> N
     await viewer.start()
     assert viewer.url == first_url
     await viewer.stop()
-    await viewer.stop()
+    repeated_stop = await viewer.stop()
+    assert repeated_stop is None
 
     with socket.socket() as occupied:
         occupied.bind(("127.0.0.1", 0))
@@ -216,6 +230,7 @@ async def test_viewer_cancellation_finishes_listener_cleanup(monkeypatch) -> Non
     ("kwargs", "message"),
     [
         ({"host": " "}, "host"),
+        ({"host": "::1"}, "IPv4"),
         ({"port": -1}, "port"),
         ({"port": 65_536}, "port"),
         ({"max_events": 0}, "max_events"),

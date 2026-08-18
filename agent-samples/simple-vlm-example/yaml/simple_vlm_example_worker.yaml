@@ -37,8 +37,3 @@ min_speech:        0.1    # minimum seconds of speech before STT is called
 # (e.g. 300 for 5 min) to opt in; the worker then tears the pipeline down
 # after that long idle. Applied by VoiceAgent.
 idle_timeout_secs: 0
-
-# Live conversation event viewer. Keep the default loopback binding and use an
-# SSH tunnel for remote development; see docs/source/getting_started/networking.md.
-web_events_host: 127.0.0.1
-web_events_port: 8092

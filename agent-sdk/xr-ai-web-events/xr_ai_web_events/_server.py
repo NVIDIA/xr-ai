@@ -26,29 +26,30 @@ _CSP = (
     "frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; "
     "script-src 'self'; style-src 'self'"
 )
-_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
-_WILDCARD_HOSTS = frozenset({"", "0.0.0.0", "::"})
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1"})
+_WILDCARD_HOSTS = frozenset({"", "0.0.0.0"})
 
 
 def _normalized_host(value: str) -> str:
     return value.strip().lower().rstrip(".").strip("[]")
 
 
-def _is_ip_literal(value: str) -> bool:
+def _is_ipv4_literal(value: str) -> bool:
     try:
-        ip_address(value)
+        address = ip_address(value)
     except ValueError:
         return False
-    return True
+    return address.version == 4
 
 
 def _is_loopback(value: str) -> bool:
     if value in _LOOPBACK_HOSTS:
         return True
     try:
-        return ip_address(value).is_loopback
+        address = ip_address(value)
     except ValueError:
         return False
+    return address.version == 4 and address.is_loopback
 
 
 class _WebEventsServer(ThreadingHTTPServer):
@@ -77,7 +78,7 @@ class _WebEventsServer(ThreadingHTTPServer):
             # A wildcard listener has no single external identity. Permit
             # literal addresses for direct private-network access, but reject
             # arbitrary DNS names that can be rebound to this listener.
-            return host == "localhost" or _is_ip_literal(host)
+            return host == "localhost" or _is_ipv4_literal(host)
         if _is_loopback(self.listener_host):
             return _is_loopback(host)
         return host in {self.listener_host, self.bound_host}

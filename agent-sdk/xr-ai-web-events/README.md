@@ -12,7 +12,8 @@ in-memory history is for observation only; durable output remains an
 application responsibility.
 
 Applications opt in explicitly by publishing compact JSON-compatible payloads
-to `WEB_EVENT_TOPIC`:
+to `WEB_EVENT_TOPIC`. Each payload is limited to 16 KiB of serialized UTF-8 so
+the count-bounded history also has a per-event size bound:
 
 ```python
 from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent, WebEventsAgent
@@ -49,10 +50,6 @@ and topic views. `/api/events?after=<sequence>` reports cursor rollover so a
 browser can recover after falling behind the bounded store. `/healthz` reports
 whether the HTTP listener can answer requests.
 
-The shipped `simple-vlm-example` worker publishes participant-scoped VLM queries
-and response chunks, while `xr-render-demo` publishes XR requests and spoken
-agent output. Both configure and start their viewer from the sample worker YAML.
-
 The listener has no application authentication or TLS. Its loopback default is
 intentional because payloads may contain speech transcripts or camera-derived
 text. For remote development, keep it on loopback and use an SSH tunnel:
@@ -65,4 +62,5 @@ Do not bind it to `0.0.0.0` on an untrusted network. A remotely exposed viewer
 needs an authenticated TLS reverse proxy chosen by the deployment owner; it
 does not reuse the media hub's participant credentials. The server also rejects
 unrecognized HTTP `Host` names. A reverse proxy must preserve a configured host,
-use a literal listener address, or rewrite `Host` to `127.0.0.1`.
+use a literal listener address, or rewrite `Host` to `127.0.0.1`. Listener
+addresses are IPv4-only; IPv6 literals are rejected with a configuration error.
