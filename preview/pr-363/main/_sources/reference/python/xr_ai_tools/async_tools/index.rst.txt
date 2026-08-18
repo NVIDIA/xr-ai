@@ -14,7 +14,7 @@ Classes
 
 .. autoapisummary::
 
-   xr_ai_tools.async_tools.AsyncTool
+   xr_ai_tools.AsyncTool
 
 
 Module Contents

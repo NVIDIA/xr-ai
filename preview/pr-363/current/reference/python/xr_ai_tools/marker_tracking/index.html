@@ -327,6 +327,8 @@
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../../index.html">API Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="../../xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 current active has-children"><a class="reference internal" href="../index.html">xr_ai_tools</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l3"><a class="reference internal" href="../async_tools/index.html">xr_ai_tools.async_tools</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../current_frame/index.html">xr_ai_tools.current_frame</a></li>
@@ -351,6 +353,9 @@
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../../xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 </ul>
 </details></li>
 </ul>
@@ -469,6 +474,12 @@
 <dd><p>Participant whose current camera frame should be scanned.</p>
 </dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_tools.marker_tracking.MarkerTrackingRequest.image">
+<span class="sig-name descname"><span class="pre">image</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="../image/index.html#xr_ai_tools.image.ImageReference" title="xr_ai_tools.image.ImageReference"><span class="pre">xr_ai_tools.image.ImageReference</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#xr_ai_tools.marker_tracking.MarkerTrackingRequest.image" title="Link to this definition">#</a></dt>
+<dd><p>Previously selected image to scan instead of acquiring another frame.</p>
+</dd></dl>
+
 </dd></dl>
 
 <dl class="py class">
@@ -549,6 +560,7 @@
 <dd><em class="sig-param"><span class="n"><span class="pre">frame_max_age_s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2.0</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">frame_timeout_s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5.0</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">manage_status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">images</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../image/index.html#xr_ai_tools.image.ImageRegistry" title="xr_ai_tools.image.ImageRegistry"><span class="pre">xr_ai_tools.image.ImageRegistry</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 </dl>
 
 <span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_tools.marker_tracking.MarkerTrackingTool" title="Link to this definition">#</a></dt>
@@ -622,6 +634,7 @@
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.marker_tracking.MarkerTrackingRequest"><code class="docutils literal notranslate"><span class="pre">MarkerTrackingRequest</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.marker_tracking.MarkerTrackingRequest.participant_id"><code class="docutils literal notranslate"><span class="pre">participant_id</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.marker_tracking.MarkerTrackingRequest.image"><code class="docutils literal notranslate"><span class="pre">image</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_tools.marker_tracking.MarkerPoint"><code class="docutils literal notranslate"><span class="pre">MarkerPoint</span></code></a><ul class="nav section-nav flex-column">

@@ -193,19 +193,19 @@ Module Contents
    Async model invocation supplied with the transcript and tool definitions.
 
 
-.. py:function:: tool_definitions(tools: collections.abc.Iterable[xr_ai_tools.tools.Tool[Any, Any]] | xr_ai_tools.tools.ToolSet) -> tuple[xr_ai_models.ToolDef, Ellipsis]
+.. py:function:: tool_definitions(tools: collections.abc.Iterable[xr_ai_tools.Tool[Any, Any]] | xr_ai_tools.ToolSet) -> tuple[xr_ai_models.ToolDef, Ellipsis]
 
    Return model-service definitions for native tools.
 
 
-.. py:function:: handle_tool_call(call: xr_ai_models.ToolCall, tools: xr_ai_tools.tools.ToolSet) -> ToolCallResult
+.. py:function:: handle_tool_call(call: xr_ai_models.ToolCall, tools: xr_ai_tools.ToolSet) -> ToolCallResult
    :async:
 
 
    Invoke one model-produced call and return its tool-role message.
 
 
-.. py:function:: run_tool_loop(messages: collections.abc.Sequence[xr_ai_models.ChatMessage], tools: xr_ai_tools.tools.ToolSet, call_model: ModelCallback, *, max_iterations: int = 4, max_tool_calls: int = 16) -> ToolLoopResult
+.. py:function:: run_tool_loop(messages: collections.abc.Sequence[xr_ai_models.ChatMessage], tools: xr_ai_tools.ToolSet, call_model: ModelCallback, *, max_iterations: int = 4, max_tool_calls: int = 16) -> ToolLoopResult
    :async:
 
 
