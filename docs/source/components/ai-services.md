@@ -488,14 +488,8 @@ cleanup.
   vLLM runtime*); persists across stack restarts in both pip and docker modes.
 - **stt-server** loads parakeet-tdt-0.6b-v3 via NeMo ASR in-process.
   English-only; the `language` and `temperature` form fields are accepted but
-  ignored. Its persistent wrapper allows 600 seconds for a cold start by
-  default because that path can include importing NeMo, downloading weights,
-  initializing CUDA, and loading the model. Set `startup_timeout_s` in the STT
-  YAML to a positive finite number to tune the budget. A child that exits
-  before readiness is reported immediately, and a child that exceeds the
-  budget is terminated before the wrapper exits so a retry cannot collide with
-  an orphaned server. After startup, three consecutive failed health checks
-  terminate a child known to this wrapper; an isolated failed check is retried.
+  ignored. Set `startup_timeout_s` to a positive finite number to override the
+  600-second cold-start budget.
 - **magpie-tts** loads magpie_tts_multilingual_357m via NeMo TTS in-process.
 - **piper-tts** serves any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
   All inference runs in a thread pool so the asyncio loop is never blocked.
