@@ -5,6 +5,9 @@
 
 # Tea-making guidance
 
+For an adaptation-oriented architecture guide, see
+[`docs/source/reference/tea-making-sample.md`](../../docs/source/reference/tea-making-sample.md).
+
 This sample combines a foreground tea guide with independent background
 observers. The foreground guide identifies tea, retrieves brewing guidance,
 watches visible preparation steps, and maintains one deterministic workflow per

@@ -76,6 +76,18 @@ def test_launcher_declares_one_omni_and_no_monitoring_ui(tmp_path: Path) -> None
     assert "rag" in names
 
 
+def test_published_guide_covers_architecture_and_adaptation() -> None:
+    guide = (_ROOT / "docs/source/reference/tea-making-sample.md").read_text()
+
+    assert "## Architecture" in guide
+    assert "## Source map" in guide
+    assert "## Connecting a backend" in guide
+    assert "## Adapting the sample" in guide
+    assert "## Lifecycle invariants" in guide
+    assert "GuidanceAgent" in guide
+    assert "BackgroundContextAgent" in guide
+
+
 def test_workflow_requires_explicit_advancement() -> None:
     workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
     store = WorkflowStore(workflow)
