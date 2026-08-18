@@ -456,7 +456,7 @@ accepted speech / typed query          ├─&gt; current frame + generic VLM qu
               ├─&gt; visual monitor controls      v
               ├─&gt; instrument controls   InstrumentMonitorAgent
               └─&gt; current readings             │
-                                               ├─&gt; change event ─┬─&gt; voice alert
+                                               ├─&gt; change event ─┬─&gt; voice aggregation
                                                ├─&gt; lost event ───┤
                                                └─&gt; state event ──┴─&gt; JSONL/backend
 </pre></div>
@@ -500,7 +500,11 @@ appear in the worker’s agent contracts.</p>
 <td><p>Which instrument events become participant voice output</p></td>
 <td><p>Tracking state</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">FileOutputAgent</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code></p></td>
+<td><p>Participant speech pacing, ordering, and coalescing</p></td>
+<td><p>Instrument or foreground decisions</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">FileOutputAgent</span></code></p></td>
 <td><p>Session files, JSONL records, recent visual-history tool</p></td>
 <td><p>Agent decisions</p></td>
 </tr>
@@ -510,6 +514,11 @@ appear in the worker’s agent contracts.</p>
 <p>This ownership keeps periodic tasks and mutable state out of the runtime. The
 runtime delivers typed events; each agent cancels its own participant tasks and
 releases its own state.</p>
+<p>For a <code class="docutils literal notranslate"><span class="pre">current_view</span></code> selection, <code class="docutils literal notranslate"><span class="pre">ForegroundAgent</span></code> uses the same direct path as
+<code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code>: <code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code> selects one frame and
+<code class="docutils literal notranslate"><span class="pre">StreamingImageQueryTool</span></code> publishes chunks to participant voice. The tool is a
+direct return, so the completed visual answer does not incur a second language
+model call.</p>
 </section>
 <section id="source-map">
 <h2>Source map<a class="headerlink" href="#source-map" title="Link to this heading">#</a></h2>
@@ -642,6 +651,12 @@ unit, the previous known unit is retained. The agent publishes:</p>
 <p>A device moving in and out of view does not repeatedly alert unless its value
 changes. This is application policy and belongs in the tracker rather than the
 VLM prompt or voice agent.</p>
+<p>Only marker identities present in <code class="docutils literal notranslate"><span class="pre">device_map.yaml</span></code> are treated as instruments.
+Unknown QR payloads and ArUco IDs are logged and ignored, preventing detector
+false positives from becoming names such as <code class="docutils literal notranslate"><span class="pre">ArUco</span> <span class="pre">17</span></code>. The one-frame reader
+also instructs the VLM to use only a display on the same physical instrument
+body as the highlighted marker and to return <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code> when an adjacent display
+cannot be excluded.</p>
 </section>
 <section id="connecting-a-backend">
 <h2>Connecting a backend<a class="headerlink" href="#connecting-a-backend" title="Link to this heading">#</a></h2>
