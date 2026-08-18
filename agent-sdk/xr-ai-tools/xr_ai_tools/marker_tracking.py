@@ -95,74 +95,113 @@ def _corners(points: np.ndarray) -> tuple[MarkerPoint, MarkerPoint, MarkerPoint,
     )
 
 
-def _full_frame_scans(pixels: np.ndarray) -> list[tuple[np.ndarray, int]]:
+def _full_frame_scans(
+    pixels: np.ndarray,
+) -> list[tuple[np.ndarray, float, float]]:
     height, width = pixels.shape[:2]
     grayscale = Image.fromarray(pixels).convert("L")
-    scans = [(np.asarray(grayscale), 1)]
-    scale = min(
-        _MARKER_SCAN_MAX_SCALE,
-        max(
-            1,
-            (_MARKER_SCAN_LONG_EDGE + max(width, height) - 1)
-            // max(width, height),
-        ),
+    scans = [(np.asarray(grayscale), 1.0, 1.0)]
+    long_edge = max(width, height)
+    target_long_edge = min(
+        _MARKER_SCAN_LONG_EDGE,
+        long_edge * _MARKER_SCAN_MAX_SCALE,
     )
-    if scale > 1:
-        enlarged = grayscale.resize(
-            (width * scale, height * scale),
-            Image.Resampling.LANCZOS,
+    if target_long_edge <= long_edge:
+        return scans
+
+    if width >= height:
+        resized_width = target_long_edge
+        resized_height = max(1, round(height * target_long_edge / width))
+    else:
+        resized_width = max(1, round(width * target_long_edge / height))
+        resized_height = target_long_edge
+    enlarged = grayscale.resize(
+        (resized_width, resized_height),
+        Image.Resampling.LANCZOS,
+    )
+    scans.append(
+        (
+            np.asarray(enlarged),
+            resized_width / width,
+            resized_height / height,
         )
-        scans.append((np.asarray(enlarged), scale))
+    )
     return scans
 
 
 def _extract_qr_markers(
-    scans: Iterable[tuple[np.ndarray, int]],
+    scans: Iterable[tuple[np.ndarray, float, float]],
 ) -> list[TrackedMarker]:
-    markers: list[TrackedMarker] = []
-    for scan, scan_scale in scans:
+    scan_markers: list[list[TrackedMarker]] = []
+    for scan, scale_x, scale_y in scans:
         barcodes = zxingcpp.read_barcodes(
             np.ascontiguousarray(scan),
             formats=zxingcpp.BarcodeFormat.QRCode,
         )
-        for barcode in barcodes:
-            marker = TrackedMarker(
-                marker_type=MarkerType.QR_CODE,
-                value=barcode.text,
-                corners=tuple(
-                    MarkerPoint(
-                        x=float(point.x / scan_scale),
-                        y=float(point.y / scan_scale),
-                    )
-                    for point in (
-                        barcode.position.top_left,
-                        barcode.position.top_right,
-                        barcode.position.bottom_right,
-                        barcode.position.bottom_left,
-                    )
-                ),
-            )
-            if not any(_same_marker(marker, existing) for existing in markers):
-                markers.append(marker)
-    return markers
+        scan_markers.append(
+            [
+                TrackedMarker(
+                    marker_type=MarkerType.QR_CODE,
+                    value=barcode.text,
+                    corners=tuple(
+                        MarkerPoint(
+                            x=float(point.x / scale_x),
+                            y=float(point.y / scale_y),
+                        )
+                        for point in (
+                            barcode.position.top_left,
+                            barcode.position.top_right,
+                            barcode.position.bottom_right,
+                            barcode.position.bottom_left,
+                        )
+                    ),
+                )
+                for barcode in barcodes
+            ]
+        )
+    return _merge_marker_scans(scan_markers)
 
 
-def _same_marker(first: TrackedMarker, second: TrackedMarker) -> bool:
-    if first.marker_type is not second.marker_type or first.value != second.value:
-        return False
+def _marker_overlap_area(first: TrackedMarker, second: TrackedMarker) -> float:
+    first_left = min(point.x for point in first.corners)
+    first_top = min(point.y for point in first.corners)
+    first_right = max(point.x for point in first.corners)
+    first_bottom = max(point.y for point in first.corners)
+    second_left = min(point.x for point in second.corners)
+    second_top = min(point.y for point in second.corners)
+    second_right = max(point.x for point in second.corners)
+    second_bottom = max(point.y for point in second.corners)
+    return max(0.0, min(first_right, second_right) - max(first_left, second_left)) * max(
+        0.0,
+        min(first_bottom, second_bottom) - max(first_top, second_top),
+    )
 
-    first_center = (
-        sum(point.x for point in first.corners) / len(first.corners),
-        sum(point.y for point in first.corners) / len(first.corners),
-    )
-    second_center = (
-        sum(point.x for point in second.corners) / len(second.corners),
-        sum(point.y for point in second.corners) / len(second.corners),
-    )
-    return (
-        abs(first_center[0] - second_center[0]) <= 24
-        and abs(first_center[1] - second_center[1]) <= 24
-    )
+
+def _merge_marker_scans(
+    marker_scans: Iterable[list[TrackedMarker]],
+) -> list[TrackedMarker]:
+    merged: list[TrackedMarker] = []
+    for scan_markers in marker_scans:
+        unmatched_previous = set(range(len(merged)))
+        for marker in scan_markers:
+            best_index: int | None = None
+            best_overlap = 0.0
+            for index in unmatched_previous:
+                existing = merged[index]
+                if (
+                    marker.marker_type != existing.marker_type
+                    or marker.value != existing.value
+                ):
+                    continue
+                overlap = _marker_overlap_area(marker, existing)
+                if overlap > best_overlap:
+                    best_index = index
+                    best_overlap = overlap
+            if best_index is None:
+                merged.append(marker)
+            else:
+                unmatched_previous.remove(best_index)
+    return merged
 
 
 def _make_aruco_detector(dictionary_name: str) -> cv2.aruco.ArucoDetector:
@@ -174,27 +213,34 @@ def _make_aruco_detector(dictionary_name: str) -> cv2.aruco.ArucoDetector:
 
 
 def _extract_aruco_markers(
-    scans: Iterable[tuple[np.ndarray, int]],
+    scans: Iterable[tuple[np.ndarray, float, float]],
     detector: cv2.aruco.ArucoDetector,
 ) -> list[TrackedMarker]:
-    markers: list[TrackedMarker] = []
-    for scan, scan_scale in scans:
+    marker_scans: list[list[TrackedMarker]] = []
+    for scan, scale_x, scale_y in scans:
         corners, identifiers, _rejected = detector.detectMarkers(scan)
         if identifiers is None:
+            marker_scans.append([])
             continue
+        scan_markers: list[TrackedMarker] = []
         for marker_corners, identifier in zip(
             corners,
             identifiers.reshape(-1),
             strict=True,
         ):
-            marker = TrackedMarker(
-                marker_type=MarkerType.ARUCO,
-                value=str(int(identifier)),
-                corners=_corners(np.asarray(marker_corners) / scan_scale),
+            source_corners = np.asarray(marker_corners, dtype=np.float32) / np.array(
+                [scale_x, scale_y],
+                dtype=np.float32,
             )
-            if not any(_same_marker(marker, existing) for existing in markers):
-                markers.append(marker)
-    return markers
+            scan_markers.append(
+                TrackedMarker(
+                    marker_type=MarkerType.ARUCO,
+                    value=str(int(identifier)),
+                    corners=_corners(source_corners),
+                )
+            )
+        marker_scans.append(scan_markers)
+    return _merge_marker_scans(marker_scans)
 
 
 class MarkerTrackingTool(Tool[MarkerTrackingRequest, MarkerTrackingResult]):
