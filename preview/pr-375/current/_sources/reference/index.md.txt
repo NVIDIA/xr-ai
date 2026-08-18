@@ -5,7 +5,7 @@
 
 # Reference
 
-Detailed reference for the xr-render-demo stack.
+Package, Python API, migration, and sample-stack references.
 
 ```{toctree}
 :glob:
