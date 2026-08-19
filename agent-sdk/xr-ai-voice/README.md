@@ -105,7 +105,10 @@ next batch instead of becoming separate queued utterances. This is open-loop
 pacing rather than a client playback acknowledgement. An estimate that is too
 short moves queuing downstream into TTS; one that is too long creates silence
 between utterances, but neither delays the completed-response data echo. Tune
-all three playback settings for the selected TTS voice.
+all three playback settings for the selected TTS voice. The echo represents the
+complete intended utterance, not a playback acknowledgement: a later urgent
+barge-in can interrupt its audio after the full text has already reached the
+client.
 
 Rewrites have an aggregator-enforced `rewrite_timeout_s` deadline, which is also
 passed to the model service. If a rewrite fails or times out, the original text
