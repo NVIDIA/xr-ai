@@ -21,7 +21,7 @@ concurrency:
 jobs:
   check:
     name: check SPDX headers
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && contains(github.event.pull_request.labels.*.name, 'ci:self-hosted') && 'Linux' || 'ubuntu-latest' }}
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && contains(github.event.pull_request.labels.*.name, 'ci:self-hosted') && '["self-hosted","Linux","X64"]' || '["ubuntu-latest"]') }}
     timeout-minutes: 5
 
     steps:
