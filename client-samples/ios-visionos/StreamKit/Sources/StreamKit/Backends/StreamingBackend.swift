@@ -41,6 +41,7 @@ import Foundation
 ///     var onConnectionStateChanged: (@Sendable (ConnectionState) -> Void)?
 ///     var onDataReceived: (@Sendable (_ topic: String, _ data: Data) -> Void)?
 ///     var onAgentStatus: (@Sendable (String) -> Void)?
+///     var onNetworkMetrics: (@Sendable (NetworkMetrics) -> Void)?
 ///
 ///     func connect(config: SessionConfig) async throws {
 ///         onConnectionStateChanged?(.connected)
@@ -73,6 +74,9 @@ public protocol StreamingBackend: AnyObject, Sendable {
     /// These messages are delivered on the reserved `_agent.status` topic and are
     /// **not** forwarded to ``onDataReceived``.
     var onAgentStatus: (@Sendable (String) -> Void)? { get set }
+
+    /// Fired about once per second with transport-neutral network telemetry.
+    var onNetworkMetrics: (@Sendable (NetworkMetrics) -> Void)? { get set }
 
     // MARK: - Connection
 

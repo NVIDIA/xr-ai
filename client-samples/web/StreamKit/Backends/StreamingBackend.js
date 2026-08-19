@@ -44,6 +44,7 @@
  *
  *   /** @type {((data: ArrayBuffer | Uint8Array) => void) | null} *\/
  *   onDataReceived = null;
+ *   onNetworkMetrics = null;
  *
  *   // ── Lifecycle ───────────────────────────────────────────────────────────
  *
@@ -93,6 +94,13 @@
  *
  * @name StreamingBackend#onDataReceived
  * @type {((topic: string, data: Uint8Array) => void) | null}
+ */
+
+/**
+ * Fired about once per second with transport-neutral network telemetry.
+ *
+ * @name StreamingBackend#onNetworkMetrics
+ * @type {((metrics: import('../NetworkMetrics.js').NetworkMetrics) => void) | null}
  */
 
 /**

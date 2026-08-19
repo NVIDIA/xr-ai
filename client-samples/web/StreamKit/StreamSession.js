@@ -72,6 +72,13 @@ export class StreamSession {
    */
   onAgentStatus = null;
 
+  /**
+   * Called about once per second with LiveKit-native network telemetry.
+   *
+   * @type {((metrics: import('./NetworkMetrics.js').NetworkMetrics) => void) | null}
+   */
+  onNetworkMetrics = null;
+
   // ── Constructor ─────────────────────────────────────────────────────────────
 
   /**
@@ -238,6 +245,10 @@ export class StreamSession {
 
     this.#backend.onAgentStatus = (status) => {
       this.onAgentStatus?.(status);
+    };
+
+    this.#backend.onNetworkMetrics = (metrics) => {
+      this.onNetworkMetrics?.(metrics);
     };
   }
 }

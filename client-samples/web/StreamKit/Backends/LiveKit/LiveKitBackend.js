@@ -22,6 +22,7 @@ import {
 } from 'livekit-client';
 
 import { ConnectionState } from '../../ConnectionState.js';
+import { NetworkMetrics, NetworkQuality } from '../../NetworkMetrics.js';
 import { StreamError } from '../../StreamError.js';
 import { MicrophoneMode } from '../../Config/AudioConfig.js';
 
@@ -47,6 +48,16 @@ function mapState(lkState) {
     case 'reconnecting':  return ConnectionState.RECONNECTING;
     case 'disconnected':
     default:              return ConnectionState.DISCONNECTED;
+  }
+}
+
+function mapQuality(lkQuality) {
+  switch (String(lkQuality ?? '').toLowerCase()) {
+    case 'excellent': return NetworkQuality.EXCELLENT;
+    case 'good':      return NetworkQuality.GOOD;
+    case 'poor':      return NetworkQuality.POOR;
+    case 'lost':      return NetworkQuality.LOST;
+    default:          return NetworkQuality.UNKNOWN;
   }
 }
 
@@ -86,6 +97,14 @@ export class LiveKitBackend {
   /** @type {Map<string, HTMLAudioElement>} sid → element, for cleanup on teardown */
   #audioElements = new Map();
 
+  /** @type {Map<string, import('livekit-client').RemoteAudioTrack>} */
+  #remoteAudioTracks = new Map();
+
+  /** @type {number | null} */
+  #networkMetricsTimer = null;
+
+  #networkMetricsPollActive = false;
+
   // ── Public event hooks ──────────────────────────────────────────────────────
 
   /**
@@ -111,6 +130,9 @@ export class LiveKitBackend {
    * @type {((status: string) => void) | null}
    */
   onAgentStatus = null;
+
+  /** @type {((metrics: NetworkMetrics) => void) | null} */
+  onNetworkMetrics = null;
 
   /** @type {string} Reserved LiveKit topic for internal SDK status messages. */
   static #STATUS_TOPIC = '_agent.status';
@@ -224,6 +246,7 @@ export class LiveKitBackend {
 
     room.on(RoomEvent.TrackSubscribed, (track) => {
       if (track.kind === Track.Kind.Audio) {
+        this.#remoteAudioTracks.set(track.sid, track);
         const el = track.attach();
         el.id = `remote-audio-${track.sid}`;
         el.style.display = 'none';
@@ -237,6 +260,7 @@ export class LiveKitBackend {
 
     room.on(RoomEvent.TrackUnsubscribed, (track) => {
       if (track.kind === Track.Kind.Audio) {
+        this.#remoteAudioTracks.delete(track.sid);
         for (const el of track.detach()) el.remove();
         this.#audioElements.delete(track.sid);
       }
@@ -258,6 +282,7 @@ export class LiveKitBackend {
         }
       }
     }
+    this.#startNetworkMetricsReporting();
   }
 
   /**
@@ -441,6 +466,10 @@ export class LiveKitBackend {
    * @returns {Promise<void>}
    */
   async #tearDown() {
+    if (this.#networkMetricsTimer !== null) {
+      clearInterval(this.#networkMetricsTimer);
+      this.#networkMetricsTimer = null;
+    }
     const room = this.#room;
     this.#room = null;
     try {
@@ -454,6 +483,7 @@ export class LiveKitBackend {
     } finally {
       for (const el of this.#audioElements.values()) el.remove();
       this.#audioElements.clear();
+      this.#remoteAudioTracks.clear();
 
       if (this.#videoTrack) {
         this.#videoTrack.stop();
@@ -466,6 +496,56 @@ export class LiveKitBackend {
       }
 
       this.#sessionConfig = null;
+    }
+  }
+
+  #startNetworkMetricsReporting() {
+    const publish = () => { this.#publishNetworkMetrics().catch(() => {}); };
+    publish();
+    this.#networkMetricsTimer = setInterval(publish, 1000);
+  }
+
+  async #publishNetworkMetrics() {
+    if (this.#networkMetricsPollActive) return;
+    const room = this.#room;
+    if (!room || room.state !== 'connected') return;
+
+    this.#networkMetricsPollActive = true;
+    try {
+      const tracks = [
+        this.#audioTrack,
+        this.#videoTrack,
+        ...this.#remoteAudioTracks.values(),
+      ].filter(Boolean);
+      const reports = (await Promise.allSettled(
+        tracks.map(track => track.getRTCStatsReport()),
+      )).flatMap(result => result.status === 'fulfilled' && result.value
+        ? [result.value]
+        : []);
+
+      let roundTripTimeMs = null;
+      let receiveJitterMs = null;
+      for (const report of reports) {
+        for (const stat of report.values()) {
+          if (roundTripTimeMs === null && stat.type === 'candidate-pair'
+              && (stat.nominated || stat.state === 'succeeded')
+              && Number.isFinite(stat.currentRoundTripTime)) {
+            roundTripTimeMs = stat.currentRoundTripTime * 1000;
+          }
+          if (stat.type === 'inbound-rtp' && Number.isFinite(stat.jitter)) {
+            receiveJitterMs = Math.max(receiveJitterMs ?? 0, stat.jitter * 1000);
+          }
+        }
+      }
+
+      if (this.#room !== room) return;
+      this.onNetworkMetrics?.(new NetworkMetrics({
+        quality: mapQuality(room.localParticipant.connectionQuality),
+        roundTripTimeMs,
+        receiveJitterMs,
+      }));
+    } finally {
+      this.#networkMetricsPollActive = false;
     }
   }
 

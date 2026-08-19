@@ -138,6 +138,8 @@ export function createBaseModel() {
     selectedCameraId:  null,
     /** @type {string|null} */
     agentStatus:       null,
+    /** @type {import('/StreamKit/index.js').NetworkMetrics|null} */
+    networkMetrics:    null,
     /** @type {Array<{id: string, text: string, timestamp: Date}>} */
     receivedMessages:  [],
     /** @type {string|null} */
@@ -288,6 +290,21 @@ export function renderBase(model) {
     }
   }
 
+  // ── Network telemetry ──────────────────────────────────────────────────────
+  const metrics = model.networkMetrics;
+  const quality = $('network-quality');
+  if (quality) {
+    quality.textContent = isConnected && metrics
+      ? metrics.quality[0].toUpperCase() + metrics.quality.slice(1)
+      : '—';
+    $('network-rtt').textContent = isConnected && metrics?.roundTripTimeMs != null
+      ? `${Math.round(metrics.roundTripTimeMs)} ms`
+      : '—';
+    $('network-jitter').textContent = isConnected && metrics?.receiveJitterMs != null
+      ? `${Math.round(metrics.receiveJitterMs)} ms`
+      : '—';
+  }
+
   // ── Data channel ───────────────────────────────────────────────────────────
   $('send-btn').disabled = !isConnected || $('message-input').value.trim() === '';
 
@@ -375,6 +392,7 @@ export async function connect(model, {
       model.isAudioActive  = false;
       model.isCameraActive = false;
       model.agentStatus    = null;
+      model.networkMetrics = null;
     } else if (state === ConnectionState.RECONNECTING) {
       // Stop the camera when the connection drops so the server and client
       // both start from a known-off state after reconnect.
@@ -386,6 +404,11 @@ export async function connect(model, {
 
   newSession.onAgentStatus = (status) => {
     model.agentStatus = status;
+    render();
+  };
+
+  newSession.onNetworkMetrics = (metrics) => {
+    model.networkMetrics = metrics;
     render();
   };
 

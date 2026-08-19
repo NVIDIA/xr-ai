@@ -22,6 +22,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <thread>
 
 #include "streamkit/AudioSink.h"
 #include "streamkit/Backends/StreamingBackend.h"
@@ -163,6 +164,11 @@ private:
     void HandleDataReceived(std::string_view topic,
                             std::span<const std::byte> payload) const;
 
+    void HandleNetworkQualityChange(int lk_quality);
+    void StartNetworkMetricsReporting();
+    void StopNetworkMetricsReporting();
+    void PublishNetworkMetrics() const;
+
     LiveKitConfig config_;
     SessionConfig session_config_;
     CameraConfig camera_config_;
@@ -189,6 +195,8 @@ private:
     std::atomic<bool> camera_armed_{false};
     std::atomic<bool> audio_armed_{false};
     std::atomic<ConnectionState> last_fired_state_{ConnectionState::kDisconnected};
+    std::atomic<NetworkQuality> network_quality_{NetworkQuality::kUnknown};
+    std::jthread network_metrics_thread_;
 
     static constexpr std::string_view kAgentStatusTopic = "_agent.status";
 };

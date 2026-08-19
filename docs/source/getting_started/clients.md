@@ -29,6 +29,20 @@ All five share the same **StreamKit** shape: a single transport-agnostic
 Android, and iOS/visionOS clients are feature-equivalent (connection, audio,
 camera, agent-status badge, data channel).
 
+### Network telemetry
+
+Every client displays the same three network values and exposes them through
+StreamKit's `onNetworkMetrics` callback (spelled `on_network_metrics` in C++):
+
+- **Quality** — LiveKit's connection-quality estimate for the local participant.
+- **Round-trip time** — the selected ICE candidate pair's current RTT.
+- **Receive jitter** — the highest inbound RTP jitter in the current sample.
+
+`LiveKitBackend` samples LiveKit's existing WebRTC statistics about once per
+second and converts seconds to milliseconds. No hub messages or additional
+telemetry service are involved. RTT and jitter display as unavailable until the
+SDK has a matching stats record, such as before a media track is active.
+
 ## The connect flow
 
 When you start a server sample, the hub prints its connection details on

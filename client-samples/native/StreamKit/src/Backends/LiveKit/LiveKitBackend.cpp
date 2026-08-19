@@ -19,13 +19,16 @@
 
 #include "AgentStatusParser.h"
 
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <format>
+#include <future>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <variant>
 #include <vector>
 
 #if STREAMKIT_HAVE_LIVEKIT
@@ -35,9 +38,11 @@
 #include "livekit/local_audio_track.h"
 #include "livekit/local_participant.h"
 #include "livekit/local_video_track.h"
+#include "livekit/participant.h"
 #include "livekit/room.h"
 #include "livekit/room_delegate.h"
 #include "livekit/room_event_types.h"
+#include "livekit/stats.h"
 #include "livekit/track.h"
 #include "livekit/video_frame.h"
 #include "livekit/video_source.h"
@@ -144,6 +149,14 @@ public:
         owner_->HandleDataReceived(e.topic, bytes);
     }
 
+    void onConnectionQualityChanged(
+        livekit::Room&,
+        const livekit::ConnectionQualityChangedEvent& e) override {
+        if (e.participant && e.participant->identity() == owner_->session_config_.identity) {
+            owner_->HandleNetworkQualityChange(static_cast<int>(e.quality));
+        }
+    }
+
 private:
     LiveKitBackend* owner_;
 };
@@ -220,6 +233,7 @@ void LiveKitBackend::Connect(const SessionConfig& session_config) {
     // see exactly one transition into kConnected regardless of which path
     // fired first.
     FireStateChanged(ConnectionState::kConnected);
+    StartNetworkMetricsReporting();
 #else
     (void)ws_url;
     (void)token;
@@ -514,12 +528,101 @@ void LiveKitBackend::HandleDataReceived(std::string_view topic,
     }
 }
 
+void LiveKitBackend::HandleNetworkQualityChange(int lk_quality) {
+#if STREAMKIT_HAVE_LIVEKIT
+    switch (static_cast<livekit::ConnectionQuality>(lk_quality)) {
+        case livekit::ConnectionQuality::Excellent:
+            network_quality_.store(NetworkQuality::kExcellent);
+            break;
+        case livekit::ConnectionQuality::Good:
+            network_quality_.store(NetworkQuality::kGood);
+            break;
+        case livekit::ConnectionQuality::Poor:
+            network_quality_.store(NetworkQuality::kPoor);
+            break;
+        case livekit::ConnectionQuality::Lost:
+            network_quality_.store(NetworkQuality::kLost);
+            break;
+    }
+#else
+    (void)lk_quality;
+#endif
+}
+
+void LiveKitBackend::StartNetworkMetricsReporting() {
+#if STREAMKIT_HAVE_LIVEKIT
+    StopNetworkMetricsReporting();
+    network_metrics_thread_ = std::jthread([this](std::stop_token stop_token) {
+        while (!stop_token.stop_requested()) {
+            if (is_connected_.load()) {
+                PublishNetworkMetrics();
+            }
+            for (int tenth = 0; tenth < 10 && !stop_token.stop_requested(); ++tenth) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        }
+    });
+#endif
+}
+
+void LiveKitBackend::StopNetworkMetricsReporting() {
+    if (network_metrics_thread_.joinable()) {
+        network_metrics_thread_.request_stop();
+        network_metrics_thread_.join();
+    }
+}
+
+void LiveKitBackend::PublishNetworkMetrics() const {
+#if STREAMKIT_HAVE_LIVEKIT
+    const auto room = room_;
+    if (!room || !on_network_metrics) return;
+
+    NetworkMetrics metrics{.quality = network_quality_.load()};
+    try {
+        auto stats_future = room->getStats();
+        if (stats_future.wait_for(std::chrono::milliseconds(750)) !=
+            std::future_status::ready) {
+            on_network_metrics(metrics);
+            return;
+        }
+        const auto stats = stats_future.get();
+        const auto inspect = [&metrics](const std::vector<livekit::RtcStats>& records,
+                                        bool include_jitter) {
+            for (const auto& record : records) {
+                if (!metrics.round_trip_time_ms) {
+                    if (const auto* pair = std::get_if<livekit::RtcCandidatePairStats>(&record.stats);
+                        pair && pair->candidate_pair.nominated) {
+                        metrics.round_trip_time_ms =
+                            pair->candidate_pair.current_round_trip_time * 1'000.0;
+                    }
+                }
+                if (include_jitter) {
+                    if (const auto* inbound = std::get_if<livekit::RtcInboundRtpStats>(&record.stats)) {
+                        const double jitter_ms = inbound->received.jitter * 1'000.0;
+                        if (!metrics.receive_jitter_ms || jitter_ms > *metrics.receive_jitter_ms) {
+                            metrics.receive_jitter_ms = jitter_ms;
+                        }
+                    }
+                }
+            }
+        };
+        inspect(stats.publisher_stats, false);
+        inspect(stats.subscriber_stats, true);
+    } catch (...) {
+        // Quality remains useful while RTCStats is temporarily unavailable.
+    }
+    on_network_metrics(metrics);
+#endif
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Teardown
 // ─────────────────────────────────────────────────────────────────────────────
 
 void LiveKitBackend::TearDown() {
     is_connected_.store(false);
+    StopNetworkMetricsReporting();
+    network_quality_.store(NetworkQuality::kUnknown);
     camera_armed_.store(false);
     audio_armed_.store(false);
 

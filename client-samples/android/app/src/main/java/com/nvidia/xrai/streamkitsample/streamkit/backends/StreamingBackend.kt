@@ -4,6 +4,7 @@
 package com.nvidia.xrai.streamkitsample.streamkit.backends
 
 import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
+import com.nvidia.xrai.streamkitsample.streamkit.NetworkMetrics
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
@@ -25,6 +26,7 @@ import java.nio.ByteBuffer
  *     override var onConnectionStateChanged: ((ConnectionState) -> Unit)? = null
  *     override var onDataReceived: ((topic: String, data: ByteArray) -> Unit)? = null
  *     override var onAgentStatus: ((status: String) -> Unit)? = null
+ *     override var onNetworkMetrics: ((NetworkMetrics) -> Unit)? = null
  *
  *     override suspend fun connect(sessionConfig: SessionConfig) {
  *         // establish connection; call onConnectionStateChanged(CONNECTED) when done
@@ -58,6 +60,9 @@ interface StreamingBackend {
      * Common values: `"idle"`, `"processing"`.
      */
     var onAgentStatus: ((status: String) -> Unit)?
+
+    /** Fired about once per second with transport-neutral network telemetry. */
+    var onNetworkMetrics: ((metrics: NetworkMetrics) -> Unit)?
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
 

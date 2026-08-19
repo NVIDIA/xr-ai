@@ -23,6 +23,7 @@
 #include "streamkit/Config/CameraConfig.h"
 #include "streamkit/Config/SessionConfig.h"
 #include "streamkit/ConnectionState.h"
+#include "streamkit/NetworkMetrics.h"
 
 namespace streamkit {
 
@@ -113,6 +114,9 @@ public:
     /// `_agent.status` topic. Common values: "idle", "processing".
     /// These messages are NOT forwarded to on_data_received.
     std::function<void(std::string_view status)> on_agent_status;
+
+    /// Fired about once per second with transport-neutral network telemetry.
+    std::function<void(const NetworkMetrics& metrics)> on_network_metrics;
 
     // ── Connection ─────────────────────────────────────────────────────────
 

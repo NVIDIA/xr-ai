@@ -126,6 +126,7 @@ final class AppModel {
     var session: StreamSession?
     var connectionState: ConnectionState = .disconnected
     var agentStatus: String?
+    var networkMetrics: NetworkMetrics?
     /// Latest final-reply text received on `agent.response` or `vlm.response`.
     /// Mirrors the web client's Agent panel; nil shows the "Waiting for agent..." placeholder.
     var agentResponse: String?
@@ -233,6 +234,7 @@ final class AppModel {
                 self.isCameraActive = false
                 self.cameraIntendedOn = false
                 self.agentStatus = nil
+                self.networkMetrics = nil
                 self.agentResponse = nil
                 #if os(visionOS)
                 // An unexpected LiveKit drop would orphan the CloudXR session; tear
@@ -269,6 +271,10 @@ final class AppModel {
         newSession.onAgentStatus = { [weak self, weak newSession] status in
             guard let self, self.session === newSession else { return }
             self.agentStatus = status
+        }
+        newSession.onNetworkMetrics = { [weak self, weak newSession] metrics in
+            guard let self, self.session === newSession else { return }
+            self.networkMetrics = metrics
         }
         newSession.onDataReceived = { [weak self, weak newSession] topic, data in
             guard let self, self.session === newSession else { return }
@@ -321,6 +327,7 @@ final class AppModel {
         session = nil
         connectionState = .disconnected
         agentStatus = nil
+        networkMetrics = nil
         agentResponse = nil
         isAudioActive = false
         micEnabledByUser = false

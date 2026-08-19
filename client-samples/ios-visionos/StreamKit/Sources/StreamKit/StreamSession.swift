@@ -49,6 +49,9 @@ public final class StreamSession: ObservableObject {
     /// Common values: `"idle"`, `"processing"`.
     @Published public private(set) var agentStatus: String?
 
+    /// Latest once-per-second network telemetry snapshot.
+    @Published public private(set) var networkMetrics: NetworkMetrics?
+
     // MARK: - Callbacks
 
     /// Called on the main actor when the connection state changes.
@@ -61,6 +64,9 @@ public final class StreamSession: ObservableObject {
     /// Called on the main actor when the agent publishes a status update.
     /// Common values: `"idle"`, `"processing"`.
     public var onAgentStatus: ((String) -> Void)?
+
+    /// Called on the main actor when a new network telemetry snapshot is ready.
+    public var onNetworkMetrics: ((NetworkMetrics) -> Void)?
 
     // MARK: - Private
 
@@ -93,6 +99,7 @@ public final class StreamSession: ObservableObject {
     public func disconnect() async {
         await backend.disconnect()
         agentStatus = nil
+        networkMetrics = nil
     }
 
     // MARK: - Audio
@@ -190,6 +197,13 @@ public final class StreamSession: ObservableObject {
                 guard let self else { return }
                 agentStatus = status
                 onAgentStatus?(status)
+            }
+        }
+        backend.onNetworkMetrics = { [weak self] metrics in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                networkMetrics = metrics
+                onNetworkMetrics?(metrics)
             }
         }
     }

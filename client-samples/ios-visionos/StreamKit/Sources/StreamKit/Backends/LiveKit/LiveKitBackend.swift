@@ -27,6 +27,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     public var onConnectionStateChanged: (@Sendable (ConnectionState) -> Void)?
     public var onDataReceived: (@Sendable (_ topic: String, _ data: Data) -> Void)?
     public var onAgentStatus: (@Sendable (String) -> Void)?
+    public var onNetworkMetrics: (@Sendable (NetworkMetrics) -> Void)?
 
     // MARK: Private constants
 
@@ -39,6 +40,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     private let config: LiveKitConfig
     private var room: Room?
     private var sessionConfig: SessionConfig = .default
+    private var networkMetricsTask: Task<Void, Never>?
 
     /// Publication for the device camera track (iOS) or ARKit track (visionOS).
     /// Nil on simulator — all video goes through the buffer track path.
@@ -163,6 +165,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
                 }
             }
         }
+        startNetworkMetricsReporting(for: room)
     }
 
     public func disconnect() async {
@@ -367,6 +370,8 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     }
 
     private func tearDown() async {
+        networkMetricsTask?.cancel()
+        networkMetricsTask = nil
         #if targetEnvironment(simulator)
         simulatorFrameTask?.cancel()
         simulatorFrameTask = nil
@@ -381,6 +386,49 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         bufferPublication = nil
         bufferTrack = nil
         localCameraTrack = nil
+    }
+
+    private func startNetworkMetricsReporting(for room: Room) {
+        networkMetricsTask?.cancel()
+        networkMetricsTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, self.room === room else { return }
+                guard room.connectionState != .disconnected else { return }
+                let metrics = await self.collectNetworkMetrics(from: room)
+                self.onNetworkMetrics?(metrics)
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
+    }
+
+    private func collectNetworkMetrics(from room: Room) async -> NetworkMetrics {
+        var tracks = room.localParticipant.trackPublications.values.compactMap(\.track)
+        for participant in room.remoteParticipants.values {
+            tracks.append(contentsOf: participant.trackPublications.values.compactMap(\.track))
+        }
+        for track in tracks {
+            await track.set(reportStatistics: true)
+        }
+
+        let statistics = tracks.compactMap(\.statistics)
+        let roundTripTimeMs = statistics
+            .lazy
+            .flatMap(\.iceCandidatePair)
+            .first(where: { $0.nominated == true })?
+            .currentRoundTripTime
+            .map { $0 * 1_000 }
+        let receiveJitterMs = statistics
+            .lazy
+            .flatMap(\.inboundRtpStream)
+            .compactMap(\.jitter)
+            .max()
+            .map { $0 * 1_000 }
+
+        return NetworkMetrics(
+            quality: room.localParticipant.connectionQuality.toStreamKitQuality(),
+            roundTripTimeMs: roundTripTimeMs,
+            receiveJitterMs: receiveJitterMs
+        )
     }
 
     // MARK: - Track factories
@@ -694,6 +742,18 @@ extension LiveKitBackend: RoomDelegate {
         guard participant is LocalParticipant else { return }
         mediaLog.info("livekit local didUpdateIsMuted: source=\(String(describing: trackPublication.source), privacy: .public) muted=\(isMuted, privacy: .public)")
         #endif
+    }
+}
+
+private extension LiveKit.ConnectionQuality {
+    func toStreamKitQuality() -> NetworkQuality {
+        switch self {
+        case .excellent: return .excellent
+        case .good: return .good
+        case .poor: return .poor
+        case .lost: return .lost
+        case .unknown: return .unknown
+        }
     }
 }
 

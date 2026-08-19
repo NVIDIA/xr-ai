@@ -81,6 +81,9 @@ public:
     /// Common values: "idle", "processing".
     std::function<void(std::string_view status)> on_agent_status;
 
+    /// Called about once per second with network telemetry from the backend.
+    std::function<void(const NetworkMetrics& metrics)> on_network_metrics;
+
     // ── State ──────────────────────────────────────────────────────────────
 
     ConnectionState connection_state() const { return connection_state_; }

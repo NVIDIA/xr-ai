@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
+import com.nvidia.xrai.streamkitsample.streamkit.NetworkMetrics
 import com.nvidia.xrai.streamkitsample.streamkit.StreamSession
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.BackendConfiguration
@@ -100,6 +101,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var agentStatus by mutableStateOf<String?>(null)
         private set
+    var networkMetrics by mutableStateOf<NetworkMetrics?>(null)
+        private set
     /** Latest final-reply text from the agent. Drives the Agent panel;
      *  null shows the "Waiting for agent…" placeholder. Mirrors web. */
     var agentResponse by mutableStateOf<String?>(null)
@@ -173,6 +176,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         isAudioActive = false
                         isCameraActive = false
                         agentStatus = null
+                        networkMetrics = null
                         agentResponse = null
                     } else if (state == ConnectionState.RECONNECTING) {
                         // Session persists across a reconnect, so unpublish the
@@ -185,6 +189,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 newSession.onAgentStatus = { status ->
                     agentStatus = status
+                }
+                newSession.onNetworkMetrics = { metrics ->
+                    networkMetrics = metrics
                 }
                 newSession.onDataReceived = { topic, data ->
                     when {
@@ -237,6 +244,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             session = null
             connectionState = ConnectionState.DISCONNECTED
             agentStatus = null
+            networkMetrics = null
             agentResponse = null
             isAudioActive = false
             isCameraActive = false

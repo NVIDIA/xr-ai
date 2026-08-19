@@ -5,6 +5,8 @@ package com.nvidia.xrai.streamkitsample.streamkit.backends.livekit
 
 import android.content.Context
 import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
+import com.nvidia.xrai.streamkitsample.streamkit.NetworkMetrics
+import com.nvidia.xrai.streamkitsample.streamkit.NetworkQuality
 import com.nvidia.xrai.streamkitsample.streamkit.StreamError
 import com.nvidia.xrai.streamkitsample.streamkit.backends.StreamingBackend
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
@@ -18,20 +20,24 @@ import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
 import io.livekit.android.renderer.TextureViewRenderer
 import io.livekit.android.room.Room
+import io.livekit.android.room.participant.ConnectionQuality
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.VideoTrackPublishOptions
 import io.livekit.android.room.track.CameraPosition
 import io.livekit.android.room.track.DataPublishReliability
 import io.livekit.android.room.track.LocalVideoTrack
-import io.livekit.android.room.track.RemoteTrackPublication
 import io.livekit.android.room.track.LocalVideoTrackOptions
+import io.livekit.android.room.track.RemoteTrackPublication
 import io.livekit.android.room.track.Track
 import io.livekit.android.room.track.VideoCaptureParameter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -39,6 +45,7 @@ import org.json.JSONObject
 import java.net.URL
 import java.net.URLEncoder
 import java.nio.ByteBuffer
+import kotlin.coroutines.resume
 
 /**
  * [StreamingBackend] implementation using the LiveKit Android SDK.
@@ -68,6 +75,7 @@ internal class LiveKitBackend(
     override var onConnectionStateChanged: ((ConnectionState) -> Unit)? = null
     override var onDataReceived: ((topic: String, data: ByteArray) -> Unit)? = null
     override var onAgentStatus: ((status: String) -> Unit)? = null
+    override var onNetworkMetrics: ((metrics: NetworkMetrics) -> Unit)? = null
 
     // ── Public local preview accessor ─────────────────────────────────────────
 
@@ -160,6 +168,12 @@ internal class LiveKitBackend(
         // Successfully connected.
         isConnected = true
         onConnectionStateChanged?.invoke(ConnectionState.CONNECTED)
+        scope.launch {
+            while (isActive && isConnected && room === newRoom) {
+                onNetworkMetrics?.invoke(collectNetworkMetrics(newRoom))
+                delay(1_000)
+            }
+        }
     }
 
     override suspend fun disconnect() {
@@ -329,6 +343,53 @@ internal class LiveKitBackend(
         }
 
         onDataReceived?.invoke(topic, data)
+    }
+
+    private suspend fun collectNetworkMetrics(room: Room): NetworkMetrics {
+        val publisher = runCatching { publisherStats(room) }.getOrNull()
+        val subscriber = runCatching { subscriberStats(room) }.getOrNull()
+        val allStats = listOfNotNull(publisher, subscriber)
+            .flatMap { it.statsMap.values }
+
+        val roundTripTimeMs = allStats.firstNotNullOfOrNull { stat ->
+            if (stat.type != "candidate-pair") return@firstNotNullOfOrNull null
+            val nominated = stat.members["nominated"] as? Boolean ?: false
+            val state = stat.members["state"] as? String
+            if (!nominated && state != "succeeded") return@firstNotNullOfOrNull null
+            (stat.members["currentRoundTripTime"] as? Number)?.toDouble()?.times(1_000)
+        }
+        val receiveJitterMs = subscriber?.statsMap?.values
+            ?.asSequence()
+            ?.filter { it.type == "inbound-rtp" }
+            ?.mapNotNull { (it.members["jitter"] as? Number)?.toDouble() }
+            ?.maxOrNull()
+            ?.times(1_000)
+
+        return NetworkMetrics(
+            quality = room.localParticipant.connectionQuality.toStreamKitQuality(),
+            roundTripTimeMs = roundTripTimeMs,
+            receiveJitterMs = receiveJitterMs,
+        )
+    }
+
+    private suspend fun publisherStats(room: Room) = suspendCancellableCoroutine { continuation ->
+        room.getPublisherRTCStats { report ->
+            if (continuation.isActive) continuation.resume(report)
+        }
+    }
+
+    private suspend fun subscriberStats(room: Room) = suspendCancellableCoroutine { continuation ->
+        room.getSubscriberRTCStats { report ->
+            if (continuation.isActive) continuation.resume(report)
+        }
+    }
+
+    private fun ConnectionQuality.toStreamKitQuality() = when (this) {
+        ConnectionQuality.EXCELLENT -> NetworkQuality.EXCELLENT
+        ConnectionQuality.GOOD -> NetworkQuality.GOOD
+        ConnectionQuality.POOR -> NetworkQuality.POOR
+        ConnectionQuality.LOST -> NetworkQuality.LOST
+        ConnectionQuality.UNKNOWN -> NetworkQuality.UNKNOWN
     }
 
     // ── Teardown ──────────────────────────────────────────────────────────────

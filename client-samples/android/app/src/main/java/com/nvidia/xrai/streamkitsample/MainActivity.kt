@@ -154,6 +154,7 @@ private fun StreamKitSampleApp(vm: AppViewModel = viewModel()) {
                 CameraPreviewCard(vm)
                 AgentSection(vm)
                 ConnectionSection(vm)
+                NetworkSection(vm)
                 MediaSection(vm)
                 DataChannelSection(vm)
                 if (vm.receivedMessages.isNotEmpty()) {
@@ -168,6 +169,42 @@ private fun StreamKitSampleApp(vm: AppViewModel = viewModel()) {
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 24.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun NetworkSection(vm: AppViewModel) {
+    val metrics = vm.networkMetrics
+    fun milliseconds(value: Double?) = value?.let { "${it.toInt()} ms" } ?: "—"
+
+    SectionCard(title = "Network") {
+        CardRow {
+            Text("Quality", style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.weight(1f))
+            Text(
+                metrics?.quality?.name?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "—",
+                style = MaterialTheme.typography.bodySmall,
+                color = ColorSecondary,
+            )
+        }
+        CardRow {
+            Text("Round-trip time", style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.weight(1f))
+            Text(
+                milliseconds(metrics?.roundTripTimeMs),
+                style = MaterialTheme.typography.bodySmall,
+                color = ColorSecondary,
+            )
+        }
+        CardRow(showDivider = false) {
+            Text("Receive jitter", style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.weight(1f))
+            Text(
+                milliseconds(metrics?.receiveJitterMs),
+                style = MaterialTheme.typography.bodySmall,
+                color = ColorSecondary,
             )
         }
     }
