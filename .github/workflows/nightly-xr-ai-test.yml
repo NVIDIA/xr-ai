@@ -157,9 +157,24 @@ jobs:
         # method interrupts blocked reads (thread method can't); 1200s > the
         # 900s cold-start budget. pytest-timeout layered CI-only via --with
         # to keep it out of tests/pyproject.toml + uv.lock + DEPENDENCIES.md.
-        run: >-
-          uv run --with pytest-timeout pytest -v --tb=short --color=yes -m gpu
-          --timeout=1200 --timeout-method=signal
+        #
+        # NGC_API_KEY (repository secret) feeds the NIM container test. An
+        # empty value fails scheduled runs (a misconfigured secret would
+        # otherwise read as a green nightly that never ran the NIM path) but
+        # only warns on PR dry-runs, which legitimately get empty secrets.
+        env:
+          NGC_API_KEY: ${{ secrets.NGC_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NGC_API_KEY:-}" ]; then
+            if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+              echo "::error::NGC_API_KEY is empty; the nightly cannot run the NIM test"
+              exit 1
+            fi
+            echo "::warning::NGC_API_KEY is empty; test_gpu_nim_server will skip"
+          fi
+          uv run --with pytest-timeout pytest -v --tb=short --color=yes -m gpu \
+            --timeout=1200 --timeout-method=signal
 
       - name: Purge xr-ai containers (post)
         # Always-run cleanup so a failed test (or a cancelled job) does
