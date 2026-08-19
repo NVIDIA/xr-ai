@@ -60,7 +60,7 @@ async def _warm_vlm(vlm: VLMService) -> bool:
             _VLM_WARMUP_MAX_TOKENS,
         )
         first_token_at: float | None = None
-        async for _chunk in vlm.stream_images(
+        async for _ in vlm.stream_images(
             [_VLM_WARMUP_IMAGE],
             "What is the dominant color?",
             system_prompt="Answer with one word.",

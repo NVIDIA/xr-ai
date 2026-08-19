@@ -477,7 +477,7 @@ def test_image_sanitizer_reraises_unrelated_deregistration_failure(
     monkeypatch,
 ) -> None:
     def fail_deregistration(*_args) -> None:
-        raise RuntimeError("deregistration failed")
+        raise RuntimeError("not found: scope another-owner not found")
 
     monkeypatch.setattr(
         nemo_relay.scope,
@@ -495,9 +495,35 @@ def test_image_sanitizer_reraises_unrelated_deregistration_failure(
         fail_deregistration,
     )
 
-    with pytest.raises(RuntimeError, match="deregistration failed"):
+    with pytest.raises(RuntimeError, match="another-owner"):
         with image_sanitizer():
             pass
+
+
+def test_image_sanitizer_tolerates_changed_missing_owner_suffix(
+    monkeypatch,
+) -> None:
+    def fail_deregistration(*_args) -> None:
+        raise RuntimeError("not found: scope owner was already removed")
+
+    monkeypatch.setattr(
+        nemo_relay.scope,
+        "get_handle",
+        lambda: SimpleNamespace(uuid="owner"),
+    )
+    monkeypatch.setattr(
+        nemo_relay.scope_local,
+        "register_llm_sanitize_request",
+        lambda *_args: None,
+    )
+    monkeypatch.setattr(
+        nemo_relay.scope_local,
+        "deregister_llm_sanitize_request",
+        fail_deregistration,
+    )
+
+    with image_sanitizer():
+        pass
 
 
 async def test_streaming_image_query_stops_after_partial_failure() -> None:

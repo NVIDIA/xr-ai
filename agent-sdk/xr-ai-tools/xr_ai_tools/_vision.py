@@ -17,6 +17,14 @@ import nemo_relay
 VLM_CALL_NAME = "xr-ai-vlm"
 _IMAGE_REDACTION = "<redacted:image>"
 _IMAGE_SANITIZER_IDS = count()
+_MISSING_SCOPE_PREFIX = "not found: scope "
+
+
+def _owning_scope_is_missing(error: RuntimeError, owner_uuid: str) -> bool:
+    # Relay's native binding reports missing scopes as RuntimeError text.
+    owner_prefix = f"{_MISSING_SCOPE_PREFIX}{owner_uuid}"
+    message = str(error)
+    return message == owner_prefix or message.startswith(f"{owner_prefix} ")
 
 
 @contextmanager
@@ -38,7 +46,7 @@ def image_sanitizer() -> Iterator[None]:
             nemo_relay.scope_local.deregister_llm_sanitize_request(handle, name)
         except RuntimeError as error:
             # Popping the owner already removes all of its scope-local registrations.
-            if str(error) != f"not found: scope {handle.uuid} not found":
+            if not _owning_scope_is_missing(error, handle.uuid):
                 raise
 
 

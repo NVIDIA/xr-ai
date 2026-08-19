@@ -24,6 +24,7 @@ from xr_ai_models import ChatResponse, VLMService
 from xr_ai_runtime import AgentRuntime
 from xr_ai_voice import UserQuery, VoiceAgent, VoiceInterrupted, VoiceOutput
 from xr_ai_voice import _runtime as voice_runtime_module
+from xr_ai_voice._readiness import wait_for_services
 from xr_ai_voice._session import _VoiceSession as VoiceSession
 from xr_ai_voicegate import VoiceGateConfig
 
@@ -82,6 +83,22 @@ class _Service:
 
     async def close(self) -> None:
         self.close_calls += 1
+
+
+class _FlakyWarmupService(_Service):
+    async def stream_images(
+        self,
+        images,
+        question,
+        *,
+        system_prompt="",
+        max_tokens=None,
+        timeout=None,
+    ):
+        self.stream_calls.append((images, question, system_prompt, max_tokens, timeout))
+        if len(self.stream_calls) == 1:
+            raise RuntimeError("still loading")
+        yield "gray"
 
 
 class _Transport:
@@ -504,6 +521,21 @@ async def test_cancelled_vlm_turn_does_not_publish_stream_terminator() -> None:
     assert closed.is_set()
     assert len(published) == 1
     assert published[0].final is False
+
+
+async def test_vlm_warmup_failure_is_retried_by_readiness() -> None:
+    vlm = _FlakyWarmupService()
+
+    await asyncio.wait_for(
+        wait_for_services(
+            {"vlm": lambda: app._warm_vlm(cast(VLMService, vlm))},
+            poll_interval=0,
+        ),
+        timeout=1,
+    )
+
+    assert vlm.health_calls == 2
+    assert len(vlm.stream_calls) == 2
 
 
 async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
