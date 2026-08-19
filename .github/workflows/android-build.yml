@@ -46,3 +46,6 @@ jobs:
 
       - name: Build debug APK
         run: ./gradlew assembleDebug
+
+      - name: Verify Netty pin
+        run: ./gradlew verifyNettyPin

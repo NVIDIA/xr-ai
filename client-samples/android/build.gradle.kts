@@ -33,3 +33,21 @@ allprojects {
     buildscript.configurations.configureEach { forceNettyVersion() }
     configurations.configureEach { forceNettyVersion() }
 }
+
+// CI runs this so the lift fails loudly if a Gradle or AGP change stops it applying.
+tasks.register("verifyNettyPin") {
+    doLast {
+        val offenders = allprojects.flatMap { p ->
+            (p.buildscript.configurations.toList() +
+                p.configurations.filter { it.name.contains("unified-test-platform") })
+                .filter { it.isCanBeResolved }
+                .flatMap { c ->
+                    runCatching { c.resolvedConfiguration.lenientConfiguration.allModuleDependencies }
+                        .getOrDefault(emptySet())
+                        .filter { it.moduleGroup == "io.netty" && belowNettyPin(it.moduleVersion) }
+                        .map { "${c.name}: ${it.moduleGroup}:${it.moduleName}:${it.moduleVersion}" }
+                }
+        }
+        check(offenders.isEmpty()) { "io.netty below $nettyPin:\n" + offenders.joinToString("\n") }
+    }
+}

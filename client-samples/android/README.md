@@ -138,4 +138,4 @@ The app requests the following Android permissions:
 
 **Build-time only:** `build.gradle.kts` lifts transitive `io.netty` (pulled in by AGP's
 UTP test tooling) past known CVEs in its 4.1 line; the version lives in the `netty` catalog
-entry. Re-check after an AGP bump: `gradle buildEnvironment | grep netty`.
+entry. Re-check after an AGP bump: `./gradlew verifyNettyPin` (also run by CI).
