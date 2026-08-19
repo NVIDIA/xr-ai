@@ -131,7 +131,7 @@ def test_launcher_defaults_to_wake_word_and_allows_always_on() -> None:
 def test_web_event_config_defaults_and_validation(tmp_path: Path) -> None:
     config = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
 
-    assert config.web_events_host == "127.0.0.1"
+    assert config.web_events_host == "0.0.0.0"
     assert config.web_events_port == 8092
     assert config.web_events_max_events == 5_000
 

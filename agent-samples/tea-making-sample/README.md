@@ -43,9 +43,11 @@ uv run --project agent-samples/tea-making-sample tea_making_sample \
 
 Open `https://localhost:8080`, accept the self-signed certificate on first use,
 allow microphone and camera access, and connect.
-Open `http://127.0.0.1:8092` to watch selected foreground, guidance,
-background, and participant events grouped by topic. The viewer is loopback-only
-and starts with the worker; it does not read or tail the JSONL files.
+Open `http://<xr-host>:8092` to watch selected foreground, guidance,
+background, and participant events grouped by topic. The viewer starts with the
+worker and listens on all IPv4 interfaces; it does not read or tail the JSONL
+files. Allow TCP port 8092 through the host and cloud firewalls only from your
+trusted development network.
 In wake-word mode, begin commands with “Agent” or “Hey Agent.” For example:
 
 ```text
@@ -99,15 +101,16 @@ application.
 
 The browser viewer is an independent, bounded in-memory presentation of
 selected events. It is useful while a session is live but is not durable and
-does not replace the JSONL artifacts. Its loopback listener has no application
-authentication; use an SSH tunnel rather than exposing it directly.
+does not replace the JSONL artifacts. Its listener has no application
+authentication or TLS. Do not expose it to the public Internet; restrict access
+to a trusted development network or put it behind an authenticated TLS proxy.
 
 ## Configuration
 
 - `yaml/models.local.json` maps both `llm` and `vlm` to Omni on port 8108 and
   declares STT, embedding, and TTS endpoints.
 - `yaml/tea_making_worker.yaml` controls VAD, frame timeouts, observation
-  intervals, artifact output, the loopback web-events host/port/history, RAG,
+  intervals, artifact output, the web-events host/port/history, RAG,
   and workflow paths.
 - `yaml/workflow.yaml` defines the tea steps, typed state, evidence gates, and
   user-facing messages.

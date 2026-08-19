@@ -80,7 +80,7 @@ on `agent.response` so the client can render accessible text alongside audio.
 | `VoiceAggregationAgent` | Participant speech pacing, ordering, and coalescing | Workflow decisions |
 | `FileOutputAgent` | Participant session files and JSONL records | Agent policy |
 | `TeaWebEventsAgent` | Explicit compact projections for the generic live viewer | Durable storage or file polling |
-| `WebEventsAgent` | Bounded loopback HTTP presentation grouped by participant and topic | Application event selection |
+| `WebEventsAgent` | Bounded HTTP presentation grouped by participant and topic | Application event selection |
 
 The runtime delivers events but does not absorb application state or
 concurrency. Moving a task to another agent also means moving its cancellation,
@@ -202,17 +202,18 @@ conversation history or taking ownership of the response.
 
 ## Live inspection and durable output
 
-The worker starts a generic event viewer at `http://127.0.0.1:8092` before it
-announces voice readiness. `TeaWebEventsAgent` explicitly subscribes to the
+The worker starts a generic event viewer on all IPv4 interfaces before it
+announces voice readiness. Open `http://<xr-host>:8092` from a trusted
+development network. `TeaWebEventsAgent` explicitly subscribes to the
 foreground, guidance, background, transcript, video-log, and participant
 lifecycle topics and publishes compact `WebEvent` payloads. There is no runtime
 wildcard subscription and no file tailing.
 
 The viewer keeps only a bounded in-memory history for the current process. The
 participant JSONL files under `artifacts/` remain the durable record and include
-events that may not be selected for live presentation. The loopback listener is
-read-only but unauthenticated; use an SSH tunnel for remote development instead
-of binding it to an untrusted network.
+events that may not be selected for live presentation. The listener is
+read-only but has no authentication or TLS. Restrict TCP port 8092 to a trusted
+development network, or place the viewer behind an authenticated TLS proxy.
 
 ## Connecting a backend
 
