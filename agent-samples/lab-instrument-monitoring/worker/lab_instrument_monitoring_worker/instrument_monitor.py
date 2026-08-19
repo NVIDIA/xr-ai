@@ -27,6 +27,7 @@ from .events import (
     InstrumentChange,
     InstrumentLost,
     InstrumentReading,
+    InstrumentSighting,
     InstrumentState,
     InstrumentStateSnapshot,
 )
@@ -235,7 +236,11 @@ class InstrumentMonitorAgent(Agent):
                 result = await self._reader.read_lab_instruments.execute(
                     ReadLabInstrumentsRequest(participant_id=participant_id)
                 )
-                await self._observe(participant_id, result.readings)
+                await self._observe(
+                    participant_id,
+                    result.readings,
+                    sightings=result.sightings,
+                )
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -259,6 +264,7 @@ class InstrumentMonitorAgent(Agent):
         participant_id: str,
         readings: list[InstrumentReading],
         *,
+        sightings: list[InstrumentSighting] | None = None,
         observed_at: float | None = None,
     ) -> None:
         tracker = self._trackers.get(participant_id)
@@ -268,6 +274,18 @@ class InstrumentMonitorAgent(Agent):
         seen_at = time.monotonic() if observed_at is None else observed_at
         changes: list[InstrumentChange] = []
         async with tracker.lock:
+            unique_sightings = {
+                (item.marker_type, item.marker_id): item
+                for item in sightings or ()
+            }
+            for marker_key, sighting in unique_sightings.items():
+                previous = tracker.instruments.get(marker_key)
+                if previous is None:
+                    continue
+                previous.last_seen_monotonic = seen_at
+                previous.state.last_seen_us = sighting.timestamp_us
+                previous.state.tracking = True
+
             unique = {(item.marker_type, item.marker_id): item for item in readings}
             for marker_key, reading in unique.items():
                 previous = tracker.instruments.get(marker_key)

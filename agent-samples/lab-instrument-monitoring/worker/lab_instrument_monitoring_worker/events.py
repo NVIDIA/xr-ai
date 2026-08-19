@@ -39,6 +39,15 @@ class InstrumentReading(BaseModel):
     meter_reading: str = Field(min_length=1)
 
 
+class InstrumentSighting(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    timestamp_us: int = Field(ge=0)
+    marker_type: MarkerType
+    marker_id: str = Field(min_length=1)
+    device_name: str = Field(min_length=1)
+
+
 class InstrumentState(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -140,6 +149,7 @@ __all__ = [
     "InstrumentChange",
     "InstrumentLost",
     "InstrumentReading",
+    "InstrumentSighting",
     "InstrumentState",
     "InstrumentStateSnapshot",
     "MonitorRecord",

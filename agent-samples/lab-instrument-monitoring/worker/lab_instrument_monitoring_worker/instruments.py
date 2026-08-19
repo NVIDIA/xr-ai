@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import time
 from collections import Counter
 from pathlib import Path
@@ -30,7 +31,7 @@ from xr_ai_tools.marker_tracking import (
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 
 from .device_map import DeviceMap
-from .events import InstrumentReading
+from .events import InstrumentReading, InstrumentSighting
 from .images import ParticipantImageAgent
 
 
@@ -42,6 +43,7 @@ class ReadLabInstrumentsRequest(BaseModel):
 
 class LabInstrumentReadResult(BaseModel):
     readings: list[InstrumentReading] = Field(default_factory=list)
+    sightings: list[InstrumentSighting] = Field(default_factory=list)
     available: bool = True
     message: str = ""
 
@@ -55,6 +57,7 @@ class LabInstrumentAgent(Agent):
         images: ParticipantImageAgent,
         vlm: VLMService,
         device_map: DeviceMap,
+        prompt: str,
         debug_dir: Path | None = None,
     ) -> None:
         self._images = images
@@ -62,7 +65,11 @@ class LabInstrumentAgent(Agent):
         self._debug_dir = debug_dir
         if debug_dir is not None:
             debug_dir.mkdir(parents=True, exist_ok=True)
-        self._query_image = ImageQueryTool(images=images.images, vlm=vlm)
+        self._query_image = ImageQueryTool(
+            images=images.images,
+            vlm=vlm,
+            system_prompt=prompt,
+        )
         self._fill_polygon = ImagePolygonFillTool(images=images.images)
         self.read_lab_instruments = Tool(
             "read_lab_instruments",
@@ -124,12 +131,29 @@ class LabInstrumentAgent(Agent):
             return LabInstrumentReadResult(message="No readable marker-labelled lab instruments were found.")
 
         readings: list[InstrumentReading] = []
+        sightings: list[InstrumentSighting] = []
         for marker in markers:
+            identity = self._device_map.resolve(marker.marker_type, marker.value)
+            if identity is None:
+                logger.warning(
+                    "ignoring unmapped instrument marker marker={}",
+                    _marker_log_id(marker),
+                )
+                continue
+            sightings.append(
+                InstrumentSighting(
+                    timestamp_us=frame.timestamp_us,
+                    marker_type=marker.marker_type,
+                    marker_id=marker.value,
+                    device_name=identity.device_name,
+                )
+            )
             try:
                 reading = await self._read_one(
                     frame.image,
                     frame.timestamp_us,
                     marker,
+                    identity.device_name,
                 )
             except asyncio.CancelledError:
                 raise
@@ -144,10 +168,11 @@ class LabInstrumentAgent(Agent):
                 readings.append(reading)
         if not readings:
             return LabInstrumentReadResult(
+                sightings=sightings,
                 available=False,
                 message="Markers were found, but their instrument displays could not be read.",
             )
-        return LabInstrumentReadResult(readings=readings)
+        return LabInstrumentReadResult(readings=readings, sightings=sightings)
 
     async def _record_scan_image(
         self,
@@ -171,14 +196,8 @@ class LabInstrumentAgent(Agent):
         image: ImageReference,
         timestamp_us: int,
         marker: TrackedMarker,
+        device_name: str,
     ) -> InstrumentReading | None:
-        identity = self._device_map.resolve(marker.marker_type, marker.value)
-        if identity is None:
-            logger.warning(
-                "ignoring unmapped instrument marker marker={}",
-                _marker_log_id(marker),
-            )
-            return None
         marked = await self._fill_polygon.execute(
             ImagePolygonFillRequest(
                 image=image,
@@ -190,7 +209,7 @@ class LabInstrumentAgent(Agent):
         result = await self._query_image.execute(
             ImageQueryRequest(
                 image=marked.image,
-                query=self._reading_query(marker, identity.device_name),
+                query=self._reading_query(marker, device_name),
             )
         )
         reading = result.text.strip()
@@ -200,25 +219,18 @@ class LabInstrumentAgent(Agent):
             timestamp_us=timestamp_us,
             marker_type=marker.marker_type,
             marker_id=marker.value,
-            device_name=identity.device_name,
+            device_name=device_name,
             meter_reading=reading,
         )
 
     @staticmethod
     def _reading_query(marker: TrackedMarker, device_name: str) -> str:
-        return (
-            "Read exactly one target lab instrument. The solid magenta polygon covers the "
-            f"{marker.marker_type.value} marker {marker.value!r} mapped to {device_name!r}. "
-            "First locate the physical instrument housing or panel to which that magenta marker "
-            "is visibly attached. A display is valid only when the image clearly shows that the "
-            "display and the magenta marker belong to that same continuous housing or panel, with "
-            "no device boundary between them. Proximity, alignment, a shared table or rack, or the "
-            "fact that it is the only readable display in the image is not evidence of ownership. "
-            "Ignore every unhighlighted QR or ArUco marker and every display on an adjacent, "
-            "overlapping, or nearby device. If the target housing has no visible readable display, "
-            "return UNKNOWN even when another device has a clear reading. If ownership is at all "
-            "ambiguous, return UNKNOWN. Otherwise return only the target display's reading and unit, "
-            "with no explanation."
+        return json.dumps(
+            {
+                "target_marker_type": marker.marker_type.value,
+                "target_marker_id": marker.value,
+                "target_device_name": device_name,
+            }
         )
 
     @staticmethod

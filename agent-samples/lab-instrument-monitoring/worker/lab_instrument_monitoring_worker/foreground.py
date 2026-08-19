@@ -279,6 +279,18 @@ class ForegroundAgent(Agent):
                 response = "I couldn't complete that request. Please try again."
                 tools = []
                 spoken = False
+            if not spoken:
+                try:
+                    await ctx.publish(
+                        VOICE_CONTRIBUTION_TOPIC,
+                        VoiceOutput(
+                            text=response,
+                            interrupt=True,
+                            timestamp_us=query.timestamp_us,
+                        ),
+                    )
+                except RuntimeClosedError:
+                    return
             try:
                 await ctx.publish(
                     FOREGROUND_RECORD_TOPIC,
@@ -289,17 +301,13 @@ class ForegroundAgent(Agent):
                         tools=tools,
                     ),
                 )
-                if not spoken:
-                    await ctx.publish(
-                        VOICE_CONTRIBUTION_TOPIC,
-                        VoiceOutput(
-                            text=response,
-                            interrupt=True,
-                            timestamp_us=query.timestamp_us,
-                        ),
-                    )
             except RuntimeClosedError:
                 return
+            except Exception:
+                logger.opt(exception=True).error(
+                    "foreground record publish failed pid={!r}",
+                    participant_id,
+                )
 
     async def _answer(
         self,

@@ -21,7 +21,8 @@ its start, stop, or status control.
 
 `visual_cases.yaml` exercises the VLM-facing prompts with generated images. It
 covers monitor baseline, changed, unchanged, adversarial focus and visible
-instruction text, plus same-device and ambiguous instrument-display association:
+instruction text, plus same-device, missing-display, ambiguous-association, and
+visible-instruction instrument cases:
 
 ```bash
 uv run --project worker python eval/visual_eval.py

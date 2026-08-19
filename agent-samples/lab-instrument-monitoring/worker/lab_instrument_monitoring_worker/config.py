@@ -28,6 +28,7 @@ class WorkerConfig:
     web_events_max_events: int
     foreground_prompt: str
     monitor_prompt: str
+    instrument_prompt: str
     monitor_interval_s: float
     instrument_monitor_interval_s: float
     instrument_state_interval_s: float
@@ -108,6 +109,7 @@ def load_config(path: Path | None) -> WorkerConfig:
         web_events_max_events=web_events_max_events,
         foreground_prompt=_prompt(data, path, "foreground_prompt"),
         monitor_prompt=_prompt(data, path, "monitor_prompt"),
+        instrument_prompt=_prompt(data, path, "instrument_prompt"),
         monitor_interval_s=interval,
         instrument_monitor_interval_s=instrument_interval,
         instrument_state_interval_s=instrument_state_interval,

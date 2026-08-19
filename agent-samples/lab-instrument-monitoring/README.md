@@ -57,15 +57,19 @@ Detections absent from the device map are logged and ignored; they never become
 invented device names or voice alerts. For each mapped marker, the VLM must
 visibly establish that the highlighted marker and display share one continuous
 instrument housing. A nearby or lone readable display is not sufficient; the
-reader returns `UNKNOWN` whenever ownership cannot be proved from the image.
+reader returns `UNKNOWN` whenever ownership cannot be proved from the image. A
+dedicated VLM system prompt owns these rules; marker identity is passed as
+structured, untrusted data.
 
 `InstrumentMonitorAgent` owns all participant-scoped instrument state. It
 normalizes numeric readings, retains a known unit when a later VLM result omits
-it, and emits an event only when a device is first discovered or its numeric
-reading changes. A device can leave and re-enter view without another alert when
-its value is unchanged. Once a device has not been seen for the configured loss
-timeout, the agent emits one lost-device event. It also emits the full tracked
-state every 10 seconds. `InstrumentAlertAgent` converts change and lost-device
+it, and emits an event only when a device is first discovered or its normalized
+value or unit changes. Mapped marker sightings refresh last-seen state even when
+glare or obstruction makes the display unreadable. A device can leave and
+re-enter view without another alert when its reading is unchanged. Once its
+marker has not been seen for the configured loss timeout, the agent emits one
+lost-device event. It also emits the full tracked state every 10 seconds.
+`InstrumentAlertAgent` converts change and lost-device
 topics into voice notes; state snapshots are persisted without being spoken.
 Foreground replies and alert notes first pass through `VoiceAggregationAgent`,
 which keeps one participant response active and combines non-urgent updates

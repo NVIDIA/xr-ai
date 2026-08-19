@@ -28,6 +28,7 @@ from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult
 from xr_ai_voice import (
     VOICE_CONTRIBUTION_TOPIC,
     VOICE_TRANSCRIPT_TOPIC,
+    UserQuery,
     VoiceOutput,
     VoiceParticipantJoined,
     VoiceParticipantLeft,
@@ -62,6 +63,7 @@ from lab_instrument_monitoring_worker.events import (  # noqa: E402  # pyright: 
     InstrumentChange,
     InstrumentLost,
     InstrumentReading,
+    InstrumentSighting,
     InstrumentStateSnapshot,
     MonitorRecord,
 )
@@ -181,6 +183,7 @@ def _make_instruments(
         images=images or _make_images(),
         vlm=SimpleNamespace(),  # type: ignore[arg-type]
         device_map=_device_map(),
+        prompt="Read only the highlighted instrument.",
     )
 
 
@@ -431,7 +434,36 @@ def test_instrument_reading_normalization_retains_units() -> None:
     assert normalize_meter_reading("UNKNOWN", previous_unit="V") is None
 
 
-def test_instrument_read_prompt_rejects_adjacent_device_displays() -> None:
+def test_instrument_read_prompt_rejects_adjacent_device_displays(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from lab_instrument_monitoring_worker import instruments as instruments_module
+
+    config = load_config(_SAMPLE / "yaml/lab_instrument_monitoring_worker.yaml")
+    prompt = config.instrument_prompt
+    normalized_prompt = " ".join(prompt.split())
+    captured_system_prompts: list[str] = []
+    real_image_query_tool = instruments_module.ImageQueryTool
+
+    def capture_image_query_tool(*, images, vlm, system_prompt=""):
+        captured_system_prompts.append(system_prompt)
+        return real_image_query_tool(
+            images=images,
+            vlm=vlm,
+            system_prompt=system_prompt,
+        )
+
+    monkeypatch.setattr(
+        instruments_module,
+        "ImageQueryTool",
+        capture_image_query_tool,
+    )
+    LabInstrumentAgent(
+        images=_make_images(),
+        vlm=SimpleNamespace(),  # type: ignore[arg-type]
+        device_map=_device_map(),
+        prompt=prompt,
+    )
     query = LabInstrumentAgent._reading_query(
         TrackedMarker(
             marker_type=MarkerType.QR_CODE,
@@ -446,11 +478,18 @@ def test_instrument_read_prompt_rejects_adjacent_device_displays() -> None:
         "Device1",
     )
 
-    assert "same continuous housing" in query
-    assert "adjacent" in query
-    assert "only readable display" in query
-    assert "target housing has no visible readable display" in query
-    assert "UNKNOWN" in query
+    assert "same continuous housing" in normalized_prompt
+    assert "adjacent" in normalized_prompt
+    assert "only readable display" in normalized_prompt
+    assert "target housing has no visible readable display" in normalized_prompt
+    assert "UNKNOWN" in normalized_prompt
+    assert "untrusted data" in normalized_prompt
+    assert captured_system_prompts == [prompt]
+    assert json.loads(query) == {
+        "target_marker_type": "qr_code",
+        "target_marker_id": "device-1",
+        "target_device_name": "Device1",
+    }
 
 
 def test_unmapped_marker_log_identifier_redacts_payload() -> None:
@@ -470,6 +509,65 @@ def test_unmapped_marker_log_identifier_redacts_payload() -> None:
     assert identifier.startswith("qr_code:")
     assert len(identifier.removeprefix("qr_code:")) == 12
     assert "secret-value" not in identifier
+
+
+@pytest.mark.asyncio
+async def test_instrument_reader_returns_sighting_when_display_is_unreadable() -> None:
+    marker = TrackedMarker(
+        marker_type=MarkerType.QR_CODE,
+        value="meter-a",
+        corners=[
+            MarkerPoint(x=1, y=1),
+            MarkerPoint(x=2, y=1),
+            MarkerPoint(x=2, y=2),
+            MarkerPoint(x=1, y=2),
+        ],
+    )
+    images = _make_images()
+    agent = _make_instruments(images)
+    frame_reference = images.images.put(b"jpeg", owner="participant-1")
+
+    async def current_frame(_request):
+        return ImageFrame(
+            image=frame_reference,
+            timestamp_us=7,
+            width=640,
+            height=480,
+            sequence=1,
+            participant_id="participant-1",
+        )
+
+    async def tracked_markers(_request):
+        return SimpleNamespace(available=True, markers=[marker], message="")
+
+    async def filled_polygon(_request):
+        return SimpleNamespace(
+            available=True,
+            image=frame_reference,
+        )
+
+    async def unreadable(_request):
+        return ImageQueryResult(text="UNKNOWN")
+
+    images.get_current_frame = SimpleNamespace(execute=current_frame)  # type: ignore[assignment]
+    images.track_markers = SimpleNamespace(execute=tracked_markers)  # type: ignore[assignment]
+    agent._fill_polygon = SimpleNamespace(execute=filled_polygon)  # type: ignore[assignment]
+    agent._query_image = SimpleNamespace(execute=unreadable)  # type: ignore[assignment]
+
+    result = await agent._read_lab_instruments(
+        ReadLabInstrumentsRequest(participant_id="participant-1")
+    )
+
+    assert result.readings == []
+    assert result.sightings == [
+        InstrumentSighting(
+            timestamp_us=7,
+            marker_type=MarkerType.QR_CODE,
+            marker_id="meter-a",
+            device_name="Device1",
+        )
+    ]
+    assert result.available is False
 
 
 @pytest.mark.asyncio
@@ -623,6 +721,63 @@ async def test_instrument_monitor_emits_changes_when_only_unit_changes() -> None
         ("1 A", "12 V"),
         ("12 V", "12 mV"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_visible_instrument_with_unreadable_display_is_not_lost() -> None:
+    monitor = InstrumentMonitorAgent(
+        reader=_make_instruments(),
+        interval_s=5.0,
+        lost_after_s=10.0,
+    )
+    collector = _InstrumentEventCollector()
+    runtime = AgentRuntime()
+    runtime.register("instrument-monitor", monitor)
+    runtime.register("collector", collector)
+    def sighting(timestamp_us: int) -> InstrumentSighting:
+        return InstrumentSighting(
+            timestamp_us=timestamp_us,
+            marker_type=MarkerType.QR_CODE,
+            marker_id="meter-a",
+            device_name="Device1",
+        )
+
+    async with runtime:
+        monitor.bind_runtime(runtime)
+        monitor._trackers["participant-1"] = _ParticipantTracker()
+        await monitor._observe(
+            "participant-1",
+            [
+                InstrumentReading(
+                    timestamp_us=1,
+                    marker_type=MarkerType.QR_CODE,
+                    marker_id="meter-a",
+                    device_name="Device1",
+                    meter_reading="12 V",
+                )
+            ],
+            observed_at=100.0,
+        )
+        await monitor._observe(
+            "participant-1",
+            [],
+            sightings=[sighting(2)],
+            observed_at=111.0,
+        )
+        await monitor._publish_lost("participant-1", 111.0)
+        await monitor._observe(
+            "participant-1",
+            [],
+            sightings=[sighting(3)],
+            observed_at=122.0,
+        )
+        await monitor._publish_lost("participant-1", 122.0)
+        await monitor._publish_snapshot("participant-1")
+        await monitor.stop()
+
+    assert collector.lost == []
+    assert collector.snapshots[-1].instruments[0].tracking is True
+    assert collector.snapshots[-1].instruments[0].last_seen_us == 3
 
 
 @pytest.mark.asyncio
@@ -1214,6 +1369,40 @@ async def test_foreground_empty_current_view_stream_reports_unavailable(tmp_path
 
 
 @pytest.mark.asyncio
+async def test_foreground_record_failure_does_not_suppress_speech() -> None:
+    published: list[tuple[object, object]] = []
+
+    class Context:
+        metadata = SimpleNamespace(
+            participant_id="participant-disk-full",
+            message_id="query-1",
+        )
+
+        async def publish(self, topic, message) -> None:
+            if topic is FOREGROUND_RECORD_TOPIC:
+                raise OSError("disk full")
+            published.append((topic, message))
+
+    foreground = object.__new__(ForegroundAgent)
+
+    async def answer(*_args, **_kwargs):
+        return "Device1 is reading 12 volts.", ["lab_instruments__read"], False
+
+    foreground._answer = answer
+    await foreground._run_turn(
+        UserQuery(text="Read the instrument.", timestamp_us=7),
+        Context(),  # type: ignore[arg-type]
+    )
+
+    assert [topic for topic, _message in published] == [VOICE_CONTRIBUTION_TOPIC]
+    assert published[0][1] == VoiceOutput(
+        text="Device1 is reading 12 volts.",
+        interrupt=True,
+        timestamp_us=7,
+    )
+
+
+@pytest.mark.asyncio
 async def test_foreground_background_control_returns_direct(tmp_path: Path) -> None:
     class Llm:
         def __init__(self) -> None:
@@ -1391,4 +1580,5 @@ def test_visual_eval_covers_prompt_driven_monitor_and_instrument_rules() -> None
         ("instrument", "instrument-same-device"),
         ("instrument", "instrument-ambiguous-association"),
         ("instrument", "instrument-target-has-no-reading"),
+        ("instrument", "instrument-visible-instruction-is-data"),
     }

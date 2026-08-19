@@ -159,6 +159,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             images=images,
             vlm=vlm,
             device_map=config.device_map,
+            prompt=config.instrument_prompt,
             debug_dir=(config.artifacts_dir / "marker-scans" if config.capture_marker_scans else None),
         ),
     )
