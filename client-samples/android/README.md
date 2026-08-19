@@ -90,9 +90,12 @@ uv sync && uv run echo_agent
 The hub prints:
 
 ```
-[hub]   LiveKit URL : wss://0.0.0.0:8080
+[hub]   LiveKit URL : wss://localhost:8080
 [hub]   Token       : eyJ…   ← paste into the app
 ```
+
+From the phone, replace `localhost` with the server machine's IP (the table
+below uses the same value).
 
 In the app:
 

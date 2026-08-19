@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
@@ -167,6 +168,8 @@ class _ImageInference:
             yield ImageQueryChunk(text="Image input unavailable — please select it again.")
             return
         try:
+            started_at = time.monotonic()
+            _LOGGER.info("Image VLM stream request started image_count=%d", len(inputs))
             with image_sanitizer():
                 stream = await nemo_relay.llm.stream_execute(
                     VLM_CALL_NAME,
@@ -185,6 +188,12 @@ class _ImageInference:
                 async for chunk in stream:
                     text = stream_text(chunk)
                     if text:
+                        if not emitted_output:
+                            _LOGGER.info(
+                                "Image VLM stream first token latency_ms=%.1f image_count=%d",
+                                (time.monotonic() - started_at) * 1000,
+                                len(inputs),
+                            )
                         emitted_output = True
                         yield ImageQueryChunk(text=text)
         except Exception:

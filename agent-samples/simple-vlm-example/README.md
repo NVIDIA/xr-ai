@@ -42,6 +42,12 @@ uv sync
 uv run simple_vlm_example
 ```
 
+`HF_TOKEN` is required by default; pass `--allow-anonymous` to run without one
+(see [`credentials.md`](../../docs/source/getting_started/credentials.md)).
+
+The VLM and STT keep running after you exit so the next run skips the model
+reload; free the VRAM with `cd ../model-servers && uv run model_servers --stop`.
+
 Open the web client shown in the hub banner, connect, and then speak or type a
 question.
 
@@ -54,7 +60,9 @@ The worker and orchestrator consume the deployment profile selected by
 - `models.omni.json` reuses the Nemotron-Omni VLM service on port 8108.
 
 The same profile owns model behavior, endpoints, credentials, readiness, and
-launcher process ownership.
+launcher process ownership. Before announcing readiness, the worker completes a
+small streaming request with a 1280x720 JPEG so the first user query does not
+pay the multimodal initialization cost.
 
 ## Relay visibility
 

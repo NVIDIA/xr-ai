@@ -35,6 +35,7 @@ _NONCANONICAL_TYPE_REFERENCE = re.compile(
 
 _GITHUB_BLOB_PREFIX = "https://github.com/NVIDIA/xr-ai/blob/"
 _GITHUB_TREE_PREFIX = "https://github.com/NVIDIA/xr-ai/tree/"
+_GITHUB_RAW_PREFIX = "https://raw.githubusercontent.com/NVIDIA/xr-ai/"
 _SEMVER_IDENTIFIER = r"(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)"
 _SEMVER_TAG = (
     rf"v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
@@ -60,6 +61,9 @@ def _rewrite_github_links(_app, _docname: str, source: list[str]) -> None:
     )
     source[0] = source[0].replace(
         f"{_GITHUB_TREE_PREFIX}main/", f"{_GITHUB_TREE_PREFIX}{ref}/"
+    )
+    source[0] = source[0].replace(
+        f"{_GITHUB_RAW_PREFIX}main/", f"{_GITHUB_RAW_PREFIX}{ref}/"
     )
 
 
