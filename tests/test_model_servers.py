@@ -283,6 +283,24 @@ def test_explicit_gpu_profile_bypasses_detection(monkeypatch: pytest.MonkeyPatch
     assert all(Path(process.config).parent == expected_dir for process in processes)
 
 
+def test_service_catalog_does_not_duplicate_yaml_ports() -> None:
+    assert all(len(service) == 3 for service in _model_servers._MODEL_SERVICES.values())
+
+
+def test_known_ports_are_discovered_from_service_yaml() -> None:
+    assert set(_model_servers._known_service_ports()) == {
+        ("stt-nim", 9010),
+        ("tts-nim", 9011),
+        ("llm-nim", 8110),
+        ("vlm-nim", 8100),
+        ("stt", 8103),
+        ("agent-llm", 8107),
+        ("omni", 8108),
+        ("vlm", 8100),
+        ("embedding", 8109),
+    }
+
+
 def test_nim_profile_mixes_nim_containers_and_local_servers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -33,7 +33,7 @@ from ._cloudxr_env import (
     load_cloudxr_env,
     read_device_profile,
 )
-from ._config import read_config_scalar
+from ._config import read_config_scalar, read_service_port
 from ._credentials import (
     ensure_credentials,
     load_credentials,
@@ -49,7 +49,7 @@ __all__ = [
     "XR_RUNTIME_VAR", "load_cloudxr_env",
     "NATIVE_DEVICE_PROFILES", "is_native_profile", "read_device_profile",
     "ensure_credentials", "load_credentials", "require_credentials", "warn_if_missing",
-    "read_config_scalar",
+    "read_config_scalar", "read_service_port",
     "GPUInventoryError", "detect_gpu_config",
     "ModelDeployment", "load_deployment_profile", "load_model_deployment",
     "ManagedProcess",
