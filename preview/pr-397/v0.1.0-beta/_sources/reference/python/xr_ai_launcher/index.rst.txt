@@ -1,0 +1,389 @@
+xr_ai_launcher
+==============
+
+.. py:module:: xr_ai_launcher
+
+.. autoapi-nested-parse::
+
+   xr-ai-launcher — process management for the xr-ai stack.
+
+   Intentionally stdlib-only so it can be added to any sample without pulling
+   in the dependency chain of the processes it manages.
+
+   Typical usage::
+
+       from xr_ai_launcher import Parallel, Process, run_stack
+
+       _BASE = Path(__file__).resolve().parent
+
+       PROCESSES = [
+           Process("hub",    "../../services/xr-media-hub", "xr_media_hub"),
+           Parallel([
+               Process("stt", "../../services/stt-server", "stt_server"),
+               Process("tts", "../../services/piper-tts",  "piper_tts_server"),
+           ]),
+           Process("worker", "worker", "my_agent_worker"),
+       ]
+
+       def run() -> None:
+           run_stack(PROCESSES, _BASE)
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   xr_ai_launcher.NATIVE_DEVICE_PROFILES
+   xr_ai_launcher.XR_RUNTIME_VAR
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   xr_ai_launcher.GPUInventoryError
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_launcher.ModelDeployment
+   xr_ai_launcher.Parallel
+   xr_ai_launcher.Process
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   xr_ai_launcher.is_native_profile
+   xr_ai_launcher.load_cloudxr_env
+   xr_ai_launcher.read_device_profile
+   xr_ai_launcher.read_config_scalar
+   xr_ai_launcher.read_service_port
+   xr_ai_launcher.ensure_credentials
+   xr_ai_launcher.load_credentials
+   xr_ai_launcher.require_credentials
+   xr_ai_launcher.warn_if_missing
+   xr_ai_launcher.detect_gpu_config
+   xr_ai_launcher.load_deployment_profile
+   xr_ai_launcher.load_model_deployment
+   xr_ai_launcher.ManagedProcess
+   xr_ai_launcher.run_stack
+
+
+Package Contents
+----------------
+
+.. py:data:: NATIVE_DEVICE_PROFILES
+
+   CloudXR device profiles that use direct native transport instead of WSS.
+
+
+.. py:data:: XR_RUNTIME_VAR
+   :value: 'XR_RUNTIME_JSON'
+
+
+   OpenXR runtime selector written by the CloudXR runtime service.
+
+
+.. py:function:: is_native_profile(profile: str) -> bool
+
+   True if *profile* names a native-transport CloudXR device profile.
+
+
+.. py:function:: load_cloudxr_env(path: pathlib.Path) -> None
+
+   Parse an ``export KEY=VALUE`` env file and merge into ``os.environ``.
+
+
+.. py:function:: read_device_profile(yaml_path) -> str
+
+   Return NV_DEVICE_PROFILE from the environment, or from *yaml_path* when unset.
+
+
+.. py:function:: read_config_scalar(path: pathlib.Path, key: str, default: str = '') -> str
+
+   Read one scalar from a top-level YAML worker configuration.
+
+
+.. py:function:: read_service_port(path: pathlib.Path) -> int | None
+
+   Read a service's top-level HTTP port from its YAML configuration.
+
+
+.. py:function:: ensure_credentials(*names: str) -> None
+
+   Ensure each named token is available in os.environ.
+
+   Priority (highest first):
+       1. Already set in os.environ
+       2. Saved in ~/.config/xr-ai/credentials.json
+       3. Stored in ~/.cache/huggingface/token  (HF_TOKEN only)
+       4. Prompted interactively and then saved to both locations
+
+   Any token entered interactively is saved so future runs are non-interactive.
+   Pressing Enter without typing skips the token (left unset, not saved).
+
+
+.. py:function:: load_credentials() -> None
+
+   Inject saved credentials into os.environ.
+
+   Values already set in os.environ are left unchanged.  For HF_TOKEN, also
+   checks ~/.cache/huggingface/token (written by `huggingface-cli login`) as a
+   fallback so existing HuggingFace logins are picked up automatically.
+
+
+.. py:function:: require_credentials(*names: str, allow_missing: bool = False) -> None
+
+   Exit non-zero unless each named token is available; NEVER prompts.
+
+   *allow_missing* (wired to the orchestrators' ``--allow-anonymous`` flag)
+   downgrades to ``warn_if_missing`` behavior.
+
+
+.. py:function:: warn_if_missing(*names: str) -> None
+
+   Non-interactively surface missing optional tokens — NEVER prompts.
+
+   Loads saved / `huggingface-cli login` / env tokens, then prints an
+   actionable notice per still-missing token and continues, so a missing
+   token is visible early without blocking startup on an interactive prompt.
+
+
+.. py:exception:: GPUInventoryError
+
+
+
+   Raised when visible GPUs cannot be inventoried or safely classified.
+
+
+.. py:function:: detect_gpu_config() -> str
+
+   Select an existing config only when the complete topology is supported.
+
+   This compatibility bridge remains until capability-based service planning
+   replaces named config selection. It deliberately has no fallback.
+
+
+.. py:class:: ModelDeployment
+
+   Launcher-facing process ownership and credentials for model endpoints.
+
+
+   .. py:attribute:: profile_path
+      :type:  pathlib.Path
+
+      Resolved path of the selected model profile.
+
+
+
+   .. py:attribute:: services
+      :type:  dict[str, Literal['own', 'reuse']]
+
+      Launcher ownership mode keyed by managed service name.
+
+
+
+   .. py:attribute:: required_credentials
+      :type:  tuple[str, Ellipsis]
+
+      Environment-variable names required by configured model endpoints.
+
+
+
+   .. py:method:: launch_mode(service: str) -> Literal['own', 'reuse'] | None
+
+      Return the configured ownership mode for *service*, if managed.
+
+
+
+.. py:function:: load_deployment_profile(profile_path: pathlib.Path) -> ModelDeployment
+
+   Load a JSON deployment profile directly (no worker YAML indirection).
+
+
+.. py:function:: load_model_deployment(worker_config: pathlib.Path) -> ModelDeployment
+
+   Load the JSON profile selected by a YAML worker configuration.
+
+
+.. py:function:: ManagedProcess(name: str, cmd: list[str], cwd: pathlib.Path | None = None, env: dict[str, str] | None = None)
+   :async:
+
+
+   Run *cmd* as a subprocess and terminate it cleanly when the context exits.
+
+   Output routing: when the parent has called
+   :func:`xr_ai_logging.setup_logging` (per-run env vars stamped), stdout
+   and stderr are appended line-by-line to ``<log_dir>/<name>.log`` with
+   ``HH:MM:SS.mmm`` timestamps. Lines emitted via a custom ``lovr.log``
+   callback (``LOVR_LOG\t<level>\t<tag>\t<msg>``) are parsed for
+   authoritative severity; ``warn``/``error`` records are also mirrored to
+   the parent's stdout so they reach the terminal. Native bytes that don't
+   carry the marker fall back to a regex match on LOVR's level vocabulary
+   (case-insensitive ``error|warn|warning|fatal|panic``) before being
+   mirrored.
+
+   When the env vars are unset (standalone use), output is not lost: lines
+   fall back to prefixed ``[name] …`` prints on the parent's stdout.
+
+   Sends SIGTERM on exit; escalates to SIGKILL after ``_STOP_TIMEOUT``
+   seconds. *env*, if given, replaces the child's environment entirely;
+   otherwise the child inherits the parent's.
+
+
+.. py:class:: Parallel(processes: Sequence[Process])
+
+   A group of processes that start simultaneously.
+
+   The launcher spawns every member at once and waits for *all* of them to
+   signal readiness before advancing to the next item in the stack sequence.
+   If any member exits before signaling ready the launcher shuts everything
+   down, just as it would for a serial process.
+
+   Example::
+
+       Parallel([
+           Process("stt", "../../services/stt-server", "stt_server"),
+           Process("tts", "../../services/piper-tts",  "piper_tts_server"),
+       ])
+
+
+   .. py:attribute:: processes
+      :type:  tuple[Process, Ellipsis]
+
+      Processes started together before the launcher advances.
+
+
+
+.. py:class:: Process
+
+   Declare one process in a launcher-managed stack.
+
+
+   .. py:attribute:: name
+      :type:  str
+
+      Label used in launcher output and readiness diagnostics.
+
+
+
+   .. py:attribute:: project
+      :type:  str | pathlib.Path
+
+      uv project path, relative to the sample root or absolute.
+
+
+
+   .. py:attribute:: command
+      :type:  str
+
+      Entry-point command to run inside the project's environment.
+
+
+
+   .. py:attribute:: config
+      :type:  str | pathlib.Path | None
+      :value: None
+
+
+      Optional YAML path, relative to the sample root or absolute.
+
+      The launcher passes the resolved path to the process as ``--config``.
+
+
+
+   .. py:attribute:: gpu
+      :type:  str | None
+      :value: None
+
+
+      Optional ``CUDA_VISIBLE_DEVICES`` value, such as ``"0"`` or ``"0,1"``.
+
+
+
+   .. py:attribute:: launch_mode
+      :type:  str
+      :value: 'own'
+
+
+      Spawn and shutdown behavior.
+
+      ``own`` starts the process and stops it with the stack. ``persist`` starts
+      it but leaves it running at shutdown. ``reuse`` assumes the process is
+      already running and neither starts nor stops it.
+
+
+
+   .. py:attribute:: port
+      :type:  int | None
+      :value: None
+
+
+      Optional service port metadata.
+
+      The launcher stores but does not inspect this value or stop persistent
+      services by port.
+
+
+
+   .. py:attribute:: quiet_native_output
+      :type:  bool
+      :value: False
+
+
+      Route unformatted native output to DEBUG instead of the terminal.
+
+      Use this for processes that interleave native C/C++ output with Python
+      loguru records. All output remains available in the per-process log file.
+
+
+
+.. py:function:: run_stack(processes: Sequence[Union[Process, Parallel]], base: pathlib.Path, *, exit_after_ready: bool = False) -> None
+
+   Start *processes* in declaration order, waiting for each item to signal
+   readiness before advancing to the next.
+
+   Each item is either a single ``Process`` (started and awaited alone) or a
+   ``Parallel`` group (all members started at once; the launcher waits for
+   *every* member before moving on).
+
+   Each process receives ``--ready-file <path>``.  When fully initialized
+   it must ``Path(ready_file).touch()`` to signal the launcher.  Progress
+   is printed every five seconds so model-loading or CloudXR start-up
+   remains visible.
+
+   After all processes are ready the launcher monitors them: if any exits,
+   all others are terminated and the launcher exits.  Pass
+   ``exit_after_ready=True`` to return immediately once everything is ready
+   instead — useful for launchers whose processes are all ``launch_mode="persist"``
+   and should outlive the orchestrator (e.g. ``model-servers``).
+
+   *base* is the sample root — all relative paths in ``Process.project``
+   and ``Process.config`` are resolved against it::
+
+       _BASE = Path(__file__).resolve().parent
+
+       PROCESSES = [
+           Process("hub",    "../../services/xr-media-hub", "xr_media_hub",
+                   config="yaml/xr_media_hub.yaml"),
+           Parallel([
+               Process("stt", "../../services/stt-server", "stt_server"),
+               Process("tts", "../../services/piper-tts",  "piper_tts_server"),
+           ]),
+           Process("worker", "worker", "my_worker",
+                   config="yaml/my_worker.yaml"),
+       ]
+
+       def run() -> None:
+           run_stack(PROCESSES, _BASE)
+
+
