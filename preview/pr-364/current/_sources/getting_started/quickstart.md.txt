@@ -10,10 +10,8 @@
 The fastest path: paste this to your agent and it does the rest, including
 walking you through the choices below. See {doc}`skills` for how it works.
 
-```text
-Set up xr-ai for me: fetch
-https://raw.githubusercontent.com/NVIDIA/xr-ai/main/skills/getting-started/SKILL.md,
-install it as a skill (or just follow it), and walk me through the setup.
+```{literalinclude} /_snippets/agent-setup-prompt.txt
+:language: text
 ```
 
 The rest of this page is the manual path.
@@ -129,9 +127,9 @@ The hub prints:
 ```
 
 This banner appears as soon as the hub itself is ready, while the model
-services and worker are still starting. The stack accepts clients once the
-launcher prints its `All processes ready` banner; a client connected before
-that gets a session with no agent responding.
+services and worker are still starting. Clients can connect as soon as it
+appears, but the agent answers queries only after the launcher prints its
+`All processes ready` banner.
 
 ### Step 2 — Connect a client
 

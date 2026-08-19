@@ -11,10 +11,8 @@ in real time.
 :::{tip}
 Using a coding agent? Paste this to it:
 
-```text
-Set up xr-ai for me: fetch
-https://raw.githubusercontent.com/NVIDIA/xr-ai/main/skills/getting-started/SKILL.md,
-install it as a skill (or just follow it), and walk me through the setup.
+```{literalinclude} /_snippets/agent-setup-prompt.txt
+:language: text
 ```
 :::
 

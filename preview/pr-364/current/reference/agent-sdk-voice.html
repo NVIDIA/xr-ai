@@ -59,7 +59,7 @@
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Command-line reference" href="command-line.html" />
+    <link rel="next" title="xr-ai-web-events" href="agent-sdk-web-events.html" />
     <link rel="prev" title="xr-ai-tools" href="agent-sdk-tools.html" />
 
 
@@ -319,6 +319,7 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
@@ -356,6 +357,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_logging/index.html">xr_ai_logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
 </ul>
 </details></li>
 </ul>
@@ -424,6 +426,9 @@ applications work with XR concepts rather than Pipecat modules:</p>
 <li><p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes every final pre-gate STT result on <code class="docutils literal notranslate"><span class="pre">voice.transcript</span></code>
 and accepted speech, text, participant lifecycle, and interruption on typed
 topics; it subscribes to <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code> optionally serializes candidate speech per
+participant and rewrites simultaneous finite updates into one concise
+response before publishing to <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> privately owns readiness, hub transport, pipeline assembly,
 signals, execution, and cleanup.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code> is available when an application needs to share one transport explicitly.</p></li>
@@ -456,6 +461,84 @@ signals, execution, and cleanup.</p></li>
     <span class="k">await</span> <span class="n">voice</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runtime</span><span class="p">)</span>
 </pre></div>
 </div>
+</section>
+<section id="multiple-voice-producers">
+<h2>Multiple voice producers<a class="headerlink" href="#multiple-voice-producers" title="Link to this heading">#</a></h2>
+<p>Applications with foreground responses, background monitors, timers, and
+alerts can register one <code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code>. Producers publish the same
+<code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code> payload to <code class="docutils literal notranslate"><span class="pre">VOICE_CONTRIBUTION_TOPIC</span></code>; only the aggregator
+publishes the final response to <code class="docutils literal notranslate"><span class="pre">VOICE_OUTPUT_TOPIC</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">VOICE_CONTRIBUTION_TOPIC</span><span class="p">,</span>
+    <span class="n">VoiceAggregationAgent</span><span class="p">,</span>
+    <span class="n">VoiceOutput</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">aggregation</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+    <span class="s2">"voice-aggregation"</span><span class="p">,</span>
+    <span class="n">VoiceAggregationAgent</span><span class="p">(</span><span class="n">llm</span><span class="o">=</span><span class="n">llm</span><span class="p">),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>A producer uses its runtime context while handling an application event:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">ctx</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span>
+    <span class="n">VOICE_CONTRIBUTION_TOPIC</span><span class="p">,</span>
+    <span class="n">VoiceOutput</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"The timer is done."</span><span class="p">),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The application stops participant-owned aggregation tasks before the runtime:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">voice</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runtime</span><span class="p">)</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">aggregation</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Applications should call <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">aggregation.release(participant_id)</span></code> from
+their participant-left subscriber so buffered speech and stream state are
+discarded as soon as that participant departs. The application owns its
+lifecycle topic; the shared aggregator therefore exposes cleanup directly
+rather than subscribing to one hard-coded topic name.</p>
+<p>Aggregation is participant-scoped. A lone finite contribution passes through
+without an LLM call after the short coalescing window. Two or more finite
+contributions in one batch are rewritten into a single concise utterance. The
+aggregator keeps each output open for an estimated spoken duration, based on
+<code class="docutils literal notranslate"><span class="pre">speech_rate_wpm</span></code> and clamped between <code class="docutils literal notranslate"><span class="pre">minimum_playback_s</span></code> and
+<code class="docutils literal notranslate"><span class="pre">maximum_playback_s</span></code>, so updates produced while that output is playing form the
+next batch instead of becoming separate queued utterances. This is open-loop
+pacing rather than a client playback acknowledgement. An estimate that is too
+short moves queuing downstream into TTS; one that is too long creates silence.
+Tune all three playback settings for the selected TTS voice.</p>
+<p>Rewrites have an aggregator-enforced <code class="docutils literal notranslate"><span class="pre">rewrite_timeout_s</span></code> deadline, which is also
+passed to the model service. If a rewrite fails or times out, the original text
+is joined so updates are not lost. The earliest input timestamp is preserved.
+An <code class="docutils literal notranslate"><span class="pre">interrupt=True</span></code> contribution bypasses the coalescing delay and LLM rewrite,
+cancels a rewrite already in progress, and replaces active speech without model
+latency. Routine updates already collected in its batch remain ordered for the
+next batch. <code class="docutils literal notranslate"><span class="pre">queue_capacity</span></code> bounds all pending contributions for one
+participant, including chunks waiting behind another stream. At capacity,
+routine input replaces the oldest routine contribution but never an urgent one.
+Urgent input replaces the oldest routine contribution when possible, otherwise
+the oldest urgent contribution, so the freshest alert wins. Every drop is
+logged, and dropping a stream fragment quarantines that stream ID. Batches also
+have a bounded size; retained contributions remain ordered for following
+batches.</p>
+<p>A lone incremental contribution starts streaming immediately with a new
+aggregator-owned response ID. Other contributions wait behind that stream;
+finite updates that accumulated while it ran are coalesced when it finishes.
+An urgent contribution interrupts the active stream. A stream that stops
+producing chunks is closed after <code class="docutils literal notranslate"><span class="pre">stream_idle_timeout_s</span></code>, allowing pending
+updates to proceed. An interrupted or dropped stream ID remains quarantined
+until its terminator arrives. Each ignored fragment refreshes the quarantine;
+after a full <code class="docutils literal notranslate"><span class="pre">stream_idle_timeout_s</span></code> without another fragment, the ID may begin
+a new stream. This expiry bounds stale stream state independently from pending
+queue capacity.</p>
+<p>Call <code class="docutils literal notranslate"><span class="pre">stop()</span></code> before shutting down the runtime so the agent can cancel its
+participant-owned tasks. Contributions published after shutdown starts are
+logged and dropped. Shutdown and participant release log accepted contributions
+that are still pending or in pre-publication processing. Output already handed
+to the voice pipeline during the playback hold is not counted as discarded.</p>
 </section>
 <section id="voice-tuning-and-data-echo">
 <h2>Voice tuning and data echo<a class="headerlink" href="#voice-tuning-and-data-echo" title="Link to this heading">#</a></h2>
@@ -500,14 +583,15 @@ hub preserves the original data-channel topic for every processor.</p>
 </pre></div>
 </div>
 <p>Incremental producers reuse a <code class="docutils literal notranslate"><span class="pre">response_id</span></code>, set <code class="docutils literal notranslate"><span class="pre">final=False</span></code> while more
-chunks remain, and end with <code class="docutils literal notranslate"><span class="pre">final=True</span></code>. Aggregation is private to voice/TTS,
-and producer identity is part of the response key so independent agents cannot
-merge output accidentally. Output is serialized per participant; urgent output
-sets <code class="docutils literal notranslate"><span class="pre">interrupt=True</span></code> to replace active and queued speech. Producers may copy
-the originating query’s <code class="docutils literal notranslate"><span class="pre">timestamp_us</span></code> into <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code> so the TTS response
-preserves the input timestamp. <code class="docutils literal notranslate"><span class="pre">VoiceStreamClosedError</span></code> identifies an empty final
-chunk for a stream that voice already closed, including when wrapped in the
-runtime publication exception group.</p>
+chunks remain, and end with <code class="docutils literal notranslate"><span class="pre">final=True</span></code>. Without the optional aggregation
+agent, producer identity is part of the response key so independent agents
+cannot merge output accidentally. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> serializes output per
+participant; urgent output sets <code class="docutils literal notranslate"><span class="pre">interrupt=True</span></code> to replace active and queued
+speech. Producers may copy the originating query’s <code class="docutils literal notranslate"><span class="pre">timestamp_us</span></code> into
+<code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code> so the TTS response preserves the input timestamp.
+<code class="docutils literal notranslate"><span class="pre">VoiceStreamClosedError</span></code> identifies an empty final chunk for a stream that
+voice already closed, including when wrapped in the runtime publication
+exception group.</p>
 <p>Lifecycle publication runs on <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>-owned tasks, so participant cleanup
 cannot block the shared media processor. Join and leave publications are
 serialized per participant, preserving lifecycle order even when a subscriber
@@ -566,11 +650,11 @@ after a comma, semicolon, or within ordinary prose does not activate the gate.</
       </div>
     </a>
     <a class="right-next"
-       href="command-line.html"
+       href="agent-sdk-web-events.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Command-line reference</p>
+        <p class="prev-next-title">xr-ai-web-events</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -596,6 +680,7 @@ after a comma, semicolon, or within ordinary prose does not activate the gate.</
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#usage">Usage</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#multiple-voice-producers">Multiple voice producers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-tuning-and-data-echo">Voice tuning and data echo</a></li>
 </ul>
   </nav></div>

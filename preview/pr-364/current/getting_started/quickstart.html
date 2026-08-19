@@ -319,6 +319,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
@@ -356,6 +357,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
 </ul>
 </details></li>
 </ul>
@@ -422,9 +424,11 @@
 <h2>Set up with a coding agent<a class="headerlink" href="#set-up-with-a-coding-agent" title="Link to this heading">#</a></h2>
 <p>The fastest path: paste this to your agent and it does the rest, including
 walking you through the choices below. See <a class="reference internal" href="skills.html"><span class="doc">Skills</span></a> for how it works.</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set up xr-ai for me: fetch
-https://raw.githubusercontent.com/NVIDIA/xr-ai/d1a49ec778d64593c26ebc937bd998d22d8e9f8c/skills/getting-started/SKILL.md,
-install it as a skill (or just follow it), and walk me through the setup.
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set up xr-ai for me: ask me whether to build against the latest release or
+main, then fetch skills/getting-started/SKILL.md at that ref from
+https://raw.githubusercontent.com/NVIDIA/xr-ai/ (fall back to the main copy
+if the ref predates it), install it as a skill (or just follow it), and walk
+me through the rest of the setup.
 </pre></div>
 </div>
 <p>The rest of this page is the manual path.</p>
@@ -517,9 +521,9 @@ The hub prints:</p>
 </pre></div>
 </div>
 <p>This banner appears as soon as the hub itself is ready, while the model
-services and worker are still starting. The stack accepts clients once the
-launcher prints its <code class="docutils literal notranslate"><span class="pre">All</span> <span class="pre">processes</span> <span class="pre">ready</span></code> banner; a client connected before
-that gets a session with no agent responding.</p>
+services and worker are still starting. Clients can connect as soon as it
+appears, but the agent answers queries only after the launcher prints its
+<code class="docutils literal notranslate"><span class="pre">All</span> <span class="pre">processes</span> <span class="pre">ready</span></code> banner.</p>
 </section>
 <section id="step-2-connect-a-client">
 <h3>Step 2 — Connect a client<a class="headerlink" href="#step-2-connect-a-client" title="Link to this heading">#</a></h3>
