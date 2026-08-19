@@ -1,0 +1,407 @@
+xr_ai_tools.ocr
+===============
+
+.. py:module:: xr_ai_tools.ocr
+
+.. autoapi-nested-parse::
+
+   Bounded OCR tools over opaque image and result references.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_tools.ocr.OCRResultReference
+   xr_ai_tools.ocr.OCRResultRegistry
+   xr_ai_tools.ocr.OCRRequest
+   xr_ai_tools.ocr.OCRCapabilitiesResult
+   xr_ai_tools.ocr.OCRSpanResult
+   xr_ai_tools.ocr.OCRResult
+   xr_ai_tools.ocr.OCRSpansRequest
+   xr_ai_tools.ocr.OCRSpansResult
+   xr_ai_tools.ocr.OCRTool
+   xr_ai_tools.ocr.OCRSpansTool
+   xr_ai_tools.ocr.OCRTools
+
+
+Module Contents
+---------------
+
+.. py:class:: OCRResultReference
+
+
+
+   An opaque reference to complete OCR output held by the worker.
+
+
+   .. py:attribute:: uri
+      :type:  str
+
+      Opaque URI for one live OCR result.
+
+
+
+   .. py:method:: require_ocr_scheme(value: str) -> str
+      :classmethod:
+
+
+      Accept only handles issued by an OCR result registry.
+
+
+
+.. py:class:: OCRResultRegistry(*, capacity: int = 128)
+
+   Bounded in-process storage behind opaque OCR result references.
+
+
+   .. py:method:: put(response: xr_ai_models.OCRResponse, *, owner: str | None = None) -> OCRResultReference
+
+      Store complete structured output without provider metadata.
+
+
+
+   .. py:method:: resolve(reference: OCRResultReference) -> xr_ai_models.OCRResponse
+
+      Resolve a live handle and refresh its least-recently-used position.
+
+
+
+   .. py:method:: release_owner(owner: str) -> None
+
+      Remove OCR results associated with one participant or workflow.
+
+
+
+   .. py:method:: clear() -> None
+
+      Remove all registered OCR results.
+
+
+
+.. py:class:: OCRRequest
+
+
+
+   An opaque image reference and requested OCR granularity.
+
+
+   .. py:attribute:: image
+      :type:  xr_ai_tools.image.ImageReference
+
+      Image selected by another tool or registered by the caller.
+
+
+
+   .. py:attribute:: merge_level
+      :type:  xr_ai_models.OCRMergeLevel
+
+      Granularity used to merge neighboring recognized text regions.
+
+
+
+.. py:class:: OCRCapabilitiesResult
+
+
+
+   Structured OCR features provided by the selected backend.
+
+
+   .. py:attribute:: merge_levels
+      :type:  list[xr_ai_models.OCRMergeLevel]
+
+      Detection granularities accepted by the backend.
+
+
+
+   .. py:attribute:: structured_spans
+      :type:  bool
+
+      Whether separately addressable recognized spans are returned.
+
+
+
+   .. py:attribute:: polygons
+      :type:  bool
+
+      Whether recognized spans include normalized polygons and boxes.
+
+
+
+   .. py:attribute:: confidence_scores
+      :type:  bool
+
+      Whether recognized spans include confidence scores.
+
+
+
+   .. py:attribute:: reading_order
+      :type:  bool
+
+      Whether span identifiers follow sequential reading order.
+
+
+
+.. py:class:: OCRSpanResult
+
+
+
+   One bounded recognized span and its normalized image geometry.
+
+
+   .. py:attribute:: span_id
+      :type:  int
+
+      Zero-based identifier in backend reading order.
+
+
+
+   .. py:attribute:: text
+      :type:  str
+
+      Recognized text, possibly shortened to keep tool output bounded.
+
+
+
+   .. py:attribute:: text_truncated
+      :type:  bool
+      :value: False
+
+
+      Whether the stored span contains more text than this response.
+
+
+
+   .. py:attribute:: confidence
+      :type:  float | None
+
+      Backend confidence score, when supplied.
+
+
+
+   .. py:attribute:: polygon
+      :type:  list[xr_ai_tools.image.NormalizedImagePoint]
+
+      Ordered normalized vertices surrounding the recognized span.
+
+
+
+   .. py:attribute:: box
+      :type:  xr_ai_tools.image.NormalizedImageBox | None
+      :value: None
+
+
+      Axis-aligned normalized bounds derived from the polygon, when available.
+
+
+
+.. py:class:: OCRResult
+
+
+
+   Bounded OCR summary with a handle to complete worker-owned output.
+
+
+   .. py:attribute:: result
+      :type:  OCRResultReference | None
+      :value: None
+
+
+      Opaque handle for paging through the complete structured output.
+
+
+
+   .. py:attribute:: text
+      :type:  str
+
+      Recognized text and numbers in reading order, possibly shortened.
+
+
+
+   .. py:attribute:: spans
+      :type:  list[OCRSpanResult]
+
+      First bounded page of structured spans in reading order.
+
+
+
+   .. py:attribute:: span_count
+      :type:  int
+
+      Total structured spans retained behind the result handle.
+
+
+
+   .. py:attribute:: truncated
+      :type:  bool
+      :value: False
+
+
+      Whether more aggregate text or structured spans are available.
+
+
+
+   .. py:attribute:: model
+      :type:  str | None
+      :value: None
+
+
+      Backend model identifier, when supplied.
+
+
+
+   .. py:attribute:: capabilities
+      :type:  OCRCapabilitiesResult
+
+      Structured output features provided by the selected backend.
+
+
+
+   .. py:attribute:: available
+      :type:  bool
+      :value: True
+
+
+      Whether the supplied image produced a usable OCR result.
+
+
+
+   .. py:attribute:: message
+      :type:  str | None
+      :value: None
+
+
+      Recoverable failure detail when OCR output was not produced.
+
+
+
+.. py:class:: OCRSpansRequest
+
+
+
+   Select one bounded page from stored structured OCR spans.
+
+
+   .. py:attribute:: result
+      :type:  OCRResultReference
+
+      Opaque OCR result handle returned by ``read_image_text``.
+
+
+
+   .. py:attribute:: offset
+      :type:  int
+
+      Zero-based index of the first span to return.
+
+
+
+   .. py:attribute:: limit
+      :type:  int
+
+      Maximum number of spans to return, capped at 32.
+
+
+
+.. py:class:: OCRSpansResult
+
+
+
+   One bounded page of structured OCR spans.
+
+
+   .. py:attribute:: result
+      :type:  OCRResultReference
+
+      Opaque OCR result handle used for this page.
+
+
+
+   .. py:attribute:: spans
+      :type:  list[OCRSpanResult]
+
+      Requested reading-order span page.
+
+
+
+   .. py:attribute:: offset
+      :type:  int
+
+      Zero-based index requested for this page.
+
+
+
+   .. py:attribute:: next_offset
+      :type:  int | None
+
+      Offset for the next page, or ``None`` after the final span.
+
+
+
+   .. py:attribute:: span_count
+      :type:  int
+
+      Total number of stored structured spans.
+
+
+
+   .. py:attribute:: truncated
+      :type:  bool
+      :value: False
+
+
+      Whether any span text was shortened in this page.
+
+
+
+   .. py:attribute:: available
+      :type:  bool
+      :value: True
+
+
+      Whether the referenced OCR result remains available.
+
+
+
+   .. py:attribute:: message
+      :type:  str | None
+      :value: None
+
+
+      Recoverable failure detail when the result handle is stale.
+
+
+
+.. py:class:: OCRTool(*, images: xr_ai_tools.image.ImageRegistry, ocr: xr_ai_models.OCRService, results: OCRResultRegistry | None = None)
+
+
+
+   Read one registered image with an injected OCR service.
+
+
+.. py:class:: OCRSpansTool(*, results: OCRResultRegistry)
+
+
+
+   Page through structured spans retained by an OCR result registry.
+
+
+.. py:class:: OCRTools(*, images: xr_ai_tools.image.ImageRegistry, ocr: xr_ai_models.OCRService, result_capacity: int = 128)
+
+   Own bounded OCR result state and the tools that operate on it.
+
+
+   .. py:method:: release_owner(owner: str) -> None
+
+      Release OCR results associated with one participant or workflow.
+
+
+
+   .. py:method:: clear() -> None
+
+      Release all OCR results owned by this tool group.
+
+
+

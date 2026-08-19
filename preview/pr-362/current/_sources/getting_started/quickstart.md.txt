@@ -5,6 +5,17 @@
 
 # Quickstart
 
+## Set up with a coding agent
+
+The fastest path: paste this to your agent and it does the rest, including
+walking you through the choices below. See {doc}`skills` for how it works.
+
+```{literalinclude} /_snippets/agent-setup-prompt.txt
+:language: text
+```
+
+The rest of this page is the manual path.
+
 Every sample follows the same pattern: **start the server, then connect a
 client.** Once it is ready, any supported client — web browser, Android app,
 iOS/visionOS app, or AR glasses — can join the session using the token printed
@@ -17,6 +28,18 @@ immediately — the services keep running in the background with weights hot.
 Start this once before running `xr-render-demo`, or whenever you want to
 pre-warm models:
 
+:::{important}
+After updating, stop any existing model servers before starting this stack:
+
+```bash
+uv run model_servers --stop
+```
+
+Persisted vLLM processes or containers may otherwise keep serving the previous
+models and images even though the checked-in configuration now selects
+Nemotron-3 Nano Omni and Cosmos3 Nano Reasoner.
+:::
+
 ```bash
 cd agent-samples/model-servers
 uv sync
@@ -26,20 +49,23 @@ uv run model_servers
 GPU profiles are auto-detected (`dual_48G_ada`, `spark`, `96G_blackwell`). These
 are presets for common configurations; to run on a different GPU, refer to
 {doc}`Running on other GPUs </getting_started/requirements>`.
-On first run each model downloads from HuggingFace (~50 GB total; can take
+On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.
 
-The default `--vlm-llm-stack` starts Nemotron-3 Nano (8107), Cosmos (8100),
-STT (8103), and embeddings (8109). Use `--omni-stack` to replace Nano and
-Cosmos with Nemotron-3 Nano Omni (8108); STT and embeddings remain available.
-Switching stacks stops the incompatible persistent models first and aborts if
-they cannot be stopped, avoiding GPU overcommit.
+Which servers start is a deployment profile selected with
+`--models <name|path>`. The default starts Nemotron-3 Nano Omni (8108,
+serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), and
+embeddings (8109); `vlm_llm_nim` serves the LLM and VLM as self-hosted NIM
+containers (requires docker + `NGC_API_KEY`); `vlm_speech_nim` serves
+speech from Riva NIM containers. Starting a profile stops persisted servers
+outside it first and aborts if they cannot be stopped, avoiding GPU
+overcommit.
 
 ```bash
-uv run model_servers --omni-stack
+uv run model_servers --models vlm_llm_nim
 ```
 
-`HF_TOKEN` is required by default: without it the ~50 GB first-run download
+`HF_TOKEN` is required by default: without it the large first-run download
 can stall indefinitely. Refer to the
 {doc}`credentials guide </getting_started/credentials>` for how to set it, or
 pass `--allow-anonymous` to run without one.
@@ -50,21 +76,20 @@ To stop all model servers when done:
 uv run model_servers --stop
 ```
 
-`--stop` always stops both stack variants, so it takes no stack-selection flag.
+`--stop` stops every model-server port, so it takes no profile selection.
 
 ## Simple VLM example (vision Q&A over voice + text)
 
-End-to-end voice + vision sample. Speak into the mic, type into the data
-channel, or send the literal text `"ping"` — all routes go through the same VLM
-pipeline against the latest video frame. Replies arrive as streaming Piper TTS
-audio plus a `vlm.response` text message.
+End-to-end voice + vision sample. Speak into the mic or type into the data
+channel; both routes use the same VLM pipeline against the latest video frame.
+Replies arrive as streaming Piper TTS audio plus a `vlm.response` text message.
 
-Uses `nvidia/Cosmos-Reason1-7B` (NVIDIA Open Model License + Apache 2.0).
+Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. Refer to
+{doc}`AI services </components/ai-services>` for runtime-selection details.
 
 There are two ways to run it:
 
-**Standalone** (~23 GB VRAM) — starts its own VLM and STT, owns them for the
-session, and stops them when you exit:
+**Standalone** (~23 GB VRAM) — starts its own VLM and STT:
 
 ```bash
 cd agent-samples/simple-vlm-example
@@ -72,14 +97,18 @@ uv sync
 uv run simple_vlm_example
 ```
 
-On the very first run weights download from HuggingFace (~23 GB; can take
+On the very first run weights download from HuggingFace (tens of GB; can take
 several minutes). `HF_TOKEN` is required by default; pass `--allow-anonymous`
 to run without one (refer to the
 {doc}`credentials guide </getting_started/credentials>`).
 
-**With model-servers pre-running** — if VLM (port 8100) and STT (port 8103) are
-already up from `model-servers`, the demo detects them at startup and reuses
-them. No extra flags needed. When you exit, those services keep running.
+**With model-servers pre-running** — start `model_servers` to pre-warm VLM
+(port 8100) and STT (port 8103). The demo detects and reuses them.
+
+In both modes the VLM and STT keep running after you exit so the next run skips
+the model reload (see the {doc}`AI services guide </components/ai-services>`);
+free the VRAM with `cd agent-samples/model-servers && uv run model_servers
+--stop`.
 
 ### Step 1 — Start the server
 
@@ -88,14 +117,20 @@ uv run simple_vlm_example
 ```
 
 The XR-Media-Hub, VLM, STT, and TTS start together (or reuse running services).
-When ready the hub prints:
+Worker readiness includes a short 1280x720 streaming VLM warmup.
+The hub prints:
 
 ```
-[hub]   LiveKit URL : wss://0.0.0.0:8080
+[hub]   LiveKit URL : wss://localhost:8080
 [hub]   Room        : xr-room
 [hub]   Token       : eyJ…
 [hub]   Web client  : https://localhost:8080
 ```
+
+This banner appears as soon as the hub itself is ready, while the model
+services and worker are still starting. Clients can connect as soon as it
+appears, but the agent answers queries only after the launcher prints its
+`All processes ready` banner.
 
 ### Step 2 — Connect a client
 
@@ -111,7 +146,6 @@ automatically. Click **Connect**.
 
 You are now live in the XR session. To test the agent:
 
-- Type `ping` in the data channel → the agent describes what the camera sees.
 - Type any question → sent verbatim to the VLM.
 - Speak into your mic → speech is transcribed and sent as a query.
 
@@ -120,6 +154,9 @@ a moment, and you hear the reply through your speakers.
 
 **Local model** — override the model weights or GPU settings by editing
 `vlm_server.yaml` in the sample directory.
+
+To use Cosmos-Reason1 instead, set `model: nvidia/Cosmos-Reason1-7B` in that
+file and select `cosmos_vlm` as the VLM adapter preset in `models.local.json`.
 
 **Remote model** — copy `yaml/models.hosted.json`, point its VLM endpoint at
 your server, and select it in the worker config:
@@ -157,6 +194,35 @@ full details (and self-hosted NIM containers).
 
 Each sample has its own `xr_media_hub.yaml` controlling the hub; refer to
 `services/xr-media-hub/xr_media_hub.yaml` for the full option list.
+
+## Lab instrument monitoring (marker-associated readings + foreground voice)
+
+This sample offers one on-demand background visual observation task per
+participant while a separate generic tool-calling agent answers voice or typed
+queries and controls that task. A separate QR and ArUco instrument monitor tracks readings,
+speaks only discovered, changed, or long-missing device updates, and persists
+10-second full-state snapshots. The sample writes monitor, instrument,
+final pre-gate transcript, foreground-turn, and Relay JSONL files under `artifacts/`
+and intentionally serves no sample-specific monitoring web UI.
+
+Start `model-servers`, then run:
+
+```bash
+cd agent-samples/lab-instrument-monitoring
+uv sync
+uv sync --project worker
+uv run lab_instrument_monitoring
+
+# Optional: use Nemotron Omni instead of Cosmos for visual inference.
+uv run lab_instrument_monitoring --vlm-mode omni
+```
+
+Connect an existing glasses or platform client using the authenticated URL,
+room, and token printed by the hub. The token and signaling routes remain
+available on port 8080 together with the shared connection web client. Refer to
+the {doc}`lab instrument architecture guide </reference/lab-instrument-monitoring>`
+for reusable agent patterns, marker setup, output contracts, and adaptation
+recipes.
 
 ## XR render demo (voice-driven sphere in CloudXR)
 
@@ -237,14 +303,14 @@ uv run model_servers --stop
 stay local) by setting **one key** in `xr_render_demo_worker.yaml`:
 
 ```yaml
-model_backend: nim     # default is "local"
+models_config: models.hosted.json     # default is models.local.json
 ```
 
-The worker loads `yaml/models.nim.yaml` for native model-backed Functions.
-Provide an
-`NGC_API_KEY` as an **environment variable** (or via the launcher credential
-prompt — not in YAML) and just don't start the local `agent-llm` / `vlm`
-model-servers. Refer to the AI-services guide.
+The profile is consumed by both the worker and orchestrator, so there are
+no `main.py`
+edits, and the stack owns its own speech servers, so the model-servers stack
+isn't needed at all. Provide an `NGC_API_KEY` as an **environment variable** (or via the
+launcher credential prompt, not in YAML). Refer to the AI-services guide.
 
 ## Hub only (standalone)
 

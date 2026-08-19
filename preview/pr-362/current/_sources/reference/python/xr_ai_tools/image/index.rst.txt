@@ -1,0 +1,172 @@
+xr_ai_tools.image
+=================
+
+.. py:module:: xr_ai_tools.image
+
+.. autoapi-nested-parse::
+
+   Lightweight image references and bounded in-process image storage.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_tools.image.ImageReference
+   xr_ai_tools.image.NormalizedImagePoint
+   xr_ai_tools.image.NormalizedImageBox
+   xr_ai_tools.image.TimedImage
+   xr_ai_tools.image.ImageRegistry
+
+
+Module Contents
+---------------
+
+.. py:class:: ImageReference
+
+
+
+   A lightweight reference to image bytes, a local path, or an HTTP URL.
+
+
+   .. py:attribute:: uri
+      :type:  str
+
+      Opaque image URI, local path, file URI, or HTTP(S) URL.
+
+
+
+   .. py:method:: reject_inline_data(value: str) -> str
+      :classmethod:
+
+
+      Reject data URIs so image bytes remain outside request payloads.
+
+
+
+.. py:class:: NormalizedImagePoint
+
+
+
+   One finite image coordinate normalized to the closed unit interval.
+
+
+   .. py:attribute:: x
+      :type:  float
+
+      Horizontal coordinate normalized to the image width.
+
+
+
+   .. py:attribute:: y
+      :type:  float
+
+      Vertical coordinate normalized to the image height.
+
+
+
+.. py:class:: NormalizedImageBox
+
+
+
+   An axis-aligned image box expressed in normalized coordinates.
+
+
+   .. py:attribute:: left
+      :type:  float
+
+      Normalized horizontal coordinate of the left edge.
+
+
+
+   .. py:attribute:: top
+      :type:  float
+
+      Normalized vertical coordinate of the top edge.
+
+
+
+   .. py:attribute:: right
+      :type:  float
+
+      Normalized horizontal coordinate of the right edge.
+
+
+
+   .. py:attribute:: bottom
+      :type:  float
+
+      Normalized vertical coordinate of the bottom edge.
+
+
+
+   .. py:method:: validate_area() -> NormalizedImageBox
+
+      Require a non-empty rectangle.
+
+
+
+.. py:class:: TimedImage
+
+
+
+   An image reference positioned on a microsecond timeline.
+
+
+   .. py:attribute:: image
+      :type:  ImageReference
+
+      Reference to the image content.
+
+
+
+   .. py:attribute:: timestamp_us
+      :type:  int
+
+      Position on the image sequence's microsecond timeline.
+
+
+
+.. py:class:: ImageRegistry(*, capacity: int = 128, allow_external: bool = False)
+
+   Bounded in-process storage behind opaque image references.
+
+
+   .. py:method:: put(image: ImageInput, *, owner: str | None = None) -> ImageReference
+
+      Store image input without placing its bytes in tool results or telemetry.
+
+
+
+   .. py:method:: put_derived(image: ImageInput, *, source: ImageReference) -> ImageReference
+
+      Store derived image input with the source reference's owner.
+
+
+
+   .. py:method:: resolve(reference: ImageReference) -> ImageInput
+
+      Resolve an opaque handle or normalize an external image location.
+
+
+
+   .. py:method:: owner(reference: ImageReference) -> str | None
+
+      Return the owner of a live opaque reference, if one is assigned.
+
+
+
+   .. py:method:: release_owner(owner: str) -> None
+
+      Remove opaque images associated with one participant or workflow.
+
+
+
+   .. py:method:: clear() -> None
+
+      Remove all registered opaque images.
+
+
+

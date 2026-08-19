@@ -5,7 +5,9 @@
 
 # Reference
 
-Deep references: the xr-render-demo stack and the decision changelog.
+Package, Python API, migration, and sample-stack references. The generated
+{doc}`command-line` reference lists the exact top-level sample invocations and
+their user-facing arguments.
 
 ```{toctree}
 :glob:

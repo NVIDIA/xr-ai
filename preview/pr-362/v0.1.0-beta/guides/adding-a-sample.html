@@ -33,6 +33,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
@@ -339,6 +340,42 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_crop/index.html">xr_ai_tools.image_crop</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/ocr/index.html">xr_ai_tools.ocr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+</ul>
+</details></li>
 </ul>
 </div>
 </nav></div>
@@ -515,72 +552,72 @@ modules over one monolith <em>or</em> a swarm of tiny files.</p>
 <section id="orchestrator-pyproject-toml">
 <h2>Orchestrator <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code><a class="headerlink" href="#orchestrator-pyproject-toml" title="Link to this heading">#</a></h2>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[build-system]
-requires = [&quot;hatchling&quot;]
-build-backend = &quot;hatchling.build&quot;
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
-name = &quot;&lt;kebab-name&gt;&quot;
-version = &quot;0.1.0&quot;
-requires-python = &quot;&gt;=3.11,&lt;3.13&quot;
-dependencies = [&quot;xr-ai-launcher&quot;]
+name = "&lt;kebab-name&gt;"
+version = "0.1.0"
+requires-python = "&gt;=3.11,&lt;3.13"
+dependencies = ["xr-ai-launcher"]
 
 [tool.uv.sources]
-xr-ai-launcher = { path = &quot;../../utils/xr-ai-launcher&quot;, editable = true }
+xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
 
 [project.scripts]
-&lt;snake_name&gt; = &quot;main:run&quot;
+&lt;snake_name&gt; = "main:run"
 
 [tool.hatch.build.targets.wheel]
-only-include = [&quot;main.py&quot;]
+only-include = ["main.py"]
 </pre></div>
 </div>
 </section>
 <section id="worker-pyproject-toml">
 <h2>Worker <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code><a class="headerlink" href="#worker-pyproject-toml" title="Link to this heading">#</a></h2>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[build-system]
-requires = [&quot;hatchling&quot;]
-build-backend = &quot;hatchling.build&quot;
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
-name = &quot;&lt;kebab-name&gt;-worker&quot;
-version = &quot;0.1.0&quot;
-requires-python = &quot;&gt;=3.11,&lt;3.13&quot;
+name = "&lt;kebab-name&gt;-worker"
+version = "0.1.0"
+requires-python = "&gt;=3.11,&lt;3.13"
 dependencies = [
-    &quot;xr-ai-agent&quot;,
-    &quot;xr-ai-models&quot;,
+    "xr-ai-agent",
+    "xr-ai-models",
     # add task-specific deps here: numpy, torch, etc.
 ]
 
 [tool.uv.sources]
-xr-ai-agent  = { path = &quot;../../../agent-sdk&quot;,              editable = true }
-xr-ai-models = { path = &quot;../../../agent-sdk/xr-ai-models&quot;, editable = true }
+xr-ai-agent  = { path = "../../../agent-sdk",              editable = true }
+xr-ai-models = { path = "../../../agent-sdk/xr-ai-models", editable = true }
 
 [project.scripts]
-&lt;snake_name&gt;_worker = &quot;&lt;snake_name&gt;_worker:run&quot;
+&lt;snake_name&gt;_worker = "&lt;snake_name&gt;_worker:run"
 
 [tool.hatch.build.targets.wheel]
 only-include = [
-    &quot;&lt;snake_name&gt;_worker.py&quot;,
-    &quot;agent.py&quot;,
+    "&lt;snake_name&gt;_worker.py",
+    "agent.py",
     # add other split modules here
 ]
 </pre></div>
 </div>
 <p>When the worker is a single file, drop the extra entries:</p>
 <div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[tool.hatch.build.targets.wheel]</span>
-<span class="n">only-include</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;&lt;snake_name&gt;_worker.py&quot;</span><span class="p">]</span>
+<span class="n">only-include</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"&lt;snake_name&gt;_worker.py"</span><span class="p">]</span>
 </pre></div>
 </div>
 </section>
 <section id="orchestrator-main-py">
 <h2>Orchestrator <code class="docutils literal notranslate"><span class="pre">main.py</span></code><a class="headerlink" href="#orchestrator-main-py" title="Link to this heading">#</a></h2>
 <p>Exact boilerplate — do not add logic here:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">&quot;&quot;&quot;</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">"""</span>
 <span class="sd">&lt;Name&gt; agent orchestrator.  Runs the process stack for this sample.</span>
 
 <span class="sd">How to run (from agent-samples/&lt;name&gt;/):</span>
 <span class="sd">    uv sync &amp;&amp; uv run &lt;snake_name&gt;</span>
-<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">"""</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_launcher</span><span class="w"> </span><span class="kn">import</span> <span class="n">Process</span><span class="p">,</span> <span class="n">run_stack</span>
@@ -588,8 +625,8 @@ only-include = [
 <span class="n">_BASE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span>
 
 <span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;hub&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../server-runtime&quot;</span><span class="p">,</span> <span class="s2">&quot;xr_media_hub&quot;</span><span class="p">),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;worker&quot;</span><span class="p">,</span> <span class="s2">&quot;worker&quot;</span><span class="p">,</span>               <span class="s2">&quot;&lt;snake_name&gt;_worker&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../server-runtime"</span><span class="p">,</span> <span class="s2">"xr_media_hub"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span>               <span class="s2">"&lt;snake_name&gt;_worker"</span><span class="p">),</span>
 <span class="p">]</span>
 
 
@@ -597,7 +634,7 @@ only-include = [
     <span class="n">run_stack</span><span class="p">(</span><span class="n">PROCESSES</span><span class="p">,</span> <span class="n">_BASE</span><span class="p">)</span>
 
 
-<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
     <span class="n">run</span><span class="p">()</span>
 </pre></div>
 </div>
@@ -605,7 +642,7 @@ only-include = [
 <section id="worker-snake-name-worker-py">
 <h2>Worker <code class="docutils literal notranslate"><span class="pre">&lt;snake_name&gt;_worker.py</span></code><a class="headerlink" href="#worker-snake-name-worker-py" title="Link to this heading">#</a></h2>
 <p>Follow this structure exactly. Fill in the sections marked <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">←</span> <span class="pre">FILL</span> <span class="pre">IN</span></code>.</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>&quot;&quot;&quot;
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>"""
 &lt;Name&gt; agent worker — &lt;one-line description&gt;.
 
 Launched as a subprocess by ``uv run &lt;snake_name&gt;`` (the orchestrator).
@@ -613,16 +650,16 @@ Do not run this directly.
 
 Protocol                            # ← include only if the worker sends/receives data msgs
 --------
-Client → agent  (topic &quot;&lt;in.topic&gt;&quot;):
+Client → agent  (topic "&lt;in.topic&gt;"):
     &lt;description&gt;
 
-Agent → client  (topic &quot;&lt;out.topic&gt;&quot;):
+Agent → client  (topic "&lt;out.topic&gt;"):
     &lt;description&gt;
 
 Environment                         # ← include only if env vars are read
 -----------
     ENV_VAR   description (default: value)
-&quot;&quot;&quot;
+"""
 from __future__ import annotations
 
 import argparse
@@ -636,17 +673,17 @@ from xr_ai_agent import (          # ← import only what you use
     Subscribe,                     # ← only needed when scoping subscriptions
 )
 
-log = logging.getLogger(&quot;&lt;snake_name&gt;&quot;)
+log = logging.getLogger("&lt;snake_name&gt;")
 
-_HUB_PUB  = &quot;ipc:///tmp/xr_hub_pub&quot;
-_HUB_PUSH = &quot;ipc:///tmp/xr_hub_in&quot;
+_HUB_PUB  = "ipc:///tmp/xr_hub_pub"
+_HUB_PUSH = "ipc:///tmp/xr_hub_in"
 
 
 class &lt;CamelName&gt;Agent:            # ← FILL IN agent logic
 
     def __init__(self) -&gt; None:
         self._ep = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
-        self._ep.on_frame(self._on_frame)       # ← remove callbacks you don&#39;t use
+        self._ep.on_frame(self._on_frame)       # ← remove callbacks you don't use
         self._ep.on_audio(self._on_audio)
         self._ep.on_data(self._on_data)
         self._ep.on_participant(self._on_participant)
@@ -672,7 +709,7 @@ class &lt;CamelName&gt;Agent:            # ← FILL IN agent logic
 async def main(ready_file: Path | None = None) -&gt; None:
     logging.basicConfig(
         level=logging.INFO,
-        format=&quot;%(asctime)s %(name)s %(levelname)s %(message)s&quot;,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
 
     agent = &lt;CamelName&gt;Agent()
@@ -684,7 +721,7 @@ async def main(ready_file: Path | None = None) -&gt; None:
     if ready_file:
         ready_file.touch()
 
-    log.info(&quot;&lt;snake_name&gt; connecting  sub=%s  push=%s&quot;, _HUB_PUB, _HUB_PUSH)
+    log.info("&lt;snake_name&gt; connecting  sub=%s  push=%s", _HUB_PUB, _HUB_PUSH)
     try:
         await agent.run()
     finally:
@@ -693,12 +730,12 @@ async def main(ready_file: Path | None = None) -&gt; None:
 
 def run() -&gt; None:
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument(&quot;--ready-file&quot;, type=Path, default=None)
+    p.add_argument("--ready-file", type=Path, default=None)
     ns, _ = p.parse_known_args()
     asyncio.run(main(ready_file=ns.ready_file))
 
 
-if __name__ == &quot;__main__&quot;:
+if __name__ == "__main__":
     run()
 </pre></div>
 </div>

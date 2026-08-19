@@ -5,8 +5,8 @@
 
 # Networking and firewall
 
-The XR-Media-Hub and CloudXR runtime use the following ports. Open them permanently
-if a firewall is active.
+XR-Media-Hub, CloudXR, and optional application viewers use the following
+ports. Open only the externally reachable ports required by the deployment.
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
@@ -14,6 +14,7 @@ if a firewall is active.
 | 7881 | TCP | LiveKit WebRTC TCP fallback (DTLS/SRTP — already encrypted) |
 | 7882 | UDP | LiveKit WebRTC UDP media (DTLS/SRTP — already encrypted) |
 | 8080 | TCP | Web client + token server + wss:// /rtc proxy (HTTPS — the single entry point for browser, Android, iOS, and visionOS clients) |
+| 8092 | TCP | Optional live agent-event viewer (plain HTTP — bound to 127.0.0.1 by default; do not expose to an untrusted network) |
 | 48322 | TCP | CloudXR WSS proxy (XR headset or client connection) |
 
 ## Ubuntu or Debian (`ufw`)
@@ -30,6 +31,30 @@ sudo ufw reload
 mobile clients reach LiveKit through the same-origin `wss://<host>:8080/rtc`
 proxy, not directly.
 
+## Cloud VMs behind NAT
+
+The signaling proxy on port 8080 does not proxy WebRTC media. LiveKit still
+needs to advertise an ICE address that clients can reach on ports 7881 and
+7882. On a cloud VM whose network interface has only a private address, enable
+STUN-based public-IP discovery in the sample's `xr_media_hub.yaml`:
+
+```yaml
+lk_use_external_ip: true
+```
+
+LiveKit validates the discovered address with a self-ping before advertising
+it. If the provider's NAT does not support that hairpin path, also skip the
+validation:
+
+```yaml
+lk_use_external_ip: true
+lk_skip_external_ip_validation: true
+```
+
+Skipping validation does not make a closed port reachable. Ensure the VM's
+cloud firewall and host firewall allow 7881/TCP and 7882/UDP. Keep both options
+disabled for local and private-network deployments.
+
 ## RHEL, Fedora, or CentOS (`firewall-cmd`)
 
 ```bash
@@ -38,6 +63,52 @@ sudo firewall-cmd --permanent --add-port=7882/udp
 sudo firewall-cmd --permanent --add-port=8080/tcp
 sudo firewall-cmd --permanent --add-port=48322/tcp
 sudo firewall-cmd --reload
+```
+
+## Live agent-event viewer
+
+The `WebEventsAgent` SDK and shipped samples default to
+`http://127.0.0.1:8092`. For access from another machine, keep the loopback
+binding and use an SSH tunnel:
+
+```bash
+ssh -L 8092:127.0.0.1:8092 user@xr-host
+```
+
+Then open `http://127.0.0.1:8092` locally.
+
+For direct access on a trusted private network, pass `--expose-web-events` to
+the lab-instrument or tea-making sample. This binds the viewer to
+`0.0.0.0:8092`. Applications can configure the same behavior when registering
+their viewer with the runtime:
+
+```python
+viewer = runtime.register(
+    "web-events",
+    WebEventsAgent(host="0.0.0.0", port=8092),
+)
+```
+
+Restrict the firewall rule to the client subnet instead of opening the port to
+every source. For example, with `ufw` and a `192.168.1.0/24` development
+network:
+
+```bash
+sudo ufw allow from 192.168.1.0/24 to any port 8092 proto tcp
+sudo ufw reload
+```
+
+Apply the equivalent source-restricted rule to the cloud security group when
+the host is behind a provider firewall. The viewer rejects unrecognized HTTP
+`Host` names to prevent DNS rebinding. Connect using a literal server address;
+an authenticated reverse proxy can instead rewrite `Host` to `127.0.0.1`.
+The listener currently accepts IPv4 addresses only.
+
+```{warning}
+The live event viewer does not provide authentication or TLS, and its payloads
+can include transcripts and camera-derived text. Do not expose port 8092 to
+the public Internet. Use the loopback binding with an SSH tunnel, or put the
+viewer behind an authenticated TLS reverse proxy.
 ```
 
 ## TLS for the web client

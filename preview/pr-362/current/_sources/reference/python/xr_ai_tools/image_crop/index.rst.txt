@@ -1,0 +1,129 @@
+xr_ai_tools.image_crop
+======================
+
+.. py:module:: xr_ai_tools.image_crop
+
+.. autoapi-nested-parse::
+
+   Deterministically crop registered images with normalized rectangles.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_tools.image_crop.ImageCropRequest
+   xr_ai_tools.image_crop.ImageCropResult
+   xr_ai_tools.image_crop.ImageCropTool
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   xr_ai_tools.image_crop.crop_image
+
+
+Module Contents
+---------------
+
+.. py:class:: ImageCropRequest
+
+
+
+   Select a normalized rectangular region from one registered image.
+
+
+   .. py:attribute:: image
+      :type:  xr_ai_tools.image.ImageReference
+
+      Source image returned by an image tool or supplied by the caller.
+
+
+
+   .. py:attribute:: box
+      :type:  xr_ai_tools.image.NormalizedImageBox
+
+      Normalized region to crop from the source image.
+
+
+
+   .. py:attribute:: padding
+      :type:  float
+
+      Normalized image fraction added on every side before clamping.
+
+
+
+.. py:class:: ImageCropResult
+
+
+
+   A derived lossless PNG and the exact source region used to create it.
+
+
+   .. py:attribute:: image
+      :type:  xr_ai_tools.image.ImageReference | None
+      :value: None
+
+
+      Opaque reference to the cropped PNG when available.
+
+
+
+   .. py:attribute:: box
+      :type:  xr_ai_tools.image.NormalizedImageBox | None
+      :value: None
+
+
+      Pixel-aligned normalized source bounds actually used for the crop.
+
+
+
+   .. py:attribute:: width
+      :type:  int | None
+
+      Width of the cropped image in pixels, when available.
+
+
+
+   .. py:attribute:: height
+      :type:  int | None
+
+      Height of the cropped image in pixels, when available.
+
+
+
+   .. py:attribute:: available
+      :type:  bool
+      :value: True
+
+
+      Whether the supplied image and box produced a derived image.
+
+
+
+   .. py:attribute:: message
+      :type:  str | None
+      :value: None
+
+
+      Recoverable failure detail when no crop was produced.
+
+
+
+.. py:function:: crop_image(source: xr_ai_tools.image.ImageInput, box: xr_ai_tools.image.NormalizedImageBox, *, padding: float = 0.0) -> tuple[bytes, int, int, xr_ai_tools.image.NormalizedImageBox]
+
+   Return lossless PNG bytes cropped to deterministic pixel-aligned bounds.
+
+
+.. py:class:: ImageCropTool(*, images: xr_ai_tools.image.ImageRegistry)
+
+
+
+   Create a derived image from a normalized rectangular selection.
+
+

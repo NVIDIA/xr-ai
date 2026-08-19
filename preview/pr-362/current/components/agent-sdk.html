@@ -33,6 +33,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
@@ -290,6 +291,7 @@
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../getting_started/index.html">Getting Started</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
@@ -307,12 +309,58 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../reference/changelog.html">Decision changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_crop/index.html">xr_ai_tools.image_crop</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/ocr/index.html">xr_ai_tools.ocr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
 </ul>
 </details></li>
 </ul>
@@ -375,764 +423,110 @@
 -->
 <section id="agent-sdk">
 <h1>Agent SDK<a class="headerlink" href="#agent-sdk" title="Link to this heading">#</a></h1>
-<p>The <code class="docutils literal notranslate"><span class="pre">agent-sdk/</span></code> workspace holds the libraries an xr-ai agent is built
-from:</p>
-<ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code></strong> — agents exposing existing native tools and typed
-publish/subscribe.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code></strong> — unified service protocols (<code class="docutils literal notranslate"><span class="pre">LLMService</span></code>, <code class="docutils literal notranslate"><span class="pre">VLMService</span></code>,
-<code class="docutils literal notranslate"><span class="pre">STTService</span></code>, <code class="docutils literal notranslate"><span class="pre">TTSService</span></code>, <code class="docutils literal notranslate"><span class="pre">EmbeddingService</span></code>) plus OpenAI-compatible HTTP clients, driven by a
-structured model deployment profile. Swapping a backend is a configuration
-edit, not a code edit.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code></strong> — the native voice runtime. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes
-<code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> and lifecycle events to application-named topics and consumes
-<code class="docutils literal notranslate"><span class="pre">voice.output</span></code>. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns readiness, hub transport, voice gating,
-streaming responses, signals, and cleanup.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-pipecat</span></code></strong> — the direct Pipecat compatibility surface. Current
-samples use <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code>; <code class="docutils literal notranslate"><span class="pre">run_voice_pipeline</span></code> remains available to
-external consumers that still assemble Pipecat processors directly.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-hub-client</span></code></strong> — the minimal pyzmq + msgpack IPC library every agent uses
-to talk to the XR-Media-Hub (refer to <a class="reference internal" href="server-runtime.html"><span class="doc">Server runtime</span></a>). No LiveKit or
-FastAPI dependency.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code></strong> — Relay-managed native tools and model tool-call
-workflow helpers.</p></li>
-</ul>
-<hr class="docutils" />
-<section id="xr-ai-agent-runtime">
-<h2>xr-ai-agent-runtime<a class="headerlink" href="#xr-ai-agent-runtime" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code> provides participant-scoped publish/subscribe. An agent exposes
-ordinary <code class="docutils literal notranslate"><span class="pre">Tool</span></code> and <code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> instances from <code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code>. Direct callers
-use <code class="docutils literal notranslate"><span class="pre">execute()</span></code> or <code class="docutils literal notranslate"><span class="pre">stream()</span></code>, and model loops use the same <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code> and
-<code class="docutils literal notranslate"><span class="pre">handle_tool_call()</span></code> path as standalone tools. There is no runtime call
-adapter.</p>
-<p>Agent lifetime is not itself a runtime concern. Domain controls such as starting
-or stopping monitoring remain ordinary tools. Agents are registered before
-runtime startup and own their resources, tasks, and concurrency policy. Shared
-state that is touched by tools and subscriptions must be protected by the
-agent’s lock or private queue. Model loops, planning, and memory remain agent
-implementations. Raw audio and video remain on the hub path.</p>
-<p><code class="docutils literal notranslate"><span class="pre">ToolSet.namespaced({&quot;vision&quot;:</span> <span class="pre">vision.tools,</span> <span class="pre">&quot;planner&quot;:</span> <span class="pre">planner.tools})</span></code>
-assigns unique model-visible names when tools from multiple agents are combined;
-the agents and underlying tools remain unchanged. Participant identity needed
-by direct execution belongs in the tool’s request schema; participant and
-correlation metadata on <code class="docutils literal notranslate"><span class="pre">RuntimeContext</span></code> applies to pub/sub. Agents create,
-cancel, and await their own background tasks. <code class="docutils literal notranslate"><span class="pre">publish()</span></code> settles all fan-out
-deliveries before propagating subscriber failures.</p>
-<p>Relay records each publication and receiving-agent callback as nested runtime
-and agent scopes. These scopes include the topic plus message, correlation,
-participant, source, and subscriber metadata. Agent-owned work that outlives a
-subscription callback starts a fresh Relay scope stack and adds its own agent
-scope, preserving logical correlation in metadata without retaining an ended
-callback as its parent.</p>
-<p><code class="docutils literal notranslate"><span class="pre">Topic.telemetry</span></code> controls runtime cardinality without changing delivery. Keep
-<code class="docutils literal notranslate"><span class="pre">&quot;full&quot;</span></code> for commands, state changes, and lifecycle events. High-volume
-transport streams use <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code>; their receiving agent records one semantic
-scope after aggregation. The voice output topic follows this pattern, producing
-one <code class="docutils literal notranslate"><span class="pre">voice.response</span></code> scope for either a finite response or a completed stream.
-Voice records provider work separately: <code class="docutils literal notranslate"><span class="pre">voice.stt</span></code> covers final and bounded
-partial-probe transcription, while <code class="docutils literal notranslate"><span class="pre">voice.tts</span></code> covers each sentence synthesis.
-Audio is summarized rather than stored, and playback on the remote client is
-outside these spans.</p>
-</section>
-<hr class="docutils" />
-<section id="xr-ai-models">
-<h2>xr-ai-models<a class="headerlink" href="#xr-ai-models" title="Link to this heading">#</a></h2>
-<p>Worker code depends on the service protocols and constructs concrete
-clients from a model deployment profile — no hand-rolled <code class="docutils literal notranslate"><span class="pre">httpx</span></code> calls in
-callers, no model quirks leaking out of this package.</p>
-<p>Each profile names the logical models the worker needs and separates adapter,
-endpoint, and deployment metadata;
-<code class="docutils literal notranslate"><span class="pre">make_llm(config,</span> <span class="pre">&quot;llm&quot;)</span></code> / <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code> / <code class="docutils literal notranslate"><span class="pre">make_stt</span></code> / <code class="docutils literal notranslate"><span class="pre">make_tts</span></code> return an
-object satisfying the matching service protocol regardless of backend or
-model-specific quirks (such as reasoning-field naming). Swapping a model is a
-config edit, not a code change.</p>
-<section id="quickstart">
-<h3>Quickstart<a class="headerlink" href="#quickstart" title="Link to this heading">#</a></h3>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_models_config</span><span class="p">,</span> <span class="n">make_llm</span><span class="p">,</span> <span class="n">ChatMessage</span>
-
-<span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">&quot;yaml/models.local.json&quot;</span><span class="p">)</span>
-<span class="k">async</span> <span class="k">with</span> <span class="n">make_llm</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">&quot;agent_llm&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">llm</span><span class="p">:</span>
-    <span class="n">resp</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span>
-        <span class="p">[</span><span class="n">ChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">&quot;hello&quot;</span><span class="p">)],</span>
-        <span class="n">max_tokens</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span>
-        <span class="n">enable_thinking</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">resp</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">resp</span><span class="o">.</span><span class="n">reasoning</span><span class="p">)</span>
-</pre></div>
-</div>
-<p><code class="docutils literal notranslate"><span class="pre">models.local.json</span></code>:</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;models&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;agent_llm&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;category&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;llm&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;adapter&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;preset&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nemotron3_nano&quot;</span><span class="p">},</span>
-<span class="w">      </span><span class="nt">&quot;endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;base_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8107&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;readiness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;health&quot;</span><span class="p">},</span>
-<span class="w">      </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;ownership&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;reused&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;service&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;agent-llm&quot;</span><span class="p">}</span>
-<span class="w">    </span><span class="p">}</span>
-<span class="w">  </span><span class="p">}</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-<p>JSON and YAML are both accepted; flat legacy entries remain compatible.</p>
-</section>
-<section id="built-in-presets">
-<h3>Built-in presets<a class="headerlink" href="#built-in-presets" title="Link to this heading">#</a></h3>
-<p>Refer to <code class="docutils literal notranslate"><span class="pre">xr_ai_models/presets/</span></code>:</p>
+<p>The SDK is split by dependency boundary. Directory names match the Python
+imports developers use; distribution names remain stable for package
+installation.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
-<tr class="row-odd"><th class="head"><p>Preset</p></th>
-<th class="head"><p>Service it targets</p></th>
-<th class="head"><p>Notes</p></th>
+<tr class="row-odd"><th class="head"><p>Directory</p></th>
+<th class="head"><p>Import</p></th>
+<th class="head"><p>Responsibility</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code></p></td>
-<td><p>vlm-server</p></td>
-<td><p>image + video; <code class="docutils literal notranslate"><span class="pre">enable_thinking=false</span></code> by default. Video requires vlm-server’s <code class="docutils literal notranslate"><span class="pre">max_videos_per_prompt</span> <span class="pre">&gt;=</span> <span class="pre">1</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-hub</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_hub</span></code></p></td>
+<td><p>Minimal msgpack/ZMQ IPC with XR-Media-Hub</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">llama_nemotron</span></code></p></td>
-<td><p>llama-nemotron-llm-server</p></td>
-<td><p>OpenAI tool calling via llama3_json (server-side)</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code></p></td>
+<td><p>Typed model protocols, profiles, and OpenAI-compatible clients</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nemotron3_nano</span></code></p></td>
-<td><p>nemotron3-nano-llm-server</p></td>
-<td><p>reasoning field: <code class="docutils literal notranslate"><span class="pre">reasoning</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-runtime</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_runtime</span></code></p></td>
+<td><p>Agent registration and typed participant-scoped fan-out</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nemotron_omni</span></code></p></td>
-<td><p>nemotron-omni-llm-server</p></td>
-<td><p>reasoning field: <code class="docutils literal notranslate"><span class="pre">reasoning_content</span></code>, vision + video</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_tools</span></code></p></td>
+<td><p>Relay-managed tools and model tool-call helpers</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">parakeet_stt</span></code></p></td>
-<td><p>stt-server</p></td>
-<td><p></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_voice</span></code></p></td>
+<td><p>Voice agent, transport, and private media pipeline</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">piper_tts</span></code></p></td>
-<td><p>tts/piper</p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">magpie_tts</span></code></p></td>
-<td><p>tts/magpie</p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nemotron_embedding</span></code></p></td>
-<td><p>embedding-server</p></td>
-<td><p>dense text embeddings</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-web-events</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_web_events</span></code></p></td>
+<td><p>Bounded live browser views over selected application events</p></td>
 </tr>
 </tbody>
 </table>
 </div>
+<p>Package guides are versioned with this site:
+<a class="reference internal" href="../reference/agent-sdk-hub.html"><span class="doc">xr-ai-hub</span></a>, <a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>,
+<a class="reference internal" href="../reference/agent-sdk-runtime.html"><span class="doc">xr-ai-runtime</span></a>, <a class="reference internal" href="../reference/agent-sdk-tools.html"><span class="doc">xr-ai-tools</span></a>,
+<a class="reference internal" href="../reference/agent-sdk-voice.html"><span class="doc">xr-ai-voice</span></a>, and <a class="reference internal" href="../reference/agent-sdk-web-events.html"><span class="doc">xr-ai-web-events</span></a>.
+The generated <a class="reference internal" href="../reference/python/index.html"><span class="doc">API Reference</span></a>
+is the source of truth for public names, signatures, types, defaults, fields,
+and method-level behavior.</p>
+<section id="ownership-boundaries">
+<h2>Ownership boundaries<a class="headerlink" href="#ownership-boundaries" title="Link to this heading">#</a></h2>
+<p>An <code class="docutils literal notranslate"><span class="pre">Agent</span></code> owns its state, resources, background tasks, lifecycle, and
+concurrency policy. It exposes ordinary <code class="docutils literal notranslate"><span class="pre">Tool</span></code> or <code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> instances for
+direct execution and model tool-call loops. Bounded turns use <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code> and
+<code class="docutils literal notranslate"><span class="pre">run_tool_loop()</span></code>; callers retain model configuration, conversation policy,
+retries, participant context, cancellation, and task ownership. <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code>
+owns only typed publication and delivery tasks; it does not own model loops,
+planning, memory, media, or agent-created work. A publication waits for its
+subscribers, so a subscriber that performs lengthy work should hand it to its
+own bounded queue.</p>
+<p>Workers construct model clients with the factories in <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code> and depend
+on the corresponding typed service protocols. Adapter behavior, endpoint
+connectivity, deployment ownership, credentials, and model-specific wire
+details remain inside that package. See <a class="reference internal" href="ai-services.html"><span class="doc">AI inference servers</span></a> for deployment and
+operational guidance.</p>
+<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns readiness, hub transport, voice gating, its private media
+pipeline, signal handling, and cleanup. It publishes final pre-gate transcripts
+separately from gate-accepted user queries, optionally publishes typed
+participant lifecycle events, and consumes typed voice output. Join and leave
+publication stays non-blocking for the media pipeline while preserving order per
+participant. Application agents subscribe to the events they own and clean up
+their own participant state. Pipecat and the media session remain implementation
+details.</p>
+<p>Applications may publish selected compact payloads to <code class="docutils literal notranslate"><span class="pre">WEB_EVENT_TOPIC</span></code> for a
+<code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code> to display. The viewer owns only a bounded live history and a
+loopback HTTP listener. It is not persistence, does not inspect every runtime
+topic, and does not enter model, voice, media, or hub authentication paths. The
+application selects which typed events to forward explicitly.</p>
+<p>Applications with multiple speech producers may place
+<code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code> before <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>. Producers publish candidate
+finite or incremental responses to <code class="docutils literal notranslate"><span class="pre">voice.contribution</span></code>; the aggregator owns
+participant-scoped ordering, preserves a lone stream, coalesces simultaneous
+finite updates through the configured <code class="docutils literal notranslate"><span class="pre">LLMService</span></code>, holds an active response
+for a bounded, open-loop estimate of its spoken duration, and publishes only
+the result to <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>. Pending work is capacity-bounded with a
+priority-aware drop policy: routine work never displaces an alert, while a new
+alert replaces the oldest pending routine update or, if necessary, the oldest
+alert. Urgent output bypasses coalescing and rewriting, retains displaced
+routine work encountered during coalescing or rewrite for a later batch, and
+interrupts active speech. Interrupted stream IDs remain quarantined through
+their terminator or idle expiry, and the agent enforces its rewrite deadline
+independently of the model transport. This
+policy remains outside the private media pipeline so applications opt in
+explicitly and retain ownership of which events should become speech.</p>
+<p><code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> is the minimal agent-side hub boundary. It receives data,
+audio, frame signals, and participant events and sends participant-routed return
+traffic. Video tools acquire frames on demand; raw pixels and media stay on the
+hub path rather than entering agent APIs.</p>
 </section>
-<section id="explicit-no-preset-specification">
-<h3>Explicit (no-preset) specification<a class="headerlink" href="#explicit-no-preset-specification" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">agent_llm</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">       </span><span class="l l-Scalar l-Scalar-Plain">openai_compat</span>
-<span class="w">  </span><span class="nt">category</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">llm</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8107</span>
-<span class="w">  </span><span class="nt">model_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">llm</span>
-<span class="w">  </span><span class="nt">capabilities</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> tool_calls</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">,</span><span class="nt"> reasoning</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="w"> </span><span class="p p-Indicator">}</span>
-<span class="w">  </span><span class="nt">reasoning_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">reasoning</span>
-<span class="w">  </span><span class="nt">default_extras</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">chat_template_kwargs</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> enable_thinking</span><span class="p">:</span><span class="w"> </span><span class="nv">false</span><span class="w"> </span><span class="p p-Indicator">}</span>
-<span class="w">  </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">60.0</span>
-</pre></div>
-</div>
-<p><code class="docutils literal notranslate"><span class="pre">category:</span></code> is required when not using a preset.</p>
-</section>
-<section id="deployment-profiles">
-<h3>Deployment profiles<a class="headerlink" href="#deployment-profiles" title="Link to this heading">#</a></h3>
-<p>A structured profile can keep model behavior, endpoint connectivity, and
-process ownership in one JSON file consumed by both the worker and a
-stdlib-only orchestrator:</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;models&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;vlm&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;adapter&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;preset&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;cosmos_vlm&quot;</span><span class="p">},</span>
-<span class="w">      </span><span class="nt">&quot;endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;base_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8100&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;readiness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;health&quot;</span><span class="p">},</span>
-<span class="w">      </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;ownership&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;managed&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;service&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;vlm&quot;</span><span class="p">}</span>
-<span class="w">    </span><span class="p">}</span>
-<span class="w">  </span><span class="p">}</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-<p>The worker passes the file to <code class="docutils literal notranslate"><span class="pre">load_models_config()</span></code>. The orchestrator calls
-<code class="docutils literal notranslate"><span class="pre">load_model_deployment(worker_config)</span></code> to map <code class="docutils literal notranslate"><span class="pre">managed</span></code> to an owned process,
-<code class="docutils literal notranslate"><span class="pre">reused</span></code> to <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;reuse&quot;</span></code>, and <code class="docutils literal notranslate"><span class="pre">external</span></code> to no local process. Launcher
-profiles must use the wrapped nested JSON shape and declare credentials as
-<code class="docutils literal notranslate"><span class="pre">endpoint.api_key_env</span></code>; the launcher rejects non-<code class="docutils literal notranslate"><span class="pre">.json</span></code> profiles before
-parsing, while flat YAML remains supported for worker-only configs.</p>
-<p>Model roles compose <code class="docutils literal notranslate"><span class="pre">AdapterSpec</span></code>, <code class="docutils literal notranslate"><span class="pre">EndpointSpec</span></code>, and <code class="docutils literal notranslate"><span class="pre">DeploymentSpec</span></code>; their
-legacy flat attributes remain available as read-only compatibility aliases.</p>
-</section>
-<section id="protocols">
-<h3>Protocols<a class="headerlink" href="#protocols" title="Link to this heading">#</a></h3>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">LLMService</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
-    <span class="n">capabilities</span><span class="p">:</span> <span class="n">Capabilities</span>
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">chat</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">messages</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_tokens</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                   <span class="n">temperature</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">enable_thinking</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                   <span class="n">thinking_budget</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                   <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResponse</span><span class="p">:</span> <span class="o">...</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">stream</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">messages</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span> <span class="o">...</span>
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">health</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span> <span class="o">...</span>
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
-
-<span class="k">class</span><span class="w"> </span><span class="nc">VLMService</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
-    <span class="n">capabilities</span><span class="p">:</span> <span class="n">Capabilities</span>
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">ask_image</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">,</span> <span class="n">question</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">system_prompt</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
-                        <span class="n">max_tokens</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">temperature</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                        <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResponse</span><span class="p">:</span> <span class="o">...</span>
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">ask_video</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">video</span><span class="p">,</span> <span class="n">question</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">system_prompt</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
-                        <span class="n">max_tokens</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">temperature</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                        <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResponse</span><span class="p">:</span> <span class="o">...</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">stream</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">,</span> <span class="n">question</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">system_prompt</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
-               <span class="n">max_tokens</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">temperature</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-               <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span> <span class="o">...</span>
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">health</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span> <span class="o">...</span>
-
-<span class="k">class</span><span class="w"> </span><span class="nc">STTService</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">transcribe</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">audio</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">sample_rate</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                         <span class="n">channels</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span> <span class="o">...</span>
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">health</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span> <span class="o">...</span>
-
-<span class="k">class</span><span class="w"> </span><span class="nc">TTSService</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">synthesize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">response_format</span><span class="o">=</span><span class="s2">&quot;wav&quot;</span><span class="p">,</span>
-                         <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span> <span class="o">...</span>
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">health</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span> <span class="o">...</span>
-</pre></div>
-</div>
-<p><code class="docutils literal notranslate"><span class="pre">ChatResponse.reasoning</span></code> is the canonical reasoning field — the
-<code class="docutils literal notranslate"><span class="pre">reasoning_field</span></code> knob normalizes <code class="docutils literal notranslate"><span class="pre">reasoning_content</span></code> (the nemotron_v3 parser)
-into the same surface.</p>
-</section>
-<section id="remote-and-hosted-nim-endpoints">
-<h3>Remote and hosted-NIM endpoints<a class="headerlink" href="#remote-and-hosted-nim-endpoints" title="Link to this heading">#</a></h3>
-<p>Cloud and remote endpoints (e.g. hosted <a class="reference external" href="https://build.nvidia.com">NVIDIA NIM</a>)
-are a configuration change — point <code class="docutils literal notranslate"><span class="pre">base_url</span></code> at the OpenAI-compatible URL and set
-<code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">vlm</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">        </span><span class="l l-Scalar l-Scalar-Plain">openai_compat</span>
-<span class="w">  </span><span class="nt">category</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">vlm</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">https://integrate.api.nvidia.com</span>
-<span class="w">  </span><span class="nt">model_name</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">nvidia/cosmos-reason1-7b</span>
-<span class="w">  </span><span class="nt">api_key_env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">NGC_API_KEY</span><span class="w">    </span><span class="c1"># → Authorization: Bearer &lt;env value&gt;</span>
-<span class="w">  </span><span class="nt">health_check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">         </span><span class="c1"># remote endpoints have no local /health route</span>
-</pre></div>
-</div>
-<p><code class="docutils literal notranslate"><span class="pre">api_key_env</span></code> names the environment variable holding the API key; its value is
-sent as an <code class="docutils literal notranslate"><span class="pre">Authorization:</span> <span class="pre">Bearer</span> <span class="pre">&lt;value&gt;</span></code> header on every request.</p>
-<p><code class="docutils literal notranslate"><span class="pre">health_check</span></code> (default <code class="docutils literal notranslate"><span class="pre">true</span></code>) gates whether <code class="docutils literal notranslate"><span class="pre">health()</span></code> probes
-<code class="docutils literal notranslate"><span class="pre">base_url/health</span></code>. Remote endpoints don’t expose that route, so <code class="docutils literal notranslate"><span class="pre">false</span></code> makes
-<code class="docutils literal notranslate"><span class="pre">health()</span></code> return <code class="docutils literal notranslate"><span class="pre">True</span></code> without a request — otherwise a worker’s readiness
-gate would block forever.</p>
-<p>Non-OpenAI-compatible backends can be added as new <code class="docutils literal notranslate"><span class="pre">kind</span></code>s without changing the
-protocols or callers.</p>
-</section>
-<section id="tests">
-<h3>Tests<a class="headerlink" href="#tests" title="Link to this heading">#</a></h3>
-<p>The clients can be exercised without a GPU.</p>
-</section>
-</section>
-<hr class="docutils" />
-<section id="native-tools-and-model-tool-calls">
-<h2>Native tools and model tool calls<a class="headerlink" href="#native-tools-and-model-tool-calls" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code> is the native migration target for model-driven XR composition.
-<code class="docutils literal notranslate"><span class="pre">Tool</span></code> declares Pydantic request and response boundaries and executes its
-handler through NeMo Relay. <code class="docutils literal notranslate"><span class="pre">tool_definitions(...)</span></code> adapts a native catalog to
-<code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> definitions; <code class="docutils literal notranslate"><span class="pre">handle_tool_call(...)</span></code> invokes one model-selected
-call and returns the tool-role message.</p>
-<p>The package does not implement an agent, model loop, Hub transport, or implicit
-conversation store. Applications own prompts, LLM calls, history, iteration,
-foreground selection, workflow state, and background work.</p>
-<p><code class="docutils literal notranslate"><span class="pre">xr_ai_tools.live_vision.LiveVisionTool</span></code> is the finite current-frame tool; it
-returns one complete observation through Relay’s managed tool and LLM
-boundaries. <code class="docutils literal notranslate"><span class="pre">xr_ai_tools.streaming_vision.StreamingVisionTool</span></code> is a separate
-<code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> that yields typed chunks around Relay’s managed streaming LLM
-boundary. It has no voice or output-transport dependency. Both tools own their
-own frame sources and redact inline camera data from Relay events without
-changing provider input.</p>
-<p>Applications place native tools and model loops inside an agent to group tools
-with their state, and register the agent with <code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code> when they
-need pub/sub. Relay remains responsible for tool and model execution; the
-runtime does not duplicate the tool loop or model boundary.</p>
-</section>
-<hr class="docutils" />
-<section id="xr-ai-voice">
-<h2>xr-ai-voice<a class="headerlink" href="#xr-ai-voice" title="Link to this heading">#</a></h2>
-<p>Native voice applications work with participant-aware runtime topics rather
-than Pipecat processors. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code>, publishes accepted
-input and lifecycle events with voice-owned schemas on application-named
-topics, and subscribes to <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">Topic</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">UserQuery</span><span class="p">,</span>
-    <span class="n">VadConfig</span><span class="p">,</span>
-    <span class="n">VoiceAgent</span><span class="p">,</span>
-    <span class="n">VoiceParticipantLeft</span><span class="p">,</span>
-    <span class="n">VoiceSession</span><span class="p">,</span>
-<span class="p">)</span>
-
-<span class="n">session</span> <span class="o">=</span> <span class="n">VoiceSession</span><span class="p">(</span>
-    <span class="n">stt</span><span class="o">=</span><span class="n">stt</span><span class="p">,</span>
-    <span class="n">tts</span><span class="o">=</span><span class="n">tts</span><span class="p">,</span>
-    <span class="n">vad</span><span class="o">=</span><span class="n">VadConfig</span><span class="p">(),</span>
-    <span class="n">voice_gate</span><span class="o">=</span><span class="n">voice_gate_config</span><span class="p">,</span>
-    <span class="n">probes</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;vlm&quot;</span><span class="p">:</span> <span class="n">vlm</span><span class="o">.</span><span class="n">health</span><span class="p">},</span>
-    <span class="n">ready_file</span><span class="o">=</span><span class="n">ready_file</span><span class="p">,</span>
-    <span class="n">closeables</span><span class="o">=</span><span class="p">(</span><span class="n">vlm</span><span class="p">,),</span>
-<span class="p">)</span>
-<span class="n">queries</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">&quot;my-sample.user-query&quot;</span><span class="p">,</span> <span class="n">UserQuery</span><span class="p">)</span>
-<span class="n">participant_left</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">&quot;my-sample.participant-left&quot;</span><span class="p">,</span> <span class="n">VoiceParticipantLeft</span><span class="p">)</span>
-<span class="n">voice</span> <span class="o">=</span> <span class="n">VoiceAgent</span><span class="p">(</span>
-    <span class="n">session</span><span class="p">,</span>
-    <span class="n">query_topic</span><span class="o">=</span><span class="n">queries</span><span class="p">,</span>
-    <span class="n">participant_left_topic</span><span class="o">=</span><span class="n">participant_left</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;voice&quot;</span><span class="p">,</span> <span class="n">voice</span><span class="p">)</span>
-<span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
-    <span class="k">await</span> <span class="n">voice</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runtime</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>The default hub transport is opened only after readiness probes succeed; failed
-readiness closes the session’s model clients without opening hub sockets. The
-ready file is touched only after the input transport enters its hub IPC receive
-loop. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> preserves participant routing, cancels superseded or
-interrupted output, installs signal handlers, and closes its transport and
-model clients. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> turns transport lifecycle callbacks into typed
-runtime events on agent-owned tasks, so application cleanup cannot block the
-shared media processor. It cancels and awaits those tasks during shutdown.
-Application agents subscribe and clean up their own state. A pid-less
-interruption is a global event.</p>
-</section>
-<section id="xr-ai-pipecat">
-<h2>xr-ai-pipecat<a class="headerlink" href="#xr-ai-pipecat" title="Link to this heading">#</a></h2>
-<p>The unified <a class="reference external" href="https://github.com/pipecat-ai/pipecat">Pipecat</a> voice pipeline for
-xr-ai agents that still use the direct processor API. The top-level entry point
-is <code class="docutils literal notranslate"><span class="pre">make_voice_pipeline</span></code>; those workers subclass <code class="docutils literal notranslate"><span class="pre">BrainProcessor</span></code>, hand the
-instance to the factory, and run it with <code class="docutils literal notranslate"><span class="pre">run_voice_pipeline</span></code>. Everything else
-— VAD/STT, voice gate, streaming TTS — is provided.</p>
-<section id="make-voice-pipeline">
-<h3>make_voice_pipeline<a class="headerlink" href="#make-voice-pipeline" title="Link to this heading">#</a></h3>
-<p>One call composes the chain and returns the assembled pipeline plus a
-<code class="docutils literal notranslate"><span class="pre">PipelineWorker</span></code> ready to run:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_pipecat</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_voice_pipeline</span><span class="p">,</span> <span class="n">VadConfig</span>
-
-<span class="n">pipeline</span><span class="p">,</span> <span class="n">worker</span> <span class="o">=</span> <span class="n">make_voice_pipeline</span><span class="p">(</span>
-    <span class="n">transport</span>      <span class="o">=</span> <span class="n">transport</span><span class="p">,</span>        <span class="c1"># XRMediaHubTransport</span>
-    <span class="n">stt</span>            <span class="o">=</span> <span class="n">stt</span><span class="p">,</span>              <span class="c1"># STTService  (from xr-ai-models)</span>
-    <span class="n">tts</span>            <span class="o">=</span> <span class="n">tts</span><span class="p">,</span>              <span class="c1"># TTSService  (from xr-ai-models)</span>
-    <span class="n">brain</span>          <span class="o">=</span> <span class="n">my_brain</span><span class="p">,</span>         <span class="c1"># BrainProcessor subclass</span>
-    <span class="n">vad_cfg</span>        <span class="o">=</span> <span class="n">VadConfig</span><span class="p">(),</span>
-    <span class="n">voice_gate_cfg</span> <span class="o">=</span> <span class="n">voice_gate_cfg</span><span class="p">,</span>   <span class="c1"># xr_ai_voicegate.VoiceGateConfig</span>
-    <span class="n">text_topic</span>     <span class="o">=</span> <span class="s2">&quot;agent.response&quot;</span><span class="p">,</span>
-    <span class="n">idle_timeout_secs</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span>
-</pre></div>
-</div>
-<p>The resulting pipeline is:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>input → VadStt → VoiceGate → brain → StreamingTts → output
-</pre></div>
-</div>
-</section>
-<section id="run-voice-pipeline">
-<h3>run_voice_pipeline<a class="headerlink" href="#run-voice-pipeline" title="Link to this heading">#</a></h3>
-<p>Run the returned worker with its transport. For launcher-managed workers, pass
-the ready-file callback so it runs only after the input transport has started
-the hub IPC receive loop. Participant roster catch-up remains asynchronous;
-the worker re-announces its current status periodically so clients that join
-or reconnect later converge on the same state. If the callback fails, the
-worker is cancelled and the error propagates so the launcher reports startup
-failure rather than waiting on a process that cannot signal readiness:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_pipecat</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_voice_pipeline</span>
-
-<span class="k">await</span> <span class="n">run_voice_pipeline</span><span class="p">(</span><span class="n">worker</span><span class="p">,</span> <span class="n">transport</span><span class="p">,</span> <span class="n">on_ready</span><span class="o">=</span><span class="n">ready_file</span><span class="o">.</span><span class="n">touch</span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Stage</p></th>
-<th class="head"><p>Processor</p></th>
-<th class="head"><p>Role</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>input</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">transport.input()</span></code></p></td>
-<td><p>inbound microphone audio frames from the hub</p></td>
-</tr>
-<tr class="row-odd"><td><p>VAD/STT</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">VadSttProcessor</span></code></p></td>
-<td><p>Silero-VAD utterance detection → <code class="docutils literal notranslate"><span class="pre">STTService.transcribe</span></code> → <code class="docutils literal notranslate"><span class="pre">TranscriptionFrame</span></code>; emits start and stop speech frames and a fast-path STOP probe</p></td>
-</tr>
-<tr class="row-even"><td><p>voice gate</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">VoiceGateProcessor</span></code></p></td>
-<td><p>wraps <code class="docutils literal notranslate"><span class="pre">xr_ai_voicegate.VoiceGate</span></code>; wake-phrase and stop gating, chime and stop-ack audio</p></td>
-</tr>
-<tr class="row-odd"><td><p>brain</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">BrainProcessor</span></code></p></td>
-<td><p>the sample-specific reasoning (you subclass this)</p></td>
-</tr>
-<tr class="row-even"><td><p>streaming TTS</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">StreamingTtsProcessor</span></code></p></td>
-<td><p>sentence-batched parallel <code class="docutils literal notranslate"><span class="pre">TTSService.synthesize</span></code>, monotonic playback, per-turn data echo</p></td>
-</tr>
-<tr class="row-odd"><td><p>output</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">transport.output()</span></code></p></td>
-<td><p>return audio + data back to the hub</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-<p><code class="docutils literal notranslate"><span class="pre">text_topic</span></code> controls the per-turn data-channel echo emitted by the streaming
-TTS processor. Set it to <code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> to opt out — samples whose brain pushes its own
-response data message (e.g. xr-render-demo) want this off to avoid duplicate
-sends.</p>
-<section id="the-idle-timeout-knob">
-<h4>The idle-timeout knob<a class="headerlink" href="#the-idle-timeout-knob" title="Link to this heading">#</a></h4>
-<p><code class="docutils literal notranslate"><span class="pre">idle_timeout_secs</span></code> controls Pipecat’s idle-timeout auto-cancel and is
-<strong>disabled by default</strong> (<code class="docutils literal notranslate"><span class="pre">None</span></code>): the pipeline is <em>never</em> cancelled for
-inactivity, so a quiet session stays connected indefinitely — important for XR
-sessions where the user may simply not be speaking. This deliberately overrides
-Pipecat’s upstream default (<code class="docutils literal notranslate"><span class="pre">cancel_on_idle_timeout=True</span></code>), which would
-silently drop idle sessions. Set a positive number of seconds to opt in: the
-worker then cancels the pipeline (and its runner) after that long with no
-user or bot speech.</p>
-</section>
-</section>
-<section id="writing-a-brain">
-<h3>Writing a brain<a class="headerlink" href="#writing-a-brain" title="Link to this heading">#</a></h3>
-<p>Subclass <code class="docutils literal notranslate"><span class="pre">BrainProcessor</span></code> and implement <code class="docutils literal notranslate"><span class="pre">handle_query</span></code>. It is a coroutine that
-<em>returns</em> either a single string (one downstream <code class="docutils literal notranslate"><span class="pre">TextFrame</span></code>) or an async
-iterator of strings (one <code class="docutils literal notranslate"><span class="pre">TextFrame</span></code> per chunk — this is how token streaming
-reaches TTS). Note it returns the iterator; it is not itself a generator:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_pipecat</span><span class="w"> </span><span class="kn">import</span> <span class="n">BrainProcessor</span>
-
-<span class="k">class</span><span class="w"> </span><span class="nc">MyBrain</span><span class="p">(</span><span class="n">BrainProcessor</span><span class="p">):</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">llm</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kw</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_llm</span> <span class="o">=</span> <span class="n">llm</span>          <span class="c1"># the sample injects its own LLMService</span>
-
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">handle_query</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pid</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">fresh_match</span><span class="p">):</span>
-        <span class="c1"># Return the AsyncIterator[str]; the base class consumes it and</span>
-        <span class="c1"># pushes one TextFrame per chunk. For a non-streaming brain,</span>
-        <span class="c1"># `return resp.content` (a single string) instead.</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_llm</span><span class="o">.</span><span class="n">stream</span><span class="p">([</span><span class="o">...</span><span class="p">])</span>
-</pre></div>
-</div>
-<p>The base class owns the per-participant in-flight task, cancellation, and the
-lifecycle hooks. Key semantics:</p>
-<ul class="simple">
-<li><p>A new <code class="docutils literal notranslate"><span class="pre">GatedQueryFrame</span></code> supersedes any prior in-flight response for the same
-participant — the prior brain task is cancelled automatically. You cannot
-have two queries in flight for one participant.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">UserStartedSpeakingFrame</span></code> is a <strong>hook only</strong>; it does <em>not</em> cancel in-flight
-work. Cancelling on every speech onset would interrupt the agent mid-sentence
-on a follow-up, and any acoustic-echo leak of the agent’s own TTS would make
-it cancel itself. The voice gate emits an explicit <code class="docutils literal notranslate"><span class="pre">InterruptionFrame</span></code> when
-the user actually says “stop”; that is the real cancel signal.</p></li>
-</ul>
-<p>Optional overrides (all default to no-op):</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Hook</p></th>
-<th class="head"><p>Fires when</p></th>
-<th class="head"><p>Typical use</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">on_user_started_speaking(pid)</span></code></p></td>
-<td><p>speech onset</p></td>
-<td><p>speculative warmup (camera, image fetch)</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">on_query_superseded(pid)</span></code></p></td>
-<td><p>every non-first query for a pid</p></td>
-<td><p>drain in-flight TTS audio (push <code class="docutils literal notranslate"><span class="pre">InterruptionFrame</span></code>)</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">on_participant_joined(pid)</span></code></p></td>
-<td><p>participant joins</p></td>
-<td><p>per-pid setup</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">on_participant_left(pid)</span></code></p></td>
-<td><p>participant leaves</p></td>
-<td><p>per-pid teardown</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
-<section id="vad-configuration">
-<h3>VAD configuration<a class="headerlink" href="#vad-configuration" title="Link to this heading">#</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">VadConfig</span></code> mirrors the constructor of <code class="docutils literal notranslate"><span class="pre">xr_ai_vad.VadDetector</span></code>:</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Field</p></th>
-<th class="head"><p>Default</p></th>
-<th class="head"><p>Meaning</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">silence_duration</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">0.8</span></code></p></td>
-<td><p>seconds of silence that finalize an utterance</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">min_speech</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">0.15</span></code></p></td>
-<td><p>minimum speech duration to count as an utterance</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">silero_threshold</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">0.5</span></code></p></td>
-<td><p>Silero VAD speech-probability threshold</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">stop_probe_after_s</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">0.4</span></code></p></td>
-<td><p>seconds after speech-start to run an early STT pass and check for a STOP phrase; <code class="docutils literal notranslate"><span class="pre">0</span></code> or negative disables the probe</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>The early STOP probe lets brief commands (“stop”, “be quiet”) interrupt the
-agent without waiting for the full <code class="docutils literal notranslate"><span class="pre">silence_duration</span></code> finalize window. On a
-STOP match the processor pushes an <code class="docutils literal notranslate"><span class="pre">InterruptionFrame</span></code> immediately and lets the
-gate handle the canned acknowledgement; the eventual VAD-finalize for the same
-utterance is suppressed so the stop-ack does not double.</p>
-</section>
-<section id="dependencies">
-<h3>Dependencies<a class="headerlink" href="#dependencies" title="Link to this heading">#</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">xr-ai-pipecat</span></code> builds on <code class="docutils literal notranslate"><span class="pre">xr-ai-hub-client</span></code>, <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code>, <code class="docutils literal notranslate"><span class="pre">xr-ai-vad</span></code>,
-<code class="docutils literal notranslate"><span class="pre">xr-ai-voicegate</span></code>, and <code class="docutils literal notranslate"><span class="pre">pipecat-ai</span></code>.</p>
-</section>
-</section>
-<hr class="docutils" />
-<section id="xr-ai-hub-client">
-<h2>xr-ai-hub-client<a class="headerlink" href="#xr-ai-hub-client" title="Link to this heading">#</a></h2>
-<p>The lightweight, agent-side IPC library for the XR-Media-Hub. Agents only need
-this package — its sole runtime dependencies are <code class="docutils literal notranslate"><span class="pre">pyzmq</span></code> and <code class="docutils literal notranslate"><span class="pre">msgpack</span></code>. The
-heavy server runtime (LiveKit, FastAPI, uvicorn) is <strong>not</strong> a dependency, so an
-agent process stays small.</p>
-<section id="processorendpoint">
-<h3>ProcessorEndpoint<a class="headerlink" href="#processorendpoint" title="Link to this heading">#</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> connects to the hub’s PUB socket to receive real-time video
-signals, audio, data, and participant events, and connects a PUSH socket to
-send return-data, return-audio, and frame requests back. It works for any
-downstream workload — analytics, ML inference, transcription, echo, recording
-— not just agentic pipelines.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_hub</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProcessorEndpoint</span><span class="p">,</span> <span class="n">Subscribe</span>
-
-<span class="n">ep</span> <span class="o">=</span> <span class="n">ProcessorEndpoint</span><span class="p">(</span>
-    <span class="n">sub_addr</span>  <span class="o">=</span> <span class="s2">&quot;ipc:///tmp/xr_hub_pub&quot;</span><span class="p">,</span>
-    <span class="n">push_addr</span> <span class="o">=</span> <span class="s2">&quot;ipc:///tmp/xr_hub_in&quot;</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">ep</span><span class="o">.</span><span class="n">on_frame</span><span class="p">(</span><span class="n">handle_frame_signal</span><span class="p">)</span>   <span class="c1"># metadata — fires at full frame rate</span>
-<span class="n">ep</span><span class="o">.</span><span class="n">on_audio</span><span class="p">(</span><span class="n">my_audio_handler</span><span class="p">)</span>
-<span class="n">ep</span><span class="o">.</span><span class="n">on_data</span><span class="p">(</span><span class="n">my_data_handler</span><span class="p">)</span>
-<span class="n">ep</span><span class="o">.</span><span class="n">on_participant</span><span class="p">(</span><span class="n">handle_participant</span><span class="p">)</span>  <span class="c1"># optional — set is auto-maintained</span>
-<span class="k">await</span> <span class="n">ep</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
-</pre></div>
-</div>
-<section id="subscription-model">
-<h4>Subscription model<a class="headerlink" href="#subscription-model" title="Link to this heading">#</a></h4>
-<p>Participants are the unit of subscription. By default the endpoint subscribes
-to every participant who joins (and unsubscribes on leave), giving each agent
-the full inbound stream — data, audio, and video — for every client. Two knobs
-control this:</p>
-<ul>
-<li><p><code class="docutils literal notranslate"><span class="pre">filter</span></code> — a <code class="docutils literal notranslate"><span class="pre">Subscribe</span></code> flag that drops whole categories
-(<code class="docutils literal notranslate"><span class="pre">DATA</span></code>, <code class="docutils literal notranslate"><span class="pre">AUDIO</span></code>, and <code class="docutils literal notranslate"><span class="pre">VIDEO</span></code>) at the ZMQ kernel level for efficiency. Default
-is <code class="docutils literal notranslate"><span class="pre">Subscribe.ALL</span></code>. Combine flags with <code class="docutils literal notranslate"><span class="pre">|</span></code> to scope down:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Audio-only processor; ignores data + video on every pid.</span>
-<span class="n">ep</span> <span class="o">=</span> <span class="n">ProcessorEndpoint</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="nb">filter</span><span class="o">=</span><span class="n">Subscribe</span><span class="o">.</span><span class="n">AUDIO</span><span class="p">)</span>
-</pre></div>
-</div>
-</li>
-<li><p><code class="docutils literal notranslate"><span class="pre">auto_subscribe</span></code> — when <code class="docutils literal notranslate"><span class="pre">True</span></code> (default), the endpoint subscribes on join and
-unsubscribes on leave. Set to <code class="docutils literal notranslate"><span class="pre">False</span></code> for agents that service a fixed set of
-participants, then call <code class="docutils literal notranslate"><span class="pre">subscribe(pid)</span></code> yourself (it may be called before
-that participant has even joined — ZMQ holds the subscription until matching
-traffic arrives).</p></li>
-</ul>
-<p>Endpoints created mid-session issue a roster request so they learn about
-participants who joined before they did: the hub re-publishes a “joined” event
-for every current pid, so already-connected pids are auto-subscribed
-retroactively. Because the replays go on the regular <code class="docutils literal notranslate"><span class="pre">participant</span></code> topic, keep
-your <code class="docutils literal notranslate"><span class="pre">on_participant</span></code> callbacks idempotent.</p>
-</section>
-<section id="on-demand-frame-pixels">
-<h4>On-demand frame pixels<a class="headerlink" href="#on-demand-frame-pixels" title="Link to this heading">#</a></h4>
-<p>Video frame access is two-step, so an agent only pays for the pixels it
-actually uses:</p>
-<ol class="arabic simple">
-<li><p>The <code class="docutils literal notranslate"><span class="pre">on_frame</span></code> callback receives <code class="docutils literal notranslate"><span class="pre">FrameSignal</span></code> metadata (always, at full
-frame rate).</p></li>
-<li><p>Call <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">ep.request_frame(signal)</span></code> to pull pixel data on demand. The hub
-serves from a small cache and copies pixels only when a request arrives;
-returns <code class="docutils literal notranslate"><span class="pre">None</span></code> if the frame has expired or on timeout. Concurrent requests
-for the same <code class="docutils literal notranslate"><span class="pre">(participant,</span> <span class="pre">track)</span></code> are coalesced into one <code class="docutils literal notranslate"><span class="pre">FRAME_REQUEST</span></code>.</p></li>
-</ol>
-</section>
-<section id="liveframesource">
-<h4>LiveFrameSource<a class="headerlink" href="#liveframesource" title="Link to this heading">#</a></h4>
-<p><code class="docutils literal notranslate"><span class="pre">LiveFrameSource</span></code> is the higher-level live-camera helper for a caller that
-needs one fresh raw frame for a participant. It waits for a frame within its
-configured freshness window, then returns <code class="docutils literal notranslate"><span class="pre">FrameData</span></code> or raises
-<code class="docutils literal notranslate"><span class="pre">FrameUnavailable</span></code>. It deliberately stops at raw pixels: image conversion,
-model calls, and PNG export remain the consumer’s responsibility. Participant
-departure events automatically discard that participant’s cached frames and
-wake pending requests; wait state is removed when each request completes.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_hub</span><span class="w"> </span><span class="kn">import</span> <span class="n">LiveFrameSource</span>
-
-<span class="n">frames</span> <span class="o">=</span> <span class="n">LiveFrameSource</span><span class="p">(</span><span class="n">ep</span><span class="p">,</span> <span class="n">max_age_s</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span> <span class="n">timeout_s</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
-<span class="n">frame</span> <span class="o">=</span> <span class="k">await</span> <span class="n">frames</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;participant-1&quot;</span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
-<section id="return-path">
-<h4>Return path<a class="headerlink" href="#return-path" title="Link to this heading">#</a></h4>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Method</p></th>
-<th class="head"><p>Sends</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">send_return_data(msg)</span></code></p></td>
-<td><p>a <code class="docutils literal notranslate"><span class="pre">DataMessage</span></code> back to a client (text or binary on a topic)</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">send_return_audio(chunk)</span></code></p></td>
-<td><p>an <code class="docutils literal notranslate"><span class="pre">AudioChunk</span></code> of agent or TTS audio to a client</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">flush_return_audio(pid)</span></code></p></td>
-<td><p>drops audio queued at the hub for <code class="docutils literal notranslate"><span class="pre">pid</span></code> — interrupts the agent’s own playback</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">set_status(status,</span> <span class="pre">pid=None)</span></code></p></td>
-<td><p>records and publishes <em>this agent’s</em> status (<code class="docutils literal notranslate"><span class="pre">&quot;loading&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;processing&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;idle&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;ready&quot;</span></code>) on the reserved <code class="docutils literal notranslate"><span class="pre">_agent.status</span></code> channel; broadcasts when <code class="docutils literal notranslate"><span class="pre">pid</span></code> is omitted</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mark_ready()</span></code></p></td>
-<td><p>shorthand for <code class="docutils literal notranslate"><span class="pre">set_status(&quot;ready&quot;)</span></code> — declares this agent available to serve requests</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">republish_statuses()</span></code></p></td>
-<td><p>re-sends each connected participant’s current agent status so a missed one-shot update self-heals</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">wait_for_subscriptions(timeout=5.0)</span></code></p></td>
-<td><p>blocks until the hub has applied every subscription issued so far; returns <code class="docutils literal notranslate"><span class="pre">False</span></code> on timeout</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">request_roster()</span></code></p></td>
-<td><p>asks the hub to replay “joined” events for all current pids</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
-</section>
-<section id="ipc-message-types">
-<h3>IPC message types<a class="headerlink" href="#ipc-message-types" title="Link to this heading">#</a></h3>
-<p>The codec is msgpack with a small <code class="docutils literal notranslate"><span class="pre">MsgType</span></code> tag. New types can be appended
-without breaking existing code.</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">MsgType</span></code></p></th>
-<th class="head"><p>Direction</p></th>
-<th class="head"><p>Meaning</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">FRAME_SIGNAL</span></code></p></td>
-<td><p>connector → hub</p></td>
-<td><p>a decoded frame was written to the shared-memory ring buffer</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AUDIO_CHUNK</span></code></p></td>
-<td><p>connector → hub</p></td>
-<td><p>raw PCM audio chunk</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">CONTROL</span></code></p></td>
-<td><p>connector → hub</p></td>
-<td><p>extensible key/value control message</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">DATA_MESSAGE</span></code></p></td>
-<td><p>connector → hub</p></td>
-<td><p>LiveKit data-channel payload (routed by topic)</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RETURN_AUDIO</span></code></p></td>
-<td><p>hub → connector</p></td>
-<td><p>agent or TTS audio for a specific client</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">RETURN_DATA</span></code></p></td>
-<td><p>hub → connector</p></td>
-<td><p>agent text or binary for a specific client</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">PARTICIPANT_EVENT</span></code></p></td>
-<td><p>bidirectional</p></td>
-<td><p>participant joined or left the room</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">CONNECTOR_REGISTER</span></code></p></td>
-<td><p>connector → hub</p></td>
-<td><p>connector announces itself + its shm name</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">FRAME_REQUEST</span></code></p></td>
-<td><p>processor → hub</p></td>
-<td><p>request pixel data for a frame</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">FRAME_DATA</span></code></p></td>
-<td><p>hub → processor</p></td>
-<td><p>pixel data delivered to the requester</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RETURN_AUDIO_FLUSH</span></code></p></td>
-<td><p>processor → hub</p></td>
-<td><p>drop audio queued for a participant’s return track</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ROSTER_REQUEST</span></code></p></td>
-<td><p>processor → hub</p></td>
-<td><p>replay joined-events for the current roster</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">SUBSCRIPTION_PROBE</span></code></p></td>
-<td><p>processor → hub → processor</p></td>
-<td><p>round-trip token proving pending SUBSCRIBEs are live</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AGENT_PRESENCE</span></code></p></td>
-<td><p>processor → hub</p></td>
-<td><p>readiness participation, plus the participants the agent answers for</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
-<section id="readiness-contract">
-<h3>Readiness contract<a class="headerlink" href="#readiness-contract" title="Link to this heading">#</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">_agent.status</span></code> carries one scalar per client, and the hub owns it. Each agent
-reports only its own state, tagged with its <code class="docutils literal notranslate"><span class="pre">agent_id</span></code>; the hub folds every
-<em>responsible</em> agent’s state into the status a client sees, taking the least
-available: <code class="docutils literal notranslate"><span class="pre">loading</span></code> &gt; <code class="docutils literal notranslate"><span class="pre">processing</span></code> &gt; <code class="docutils literal notranslate"><span class="pre">idle</span></code> &gt; <code class="docutils literal notranslate"><span class="pre">ready</span></code>. An agent that has
-registered but not yet reported counts as <code class="docutils literal notranslate"><span class="pre">loading</span></code>, so one ready agent cannot
-make the room look ready while another is still starting up or busy.</p>
-<p>Two things bound who gets a say:</p>
-<ul class="simple">
-<li><p><strong>Participation is opt-in.</strong> Only endpoints constructed with
-<code class="docutils literal notranslate"><span class="pre">announces_readiness=True</span></code> register. <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> is the generic
-downstream endpoint — analytics, recorders, MCP servers — and a processor
-that never reports status must not hold clients at <code class="docutils literal notranslate"><span class="pre">loading</span></code>. The voice
-transports opt in; passive processors leave it off, and <code class="docutils literal notranslate"><span class="pre">set_status</span></code> is a
-logged no-op for them.</p></li>
-<li><p><strong>Scope follows subscription.</strong> An endpoint answers for exactly the
-participants it has a live subscription for: every participant when
-<code class="docutils literal notranslate"><span class="pre">auto_subscribe=True</span></code>, otherwise the pids passed to <code class="docutils literal notranslate"><span class="pre">subscribe()</span></code>. Scope
-travels to the hub on <code class="docutils literal notranslate"><span class="pre">AGENT_PRESENCE</span></code> and is re-announced when it changes.
-An agent pinned to one pid neither marks another client ready nor holds that
-client back.</p></li>
-</ul>
-<p>Availability also implies routability. <code class="docutils literal notranslate"><span class="pre">set_status</span></code> publishes only for
-participants in scope, and waits behind <code class="docutils literal notranslate"><span class="pre">wait_for_subscriptions</span></code> before doing
-so, so a client is told <code class="docutils literal notranslate"><span class="pre">ready</span></code> only once the hub has applied this endpoint’s
-SUBSCRIBE for it — otherwise the client’s first request would land in the
-PUB/SUB slow-joiner window and be dropped. The barrier proves issued
-subscriptions are live; the scope check proves one was issued for that
-participant. Agents that need the barrier for their own purposes can await
-<code class="docutils literal notranslate"><span class="pre">wait_for_subscriptions()</span></code> directly.</p>
-<p><code class="docutils literal notranslate"><span class="pre">agent_id</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">$XR_AI_AGENT_ID</span></code>, falling back to a per-process value;
-pass <code class="docutils literal notranslate"><span class="pre">agent_id=</span></code> to <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> to set it explicitly.</p>
-</section>
-<section id="shared-memory">
-<h3>Shared memory<a class="headerlink" href="#shared-memory" title="Link to this heading">#</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">ShmRingBuffer</span></code> and <code class="docutils literal notranslate"><span class="pre">SlotView</span></code> give agents that read raw pixels a zero-copy view
-into the hub’s shared-memory ring buffer. The codec is extensible via
-<code class="docutils literal notranslate"><span class="pre">register_encoder</span></code> and <code class="docutils literal notranslate"><span class="pre">register_decoder</span></code> for custom payload types.</p>
-</section>
+<section id="documentation-boundary">
+<h2>Documentation boundary<a class="headerlink" href="#documentation-boundary" title="Link to this heading">#</a></h2>
+<p>Public API membership comes from literal <code class="docutils literal notranslate"><span class="pre">__all__</span></code> declarations. Sphinx parses
+the source without importing SDK packages, then renders co-located docstrings,
+annotations, and defaults. Package READMEs retain installation, quickstarts,
+and cross-call behavioral guidance; this component page records only shared
+architecture and ownership. Guides, troubleshooting, and migrations remain
+handwritten because they describe workflows and decisions rather than API
+shape.</p>
 </section>
 </section>
 
@@ -1185,43 +579,8 @@ into the hub’s shared-memory ring buffer. The codec is extensible via
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-agent-runtime">xr-ai-agent-runtime</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-models">xr-ai-models</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#quickstart">Quickstart</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#built-in-presets">Built-in presets</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#explicit-no-preset-specification">Explicit (no-preset) specification</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#deployment-profiles">Deployment profiles</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#protocols">Protocols</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#remote-and-hosted-nim-endpoints">Remote and hosted-NIM endpoints</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tests">Tests</a></li>
-</ul>
-</li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-tools-and-model-tool-calls">Native tools and model tool calls</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-voice">xr-ai-voice</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-pipecat">xr-ai-pipecat</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#make-voice-pipeline">make_voice_pipeline</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#run-voice-pipeline">run_voice_pipeline</a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#the-idle-timeout-knob">The idle-timeout knob</a></li>
-</ul>
-</li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#writing-a-brain">Writing a brain</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vad-configuration">VAD configuration</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dependencies">Dependencies</a></li>
-</ul>
-</li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-hub-client">xr-ai-hub-client</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#processorendpoint">ProcessorEndpoint</a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#subscription-model">Subscription model</a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#on-demand-frame-pixels">On-demand frame pixels</a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#liveframesource">LiveFrameSource</a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#return-path">Return path</a></li>
-</ul>
-</li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#ipc-message-types">IPC message types</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#readiness-contract">Readiness contract</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-memory">Shared memory</a></li>
-</ul>
-</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ownership-boundaries">Ownership boundaries</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#documentation-boundary">Documentation boundary</a></li>
 </ul>
   </nav></div>
 

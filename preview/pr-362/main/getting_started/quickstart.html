@@ -33,6 +33,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
@@ -58,7 +59,7 @@
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Requirements" href="requirements.html" />
+    <link rel="next" title="Skills" href="skills.html" />
     <link rel="prev" title="Getting Started" href="index.html" />
 
 
@@ -313,6 +314,7 @@
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Getting Started</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="requirements.html">Requirements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="clients.html">Connecting Clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="networking.html">Networking and firewall</a></li>
@@ -330,12 +332,58 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../reference/changelog.html">Decision changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_crop/index.html">xr_ai_tools.image_crop</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/ocr/index.html">xr_ai_tools.ocr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
 </ul>
 </details></li>
 </ul>
@@ -398,16 +446,41 @@
 -->
 <section id="quickstart">
 <h1>Quickstart<a class="headerlink" href="#quickstart" title="Link to this heading">#</a></h1>
+<section id="set-up-with-a-coding-agent">
+<h2>Set up with a coding agent<a class="headerlink" href="#set-up-with-a-coding-agent" title="Link to this heading">#</a></h2>
+<p>The fastest path: paste this to your agent and it does the rest, including
+walking you through the choices below. See <a class="reference internal" href="skills.html"><span class="doc">Skills</span></a> for how it works.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set up xr-ai for me: ask me whether to build against the latest release
+(newest stable tag; a prerelease only if no stable exists) or main, then
+fetch skills/getting-started/SKILL.md at that ref from
+https://raw.githubusercontent.com/NVIDIA/xr-ai/. If the file does not exist
+at that ref, the release predates agent setup: get my OK to use main for
+both the skill and the checkout. Install the skill (or just follow it), and
+walk me through the rest of the setup.
+</pre></div>
+</div>
+<p>The rest of this page is the manual path.</p>
 <p>Every sample follows the same pattern: <strong>start the server, then connect a
 client.</strong> Once it is ready, any supported client — web browser, Android app,
 iOS/visionOS app, or AR glasses — can join the session using the token printed
 on startup.</p>
+</section>
 <section id="model-servers-shared-ai-services">
 <h2>Model servers (shared AI services)<a class="headerlink" href="#model-servers-shared-ai-services" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">model-servers</span></code> starts the shared inference services used across demos and exits
 immediately — the services keep running in the background with weights hot.
 Start this once before running <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>, or whenever you want to
 pre-warm models:</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>After updating, stop any existing model servers before starting this stack:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--stop
+</pre></div>
+</div>
+<p>Persisted vLLM processes or containers may otherwise keep serving the previous
+models and images even though the checked-in configuration now selects
+Nemotron-3 Nano Omni and Cosmos3 Nano Reasoner.</p>
+</div>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/model-servers
 uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>model_servers
@@ -416,17 +489,20 @@ uv<span class="w"> </span>run<span class="w"> </span>model_servers
 <p>GPU profiles are auto-detected (<code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, <code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>). These
 are presets for common configurations; to run on a different GPU, refer to
 <a class="reference internal" href="requirements.html"><span class="doc">Running on other GPUs</span></a>.
-On first run each model downloads from HuggingFace (~50 GB total; can take
+On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.</p>
-<p>The default <code class="docutils literal notranslate"><span class="pre">--vlm-llm-stack</span></code> starts Nemotron-3 Nano (8107), Cosmos (8100),
-STT (8103), and embeddings (8109). Use <code class="docutils literal notranslate"><span class="pre">--omni-stack</span></code> to replace Nano and
-Cosmos with Nemotron-3 Nano Omni (8108); STT and embeddings remain available.
-Switching stacks stops the incompatible persistent models first and aborts if
-they cannot be stopped, avoiding GPU overcommit.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--omni-stack
+<p>Which servers start is a deployment profile selected with
+<code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">&lt;name|path&gt;</span></code>. The default starts Nemotron-3 Nano Omni (8108,
+serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), and
+embeddings (8109); <code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code> serves the LLM and VLM as self-hosted NIM
+containers (requires docker + <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code>); <code class="docutils literal notranslate"><span class="pre">vlm_speech_nim</span></code> serves
+speech from Riva NIM containers. Starting a profile stops persisted servers
+outside it first and aborts if they cannot be stopped, avoiding GPU
+overcommit.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--models<span class="w"> </span>vlm_llm_nim
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default: without it the ~50 GB first-run download
+<p><code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default: without it the large first-run download
 can stall indefinitely. Refer to the
 <a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a> for how to set it, or
 pass <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code> to run without one.</p>
@@ -434,43 +510,49 @@ pass <code class="docutils literal notranslate"><span class="pre">--allow-anonym
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">--stop</span></code> always stops both stack variants, so it takes no stack-selection flag.</p>
+<p><code class="docutils literal notranslate"><span class="pre">--stop</span></code> stops every model-server port, so it takes no profile selection.</p>
 </section>
 <section id="simple-vlm-example-vision-q-a-over-voice-text">
 <h2>Simple VLM example (vision Q&amp;A over voice + text)<a class="headerlink" href="#simple-vlm-example-vision-q-a-over-voice-text" title="Link to this heading">#</a></h2>
-<p>End-to-end voice + vision sample. Speak into the mic, type into the data
-channel, or send the literal text <code class="docutils literal notranslate"><span class="pre">&quot;ping&quot;</span></code> — all routes go through the same VLM
-pipeline against the latest video frame. Replies arrive as streaming Piper TTS
-audio plus a <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> text message.</p>
-<p>Uses <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos-Reason1-7B</span></code> (NVIDIA Open Model License + Apache 2.0).</p>
+<p>End-to-end voice + vision sample. Speak into the mic or type into the data
+channel; both routes use the same VLM pipeline against the latest video frame.
+Replies arrive as streaming Piper TTS audio plus a <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> text message.</p>
+<p>Uses the text-output Reasoner from <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos3-Nano</span></code> by default. Refer to
+<a class="reference internal" href="../components/ai-services.html"><span class="doc">AI services</span></a> for runtime-selection details.</p>
 <p>There are two ways to run it:</p>
-<p><strong>Standalone</strong> (~23 GB VRAM) — starts its own VLM and STT, owns them for the
-session, and stops them when you exit:</p>
+<p><strong>Standalone</strong> (~23 GB VRAM) — starts its own VLM and STT:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/simple-vlm-example
 uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example
 </pre></div>
 </div>
-<p>On the very first run weights download from HuggingFace (~23 GB; can take
+<p>On the very first run weights download from HuggingFace (tens of GB; can take
 several minutes). <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default; pass <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code>
 to run without one (refer to the
 <a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a>).</p>
-<p><strong>With model-servers pre-running</strong> — if VLM (port 8100) and STT (port 8103) are
-already up from <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>, the demo detects them at startup and reuses
-them. No extra flags needed. When you exit, those services keep running.</p>
+<p><strong>With model-servers pre-running</strong> — start <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> to pre-warm VLM
+(port 8100) and STT (port 8103). The demo detects and reuses them.</p>
+<p>In both modes the VLM and STT keep running after you exit so the next run skips
+the model reload (see the <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI services guide</span></a>);
+free the VRAM with <code class="docutils literal notranslate"><span class="pre">cd</span> <span class="pre">agent-samples/model-servers</span> <span class="pre">&amp;&amp;</span> <span class="pre">uv</span> <span class="pre">run</span> <span class="pre">model_servers</span> <span class="pre">--stop</span></code>.</p>
 <section id="step-1-start-the-server">
 <h3>Step 1 — Start the server<a class="headerlink" href="#step-1-start-the-server" title="Link to this heading">#</a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example
 </pre></div>
 </div>
 <p>The XR-Media-Hub, VLM, STT, and TTS start together (or reuse running services).
-When ready the hub prints:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>[hub]   LiveKit URL : wss://0.0.0.0:8080
+Worker readiness includes a short 1280x720 streaming VLM warmup.
+The hub prints:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>[hub]   LiveKit URL : wss://localhost:8080
 [hub]   Room        : xr-room
 [hub]   Token       : eyJ…
 [hub]   Web client  : https://localhost:8080
 </pre></div>
 </div>
+<p>This banner appears as soon as the hub itself is ready, while the model
+services and worker are still starting. Clients can connect as soon as it
+appears, but the agent answers queries only after the launcher prints its
+<code class="docutils literal notranslate"><span class="pre">All</span> <span class="pre">processes</span> <span class="pre">ready</span></code> banner.</p>
 </section>
 <section id="step-2-connect-a-client">
 <h3>Step 2 — Connect a client<a class="headerlink" href="#step-2-connect-a-client" title="Link to this heading">#</a></h3>
@@ -484,7 +566,6 @@ trusting the certificate permanently or running over plain HTTP instead.</p>
 automatically. Click <strong>Connect</strong>.</p>
 <p>You are now live in the XR session. To test the agent:</p>
 <ul class="simple">
-<li><p>Type <code class="docutils literal notranslate"><span class="pre">ping</span></code> in the data channel → the agent describes what the camera sees.</p></li>
 <li><p>Type any question → sent verbatim to the VLM.</p></li>
 <li><p>Speak into your mic → speech is transcribed and sent as a query.</p></li>
 </ul>
@@ -492,11 +573,13 @@ automatically. Click <strong>Connect</strong>.</p>
 a moment, and you hear the reply through your speakers.</p>
 <p><strong>Local model</strong> — override the model weights or GPU settings by editing
 <code class="docutils literal notranslate"><span class="pre">vlm_server.yaml</span></code> in the sample directory.</p>
+<p>To use Cosmos-Reason1 instead, set <code class="docutils literal notranslate"><span class="pre">model:</span> <span class="pre">nvidia/Cosmos-Reason1-7B</span></code> in that
+file and select <code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code> as the VLM adapter preset in <code class="docutils literal notranslate"><span class="pre">models.local.json</span></code>.</p>
 <p><strong>Remote model</strong> — copy <code class="docutils literal notranslate"><span class="pre">yaml/models.hosted.json</span></code>, point its VLM endpoint at
 your server, and select it in the worker config:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;base_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://your-remote-vlm.example.com&quot;</span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;ownership&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;external&quot;</span><span class="p">}</span>
+<span class="w">  </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://your-remote-vlm.example.com"</span><span class="p">},</span>
+<span class="w">  </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"external"</span><span class="p">}</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -522,6 +605,32 @@ full details (and self-hosted NIM containers).</p>
 <p>Each sample has its own <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> controlling the hub; refer to
 <code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/xr_media_hub.yaml</span></code> for the full option list.</p>
 </section>
+</section>
+<section id="lab-instrument-monitoring-marker-associated-readings-foreground-voice">
+<h2>Lab instrument monitoring (marker-associated readings + foreground voice)<a class="headerlink" href="#lab-instrument-monitoring-marker-associated-readings-foreground-voice" title="Link to this heading">#</a></h2>
+<p>This sample offers one on-demand background visual observation task per
+participant while a separate generic tool-calling agent answers voice or typed
+queries and controls that task. A separate QR and ArUco instrument monitor tracks readings,
+speaks only discovered, changed, or long-missing device updates, and persists
+10-second full-state snapshots. The sample writes monitor, instrument,
+final pre-gate transcript, foreground-turn, and Relay JSONL files under <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code>
+and intentionally serves no sample-specific monitoring web UI.</p>
+<p>Start <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>, then run:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/lab-instrument-monitoring
+uv<span class="w"> </span>sync
+uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>worker
+uv<span class="w"> </span>run<span class="w"> </span>lab_instrument_monitoring
+
+<span class="c1"># Optional: use Nemotron Omni instead of Cosmos for visual inference.</span>
+uv<span class="w"> </span>run<span class="w"> </span>lab_instrument_monitoring<span class="w"> </span>--vlm-mode<span class="w"> </span>omni
+</pre></div>
+</div>
+<p>Connect an existing glasses or platform client using the authenticated URL,
+room, and token printed by the hub. The token and signaling routes remain
+available on port 8080 together with the shared connection web client. Refer to
+the <a class="reference internal" href="../reference/lab-instrument-monitoring.html"><span class="doc">lab instrument architecture guide</span></a>
+for reusable agent patterns, marker setup, output contracts, and adaptation
+recipes.</p>
 </section>
 <section id="xr-render-demo-voice-driven-sphere-in-cloudxr">
 <h2>XR render demo (voice-driven sphere in CloudXR)<a class="headerlink" href="#xr-render-demo-voice-driven-sphere-in-cloudxr" title="Link to this heading">#</a></h2>
@@ -589,14 +698,14 @@ uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w
 <p><strong>Hosted NVIDIA NIM</strong> — run the LLMs and VLM on hosted NIM
 (<a class="reference external" href="https://build.nvidia.com">build.nvidia.com</a>) instead of local vLLM (STT/TTS
 stay local) by setting <strong>one key</strong> in <code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.yaml</span></code>:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">model_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nim</span><span class="w">     </span><span class="c1"># default is &quot;local&quot;</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">models_config</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">models.hosted.json</span><span class="w">     </span><span class="c1"># default is models.local.json</span>
 </pre></div>
 </div>
-<p>The worker loads <code class="docutils literal notranslate"><span class="pre">yaml/models.nim.yaml</span></code> for native model-backed Functions.
-Provide an
-<code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> as an <strong>environment variable</strong> (or via the launcher credential
-prompt — not in YAML) and just don’t start the local <code class="docutils literal notranslate"><span class="pre">agent-llm</span></code> / <code class="docutils literal notranslate"><span class="pre">vlm</span></code>
-model-servers. Refer to the AI-services guide.</p>
+<p>The profile is consumed by both the worker and orchestrator, so there are
+no <code class="docutils literal notranslate"><span class="pre">main.py</span></code>
+edits, and the stack owns its own speech servers, so the model-servers stack
+isn’t needed at all. Provide an <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> as an <strong>environment variable</strong> (or via the
+launcher credential prompt, not in YAML). Refer to the AI-services guide.</p>
 </section>
 </section>
 <section id="hub-only-standalone">
@@ -631,11 +740,11 @@ XR-Media-Hub auto-discovers <code class="docutils literal notranslate"><span cla
       </div>
     </a>
     <a class="right-next"
-       href="requirements.html"
+       href="skills.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Requirements</p>
+        <p class="prev-next-title">Skills</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -660,12 +769,14 @@ XR-Media-Hub auto-discovers <code class="docutils literal notranslate"><span cla
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#set-up-with-a-coding-agent">Set up with a coding agent</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#model-servers-shared-ai-services">Model servers (shared AI services)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simple-vlm-example-vision-q-a-over-voice-text">Simple VLM example (vision Q&amp;A over voice + text)</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-start-the-server">Step 1 — Start the server</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-connect-a-client">Step 2 — Connect a client</a></li>
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lab-instrument-monitoring-marker-associated-readings-foreground-voice">Lab instrument monitoring (marker-associated readings + foreground voice)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-render-demo-voice-driven-sphere-in-cloudxr">XR render demo (voice-driven sphere in CloudXR)</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-start-model-servers-once">Step 1 — Start model servers (once)</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-start-the-demo">Step 2 — Start the demo</a></li>
