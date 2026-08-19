@@ -95,14 +95,17 @@ rather than subscribing to one hard-coded topic name.
 
 Aggregation is participant-scoped. A lone finite contribution passes through
 without an LLM call after the short coalescing window. Two or more finite
-contributions in one batch are rewritten into a single concise utterance. The
-aggregator keeps each output open for an estimated spoken duration, based on
-`speech_rate_wpm` and clamped between `minimum_playback_s` and
+contributions in one batch are rewritten into a single concise utterance. As
+soon as raw or rewritten text is complete, the aggregator marks that response
+final so `VoiceAgent.text_topic` can update the client independently of audio
+playback. The aggregator separately reserves an estimated spoken duration,
+based on `speech_rate_wpm` and clamped between `minimum_playback_s` and
 `maximum_playback_s`, so updates produced while that output is playing form the
 next batch instead of becoming separate queued utterances. This is open-loop
 pacing rather than a client playback acknowledgement. An estimate that is too
-short moves queuing downstream into TTS; one that is too long creates silence.
-Tune all three playback settings for the selected TTS voice.
+short moves queuing downstream into TTS; one that is too long creates silence
+between utterances, but neither delays the completed-response data echo. Tune
+all three playback settings for the selected TTS voice.
 
 Rewrites have an aggregator-enforced `rewrite_timeout_s` deadline, which is also
 passed to the model service. If a rewrite fails or times out, the original text
@@ -120,15 +123,17 @@ have a bounded size; retained contributions remain ordered for following
 batches.
 
 A lone incremental contribution starts streaming immediately with a new
-aggregator-owned response ID. Other contributions wait behind that stream;
-finite updates that accumulated while it ran are coalesced when it finishes.
-An urgent contribution interrupts the active stream. A stream that stops
-producing chunks is closed after `stream_idle_timeout_s`, allowing pending
-updates to proceed. An interrupted or dropped stream ID remains quarantined
-until its terminator arrives. Each ignored fragment refreshes the quarantine;
-after a full `stream_idle_timeout_s` without another fragment, the ID may begin
-a new stream. This expiry bounds stale stream state independently from pending
-queue capacity.
+aggregator-owned response ID. Its final content chunk closes the downstream
+response immediately; the playback reservation continues only inside the
+aggregator's scheduler. Other contributions wait behind that reservation, and
+finite updates that accumulated while it ran are coalesced afterwards. An
+urgent contribution interrupts the active stream. A stream that stops producing
+chunks is closed after `stream_idle_timeout_s`, allowing pending updates to
+proceed. An interrupted or dropped stream ID remains quarantined until its
+terminator arrives. Each ignored fragment refreshes the quarantine; after a
+full `stream_idle_timeout_s` without another fragment, the ID may begin a new
+stream. This expiry bounds stale stream state independently from pending queue
+capacity.
 
 Call `stop()` before shutting down the runtime so the agent can cancel its
 participant-owned tasks. Contributions published after shutdown starts are
