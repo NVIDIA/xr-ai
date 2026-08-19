@@ -676,6 +676,61 @@ async def test_streaming_current_view_uses_question_and_times_out() -> None:
     assert published[-1].final is True
 
 
+@pytest.mark.parametrize(
+    ("chunks", "expected_text", "available"),
+    [
+        (["\n", "A kettle is visible."], "A kettle is visible.", True),
+        (
+            ["\n", "  "],
+            "Unable to inspect the current frame because the vision model returned no "
+            "description.",
+            False,
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_streaming_current_view_handles_leading_whitespace(
+    chunks: list[str], expected_text: str, available: bool
+) -> None:
+    published: list[VoiceOutput] = []
+
+    class CurrentFrame:
+        async def execute(self, _request):
+            return SimpleNamespace(image=ImageReference(uri="frame.jpg"))
+
+    class Vision:
+        def stream(self, _request):
+            async def responses():
+                for text in chunks:
+                    yield ImageQueryChunk(text=text)
+
+            return responses()
+
+    class Context:
+        metadata = SimpleNamespace(message_id="view-whitespace")
+
+        async def publish(self, topic, message):
+            assert topic is VOICE_CONTRIBUTION_TOPIC
+            published.append(message)
+
+    foreground = object.__new__(ForegroundAgent)
+    foreground._images = SimpleNamespace(get_current_frame=CurrentFrame())
+    foreground._vision = Vision()
+    foreground._vlm_timeout_s = 1.0
+
+    result = await foreground._stream_current_view(
+        "What do you see?",
+        "participant-whitespace",
+        Context(),  # type: ignore[arg-type]
+        timestamp_us=42,
+    )
+
+    assert result == ImageQueryResult(text=expected_text, available=available)
+    assert [output.text for output in published] == [expected_text, ""]
+    assert published[0].interrupt is True
+    assert published[-1].final is True
+
+
 @pytest.mark.asyncio
 async def test_foreground_record_failure_does_not_suppress_speech() -> None:
     published: list[tuple[object, object]] = []
