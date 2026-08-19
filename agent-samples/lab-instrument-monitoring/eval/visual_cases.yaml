@@ -28,6 +28,14 @@
   expected_contains: "12.0 V"
   forbidden_contains: "99.0 A"
 
+- name: instrument-distinct-right-device
+  kind: instrument
+  scene: adjacent-instruments-right-highlighted
+  target_marker_id: device-2
+  target_device_name: Device2
+  expected_contains: "99.0 A"
+  forbidden_contains: "12.0 V"
+
 - name: instrument-ambiguous-association
   kind: instrument
   scene: adjacent-instruments-ambiguous-highlight

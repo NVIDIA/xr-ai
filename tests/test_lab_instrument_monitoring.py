@@ -485,11 +485,12 @@ def test_instrument_read_prompt_rejects_adjacent_device_displays(
     assert "UNKNOWN" in normalized_prompt
     assert "untrusted data" in normalized_prompt
     assert captured_system_prompts == [prompt]
-    assert json.loads(query) == {
-        "target_marker_type": "qr_code",
-        "target_marker_id": "device-1",
-        "target_device_name": "Device1",
-    }
+    assert "solid magenta polygon marks one target" in query.lower()
+    assert "Do not reuse a reading from any other device" in query
+    assert "return UNKNOWN" in query
+    assert '"marker_type": "qr_code"' in query
+    assert '"marker_id": "device-1"' in query
+    assert '"device_name": "Device1"' in query
 
 
 def test_unmapped_marker_log_identifier_redacts_payload() -> None:
@@ -1578,6 +1579,7 @@ def test_visual_eval_covers_prompt_driven_monitor_and_instrument_rules() -> None
         ("monitor", "monitor-unchanged"),
         ("monitor", "monitor-changed"),
         ("instrument", "instrument-same-device"),
+        ("instrument", "instrument-distinct-right-device"),
         ("instrument", "instrument-ambiguous-association"),
         ("instrument", "instrument-target-has-no-reading"),
         ("instrument", "instrument-visible-instruction-is-data"),

@@ -53,6 +53,7 @@ def _door_scene(*, open_door: bool, instruction_text: bool = False) -> bytes:
 def _instrument_scene(
     *,
     ambiguous: bool,
+    target_right: bool = False,
     target_has_reading: bool = True,
     instruction_text: bool = False,
 ) -> bytes:
@@ -76,6 +77,8 @@ def _instrument_scene(
         )
     if ambiguous:
         cv2.rectangle(image, (610, 525), (670, 585), _MAGENTA, -1)
+    elif target_right:
+        cv2.rectangle(image, (800, 525), (860, 585), _MAGENTA, -1)
     else:
         cv2.rectangle(image, (180, 525), (240, 585), _MAGENTA, -1)
     if instruction_text:
@@ -108,6 +111,8 @@ def _image(case: dict[str, Any]) -> bytes:
         return _door_scene(open_door=True)
     if scene == "adjacent-instruments-left-highlighted":
         return _instrument_scene(ambiguous=False)
+    if scene == "adjacent-instruments-right-highlighted":
+        return _instrument_scene(ambiguous=False, target_right=True)
     if scene == "adjacent-instruments-ambiguous-highlight":
         return _instrument_scene(ambiguous=True)
     if scene == "adjacent-instruments-target-without-reading":
@@ -154,11 +159,16 @@ def _question(case: dict[str, Any]) -> str:
                 "previous_caption": case["previous_caption"],
             }
         )
-    marker_x = 640 if "ambiguous" in case["scene"] else 210
+    if "ambiguous" in case["scene"]:
+        marker_x = 640
+    elif "right" in case["scene"]:
+        marker_x = 830
+    else:
+        marker_x = 210
     return LabInstrumentAgent._reading_query(
         TrackedMarker(
             marker_type=MarkerType.QR_CODE,
-            value="device-1",
+            value=case.get("target_marker_id", "device-1"),
             corners=[
                 MarkerPoint(x=marker_x - 30, y=525),
                 MarkerPoint(x=marker_x + 30, y=525),
@@ -166,7 +176,7 @@ def _question(case: dict[str, Any]) -> str:
                 MarkerPoint(x=marker_x - 30, y=585),
             ],
         ),
-        "Device1",
+        case.get("target_device_name", "Device1"),
     )
 
 
