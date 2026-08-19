@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "hardware_profile": "96G_blackwell",
+  "stack": "vlm_llm_nim",
+  "status": "provisional",
+  "device_safety_reserve_gib": 4.0,
+  "source": "untested estimate; replace with certified measurements",
+  "services": {
+    "llm-nim": {"gpu": 0, "reservation_gib": 45.0, "vllm": false},
+    "vlm-nim": {"gpu": 0, "reservation_gib": 30.0, "vllm": false},
+    "stt": {"gpu": 0, "reservation_gib": 3.0, "vllm": false},
+    "embedding": {"gpu": 0, "reservation_gib": 8.0, "vllm": true}
+  }
+}

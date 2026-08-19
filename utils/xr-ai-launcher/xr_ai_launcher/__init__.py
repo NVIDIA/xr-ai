@@ -40,17 +40,44 @@ from ._credentials import (
     require_credentials,
     warn_if_missing,
 )
-from ._gpu import detect_gpu_config
+from ._gpu import (
+    GPUDevice,
+    GPUInventoryError,
+    GPUProcess,
+    detect_gpu_config,
+    match_gpu_config,
+    query_gpu_inventory,
+)
 from ._models import ModelDeployment, load_deployment_profile, load_model_deployment
 from ._processes import ManagedProcess
 from ._stack import Parallel, Process, run_stack
+from ._vram import (
+    VRAM_UTILIZATION_ENV,
+    GPUPreflight,
+    ServiceReservation,
+    VRAMProfile,
+    VRAMProfileError,
+    derive_gpu_memory_utilization,
+    format_vram_preflight,
+    load_vram_profile,
+    preflight_vram,
+    require_vram_preflight,
+    utilization_overrides,
+    validate_vram_certification,
+)
 
 __all__ = [
     "XR_RUNTIME_VAR", "load_cloudxr_env",
     "NATIVE_DEVICE_PROFILES", "is_native_profile", "read_device_profile",
     "ensure_credentials", "load_credentials", "require_credentials", "warn_if_missing",
     "read_config_scalar",
-    "detect_gpu_config",
+    "GPUDevice", "GPUInventoryError", "GPUProcess",
+    "detect_gpu_config", "match_gpu_config", "query_gpu_inventory",
+    "VRAM_UTILIZATION_ENV", "GPUPreflight", "ServiceReservation",
+    "VRAMProfile", "VRAMProfileError", "derive_gpu_memory_utilization",
+    "format_vram_preflight", "load_vram_profile", "preflight_vram",
+    "require_vram_preflight", "utilization_overrides",
+    "validate_vram_certification",
     "ModelDeployment", "load_deployment_profile", "load_model_deployment",
     "ManagedProcess",
     "Parallel", "Process", "run_stack",

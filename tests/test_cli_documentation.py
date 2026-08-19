@@ -33,6 +33,7 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         ("--stop",),
         ("--models",),
         ("--allow-anonymous",),
+        ("--gpu-profile",),
     ]
     assert [argument.flags for argument in commands["simple_vlm_example"].arguments] == [
         ("--allow-anonymous",),
@@ -45,7 +46,8 @@ def test_catalog_builds_repository_root_invocation() -> None:
 
     assert commands["model_servers"].invocation == (
         "uv run --project agent-samples/model-servers model_servers "
-        "[--stop] [--models NAME_OR_PATH] [--allow-anonymous]"
+        "[--stop] [--models NAME_OR_PATH] [--allow-anonymous] "
+        "[--gpu-profile {dual_48G_ada,96G_blackwell,spark}]"
     )
 
 

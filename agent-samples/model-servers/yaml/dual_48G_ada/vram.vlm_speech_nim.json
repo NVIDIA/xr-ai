@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "hardware_profile": "dual_48G_ada",
+  "stack": "vlm_speech_nim",
+  "status": "provisional",
+  "device_safety_reserve_gib": 2.0,
+  "source": "existing validated NIM placement; replace with certified measurements",
+  "services": {
+    "stt-nim": {"gpu": 0, "reservation_gib": 8.0, "vllm": false},
+    "tts-nim": {"gpu": 0, "reservation_gib": 8.0, "vllm": false},
+    "vlm-nim": {"gpu": 1, "reservation_gib": 40.0, "vllm": false},
+    "embedding": {"gpu": 0, "reservation_gib": 4.0, "vllm": true}
+  }
+}

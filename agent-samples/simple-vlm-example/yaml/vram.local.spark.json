@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "hardware_profile": "spark",
+  "stack": "simple-vlm-example/local",
+  "status": "provisional",
+  "device_safety_reserve_gib": 4.0,
+  "source": "converted from legacy service budgets at 96 GiB; replace with certified measurements",
+  "services": {
+    "stt": {"gpu": 0, "reservation_gib": 3.0, "vllm": false},
+    "vlm": {"gpu": 0, "reservation_gib": 81.0, "vllm": true}
+  }
+}

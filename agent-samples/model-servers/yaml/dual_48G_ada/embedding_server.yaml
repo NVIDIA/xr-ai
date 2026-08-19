@@ -9,7 +9,6 @@ model_cache: ../../../../models
 cuda_visible_devices: "0"
 max_num_seqs: 32
 max_model_len: 8192
-gpu_memory_utilization: 0.08
 enforce_eager: true
 vllm_backend: docker
 vllm_image: nvcr.io/nvidia/vllm:26.04-py3

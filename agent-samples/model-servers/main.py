@@ -42,14 +42,24 @@ To stop all model servers:
     uv run --project agent-samples/model-servers model_servers --stop
 """
 import argparse
+import urllib.request
+from dataclasses import replace
 from pathlib import Path
 
 from xr_ai_launcher import (
+    VRAM_UTILIZATION_ENV,
     Process,
     detect_gpu_config,
+    format_vram_preflight,
     load_deployment_profile,
+    load_vram_profile,
+    preflight_vram,
+    query_gpu_inventory,
     require_credentials,
+    require_vram_preflight,
     run_stack,
+    utilization_overrides,
+    validate_vram_certification,
 )
 from xr_ai_logging import setup_logging
 from xr_ai_vllm import stop_persistent_servers
@@ -103,14 +113,16 @@ def _service_config(gpu_dir: str, config_base: str, profile_key: str) -> str:
     return f"{gpu_dir}/{config_base}.yaml"
 
 
-def _build_processes(selection: str) -> tuple[list[Process], tuple[str, ...]]:
+def _build_processes(
+    selection: str, gpu_profile: str | None = None,
+) -> tuple[list[Process], tuple[str, ...]]:
     profile_path = _profile_path(selection)
     deployment = load_deployment_profile(profile_path)
     unknown = deployment.services.keys() - _MODEL_SERVICES.keys()
     if unknown:
         raise ValueError(f"model profile declares unknown services: {sorted(unknown)}")
 
-    gpu_dir = f"yaml/{detect_gpu_config()}"
+    gpu_dir = f"yaml/{gpu_profile or detect_gpu_config()}"
     profile_key = profile_path.stem.removeprefix("models.")
     processes = [
         Process(
@@ -122,6 +134,63 @@ def _build_processes(selection: str) -> tuple[list[Process], tuple[str, ...]]:
         if deployment.launch_mode(service) == "own"
     ]
     return processes, deployment.required_credentials
+
+
+def _vram_profile_path(gpu_profile: str, selection: str) -> Path:
+    profile_key = _profile_path(selection).stem.removeprefix("models.")
+    return _BASE / "yaml" / gpu_profile / f"vram.{profile_key}.json"
+
+
+def _service_is_ready(port: int) -> bool:
+    for path in ("/health", "/v1/health/ready"):
+        try:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{port}{path}", timeout=0.5,
+            ) as response:
+                if response.status == 200:
+                    return True
+        except Exception:
+            continue
+    return False
+
+
+def _apply_vram_plan(
+    processes: list[Process], *, selection: str, gpu_profile: str,
+) -> list[Process]:
+    """Preflight the complete stack and inject derived vLLM utilization."""
+    profile = load_vram_profile(_vram_profile_path(gpu_profile, selection))
+    selected = {process.name for process in processes}
+    reserved = {item.service for item in profile.services}
+    if selected != reserved:
+        raise ValueError(
+            f"VRAM profile services do not match deployment: "
+            f"missing={sorted(selected - reserved)}, extra={sorted(reserved - selected)}"
+        )
+    validate_vram_certification(profile, {
+        process.name: (_BASE / process.config).resolve()
+        for process in processes if process.config is not None
+    })
+
+    inventory = query_gpu_inventory()
+    active = frozenset(
+        process.name for process in processes
+        if process.port is not None and _service_is_ready(process.port)
+    )
+    results = preflight_vram(profile, inventory, active_services=active)
+    print(format_vram_preflight(profile, results), flush=True)
+    require_vram_preflight(results)
+
+    overrides = utilization_overrides(profile, inventory)
+    return [
+        replace(
+            process,
+            environment=process.environment + (
+                (VRAM_UTILIZATION_ENV, overrides[process.name]),
+            ),
+        )
+        if process.name in overrides else process
+        for process in processes
+    ]
 
 
 def _stop_models() -> None:
@@ -171,13 +240,19 @@ def run() -> None:
     p.add_argument("--allow-anonymous", action="store_true",
                    help="Start without HF_TOKEN (unauthenticated downloads "
                         "of the multi-GB checkpoints may stall indefinitely).")
+    p.add_argument(
+        "--gpu-profile", choices=("dual_48G_ada", "96G_blackwell", "spark"),
+        help="Explicit hardware profile. By default XR-AI requires an exact "
+             "per-GPU topology match; this override is for reviewed custom hosts.",
+    )
     ns, _ = p.parse_known_args()
 
     if ns.stop:
         _stop_models()
         return
 
-    processes, credentials = _build_processes(ns.models)
+    gpu_profile = ns.gpu_profile or detect_gpu_config()
+    processes, credentials = _build_processes(ns.models, gpu_profile)
 
     # A missing HF_TOKEN silently stalls the multi-GB first-run download; see
     # docs/source/getting_started/credentials.md.
@@ -185,6 +260,9 @@ def run() -> None:
     for credential in credentials:
         require_credentials(credential)
     _stop_unselected_services(processes)
+    processes = _apply_vram_plan(
+        processes, selection=ns.models, gpu_profile=gpu_profile,
+    )
     run_stack(processes, _BASE, exit_after_ready=True)
 
 

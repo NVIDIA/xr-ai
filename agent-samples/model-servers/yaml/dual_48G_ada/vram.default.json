@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "hardware_profile": "dual_48G_ada",
+  "stack": "default",
+  "status": "provisional",
+  "device_safety_reserve_gib": 2.0,
+  "source": "legacy profile budgets plus observed Omni startup shortfall; replace with certified measurements",
+  "services": {
+    "stt": {"gpu": 1, "reservation_gib": 3.0, "vllm": false},
+    "omni": {"gpu": 1, "reservation_gib": 37.0, "vllm": true},
+    "vlm": {"gpu": 0, "reservation_gib": 22.0, "vllm": true},
+    "embedding": {"gpu": 0, "reservation_gib": 4.0, "vllm": true}
+  }
+}

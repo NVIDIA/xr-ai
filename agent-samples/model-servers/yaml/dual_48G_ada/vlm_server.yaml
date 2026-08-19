@@ -25,10 +25,7 @@ cuda_visible_devices: "0"   # share GPU 0 with embeddings; Nemotron/STT use GPU 
 
 model_cache: ../../../../models
 
-# 0.47 × 47 = 22.1 GiB budget: 16.8 GiB Reasoner weights plus multimodal
-# encoder profiling, runtime overhead, and KV cache.
-# Single-image queries have short context so the KV budget is adequate.
-gpu_memory_utilization: 0.47
+# The stack's absolute-GiB manifest derives the vLLM memory utilization.
 enforce_eager: true
 async_scheduling: true
 mm_encoder_tp_mode: data

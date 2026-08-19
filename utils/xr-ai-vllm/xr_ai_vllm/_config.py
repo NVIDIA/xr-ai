@@ -19,6 +19,27 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
+_GPU_MEMORY_UTILIZATION_ENV = "XR_AI_GPU_MEMORY_UTILIZATION"
+
+
+def gpu_memory_utilization(cfg: dict, default: float) -> float:
+    """Resolve the launcher-derived VRAM budget before the YAML fallback."""
+    raw = os.environ.get(_GPU_MEMORY_UTILIZATION_ENV)
+    if raw is None:
+        raw = cfg.get("gpu_memory_utilization", default)
+    try:
+        value = float(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid GPU memory utilization: {raw!r}") from exc
+    if not 0 < value < 1:
+        raise ValueError(f"GPU memory utilization must be between 0 and 1: {value}")
+    if os.environ.get(_GPU_MEMORY_UTILIZATION_ENV) is not None:
+        log.info(
+            "Derived vLLM GPU memory utilization: %.4f (XR-AI GiB reservation)",
+            value,
+        )
+    return value
+
 
 def resolve_model_cache(cfg: dict, yaml_dir: Path, *, default: str) -> Path:
     """Resolve ``model_cache`` (relative to the YAML dir) and ensure it exists."""

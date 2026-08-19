@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "hardware_profile": "96G_blackwell",
+  "stack": "default",
+  "status": "provisional",
+  "device_safety_reserve_gib": 4.0,
+  "source": "converted from legacy percentage budgets; replace with certified measurements",
+  "services": {
+    "stt": {"gpu": 0, "reservation_gib": 3.0, "vllm": false},
+    "omni": {"gpu": 0, "reservation_gib": 34.0, "vllm": true},
+    "vlm": {"gpu": 0, "reservation_gib": 22.0, "vllm": true},
+    "embedding": {"gpu": 0, "reservation_gib": 8.0, "vllm": true}
+  }
+}

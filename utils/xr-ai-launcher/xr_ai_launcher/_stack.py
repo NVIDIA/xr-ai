@@ -105,6 +105,9 @@ class Process:
     loguru records. All output remains available in the per-process log file.
     """
 
+    environment: tuple[tuple[str, str], ...] = ()
+    """Additional environment variables passed only to this process."""
+
 
 @dataclass(frozen=True)
 class Parallel:
@@ -213,6 +216,7 @@ def _spawn(proc: Process, base: Path, ready_file: Path) -> subprocess.Popen:
     cmd += ["--ready-file", str(ready_file)]
 
     env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
+    env.update(proc.environment)
     if proc.gpu is not None:
         env["CUDA_VISIBLE_DEVICES"] = proc.gpu
 

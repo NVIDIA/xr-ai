@@ -187,11 +187,15 @@ def test_cli_selects_requested_profile(
 ) -> None:
     selected: list[str] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
     monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
     monkeypatch.setattr(
+        _model_servers, "_apply_vram_plan", lambda processes, **_kw: processes,
+    )
+    monkeypatch.setattr(
         _model_servers, "_build_processes",
-        lambda selection: (selected.append(selection) or [], ()),
+        lambda selection, _gpu_profile=None: (selected.append(selection) or [], ()),
     )
     monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: None)
     monkeypatch.setattr(sys, "argv", ["model_servers", *argv])
@@ -234,14 +238,18 @@ def test_profile_path_argument_loads_custom_profile(tmp_path, monkeypatch) -> No
 def test_cli_requires_profile_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     required: list[str] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
     monkeypatch.setattr(
         _model_servers, "require_credentials",
         lambda name, **kw: required.append(name),
     )
     monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
     monkeypatch.setattr(
+        _model_servers, "_apply_vram_plan", lambda processes, **_kw: processes,
+    )
+    monkeypatch.setattr(
         _model_servers, "_build_processes",
-        lambda _selection: ([], ("NGC_API_KEY",)),
+        lambda _selection, _gpu_profile=None: ([], ("NGC_API_KEY",)),
     )
     monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: None)
     monkeypatch.setattr(sys, "argv", ["model_servers", "--models", "vlm_llm_nim"])
@@ -256,10 +264,12 @@ def test_cli_aborts_when_unselected_services_cannot_stop(
 ) -> None:
     started: list[bool] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
     monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "stop_persistent_servers", lambda _services: False)
     monkeypatch.setattr(
-        _model_servers, "_build_processes", lambda _selection: ([], ()),
+        _model_servers, "_build_processes",
+        lambda _selection, _gpu_profile=None: ([], ()),
     )
     monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: started.append(True))
     monkeypatch.setattr(sys, "argv", ["model_servers"])

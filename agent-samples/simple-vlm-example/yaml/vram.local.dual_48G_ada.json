@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "hardware_profile": "dual_48G_ada",
+  "stack": "simple-vlm-example/local",
+  "status": "provisional",
+  "device_safety_reserve_gib": 2.0,
+  "source": "converted from legacy service budgets; replace with certified measurements",
+  "services": {
+    "stt": {"gpu": 1, "reservation_gib": 3.0, "vllm": false},
+    "vlm": {"gpu": 0, "reservation_gib": 39.0, "vllm": true}
+  }
+}

@@ -81,16 +81,15 @@ def test_all_local_profiles_select_cosmos3_reasoner_runtime() -> None:
         assert cfg["mm_encoder_tp_mode"] == "data", config_path
 
 
-def test_hardware_profiles_reserve_measured_reasoner_memory() -> None:
-    blackwell = yaml.safe_load(
-        (_MODEL_PROFILES / "96G_blackwell" / "vlm_server.yaml").read_text()
-    )
-    dual_ada = yaml.safe_load(
-        (_MODEL_PROFILES / "dual_48G_ada" / "vlm_server.yaml").read_text()
-    )
-
-    assert blackwell["gpu_memory_utilization"] == 0.23
-    assert dual_ada["gpu_memory_utilization"] == 0.47
+def test_hardware_profiles_do_not_hardcode_vllm_memory_percentages() -> None:
+    for hardware in ("96G_blackwell", "dual_48G_ada", "spark"):
+        for config_name in (
+            "embedding_server.yaml", "nemotron_omni_llm_server.yaml", "vlm_server.yaml",
+        ):
+            config = yaml.safe_load(
+                (_MODEL_PROFILES / hardware / config_name).read_text()
+            )
+            assert "gpu_memory_utilization" not in config
 
 
 def test_cosmos3_rejects_missing_reasoner_override(monkeypatch, tmp_path) -> None:

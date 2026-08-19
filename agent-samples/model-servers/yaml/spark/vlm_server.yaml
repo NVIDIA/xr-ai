@@ -17,7 +17,6 @@ hf_token: ""
 port: 8100
 host: "0.0.0.0"
 model_cache: ../../../../models
-gpu_memory_utilization: 0.20
 max_num_seqs: 4
 enforce_eager: true
 async_scheduling: true

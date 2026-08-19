@@ -52,6 +52,9 @@ from ._config import (
     resolve_model_cache,
     setup_hf_env,
 )
+from ._config import (
+    gpu_memory_utilization as gpu_memory_utilization,
+)
 from ._nim import serve_nim
 
 log = logging.getLogger(__name__)
