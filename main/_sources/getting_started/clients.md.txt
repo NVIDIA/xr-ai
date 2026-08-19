@@ -35,7 +35,7 @@ When you start a server sample, the hub prints its connection details on
 startup:
 
 ```
-[hub]   LiveKit URL : wss://0.0.0.0:8080
+[hub]   LiveKit URL : wss://localhost:8080
 [hub]   Room        : xr-room
 [hub]   Token       : eyJ…
 [hub]   Web client  : https://localhost:8080

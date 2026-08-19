@@ -9,7 +9,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Credentials &#8212; XR AI</title>
+    <title>Skills &#8212; XR AI</title>
   
   
   
@@ -52,15 +52,15 @@
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'getting_started/credentials';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'getting_started/skills';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
 
     <link rel="icon" href="../_static/favicon.png"/>
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Components" href="../components/index.html" />
-    <link rel="prev" title="Networking and firewall" href="networking.html" />
+    <link rel="next" title="Requirements" href="requirements.html" />
+    <link rel="prev" title="Quickstart" href="quickstart.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -289,7 +289,7 @@
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.1.0-beta/getting_started/credentials.html", "credentials.html"];
+    var urls = ["../../v0.1.0-beta/index.html", "skills.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -314,11 +314,11 @@
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Getting Started</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
-<li class="toctree-l2"><a class="reference internal" href="skills.html">Skills</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="requirements.html">Requirements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="clients.html">Connecting Clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="networking.html">Networking and firewall</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Credentials</a></li>
+<li class="toctree-l2"><a class="reference internal" href="credentials.html">Credentials</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../components/index.html">Components</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -420,7 +420,7 @@
     
     <li class="breadcrumb-item"><a href="index.html" class="nav-link">Getting Started</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Credentials</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Skills</span></li>
   </ul>
 </nav>
 </div>
@@ -441,98 +441,44 @@
   SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
   SPDX-License-Identifier: Apache-2.0
 -->
-<section id="credentials">
-<h1>Credentials<a class="headerlink" href="#credentials" title="Link to this heading">#</a></h1>
-<p>The launcher manages HuggingFace and NGC API tokens so they are never stored
-in source files or YAML configurations.</p>
-<p>Tokens are cached in <code class="docutils literal notranslate"><span class="pre">~/.config/xr-ai/credentials.json</span></code> — outside any
-project directory. Values already in <code class="docutils literal notranslate"><span class="pre">os.environ</span></code>
-always take
-priority (useful in CI or when you want to override the cache).</p>
-<p><code class="docutils literal notranslate"><span class="pre">run_stack</span></code> always calls <code class="docutils literal notranslate"><span class="pre">load_credentials()</span></code> before spawning child processes,
-so any token saved in the credentials file, exported in the environment, or
-stored by <code class="docutils literal notranslate"><span class="pre">huggingface-cli</span> <span class="pre">login</span></code> is injected into <strong>every</strong> subprocess in the
-stack automatically — no per-sample wiring needed.</p>
-<section id="huggingface-token-hf-token">
-<h2>HuggingFace token (<code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code>)<a class="headerlink" href="#huggingface-token-hf-token" title="Link to this heading">#</a></h2>
-<p><strong>Required by default</strong> for the samples that download model checkpoints
-(<code class="docutils literal notranslate"><span class="pre">model_servers</span></code>, <code class="docutils literal notranslate"><span class="pre">simple_vlm_example</span></code>). The default models are public, but
-unauthenticated Hub downloads are rate-limited to the point of <strong>stalling
-indefinitely</strong> on multi-GB checkpoints (no error, no progress output), so the
-orchestrators refuse to start without a token rather than hang silently on
-first launch. A token is also required outright for:</p>
-<ul class="simple">
-<li><p><strong>Gated models</strong> — any model whose HuggingFace page requires accepting a
-license or requesting access (plus license acceptance on your account).</p></li>
-</ul>
-<p>The samples <strong>do not prompt</strong> for it. If <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is not set, the
-orchestrator prints an actionable error and exits; pass <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code>
-to start without a token anyway (all weights already cached, or you accept
-the stall risk). Provide the token any one of these ways; all are picked up
-automatically:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># 1. Environment variable (highest priority; good for CI / one-off overrides)</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">HF_TOKEN</span><span class="o">=</span>hf_xxx
-
-<span class="c1"># 2. huggingface-cli login (writes ~/.cache/huggingface/token)</span>
-huggingface-cli<span class="w"> </span>login
-
-<span class="c1"># 3. Save it once for all samples (written to ~/.config/xr-ai/credentials.json</span>
-<span class="c1">#    and ~/.cache/huggingface/token)</span>
-python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">"from xr_ai_launcher import ensure_credentials; ensure_credentials('HF_TOKEN')"</span>
+<section id="skills">
+<h1>Skills<a class="headerlink" href="#skills" title="Link to this heading">#</a></h1>
+<p>Skills are how a coding agent sets itself up to work with xr-ai: small
+<code class="docutils literal notranslate"><span class="pre">SKILL.md</span></code> modules under the open <a class="reference external" href="https://agentskills.io">Agent Skills</a> spec
+that the agent installs and follows. This is the primary way to get started.
+Paste this to your agent:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set up xr-ai for me: ask me whether to build against the latest release
+(newest stable tag; a prerelease only if no stable exists) or main, then
+fetch skills/getting-started/SKILL.md at that ref from
+https://raw.githubusercontent.com/NVIDIA/xr-ai/. If the file does not exist
+at that ref, the release predates agent setup: get my OK to use main for
+both the skill and the checkout. Install the skill (or just follow it), and
+walk me through the rest of the setup.
 </pre></div>
 </div>
-<p>Get a token at <a class="reference external" href="https://huggingface.co/settings/tokens">https://huggingface.co/settings/tokens</a>. <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is also
-written to <code class="docutils literal notranslate"><span class="pre">~/.cache/huggingface/token</span></code> — the standard location
-<code class="docutils literal notranslate"><span class="pre">huggingface_hub</span></code> checks — so child processes (e.g. <code class="docutils literal notranslate"><span class="pre">vlm-server</span></code>) find it even
-when env-var inheritance is incomplete, and an existing <code class="docutils literal notranslate"><span class="pre">huggingface-cli</span> <span class="pre">login</span></code>
-is reused without any further setup.</p>
-</section>
-<section id="ngc-api-key-ngc-api-key">
-<h2>NGC API key (<code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code>)<a class="headerlink" href="#ngc-api-key-ngc-api-key" title="Link to this heading">#</a></h2>
-<p><strong>Required only for the NIM model backend and <code class="docutils literal notranslate"><span class="pre">nvcr.io</span></code> image pulls.</strong> It
-authenticates both <code class="docutils literal notranslate"><span class="pre">nvcr.io</span></code> container pulls and <strong>hosted NVIDIA NIM</strong>
-inference endpoints — a <code class="docutils literal notranslate"><span class="pre">models.yaml</span></code> entry with <code class="docutils literal notranslate"><span class="pre">api_key_env:</span> <span class="pre">NGC_API_KEY</span></code>
-sends it as the <code class="docutils literal notranslate"><span class="pre">Authorization:</span> <span class="pre">Bearer</span></code> token (refer to
-<a class="reference internal" href="../components/ai-services.html"><span class="doc">AI services — hosting models on NVIDIA NIM</span></a>).</p>
-<p>Samples that select the NIM backend call <code class="docutils literal notranslate"><span class="pre">ensure_credentials(&quot;NGC_API_KEY&quot;)</span></code>,
-which <strong>prompts once</strong> (password-style, no echo) if the key isn’t already
-available and saves it for future runs — NIM cannot function without it, so the
-prompt is intentional. Get a key at <a class="reference external" href="https://ngc.nvidia.com/setup/api-key">https://ngc.nvidia.com/setup/api-key</a>, or
-set it ahead of time:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">NGC_API_KEY</span><span class="o">=</span>nvapi-xxx
-</pre></div>
+<p>The skill has the agent ask two setup questions (latest release or <code class="docutils literal notranslate"><span class="pre">main</span></code>;
+models on the local GPU or a hosted endpoint), clone the repo, and route
+itself to the working contract, the docs, and the reference sample. An agent
+with no skills mechanism can follow the <code class="docutils literal notranslate"><span class="pre">SKILL.md</span></code> contents directly.</p>
+<p>Prefer to do it by hand? Follow <a class="reference internal" href="quickstart.html"><span class="doc">Quickstart</span></a>.</p>
+<section id="available-skills">
+<h2>Available skills<a class="headerlink" href="#available-skills" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Skill</p></th>
+<th class="head"><p>What it does</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/skills/getting-started/SKILL.md"><code class="docutils literal notranslate"><span class="pre">getting-started</span></code></a></p></td>
+<td><p>Sets an agent up to build on xr-ai: repo, working contract, docs, reference sample</p></td>
+</tr>
+</tbody>
+</table>
 </div>
-</section>
-<section id="how-a-token-is-resolved">
-<h2>How a token is resolved<a class="headerlink" href="#how-a-token-is-resolved" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">load_credentials()</span></code> (always) and <code class="docutils literal notranslate"><span class="pre">ensure_credentials()</span></code> (NGC only) resolve in
-this priority order, highest first:</p>
-<ol class="arabic simple">
-<li><p>Already set in <code class="docutils literal notranslate"><span class="pre">os.environ</span></code></p></li>
-<li><p>Saved in <code class="docutils literal notranslate"><span class="pre">~/.config/xr-ai/credentials.json</span></code></p></li>
-<li><p>Stored in <code class="docutils literal notranslate"><span class="pre">~/.cache/huggingface/token</span></code> (<code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> only)</p></li>
-<li><p><em>(interactive paths only)</em> prompted, then saved to both locations</p></li>
-</ol>
-<p><code class="docutils literal notranslate"><span class="pre">warn_if_missing(...)</span></code> runs steps 1–3 and, if the token is still absent, prints
-an actionable notice and continues <strong>without prompting</strong>.
-<code class="docutils literal notranslate"><span class="pre">require_credentials(...)</span></code> runs the same steps but exits non-zero when the
-token is absent (unless called with <code class="docutils literal notranslate"><span class="pre">allow_missing=True</span></code>, wired to the
-orchestrators’ <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code> flag); this is how <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is handled
-in the checkpoint-downloading samples.</p>
-</section>
-<section id="managing-saved-tokens">
-<h2>Managing saved tokens<a class="headerlink" href="#managing-saved-tokens" title="Link to this heading">#</a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># View saved tokens</span>
-cat<span class="w"> </span>~/.config/xr-ai/credentials.json
-
-<span class="c1"># Remove a token</span>
-python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">"</span>
-<span class="s2">import json, pathlib</span>
-<span class="s2">p = pathlib.Path.home() / '.config/xr-ai/credentials.json'</span>
-<span class="s2">d = json.loads(p.read_text()); d.pop('HF_TOKEN', None); p.write_text(json.dumps(d, indent=2))</span>
-<span class="s2">"</span>
-</pre></div>
-</div>
+<p>The bank lives at
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/main/skills"><code class="docutils literal notranslate"><span class="pre">skills/</span></code></a> in the
+repository; new skills land there with the features they cover.</p>
 </section>
 </section>
 
@@ -547,20 +493,20 @@ python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">"</spa
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="networking.html"
+       href="quickstart.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Networking and firewall</p>
+        <p class="prev-next-title">Quickstart</p>
       </div>
     </a>
     <a class="right-next"
-       href="../components/index.html"
+       href="requirements.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Components</p>
+        <p class="prev-next-title">Requirements</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -585,10 +531,7 @@ python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">"</spa
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#huggingface-token-hf-token">HuggingFace token (<code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code>)</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ngc-api-key-ngc-api-key">NGC API key (<code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code>)</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-a-token-is-resolved">How a token is resolved</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#managing-saved-tokens">Managing saved tokens</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#available-skills">Available skills</a></li>
 </ul>
   </nav></div>
 

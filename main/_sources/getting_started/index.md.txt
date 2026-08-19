@@ -5,12 +5,15 @@
 
 # Getting Started
 
-The quickstart paths, requirements, connecting clients, networking, and credentials.
+Using a coding agent? Start at {doc}`skills`. The rest of this section is the
+manual path: quickstarts, requirements, connecting clients, networking, and
+credentials.
 
 ```{toctree}
 :maxdepth: 1
 
 quickstart
+skills
 requirements
 clients
 networking
