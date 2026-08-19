@@ -1,0 +1,869 @@
+
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>xr-ai-tools &#8212; XR AI</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=a95f357e85573c9b56d5"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5" />
+
+
+
+    <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/agent-sdk-tools';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+
+    <link rel="icon" href="../_static/favicon.png"/>
+
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="xr-ai-voice" href="agent-sdk-voice.html" />
+    <link rel="prev" title="xr-ai-runtime" href="agent-sdk-runtime.html" />
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+
+
+  </head>
+
+  <body data-default-mode="">
+
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="XR AI - Home"/>
+    <img src="../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="XR AI - Home"/>
+  
+  
+    <p class="title logo__title">XR AI</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="XR AI - Home"/>
+    <img src="../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="XR AI - Home"/>
+  
+  
+    <p class="title logo__title">XR AI</p>
+  
+</a>
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item"><!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+
+
+<div class="version-switcher">
+  <label for="version-select" class="version-switcher__label">Version</label>
+  <select id="version-select" class="version-switcher__select">
+    <option value="0" >v0.1.0-beta</option>
+    <option value="1" selected>main (development)</option>
+  </select>
+</div>
+<script>
+  (function () {
+    // Navigate by index into a build-time list, never by reading the URL back
+    // out of the DOM, so page text can never become a navigation target.
+    var urls = ["../../v0.1.0-beta/index.html", "agent-sdk-tools.html"];
+    var select = document.getElementById("version-select");
+    select.addEventListener("change", function () {
+      var url = urls[select.selectedIndex];
+      if (url) {
+        window.location.assign(url);
+      }
+    });
+  })();
+</script>
+</div>
+        <div class="sidebar-primary-item">
+
+
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Table of Contents">
+  <p class="bd-links__title" role="heading" aria-level="1">Table of Contents</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../overview/index.html">Overview</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../overview/architecture.html">Architecture</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../getting_started/index.html">Getting Started</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../components/index.html">Components</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../components/agent-sdk.html">Agent SDK</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../components/ai-services.html">AI inference servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../components/launcher-and-process-model.html">Launcher and process model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../components/server-runtime.html">Server runtime</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+</ul>
+</details></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Reference</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">xr-ai-tools</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+<section id="xr-ai-tools">
+<h1>xr-ai-tools<a class="headerlink" href="#xr-ai-tools" title="Link to this heading">#</a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code> is the toolkit-independent native tools layer for XR AI.
+<code class="docutils literal notranslate"><span class="pre">Tool</span></code> gives voice, background triggers, and model-driven agents one typed
+Pydantic invocation interface. NeMo Relay manages every tool execution;
+model-backed tools use injected <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> services.</p>
+<section id="native-tools-and-model-tool-calls">
+<h2>Native tools and model tool calls<a class="headerlink" href="#native-tools-and-model-tool-calls" title="Link to this heading">#</a></h2>
+<p>The base install supplies finite <code class="docutils literal notranslate"><span class="pre">Tool</span></code> and streaming <code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> types. Install
+<code class="docutils literal notranslate"><span class="pre">xr-ai-tools[relay]</span></code> for the small model tool-call helpers:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatMessage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tool</span><span class="p">,</span> <span class="n">ToolSet</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.tool_calling</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_tool_loop</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">LookupRequest</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">query</span><span class="p">:</span> <span class="nb">str</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">LookupResult</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">answer</span><span class="p">:</span> <span class="nb">str</span>
+
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">lookup</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">LookupRequest</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LookupResult</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">LookupResult</span><span class="p">(</span><span class="n">answer</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">query</span><span class="p">)</span>
+
+
+<span class="n">lookup_tool</span> <span class="o">=</span> <span class="n">Tool</span><span class="p">(</span>
+    <span class="s2">"lookup"</span><span class="p">,</span>
+    <span class="s2">"Look up one answer."</span><span class="p">,</span>
+    <span class="n">LookupRequest</span><span class="p">,</span>
+    <span class="n">LookupResult</span><span class="p">,</span>
+    <span class="n">lookup</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">tools</span> <span class="o">=</span> <span class="p">(</span><span class="n">lookup_tool</span><span class="p">,)</span>
+<span class="n">tool_set</span> <span class="o">=</span> <span class="n">ToolSet</span><span class="p">(</span><span class="n">tools</span><span class="p">)</span>
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">call_model</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">definitions</span><span class="p">):</span>
+    <span class="c1"># The caller owns model parameters, headers, timeouts, and retry policy.</span>
+    <span class="k">return</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span>
+        <span class="n">messages</span><span class="p">,</span>
+        <span class="n">tools</span><span class="o">=</span><span class="n">definitions</span><span class="p">,</span>
+        <span class="n">max_tokens</span><span class="o">=</span><span class="mi">1024</span><span class="p">,</span>
+        <span class="n">temperature</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">run_tool_loop</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">ChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">"user"</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">"look up the current answer"</span><span class="p">)],</span>
+    <span class="n">tool_set</span><span class="p">,</span>
+    <span class="n">call_model</span><span class="p">,</span>
+    <span class="n">max_iterations</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+    <span class="n">max_tool_calls</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">final_answer</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">content</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">run_tool_loop(...)</span></code> is a stateless bounded turn runner. It passes an immutable
+transcript and the current <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code> definitions to the supplied model callback,
+executes emitted calls sequentially, and returns the complete transcript and a
+structured tool-call audit. Unknown tools and invalid Pydantic arguments are
+returned to the model for repair. Iteration exhaustion, tool-call budget
+exhaustion, empty or truncated responses, and unsafe mixed <code class="docutils literal notranslate"><span class="pre">return_direct</span></code>
+batches raise typed errors carrying the partial transcript and audit. Blank or
+non-string or duplicate tool-call IDs are rejected before executing their batch.
+Error <code class="docutils literal notranslate"><span class="pre">messages</span></code> contain only a valid, resumable transcript; the rejected model
+turn remains available separately as <code class="docutils literal notranslate"><span class="pre">rejected_response</span></code> for diagnostics.</p>
+<p>The application or agent continues to own prompts, conversation history, model
+parameters, retries, participant context, cancellation, and background tasks.
+The loop never retries an executed tool. A direct-return tool must be the only
+call in its model batch, so the loop can reject an ambiguous batch before any
+side effect occurs.</p>
+<p>The lower-level <code class="docutils literal notranslate"><span class="pre">tool_definitions(...)</span></code> and <code class="docutils literal notranslate"><span class="pre">handle_tool_call(...)</span></code> helpers
+remain available for specialized loops. The former adapts native tools to
+<code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> <code class="docutils literal notranslate"><span class="pre">ToolDef</span></code> values. The latter validates and invokes one
+model-produced <code class="docutils literal notranslate"><span class="pre">ToolCall</span></code>, then returns a tool-role <code class="docutils literal notranslate"><span class="pre">ChatMessage</span></code> plus its
+<code class="docutils literal notranslate"><span class="pre">return_direct</span></code> hint. A unary side-effect tool uses <code class="docutils literal notranslate"><span class="pre">result_model=None</span></code>, returns
+<code class="docutils literal notranslate"><span class="pre">None</span></code>, and produces <code class="docutils literal notranslate"><span class="pre">null</span></code> as its model-visible result.</p>
+<p>Tool catalogs can assign model-visible aliases without wrapping or changing the
+underlying tools:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tools</span> <span class="o">=</span> <span class="n">ToolSet</span><span class="p">({</span><span class="s2">"camera_status"</span><span class="p">:</span> <span class="n">vision</span><span class="o">.</span><span class="n">status</span><span class="p">})</span>
+</pre></div>
+</div>
+<p>When composing independently named tool groups, namespace them at the workflow
+boundary:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tools</span> <span class="o">=</span> <span class="n">ToolSet</span><span class="o">.</span><span class="n">namespaced</span><span class="p">({</span>
+    <span class="s2">"vision"</span><span class="p">:</span> <span class="n">vision</span><span class="o">.</span><span class="n">tools</span><span class="p">,</span>
+    <span class="s2">"planner"</span><span class="p">:</span> <span class="n">planner</span><span class="o">.</span><span class="n">tools</span><span class="p">,</span>
+<span class="p">})</span>
+</pre></div>
+</div>
+<p>This exposes names such as <code class="docutils literal notranslate"><span class="pre">vision__status</span></code> and <code class="docutils literal notranslate"><span class="pre">planner__status</span></code> to the model.
+Only finite <code class="docutils literal notranslate"><span class="pre">Tool</span></code> instances belong in a <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code>; streaming <code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code>
+instances are consumed explicitly with <code class="docutils literal notranslate"><span class="pre">stream()</span></code>.</p>
+</section>
+<section id="typed-capability-services">
+<h2>Typed capability services<a class="headerlink" href="#typed-capability-services" title="Link to this heading">#</a></h2>
+<p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[services]</span></code> for the msgpack/ZMQ RPC client/server and the
+shared tracking, video-memory, text-memory, and spatial
+building blocks. Applications compose these finite tools into their own
+<code class="docutils literal notranslate"><span class="pre">ToolSet</span></code>; service processes use the matching RPC primitives without pulling
+in an agent framework or HTTP server.</p>
+<p>Each capability has a focused import surface: <code class="docutils literal notranslate"><span class="pre">tracking</span></code>, <code class="docutils literal notranslate"><span class="pre">video_memory</span></code>,
+<code class="docutils literal notranslate"><span class="pre">text_memory</span></code>, <code class="docutils literal notranslate"><span class="pre">spatial</span></code>, and their shared request types in <code class="docutils literal notranslate"><span class="pre">types</span></code>. RPC
+transport remains isolated in <code class="docutils literal notranslate"><span class="pre">rpc</span></code>.</p>
+</section>
+<section id="image-selection-and-vlm-query-tools">
+<h2>Image selection and VLM query tools<a class="headerlink" href="#image-selection-and-vlm-query-tools" title="Link to this heading">#</a></h2>
+<p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[frames]</span></code> for live-frame selection and
+<code class="docutils literal notranslate"><span class="pre">xr-ai-tools[vision]</span></code> for VLM queries. Image selection does not invoke a model:
+<code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code> returns an <code class="docutils literal notranslate"><span class="pre">ImageFrame</span></code>, while
+<code class="docutils literal notranslate"><span class="pre">VideoMemoryTools</span></code> groups recorded selection by timing:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">latest_tools</span></code> contains <code class="docutils literal notranslate"><span class="pre">get_latest_video</span></code> and <code class="docutils literal notranslate"><span class="pre">get_latest_frames</span></code>;
+their windows end at the newest recorded timestamp and require only
+<code class="docutils literal notranslate"><span class="pre">duration_seconds</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">historical_tools</span></code> contains <code class="docutils literal notranslate"><span class="pre">get_historical_frame</span></code>,
+<code class="docutils literal notranslate"><span class="pre">get_historical_frames</span></code>, and <code class="docutils literal notranslate"><span class="pre">get_historical_video</span></code>; they share one
+absolute <code class="docutils literal notranslate"><span class="pre">start_us</span></code>, with video and sampling adding <code class="docutils literal notranslate"><span class="pre">duration_seconds</span></code>.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">get_current_frame</span></code> joins the latest group conceptually as the live-image
+equivalent. Every selected frame carries the same <code class="docutils literal notranslate"><span class="pre">ImageReference</span></code>; timed
+frames also share the <code class="docutils literal notranslate"><span class="pre">TimedImage</span></code> contract consumed by video queries.</p>
+<p><code class="docutils literal notranslate"><span class="pre">ImageQueryTool</span></code> returns one complete <code class="docutils literal notranslate"><span class="pre">ImageQueryResult</span></code> for any image reference;
+<code class="docutils literal notranslate"><span class="pre">MultiImageQueryTool</span></code> queries an ordered image collection, and <code class="docutils literal notranslate"><span class="pre">VideoQueryTool</span></code>
+queries chronological <code class="docutils literal notranslate"><span class="pre">TimedImage</span></code> frames with their timestamps and relative
+offsets. <code class="docutils literal notranslate"><span class="pre">StreamingImageQueryTool</span></code> preserves the low-latency single-image path.
+All four tools use one list-based inference implementation. The shipped Cosmos
+deployment accepts at most four images in one <code class="docutils literal notranslate"><span class="pre">query_images</span></code> or <code class="docutils literal notranslate"><span class="pre">query_video</span></code>
+call. This inference limit is separate from the video-memory sampling budget;
+select the relevant subset before querying the VLM.</p>
+<p>In-memory bytes use a bounded <code class="docutils literal notranslate"><span class="pre">ImageRegistry</span></code>, whose opaque handles keep tool
+results and telemetry small. Registries accept only their own opaque references
+by default. Trusted applications may opt into local paths, file URIs, and
+HTTP(S) URLs with <code class="docutils literal notranslate"><span class="pre">ImageRegistry(allow_external=True)</span></code>, but must not expose an
+external-enabled query tool directly to an untrusted model. Query tools forward
+controlled Relay headers and redact every image location from VLM events while
+preserving provider input. Timelines supplied to video inference are described
+as estimates because recorded-frame timestamps are interpolated from chunk
+metadata rather than persisted per-frame presentation timestamps.</p>
+<p>Derived images use <code class="docutils literal notranslate"><span class="pre">ImageRegistry.put_derived(...)</span></code> to inherit the source
+reference’s owner, so participant or workflow cleanup releases the source and
+all derived pixels together.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.current_frame</span><span class="w"> </span><span class="kn">import</span> <span class="n">CurrentFrameRequest</span><span class="p">,</span> <span class="n">CurrentFrameTool</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.image</span><span class="w"> </span><span class="kn">import</span> <span class="n">ImageReference</span><span class="p">,</span> <span class="n">ImageRegistry</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.video_memory</span><span class="w"> </span><span class="kn">import</span> <span class="n">LatestFramesRequest</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.vision</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ImageQueryRequest</span><span class="p">,</span>
+    <span class="n">ImageQueryTool</span><span class="p">,</span>
+    <span class="n">VideoQueryRequest</span><span class="p">,</span>
+    <span class="n">VideoQueryTool</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">images</span> <span class="o">=</span> <span class="n">ImageRegistry</span><span class="p">(</span><span class="n">allow_external</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">frames</span> <span class="o">=</span> <span class="n">CurrentFrameTool</span><span class="p">(</span><span class="n">endpoint</span><span class="o">=</span><span class="n">endpoint</span><span class="p">,</span> <span class="n">images</span><span class="o">=</span><span class="n">images</span><span class="p">)</span>
+<span class="n">vision</span> <span class="o">=</span> <span class="n">ImageQueryTool</span><span class="p">(</span><span class="n">images</span><span class="o">=</span><span class="n">images</span><span class="p">,</span> <span class="n">vlm</span><span class="o">=</span><span class="n">vlm</span><span class="p">)</span>
+<span class="n">video</span> <span class="o">=</span> <span class="n">VideoQueryTool</span><span class="p">(</span><span class="n">images</span><span class="o">=</span><span class="n">images</span><span class="p">,</span> <span class="n">vlm</span><span class="o">=</span><span class="n">vlm</span><span class="p">)</span>
+
+<span class="n">frame</span> <span class="o">=</span> <span class="k">await</span> <span class="n">frames</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">CurrentFrameRequest</span><span class="p">(</span><span class="n">participant_id</span><span class="o">=</span><span class="s2">"alice"</span><span class="p">))</span>
+<span class="n">answer</span> <span class="o">=</span> <span class="k">await</span> <span class="n">vision</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+    <span class="n">ImageQueryRequest</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="n">frame</span><span class="o">.</span><span class="n">image</span><span class="p">,</span> <span class="n">query</span><span class="o">=</span><span class="s2">"What is on the table?"</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="c1"># The same VLM tool accepts images that did not come from a camera tool.</span>
+<span class="n">other</span> <span class="o">=</span> <span class="k">await</span> <span class="n">vision</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+    <span class="n">ImageQueryRequest</span><span class="p">(</span>
+        <span class="n">image</span><span class="o">=</span><span class="n">ImageReference</span><span class="p">(</span><span class="n">uri</span><span class="o">=</span><span class="s2">"/tmp/reference.png"</span><span class="p">),</span>
+        <span class="n">query</span><span class="o">=</span><span class="s2">"Does this match the current object?"</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+
+<span class="c1"># The newest recorded window needs no caller-supplied timestamp.</span>
+<span class="n">sample</span> <span class="o">=</span> <span class="k">await</span> <span class="n">video_memory</span><span class="o">.</span><span class="n">get_latest_frames</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+    <span class="n">LatestFramesRequest</span><span class="p">(</span>
+        <span class="n">participant_id</span><span class="o">=</span><span class="s2">"alice"</span><span class="p">,</span>
+        <span class="n">duration_seconds</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+        <span class="n">frame_budget</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+<span class="n">change</span> <span class="o">=</span> <span class="k">await</span> <span class="n">video</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+    <span class="n">VideoQueryRequest</span><span class="p">(</span><span class="n">frames</span><span class="o">=</span><span class="n">sample</span><span class="o">.</span><span class="n">frames</span><span class="p">,</span> <span class="n">query</span><span class="o">=</span><span class="s2">"What changed over time?"</span><span class="p">)</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="marker-tracking">
+<h2>Marker tracking<a class="headerlink" href="#marker-tracking" title="Link to this heading">#</a></h2>
+<p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[marker-tracking]</span></code> to use <code class="docutils literal notranslate"><span class="pre">MarkerTrackingTool</span></code>. The finite
+<code class="docutils literal notranslate"><span class="pre">track_markers</span></code> tool acquires a participant’s current camera frame and detects
+QR codes with ZXing-C++ and ArUco markers with OpenCV. Its typed result
+distinguishes an unavailable frame from a valid frame with no marker. Every
+marker has the same <code class="docutils literal notranslate"><span class="pre">marker_type</span></code>, <code class="docutils literal notranslate"><span class="pre">value</span></code>, and four-corner contract: <code class="docutils literal notranslate"><span class="pre">value</span></code>
+is decoded text for QR codes and the decimal marker ID for ArUco markers.
+Both detectors scan the complete frame at native resolution and at one bounded
+enlarged resolution so small markers remain readable without discarding context.
+Results from both scans are deduplicated and use source-frame coordinates.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.marker_tracking</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">MarkerTrackingRequest</span><span class="p">,</span>
+    <span class="n">MarkerTrackingTool</span><span class="p">,</span>
+    <span class="n">MarkerType</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">markers</span> <span class="o">=</span> <span class="n">MarkerTrackingTool</span><span class="p">(</span><span class="n">endpoint</span><span class="o">=</span><span class="n">processor_endpoint</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">markers</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+    <span class="n">MarkerTrackingRequest</span><span class="p">(</span><span class="n">participant_id</span><span class="o">=</span><span class="s2">"participant-1"</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="k">for</span> <span class="n">marker</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">markers</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">marker</span><span class="o">.</span><span class="n">marker_type</span><span class="p">,</span> <span class="n">marker</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">marker</span><span class="o">.</span><span class="n">corners</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Both marker families are enabled by default. Select families only while
+initializing the tool; requests and results do not change. ArUco detection uses
+<code class="docutils literal notranslate"><span class="pre">DICT_4X4_50</span></code> by default and accepts any OpenCV predefined dictionary name.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">aruco_only</span> <span class="o">=</span> <span class="n">MarkerTrackingTool</span><span class="p">(</span>
+    <span class="n">endpoint</span><span class="o">=</span><span class="n">processor_endpoint</span><span class="p">,</span>
+    <span class="n">marker_types</span><span class="o">=</span><span class="p">(</span><span class="n">MarkerType</span><span class="o">.</span><span class="n">ARUCO</span><span class="p">,),</span>
+    <span class="n">aruco_dictionary</span><span class="o">=</span><span class="s2">"DICT_6X6_250"</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Generate sample QR and ArUco marker PNGs with the standalone utility beside the
+tool. Its inline dependency metadata lets <code class="docutils literal notranslate"><span class="pre">uv</span></code> create an isolated environment
+without modifying the project environment:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>xr_ai_tools/utilities/generate_marker.py<span class="w"> </span>qr<span class="w"> </span><span class="s2">"XR AI"</span><span class="w"> </span>--output<span class="w"> </span>qr.png
+uv<span class="w"> </span>run<span class="w"> </span>xr_ai_tools/utilities/generate_marker.py<span class="w"> </span>aruco<span class="w"> </span><span class="m">23</span><span class="w"> </span>--output<span class="w"> </span>aruco.png
+uv<span class="w"> </span>run<span class="w"> </span>xr_ai_tools/utilities/generate_marker.py<span class="w"> </span>aruco<span class="w"> </span><span class="m">42</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--dictionary<span class="w"> </span>DICT_6X6_250<span class="w"> </span>--output<span class="w"> </span>aruco-42.png
+</pre></div>
+</div>
+<p>Run these commands from <code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-tools/</span></code>. Both commands produce square
+512-pixel PNGs by default; use <code class="docutils literal notranslate"><span class="pre">--help</span></code> to see sizing and border options.</p>
+<p>Call <code class="docutils literal notranslate"><span class="pre">release(participant_id)</span></code> when a participant disconnects. Applications
+that expose the tool to a model should inject the active participant identity
+at their workflow boundary, as they do for other participant-scoped tools.</p>
+</section>
+<section id="magenta-polygon-image-editing">
+<h2>Magenta polygon image editing<a class="headerlink" href="#magenta-polygon-image-editing" title="Link to this heading">#</a></h2>
+<p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[image-editing]</span></code> to fill an image-space polygon with
+standard magenta (<code class="docutils literal notranslate"><span class="pre">#FF00FF</span></code>). <code class="docutils literal notranslate"><span class="pre">ImagePolygonFillTool</span></code> accepts an image reference
+and at least three ordered pixel coordinates. It connects the final point to
+the first, validates that the polygon is inside the image and encloses an area,
+and stores a new lossless PNG without changing the source image. The returned
+reference inherits the source owner and can be passed directly to an image
+query tool. Stale image references and invalid polygons return
+<code class="docutils literal notranslate"><span class="pre">available=False</span></code> with a recoverable message instead of raising an internal
+tool error.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.image</span><span class="w"> </span><span class="kn">import</span> <span class="n">ImageRegistry</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.image_polygon</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ImagePoint</span><span class="p">,</span>
+    <span class="n">ImagePolygonFillRequest</span><span class="p">,</span>
+    <span class="n">ImagePolygonFillTool</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">images</span> <span class="o">=</span> <span class="n">ImageRegistry</span><span class="p">()</span>
+<span class="n">source</span> <span class="o">=</span> <span class="n">images</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">"measurement.png"</span><span class="p">))</span>
+<span class="n">fill_polygon</span> <span class="o">=</span> <span class="n">ImagePolygonFillTool</span><span class="p">(</span><span class="n">images</span><span class="o">=</span><span class="n">images</span><span class="p">)</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">fill_polygon</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+    <span class="n">ImagePolygonFillRequest</span><span class="p">(</span>
+        <span class="n">image</span><span class="o">=</span><span class="n">source</span><span class="p">,</span>
+        <span class="n">coordinates</span><span class="o">=</span><span class="p">[</span>
+            <span class="n">ImagePoint</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">30</span><span class="p">),</span>
+            <span class="n">ImagePoint</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">140</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">30</span><span class="p">),</span>
+            <span class="n">ImagePoint</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">140</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">130</span><span class="p">),</span>
+            <span class="n">ImagePoint</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">130</span><span class="p">),</span>
+        <span class="p">],</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="agent-sdk-runtime.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">xr-ai-runtime</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="agent-sdk-voice.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">xr-ai-voice</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+
+
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-tools-and-model-tool-calls">Native tools and model tool calls</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#typed-capability-services">Typed capability services</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#image-selection-and-vlm-query-tools">Image selection and VLM query tools</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#marker-tracking">Marker tracking</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#magenta-polygon-image-editing">Magenta polygon image editing</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5"></script>
+
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+<a class="footer-brand logo" href="https://www.nvidia.com">
+  <img src="../_static/nvidia-logo-horiz-rgb-1c-blk-for-screen.svg" class="logo__image only-light" alt="NVIDIA"/>
+  <img src="../_static/nvidia-logo-horiz-rgb-1c-wht-for-screen.svg" class="logo__image only-dark" alt="NVIDIA"/>
+</a></div>
+      
+        <div class="footer-item">
+
+<div class="footer-links">
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/privacy-policy/">Privacy Policy</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/privacy-center/">Your Privacy Choices</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/terms-of-service/">Terms of Service</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/accessibility/">Accessibility</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/company-policies/">Corporate Policies</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/product-security/">Product Security</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/contact/">Contact</a>
+  
+  
+  
+</div>
+</div>
+      
+        <div class="footer-item">
+
+
+
+
+  <p class="copyright">
+    
+      Copyright © 2026, NVIDIA CORPORATION &amp; AFFILIATES.
+      <br/>
+    
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+  </body>
+</html>
