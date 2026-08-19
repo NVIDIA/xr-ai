@@ -46,7 +46,13 @@ uv run simple_vlm_example
 (see [`credentials.md`](../../docs/source/getting_started/credentials.md)).
 
 The VLM and STT keep running after you exit so the next run skips the model
-reload; free the VRAM with `cd ../model-servers && uv run model_servers --stop`.
+reload; free the GPU memory with
+`cd ../model-servers && uv run model_servers --stop`.
+
+For the local profile, the orchestrator reads device placement and absolute
+GPU-memory requirements from `yaml/vlm_server.yaml` and `yaml/stt_server.yaml`.
+It prints a per-device preflight before loading either model and derives vLLM's
+utilization from the detected device total.
 
 Open the web client shown in the hub banner, connect, and then speak or type a
 question.

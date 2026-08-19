@@ -5,7 +5,10 @@
 #
 # vlm is THIRD in load order: STT → Omni → vlm.
 # free_at_startup ≈ 120 − 30 (Omni) − 2 (STT) ≈ 88 GiB.
-# 0.20 × 120 = 24 GiB cap: ~16 GiB Cosmos3 Reasoner weights + ~8 GiB KV.
+# Initial 24 GiB budget preserves the previous 0.20 fraction at the profile's
+# nominal 120 GiB GPU-visible capacity. It is not a measured requirement;
+# measurement must replace or validate it. The launcher derives vLLM's
+# utilization fraction from the detected device total.
 # hf_overrides selects the Reasoner runtime; details are documented in
 # docs/source/components/ai-services.md#per-server-notes.
 
@@ -15,9 +18,10 @@ hf_overrides:
     - Cosmos3ForConditionalGeneration
 hf_token: ""
 port: 8100
+cuda_visible_devices: "0"
+gpu_memory_reservation_gib: 24.0
 host: "0.0.0.0"
 model_cache: ../../../../models
-gpu_memory_utilization: 0.20
 max_num_seqs: 4
 enforce_eager: true
 async_scheduling: true

@@ -7,13 +7,13 @@
 
 host: "0.0.0.0"
 port: 8108
+gpu_memory_reservation_gib: 30.0
 hf_token: ""
 model_cache: ../../../../models
 
 max_num_seqs: 8
 tensor_parallel_size: 1
 max_model_len: 32768
-gpu_memory_utilization: 0.25
 enforce_eager: false
 
 video_pruning_rate: 0.5

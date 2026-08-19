@@ -47,6 +47,7 @@ from xr_ai_logging import setup_logging
 from xr_ai_vllm import (
     DEFAULT_IMAGE,
     gpu_compute_major,
+    gpu_memory_utilization,
     load_config,
     resolve_model_cache,
     serve,
@@ -104,7 +105,7 @@ def run() -> None:
     max_seqs      = int(cfg.get("max_num_seqs",     _DEFAULT_SEQS))
     tp_size       = int(cfg.get("tensor_parallel_size", _DEFAULT_TP))
     max_ctx       = int(cfg.get("max_model_len",    _DEFAULT_CTX))
-    gpu_mem       = float(cfg.get("gpu_memory_utilization", _DEFAULT_GPU_MEM))
+    gpu_mem       = gpu_memory_utilization(cfg, _DEFAULT_GPU_MEM)
     enforce_eager = bool(cfg.get("enforce_eager",   _DEFAULT_EAGER))
     prune_rate    = float(cfg.get("video_pruning_rate", _DEFAULT_PRUNE))
     video_fps     = int(cfg.get("video_fps",        _DEFAULT_FPS))

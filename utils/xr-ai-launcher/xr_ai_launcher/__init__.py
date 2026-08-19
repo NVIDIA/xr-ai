@@ -40,7 +40,26 @@ from ._credentials import (
     require_credentials,
     warn_if_missing,
 )
-from ._gpu import GPUInventoryError, detect_gpu_config
+from ._gpu import (
+    GPUDevice,
+    GPUInventoryError,
+    detect_gpu_config,
+    query_gpu_inventory,
+)
+from ._gpu_memory import (
+    GPU_MEMORY_UTILIZATION_ENV,
+    GPUMemoryError,
+    GPUMemoryPlan,
+    GPUPreflight,
+    ServiceGPURequirement,
+    derive_gpu_memory_utilization,
+    format_gpu_memory_preflight,
+    load_service_gpu_requirement,
+    preflight_gpu_memory,
+    require_gpu_memory_preflight,
+    resolve_gpu_memory_plan,
+    utilization_overrides,
+)
 from ._models import ModelDeployment, load_deployment_profile, load_model_deployment
 from ._processes import ManagedProcess
 from ._stack import Parallel, Process, run_stack
@@ -50,7 +69,13 @@ __all__ = [
     "NATIVE_DEVICE_PROFILES", "is_native_profile", "read_device_profile",
     "ensure_credentials", "load_credentials", "require_credentials", "warn_if_missing",
     "read_config_scalar", "read_service_port",
-    "GPUInventoryError", "detect_gpu_config",
+    "GPUDevice", "GPUInventoryError",
+    "detect_gpu_config", "query_gpu_inventory",
+    "GPU_MEMORY_UTILIZATION_ENV", "GPUMemoryError", "GPUMemoryPlan",
+    "GPUPreflight", "ServiceGPURequirement", "derive_gpu_memory_utilization",
+    "format_gpu_memory_preflight", "load_service_gpu_requirement",
+    "preflight_gpu_memory", "require_gpu_memory_preflight",
+    "resolve_gpu_memory_plan", "utilization_overrides",
     "ModelDeployment", "load_deployment_profile", "load_model_deployment",
     "ManagedProcess",
     "Parallel", "Process", "run_stack",

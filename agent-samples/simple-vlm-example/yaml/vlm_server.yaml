@@ -11,6 +11,8 @@ hf_overrides:
   architectures:
     - Cosmos3ForConditionalGeneration
 port:        8100
+cuda_visible_devices: "0"
+gpu_memory_reservation_gib: 24.0
 model_cache: ../../../models
 async_scheduling: true
 mm_encoder_tp_mode: data

@@ -5,6 +5,7 @@
 # riva_grpc model kind; http_port serves /v1/health/ready only.
 image:     nvcr.io/nim/nvidia/parakeet-tdt-0.6b-v2:1.2.0
 http_port: 9010
+gpu_memory_reservation_gib: 8.0
 grpc_port: 50051
 
 nim_cache: ../../../../models/nim
@@ -12,5 +13,5 @@ nim_cache: ../../../../models/nim
 cuda_visible_devices: "0"
 env:
   # Single-process inference: the default multiprocessing mode runs two
-  # CUDA processes; one is plenty for demo traffic. ~14 GB VRAM either way.
+  # CUDA processes; one is plenty for demo traffic.
   NIM_USE_MULTIPROCESSING_FOR_INFERENCE: "false"

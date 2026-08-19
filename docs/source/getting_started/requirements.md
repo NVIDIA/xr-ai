@@ -8,7 +8,7 @@
 ## Hardware
 
 The bundled GPU profiles target a single NVIDIA RTX PRO 6000 Blackwell workstation
-GPU or an NVIDIA DGX Spark, both of which have enough VRAM to run the full model
+GPU or an NVIDIA DGX Spark, both of which have enough GPU-visible memory to run the full model
 stack locally. These profiles are turnkey presets, not a hardware allowlist: you
 can run on other NVIDIA GPUs by tuning the per-server GPU-memory split. Refer to
 [Running on other GPUs](#running-on-other-gpus) below.
@@ -17,7 +17,7 @@ If you prefer not to run models on local hardware, model endpoints are plain
 URLs: point the worker configuration at a cloud NIM or model endpoint and no
 local GPU is required for the agent or XR-Media-Hub.
 
-| Sample | Local VRAM needed |
+| Sample | Local GPU memory needed |
 |---|---|
 | model-servers (all models) | ~55 GB |
 | simple-vlm-example (standalone) | ~23 GB |
@@ -110,24 +110,28 @@ setups:
 
 ## Running on other GPUs
 
-A profile (`agent-samples/model-servers/yaml/<profile>/`) is a convenience preset
-that pins two knobs per model server so the stack fits a known configuration:
+A profile (`agent-samples/model-servers/yaml/<profile>/`) is a convenience layout
+that pins each model server to a device. The service's existing YAML also owns
+its memory requirement:
 
 - `cuda_visible_devices` — which physical GPU each server runs on (for example,
   the `dual_48G_ada` profile places some servers on GPU `0` and others on GPU `1`).
-- `gpu_memory_utilization` — the fraction of that GPU's VRAM the server may use.
-  Several servers share one GPU, so each takes a slice (for example, `0.43`), and
-  the slices on a given GPU must sum to less than `1.0`.
+- `gpu_memory_reservation_gib` — the service's absolute GPU-memory requirement.
+
+Before launch, XR-AI sums the selected services on each device, retains a safety
+reserve, and compares that requirement with the device's current free memory.
+For vLLM services, it derives `gpu_memory_utilization` from the absolute GiB
+requirement and the detected device total. Existing custom YAML that declares
+only `gpu_memory_utilization` remains supported as a compatibility fallback.
 
 To run on a GPU that is not one of the presets, copy the closest profile directory
 and adjust those knobs to your hardware:
 
 1. Set `cuda_visible_devices` in each server's YAML to your GPU index, or spread
    the servers across the GPUs you have.
-2. Tune `gpu_memory_utilization` per server so the slices on each GPU fit its VRAM.
-   Lower the values if a server fails to start with an out-of-memory error; raise
-   them if you have spare VRAM.
-3. On lower-VRAM GPUs, run fewer models concurrently, or lower `max_model_len` on
+2. Set `gpu_memory_reservation_gib` from repeated peak and steady-state
+   measurements of that exact model configuration, including a safety margin.
+3. On lower-memory GPUs, run fewer models concurrently, or lower `max_model_len` on
    the LLM and VLM servers to reduce the KV-cache footprint.
 
 Then select the reviewed profile explicitly:
@@ -143,9 +147,9 @@ profile you have explicitly copied and tuned; it does not validate that the mode
 servers fit the selected devices.
 
 ```{note}
-The model weights are independent of the GPU. Any NVIDIA GPU with enough VRAM for
-the models you load will run the stack; the profiles only encode where each server
-lands and how much memory it claims.
+The GPU-memory preflight does not require a particular GPU product name. Model
+and runtime compatibility remains the responsibility of the selected service
+configuration until XR-AI has a validated capability matrix.
 ```
 
 ## Network

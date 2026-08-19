@@ -8,8 +8,7 @@ import subprocess
 from unittest.mock import patch
 
 import pytest
-from xr_ai_launcher import GPUInventoryError, detect_gpu_config
-from xr_ai_launcher._gpu import _query_gpu_inventory
+from xr_ai_launcher import GPUInventoryError, detect_gpu_config, query_gpu_inventory
 
 
 def _row(
@@ -55,7 +54,7 @@ def test_inventory_records_each_gpu_capacity() -> None:
             _row(1, "NVIDIA L40S", 8.9, 46068, free_mib=44000, used_mib=2068),
         ],
     ):
-        inventory = _query_gpu_inventory()
+        inventory = query_gpu_inventory()
 
     assert [gpu.index for gpu in inventory] == [0, 1]
     assert inventory[0].total_memory_gib == pytest.approx(44.988, abs=0.001)
@@ -133,7 +132,7 @@ def test_not_supported_memory_fields_are_nullable(sentinel: str) -> None:
     with _mock_smi([_row(
         0, "NVIDIA GB10", 12.1, sentinel, free_mib=sentinel, used_mib=sentinel,
     )]):
-        inventory = _query_gpu_inventory()
+        inventory = query_gpu_inventory()
         assert detect_gpu_config() == "spark"
 
     assert inventory[0].total_memory_gib is None
@@ -171,7 +170,7 @@ def test_spark_name_matches_when_memory_fields_are_unavailable() -> None:
     with _mock_smi([_row(
         0, "NVIDIA GB10", 10.0, "[N/A]", free_mib="[N/A]", used_mib="[N/A]",
     )]):
-        inventory = _query_gpu_inventory()
+        inventory = query_gpu_inventory()
         assert inventory[0].total_memory_gib is None
         assert inventory[0].free_memory_gib is None
         assert inventory[0].used_memory_gib is None

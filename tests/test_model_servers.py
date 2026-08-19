@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from xr_ai_launcher import GPUDevice
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _MAIN_PATH = _REPO_ROOT / "agent-samples/model-servers/main.py"
@@ -76,6 +77,73 @@ def test_known_ports_are_discovered_from_service_yaml() -> None:
         ("vlm", 8100),
         ("embedding", 8109),
     }
+
+
+def test_gpu_memory_plan_derives_vllm_budget_from_selected_yaml(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
+    inventory = tuple(
+        GPUDevice(
+            index=index,
+            uuid=f"GPU-{index}",
+            pci_bus_id=f"0000:{index:02x}:00.0",
+            name="NVIDIA L40S",
+            compute_capability=8.9,
+            total_memory_gib=45.0,
+            free_memory_gib=45.0,
+            used_memory_gib=0.0,
+        )
+        for index in (0, 1)
+    )
+    monkeypatch.setattr(_model_servers, "query_gpu_inventory", lambda: inventory)
+    monkeypatch.setattr(_model_servers, "_service_is_ready", lambda _port: False)
+    processes, _ = _model_servers._build_processes("default")
+
+    planned = _model_servers._apply_gpu_memory_plan(processes, "default")
+
+    by_name = {process.name: dict(process.environment) for process in planned}
+    assert by_name["vlm"]["XR_AI_GPU_MEMORY_UTILIZATION"] == "0.4889"
+    assert by_name["omni"]["XR_AI_GPU_MEMORY_UTILIZATION"] == "0.8223"
+    assert by_name["stt"] == {}
+
+
+@pytest.mark.parametrize(
+    ("gpu_config", "gpu_count", "total_gib", "capability"),
+    [
+        ("dual_48G_ada", 2, 45.0, 8.9),
+        ("96G_blackwell", 1, 96.0, 10.0),
+        ("spark", 1, 120.0, 10.0),
+    ],
+)
+@pytest.mark.parametrize("selection", ["default", "vlm_llm_nim", "vlm_speech_nim"])
+def test_bundled_stack_requirements_fit_their_target_capacity(
+    monkeypatch: pytest.MonkeyPatch,
+    gpu_config: str,
+    gpu_count: int,
+    total_gib: float,
+    capability: float,
+    selection: str,
+) -> None:
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: gpu_config)
+    inventory = tuple(
+        GPUDevice(
+            index=index,
+            uuid=f"GPU-{index}",
+            pci_bus_id=f"0000:{index:02x}:00.0",
+            name="test GPU",
+            compute_capability=capability,
+            total_memory_gib=total_gib,
+            free_memory_gib=total_gib,
+            used_memory_gib=0.0,
+        )
+        for index in range(gpu_count)
+    )
+    monkeypatch.setattr(_model_servers, "query_gpu_inventory", lambda: inventory)
+    monkeypatch.setattr(_model_servers, "_service_is_ready", lambda _port: False)
+    processes, _ = _model_servers._build_processes(selection)
+
+    assert _model_servers._apply_gpu_memory_plan(processes, selection)
 
 
 def test_nim_profile_mixes_nim_containers_and_local_servers(
@@ -219,6 +287,11 @@ def test_cli_selects_requested_profile(
     monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
     monkeypatch.setattr(
+        _model_servers,
+        "_apply_gpu_memory_plan",
+        lambda processes, _selection: processes,
+    )
+    monkeypatch.setattr(
         _model_servers, "_build_processes",
         lambda selection, _gpu_profile=None: (selected.append(selection) or [], ()),
     )
@@ -241,6 +314,9 @@ def test_cli_passes_explicit_gpu_profile(monkeypatch: pytest.MonkeyPatch) -> Non
         lambda selection, gpu_profile=None: (
             selected.append((selection, gpu_profile)) or [], ()
         ),
+    )
+    monkeypatch.setattr(
+        _model_servers, "_apply_gpu_memory_plan", lambda processes, _selection: processes,
     )
     monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: None)
     monkeypatch.setattr(
@@ -336,6 +412,11 @@ def test_cli_requires_profile_credentials(monkeypatch: pytest.MonkeyPatch) -> No
         lambda name, **kw: required.append(name),
     )
     monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
+    monkeypatch.setattr(
+        _model_servers,
+        "_apply_gpu_memory_plan",
+        lambda processes, _selection: processes,
+    )
     monkeypatch.setattr(
         _model_servers, "_build_processes",
         lambda _selection, _gpu_profile=None: ([], ("NGC_API_KEY",)),

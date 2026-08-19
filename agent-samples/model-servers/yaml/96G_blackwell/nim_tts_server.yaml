@@ -6,6 +6,7 @@
 # UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.
 image:     nvcr.io/nim/nvidia/magpie-tts-multilingual:1.9.0
 http_port: 9011
+gpu_memory_reservation_gib: 10.0
 grpc_port: 50052
 
 nim_cache: ../../../../models/nim

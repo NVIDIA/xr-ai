@@ -42,16 +42,25 @@ To stop all model servers:
     uv run --project agent-samples/model-servers model_servers --stop
 """
 import argparse
+import urllib.request
+from dataclasses import replace
 from pathlib import Path
 
 from xr_ai_launcher import (
+    GPU_MEMORY_UTILIZATION_ENV,
     GPUInventoryError,
     Process,
     detect_gpu_config,
+    format_gpu_memory_preflight,
     load_deployment_profile,
+    preflight_gpu_memory,
+    query_gpu_inventory,
     read_service_port,
     require_credentials,
+    require_gpu_memory_preflight,
+    resolve_gpu_memory_plan,
     run_stack,
+    utilization_overrides,
 )
 from xr_ai_logging import setup_logging
 from xr_ai_vllm import stop_persistent_servers
@@ -103,6 +112,7 @@ _MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
         "embedding_server",
     ),
 }
+_VLLM_SERVICES = {"agent-llm", "omni", "vlm", "embedding"}
 
 
 def _profile_path(selection: str) -> Path:
@@ -162,6 +172,52 @@ def _known_service_ports() -> list[tuple[str, int]]:
             if config.is_file() and (port := read_service_port(config)) is not None:
                 targets.add((service, port))
     return sorted(targets)
+
+
+def _service_is_ready(port: int) -> bool:
+    for path in ("/health", "/v1/health/ready"):
+        try:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{port}{path}", timeout=0.5,
+            ) as response:
+                if response.status == 200:
+                    return True
+        except Exception:
+            continue
+    return False
+
+
+def _apply_gpu_memory_plan(processes: list[Process], selection: str) -> list[Process]:
+    """Preflight selected service YAML requirements and inject vLLM budgets."""
+    inventory = query_gpu_inventory()
+    configs = {
+        process.name: ((_BASE / process.config).resolve(), process.name in _VLLM_SERVICES)
+        for process in processes
+        if process.config is not None
+    }
+    plan = resolve_gpu_memory_plan(
+        stack=f"model-servers/{selection}",
+        inventory=inventory,
+        service_configs=configs,
+    )
+    active = frozenset(
+        process.name for process in processes
+        if process.port is not None and _service_is_ready(process.port)
+    )
+    results = preflight_gpu_memory(plan, inventory, active_services=active)
+    print(format_gpu_memory_preflight(plan, results), flush=True)
+    require_gpu_memory_preflight(results)
+    overrides = utilization_overrides(plan, inventory)
+    return [
+        replace(
+            process,
+            environment=process.environment + (
+                (GPU_MEMORY_UTILIZATION_ENV, overrides[process.name]),
+            ),
+        )
+        if process.name in overrides else process
+        for process in processes
+    ]
 
 
 def _stop_models() -> None:
@@ -235,6 +291,7 @@ def run() -> None:
     for credential in credentials:
         require_credentials(credential)
     _stop_unselected_services(processes)
+    processes = _apply_gpu_memory_plan(processes, ns.models)
     run_stack(processes, _BASE, exit_after_ready=True)
 
 

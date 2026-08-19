@@ -83,6 +83,9 @@ class Process:
     gpu:                 str | None = None
     """Optional ``CUDA_VISIBLE_DEVICES`` value, such as ``"0"`` or ``"0,1"``."""
 
+    environment:         tuple[tuple[str, str], ...] = ()
+    """Additional environment entries passed only to this process."""
+
     launch_mode:         str = "own"
     """Spawn and shutdown behavior.
 
@@ -213,6 +216,7 @@ def _spawn(proc: Process, base: Path, ready_file: Path) -> subprocess.Popen:
     cmd += ["--ready-file", str(ready_file)]
 
     env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
+    env.update(proc.environment)
     if proc.gpu is not None:
         env["CUDA_VISIBLE_DEVICES"] = proc.gpu
 

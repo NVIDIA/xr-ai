@@ -6,7 +6,7 @@
 # OpenAI-compatible API at http://localhost:8103/v1
 
 # NeMo model name.
-# nvidia/parakeet-tdt-0.6b-v3  — 0.6B TDT model; CC-BY-4.0; ~1.5 GB VRAM; English only
+# nvidia/parakeet-tdt-0.6b-v3  — 0.6B TDT model; CC-BY-4.0; English only
 # nvidia/parakeet-rnnt-1.1b    — stronger, larger; same CC-BY-4.0 license
 model: nvidia/parakeet-tdt-0.6b-v3
 
@@ -17,6 +17,7 @@ device: auto
 cuda_visible_devices: "1"
 
 port: 8103
+gpu_memory_reservation_gib: 3.0
 host: "0.0.0.0"
 startup_timeout_s: 600
 

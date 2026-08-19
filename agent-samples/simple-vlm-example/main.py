@@ -27,11 +27,18 @@ from dataclasses import replace
 from pathlib import Path
 
 from xr_ai_launcher import (
+    GPU_MEMORY_UTILIZATION_ENV,
     Process,
     ensure_credentials,
+    format_gpu_memory_preflight,
     load_model_deployment,
+    preflight_gpu_memory,
+    query_gpu_inventory,
     require_credentials,
+    require_gpu_memory_preflight,
+    resolve_gpu_memory_plan,
     run_stack,
+    utilization_overrides,
 )
 from xr_ai_logging import setup_logging
 
@@ -95,6 +102,35 @@ def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
     return procs, deployment.required_credentials
 
 
+def _apply_local_gpu_memory_plan(processes: list[Process]) -> list[Process]:
+    """Preflight GPU services owned by the local deployment."""
+    inventory = query_gpu_inventory()
+    configs = {
+        process.name: ((_BASE / process.config).resolve(), process.name == "vlm")
+        for process in processes
+        if process.config is not None and process.name in {"vlm", "stt"}
+    }
+    plan = resolve_gpu_memory_plan(
+        stack="simple-vlm-example/local",
+        inventory=inventory,
+        service_configs=configs,
+    )
+    results = preflight_gpu_memory(plan, inventory)
+    print(format_gpu_memory_preflight(plan, results), flush=True)
+    require_gpu_memory_preflight(results)
+    overrides = utilization_overrides(plan, inventory)
+    return [
+        replace(
+            process,
+            environment=process.environment + (
+                (GPU_MEMORY_UTILIZATION_ENV, overrides[process.name]),
+            ),
+        )
+        if process.name in overrides else process
+        for process in processes
+    ]
+
+
 def run() -> None:
     setup_logging("orchestrator", namespace="simple-vlm-example")
 
@@ -105,6 +141,9 @@ def run() -> None:
     ns, _ = p.parse_known_args()
 
     processes, credentials = _build_processes()
+    deployment = load_model_deployment(_BASE / _WORKER_CONFIG)
+    if deployment.profile_path.stem == "models.local":
+        processes = _apply_local_gpu_memory_plan(processes)
     # A missing HF_TOKEN silently stalls the multi-GB first-run download; see
     # docs/source/getting_started/credentials.md.
     require_credentials("HF_TOKEN", allow_missing=ns.allow_anonymous)

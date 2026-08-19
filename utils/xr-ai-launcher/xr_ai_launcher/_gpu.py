@@ -32,7 +32,7 @@ class _GPUProcess:
 
 
 @dataclass(frozen=True)
-class _GPUDevice:
+class GPUDevice:
     """Physical GPU capacity and current availability."""
 
     index: int
@@ -102,7 +102,7 @@ def _query_compute_processes() -> dict[str, list[_GPUProcess]]:
     return result
 
 
-def _format_compute_processes(devices: tuple[_GPUDevice, ...]) -> str:
+def _format_compute_processes(devices: tuple[GPUDevice, ...]) -> str:
     """Return best-effort process context for an unsupported topology."""
     try:
         processes = _query_compute_processes()
@@ -123,7 +123,7 @@ def _format_compute_processes(devices: tuple[_GPUDevice, ...]) -> str:
     return ", ".join(details) if details else "none"
 
 
-def _query_gpu_inventory() -> tuple[_GPUDevice, ...]:
+def query_gpu_inventory() -> tuple[GPUDevice, ...]:
     """Return exact per-device GPU facts or fail without an assumed fallback."""
     try:
         raw = subprocess.check_output(
@@ -145,13 +145,13 @@ def _query_gpu_inventory() -> tuple[_GPUDevice, ...]:
         suffix = f": {detail}" if detail else ""
         raise GPUInventoryError(f"nvidia-smi GPU inventory failed{suffix}") from exc
 
-    devices: list[_GPUDevice] = []
+    devices: list[GPUDevice] = []
     for line in raw.splitlines():
         parts = [part.strip() for part in line.split(",", maxsplit=7)]
         if len(parts) != 8:
             raise GPUInventoryError(f"unparseable nvidia-smi GPU row: {line!r}")
         try:
-            device = _GPUDevice(
+            device = GPUDevice(
                 index=int(parts[0]),
                 uuid=parts[1],
                 pci_bus_id=parts[2],
@@ -176,7 +176,7 @@ def detect_gpu_config() -> str:
     This compatibility bridge remains until capability-based service planning
     replaces named config selection. It deliberately has no fallback.
     """
-    devices = _query_gpu_inventory()
+    devices = query_gpu_inventory()
     if len(devices) == 1:
         gpu = devices[0]
         if gpu.compute_capability >= 10.0:

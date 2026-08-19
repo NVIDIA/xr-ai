@@ -19,6 +19,7 @@ class TestProcessDataclass:
         assert p.command == "xr_media_hub"
         assert p.config is None
         assert p.gpu is None
+        assert p.environment == ()
         assert p.launch_mode == "own"
         assert p.port is None
 
@@ -27,11 +28,13 @@ class TestProcessDataclass:
             "vlm", "../../services/vlm-server", "vlm_server",
             config="yaml/vlm.yaml",
             gpu="0",
+            environment=(("GPU_BUDGET", "0.8"),),
             launch_mode="persist",
             port=8100,
         )
         assert p.config == "yaml/vlm.yaml"
         assert p.gpu == "0"
+        assert p.environment == (("GPU_BUDGET", "0.8"),)
         assert p.launch_mode == "persist"
         assert p.port == 8100
 

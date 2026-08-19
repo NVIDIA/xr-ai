@@ -53,6 +53,10 @@ Detection inventories every visible device. If `nvidia-smi` fails, returns
 malformed data, or reports a topology without an existing model-server
 configuration, startup stops with the detected per-GPU capacity instead of
 assuming a fallback.
+After selecting the configuration, a second preflight prints every service's
+absolute GPU-memory requirement per device and stops before model loading when
+the complete stack plus safety reserve cannot fit. vLLM utilization is derived
+from that requirement and the detected device total.
 On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.
 
