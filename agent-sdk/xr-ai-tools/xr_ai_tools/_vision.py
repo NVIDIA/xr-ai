@@ -34,7 +34,12 @@ def image_sanitizer() -> Iterator[None]:
     try:
         yield
     finally:
-        nemo_relay.scope_local.deregister_llm_sanitize_request(handle, name)
+        try:
+            nemo_relay.scope_local.deregister_llm_sanitize_request(handle, name)
+        except RuntimeError as error:
+            # Popping the owner already removes all of its scope-local registrations.
+            if str(error) != f"not found: scope {handle.uuid} not found":
+                raise
 
 
 def relay_request(

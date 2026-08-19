@@ -6,8 +6,10 @@
 import asyncio
 import base64
 import io
+import logging
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import nemo_relay
@@ -17,6 +19,7 @@ from pydantic import ValidationError
 from xr_ai_hub import FrameData, FrameSignal, PixelFormat, ProcessorEndpoint
 from xr_ai_models import ChatResponse, VLMService
 from xr_ai_tools._pixels import encode_image, frame_to_pil
+from xr_ai_tools._vision import image_sanitizer
 from xr_ai_tools.current_frame import (
     CurrentFrameRequest,
     CurrentFrameTool,
@@ -417,7 +420,7 @@ async def test_image_query_hides_reasoning_and_marks_failures_unavailable() -> N
     )
 
 
-async def test_streaming_image_query_yields_typed_chunks() -> None:
+async def test_streaming_image_query_yields_typed_chunks(caplog) -> None:
     images = ImageRegistry()
     image = images.put(b"image")
     vlm = _Vlm()
@@ -427,10 +430,74 @@ async def test_streaming_image_query_yields_typed_chunks() -> None:
         system_prompt="Answer briefly.",
     )
 
-    chunks = [chunk async for chunk in tool.stream(ImageQueryRequest(image=image, query="What is shown?"))]
+    with caplog.at_level(logging.INFO, logger="xr_ai_tools.vision"):
+        chunks = [
+            chunk
+            async for chunk in tool.stream(
+                ImageQueryRequest(image=image, query="What is shown?")
+            )
+        ]
 
     assert [chunk.text for chunk in chunks] == ["a ", "blue ", "square"]
     assert vlm.stream_calls[0][:3] == ([b"image"], "What is shown?", "Answer briefly.")
+    assert "Image VLM stream request started image_count=1" in caplog.text
+    assert "Image VLM stream first token latency_ms=" in caplog.text
+
+
+async def test_image_sanitizer_tolerates_parent_scope_teardown_after_partial_stream(
+    caplog,
+    monkeypatch,
+) -> None:
+    async def stream_execute(*_args, **_kwargs):
+        async def chunks():
+            yield {"choices": [{"delta": {"content": "a "}}]}
+            await asyncio.Event().wait()
+
+        return chunks()
+
+    monkeypatch.setattr(nemo_relay.llm, "stream_execute", stream_execute)
+    images = ImageRegistry()
+    tool = StreamingImageQueryTool(
+        images=images,
+        vlm=cast(VLMService, _Vlm()),
+    )
+    stream = tool.handler(
+        ImageQueryRequest(image=images.put(b"image"), query="What is shown?")
+    )
+
+    with caplog.at_level(logging.ERROR, logger="xr_ai_tools.vision"):
+        with nemo_relay.scope.scope("parent", nemo_relay.ScopeType.Agent):
+            assert (await anext(stream)).text == "a "
+        await stream.aclose()
+
+    assert "Image VLM stream failed" not in caplog.text
+
+
+def test_image_sanitizer_reraises_unrelated_deregistration_failure(
+    monkeypatch,
+) -> None:
+    def fail_deregistration(*_args) -> None:
+        raise RuntimeError("deregistration failed")
+
+    monkeypatch.setattr(
+        nemo_relay.scope,
+        "get_handle",
+        lambda: SimpleNamespace(uuid="owner"),
+    )
+    monkeypatch.setattr(
+        nemo_relay.scope_local,
+        "register_llm_sanitize_request",
+        lambda *_args: None,
+    )
+    monkeypatch.setattr(
+        nemo_relay.scope_local,
+        "deregister_llm_sanitize_request",
+        fail_deregistration,
+    )
+
+    with pytest.raises(RuntimeError, match="deregistration failed"):
+        with image_sanitizer():
+            pass
 
 
 async def test_streaming_image_query_stops_after_partial_failure() -> None:

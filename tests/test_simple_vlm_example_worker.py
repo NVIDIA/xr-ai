@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import sys
 import time
 from collections.abc import AsyncIterator
@@ -17,6 +18,7 @@ import nemo_relay
 import pytest
 import tomllib
 import yaml
+from PIL import Image
 from xr_ai_hub import FrameData, FrameSignal, FrameUnavailable, PixelFormat, ProcessorEndpoint
 from xr_ai_models import ChatResponse, VLMService
 from xr_ai_runtime import AgentRuntime
@@ -58,10 +60,25 @@ class _Service:
     def __init__(self) -> None:
         self.health_calls = 0
         self.close_calls = 0
+        self.stream_calls = []
 
     async def health(self) -> bool:
         self.health_calls += 1
         return True
+
+    async def stream_images(
+        self,
+        images,
+        question,
+        *,
+        system_prompt="",
+        max_tokens=None,
+        timeout=None,
+    ):
+        self.stream_calls.append(
+            (images, question, system_prompt, max_tokens, timeout)
+        )
+        yield "gray"
 
     async def close(self) -> None:
         self.close_calls += 1
@@ -582,6 +599,16 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert "publish:voice.output" not in {event["name"] for event in relay_events}
     assert "agent:voice" not in {event["name"] for event in relay_events}
     assert stt.health_calls == tts.health_calls == vlm.health_calls == 1
+    assert len(vlm.stream_calls) == 1
+    warmup_images, question, system_prompt, max_tokens, timeout = vlm.stream_calls[0]
+    assert len(warmup_images) == 1
+    with Image.open(io.BytesIO(warmup_images[0])) as warmup_image:
+        assert warmup_image.format == "JPEG"
+        assert warmup_image.size == (1280, 720)
+    assert question == "What is the dominant color?"
+    assert system_prompt == "Answer with one word."
+    assert max_tokens == 4
+    assert timeout == 120.0
     assert stt.close_calls == tts.close_calls == vlm.close_calls == 1
     assert transport.shutdown_calls == 1
     assert sessions[0].text_topic == "vlm.response"

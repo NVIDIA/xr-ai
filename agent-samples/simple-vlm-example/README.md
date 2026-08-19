@@ -60,7 +60,9 @@ The worker and orchestrator consume the deployment profile selected by
 - `models.omni.json` reuses the Nemotron-Omni VLM service on port 8108.
 
 The same profile owns model behavior, endpoints, credentials, readiness, and
-launcher process ownership.
+launcher process ownership. Before announcing readiness, the worker completes a
+small streaming request with a 1280x720 JPEG so the first user query does not
+pay the multimodal initialization cost.
 
 ## Relay visibility
 
