@@ -34,3 +34,18 @@ def read_config_scalar(path: Path, key: str, default: str = "") -> str:
         comment = re.search(r"[ \t]+#", raw)
         return raw[:comment.start()].rstrip() if comment else raw
     return default
+
+
+def read_service_port(path: Path) -> int | None:
+    """Read a service's top-level HTTP port from its YAML configuration."""
+
+    raw = read_config_scalar(path, "port") or read_config_scalar(path, "http_port")
+    if not raw:
+        return None
+    try:
+        port = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{path}: port must be an integer, got {raw!r}") from exc
+    if not 1 <= port <= 65535:
+        raise ValueError(f"{path}: port must be between 1 and 65535, got {port}")
+    return port
