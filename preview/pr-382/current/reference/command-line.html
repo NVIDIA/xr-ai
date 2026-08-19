@@ -448,7 +448,7 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 <section id="tea-making-sample">
 <h2>tea_making_sample<a class="headerlink" href="#tea-making-sample" title="Link to this heading">#</a></h2>
 <p>Launch native tea guidance with explicit voice and speech modes.</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample<span class="w"> </span>tea_making_sample<span class="w"> </span><span class="o">[</span>--voice-mode<span class="w"> </span><span class="o">{</span>wake-word,always-on<span class="o">}]</span><span class="w"> </span>--tts-mode<span class="w"> </span><span class="o">{</span>piper,magpie<span class="o">}</span>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample<span class="w"> </span>tea_making_sample<span class="w"> </span><span class="o">[</span>--voice-mode<span class="w"> </span><span class="o">{</span>wake-word,always-on<span class="o">}]</span><span class="w"> </span>--tts-mode<span class="w"> </span><span class="o">{</span>piper,magpie<span class="o">}</span><span class="w"> </span><span class="o">[</span>--expose-web-events<span class="o">]</span>
 </pre></div>
 </div>
 <p class="rubric">Options</p>
@@ -456,6 +456,8 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 <dt><code class="docutils literal notranslate"><span class="pre">--voice-mode</span> <span class="pre">{wake-word,always-on}</span></code></dt><dd><p>wake-word (default): require Agent/Hey Agent; always-on: accept every utterance</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">--tts-mode</span> <span class="pre">{piper,magpie}</span></code></dt><dd><p>piper: lightweight CPU speech; magpie: neural speech on CUDA when available</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code></dt><dd><p>bind the unauthenticated event viewer to all IPv4 interfaces instead of loopback</p>
 </dd>
 </dl>
 </section>

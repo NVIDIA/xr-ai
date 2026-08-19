@@ -576,7 +576,7 @@ Package Contents
 
    .. py:method:: unlink() -> None
 
-      Remove the shared-memory segment; call once from its creating owner.
+      Remove the segment, tolerating repeated cleanup by this process.
 
 
 

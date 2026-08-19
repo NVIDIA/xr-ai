@@ -936,7 +936,7 @@ wire format (<code class="docutils literal notranslate"><span class="pre">finish
 <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">on&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">off&quot;</span></code> in a system or user
 message; reasoning preamble is <strong>not</strong> stripped server-side. Hosting backend
 is selectable per YAML (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/d722066fc3f066e13469910f6e9206494366ab63/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0874ab22b61b910826f4a3ebabd90e02c60ceb1d/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
 for the full HTTP contract and tuning knobs.</p></li>
 <li><p><strong>nemotron3-nano-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</span></code> (auto-selected by GPU compute
@@ -947,7 +947,7 @@ FlashInfer FP4 MoE kernels. Requires a Blackwell-class GPU (B200 or RTX PRO
 <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> by default to avoid the silent 3–8 min CUDA graph and
 FlashInfer autotune on cold start. Hosting backend is selectable per YAML
 (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/d722066fc3f066e13469910f6e9206494366ab63/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0874ab22b61b910826f4a3ebabd90e02c60ceb1d/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
 for the vLLM flags it forwards and Blackwell prerequisites.</p></li>
 <li><p><strong>nemotron-omni-llm</strong> is a vLLM-backed multimodal LLM serving
 <code class="docutils literal notranslate"><span class="pre">Nemotron-3-Nano-Omni-30B-A3B-Reasoning</span></code> (text + video input) at port 8108.
@@ -958,7 +958,9 @@ OpenAI-compatible HTTP contract as the other LLM servers — swap the port to
 swap backends. Hosting backend is selectable per YAML (refer to <em>Choosing the
 vLLM runtime</em>); persists across stack restarts in both pip and docker modes.</p></li>
 <li><p><strong>stt-server</strong> loads parakeet-tdt-0.6b-v3 via NeMo ASR in-process.
-English-only; the <code class="docutils literal notranslate"><span class="pre">language</span></code> and <code class="docutils literal notranslate"><span class="pre">temperature</span></code> form fields are accepted but ignored.</p></li>
+English-only; the <code class="docutils literal notranslate"><span class="pre">language</span></code> and <code class="docutils literal notranslate"><span class="pre">temperature</span></code> form fields are accepted but
+ignored. Set <code class="docutils literal notranslate"><span class="pre">startup_timeout_s</span></code> to a positive finite number to override the
+600-second cold-start budget.</p></li>
 <li><p><strong>magpie-tts</strong> loads magpie_tts_multilingual_357m via NeMo TTS in-process.</p></li>
 <li><p><strong>piper-tts</strong> serves any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
 All inference runs in a thread pool so the asyncio loop is never blocked.</p></li>

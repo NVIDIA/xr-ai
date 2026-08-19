@@ -532,7 +532,7 @@ on <code class="docutils literal notranslate"><span class="pre">agent.response</
 <td><p>Durable storage or file polling</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code></p></td>
-<td><p>Bounded loopback HTTP presentation grouped by participant and topic</p></td>
+<td><p>Bounded HTTP presentation grouped by participant and topic</p></td>
 <td><p>Application event selection</p></td>
 </tr>
 </tbody>
@@ -716,16 +716,20 @@ conversation history or taking ownership of the response.</p>
 </section>
 <section id="live-inspection-and-durable-output">
 <h2>Live inspection and durable output<a class="headerlink" href="#live-inspection-and-durable-output" title="Link to this heading">#</a></h2>
-<p>The worker starts a generic event viewer at <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code> before it
-announces voice readiness. <code class="docutils literal notranslate"><span class="pre">TeaWebEventsAgent</span></code> explicitly subscribes to the
+<p>The worker starts a generic loopback event viewer before it announces voice
+readiness. Open <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code> on the XR-AI host, or pass
+<code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code> to bind all IPv4 interfaces and browse
+<code class="docutils literal notranslate"><span class="pre">http://&lt;xr-host&gt;:8092</span></code> from a trusted development network.
+<code class="docutils literal notranslate"><span class="pre">TeaWebEventsAgent</span></code> explicitly subscribes to the
 foreground, guidance, background, transcript, video-log, and participant
 lifecycle topics and publishes compact <code class="docutils literal notranslate"><span class="pre">WebEvent</span></code> payloads. There is no runtime
 wildcard subscription and no file tailing.</p>
 <p>The viewer keeps only a bounded in-memory history for the current process. The
 participant JSONL files under <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code> remain the durable record and include
-events that may not be selected for live presentation. The loopback listener is
-read-only but unauthenticated; use an SSH tunnel for remote development instead
-of binding it to an untrusted network.</p>
+events that may not be selected for live presentation. The listener is
+read-only but has no authentication or TLS. Restrict TCP port 8092 to a trusted
+development network when <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code> is enabled, or place the viewer
+behind an authenticated TLS proxy.</p>
 </section>
 <section id="connecting-a-backend">
 <h2>Connecting a backend<a class="headerlink" href="#connecting-a-backend" title="Link to this heading">#</a></h2>
