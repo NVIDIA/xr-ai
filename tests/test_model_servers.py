@@ -39,36 +39,46 @@ _embedding = importlib.util.module_from_spec(_EMBEDDING_SPEC)
 _EMBEDDING_SPEC.loader.exec_module(_embedding)
 
 
-def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "spark")
+def _detected_hardware():
+    return _model_servers.load_gpu_hardware_profile(
+        _model_servers._GPU_PROFILES_ROOT / "dual_48G_ada/gpu_profile.yaml"
+    )
 
-    processes, credentials = _model_servers._build_processes("default")
+
+def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
+    processes, credentials = _model_servers._build_processes("default", "spark")
 
     assert [process.name for process in processes] == ["stt", "omni", "vlm", "embedding"]
-    assert [process.port for process in processes] == [8103, 8108, 8100, 8109]
+    assert [
+        _model_servers.read_service_port(_model_servers._BASE / process.config)
+        for process in processes
+    ] == [8103, 8108, 8100, 8109]
     assert credentials == ()
 
 
 def test_nim_profile_mixes_nim_containers_and_local_servers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
-
-    processes, credentials = _model_servers._build_processes("vlm_llm_nim")
+    processes, credentials = _model_servers._build_processes(
+        "vlm_llm_nim", "dual_48G_ada",
+    )
 
     assert [process.name for process in processes] == [
         "llm-nim", "vlm-nim", "stt", "embedding",
     ]
-    assert [process.port for process in processes] == [8110, 8100, 8103, 8109]
+    assert [
+        _model_servers.read_service_port(_model_servers._BASE / process.config)
+        for process in processes
+    ] == [8110, 8100, 8103, 8109]
     assert credentials == ("NGC_API_KEY",)
 
 
 def test_vlm_speech_nim_profile_serves_speech_from_riva_containers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
-
-    processes, credentials = _model_servers._build_processes("vlm_speech_nim")
+    processes, credentials = _model_servers._build_processes(
+        "vlm_speech_nim", "dual_48G_ada",
+    )
 
     assert [process.name for process in processes] == [
         "stt-nim", "tts-nim", "vlm-nim", "embedding",
@@ -93,9 +103,7 @@ def test_dual_ada_configs_follow_profile_gpu_layout(
     config_name: str,
     gpu: str,
 ) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
-
-    processes, _ = _model_servers._build_processes(selection)
+    processes, _ = _model_servers._build_processes(selection, "dual_48G_ada")
     process = next(p for p in processes if p.name == service)
     config_path = _REPO_ROOT / "agent-samples/model-servers" / str(process.config)
 
@@ -139,7 +147,6 @@ def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
         ("llm-nim", 8110),
         ("vlm-nim", 8100),
         ("stt", 8103),
-        ("agent-llm", 8107),
         ("omni", 8108),
         ("vlm", 8100),
         ("embedding", 8109),
@@ -150,8 +157,8 @@ def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
     ("selection", "expected_stopped_ports"),
     [
         # The selected profile's ports are kept; everything else is stopped.
-        ("default", {9010, 9011, 8110, 8107}),
-        ("vlm_llm_nim", {9010, 9011, 8107, 8108}),
+        ("default", {9010, 9011, 8110}),
+        ("vlm_llm_nim", {9010, 9011, 8108}),
     ],
 )
 def test_starting_profile_stops_unselected_services(
@@ -159,7 +166,6 @@ def test_starting_profile_stops_unselected_services(
     selection: str,
     expected_stopped_ports: set[int],
 ) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
     stopped: list[tuple[str, int]] = []
     monkeypatch.setattr(
         _model_servers,
@@ -167,7 +173,7 @@ def test_starting_profile_stops_unselected_services(
         lambda services: stopped.extend(services) or True,
     )
 
-    processes, _ = _model_servers._build_processes(selection)
+    processes, _ = _model_servers._build_processes(selection, "dual_48G_ada")
     _model_servers._stop_unselected_services(processes)
 
     assert {port for _, port in stopped} == expected_stopped_ports
@@ -187,7 +193,7 @@ def test_cli_selects_requested_profile(
 ) -> None:
     selected: list[str] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda *_a: _detected_hardware())
     monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
     monkeypatch.setattr(
@@ -206,7 +212,6 @@ def test_cli_selects_requested_profile(
 
 
 def test_build_processes_rejects_unknown_services(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
     profile = tmp_path / "models.custom.json"
     profile.write_text(json.dumps({"models": {"vision": {
         "adapter": {"preset": "cosmos_vlm"},
@@ -215,11 +220,10 @@ def test_build_processes_rejects_unknown_services(tmp_path, monkeypatch) -> None
     }}}), encoding="utf-8")
 
     with pytest.raises(ValueError, match="unknown services"):
-        _model_servers._build_processes(str(profile))
+        _model_servers._build_processes(str(profile), "dual_48G_ada")
 
 
 def test_profile_path_argument_loads_custom_profile(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
     profile = tmp_path / "models.custom.json"
     profile.write_text(json.dumps({"models": {"vision": {
         "adapter": {"preset": "cosmos_vlm"},
@@ -227,7 +231,7 @@ def test_profile_path_argument_loads_custom_profile(tmp_path, monkeypatch) -> No
         "deployment": {"ownership": "managed", "service": "vlm"},
     }}}), encoding="utf-8")
 
-    processes, _ = _model_servers._build_processes(str(profile))
+    processes, _ = _model_servers._build_processes(str(profile), "dual_48G_ada")
 
     assert [process.name for process in processes] == ["vlm"]
     # Config variants key off the profile filename stem; a custom name has
@@ -238,7 +242,7 @@ def test_profile_path_argument_loads_custom_profile(tmp_path, monkeypatch) -> No
 def test_cli_requires_profile_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     required: list[str] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda *_a: _detected_hardware())
     monkeypatch.setattr(
         _model_servers, "require_credentials",
         lambda name, **kw: required.append(name),
@@ -264,7 +268,7 @@ def test_cli_aborts_when_unselected_services_cannot_stop(
 ) -> None:
     started: list[bool] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda *_a: _detected_hardware())
     monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "stop_persistent_servers", lambda _services: False)
     monkeypatch.setattr(

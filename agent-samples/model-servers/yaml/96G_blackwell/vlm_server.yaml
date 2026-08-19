@@ -16,6 +16,8 @@ hf_overrides:
     - Cosmos3ForConditionalGeneration
 hf_token: ""
 port: 8100
+gpu_memory_reservation_gib: 22.0
+gpu_memory_reservation_status: provisional
 host: "0.0.0.0"
 model_cache: ../../../../models
 max_num_seqs: 4

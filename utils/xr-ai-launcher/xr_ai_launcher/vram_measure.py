@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Repeatable GPU-memory measurement and reservation-profile generation.
+"""Repeatable GPU-memory measurement and service-YAML certification.
 
 Run through an environment that contains ``xr-ai-launcher``::
 
@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ._gpu import GPUDevice, query_gpu_inventory
+from ._vram import service_config_fingerprint
 
 
 def _output(command: list[str]) -> str | None:
@@ -44,11 +45,16 @@ def _measurement_signature(command: list[str]) -> dict:
             config_hashes[str(path.resolve())] = hashlib.sha256(path.read_bytes()).hexdigest()
         except OSError:
             continue
+    driver_output = _output([
+        "nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader",
+    ])
+    driver = (
+        ",".join(dict.fromkeys(driver_output.splitlines()))
+        if driver_output else None
+    )
     return {
         "git_commit": _output(["git", "rev-parse", "HEAD"]),
-        "driver_version": _output([
-            "nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader",
-        ]),
+        "driver_version": driver,
         "python": sys.version.split()[0],
         "command": command,
         "config_sha256": config_hashes,
@@ -176,78 +182,74 @@ def measure(args: argparse.Namespace) -> int:
     return process.returncode or 0
 
 
-def _service_spec(value: str) -> tuple[str, int, bool, Path]:
-    try:
-        name, gpu_text, runtime, path_text = value.split(":", maxsplit=3)
-        gpu = int(gpu_text)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(
-            "service must be NAME:GPU:vllm|other:MEASUREMENT.json"
-        ) from exc
-    if runtime not in {"vllm", "other"}:
-        raise argparse.ArgumentTypeError("service runtime must be vllm or other")
-    return name, gpu, runtime == "vllm", Path(path_text)
+def _yaml_value(value: str | float) -> str:
+    return str(value) if isinstance(value, float) else json.dumps(value)
+
+
+def _set_yaml_scalars(path: Path, values: dict[str, str | float]) -> None:
+    """Replace or append top-level scalar keys without requiring PyYAML."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    remaining = dict(values)
+    updated: list[str] = []
+    for line in lines:
+        key = line.split(":", 1)[0].strip() if ":" in line else ""
+        if not line.startswith((" ", "\t")) and key in remaining:
+            updated.append(f"{key}: {_yaml_value(remaining.pop(key))}")
+        else:
+            updated.append(line)
+    if remaining:
+        if updated and updated[-1]:
+            updated.append("")
+        updated.extend(f"{key}: {_yaml_value(value)}" for key, value in remaining.items())
+    path.write_text("\n".join(updated) + "\n", encoding="utf-8")
 
 
 def certify(args: argparse.Namespace) -> int:
-    grouped: dict[str, list[tuple[int, bool, Path, dict]]] = {}
-    for name, gpu, is_vllm, path in args.service:
+    runs: list[tuple[Path, dict]] = []
+    for path_text in args.measurement:
+        path = Path(path_text)
         raw = json.loads(path.read_text(encoding="utf-8"))
         if raw.get("kind") != "xr-ai-vram-measurement":
             raise SystemExit(f"{path} is not an XR-AI VRAM measurement")
-        grouped.setdefault(name, []).append((gpu, is_vllm, path, raw))
+        runs.append((path, raw))
+    if len(runs) < args.minimum_runs:
+        raise SystemExit(
+            f"got {len(runs)} measurement run(s); certification requires "
+            f"{args.minimum_runs}"
+        )
+    signatures = [raw.get("measurement_signature") for _, raw in runs]
+    if any(signature != signatures[0] for signature in signatures[1:]):
+        raise SystemExit("measurement signatures do not match")
+    signature = signatures[0] or {}
+    driver = signature.get("driver_version")
+    git_commit = signature.get("git_commit")
+    if not driver or not git_commit:
+        raise SystemExit("measurement signature lacks driver or git commit")
+    reservations: list[float] = []
+    for path, raw in runs:
+        try:
+            reservations.append(float(
+                raw["summary"][str(args.gpu)]["recommended_reservation_gib"]
+            ))
+        except KeyError as exc:
+            raise SystemExit(f"{path} has no measurement for GPU {args.gpu}") from exc
 
-    services: dict[str, dict] = {}
-    sources: list[str] = []
-    for name, runs in grouped.items():
-        if len(runs) < args.minimum_runs:
-            raise SystemExit(
-                f"{name} has {len(runs)} measurement run(s); "
-                f"certification requires {args.minimum_runs}"
-            )
-        layouts = {(gpu, is_vllm) for gpu, is_vllm, _path, _raw in runs}
-        if len(layouts) != 1:
-            raise SystemExit(f"{name} measurement runs disagree on GPU or runtime")
-        signatures = [raw.get("measurement_signature") for _, _, _, raw in runs]
-        if any(signature != signatures[0] for signature in signatures[1:]):
-            raise SystemExit(f"{name} measurement signatures do not match")
-        gpu, is_vllm = next(iter(layouts))
-        reservations: list[float] = []
-        measurements: list[str] = []
-        for _, _, path, raw in runs:
-            try:
-                reservations.append(float(
-                    raw["summary"][str(gpu)]["recommended_reservation_gib"]
-                ))
-            except KeyError as exc:
-                raise SystemExit(f"{path} has no measurement for GPU {gpu}") from exc
-            measurements.append(str(path))
-            sources.append(str(path))
-        services[name] = {
-            "gpu": gpu,
-            "reservation_gib": max(reservations),
-            "vllm": is_vllm,
-            "measurements": measurements,
-            "measurement_signature": signatures[0],
-        }
-
-    profile = {
-        "schema_version": 1,
-        "hardware_profile": args.hardware_profile,
-        "stack": args.stack,
-        "status": "certified",
-        "device_safety_reserve_gib": args.device_safety_reserve,
-        "source": f"generated from {len(sources)} measurement artifact(s)",
-        "services": services,
-    }
-    output = Path(args.output)
-    output.write_text(json.dumps(profile, indent=2) + "\n", encoding="utf-8")
-    print(f"Certified VRAM profile written to {output}", flush=True)
+    config = Path(args.config)
+    _set_yaml_scalars(config, {
+        "gpu_memory_reservation_gib": max(reservations),
+        "gpu_memory_reservation_status": "certified",
+        "gpu_memory_certification_driver": driver,
+        "gpu_memory_certification_git": git_commit,
+    })
+    _set_yaml_scalars(config, {
+        "gpu_memory_certification_sha256": service_config_fingerprint(config),
+    })
+    print(f"Certified VRAM reservation written to {config}", flush=True)
     return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Measure and certify XR-AI VRAM profiles")
+    parser = argparse.ArgumentParser(description="Measure and certify XR-AI VRAM reservations")
     subparsers = parser.add_subparsers(dest="action", required=True)
 
     measure_parser = subparsers.add_parser("measure")
@@ -261,14 +263,12 @@ def build_parser() -> argparse.ArgumentParser:
     measure_parser.set_defaults(func=measure)
 
     certify_parser = subparsers.add_parser("certify")
-    certify_parser.add_argument("--hardware-profile", required=True)
-    certify_parser.add_argument("--stack", required=True)
-    certify_parser.add_argument("--output", required=True)
-    certify_parser.add_argument("--device-safety-reserve", type=float, default=2.0)
+    certify_parser.add_argument("--config", required=True)
+    certify_parser.add_argument("--gpu", required=True, type=int)
     certify_parser.add_argument("--minimum-runs", type=int, default=3)
     certify_parser.add_argument(
-        "--service", action="append", required=True, type=_service_spec,
-        metavar="NAME:GPU:vllm|other:MEASUREMENT.json",
+        "--measurement", action="append", required=True,
+        metavar="MEASUREMENT.json",
     )
     certify_parser.set_defaults(func=certify)
     return parser

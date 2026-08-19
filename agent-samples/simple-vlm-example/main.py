@@ -29,22 +29,25 @@ from pathlib import Path
 
 from xr_ai_launcher import (
     VRAM_UTILIZATION_ENV,
+    GPUHardwareProfile,
     Process,
     detect_gpu_config,
     ensure_credentials,
     format_vram_preflight,
     load_model_deployment,
-    load_vram_profile,
     preflight_vram,
     query_gpu_inventory,
+    read_service_port,
     require_credentials,
     require_vram_preflight,
+    resolve_vram_profile,
     run_stack,
     utilization_overrides,
 )
 from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
+_GPU_PROFILES_ROOT = _BASE.parent / "model-servers" / "yaml"
 
 _WORKER_CONFIG = "yaml/simple_vlm_example_worker.yaml"
 
@@ -62,21 +65,20 @@ _MODEL_PROCESSES = {
     ),
     "vlm": Process(
         "vlm", "../../services/vlm-server", "vlm_server",
-        config="yaml/vlm_server.yaml", port=8100,
+        config="yaml/vlm_server.yaml",
     ),
     "vlm-omni": Process(
         "vlm-omni",
         "../../services/nemotron-omni-llm",
         "nemotron_omni_llm_server",
-        port=8108,
     ),
     "stt": Process(
         "stt", "../../services/stt-server", "stt_server",
-        config="yaml/stt_server.yaml", port=8103,
+        config="yaml/stt_server.yaml",
     ),
     "tts": Process(
         "tts", "../../services/piper-tts", "piper_tts_server",
-        config="yaml/piper_tts_server.yaml", port=8105,
+        config="yaml/piper_tts_server.yaml",
     ),
 }
 
@@ -105,34 +107,42 @@ def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
     return procs, deployment.required_credentials
 
 
-def _apply_local_vram_plan(processes: list[Process], gpu_profile: str) -> list[Process]:
+def _apply_local_vram_plan(
+    processes: list[Process], hardware: GPUHardwareProfile,
+) -> list[Process]:
     """Preflight GPU services owned by the default local deployment."""
     deployment = load_model_deployment(_BASE / _WORKER_CONFIG)
     if deployment.profile_path.stem != "models.local":
         return processes
-    profile = load_vram_profile(
-        _BASE / "yaml" / f"vram.local.{gpu_profile}.json"
-    )
     inventory = query_gpu_inventory()
+    configs = {
+        process.name: ((_BASE / process.config).resolve(), process.name == "vlm")
+        for process in processes
+        if process.config is not None and process.name in {"vlm", "stt"}
+    }
+    profile = resolve_vram_profile(
+        stack="simple-vlm-example/local", hardware=hardware,
+        inventory=inventory, service_configs=configs,
+    )
     active = frozenset(
         process.name for process in processes
-        if process.port is not None and _service_is_ready(process.port)
+        if process.config is not None
+        and (port := read_service_port(_BASE / process.config)) is not None
+        and _service_is_ready(port)
     )
     results = preflight_vram(profile, inventory, active_services=active)
     print(format_vram_preflight(profile, results), flush=True)
     require_vram_preflight(results)
     overrides = utilization_overrides(profile, inventory)
-    reservations = {item.service: item for item in profile.services}
     return [
         replace(
             process,
-            gpu=str(reservations[process.name].gpu),
             environment=process.environment + (
                 ((VRAM_UTILIZATION_ENV, overrides[process.name]),)
                 if process.name in overrides else ()
             ),
         )
-        if process.name in reservations else process
+        if process.name in overrides else process
         for process in processes
     ]
 
@@ -162,7 +172,9 @@ def run() -> None:
     processes, credentials = _build_processes()
     deployment = load_model_deployment(_BASE / _WORKER_CONFIG)
     if deployment.profile_path.stem == "models.local":
-        processes = _apply_local_vram_plan(processes, detect_gpu_config())
+        processes = _apply_local_vram_plan(
+            processes, detect_gpu_config(_GPU_PROFILES_ROOT),
+        )
     # A missing HF_TOKEN silently stalls the multi-GB first-run download; see
     # docs/source/getting_started/credentials.md.
     require_credentials("HF_TOKEN", allow_missing=ns.allow_anonymous)

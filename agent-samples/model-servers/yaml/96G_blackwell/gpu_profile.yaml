@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+profile: 96G_blackwell
+required_gpu_count: 1
+min_compute_capability: 10.0
+min_memory_gib_per_gpu: 80.0
+max_memory_gib_per_gpu: 110.0
+device_safety_reserve_gib: 4.0

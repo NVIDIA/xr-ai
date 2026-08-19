@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+profile: dual_48G_ada
+required_gpu_count: 2
+min_compute_capability: 8.9
+max_compute_capability: 10.0
+min_memory_gib_per_gpu: 44.0
+device_safety_reserve_gib: 2.0

@@ -20,8 +20,8 @@ local GPU is required for the agent or XR-Media-Hub.
 XR-AI inventories total and currently free VRAM on every physical GPU before
 starting a local model stack. It prints the service reservations, device safety
 reserve, existing compute processes, and pass/fail result per GPU. The checked-in
-reservation manifests are currently marked ``provisional`` until replaced by
-three-run certification artifacts on each supported host.
+reservations in the service YAML files are currently marked ``provisional``
+until replaced by three-run certification artifacts on each supported host.
 
 ## Software
 
@@ -109,14 +109,16 @@ setups:
 
 ## GPU profiles and reservations
 
-A hardware profile (`agent-samples/model-servers/yaml/<profile>/`) describes a
-specific topology, not a loose GPU family. Automatic matching verifies GPU count,
-compute capability, and minimum VRAM independently on every device. Failure to run
-or parse `nvidia-smi` is fatal; XR-AI never falls back to an assumed profile.
+A hardware profile
+(`agent-samples/model-servers/yaml/<profile>/gpu_profile.yaml`) describes a
+specific topology and its per-device safety reserve, not a loose GPU family.
+Automatic matching verifies GPU count, compute capability, and minimum VRAM
+independently on every device. Failure to run or parse `nvidia-smi` is fatal;
+XR-AI never falls back to an assumed profile.
 
-Each deployment has a `vram.<deployment>.json` manifest in that directory. Its
-source-of-truth values are absolute GiB reservations per service plus an
-unallocated device safety reserve. At runtime XR-AI derives vLLM's
+Each existing service YAML in that directory owns its port, GPU placement, and
+absolute `gpu_memory_reservation_gib`. The deployment JSON only selects services.
+At runtime XR-AI sums the selected service reservations and derives vLLM's
 `gpu_memory_utilization` as:
 
 ```text
@@ -151,21 +153,21 @@ uv run --project agent-samples/model-servers \
 ```
 
 Repeat each service measurement at least three times with the same Git revision,
-driver, command, and hashed config. Generate a certified stack manifest from the
-artifacts; certification rejects inconsistent signatures and uses the largest
-recommended reservation:
+driver, command, and hashed config. Certify that service YAML from the artifacts;
+certification rejects inconsistent signatures, uses the largest recommended
+reservation, and records the config fingerprint in the same file:
 
 ```bash
 uv run --project agent-samples/model-servers \
   python -m xr_ai_launcher.vram_measure certify \
-  --hardware-profile dual_48G_ada --stack default \
-  --output agent-samples/model-servers/yaml/dual_48G_ada/vram.default.json \
-  --service omni:1:vllm:omni-run-1.json \
-  --service omni:1:vllm:omni-run-2.json \
-  --service omni:1:vllm:omni-run-3.json
+  --config agent-samples/model-servers/yaml/dual_48G_ada/nemotron_omni_llm_server.yaml \
+  --gpu 1 \
+  --measurement omni-run-1.json \
+  --measurement omni-run-2.json \
+  --measurement omni-run-3.json
 ```
 
-Supply three measurements for every service in the stack. Measure the complete
+Repeat this for every GPU service in the stack. Measure the complete
 sample as an additional aggregate check, especially under configured concurrency
 and maximum image/video inputs.
 

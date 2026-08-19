@@ -9,6 +9,8 @@
 # vlm_speech_nim placement: Riva speech NIMs own GPU 0, Cosmos gets GPU 1.
 image:     nvcr.io/nim/nvidia/cosmos-reason1-7b:1.4.1
 http_port: 8100
+gpu_memory_reservation_gib: 40.0
+gpu_memory_reservation_status: provisional
 
 nim_cache: ../../../../models/nim
 

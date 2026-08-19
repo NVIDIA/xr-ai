@@ -4,6 +4,8 @@
 model: nvidia/llama-nemotron-embed-1b-v2
 host: "0.0.0.0"
 port: 8109
+gpu_memory_reservation_gib: 8.0
+gpu_memory_reservation_status: provisional
 served_model_name: embed
 model_cache: ../../../../models
 max_num_seqs: 32

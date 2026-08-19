@@ -5,10 +5,13 @@
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from xr_ai_launcher import GPUInventoryError, detect_gpu_config, query_gpu_inventory
+
+_PROFILES = Path(__file__).resolve().parents[1] / "agent-samples/model-servers/yaml"
 
 
 def _row(
@@ -48,26 +51,26 @@ def test_inventory_records_each_gpu_capacity_independently() -> None:
 def test_detection_failure_does_not_select_an_unsafe_default(error: Exception) -> None:
     with patch("xr_ai_launcher._gpu.subprocess.check_output", side_effect=error):
         with pytest.raises(GPUInventoryError, match="nvidia-smi"):
-            detect_gpu_config()
+            detect_gpu_config(_PROFILES)
 
 
 def test_empty_inventory_is_rejected() -> None:
     with _mock_smi([]), pytest.raises(GPUInventoryError, match="no GPUs"):
-        detect_gpu_config()
+        detect_gpu_config(_PROFILES)
 
 
 def test_unparseable_inventory_is_rejected() -> None:
     with _mock_smi(["not a valid row"]), pytest.raises(
         GPUInventoryError, match="unparseable",
     ):
-        detect_gpu_config()
+        detect_gpu_config(_PROFILES)
 
 
 def test_single_ada_does_not_match_dual_profile() -> None:
     with _mock_smi([_row(0, "RTX 6000 Ada", 8.9, 49140)]), pytest.raises(
         GPUInventoryError, match="no bundled",
     ):
-        detect_gpu_config()
+        detect_gpu_config(_PROFILES)
 
 
 def test_dual_ada_requires_minimum_memory_on_each_gpu() -> None:
@@ -75,21 +78,21 @@ def test_dual_ada_requires_minimum_memory_on_each_gpu() -> None:
         _row(0, "NVIDIA L40S", 8.9, 46068),
         _row(1, "NVIDIA L40S", 8.9, 46068),
     ]):
-        assert detect_gpu_config() == "dual_48G_ada"
+        assert detect_gpu_config(_PROFILES).name == "dual_48G_ada"
 
     with _mock_smi([
         _row(0, "NVIDIA L40S", 8.9, 46068),
         _row(1, "RTX 4090", 8.9, 24564),
     ]), pytest.raises(GPUInventoryError, match="GPU 1"):
-        detect_gpu_config()
+        detect_gpu_config(_PROFILES)
 
 
 def test_single_large_blackwell_matches_workstation_profile() -> None:
     with _mock_smi([_row(0, "RTX PRO 6000 Blackwell", 12.0, 98304)]):
-        assert detect_gpu_config() == "96G_blackwell"
+        assert detect_gpu_config(_PROFILES).name == "96G_blackwell"
 
 
 @pytest.mark.parametrize("name", ["NVIDIA GB10", "NVIDIA B10"])
 def test_spark_name_matches_spark(name: str) -> None:
     with _mock_smi([_row(0, name, 10.0, 131072)]):
-        assert detect_gpu_config() == "spark"
+        assert detect_gpu_config(_PROFILES).name == "spark"

@@ -43,9 +43,10 @@ uv run simple_vlm_example
 ```
 
 For the local deployment, startup first prints a strict per-GPU VRAM preflight.
-The `vram.local.<hardware>.json` manifest places the VLM and STT and owns their
-absolute GiB reservations; vLLM utilization is derived from the detected physical
-total. See the requirements guide for measurement and certification commands.
+The existing `vlm_server.yaml` and `stt_server.yaml` files own their GPU placement,
+ports, and absolute GiB reservations. The shared hardware `gpu_profile.yaml` owns
+the device safety reserve, and vLLM utilization is derived from the detected
+physical total. See the requirements guide for measurement and certification.
 
 `HF_TOKEN` is required by default; pass `--allow-anonymous` to run without one
 (see [`credentials.md`](../../docs/source/getting_started/credentials.md)).

@@ -42,9 +42,11 @@ from ._credentials import (
 )
 from ._gpu import (
     GPUDevice,
+    GPUHardwareProfile,
     GPUInventoryError,
     GPUProcess,
     detect_gpu_config,
+    load_gpu_hardware_profile,
     match_gpu_config,
     query_gpu_inventory,
 )
@@ -59,11 +61,13 @@ from ._vram import (
     VRAMProfileError,
     derive_gpu_memory_utilization,
     format_vram_preflight,
-    load_vram_profile,
+    load_service_reservation,
     preflight_vram,
+    read_service_port,
     require_vram_preflight,
+    resolve_vram_profile,
+    service_config_fingerprint,
     utilization_overrides,
-    validate_vram_certification,
 )
 
 __all__ = [
@@ -71,13 +75,15 @@ __all__ = [
     "NATIVE_DEVICE_PROFILES", "is_native_profile", "read_device_profile",
     "ensure_credentials", "load_credentials", "require_credentials", "warn_if_missing",
     "read_config_scalar",
-    "GPUDevice", "GPUInventoryError", "GPUProcess",
-    "detect_gpu_config", "match_gpu_config", "query_gpu_inventory",
+    "GPUDevice", "GPUHardwareProfile", "GPUInventoryError", "GPUProcess",
+    "detect_gpu_config", "load_gpu_hardware_profile", "match_gpu_config",
+    "query_gpu_inventory",
     "VRAM_UTILIZATION_ENV", "GPUPreflight", "ServiceReservation",
     "VRAMProfile", "VRAMProfileError", "derive_gpu_memory_utilization",
-    "format_vram_preflight", "load_vram_profile", "preflight_vram",
-    "require_vram_preflight", "utilization_overrides",
-    "validate_vram_certification",
+    "format_vram_preflight", "load_service_reservation", "preflight_vram",
+    "read_service_port",
+    "require_vram_preflight", "resolve_vram_profile",
+    "service_config_fingerprint", "utilization_overrides",
     "ModelDeployment", "load_deployment_profile", "load_model_deployment",
     "ManagedProcess",
     "Parallel", "Process", "run_stack",

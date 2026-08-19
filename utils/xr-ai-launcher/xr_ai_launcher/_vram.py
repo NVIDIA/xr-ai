@@ -1,47 +1,52 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Absolute VRAM reservations, derived vLLM budgets, and stack preflight."""
+"""Service-YAML VRAM reservations, derived vLLM budgets, and preflight."""
 from __future__ import annotations
 
 import hashlib
-import json
-import math
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from ._gpu import GPUDevice
+from ._config import read_config_scalar
+from ._gpu import GPUDevice, GPUHardwareProfile
 
 VRAM_UTILIZATION_ENV = "XR_AI_GPU_MEMORY_UTILIZATION"
 
+_CERTIFICATION_KEYS = {
+    "gpu_memory_reservation_status",
+    "gpu_memory_certification_driver",
+    "gpu_memory_certification_git",
+    "gpu_memory_certification_sha256",
+}
+
 
 class VRAMProfileError(ValueError):
-    """Raised when a reservation profile is invalid or cannot fit."""
+    """Raised when service reservations are invalid or cannot fit."""
 
 
 @dataclass(frozen=True)
 class ServiceReservation:
-    """Absolute capacity reserved for one service on one physical GPU."""
+    """Absolute capacity reserved by one service's existing YAML config."""
 
     service: str
     gpu: int
     reservation_gib: float
     vllm: bool
-    measurement_signature: dict | None = None
+    status: str
+    config_path: Path
 
 
 @dataclass(frozen=True)
 class VRAMProfile:
-    """Measured or provisional reservation contract for one complete stack."""
+    """Resolved reservation contract for one selected set of services."""
 
     hardware_profile: str
     stack: str
     status: str
     device_safety_reserve_gib: float
     services: tuple[ServiceReservation, ...]
-    source: str | None = None
-    source_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -50,104 +55,156 @@ class GPUPreflight:
 
     gpu: GPUDevice
     reservations: tuple[ServiceReservation, ...]
+    active_services: frozenset[str]
     incremental_required_gib: float
     safety_reserve_gib: float
     remaining_gib: float
     passed: bool
 
 
-def load_vram_profile(path: str | Path) -> VRAMProfile:
-    """Load and validate a versioned JSON reservation profile."""
-    profile_path = Path(path)
+def read_service_port(path: str | Path) -> int | None:
+    """Read a service's top-level HTTP port without duplicating it in Python."""
+    config_path = Path(path)
+    raw = read_config_scalar(config_path, "port") or read_config_scalar(
+        config_path, "http_port",
+    )
+    if not raw:
+        return None
     try:
-        raw = json.loads(profile_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise VRAMProfileError(f"cannot load VRAM profile {profile_path}: {exc}") from exc
-    if raw.get("schema_version") != 1:
-        raise VRAMProfileError(f"{profile_path}: unsupported schema_version")
-    status = raw.get("status")
-    if status not in {"provisional", "certified"}:
-        raise VRAMProfileError(
-            f"{profile_path}: status must be 'provisional' or 'certified'"
-        )
-    try:
-        safety = float(raw["device_safety_reserve_gib"])
-        services_raw = raw["services"]
-        services = tuple(
-            ServiceReservation(
-                service=str(service),
-                gpu=int(spec["gpu"]),
-                reservation_gib=float(spec["reservation_gib"]),
-                vllm=bool(spec.get("vllm", False)),
-                measurement_signature=(
-                    spec.get("measurement_signature")
-                    if isinstance(spec.get("measurement_signature"), dict) else None
-                ),
-            )
-            for service, spec in services_raw.items()
-        )
-        profile = VRAMProfile(
-            hardware_profile=str(raw["hardware_profile"]),
-            stack=str(raw["stack"]),
-            status=status,
-            device_safety_reserve_gib=safety,
-            services=services,
-            source=str(raw["source"]) if raw.get("source") else None,
-            source_path=profile_path.resolve(),
-        )
-    except (KeyError, TypeError, ValueError, AttributeError) as exc:
-        raise VRAMProfileError(f"{profile_path}: invalid reservation data: {exc}") from exc
-    if safety < 0:
-        raise VRAMProfileError(f"{profile_path}: safety reserve cannot be negative")
-    if not services:
-        raise VRAMProfileError(f"{profile_path}: services cannot be empty")
-    if any(item.gpu < 0 or item.reservation_gib <= 0 for item in services):
-        raise VRAMProfileError(
-            f"{profile_path}: GPU indexes must be non-negative and reservations positive"
-        )
-    return profile
+        return int(raw)
+    except ValueError as exc:
+        raise VRAMProfileError(f"{config_path}: port must be an integer") from exc
 
 
-def validate_vram_certification(
-    profile: VRAMProfile, service_configs: dict[str, Path],
-) -> None:
-    """Reject a certified profile when code, driver, or service config changed."""
-    if profile.status != "certified":
+def service_config_fingerprint(path: str | Path) -> str:
+    """Hash runtime config while excluding certification bookkeeping fields."""
+    try:
+        config_path = Path(path)
+        lines = config_path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise VRAMProfileError(f"cannot read service config {path}: {exc}") from exc
+    kept = [
+        line for line in lines
+        if line.split(":", 1)[0].strip() not in _CERTIFICATION_KEYS
+    ]
+    body = "\n".join(kept).rstrip() + "\n"
+    return hashlib.sha256(body.encode()).hexdigest()
+
+
+def _validate_certification(path: Path, status: str) -> None:
+    if status != "certified":
         return
-    assert profile.source_path is not None
+    expected_hash = read_config_scalar(path, "gpu_memory_certification_sha256")
+    expected_driver = read_config_scalar(path, "gpu_memory_certification_driver")
+    if not expected_hash or not expected_driver:
+        raise VRAMProfileError(f"{path}: certified reservation lacks signature fields")
+    if service_config_fingerprint(path) != expected_hash:
+        raise VRAMProfileError(
+            f"{path}: service config changed since its VRAM reservation was certified"
+        )
     try:
-        current_driver = subprocess.check_output(
+        driver_output = subprocess.check_output(
             ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
             text=True, stderr=subprocess.DEVNULL,
         ).strip()
     except (FileNotFoundError, subprocess.CalledProcessError) as exc:
-        raise VRAMProfileError("cannot validate certified profile driver version") from exc
+        raise VRAMProfileError(f"{path}: cannot validate certified driver") from exc
+    driver = ",".join(dict.fromkeys(driver_output.splitlines()))
+    if driver != expected_driver:
+        raise VRAMProfileError(
+            f"{path}: reservation used driver {expected_driver}; current driver is {driver}"
+        )
 
-    for item in profile.services:
-        signature = item.measurement_signature
-        if not signature:
-            raise VRAMProfileError(
-                f"certified service {item.service!r} has no measurement signature"
+
+def load_service_reservation(
+    service: str,
+    path: str | Path,
+    inventory: tuple[GPUDevice, ...],
+    *,
+    vllm: bool,
+) -> ServiceReservation:
+    """Resolve an absolute reservation, retaining utilization as a legacy fallback."""
+    config_path = Path(path).resolve()
+    gpu_text = read_config_scalar(config_path, "cuda_visible_devices", "0")
+    if "," in gpu_text:
+        raise VRAMProfileError(
+            f"{config_path}: multi-GPU reservations require an explicit placement policy"
+        )
+    try:
+        gpu_index = int(gpu_text)
+    except ValueError as exc:
+        raise VRAMProfileError(
+            f"{config_path}: cuda_visible_devices must be one numeric GPU index"
+        ) from exc
+    by_index = {gpu.index: gpu for gpu in inventory}
+    if gpu_index not in by_index:
+        raise VRAMProfileError(
+            f"{config_path}: assigns {service!r} to unavailable GPU {gpu_index}"
+        )
+
+    reservation_text = read_config_scalar(config_path, "gpu_memory_reservation_gib")
+    utilization_text = read_config_scalar(config_path, "gpu_memory_utilization")
+    if not reservation_text and not utilization_text:
+        raise VRAMProfileError(
+            f"{config_path}: declare gpu_memory_reservation_gib "
+            "(or legacy gpu_memory_utilization)"
+        )
+    try:
+        if reservation_text:
+            reservation = float(reservation_text)
+            status = read_config_scalar(
+                config_path, "gpu_memory_reservation_status", "provisional",
             )
-        if signature.get("driver_version") != current_driver:
-            raise VRAMProfileError(
-                f"certification for {item.service!r} used driver "
-                f"{signature.get('driver_version')}; current driver is {current_driver}"
-            )
-        config = service_configs.get(item.service)
-        hashes = signature.get("config_sha256")
-        if config is None or not isinstance(hashes, dict) or not hashes:
-            raise VRAMProfileError(
-                f"cannot validate certified config for service {item.service!r}"
-            )
-        try:
-            current_hash = hashlib.sha256(config.read_bytes()).hexdigest()
-        except OSError as exc:
-            raise VRAMProfileError(f"cannot hash service config {config}: {exc}") from exc
-        if current_hash not in hashes.values():
-            raise VRAMProfileError(
-                f"service config changed since {item.service!r} was measured: {config}"
-            )
+        else:
+            utilization = float(utilization_text)
+            if not 0 < utilization < 1:
+                raise ValueError
+            reservation = utilization * by_index[gpu_index].total_memory_gib
+            status = "legacy"
+    except ValueError as exc:
+        raise VRAMProfileError(
+            f"{config_path}: invalid GPU memory reservation/utilization"
+        ) from exc
+    if reservation <= 0 or status not in {"legacy", "provisional", "certified"}:
+        raise VRAMProfileError(f"{config_path}: invalid GPU reservation status or size")
+    _validate_certification(config_path, status)
+    return ServiceReservation(
+        service=service,
+        gpu=gpu_index,
+        reservation_gib=reservation,
+        vllm=vllm,
+        status=status,
+        config_path=config_path,
+    )
+
+
+def resolve_vram_profile(
+    *,
+    stack: str,
+    hardware: GPUHardwareProfile,
+    inventory: tuple[GPUDevice, ...],
+    service_configs: dict[str, tuple[Path, bool]],
+) -> VRAMProfile:
+    """Build the stack contract directly from its selected service YAML files."""
+    reservations = tuple(
+        load_service_reservation(service, path, inventory, vllm=vllm)
+        for service, (path, vllm) in service_configs.items()
+    )
+    if not reservations:
+        raise VRAMProfileError(f"{stack}: selected services declare no GPU reservations")
+    statuses = {item.status for item in reservations}
+    status = (
+        "legacy" if "legacy" in statuses
+        else "certified" if statuses == {"certified"}
+        else "provisional"
+    )
+    return VRAMProfile(
+        hardware_profile=hardware.name,
+        stack=stack,
+        status=status,
+        device_safety_reserve_gib=hardware.device_safety_reserve_gib,
+        services=reservations,
+    )
 
 
 def derive_gpu_memory_utilization(reservation_gib: float, total_gib: float) -> float:
@@ -160,7 +217,7 @@ def derive_gpu_memory_utilization(reservation_gib: float, total_gib: float) -> f
             f"{reservation_gib:.1f} GiB reservation cannot fit a {total_gib:.1f} GiB GPU"
         )
     # Round upward so decimal serialization never undercuts the GiB contract.
-    return math.ceil(utilization * 10_000) / 10_000
+    return int(utilization * 10_000 + 0.999999) / 10_000
 
 
 def preflight_vram(
@@ -171,25 +228,23 @@ def preflight_vram(
 ) -> tuple[GPUPreflight, ...]:
     """Validate incremental stack reservations against current per-GPU free VRAM."""
     by_index = {gpu.index: gpu for gpu in inventory}
-    unknown = sorted({item.gpu for item in profile.services} - by_index.keys())
-    if unknown:
-        raise VRAMProfileError(
-            f"VRAM profile assigns services to unavailable GPU indexes: {unknown}"
-        )
-
     results: list[GPUPreflight] = []
     for index in sorted({item.gpu for item in profile.services}):
         gpu = by_index[index]
         reservations = tuple(item for item in profile.services if item.gpu == index)
+        active = frozenset(
+            item.service for item in reservations if item.service in active_services
+        )
         incremental = sum(
             item.reservation_gib
             for item in reservations
-            if item.service not in active_services
+            if item.service not in active
         )
         remaining = gpu.free_memory_gib - incremental - profile.device_safety_reserve_gib
         results.append(GPUPreflight(
             gpu=gpu,
             reservations=reservations,
+            active_services=active,
             incremental_required_gib=incremental,
             safety_reserve_gib=profile.device_safety_reserve_gib,
             remaining_gib=remaining,
@@ -238,8 +293,6 @@ def format_vram_preflight(
     lines = [
         f"XR-AI GPU preflight: {profile.stack} ({profile.status})",
     ]
-    if profile.source:
-        lines.append(f"Reservation source: {profile.source}")
     for result in results:
         lines.extend([
             "",
@@ -247,10 +300,11 @@ def format_vram_preflight(
             f"{result.gpu.total_memory_gib:.1f} GiB total, "
             f"{result.gpu.free_memory_gib:.1f} GiB currently free",
         ])
-        lines.extend(
-            f"  {item.service:<24} {item.reservation_gib:>6.1f} GiB"
-            for item in result.reservations
-        )
+        for item in result.reservations:
+            suffix = " (already active)" if item.service in result.active_services else ""
+            lines.append(
+                f"  {item.service:<24} {item.reservation_gib:>6.1f} GiB{suffix}"
+            )
         lines.append(
             f"  {'device safety reserve':<24} "
             f"{result.safety_reserve_gib:>6.1f} GiB"

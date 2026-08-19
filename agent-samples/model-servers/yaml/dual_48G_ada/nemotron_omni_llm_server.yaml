@@ -6,6 +6,8 @@
 
 host: "0.0.0.0"
 port: 8108
+gpu_memory_reservation_gib: 37.0
+gpu_memory_reservation_status: provisional
 hf_token: ""
 model_cache: ../../../../models
 

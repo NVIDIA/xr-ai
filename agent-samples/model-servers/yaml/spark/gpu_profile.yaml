@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+profile: spark
+required_gpu_count: 1
+min_compute_capability: 10.0
+min_memory_gib_per_gpu: 90.0
+gpu_name_pattern: '(?i)\b(?:GB10|B10)\b'
+device_safety_reserve_gib: 4.0

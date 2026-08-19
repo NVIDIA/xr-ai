@@ -1,12 +1,16 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Strict per-device GPU inventory and hardware-profile matching."""
+"""Strict per-device GPU inventory and YAML hardware-profile matching."""
 from __future__ import annotations
 
 import logging
+import re
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
+
+from ._config import read_config_scalar
 
 log = logging.getLogger(__name__)
 
@@ -42,13 +46,27 @@ class GPUDevice:
     processes: tuple[GPUProcess, ...] = ()
 
 
+@dataclass(frozen=True)
+class GPUHardwareProfile:
+    """Declarative topology constraints shared by every deployment."""
+
+    name: str
+    required_gpu_count: int
+    min_compute_capability: float
+    max_compute_capability: float | None
+    min_memory_gib_per_gpu: float
+    max_memory_gib_per_gpu: float | None
+    gpu_name_pattern: str | None
+    device_safety_reserve_gib: float
+    path: Path
+
+
 def _parse_mib(value: str) -> float:
     token = value.strip().split()[0]
     return float(token) / _MIB_PER_GIB
 
 
 def _query_compute_processes() -> dict[str, list[GPUProcess]]:
-    """Best-effort process inventory; capacity detection must still work without it."""
     try:
         raw = subprocess.check_output(
             [
@@ -133,53 +151,106 @@ def query_gpu_inventory() -> tuple[GPUDevice, ...]:
     return tuple(devices)
 
 
-def _all_match(
-    devices: tuple[GPUDevice, ...], *, count: int, min_cap: float,
-    max_cap: float | None, min_memory_gib: float,
-) -> bool:
-    return (
-        len(devices) == count
-        and all(device.compute_capability >= min_cap for device in devices)
-        and (max_cap is None or all(
-            device.compute_capability < max_cap for device in devices
-        ))
-        and all(device.total_memory_gib >= min_memory_gib for device in devices)
+def _optional_float(path: Path, key: str) -> float | None:
+    raw = read_config_scalar(path, key)
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise GPUInventoryError(f"{path}: {key} must be numeric") from exc
+
+
+def load_gpu_hardware_profile(path: str | Path) -> GPUHardwareProfile:
+    """Load one dependency-free top-level YAML hardware profile."""
+    profile_path = Path(path)
+    try:
+        name = read_config_scalar(profile_path, "profile")
+        count = int(read_config_scalar(profile_path, "required_gpu_count"))
+        min_cap = float(read_config_scalar(profile_path, "min_compute_capability"))
+        min_memory = float(read_config_scalar(profile_path, "min_memory_gib_per_gpu"))
+        safety = float(read_config_scalar(profile_path, "device_safety_reserve_gib"))
+    except ValueError as exc:
+        raise GPUInventoryError(f"{profile_path}: invalid hardware profile scalar") from exc
+    if not name or count <= 0 or min_memory <= 0 or safety < 0:
+        raise GPUInventoryError(f"{profile_path}: incomplete hardware profile")
+    return GPUHardwareProfile(
+        name=name,
+        required_gpu_count=count,
+        min_compute_capability=min_cap,
+        max_compute_capability=_optional_float(
+            profile_path, "max_compute_capability",
+        ),
+        min_memory_gib_per_gpu=min_memory,
+        max_memory_gib_per_gpu=_optional_float(
+            profile_path, "max_memory_gib_per_gpu",
+        ),
+        gpu_name_pattern=read_config_scalar(profile_path, "gpu_name_pattern") or None,
+        device_safety_reserve_gib=safety,
+        path=profile_path.resolve(),
     )
 
 
-def match_gpu_config(devices: tuple[GPUDevice, ...]) -> str:
-    """Match only hardware topologies covered by a bundled profile."""
-    names = " ".join(device.name.lower() for device in devices)
-    if (
-        len(devices) == 1
-        and devices[0].compute_capability >= 10.0
-        and ("gb10" in names or "b10" in names)
-    ):
-        return "spark"
-    if _all_match(
-        devices, count=1, min_cap=10.0, max_cap=None, min_memory_gib=80.0,
-    ):
-        return "96G_blackwell"
-    if _all_match(
-        devices, count=2, min_cap=8.9, max_cap=10.0, min_memory_gib=44.0,
-    ):
-        return "dual_48G_ada"
+def _matches(
+    devices: tuple[GPUDevice, ...], profile: GPUHardwareProfile,
+) -> bool:
+    if len(devices) != profile.required_gpu_count:
+        return False
+    for gpu in devices:
+        if gpu.compute_capability < profile.min_compute_capability:
+            return False
+        if (
+            profile.max_compute_capability is not None
+            and gpu.compute_capability >= profile.max_compute_capability
+        ):
+            return False
+        if gpu.total_memory_gib < profile.min_memory_gib_per_gpu:
+            return False
+        if (
+            profile.max_memory_gib_per_gpu is not None
+            and gpu.total_memory_gib >= profile.max_memory_gib_per_gpu
+        ):
+            return False
+        if profile.gpu_name_pattern and not re.search(
+            profile.gpu_name_pattern, gpu.name,
+        ):
+            return False
+    return True
 
+
+def match_gpu_config(
+    devices: tuple[GPUDevice, ...], profiles: tuple[GPUHardwareProfile, ...],
+) -> GPUHardwareProfile:
+    """Return the single hardware profile matching every physical GPU."""
+    matches = [profile for profile in profiles if _matches(devices, profile)]
+    if len(matches) == 1:
+        return matches[0]
     topology = "; ".join(
         f"GPU {gpu.index}: {gpu.name}, SM{gpu.compute_capability:.1f}, "
         f"{gpu.total_memory_gib:.1f} GiB"
         for gpu in devices
     )
+    if matches:
+        names = ", ".join(profile.name for profile in matches)
+        raise GPUInventoryError(
+            f"multiple GPU profiles match this topology ({names}): {topology}"
+        )
     raise GPUInventoryError(
         "no bundled XR-AI GPU profile safely matches this topology: " + topology
     )
 
 
-def detect_gpu_config() -> str:
-    """Inventory every GPU and return an exact bundled hardware profile."""
+def detect_gpu_config(profiles_root: str | Path) -> GPUHardwareProfile:
+    """Inventory GPUs and match the YAML profiles below *profiles_root*."""
+    root = Path(profiles_root)
+    paths = sorted(root.glob("*/gpu_profile.yaml"))
+    if not paths:
+        raise GPUInventoryError(f"no gpu_profile.yaml files found below {root}")
     devices = query_gpu_inventory()
-    profile = match_gpu_config(devices)
-    log.info("GPU config: %s", profile)
+    profile = match_gpu_config(
+        devices, tuple(load_gpu_hardware_profile(path) for path in paths),
+    )
+    log.info("GPU config: %s", profile.name)
     for gpu in devices:
         log.info(
             "GPU %d: %s, SM%.1f, %.1f GiB total, %.1f GiB free",
