@@ -271,7 +271,7 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     assert config.device_map.resolve(MarkerType.ARUCO, "99") is None
     assert config.artifacts_dir == _SAMPLE / "artifacts"
     assert config.capture_marker_scans is False
-    assert config.web_events_host == "0.0.0.0"
+    assert config.web_events_host == "127.0.0.1"
     assert config.web_events_port == 8092
     assert config.web_events_max_events == 5_000
     assert config.monitor_interval_s == 5.0
@@ -295,8 +295,14 @@ def test_launcher_can_route_visual_inference_to_omni(tmp_path: Path) -> None:
     runtime_dir = tmp_path / "runtime"
     runtime_dir.mkdir()
     assert _parser().parse_args([]).vlm_mode == "cosmos"
+    assert _parser().parse_args([]).expose_web_events is False
     assert _parser().parse_args(["--vlm-mode", "omni"]).vlm_mode == "omni"
-    worker_config = _materialize_worker_config(runtime_dir, "omni")
+    assert _parser().parse_args(["--expose-web-events"]).expose_web_events is True
+    worker_config = _materialize_worker_config(
+        runtime_dir,
+        "omni",
+        expose_web_events=True,
+    )
     config = load_config(worker_config)
     models = json.loads(config.models_config.read_text())
     processes, _credentials = _build_processes(worker_config)
@@ -304,6 +310,7 @@ def test_launcher_can_route_visual_inference_to_omni(tmp_path: Path) -> None:
     assert config.models_config == _SAMPLE / "yaml" / "models.omni.json"
     assert config.voice_gate_yaml == _SAMPLE / "yaml" / "voice_gate.yaml"
     assert config.artifacts_dir == _SAMPLE / "artifacts"
+    assert config.web_events_host == "0.0.0.0"
     assert models["models"]["llm"]["deployment"]["service"] == "omni"
     assert models["models"]["vlm"]["category"] == "vlm"
     assert models["models"]["vlm"]["adapter"]["capabilities"]["vision"] is True

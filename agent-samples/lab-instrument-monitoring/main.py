@@ -65,10 +65,20 @@ def _parser() -> argparse.ArgumentParser:
             "Nemotron Omni service for both language and vision"
         ),
     )
+    parser.add_argument(
+        "--expose-web-events",
+        action="store_true",
+        help=(
+            "bind the unauthenticated event viewer to all IPv4 interfaces "
+            "instead of loopback"
+        ),
+    )
     return parser
 
 
-def _write_config(source: Path, target: Path, overrides: Mapping[str, Path]) -> None:
+def _write_config(
+    source: Path, target: Path, overrides: Mapping[str, str | Path]
+) -> None:
     pending = set(overrides)
     lines: list[str] = []
     for line in source.read_text(encoding="utf-8").splitlines():
@@ -83,7 +93,12 @@ def _write_config(source: Path, target: Path, overrides: Mapping[str, Path]) -> 
     target.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _materialize_worker_config(runtime_dir: Path, vlm_mode: str) -> Path:
+def _materialize_worker_config(
+    runtime_dir: Path,
+    vlm_mode: str,
+    *,
+    expose_web_events: bool = False,
+) -> Path:
     worker_config = runtime_dir / "lab_instrument_monitoring_worker.yaml"
     _write_config(
         _WORKER_CONFIG,
@@ -93,6 +108,7 @@ def _materialize_worker_config(runtime_dir: Path, vlm_mode: str) -> Path:
             "voice_gate_yaml": (_BASE / "yaml" / "voice_gate.yaml").resolve(),
             "device_map_yaml": (_BASE / "yaml" / "device_map.yaml").resolve(),
             "artifacts_dir": (_BASE / "artifacts").resolve(),
+            "web_events_host": "0.0.0.0" if expose_web_events else "127.0.0.1",
         },
     )
     return worker_config
@@ -131,7 +147,11 @@ def run(argv: Sequence[str] | None = None) -> None:
     args = _parser().parse_args(argv)
     setup_logging("orchestrator", namespace="lab-instrument-monitoring")
     with tempfile.TemporaryDirectory(prefix="lab-instrument-monitoring-config-") as directory:
-        worker_config = _materialize_worker_config(Path(directory), args.vlm_mode)
+        worker_config = _materialize_worker_config(
+            Path(directory),
+            args.vlm_mode,
+            expose_web_events=args.expose_web_events,
+        )
         processes, credentials = _build_processes(worker_config)
         for credential in credentials:
             ensure_credentials(credential)

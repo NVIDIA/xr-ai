@@ -8,12 +8,13 @@
 For an adaptation-oriented architecture guide, see
 [`docs/source/reference/lab-instrument-monitoring.md`](../../docs/source/reference/lab-instrument-monitoring.md).
 
-This sample writes monitoring output only to files and keeps one visual monitor
-available for every connected participant while a separate foreground agent answers voice or typed queries.
+This sample writes durable monitoring output to files and serves a bounded live
+event viewer while a separate foreground agent answers voice or typed queries.
 Monitoring stays dormant until the foreground model calls the matching
 participant-scoped start tool. The model can also inspect the current frame or
-read recent monitor observations. The shared connection web client is served, but there is no monitoring dashboard,
-MCP adapter, NAT compatibility layer, or activity-viewer process.
+read recent monitor observations. The shared connection web client is served,
+but there is no domain-specific monitoring UI, MCP adapter, NAT compatibility
+layer, or separate activity-viewer process.
 
 The worker composes peer agents through typed runtime topics:
 
@@ -103,19 +104,23 @@ uv run lab_instrument_monitoring
 
 # Use Nemotron Omni for both language and visual inference.
 uv run lab_instrument_monitoring --vlm-mode omni
+
+# Allow direct event-viewer access from a trusted private network.
+uv run lab_instrument_monitoring --expose-web-events
 ```
 
 Connect a glasses or platform client using the authenticated LiveKit URL,
 room, and token printed by the hub. Port 8080 serves the shared connection web
 client together with the authenticated token and signaling routes. The separate
-read-only event viewer listens on all interfaces; open
+read-only event viewer defaults to `http://127.0.0.1:8092`. Pass
+`--expose-web-events` to listen on all IPv4 interfaces, then open
 `http://<xr-host>:8092` to group live output by participant and topic. JSONL
 files remain the durable output. Allow TCP port 8092 through the host firewall
-when connecting remotely.
+only from a trusted network when connecting remotely.
 
 The event viewer does not reuse media-hub authentication and serves plain HTTP.
-Use this externally reachable development default only on a trusted network;
-put an authenticated TLS reverse proxy in front of it before broader exposure.
+Use `--expose-web-events` only on a trusted network; put an authenticated TLS
+reverse proxy in front of it before broader exposure.
 
 Ask the foreground assistant to start a background task with an optional focus,
 for example “watch for packages near the doorway.” It can report status or stop
