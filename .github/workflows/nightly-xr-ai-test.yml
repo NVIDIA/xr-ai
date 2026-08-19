@@ -166,6 +166,10 @@ jobs:
           NGC_API_KEY: ${{ secrets.NGC_API_KEY }}
         run: |
           set -euo pipefail
+          # Outside the workspace: the NIM container writes the engine cache
+          # as root, which breaks actions/checkout's clean phase if it lives
+          # under _work. A fixed host path also keeps nightly reruns warm.
+          export XR_AI_NIM_CACHE="$HOME/.cache/xr-ai-nim"
           if [ -z "${NGC_API_KEY:-}" ]; then
             if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
               echo "::error::NGC_API_KEY is empty; the nightly cannot run the NIM test"

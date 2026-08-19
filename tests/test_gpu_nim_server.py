@@ -70,12 +70,14 @@ async def test_nim_container_serves_profile_llm(tmp_path) -> None:
         pytest.skip("NGC_API_KEY not set (required for nvcr.io pull + engine download)")
 
     port = pick_free_port()
+    nim_cache = Path(
+        os.environ.get("XR_AI_NIM_CACHE", str(_REPO_ROOT / "models" / "nim"))
+    )
     config = tmp_path / "nim_llm_server.yaml"
     config.write_text(
         f"image:     {_IMAGE}\n"
         f"http_port: {port}\n"
-        # Shared engine cache so nightly reruns skip the multi-GB download.
-        f"nim_cache: {_REPO_ROOT / 'models' / 'nim'}\n"
+        f"nim_cache: {nim_cache}\n"
         "cuda_visible_devices: \"0\"\n"
         "env:\n"
         "  NIM_MAX_MODEL_LEN: \"8192\"\n"
