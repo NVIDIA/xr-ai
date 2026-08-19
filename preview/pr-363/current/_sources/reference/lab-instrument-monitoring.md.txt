@@ -147,8 +147,10 @@ To add a foreground capability:
 3. Detect every QR and ArUco marker in the frame.
 4. Resolve each marker through `DeviceMap`.
 5. Create a derived image that marks the detected polygon.
-6. Ask the VLM for the nearby display reading and unit.
-7. Return typed `InstrumentReading` values.
+6. Pass structured marker identity to a VLM governed by the packaged
+   instrument-reading system prompt.
+7. Return mapped `InstrumentSighting` values independently from successful
+   `InstrumentReading` values.
 
 The marker determines identity before the VLM reads the display. This prevents
 the model from guessing which instrument produced a value. Image references,
@@ -169,13 +171,15 @@ Readings are normalized before comparison. If a later VLM response omits a
 unit, the previous known unit is retained. The agent publishes:
 
 - `InstrumentChange` when a device is first discovered;
-- `InstrumentChange` when its normalized numeric value changes;
+- `InstrumentChange` when its normalized value or unit changes;
 - `InstrumentLost` once after the device exceeds the last-seen timeout;
 - `InstrumentStateSnapshot` periodically, including tracking status.
 
-A device moving in and out of view does not repeatedly alert unless its value
-changes. This is application policy and belongs in the tracker rather than the
-VLM prompt or voice agent.
+A mapped marker refreshes last-seen state even when its display is temporarily
+unreadable, so glare does not produce a false lost-device alert. A device moving
+in and out of view does not repeatedly alert unless its reading changes. This is
+application policy and belongs in the tracker rather than the VLM prompt or
+voice agent.
 
 Only marker identities present in `device_map.yaml` are treated as instruments.
 Unknown QR payloads and ArUco IDs are logged and ignored, preventing detector
@@ -184,7 +188,9 @@ requires visible evidence that the highlighted marker and display share one
 continuous physical instrument housing. Proximity, alignment, or being the only
 readable display does not establish ownership. The reader returns `UNKNOWN`
 when the target housing has no readable display or an adjacent display cannot
-be excluded.
+be excluded. These fixed rules are supplied as a system prompt; marker identity
+is structured user data and visible text is treated as evidence, never as
+instructions.
 
 ## Connecting a backend
 

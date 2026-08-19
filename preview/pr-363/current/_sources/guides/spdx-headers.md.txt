@@ -30,6 +30,11 @@ Insert the header **after** these required first-line directives when present:
 `#!/...` shebangs, `<?xml …?>` declarations, `<!DOCTYPE …>`, and Swift's
 `// swift-tools-version:` directive.
 
+In files that must open with YAML frontmatter (e.g. `SKILL.md`), the header
+goes immediately after the closing `---`. The checker accepts this, but its
+`--fix` mode does not recognize frontmatter and would insert above it, so add
+the header by hand in such files.
+
 ## Files to skip
 
 Skip files that can't carry comments or aren't ours to license: `LICENSE`,
