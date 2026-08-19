@@ -345,6 +345,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -603,6 +604,32 @@ full details (and self-hosted NIM containers).</p>
 <code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/xr_media_hub.yaml</span></code> for the full option list.</p>
 </section>
 </section>
+<section id="lab-instrument-monitoring-marker-associated-readings-foreground-voice">
+<h2>Lab instrument monitoring (marker-associated readings + foreground voice)<a class="headerlink" href="#lab-instrument-monitoring-marker-associated-readings-foreground-voice" title="Link to this heading">#</a></h2>
+<p>This sample offers one on-demand background visual observation task per
+participant while a separate generic tool-calling agent answers voice or typed
+queries and controls that task. A separate QR and ArUco instrument monitor tracks readings,
+speaks only discovered, changed, or long-missing device updates, and persists
+10-second full-state snapshots. The sample writes monitor, instrument,
+final pre-gate transcript, foreground-turn, and Relay JSONL files under <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code>
+and intentionally serves no sample-specific monitoring web UI.</p>
+<p>Start <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>, then run:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/lab-instrument-monitoring
+uv<span class="w"> </span>sync
+uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>worker
+uv<span class="w"> </span>run<span class="w"> </span>lab_instrument_monitoring
+
+<span class="c1"># Optional: use Nemotron Omni instead of Cosmos for visual inference.</span>
+uv<span class="w"> </span>run<span class="w"> </span>lab_instrument_monitoring<span class="w"> </span>--vlm-mode<span class="w"> </span>omni
+</pre></div>
+</div>
+<p>Connect an existing glasses or platform client using the authenticated URL,
+room, and token printed by the hub. The token and signaling routes remain
+available on port 8080 together with the shared connection web client. Refer to
+the <a class="reference internal" href="../reference/lab-instrument-monitoring.html"><span class="doc">lab instrument architecture guide</span></a>
+for reusable agent patterns, marker setup, output contracts, and adaptation
+recipes.</p>
+</section>
 <section id="xr-render-demo-voice-driven-sphere-in-cloudxr">
 <h2>XR render demo (voice-driven sphere in CloudXR)<a class="headerlink" href="#xr-render-demo-voice-driven-sphere-in-cloudxr" title="Link to this heading">#</a></h2>
 <p>Speak to the web client and a sphere in the streamed scene tracks your voice —
@@ -747,6 +774,7 @@ XR-Media-Hub auto-discovers <code class="docutils literal notranslate"><span cla
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-connect-a-client">Step 2 — Connect a client</a></li>
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lab-instrument-monitoring-marker-associated-readings-foreground-voice">Lab instrument monitoring (marker-associated readings + foreground voice)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-render-demo-voice-driven-sphere-in-cloudxr">XR render demo (voice-driven sphere in CloudXR)</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-start-model-servers-once">Step 1 — Start model servers (once)</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-start-the-demo">Step 2 — Start the demo</a></li>

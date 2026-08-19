@@ -195,6 +195,35 @@ full details (and self-hosted NIM containers).
 Each sample has its own `xr_media_hub.yaml` controlling the hub; refer to
 `services/xr-media-hub/xr_media_hub.yaml` for the full option list.
 
+## Lab instrument monitoring (marker-associated readings + foreground voice)
+
+This sample offers one on-demand background visual observation task per
+participant while a separate generic tool-calling agent answers voice or typed
+queries and controls that task. A separate QR and ArUco instrument monitor tracks readings,
+speaks only discovered, changed, or long-missing device updates, and persists
+10-second full-state snapshots. The sample writes monitor, instrument,
+final pre-gate transcript, foreground-turn, and Relay JSONL files under `artifacts/`
+and intentionally serves no sample-specific monitoring web UI.
+
+Start `model-servers`, then run:
+
+```bash
+cd agent-samples/lab-instrument-monitoring
+uv sync
+uv sync --project worker
+uv run lab_instrument_monitoring
+
+# Optional: use Nemotron Omni instead of Cosmos for visual inference.
+uv run lab_instrument_monitoring --vlm-mode omni
+```
+
+Connect an existing glasses or platform client using the authenticated URL,
+room, and token printed by the hub. The token and signaling routes remain
+available on port 8080 together with the shared connection web client. Refer to
+the {doc}`lab instrument architecture guide </reference/lab-instrument-monitoring>`
+for reusable agent patterns, marker setup, output contracts, and adaptation
+recipes.
+
 ## XR render demo (voice-driven sphere in CloudXR)
 
 Speak to the web client and a sphere in the streamed scene tracks your voice —

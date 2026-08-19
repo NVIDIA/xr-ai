@@ -62,6 +62,13 @@ Module Contents
 
 
 
+   .. py:attribute:: image
+      :type:  xr_ai_tools.image.ImageReference | None
+
+      Previously selected image to scan instead of acquiring another frame.
+
+
+
 .. py:class:: MarkerPoint
 
 
@@ -139,7 +146,7 @@ Module Contents
 
 
 
-.. py:class:: MarkerTrackingTool(*, endpoint: xr_ai_hub.ProcessorEndpoint, marker_types: collections.abc.Iterable[MarkerType | str] = (MarkerType.QR_CODE, MarkerType.ARUCO), aruco_dictionary: str = 'DICT_4X4_50', frame_max_age_s: float = 2.0, frame_timeout_s: float = 5.0, manage_status: bool = True)
+.. py:class:: MarkerTrackingTool(*, endpoint: xr_ai_hub.ProcessorEndpoint, marker_types: collections.abc.Iterable[MarkerType | str] = (MarkerType.QR_CODE, MarkerType.ARUCO), aruco_dictionary: str = 'DICT_4X4_50', frame_max_age_s: float = 2.0, frame_timeout_s: float = 5.0, manage_status: bool = True, images: xr_ai_tools.image.ImageRegistry | None = None)
 
 
 

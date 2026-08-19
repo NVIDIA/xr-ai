@@ -345,6 +345,7 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -630,8 +631,9 @@ all derived pixels together.</p>
 <section id="marker-tracking">
 <h2>Marker tracking<a class="headerlink" href="#marker-tracking" title="Link to this heading">#</a></h2>
 <p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[marker-tracking]</span></code> to use <code class="docutils literal notranslate"><span class="pre">MarkerTrackingTool</span></code>. The finite
-<code class="docutils literal notranslate"><span class="pre">track_markers</span></code> tool acquires a participant’s current camera frame and detects
-QR codes with ZXing-C++ and ArUco markers with OpenCV. Its typed result
+<code class="docutils literal notranslate"><span class="pre">track_markers</span></code> tool acquires a participant’s current camera frame, or scans an
+image reference selected by another tool, and detects QR codes with ZXing-C++
+and ArUco markers with OpenCV. Its typed result
 distinguishes an unavailable frame from a valid frame with no marker. Every
 marker has the same <code class="docutils literal notranslate"><span class="pre">marker_type</span></code>, <code class="docutils literal notranslate"><span class="pre">value</span></code>, and four-corner contract: <code class="docutils literal notranslate"><span class="pre">value</span></code>
 is decoded text for QR codes and the decimal marker ID for ArUco markers.
@@ -652,8 +654,12 @@ Results from both scans are deduplicated and use source-frame coordinates.</p>
     <span class="nb">print</span><span class="p">(</span><span class="n">marker</span><span class="o">.</span><span class="n">marker_type</span><span class="p">,</span> <span class="n">marker</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">marker</span><span class="o">.</span><span class="n">corners</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>Both marker families are enabled by default. Select families only while
-initializing the tool; requests and results do not change. ArUco detection uses
+<p>Pass the same <code class="docutils literal notranslate"><span class="pre">ImageRegistry</span></code> to <code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code> and <code class="docutils literal notranslate"><span class="pre">MarkerTrackingTool</span></code>,
+then set <code class="docutils literal notranslate"><span class="pre">image</span></code> on <code class="docutils literal notranslate"><span class="pre">MarkerTrackingRequest</span></code> when marker coordinates must refer
+to one previously selected frame. This prevents a newer live frame from being
+selected between detection and downstream image annotation.</p>
+<p>Both marker families are enabled by default. Select families while initializing
+the tool; the result schema is shared across families. ArUco detection uses
 <code class="docutils literal notranslate"><span class="pre">DICT_4X4_50</span></code> by default and accepts any OpenCV predefined dictionary name.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">aruco_only</span> <span class="o">=</span> <span class="n">MarkerTrackingTool</span><span class="p">(</span>
     <span class="n">endpoint</span><span class="o">=</span><span class="n">processor_endpoint</span><span class="p">,</span>

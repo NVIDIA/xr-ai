@@ -345,6 +345,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -525,16 +526,17 @@ sudo<span class="w"> </span>firewall-cmd<span class="w"> </span>--reload
 </section>
 <section id="live-agent-event-viewer">
 <h2>Live agent-event viewer<a class="headerlink" href="#live-agent-event-viewer" title="Link to this heading">#</a></h2>
-<p>Samples that use <code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code> serve their live event page at
-<code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code> by default. Because the listener is loopback-only, no
-firewall rule is needed when the browser runs on the XR-AI host. For access
-from a development machine, keep the loopback binding and use an SSH tunnel:</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code> SDK and shipped samples default to
+<code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code>. For access from another machine, keep the loopback
+binding and use an SSH tunnel:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ssh<span class="w"> </span>-L<span class="w"> </span><span class="m">8092</span>:127.0.0.1:8092<span class="w"> </span>user@xr-host
 </pre></div>
 </div>
 <p>Then open <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code> locally.</p>
-<p>For direct access on a trusted private network, configure the application-owned
-viewer explicitly when registering it with the runtime:</p>
+<p>For direct access on a trusted private network, pass <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code> to
+the lab-instrument or tea-making sample. This binds the viewer to
+<code class="docutils literal notranslate"><span class="pre">0.0.0.0:8092</span></code>. Applications can configure the same behavior when registering
+their viewer with the runtime:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">viewer</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
     <span class="s2">"web-events"</span><span class="p">,</span>
     <span class="n">WebEventsAgent</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s2">"0.0.0.0"</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">8092</span><span class="p">),</span>
