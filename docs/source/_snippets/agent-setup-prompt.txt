@@ -1,5 +1,6 @@
-Set up xr-ai for me: ask me whether to build against the latest release or
-main, then fetch skills/getting-started/SKILL.md at that ref from
+Set up xr-ai for me: ask me whether to build against the latest release
+(newest stable tag; a prerelease only if no stable exists) or main, then
+fetch skills/getting-started/SKILL.md at that ref from
 https://raw.githubusercontent.com/NVIDIA/xr-ai/. If the file does not exist
 at that ref, the release predates agent setup: get my OK to use main for
 both the skill and the checkout. Install the skill (or just follow it), and

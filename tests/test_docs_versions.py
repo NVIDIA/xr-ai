@@ -75,3 +75,11 @@ def test_source_links_use_the_current_documentation_ref(monkeypatch) -> None:
             f"https://github.com/NVIDIA/xr-ai/tree/{ref}/docs\n"
             f"https://raw.githubusercontent.com/NVIDIA/xr-ai/{ref}/skills/getting-started/SKILL.md"
         ]
+
+
+def test_readme_agent_prompt_matches_docs_snippet() -> None:
+    snippet = (
+        _ROOT / "docs" / "source" / "_snippets" / "agent-setup-prompt.txt"
+    ).read_text()
+    readme = (_ROOT / "README.md").read_text()
+    assert f"```text\n{snippet}```" in readme
