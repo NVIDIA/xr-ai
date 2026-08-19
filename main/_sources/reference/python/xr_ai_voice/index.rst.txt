@@ -7,7 +7,8 @@ xr_ai_voice
 
    Public voice runtime for XR agents.
 
-   Applications configure and register :class:`VoiceAgent`; media sessions,
+   Applications configure and register :class:`VoiceAgent` and may route
+   concurrent producers through :class:`VoiceAggregationAgent`; media sessions,
    audio framing, and pipeline processors are implementation details.
 
 
@@ -17,6 +18,7 @@ Attributes
 
 .. autoapisummary::
 
+   xr_ai_voice.VOICE_CONTRIBUTION_TOPIC
    xr_ai_voice.VOICE_OUTPUT_TOPIC
    xr_ai_voice.VOICE_TRANSCRIPT_TOPIC
 
@@ -34,6 +36,7 @@ Classes
 
 .. autoapisummary::
 
+   xr_ai_voice.VoiceAggregationAgent
    xr_ai_voice.VadConfig
    xr_ai_voice.UserQuery
    xr_ai_voice.VoiceAgent
@@ -47,6 +50,50 @@ Classes
 
 Package Contents
 ----------------
+
+.. py:data:: VOICE_CONTRIBUTION_TOPIC
+
+   Candidate spoken output consumed by :class:`VoiceAggregationAgent`.
+
+
+.. py:class:: VoiceAggregationAgent(*, llm: xr_ai_models.LLMService, prompt: str = _DEFAULT_PROMPT, coalesce_window_s: float = 0.15, queue_capacity: int = 64, max_batch_size: int = 8, max_tokens: int = 192, stream_idle_timeout_s: float = 15.0, participant_idle_timeout_s: float = 60.0, speech_rate_wpm: float = 150.0, minimum_playback_s: float = 0.4, maximum_playback_s: float = 30.0, rewrite_timeout_s: float = 5.0)
+
+
+
+   Serialize and coalesce candidate speech independently per participant.
+
+   A lone finite contribution passes through without a model call after the
+   short coalescing window. The aggregator keeps that response open for its
+   estimated spoken duration, so updates arriving while it is being spoken
+   wait and coalesce instead of building a speech queue. Multiple pending
+   finite contributions are rewritten into one response. A lone incremental
+   response streams through immediately and uses the same playback estimate
+   after its final chunk. An urgent contribution interrupts the active output.
+
+
+   .. py:method:: contribute(output: xr_ai_voice.VoiceOutput, ctx: xr_ai_runtime.RuntimeContext) -> None
+      :async:
+
+
+      Enqueue one finite response or incremental response fragment.
+
+
+
+   .. py:method:: stop() -> None
+      :async:
+
+
+      Cancel and await all participant aggregation tasks.
+
+
+
+   .. py:method:: release(participant_id: str) -> None
+      :async:
+
+
+      Cancel and release one departed participant's aggregation state.
+
+
 
 .. py:class:: VadConfig
 

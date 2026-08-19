@@ -59,6 +59,23 @@ loopback HTTP listener. It is not persistence, does not inspect every runtime
 topic, and does not enter model, voice, media, or hub authentication paths. The
 application selects which typed events to forward explicitly.
 
+Applications with multiple speech producers may place
+`VoiceAggregationAgent` before `VoiceAgent`. Producers publish candidate
+finite or incremental responses to `voice.contribution`; the aggregator owns
+participant-scoped ordering, preserves a lone stream, coalesces simultaneous
+finite updates through the configured `LLMService`, holds an active response
+for a bounded, open-loop estimate of its spoken duration, and publishes only
+the result to `voice.output`. Pending work is capacity-bounded with a
+priority-aware drop policy: routine work never displaces an alert, while a new
+alert replaces the oldest pending routine update or, if necessary, the oldest
+alert. Urgent output bypasses coalescing and rewriting, retains displaced
+routine work encountered during coalescing or rewrite for a later batch, and
+interrupts active speech. Interrupted stream IDs remain quarantined through
+their terminator or idle expiry, and the agent enforces its rewrite deadline
+independently of the model transport. This
+policy remains outside the private media pipeline so applications opt in
+explicitly and retain ownership of which events should become speech.
+
 `ProcessorEndpoint` is the minimal agent-side hub boundary. It receives data,
 audio, frame signals, and participant events and sends participant-routed return
 traffic. Video tools acquire frames on demand; raw pixels and media stay on the
