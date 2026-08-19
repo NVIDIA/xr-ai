@@ -13,6 +13,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 concurrency:
   group: lint-${{ github.ref }}
@@ -21,7 +22,7 @@ concurrency:
 jobs:
   ruff:
     name: ruff check
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && vars.PR_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && contains(github.event.pull_request.labels.*.name, 'ci:self-hosted') && 'Linux' || 'ubuntu-latest' }}
     timeout-minutes: 5
 
     steps:
