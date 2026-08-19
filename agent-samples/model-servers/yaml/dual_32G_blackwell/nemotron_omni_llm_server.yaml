@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Experimental dual-32 GB Blackwell allocation. NVFP4 Omni owns GPU 0;
+# Cosmos, embedding, and STT share GPU 1. The shorter context limits KV cache
+# while this profile is validated on Brev.
+host: "0.0.0.0"
+port: 8108
+hf_token: ""
+model_cache: ../../../../models
+cuda_visible_devices: "0"
+max_num_seqs: 4
+tensor_parallel_size: 1
+max_model_len: 16384
+gpu_memory_utilization: 0.88
+enforce_eager: false
+video_pruning_rate: 0.5
+video_fps: 2
+video_num_frames: 64
+moe_backend: triton
+vllm_backend: docker
+vllm_image: vllm/vllm-openai:v0.20.0
+extra_pip: []

@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Cosmos needs a measured 22.1 GiB budget. On a nominal 32 GB GPU, 0.70
+# reserves that capacity while leaving room for embedding, STT, and runtime.
+model: nvidia/Cosmos3-Nano
+hf_overrides:
+  architectures:
+    - Cosmos3ForConditionalGeneration
+hf_token: ""
+port: 8100
+host: "0.0.0.0"
+cuda_visible_devices: "1"
+model_cache: ../../../../models
+gpu_memory_utilization: 0.70
+max_num_seqs: 4
+enforce_eager: true
+async_scheduling: true
+mm_encoder_tp_mode: data
+max_videos_per_prompt: 0
+max_images_per_prompt: 4
+vllm_backend: docker
+vllm_image: nvcr.io/nvidia/vllm:26.07-py3

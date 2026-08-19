@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# UNTESTED ESTIMATE: the LLM NIM owns GPU 0.
+image: nvcr.io/nim/nvidia/nemotron-3-nano:2.0.10
+http_port: 8110
+nim_cache: ../../../../models/nim
+cuda_visible_devices: "0"
+env:
+  NIM_MAX_MODEL_LEN: "16384"
+  NIM_KVCACHE_PERCENT: "0.85"
+  NIM_PASSTHROUGH_ARGS: "--enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser nemotron_v3"

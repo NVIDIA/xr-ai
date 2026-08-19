@@ -16,6 +16,7 @@ def detect_gpu_config() -> str:
     Profiles
     --------
     dual_48G_ada   — 2× ADA 48 GB (default / current dev box)
+    dual_32G_blackwell — 2× Blackwell 32 GB
     spark          — 1× Blackwell GB10 (DGX Spark; ~96 GiB GPU-visible HBM)
     96G_blackwell  — 1× Blackwell ~96 GB
 
@@ -63,8 +64,13 @@ def detect_gpu_config() -> str:
     is_spark     = any(s in first_name for s in _SPARK_NAMES)
     known_mem    = [m for _, _, m in gpus if m > 0]
     total_mem_gb = sum(known_mem) / 1024 if known_mem else 0.0
+    dual_32_blackwell = n_gpus == 2 and all(
+        cap >= 10.0 and 30_000 <= mem < 40_000 for _, cap, mem in gpus
+    )
 
-    if is_blackwell and (is_spark or (not known_mem)):
+    if dual_32_blackwell:
+        cfg = "dual_32G_blackwell"
+    elif is_blackwell and (is_spark or (not known_mem)):
         cfg = "spark"
     elif is_blackwell and total_mem_gb >= 120:
         cfg = "spark"

@@ -175,7 +175,8 @@ uv sync
 uv run model_servers
 ```
 
-GPU profiles are auto-detected (`dual_48G_ada` / `spark` / `96G_blackwell`).
+GPU profiles are auto-detected (`dual_32G_blackwell` / `dual_48G_ada` /
+`spark` / `96G_blackwell`).
 On first run the stack downloads tens of GB from Hugging Face and can take
 tens of minutes. On subsequent runs the containers restart in under a minute.
 

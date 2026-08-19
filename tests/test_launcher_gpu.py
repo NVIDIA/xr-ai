@@ -52,6 +52,13 @@ class TestDetectGpuConfig:
 
     # ── Blackwell scenarios ────────────────────────────────────────────────────
 
+    def test_dual_32gb_blackwell_returns_dual_profile(self):
+        with _mock_smi([
+            "GeForce RTX 5090, 12.0, 32607 MiB",
+            "GeForce RTX 5090, 12.0, 32607 MiB",
+        ]):
+            assert detect_gpu_config() == "dual_32G_blackwell"
+
     def test_blackwell_96gb_returns_96G_blackwell(self):
         with _mock_smi(["RTX PRO 6000 Blackwell, 12.0, 98304 MiB"]):
             assert detect_gpu_config() == "96G_blackwell"

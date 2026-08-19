@@ -20,6 +20,7 @@ _LOCAL_VLM_CONFIGS = (
     _SERVER_YAML,
     _SAMPLES / "simple-vlm-example" / "yaml" / "vlm_server.yaml",
     _MODEL_PROFILES / "96G_blackwell" / "vlm_server.yaml",
+    _MODEL_PROFILES / "dual_32G_blackwell" / "vlm_server.yaml",
     _MODEL_PROFILES / "dual_48G_ada" / "vlm_server.yaml",
     _MODEL_PROFILES / "spark" / "vlm_server.yaml",
 )
@@ -88,8 +89,12 @@ def test_hardware_profiles_reserve_measured_reasoner_memory() -> None:
     dual_ada = yaml.safe_load(
         (_MODEL_PROFILES / "dual_48G_ada" / "vlm_server.yaml").read_text()
     )
+    dual_blackwell = yaml.safe_load(
+        (_MODEL_PROFILES / "dual_32G_blackwell" / "vlm_server.yaml").read_text()
+    )
 
     assert blackwell["gpu_memory_utilization"] == 0.23
+    assert dual_blackwell["gpu_memory_utilization"] == 0.70
     assert dual_ada["gpu_memory_utilization"] == 0.47
 
 

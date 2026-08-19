@@ -103,7 +103,45 @@ def test_dual_ada_configs_follow_profile_gpu_layout(
     assert yaml.safe_load(config_path.read_text())["cuda_visible_devices"] == gpu
 
 
-@pytest.mark.parametrize("profile", ["96G_blackwell", "dual_48G_ada", "spark"])
+@pytest.mark.parametrize(
+    ("service", "gpu"),
+    [("stt", "1"), ("omni", "0"), ("vlm", "1"), ("embedding", "1")],
+)
+def test_dual_32g_blackwell_splits_default_stack(
+    monkeypatch: pytest.MonkeyPatch,
+    service: str,
+    gpu: str,
+) -> None:
+    monkeypatch.setattr(
+        _model_servers, "detect_gpu_config", lambda: "dual_32G_blackwell"
+    )
+
+    processes, _ = _model_servers._build_processes("default")
+    process = next(p for p in processes if p.name == service)
+    config_path = _REPO_ROOT / "agent-samples/model-servers" / str(process.config)
+
+    assert yaml.safe_load(config_path.read_text())["cuda_visible_devices"] == gpu
+
+
+@pytest.mark.parametrize("selection", ["default", "vlm_llm_nim", "vlm_speech_nim"])
+def test_dual_32g_blackwell_covers_every_deployment_profile(
+    monkeypatch: pytest.MonkeyPatch,
+    selection: str,
+) -> None:
+    monkeypatch.setattr(
+        _model_servers, "detect_gpu_config", lambda: "dual_32G_blackwell"
+    )
+
+    processes, _ = _model_servers._build_processes(selection)
+
+    for process in processes:
+        config_path = _REPO_ROOT / "agent-samples/model-servers" / str(process.config)
+        assert config_path.is_file(), config_path
+
+
+@pytest.mark.parametrize(
+    "profile", ["96G_blackwell", "dual_32G_blackwell", "dual_48G_ada", "spark"]
+)
 def test_omni_profiles_select_supported_vllm_images(profile: str) -> None:
     profile_path = (
         _REPO_ROOT
@@ -117,7 +155,7 @@ def test_omni_profiles_select_supported_vllm_images(profile: str) -> None:
     assert config["vllm_backend"] == "docker"
     assert config["vllm_image"] == "vllm/vllm-openai:v0.20.0"
     assert config["extra_pip"] == []
-    if profile == "96G_blackwell":
+    if profile in {"96G_blackwell", "dual_32G_blackwell"}:
         assert config["moe_backend"] == "triton"
     else:
         assert "moe_backend" not in config

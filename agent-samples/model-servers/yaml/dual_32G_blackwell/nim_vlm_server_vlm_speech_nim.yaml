@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# UNTESTED ESTIMATE: speech NIMs own GPU 0; Cosmos and embedding share GPU 1.
+image: nvcr.io/nim/nvidia/cosmos-reason1-7b:1.4.1
+http_port: 8100
+nim_cache: ../../../../models/nim
+cuda_visible_devices: "1"
+env:
+  NIM_MAX_MODEL_LEN: "8192"
+  NIM_KVCACHE_PERCENT: "0.75"

@@ -35,8 +35,9 @@ uv sync
 uv run model_servers
 ```
 
-GPU profiles are auto-detected (`dual_48G_ada`, `spark`, `96G_blackwell`). These
-are presets for common configurations; to run on a different GPU, refer to
+GPU profiles are auto-detected (`dual_32G_blackwell`, `dual_48G_ada`, `spark`,
+`96G_blackwell`). These are presets for common configurations; to run on a
+different GPU, refer to
 {doc}`Running on other GPUs </getting_started/requirements>`.
 On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.

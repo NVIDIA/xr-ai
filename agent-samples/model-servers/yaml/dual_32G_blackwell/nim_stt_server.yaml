@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# UNTESTED ESTIMATE: Riva speech NIMs share GPU 0 in vlm_speech_nim.
+image: nvcr.io/nim/nvidia/parakeet-tdt-0.6b-v2:1.2.0
+http_port: 9010
+grpc_port: 50051
+nim_cache: ../../../../models/nim
+cuda_visible_devices: "0"
+env:
+  NIM_USE_MULTIPROCESSING_FOR_INFERENCE: "false"
