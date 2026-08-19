@@ -42,6 +42,12 @@ uv sync
 uv run simple_vlm_example
 ```
 
+`HF_TOKEN` is required by default; pass `--allow-anonymous` to run without one
+(see [`credentials.md`](../../docs/source/getting_started/credentials.md)).
+
+The VLM and STT keep running after you exit so the next run skips the model
+reload; free the VRAM with `cd ../model-servers && uv run model_servers --stop`.
+
 Open the web client shown in the hub banner, connect, and then speak or type a
 question.
 

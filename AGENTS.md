@@ -19,6 +19,7 @@ services/        Hub, model servers, and typed capability services
 utils/           Launcher, logging, VAD, vLLM, and voice-gate utilities
 tests/           Cross-package and integration tests
 docs/source/     User and contributor documentation
+skills/          Skill bank that sets coding agents up
 ```
 
 ## Architecture boundaries

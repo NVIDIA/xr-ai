@@ -64,12 +64,22 @@ def test_source_links_use_the_current_documentation_ref(monkeypatch) -> None:
             monkeypatch.setenv(environment, ref)
         source = [
             "https://github.com/NVIDIA/xr-ai/blob/main/docs/example.md\n"
-            "https://github.com/NVIDIA/xr-ai/tree/main/docs"
+            "https://github.com/NVIDIA/xr-ai/tree/main/docs\n"
+            "https://raw.githubusercontent.com/NVIDIA/xr-ai/main/skills/getting-started/SKILL.md"
         ]
 
         config["_rewrite_github_links"](None, "example", source)
 
         assert source == [
             f"https://github.com/NVIDIA/xr-ai/blob/{ref}/docs/example.md\n"
-            f"https://github.com/NVIDIA/xr-ai/tree/{ref}/docs"
+            f"https://github.com/NVIDIA/xr-ai/tree/{ref}/docs\n"
+            f"https://raw.githubusercontent.com/NVIDIA/xr-ai/{ref}/skills/getting-started/SKILL.md"
         ]
+
+
+def test_readme_agent_prompt_matches_docs_snippet() -> None:
+    snippet = (
+        _ROOT / "docs" / "source" / "_snippets" / "agent-setup-prompt.txt"
+    ).read_text()
+    readme = (_ROOT / "README.md").read_text()
+    assert f"```text\n{snippet}```" in readme

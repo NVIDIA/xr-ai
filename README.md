@@ -10,6 +10,18 @@
 Agentic AI for XR — an open-source foundation for multi-modal, real-time
 conversational AI within the CloudXR ecosystem.
 
+**Using a coding agent?** Paste this to it:
+
+```text
+Set up xr-ai for me: ask me whether to build against the latest release
+(newest stable tag; a prerelease only if no stable exists) or main, then
+fetch skills/getting-started/SKILL.md at that ref from
+https://raw.githubusercontent.com/NVIDIA/xr-ai/. If the file does not exist
+at that ref, the release predates agent setup: get my OK to use main for
+both the skill and the checkout. Install the skill (or just follow it), and
+walk me through the rest of the setup.
+```
+
 ## Public Beta Notice
 
 This project is publicly available in beta and is under active development.
@@ -226,8 +238,7 @@ runtime-selection details.
 
 There are two ways to run it:
 
-**Standalone** (~23 GB VRAM) — starts its own VLM and STT, owns them for the
-session, and stops them when you exit:
+**Standalone** (~23 GB VRAM) — starts its own VLM and STT:
 
 ```bash
 cd agent-samples/simple-vlm-example
@@ -242,7 +253,11 @@ several minutes).  `HF_TOKEN` is required by default; pass
 
 **With model-servers pre-running** — start `model_servers` to pre-warm VLM
 (port 8100) and STT (port 8103). The demo detects and reuses them.
-When you exit, those services keep running.
+
+In both modes the VLM and STT keep running after you exit so the next run
+skips the model reload (see
+[model-server persistence](docs/source/components/ai-services.md#model-server-persistence)); free
+the VRAM with `cd agent-samples/model-servers && uv run model_servers --stop`.
 
 #### Step 1 — Start the server
 
@@ -251,14 +266,19 @@ uv run simple_vlm_example
 ```
 
 The hub, VLM, STT, and TTS start together (or reuse running services).
-When ready the hub prints:
+The hub prints:
 
 ```
-[hub]   LiveKit URL : wss://0.0.0.0:8080
+[hub]   LiveKit URL : wss://localhost:8080
 [hub]   Room        : xr-room
 [hub]   Token       : eyJ…
 [hub]   Web client  : https://localhost:8080
 ```
+
+This banner appears as soon as the hub itself is ready, while the model
+services and worker are still starting.  Clients can connect as soon as it
+appears, but the agent answers queries only after the launcher prints its
+`All processes ready` banner.
 
 #### Step 2 — Connect a client
 
@@ -528,6 +548,7 @@ For engineers and agents working in the repo:
 | [`AGENTS.md`](AGENTS.md) | Working contract — hard rules every change must satisfy |
 | [`DEPENDENCIES.md`](DEPENDENCIES.md) | Authoritative dependency map (update with every `pyproject.toml` change) |
 | [Versioned documentation](https://nvidia.github.io/xr-ai/) | Latest release by default, plus `main` development and release-tag documentation |
+| [`skills/README.md`](skills/README.md) | Skill bank: setup skills for coding agents |
 | [`docs/source/overview/architecture.md`](docs/source/overview/architecture.md) | Hub ↔ transport ↔ agent boundaries; known limitations |
 | [`docs/source/components/launcher-and-process-model.md`](docs/source/components/launcher-and-process-model.md) | `Process` / `run_stack` mechanics; ready-file protocol |
 | [`docs/source/components/ai-services.md`](docs/source/components/ai-services.md) | VLM / STT / TTS / LLM / embedding server reference + worker call examples |
