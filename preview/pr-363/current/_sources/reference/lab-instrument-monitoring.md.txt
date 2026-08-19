@@ -220,15 +220,15 @@ typed msgpack/ZMQ service when the backend boundary is a separate process.
 tracking-loss, state, foreground, transcript, and participant lifecycle topics.
 It publishes compact `WebEvent` projections to the shared `WebEventsAgent`; it
 does not tail JSONL files or subscribe by wildcard. The page at
-`http://<xr-host>:8092` groups those events by participant and presentation
-topic while the JSONL files remain the durable record. The shipped sample binds
-to all interfaces; allow TCP port 8092 through the host firewall for remote
-access.
+`http://127.0.0.1:8092` groups those events by participant and presentation
+topic while the JSONL files remain the durable record. Pass
+`--expose-web-events` to bind all IPv4 interfaces for access at
+`http://<xr-host>:8092`, and restrict TCP port 8092 to a trusted network.
 
 The viewer is read-only and bounded by `web_events_max_events`. Its listener has
-no participant authentication or TLS. Use the externally reachable sample
-default only on a trusted development network, or put an authenticated TLS
-reverse proxy in front of it.
+no participant authentication or TLS. Use the externally reachable sample mode
+only on a trusted development network, or put an authenticated TLS reverse
+proxy in front of it.
 
 ## Adapting the sample
 

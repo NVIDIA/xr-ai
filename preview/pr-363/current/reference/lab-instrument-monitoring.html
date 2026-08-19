@@ -710,14 +710,14 @@ typed msgpack/ZMQ service when the backend boundary is a separate process.</p>
 tracking-loss, state, foreground, transcript, and participant lifecycle topics.
 It publishes compact <code class="docutils literal notranslate"><span class="pre">WebEvent</span></code> projections to the shared <code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code>; it
 does not tail JSONL files or subscribe by wildcard. The page at
-<code class="docutils literal notranslate"><span class="pre">http://&lt;xr-host&gt;:8092</span></code> groups those events by participant and presentation
-topic while the JSONL files remain the durable record. The shipped sample binds
-to all interfaces; allow TCP port 8092 through the host firewall for remote
-access.</p>
+<code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code> groups those events by participant and presentation
+topic while the JSONL files remain the durable record. Pass
+<code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code> to bind all IPv4 interfaces for access at
+<code class="docutils literal notranslate"><span class="pre">http://&lt;xr-host&gt;:8092</span></code>, and restrict TCP port 8092 to a trusted network.</p>
 <p>The viewer is read-only and bounded by <code class="docutils literal notranslate"><span class="pre">web_events_max_events</span></code>. Its listener has
-no participant authentication or TLS. Use the externally reachable sample
-default only on a trusted development network, or put an authenticated TLS
-reverse proxy in front of it.</p>
+no participant authentication or TLS. Use the externally reachable sample mode
+only on a trusted development network, or put an authenticated TLS reverse
+proxy in front of it.</p>
 </section>
 <section id="adapting-the-sample">
 <h2>Adapting the sample<a class="headerlink" href="#adapting-the-sample" title="Link to this heading">#</a></h2>
