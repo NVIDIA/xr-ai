@@ -16,6 +16,7 @@ from runpy import run_path
 from types import SimpleNamespace
 
 import cv2
+import numpy as np
 import pytest
 import yaml
 from xr_ai_models import ChatResponse, ToolCall
@@ -96,6 +97,7 @@ from lab_instrument_monitoring_worker.instruments import (  # noqa: E402  # pyri
     LabInstrumentReadResult,
     ReadLabInstrumentsRequest,
     _marker_log_id,
+    _parse_joint_readings,
 )
 from lab_instrument_monitoring_worker.monitor import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     MonitorAgent,
@@ -218,7 +220,8 @@ def test_sample_uses_named_native_agents_and_shared_connection_client() -> None:
         "instruments.py",
     } <= {path.name for path in package.glob("*.py")}
     assert "xr-ai-agent-runtime" in dependencies
-    assert "xr-ai-tools[frames,image-editing,marker-tracking,vision]" in dependencies
+    assert "Pillow>=10.0" in dependencies
+    assert "xr-ai-tools[frames,marker-tracking,vision]" in dependencies
     assert "xr-ai-voice" in dependencies
     assert "xr-ai-web-events" in dependencies
     assert "xr-ai-nat" not in dependencies
@@ -464,33 +467,31 @@ def test_instrument_read_prompt_rejects_adjacent_device_displays(
         device_map=_device_map(),
         prompt=prompt,
     )
-    query = LabInstrumentAgent._reading_query(
-        TrackedMarker(
-            marker_type=MarkerType.QR_CODE,
-            value="device-1",
-            corners=[
-                MarkerPoint(x=1, y=1),
-                MarkerPoint(x=2, y=1),
-                MarkerPoint(x=2, y=2),
-                MarkerPoint(x=1, y=2),
-            ],
-        ),
-        "Device1",
-    )
+    query = LabInstrumentAgent._reading_query(["M1", "M2"])
 
     assert "same continuous housing" in normalized_prompt
-    assert "adjacent" in normalized_prompt
     assert "only readable display" in normalized_prompt
-    assert "target housing has no visible readable display" in normalized_prompt
+    assert "all labelled markers together" in normalized_prompt
+    assert "Never assign one display to more than one marker" in normalized_prompt
+    assert "own housing has no visible readable display" in normalized_prompt
     assert "UNKNOWN" in normalized_prompt
     assert "untrusted data" in normalized_prompt
     assert captured_system_prompts == [prompt]
-    assert "solid magenta polygon marks one target" in query.lower()
-    assert "Do not reuse a reading from any other device" in query
-    assert "return UNKNOWN" in query
-    assert '"marker_type": "qr_code"' in query
-    assert '"marker_id": "device-1"' in query
-    assert '"device_name": "Device1"' in query
+    assert 'exactly these keys: ["M1", "M2"]' in query
+    assert "Never assign one display to multiple markers" in query
+
+
+def test_joint_instrument_response_requires_exact_labels_and_string_values() -> None:
+    assert _parse_joint_readings(
+        '```json\n{"M1":"12.0 V","M2":"UNKNOWN"}\n```',
+        ["M1", "M2"],
+    ) == {"M1": "12.0 V", "M2": "UNKNOWN"}
+    assert _parse_joint_readings('{"M1":"12.0 V"}', ["M1", "M2"]) is None
+    assert _parse_joint_readings(
+        '{"M1":"12.0 V","M2":"UNKNOWN","M3":"99 A"}',
+        ["M1", "M2"],
+    ) is None
+    assert _parse_joint_readings('{"M1":12,"M2":"UNKNOWN"}', ["M1", "M2"]) is None
 
 
 def test_unmapped_marker_log_identifier_redacts_payload() -> None:
@@ -526,7 +527,9 @@ async def test_instrument_reader_returns_sighting_when_display_is_unreadable() -
     )
     images = _make_images()
     agent = _make_instruments(images)
-    frame_reference = images.images.put(b"jpeg", owner="participant-1")
+    ok, encoded = cv2.imencode(".png", np.full((64, 64, 3), 240, dtype=np.uint8))
+    assert ok
+    frame_reference = images.images.put(encoded.tobytes(), owner="participant-1")
 
     async def current_frame(_request):
         return ImageFrame(
@@ -541,18 +544,11 @@ async def test_instrument_reader_returns_sighting_when_display_is_unreadable() -
     async def tracked_markers(_request):
         return SimpleNamespace(available=True, markers=[marker], message="")
 
-    async def filled_polygon(_request):
-        return SimpleNamespace(
-            available=True,
-            image=frame_reference,
-        )
-
     async def unreadable(_request):
-        return ImageQueryResult(text="UNKNOWN")
+        return ImageQueryResult(text='{"M1":"UNKNOWN"}')
 
     images.get_current_frame = SimpleNamespace(execute=current_frame)  # type: ignore[assignment]
     images.track_markers = SimpleNamespace(execute=tracked_markers)  # type: ignore[assignment]
-    agent._fill_polygon = SimpleNamespace(execute=filled_polygon)  # type: ignore[assignment]
     agent._query_image = SimpleNamespace(execute=unreadable)  # type: ignore[assignment]
 
     result = await agent._read_lab_instruments(
@@ -569,6 +565,93 @@ async def test_instrument_reader_returns_sighting_when_display_is_unreadable() -
         )
     ]
     assert result.available is False
+
+
+@pytest.mark.asyncio
+async def test_instrument_reader_queries_all_markers_once_and_maps_joint_result() -> None:
+    markers = [
+        TrackedMarker(
+            marker_type=MarkerType.ARUCO,
+            value="23",
+            corners=[
+                MarkerPoint(x=125, y=25),
+                MarkerPoint(x=175, y=25),
+                MarkerPoint(x=175, y=75),
+                MarkerPoint(x=125, y=75),
+            ],
+        ),
+        TrackedMarker(
+            marker_type=MarkerType.QR_CODE,
+            value="meter-a",
+            corners=[
+                MarkerPoint(x=25, y=25),
+                MarkerPoint(x=75, y=25),
+                MarkerPoint(x=75, y=75),
+                MarkerPoint(x=25, y=75),
+            ],
+        ),
+        TrackedMarker(
+            marker_type=MarkerType.QR_CODE,
+            value="unmapped-neighbor",
+            corners=[
+                MarkerPoint(x=225, y=25),
+                MarkerPoint(x=275, y=25),
+                MarkerPoint(x=275, y=75),
+                MarkerPoint(x=225, y=75),
+            ],
+        ),
+    ]
+    ok, encoded = cv2.imencode(".png", np.full((100, 300, 3), 240, dtype=np.uint8))
+    assert ok
+    images = _make_images()
+    agent = _make_instruments(images)
+    frame_reference = images.images.put(encoded.tobytes(), owner="participant-1")
+    requests: list[ImageQueryRequest] = []
+
+    async def current_frame(_request):
+        return ImageFrame(
+            image=frame_reference,
+            timestamp_us=11,
+            width=300,
+            height=100,
+            sequence=2,
+            participant_id="participant-1",
+        )
+
+    async def tracked_markers(_request):
+        return SimpleNamespace(available=True, markers=markers, message="")
+
+    async def joint_read(request: ImageQueryRequest):
+        requests.append(request)
+        annotated = images.images.resolve(request.image)
+        assert isinstance(annotated, bytes)
+        decoded = cv2.imdecode(np.frombuffer(annotated, np.uint8), cv2.IMREAD_COLOR)
+        assert decoded is not None
+        assert not np.array_equal(decoded[28, 28], decoded[28, 128])
+        return ImageQueryResult(text='{"M1":"12.0 V","M2":"UNKNOWN","M3":"99.0 A"}')
+
+    images.get_current_frame = SimpleNamespace(execute=current_frame)  # type: ignore[assignment]
+    images.track_markers = SimpleNamespace(execute=tracked_markers)  # type: ignore[assignment]
+    agent._query_image = SimpleNamespace(execute=joint_read)  # type: ignore[assignment]
+
+    result = await agent._read_lab_instruments(
+        ReadLabInstrumentsRequest(participant_id="participant-1")
+    )
+
+    assert len(requests) == 1
+    assert 'exactly these keys: ["M1", "M2", "M3"]' in requests[0].query
+    assert "meter-a" not in requests[0].query
+    assert "unmapped-neighbor" not in requests[0].query
+    assert result.readings == [
+        InstrumentReading(
+            timestamp_us=11,
+            marker_type=MarkerType.QR_CODE,
+            marker_id="meter-a",
+            device_name="Device1",
+            meter_reading="12.0 V",
+        )
+    ]
+    assert {sighting.marker_id for sighting in result.sightings} == {"meter-a", "23"}
 
 
 @pytest.mark.asyncio
@@ -1578,9 +1661,8 @@ def test_visual_eval_covers_prompt_driven_monitor_and_instrument_rules() -> None
         ("monitor", "monitor-baseline-resists-instructions"),
         ("monitor", "monitor-unchanged"),
         ("monitor", "monitor-changed"),
-        ("instrument", "instrument-same-device"),
-        ("instrument", "instrument-distinct-right-device"),
-        ("instrument", "instrument-ambiguous-association"),
-        ("instrument", "instrument-target-has-no-reading"),
+        ("instrument", "instrument-two-readable-devices"),
+        ("instrument", "instrument-competing-markers-left-reading"),
+        ("instrument", "instrument-competing-markers-right-reading"),
         ("instrument", "instrument-visible-instruction-is-data"),
     }
