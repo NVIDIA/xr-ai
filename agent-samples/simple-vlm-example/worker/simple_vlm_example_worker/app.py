@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import io
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -12,8 +14,9 @@ from threading import Lock
 
 import nemo_relay
 from loguru import logger
+from PIL import Image
 from xr_ai_logging import setup_logging
-from xr_ai_models import load_models_config, make_stt, make_tts, make_vlm
+from xr_ai_models import VLMService, load_models_config, make_stt, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
@@ -28,6 +31,56 @@ from .agent import (
     SimpleVlmAgent,
 )
 from .config import WorkerConfig
+
+_VLM_WARMUP_SIZE = (1280, 720)
+_VLM_WARMUP_MAX_TOKENS = 4
+_VLM_WARMUP_TIMEOUT_S = 120.0
+
+
+def _vlm_warmup_jpeg() -> bytes:
+    buffer = io.BytesIO()
+    with Image.new("RGB", _VLM_WARMUP_SIZE, color=(128, 128, 128)) as image:
+        image.save(buffer, format="JPEG", quality=90)
+    return buffer.getvalue()
+
+
+_VLM_WARMUP_IMAGE = _vlm_warmup_jpeg()
+
+
+async def _warm_vlm(vlm: VLMService) -> bool:
+    """Confirm readiness by exercising the production multimodal stream."""
+
+    try:
+        if not await vlm.health():
+            return False
+        started_at = time.monotonic()
+        logger.info(
+            "VLM warmup request started image={}x{} max_tokens={}",
+            *_VLM_WARMUP_SIZE,
+            _VLM_WARMUP_MAX_TOKENS,
+        )
+        first_token_at: float | None = None
+        async for _ in vlm.stream_images(
+            [_VLM_WARMUP_IMAGE],
+            "What is the dominant color?",
+            system_prompt="Answer with one word.",
+            max_tokens=_VLM_WARMUP_MAX_TOKENS,
+            timeout=_VLM_WARMUP_TIMEOUT_S,
+        ):
+            if first_token_at is None:
+                first_token_at = time.monotonic()
+                logger.info(
+                    "VLM warmup first token latency_ms={:.1f}",
+                    (first_token_at - started_at) * 1000,
+                )
+        logger.info(
+            "VLM warmup completed total_ms={:.1f}",
+            (time.monotonic() - started_at) * 1000,
+        )
+        return True
+    except Exception:
+        logger.exception("VLM warmup failed; readiness will retry")
+        return False
 
 
 @asynccontextmanager
@@ -83,7 +136,7 @@ async def run_app(
             silero_threshold=config.silero_threshold,
         ),
         voice_gate=voice_gate,
-        probes={"vlm": vlm.health},
+        probes={"vlm": lambda: _warm_vlm(vlm)},
         ready_file=ready_file,
         closeables=(vlm,),
         text_topic="vlm.response",

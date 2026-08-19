@@ -117,6 +117,7 @@ uv run simple_vlm_example
 ```
 
 The XR-Media-Hub, VLM, STT, and TTS start together (or reuse running services).
+Worker readiness includes a short 1280x720 streaming VLM warmup.
 The hub prints:
 
 ```
