@@ -148,7 +148,9 @@ def test_vllm_kv_cache_failure_is_classified_as_insufficient_gpu_memory(
     assert "-0.17 GiB" in diagnosis
 
 
-@pytest.mark.parametrize("hardware", ["dual_48G_ada", "96G_blackwell", "spark"])
+@pytest.mark.parametrize(
+    "hardware", ["single_48G_ada", "dual_48G_ada", "96G_blackwell", "spark"],
+)
 def test_every_bundled_hardware_profile_and_service_yaml_has_reservation(
     hardware: str,
 ) -> None:
@@ -156,3 +158,24 @@ def test_every_bundled_hardware_profile_and_service_yaml_has_reservation(
     assert load_gpu_hardware_profile(directory / "gpu_profile.yaml").name == hardware
     for config in directory.glob("*_server*.yaml"):
         assert "gpu_memory_reservation_gib:" in config.read_text(), config
+
+
+def test_simple_vlm_fits_one_45_gib_l40s() -> None:
+    sample = _REPO_ROOT / "agent-samples/simple-vlm-example/yaml"
+    hardware = load_gpu_hardware_profile(
+        _REPO_ROOT
+        / "agent-samples/model-servers/yaml/single_48G_ada/gpu_profile.yaml"
+    )
+    inventory = (_gpu(0, total=45.0, free=45.0),)
+    plan = resolve_gpu_memory_plan(
+        stack="simple-vlm-example/local", hardware=hardware, inventory=inventory,
+        service_configs={
+            "vlm": (sample / "vlm_server.yaml", True),
+            "stt": (sample / "stt_server.yaml", False),
+        },
+    )
+
+    results = preflight_gpu_memory(plan, inventory)
+    require_gpu_memory_preflight(results)
+    assert results[0].incremental_required_gib == 27.0
+    assert results[0].remaining_gib == 16.0

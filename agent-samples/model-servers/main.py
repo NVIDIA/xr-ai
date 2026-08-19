@@ -98,6 +98,9 @@ _MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
 }
 
 _GPU_PROFILES_ROOT = _BASE / "yaml"
+_GPU_PROFILE_NAMES = tuple(
+    path.parent.name for path in sorted(_GPU_PROFILES_ROOT.glob("*/gpu_profile.yaml"))
+)
 _VLLM_SERVICES = {"agent-llm", "omni", "vlm", "embedding"}
 
 
@@ -136,6 +139,15 @@ def _build_processes(
         for service, (project, command, config_base) in _MODEL_SERVICES.items()
         if deployment.launch_mode(service) == "own"
     ]
+    missing_configs = [
+        process.config for process in processes
+        if process.config is not None and not (_BASE / process.config).is_file()
+    ]
+    if missing_configs:
+        raise ValueError(
+            f"GPU profile {profile_name!r} does not support the model-server stack; "
+            f"missing service configs: {missing_configs}"
+        )
     return processes, deployment.required_credentials
 
 
@@ -246,7 +258,7 @@ def run() -> None:
                    help="Start without HF_TOKEN (unauthenticated downloads "
                         "of the multi-GB checkpoints may stall indefinitely).")
     p.add_argument(
-        "--gpu-profile", choices=("dual_48G_ada", "96G_blackwell", "spark"),
+        "--gpu-profile", choices=_GPU_PROFILE_NAMES,
         help="Explicit hardware profile. By default XR-AI requires an exact "
              "per-GPU topology match; this override is for reviewed custom hosts.",
     )

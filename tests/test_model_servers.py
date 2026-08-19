@@ -239,6 +239,11 @@ def test_profile_path_argument_loads_custom_profile(tmp_path, monkeypatch) -> No
     assert str(processes[0].config) == "yaml/dual_48G_ada/vlm_server.yaml"
 
 
+def test_single_ada_profile_is_rejected_for_full_model_stack() -> None:
+    with pytest.raises(ValueError, match="does not support the model-server stack"):
+        _model_servers._build_processes("default", "single_48G_ada")
+
+
 def test_cli_requires_profile_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     required: list[str] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)

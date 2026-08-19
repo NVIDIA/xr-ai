@@ -66,11 +66,10 @@ def test_unparseable_inventory_is_rejected() -> None:
         detect_gpu_config(_PROFILES)
 
 
-def test_single_ada_does_not_match_dual_profile() -> None:
-    with _mock_smi([_row(0, "RTX 6000 Ada", 8.9, 49140)]), pytest.raises(
-        GPUInventoryError, match="no bundled",
-    ):
-        detect_gpu_config(_PROFILES)
+@pytest.mark.parametrize("name", ["NVIDIA L40S", "RTX 6000 Ada"])
+def test_single_48_gib_ada_matches_simple_stack_profile(name: str) -> None:
+    with _mock_smi([_row(0, name, 8.9, 46068)]):
+        assert detect_gpu_config(_PROFILES).name == "single_48G_ada"
 
 
 def test_dual_ada_requires_minimum_memory_on_each_gpu() -> None:

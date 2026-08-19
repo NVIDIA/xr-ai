@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# One GPU exposed from a 48 GB Ada host. This supports samples whose service
+# YAML is hardware-independent, such as simple-vlm-example's local stack.
+profile: single_48G_ada
+required_gpu_count: 1
+min_compute_capability: 8.9
+max_compute_capability: 10.0
+min_memory_gib_per_gpu: 44.0
+gpu_name_pattern: '(?i)\b(?:L40S|RTX 6000 Ada)\b'
+device_safety_reserve_gib: 2.0

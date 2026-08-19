@@ -7,11 +7,11 @@
 
 ## Hardware
 
-The bundled GPU profiles target a single NVIDIA RTX PRO 6000 Blackwell workstation
-GPU or an NVIDIA DGX Spark, both of which have enough GPU memory to run the full model
-stack locally. These profiles are turnkey presets, not a hardware allowlist: you
-can run on other NVIDIA GPUs by tuning the per-server GPU-memory split. Refer to
-[Running on other GPUs](#running-on-other-gpus) below.
+The bundled profiles cover single- and dual-GPU 48 GB Ada hosts, a single NVIDIA
+RTX PRO 6000 Blackwell workstation GPU, and NVIDIA DGX Spark. The single-Ada
+profile supports smaller stacks such as simple VLM; the full shared model-server
+stack requires a supported larger topology. These are turnkey presets, not a
+hardware allowlist. Refer to [Running on other GPUs](#running-on-other-gpus).
 
 If you prefer not to run models on local hardware, model endpoints are plain
 URLs: point the worker configuration at a cloud NIM or model endpoint and no
