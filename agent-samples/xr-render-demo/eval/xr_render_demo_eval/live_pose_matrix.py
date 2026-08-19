@@ -84,43 +84,45 @@ async def main() -> None:
                 participant = f"live-pose-{int(time.time())}-{case_index}"
                 await endpoint.inject_participant_event(ParticipantEvent(
                     participant_id=participant, joined=True, pts_us=time.time_ns() // 1_000))
-                await clear_scene(scene)
-                before = {i.id for i in (await scene.get_scene_state(EmptyRequest())).objects}
-                await endpoint.inject_data(DataMessage(
-                    participant_id=participant, topic="live.smoke.text",
-                    pts_us=time.time_ns() // 1_000, data=prompt.encode()))
-                new = None
-                deadline = asyncio.get_running_loop().time() + 75
-                while asyncio.get_running_loop().time() < deadline:
-                    await asyncio.sleep(2)
-                    objects = {i.id: i for i in (await scene.get_scene_state(EmptyRequest())).objects}
-                    fresh = [objects[k] for k in objects.keys() - before]
-                    if fresh:
-                        await asyncio.sleep(3)
+                try:
+                    await clear_scene(scene)
+                    before = {i.id for i in (await scene.get_scene_state(EmptyRequest())).objects}
+                    await endpoint.inject_data(DataMessage(
+                        participant_id=participant, topic="live.smoke.text",
+                        pts_us=time.time_ns() // 1_000, data=prompt.encode()))
+                    new = None
+                    deadline = asyncio.get_running_loop().time() + 75
+                    while asyncio.get_running_loop().time() < deadline:
+                        await asyncio.sleep(2)
                         objects = {i.id: i for i in (await scene.get_scene_state(EmptyRequest())).objects}
                         fresh = [objects[k] for k in objects.keys() - before]
-                        new = fresh
-                        break
-                if not new:
-                    print(f"FAIL {pose_name:15s} {prompt!r}: nothing created")
-                    failed += 1
-                    continue
-                if len(new) > 1:
-                    print(f"FAIL {pose_name:15s} {prompt!r}: {len(new)} objects created")
-                    failed += 1
-                    continue
-                item = new[0]
-                ex, ey, ez = expected_spot(p, distance)
-                dx, dy, dz = item.position.x - ex, item.position.y - ey, item.position.z - ez
-                miss = math.sqrt(dx * dx + dy * dy + dz * dz)
-                verdict = "PASS" if miss <= 0.25 else "FAIL"
-                print(f"{verdict} {pose_name:15s} {prompt!r}: {item.type} at "
-                      f"({item.position.x:.2f},{item.position.y:.2f},{item.position.z:.2f}) "
-                      f"expected ({ex:.2f},{ey:.2f},{ez:.2f}) miss={miss:.2f}")
-                passed += verdict == "PASS"
-                failed += verdict == "FAIL"
-                await endpoint.inject_participant_event(ParticipantEvent(
-                    participant_id=participant, joined=False, pts_us=time.time_ns() // 1_000))
+                        if fresh:
+                            await asyncio.sleep(3)
+                            objects = {i.id: i for i in (await scene.get_scene_state(EmptyRequest())).objects}
+                            fresh = [objects[k] for k in objects.keys() - before]
+                            new = fresh
+                            break
+                    if not new:
+                        print(f"FAIL {pose_name:15s} {prompt!r}: nothing created")
+                        failed += 1
+                        continue
+                    if len(new) > 1:
+                        print(f"FAIL {pose_name:15s} {prompt!r}: {len(new)} objects created")
+                        failed += 1
+                        continue
+                    item = new[0]
+                    ex, ey, ez = expected_spot(p, distance)
+                    dx, dy, dz = item.position.x - ex, item.position.y - ey, item.position.z - ez
+                    miss = math.sqrt(dx * dx + dy * dy + dz * dz)
+                    verdict = "PASS" if miss <= 0.25 else "FAIL"
+                    print(f"{verdict} {pose_name:15s} {prompt!r}: {item.type} at "
+                          f"({item.position.x:.2f},{item.position.y:.2f},{item.position.z:.2f}) "
+                          f"expected ({ex:.2f},{ey:.2f},{ez:.2f}) miss={miss:.2f}")
+                    passed += verdict == "PASS"
+                    failed += verdict == "FAIL"
+                finally:
+                    await endpoint.inject_participant_event(ParticipantEvent(
+                        participant_id=participant, joined=False, pts_us=time.time_ns() // 1_000))
                 case_index += 1
         print(f"\npose matrix: {passed} passed, {failed} failed", flush=True)
     finally:

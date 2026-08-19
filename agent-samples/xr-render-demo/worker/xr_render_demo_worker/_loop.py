@@ -67,8 +67,18 @@ async def tool_loop(
         for call in tool_calls:
             try:
                 result = await handle_tool_call(call, toolset)
+            except ValueError as exc:
+                logger.debug("tool {} rejected input: {!r}", call.name, exc)
+                result = ToolCallResult(
+                    message=ChatMessage(
+                        role="tool",
+                        content=json.dumps({"error": type(exc).__name__, "detail": str(exc)}),
+                        tool_call_id=call.id,
+                    ),
+                    return_direct=False,
+                )
             except Exception as exc:
-                logger.debug("tool {} raised: {!r}", call.name, exc)
+                logger.exception("tool {} failed unexpectedly", call.name)
                 result = ToolCallResult(
                     message=ChatMessage(
                         role="tool",
