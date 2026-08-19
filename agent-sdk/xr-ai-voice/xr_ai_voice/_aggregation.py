@@ -452,7 +452,6 @@ class VoiceAggregationAgent(Agent):
                         contribution,
                         output_id,
                         interrupt=False,
-                        final=contribution.output.final,
                     )
                     state.in_flight_count = 0
                     if contribution.output.final:
@@ -515,7 +514,6 @@ class VoiceAggregationAgent(Agent):
         response_id: str,
         *,
         interrupt: bool,
-        final: bool | None = None,
     ) -> None:
         try:
             await contribution.ctx.publish(
@@ -523,7 +521,7 @@ class VoiceAggregationAgent(Agent):
                 VoiceOutput(
                     text=contribution.output.text,
                     response_id=response_id,
-                    final=contribution.output.final if final is None else final,
+                    final=contribution.output.final,
                     interrupt=interrupt,
                     timestamp_us=contribution.output.timestamp_us,
                 ),
