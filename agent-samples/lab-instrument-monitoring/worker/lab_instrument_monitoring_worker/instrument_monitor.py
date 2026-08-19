@@ -334,12 +334,21 @@ class InstrumentMonitorAgent(Agent):
                     )
                 )
         for change in changes:
-            await runtime.publish(
-                INSTRUMENT_CHANGE_TOPIC,
-                change,
-                participant_id=participant_id,
-                source="instrument-monitor",
-            )
+            try:
+                await runtime.publish(
+                    INSTRUMENT_CHANGE_TOPIC,
+                    change,
+                    participant_id=participant_id,
+                    source="instrument-monitor",
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.opt(exception=True).warning(
+                    "instrument change publish failed pid={!r} device={!r}",
+                    participant_id,
+                    change.device_name,
+                )
 
     async def _publish_lost(self, participant_id: str, now: float) -> None:
         tracker = self._trackers.get(participant_id)
@@ -364,12 +373,21 @@ class InstrumentMonitorAgent(Agent):
                     )
                 )
         for event in lost:
-            await runtime.publish(
-                INSTRUMENT_LOST_TOPIC,
-                event,
-                participant_id=participant_id,
-                source="instrument-monitor",
-            )
+            try:
+                await runtime.publish(
+                    INSTRUMENT_LOST_TOPIC,
+                    event,
+                    participant_id=participant_id,
+                    source="instrument-monitor",
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.opt(exception=True).warning(
+                    "instrument lost publish failed pid={!r} device={!r}",
+                    participant_id,
+                    event.device_name,
+                )
 
     async def _publish_snapshot(self, participant_id: str) -> None:
         tracker = self._trackers.get(participant_id)
@@ -384,15 +402,23 @@ class InstrumentMonitorAgent(Agent):
                     key=lambda tracked: tracked.state.device_name,
                 )
             ]
-        await runtime.publish(
-            INSTRUMENT_STATE_TOPIC,
-            InstrumentStateSnapshot(
-                timestamp_us=time.time_ns() // 1_000,
-                instruments=instruments,
-            ),
-            participant_id=participant_id,
-            source="instrument-monitor",
-        )
+        try:
+            await runtime.publish(
+                INSTRUMENT_STATE_TOPIC,
+                InstrumentStateSnapshot(
+                    timestamp_us=time.time_ns() // 1_000,
+                    instruments=instruments,
+                ),
+                participant_id=participant_id,
+                source="instrument-monitor",
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.opt(exception=True).warning(
+                "instrument state publish failed pid={!r}",
+                participant_id,
+            )
 
     async def _cancel(self, participant_id: str) -> bool:
         task = self._tasks.pop(participant_id, None)

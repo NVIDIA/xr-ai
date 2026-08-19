@@ -271,7 +271,7 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     assert config.device_map.resolve(MarkerType.ARUCO, "99") is None
     assert config.artifacts_dir == _SAMPLE / "artifacts"
     assert config.capture_marker_scans is False
-    assert config.web_events_host == "127.0.0.1"
+    assert config.web_events_host == "0.0.0.0"
     assert config.web_events_port == 8092
     assert config.web_events_max_events == 5_000
     assert config.monitor_interval_s == 5.0
@@ -307,6 +307,7 @@ def test_launcher_can_route_visual_inference_to_omni(tmp_path: Path) -> None:
     assert models["models"]["llm"]["deployment"]["service"] == "omni"
     assert models["models"]["vlm"]["category"] == "vlm"
     assert models["models"]["vlm"]["adapter"]["capabilities"]["vision"] is True
+    assert models["models"]["vlm"]["adapter"]["default_extras"]["max_tokens"] >= 1024
     assert models["models"]["vlm"]["endpoint"]["base_url"].endswith(":8108")
     assert models["models"]["vlm"]["deployment"]["service"] == "omni"
     assert [process.name for process in processes] == [
@@ -618,6 +619,42 @@ async def test_instrument_monitor_emits_changes_when_only_unit_changes() -> None
 
 
 @pytest.mark.asyncio
+async def test_instrument_monitor_contains_subscriber_publish_failures() -> None:
+    published_topics: list[str] = []
+
+    class FailingRuntime:
+        async def publish(self, topic, _event, **_kwargs) -> None:
+            published_topics.append(topic.name)
+            raise OSError("sink unavailable")
+
+    monitor = _make_instrument_monitor()
+    monitor._runtime = FailingRuntime()  # type: ignore[assignment]
+    monitor._trackers["participant-1"] = _ParticipantTracker()
+
+    await monitor._observe(
+        "participant-1",
+        [
+            InstrumentReading(
+                timestamp_us=1,
+                marker_type=MarkerType.QR_CODE,
+                marker_id="meter-a",
+                device_name="Device1",
+                meter_reading="12 V",
+            )
+        ],
+        observed_at=1.0,
+    )
+    await monitor._publish_lost("participant-1", 20.0)
+    await monitor._publish_snapshot("participant-1")
+
+    assert published_topics == [
+        INSTRUMENT_CHANGE_TOPIC.name,
+        INSTRUMENT_LOST_TOPIC.name,
+        INSTRUMENT_STATE_TOPIC.name,
+    ]
+
+
+@pytest.mark.asyncio
 async def test_monitor_controls_are_participant_scoped_and_idempotent() -> None:
     monitor = _make_monitor()
     runtime = AgentRuntime()
@@ -673,6 +710,36 @@ def test_monitor_response_is_strict_and_normalizes_baselines() -> None:
         )
     with pytest.raises(ValueError):
         parse_monitor_response("not json", baseline=False)
+
+
+@pytest.mark.asyncio
+async def test_monitor_loop_continues_after_subscriber_publish_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from lab_instrument_monitoring_worker import monitor as monitor_module
+
+    attempts = 0
+    monitor = _make_monitor()
+
+    class FailingRuntime:
+        async def publish(self, _topic, _record, **_kwargs) -> None:
+            nonlocal attempts
+            attempts += 1
+            raise OSError("sink unavailable")
+
+    async def observe(_participant_id: str) -> MonitorRecord:
+        return MonitorRecord(timestamp_us=1, record_type="observation", caption="A bench.")
+
+    async def finish_after_first_iteration(_delay: float) -> None:
+        monitor._runtime = None
+
+    monitor._runtime = FailingRuntime()  # type: ignore[assignment]
+    monkeypatch.setattr(monitor, "_observe", observe)
+    monkeypatch.setattr(monitor_module.asyncio, "sleep", finish_after_first_iteration)
+
+    await monitor._monitor("participant-1")
+
+    assert attempts == 1
 
 
 @pytest.mark.asyncio
@@ -1001,6 +1068,136 @@ async def test_foreground_injects_participant_into_current_frame_tool(tmp_path: 
 
 
 @pytest.mark.asyncio
+async def test_foreground_prior_tool_then_current_view_is_spoken_once(tmp_path: Path) -> None:
+    class Llm:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def chat(self, _messages, **_kwargs):
+            self.calls += 1
+            tool = RECENT_VISUAL_HISTORY_TOOL if self.calls == 1 else CURRENT_VIEW_TOOL
+            arguments = '{"limit":2}' if self.calls == 1 else "{}"
+            return ChatResponse(
+                content="",
+                reasoning=None,
+                tool_calls=[ToolCall(id=f"call-{self.calls}", name=tool, arguments=arguments)],
+                finish_reason="tool_calls",
+                raw={},
+            )
+
+    class Vision:
+        def stream(self, _request: ImageQueryRequest):
+            async def chunks():
+                for text in ("A blue ", "notebook."):
+                    yield SimpleNamespace(text=text)
+
+            return chunks()
+
+    published: list[VoiceOutput] = []
+
+    class Context:
+        metadata = SimpleNamespace(message_id="turn-streamed")
+
+        async def publish(self, _topic, output: VoiceOutput) -> None:
+            published.append(output)
+
+    images = _make_images()
+    images.get_current_frame = SimpleNamespace(  # type: ignore[assignment]
+        execute=lambda _request: asyncio.sleep(
+            0,
+            result=ImageFrame(
+                image=ImageReference(uri="xr-image://frame-1"),
+                timestamp_us=1,
+                width=640,
+                height=480,
+                sequence=1,
+                participant_id="participant-1",
+            ),
+        )
+    )
+    agent = ForegroundAgent(
+        llm=Llm(),  # type: ignore[arg-type]
+        images=images,
+        vlm=SimpleNamespace(),  # type: ignore[arg-type]
+        files=FileOutputAgent(tmp_path, history_size=2),
+        monitor=_make_monitor(images),
+        lab_instruments=_make_instruments(images),
+        instrument_monitor=_make_instrument_monitor(),
+        prompt="Route tools.",
+    )
+    agent._vision = Vision()  # type: ignore[assignment]
+
+    response, tools, spoken = await agent._answer(
+        "What changed, and what can you see now?",
+        "participant-1",
+        Context(),  # type: ignore[arg-type]
+    )
+
+    assert response == "A blue notebook."
+    assert tools == [RECENT_VISUAL_HISTORY_TOOL, CURRENT_VIEW_TOOL]
+    assert spoken is True
+    assert [output.text for output in published] == ["A blue ", "notebook.", ""]
+
+
+@pytest.mark.asyncio
+async def test_foreground_empty_current_view_stream_uses_fallback(tmp_path: Path) -> None:
+    class Llm:
+        async def chat(self, _messages, **_kwargs):
+            return ChatResponse(
+                content="",
+                reasoning=None,
+                tool_calls=[ToolCall(id="call-view", name=CURRENT_VIEW_TOOL, arguments="{}")],
+                finish_reason="tool_calls",
+                raw={},
+            )
+
+    class Vision:
+        def stream(self, _request: ImageQueryRequest):
+            async def chunks():
+                if False:
+                    yield SimpleNamespace(text="")
+
+            return chunks()
+
+    images = _make_images()
+    images.get_current_frame = SimpleNamespace(  # type: ignore[assignment]
+        execute=lambda _request: asyncio.sleep(
+            0,
+            result=ImageFrame(
+                image=ImageReference(uri="xr-image://frame-1"),
+                timestamp_us=1,
+                width=640,
+                height=480,
+                sequence=1,
+                participant_id="participant-1",
+            ),
+        )
+    )
+    agent = ForegroundAgent(
+        llm=Llm(),  # type: ignore[arg-type]
+        images=images,
+        vlm=SimpleNamespace(),  # type: ignore[arg-type]
+        files=FileOutputAgent(tmp_path, history_size=2),
+        monitor=_make_monitor(images),
+        lab_instruments=_make_instruments(images),
+        instrument_monitor=_make_instrument_monitor(),
+        prompt="Route tools.",
+    )
+    agent._vision = Vision()  # type: ignore[assignment]
+    ctx = SimpleNamespace(metadata=SimpleNamespace(message_id="turn-empty"), publish=lambda *_args: None)
+
+    response, tools, spoken = await agent._answer(
+        "What do you see?",
+        "participant-1",
+        ctx,  # type: ignore[arg-type]
+    )
+
+    assert response == "Done."
+    assert tools == [CURRENT_VIEW_TOOL]
+    assert spoken is False
+
+
+@pytest.mark.asyncio
 async def test_foreground_background_control_returns_direct(tmp_path: Path) -> None:
     class Llm:
         def __init__(self) -> None:
@@ -1177,4 +1374,5 @@ def test_visual_eval_covers_prompt_driven_monitor_and_instrument_rules() -> None
         ("monitor", "monitor-changed"),
         ("instrument", "instrument-same-device"),
         ("instrument", "instrument-ambiguous-association"),
+        ("instrument", "instrument-target-has-no-reading"),
     }

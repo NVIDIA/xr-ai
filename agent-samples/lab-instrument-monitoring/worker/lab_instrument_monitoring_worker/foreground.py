@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
+from dataclasses import dataclass
 from pathlib import Path
 
 import nemo_relay
@@ -91,6 +92,11 @@ _LAB_INSTRUMENTS_STOP_DESCRIPTION = "The only route to stop continuous marker-la
 _LAB_INSTRUMENTS_STATUS_DESCRIPTION = (
     "Report whether continuous marker-labelled instrument reading monitoring is running."
 )
+
+
+@dataclass(slots=True)
+class _CurrentViewDelivery:
+    spoke: bool = False
 
 
 class _CurrentFrameArgs(BaseModel):
@@ -303,11 +309,13 @@ class ForegroundAgent(Agent):
         *,
         timestamp_us: int | None = None,
     ) -> tuple[str, list[str], bool]:
+        current_view_delivery = _CurrentViewDelivery()
         tools = self._participant_tools(
             participant_id,
             query=query,
             ctx=ctx,
             timestamp_us=timestamp_us,
+            current_view_delivery=current_view_delivery,
         )
         messages = [
             ChatMessage(role="system", content=self._prompt),
@@ -352,10 +360,11 @@ class ForegroundAgent(Agent):
             )
         fallback = "Done." if result.return_direct else "I don't have an answer."
         calls = [record.call.name for record in result.tool_calls]
+        terminating_tool = calls[-1] if result.return_direct and calls else None
         return (
             result.content.strip() or fallback,
             calls,
-            result.return_direct and calls == [CURRENT_VIEW_TOOL],
+            terminating_tool == CURRENT_VIEW_TOOL and current_view_delivery.spoke,
         )
 
     def _participant_tools(
@@ -365,6 +374,7 @@ class ForegroundAgent(Agent):
         query: str = "",
         ctx: RuntimeContext | None = None,
         timestamp_us: int | None = None,
+        current_view_delivery: _CurrentViewDelivery | None = None,
     ) -> ToolSet:
         async def inspect_current(_request: _CurrentFrameArgs) -> ImageQueryResult:
             if ctx is None:
@@ -374,6 +384,7 @@ class ForegroundAgent(Agent):
                 participant_id,
                 ctx,
                 timestamp_us=timestamp_us,
+                delivery=current_view_delivery,
             )
 
         async def read_history(request: _HistoryArgs) -> MonitoringHistoryResult:
@@ -516,6 +527,7 @@ class ForegroundAgent(Agent):
         ctx: RuntimeContext,
         *,
         timestamp_us: int | None,
+        delivery: _CurrentViewDelivery | None = None,
     ) -> ImageQueryResult:
         response_id = ctx.metadata.message_id
         first = True
@@ -539,6 +551,8 @@ class ForegroundAgent(Agent):
                         timestamp_us=timestamp_us,
                     ),
                 )
+                if delivery is not None and unavailable.strip():
+                    delivery.spoke = True
                 opened = True
                 return ImageQueryResult(text=unavailable, available=False)
             stream = self._vision.stream(ImageQueryRequest(image=frame.image, query=query))
@@ -555,6 +569,8 @@ class ForegroundAgent(Agent):
                             timestamp_us=timestamp_us,
                         ),
                     )
+                    if delivery is not None and chunk.text.strip():
+                        delivery.spoke = True
                     first = False
                     opened = True
             finally:

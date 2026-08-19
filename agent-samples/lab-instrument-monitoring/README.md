@@ -108,12 +108,14 @@ uv run lab_instrument_monitoring --vlm-mode omni
 Connect a glasses or platform client using the authenticated LiveKit URL,
 room, and token printed by the hub. Port 8080 serves the shared connection web
 client together with the authenticated token and signaling routes. The separate
-read-only event viewer runs at <http://127.0.0.1:8092> and groups live output by
-participant and topic. JSONL files remain the durable output.
+read-only event viewer listens on all interfaces; open
+`http://<xr-host>:8092` to group live output by participant and topic. JSONL
+files remain the durable output. Allow TCP port 8092 through the host firewall
+when connecting remotely.
 
-The event viewer intentionally listens on loopback and does not reuse media-hub
-authentication. Use an SSH tunnel for remote development; do not expose it on
-an untrusted network without an authenticated TLS reverse proxy.
+The event viewer does not reuse media-hub authentication and serves plain HTTP.
+Use this externally reachable development default only on a trusted network;
+put an authenticated TLS reverse proxy in front of it before broader exposure.
 
 Ask the foreground assistant to start a background task with an optional focus,
 for example “watch for packages near the doorway.” It can report status or stop
@@ -176,4 +178,5 @@ default profile provides it through `model-servers`.
 cd agent-samples/lab-instrument-monitoring
 uv run --project worker python eval/eval.py
 uv run --project worker python eval/visual_eval.py
+uv run --project worker python eval/visual_eval.py --vlm-mode omni
 ```

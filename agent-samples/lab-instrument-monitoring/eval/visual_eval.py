@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 from pathlib import Path
@@ -21,6 +22,10 @@ from xr_ai_tools.marker_tracking import MarkerPoint, MarkerType, TrackedMarker
 _SAMPLE = Path(__file__).resolve().parents[1]
 _PROMPTS = _SAMPLE / "worker" / "lab_instrument_monitoring_worker" / "prompts"
 _MAGENTA = (255, 0, 255)
+_MODEL_CONFIGS = {
+    "cosmos": _SAMPLE / "yaml" / "models.local.json",
+    "omni": _SAMPLE / "yaml" / "models.omni.json",
+}
 
 
 def _door_scene(*, open_door: bool, instruction_text: bool = False) -> bytes:
@@ -95,10 +100,10 @@ def _image(case: dict[str, Any]) -> bytes:
     raise ValueError(f"unknown eval scene: {scene}")
 
 
-async def main() -> None:
+async def main(vlm_mode: str = "cosmos") -> None:
     cases = yaml.safe_load((_SAMPLE / "eval" / "visual_cases.yaml").read_text(encoding="utf-8"))
     monitor_prompt = (_PROMPTS / "monitor_prompt.txt").read_text(encoding="utf-8").strip()
-    vlm = make_vlm(load_models_config(_SAMPLE / "yaml" / "models.local.json"), "vlm")
+    vlm = make_vlm(load_models_config(_MODEL_CONFIGS[vlm_mode]), "vlm")
     failures: list[str] = []
     try:
         for case in cases:
@@ -106,7 +111,6 @@ async def main() -> None:
                 _image(case),
                 _question(case),
                 system_prompt=monitor_prompt if case["kind"] == "monitor" else "",
-                max_tokens=256,
                 temperature=0.0,
             )
             error = _validate(case, response.content)
@@ -170,4 +174,11 @@ def _validate(case: dict[str, Any], text: str) -> str | None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(description="Evaluate the lab sample's visual prompt contracts.")
+    parser.add_argument(
+        "--vlm-mode",
+        choices=tuple(_MODEL_CONFIGS),
+        default="cosmos",
+        help="Visual model profile to evaluate (default: cosmos).",
+    )
+    asyncio.run(main(parser.parse_args().vlm_mode))

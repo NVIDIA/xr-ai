@@ -250,16 +250,30 @@ class MonitorAgent(Agent):
         with nemo_relay.use_scope_stack(nemo_relay.create_scope_stack()):
             while True:
                 record = await self._observe(participant_id)
-                runtime = self._runtime
-                if runtime is None:
+                if not await self._publish_record(participant_id, record):
                     return
-                await runtime.publish(
-                    MONITOR_RECORD_TOPIC,
-                    record,
-                    participant_id=participant_id,
-                    source="monitor",
-                )
+
                 await asyncio.sleep(self._interval_s)
+
+    async def _publish_record(self, participant_id: str, record: MonitorRecord) -> bool:
+        runtime = self._runtime
+        if runtime is None:
+            return False
+        try:
+            await runtime.publish(
+                MONITOR_RECORD_TOPIC,
+                record,
+                participant_id=participant_id,
+                source="monitor",
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.opt(exception=True).warning(
+                "background monitor record publish failed pid={!r}",
+                participant_id,
+            )
+        return True
 
     async def _observe(self, participant_id: str) -> MonitorRecord:
         now_us = time.time_ns() // 1_000

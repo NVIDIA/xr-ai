@@ -67,10 +67,11 @@ sudo firewall-cmd --reload
 
 ## Live agent-event viewer
 
-Samples that use `WebEventsAgent` serve their live event page at
-`http://127.0.0.1:8092` by default. Because the listener is loopback-only, no
-firewall rule is needed when the browser runs on the XR-AI host. For access
-from a development machine, keep the loopback binding and use an SSH tunnel:
+The `WebEventsAgent` SDK defaults to `http://127.0.0.1:8092`. The lab-instrument
+and tea-making samples override that listener to `0.0.0.0:8092`, making their
+event pages directly reachable at `http://<xr-host>:8092`. Restrict TCP port
+8092 to a trusted development network. For a loopback-bound deployment, use an
+SSH tunnel:
 
 ```bash
 ssh -L 8092:127.0.0.1:8092 user@xr-host
