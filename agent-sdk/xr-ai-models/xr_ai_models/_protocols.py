@@ -12,6 +12,7 @@ name.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from pathlib import Path
 from typing import Any, AsyncIterator, Literal, Mapping, Protocol, Sequence, runtime_checkable
 
@@ -162,6 +163,26 @@ OCRMergeLevel = Literal["word", "sentence", "paragraph"]
 
 
 @dataclass(frozen=True)
+class OCRCapabilities:
+    """Structured output features supported by an OCR service."""
+
+    merge_levels: tuple[OCRMergeLevel, ...]
+    """Detection granularities accepted by the service."""
+
+    structured_detections: bool
+    """Whether the service returns separately addressable text regions."""
+
+    bounding_boxes: bool
+    """Whether structured regions include normalized geometry."""
+
+    confidence_scores: bool
+    """Whether structured regions include confidence scores."""
+
+    reading_order: bool
+    """Whether structured regions are ordered for sequential reading."""
+
+
+@dataclass(frozen=True)
 class OCRPoint:
     """One normalized image coordinate returned by an OCR backend."""
 
@@ -170,6 +191,14 @@ class OCRPoint:
 
     y: float
     """Vertical coordinate normalized to the image height."""
+
+    def __post_init__(self) -> None:
+        """Reject non-finite coordinates outside the normalized image."""
+
+        if not math.isfinite(self.x) or not 0.0 <= self.x <= 1.0:
+            raise ValueError("OCR point x must be finite and between 0 and 1")
+        if not math.isfinite(self.y) or not 0.0 <= self.y <= 1.0:
+            raise ValueError("OCR point y must be finite and between 0 and 1")
 
 
 @dataclass(frozen=True)
@@ -184,6 +213,14 @@ class OCRDetection:
 
     bounding_box: tuple[OCRPoint, ...] = ()
     """Ordered normalized vertices surrounding the recognized region."""
+
+    def __post_init__(self) -> None:
+        """Reject confidence scores outside the normalized range."""
+
+        if self.confidence is not None and (
+            not math.isfinite(self.confidence) or not 0.0 <= self.confidence <= 1.0
+        ):
+            raise ValueError("OCR confidence must be finite and between 0 and 1")
 
 
 @dataclass(frozen=True)
@@ -349,6 +386,9 @@ class VLMService(Protocol):
 @runtime_checkable
 class OCRService(Protocol):
     """Structural interface for optical character recognition services."""
+
+    capabilities: OCRCapabilities
+    """Structured output features supported by this service."""
 
     async def recognize(
         self,

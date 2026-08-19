@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _IMAGE_SCHEME = "xr-image://"
 ImageInput = bytes | Path | str
@@ -35,6 +35,46 @@ class ImageReference(BaseModel):
         if value.startswith("data:"):
             raise ValueError("register inline image data with ImageRegistry.put()")
         return value
+
+
+class NormalizedImagePoint(BaseModel):
+    """One finite image coordinate normalized to the closed unit interval."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    x: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
+    """Horizontal coordinate normalized to the image width."""
+
+    y: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
+    """Vertical coordinate normalized to the image height."""
+
+
+class NormalizedImageBox(BaseModel):
+    """An axis-aligned image box expressed in normalized coordinates."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    left: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
+    """Normalized horizontal coordinate of the left edge."""
+
+    top: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
+    """Normalized vertical coordinate of the top edge."""
+
+    right: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
+    """Normalized horizontal coordinate of the right edge."""
+
+    bottom: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
+    """Normalized vertical coordinate of the bottom edge."""
+
+    @model_validator(mode="after")
+    def validate_area(self) -> NormalizedImageBox:
+        """Require a non-empty rectangle."""
+
+        if self.left >= self.right:
+            raise ValueError("box left must be less than right")
+        if self.top >= self.bottom:
+            raise ValueError("box top must be less than bottom")
+        return self
 
 
 class TimedImage(BaseModel):
@@ -110,6 +150,20 @@ class ImageRegistry:
             raise ValueError(f"unsupported image URI scheme: {parsed.scheme}")
         return Path(uri)
 
+    def owner(self, reference: ImageReference) -> str | None:
+        """Return the owner of a live opaque reference, if one is assigned."""
+
+        if not reference.uri.startswith(_IMAGE_SCHEME):
+            self.resolve(reference)
+            return None
+        try:
+            _image, owner = self._images[reference.uri]
+        except KeyError as exc:
+            raise LookupError(
+                f"image reference is unavailable: {reference.uri}"
+            ) from exc
+        return owner
+
     def release_owner(self, owner: str) -> None:
         """Remove opaque images associated with one participant or workflow."""
 
@@ -126,4 +180,10 @@ class ImageRegistry:
         return len(self._images)
 
 
-__all__ = ["ImageReference", "ImageRegistry", "TimedImage"]
+__all__ = [
+    "ImageReference",
+    "ImageRegistry",
+    "NormalizedImageBox",
+    "NormalizedImagePoint",
+    "TimedImage",
+]

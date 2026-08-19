@@ -17,6 +17,7 @@ from xr_ai_models import (
     Capabilities,
     ChatResponse,
     NvidiaOCR,
+    OCRCapabilities,
     OCRDetection,
     OCRPoint,
     OCRService,
@@ -112,6 +113,13 @@ async def test_nvidia_ocr_sends_nim_payload_and_parses_detections(monkeypatch) -
                 OCRPoint(0.1, 0.3),
             ),
         ),
+    )
+    assert ocr.capabilities == OCRCapabilities(
+        merge_levels=("word", "sentence", "paragraph"),
+        structured_detections=True,
+        bounding_boxes=True,
+        confidence_scores=True,
+        reading_order=True,
     )
 
 
@@ -236,21 +244,54 @@ class _VLM:
         self.closed = True
 
 
-async def test_vlm_ocr_adapts_any_vlm_to_the_same_protocol() -> None:
+async def test_vlm_ocr_adapts_any_vlm_without_fabricating_geometry() -> None:
     vlm = _VLM()
     ocr = VLMOCR(vlm, prompt="Read this meter.")
 
-    result = await ocr.recognize(_PNG, merge_level="word", timeout=4.0)
+    result = await ocr.recognize(_PNG, merge_level="paragraph", timeout=4.0)
     await ocr.close()
 
     assert result.text == "220 V"
-    assert result.detections == (OCRDetection(text="220 V"),)
+    assert result.detections == ()
     assert result.model == "replacement-vlm"
     assert vlm.calls == [
         (_PNG, "Read this meter.", {"temperature": 0.0, "timeout": 4.0, "headers": None})
     ]
     assert vlm.closed is True
     assert isinstance(ocr, OCRService)
+    assert ocr.capabilities == OCRCapabilities(
+        merge_levels=("paragraph",),
+        structured_detections=False,
+        bounding_boxes=False,
+        confidence_scores=False,
+        reading_order=False,
+    )
+
+
+async def test_vlm_ocr_rejects_unsupported_structured_merge_levels() -> None:
+    vlm = _VLM()
+    ocr = VLMOCR(vlm)
+
+    with pytest.raises(ValueError, match="supports only"):
+        await ocr.recognize(_PNG, merge_level="word")
+
+    assert vlm.calls == []
+
+
+@pytest.mark.parametrize(
+    "point",
+    [
+        (float("nan"), 0.5),
+        (0.5, float("inf")),
+        (-0.1, 0.5),
+        (0.5, 1.1),
+    ],
+)
+def test_ocr_points_reject_invalid_normalized_coordinates(
+    point: tuple[float, float],
+) -> None:
+    with pytest.raises(ValueError, match="finite and between 0 and 1"):
+        OCRPoint(*point)
 
 
 async def test_vlm_ocr_preserves_an_empty_result() -> None:

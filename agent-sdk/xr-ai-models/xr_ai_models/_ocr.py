@@ -23,6 +23,7 @@ from ._openai_compat import (
 )
 from ._protocols import (
     ImageInput,
+    OCRCapabilities,
     OCRDetection,
     OCRMergeLevel,
     OCRPoint,
@@ -39,6 +40,14 @@ _DEFAULT_VLM_PROMPT = (
 
 class NvidiaOCR:
     """Client for the NVIDIA Image OCR NIM HTTP contract."""
+
+    capabilities = OCRCapabilities(
+        merge_levels=("word", "sentence", "paragraph"),
+        structured_detections=True,
+        bounding_boxes=True,
+        confidence_scores=True,
+        reading_order=True,
+    )
 
     def __init__(
         self,
@@ -70,6 +79,8 @@ class NvidiaOCR:
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> OCRResponse:
+        """Recognize text in one PNG or JPEG image using Image OCR NIM."""
+
         image_url = await self._data_url(image, timeout=timeout)
         payload = {
             "input": [{"type": "image_url", "url": image_url}],
@@ -118,6 +129,8 @@ class NvidiaOCR:
         return _validated_data_url(_normalize_image(Path(image)))
 
     async def health(self) -> bool:
+        """Return whether the configured Image OCR endpoint is ready."""
+
         return await _http_health(
             self._client,
             self.health_url,
@@ -125,6 +138,8 @@ class NvidiaOCR:
         )
 
     async def close(self) -> None:
+        """Close the internally owned HTTP client, if any."""
+
         if self._owns_client:
             await self._client.aclose()
 
@@ -137,6 +152,14 @@ class NvidiaOCR:
 
 class VLMOCR:
     """Expose any configured VLM through the OCR service protocol."""
+
+    capabilities = OCRCapabilities(
+        merge_levels=("paragraph",),
+        structured_detections=False,
+        bounding_boxes=False,
+        confidence_scores=False,
+        reading_order=False,
+    )
 
     def __init__(self, vlm: VLMService, *, prompt: str = _DEFAULT_VLM_PROMPT) -> None:
         if not prompt.strip():
@@ -152,7 +175,13 @@ class VLMOCR:
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> OCRResponse:
-        del merge_level
+        """Recognize text in one image through the wrapped VLM service."""
+
+        if merge_level not in self.capabilities.merge_levels:
+            raise ValueError(
+                f"VLM OCR supports only {self.capabilities.merge_levels!r}, "
+                f"not {merge_level!r}"
+            )
         response = await self._vlm.ask_image(
             image,
             self._prompt,
@@ -161,19 +190,22 @@ class VLMOCR:
             headers=headers,
         )
         text = response.content.strip()
-        detections = (OCRDetection(text=text),) if text else ()
         model = response.raw.get("model")
         return OCRResponse(
             text=text,
-            detections=detections,
+            detections=(),
             model=model if isinstance(model, str) else None,
             raw=response.raw,
         )
 
     async def health(self) -> bool:
+        """Return whether the wrapped VLM endpoint is ready."""
+
         return await self._vlm.health()
 
     async def close(self) -> None:
+        """Close the wrapped VLM service."""
+
         await self._vlm.close()
 
     async def __aenter__(self) -> VLMOCR:

@@ -217,7 +217,10 @@ Future non-OpenAI-compat backends (LiteLLM, vendor SDKs) plug in as new
 
 `make_ocr(config, "ocr")` returns the same `OCRService` for local Nemotron OCR,
 hosted NVIDIA inference, or a VLM used as an OCR fallback. The native OCR path
-preserves text regions, confidence scores, and normalized bounding boxes.
+preserves text regions, confidence scores, normalized bounding boxes, and
+reading order. Each service advertises these structured-output capabilities;
+the VLM fallback supports paragraph transcription only and returns no invented
+regions, confidence scores, or geometry.
 
 For a local NVIDIA Image OCR NIM whose weights are downloaded from Hugging
 Face, use the `nemotron_ocr_v2` preset with the NIM root URL:

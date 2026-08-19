@@ -326,6 +326,16 @@ Hugging Face. Hosted build.nvidia.com inference uses the full
 adapter. See the complete local, hosted, and VLM-fallback profiles in the
 [`xr-ai-models` README](https://github.com/NVIDIA/xr-ai/blob/main/agent-sdk/xr-ai-models/README.md#nemotron-ocr-v2).
 
+At the agent boundary, `read_image_text` consumes an opaque `ImageReference`
+from the shared image registry. It defaults to paragraph granularity and
+returns at most 32 short reading-order span previews plus a bounded aggregate
+preview. Complete structured detections remain behind an `xr-ocr://` result
+handle and can be paged with `get_ocr_spans`. Native Nemotron OCR advertises
+geometry, confidence, and reading-order capabilities; a VLM fallback advertises
+aggregate paragraph transcription only and does not synthesize unsupported
+boxes or confidence scores. Use `crop_image` with a normalized box when OCR
+should operate on a deterministic selected region rather than a full frame.
+
 ## Model-server persistence
 
 The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
