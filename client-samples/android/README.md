@@ -135,3 +135,7 @@ The app requests the following Android permissions:
 | Jetpack Compose BOM | 2024.11.00 | UI framework |
 | `androidx.lifecycle:lifecycle-viewmodel-compose` | 2.8.7 | ViewModel + Compose integration |
 | `androidx.activity:activity-compose` | 1.9.3 | `ComponentActivity` Compose entry-point |
+
+**Build-time only:** `build.gradle.kts` lifts transitive `io.netty` (pulled in by AGP's
+UTP test tooling) past known CVEs in its 4.1 line; the version lives in the `netty` catalog
+entry. Re-check after an AGP bump: `gradle buildEnvironment | grep netty`.
