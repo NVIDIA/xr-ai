@@ -345,6 +345,21 @@ to skip CUDA graph capture. Eager mode starts faster but can reduce per-token
 throughput; keep the default when steady-state performance matters more than
 cold-start time.
 
+### vLLM exits before readiness with insufficient VRAM
+
+**Symptom:** startup previously ended with only `exited before signaling ready`,
+while the detailed log contained `No available memory for the cache blocks`,
+`CUDA out of memory`, or a negative `Available KV cache memory` value.
+
+**Cause:** model weights, encoder profiling, CUDA graphs, other services, and KV
+cache did not fit the service's GPU reservation or the physical free VRAM.
+
+**Fix:** the vLLM wrapper now classifies these signatures as `INSUFFICIENT VRAM`,
+and the launcher normally catches the capacity shortfall in its per-GPU preflight.
+Stop the listed existing GPU consumer or re-measure the affected service and
+regenerate its absolute-GiB reservation. Reducing `max_model_len`, concurrency,
+or media limits is preferable to raising a utilization percentage by hand.
+
 ### `xr_render_demo` exits but VRAM is still pinned
 
 **By design.** The vLLM-backed servers (`nemotron_omni_llm_server`,

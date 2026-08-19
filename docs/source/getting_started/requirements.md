@@ -17,12 +17,11 @@ If you prefer not to run models on local hardware, model endpoints are plain
 URLs: point the worker configuration at a cloud NIM or model endpoint and no
 local GPU is required for the agent or XR-Media-Hub.
 
-| Sample | Local VRAM needed |
-|---|---|
-| model-servers (all models) | ~55 GB |
-| simple-vlm-example (standalone) | ~23 GB |
-| xr-render-demo (requires model-servers) | ~55 GB (models) + ~2 GB (hub/TTS) |
-| Hub only | none |
+XR-AI inventories total and currently free VRAM on every physical GPU before
+starting a local model stack. It prints the service reservations, device safety
+reserve, existing compute processes, and pass/fail result per GPU. The checked-in
+reservation manifests are currently marked ``provisional`` until replaced by
+three-run certification artifacts on each supported host.
 
 ## Software
 
@@ -108,32 +107,71 @@ setups:
   service occupies port 8000. Refer to the `token_server_port` note in
   `services/xr-media-hub/xr_media_hub.yaml`.
 
-## Running on other GPUs
+## GPU profiles and reservations
 
-A profile (`agent-samples/model-servers/yaml/<profile>/`) is a convenience preset
-that pins two knobs per model server so the stack fits a known configuration:
+A hardware profile (`agent-samples/model-servers/yaml/<profile>/`) describes a
+specific topology, not a loose GPU family. Automatic matching verifies GPU count,
+compute capability, and minimum VRAM independently on every device. Failure to run
+or parse `nvidia-smi` is fatal; XR-AI never falls back to an assumed profile.
 
-- `cuda_visible_devices` — which physical GPU each server runs on (for example,
-  the `dual_48G_ada` profile places some servers on GPU `0` and others on GPU `1`).
-- `gpu_memory_utilization` — the fraction of that GPU's VRAM the server may use.
-  Several servers share one GPU, so each takes a slice (for example, `0.43`), and
-  the slices on a given GPU must sum to less than `1.0`.
+Each deployment has a `vram.<deployment>.json` manifest in that directory. Its
+source-of-truth values are absolute GiB reservations per service plus an
+unallocated device safety reserve. At runtime XR-AI derives vLLM's
+`gpu_memory_utilization` as:
 
-To run on a GPU that is not one of the presets, copy the closest profile directory
-and adjust those knobs to your hardware:
+```text
+service reservation GiB / physical GPU total GiB
+```
 
-1. Set `cuda_visible_devices` in each server's YAML to your GPU index, or spread
-   the servers across the GPUs you have.
-2. Tune `gpu_memory_utilization` per server so the slices on each GPU fit its VRAM.
-   Lower the values if a server fails to start with an out-of-memory error; raise
-   them if you have spare VRAM.
-3. On lower-VRAM GPUs, run fewer models concurrently, or lower `max_model_len` on
-   the LLM and VLM servers to reduce the KV-cache footprint.
+Current non-XR processes remain part of used VRAM; they do not reduce that
+denominator. Preflight requires current usage, incremental service reservations,
+and the device safety reserve to fit together before model downloads start.
+
+To intentionally use the closest bundled placement on reviewed custom hardware,
+pass `model_servers --gpu-profile <name>`. Preflight still validates actual free
+VRAM. For a durable custom profile, measure it rather than editing utilization
+percentages by hand.
+
+## Measuring and certifying VRAM
+
+The stdlib-only measurement tool samples `nvidia-smi` every 250 ms from baseline
+through startup and the final stable window. Run a representative workload before
+stopping a long-running sample; the artifact records the overall peak and stable
+median/p95. Its recommendation is the observed peak delta plus 10% and a fixed
+1 GiB service margin.
+
+```bash
+cd xr-ai
+uv run --project agent-samples/model-servers \
+  python -m xr_ai_launcher.vram_measure measure \
+  --label omni-run-1 --gpu 1 --output omni-run-1.json -- \
+  uv run --project services/nemotron-omni-llm \
+  nemotron_omni_llm_server \
+  --config agent-samples/model-servers/yaml/dual_48G_ada/nemotron_omni_llm_server.yaml
+```
+
+Repeat each service measurement at least three times with the same Git revision,
+driver, command, and hashed config. Generate a certified stack manifest from the
+artifacts; certification rejects inconsistent signatures and uses the largest
+recommended reservation:
+
+```bash
+uv run --project agent-samples/model-servers \
+  python -m xr_ai_launcher.vram_measure certify \
+  --hardware-profile dual_48G_ada --stack default \
+  --output agent-samples/model-servers/yaml/dual_48G_ada/vram.default.json \
+  --service omni:1:vllm:omni-run-1.json \
+  --service omni:1:vllm:omni-run-2.json \
+  --service omni:1:vllm:omni-run-3.json
+```
+
+Supply three measurements for every service in the stack. Measure the complete
+sample as an additional aggregate check, especially under configured concurrency
+and maximum image/video inputs.
 
 ```{note}
-The model weights are independent of the GPU. Any NVIDIA GPU with enough VRAM for
-the models you load will run the stack; the profiles only encode where each server
-lands and how much memory it claims.
+The model weights are independent of the GPU, but a certification signature is
+not: model/runtime/config or driver changes require new measurements.
 ```
 
 ## Network

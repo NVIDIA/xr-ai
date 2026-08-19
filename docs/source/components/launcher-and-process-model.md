@@ -28,6 +28,12 @@ managed, reused, or external service ownership to the orchestrator. The same
 file is loaded by the worker through `xr-ai-models`; see the simple VLM
 sample's `yaml/models.local.json` and `yaml/models.hosted.json` profiles.
 
+GPU-backed samples pair that deployment with a versioned VRAM reservation
+manifest. The launcher inventories each physical device, validates the complete
+per-GPU allocation before spawning model processes, and passes a derived
+`XR_AI_GPU_MEMORY_UTILIZATION` value only to vLLM services. `Process.environment`
+holds such process-local overrides without mutating the parent environment.
+
 The orchestrator declares the process sequence in code:
 
 ```python

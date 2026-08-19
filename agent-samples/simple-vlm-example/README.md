@@ -42,6 +42,11 @@ uv sync
 uv run simple_vlm_example
 ```
 
+For the local deployment, startup first prints a strict per-GPU VRAM preflight.
+The `vram.local.<hardware>.json` manifest places the VLM and STT and owns their
+absolute GiB reservations; vLLM utilization is derived from the detected physical
+total. See the requirements guide for measurement and certification commands.
+
 `HF_TOKEN` is required by default; pass `--allow-anonymous` to run without one
 (see [`credentials.md`](../../docs/source/getting_started/credentials.md)).
 

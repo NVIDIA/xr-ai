@@ -46,9 +46,12 @@ uv sync
 uv run model_servers
 ```
 
-GPU profiles are auto-detected (`dual_48G_ada`, `spark`, `96G_blackwell`). These
-are presets for common configurations; to run on a different GPU, refer to
-{doc}`Running on other GPUs </getting_started/requirements>`.
+GPU profiles are strictly auto-matched (`dual_48G_ada`, `spark`,
+`96G_blackwell`) from each device's count, architecture, and total VRAM. Before
+launch, XR-AI prints a per-GPU allocation table and stops with a VRAM shortfall
+instead of beginning a model download that cannot become ready. For measurement,
+certification, and an explicit custom-host override, refer to
+{doc}`GPU profiles and reservations </getting_started/requirements>`.
 On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.
 
