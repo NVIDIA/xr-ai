@@ -1,0 +1,24 @@
+{
+  "models": {
+    "llm": {
+      "adapter": {"preset": "nemotron_omni"},
+      "endpoint": {"base_url": "http://localhost:8108", "readiness": "health"},
+      "deployment": {"ownership": "reused", "service": "omni"}
+    },
+    "vlm": {
+      "adapter": {"preset": "cosmos3_nano_reasoner"},
+      "endpoint": {"base_url": "http://localhost:8100", "readiness": "health"},
+      "deployment": {"ownership": "reused", "service": "vlm"}
+    },
+    "stt": {
+      "adapter": {"preset": "parakeet_stt"},
+      "endpoint": {"base_url": "http://localhost:8103", "readiness": "health"},
+      "deployment": {"ownership": "reused", "service": "stt"}
+    },
+    "tts": {
+      "adapter": {"preset": "piper_tts"},
+      "endpoint": {"base_url": "http://localhost:8105", "readiness": "health"},
+      "deployment": {"ownership": "managed", "service": "tts"}
+    }
+  }
+}

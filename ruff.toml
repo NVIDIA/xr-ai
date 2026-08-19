@@ -9,6 +9,7 @@
 # PRs land. Regenerate after a cleanup with `ruff check . --output-format=json`.
 
 line-length = 120
+target-version = "py311"
 
 # Nested per-package .venv dirs hold third-party code; ruff's default excludes
 # the top-level .venv but not these. .claude holds agent worktrees (copies of

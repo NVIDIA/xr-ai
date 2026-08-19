@@ -418,6 +418,40 @@ change, even when an individual dependency publishes newer Python wheels.
 
 ### Agent samples
 
+#### `lab-instrument-monitoring` — [`agent-samples/lab-instrument-monitoring/`](agent-samples/lab-instrument-monitoring/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `lab_instrument_monitoring` → `main:run`
+
+#### `lab-instrument-monitoring-worker` — [`agent-samples/lab-instrument-monitoring/worker/`](agent-samples/lab-instrument-monitoring/worker/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `nemo-relay>=0.7.2,<0.8`
+  - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
+  - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-tools[frames,image-editing,marker-tracking,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
+  - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
+  - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
+  - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
+  - `loguru>=0.7`
+  - `pydantic>=2.12`
+  - `pyyaml>=6.0`
+- Optional dependency groups: none
+- Commands:
+  - `lab_instrument_monitoring_worker` → `lab_instrument_monitoring_worker.__main__:run`
+
 #### `model-servers` — [`agent-samples/model-servers/`](agent-samples/model-servers/)
 
 - Python: `>=3.11,<3.13`

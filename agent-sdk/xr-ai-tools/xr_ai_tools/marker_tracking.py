@@ -6,9 +6,12 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 from collections.abc import Iterable
 from enum import StrEnum
+from pathlib import Path
+from urllib.parse import urlsplit
 
 import cv2
 import numpy as np
@@ -18,6 +21,7 @@ from pydantic import BaseModel, Field
 from xr_ai_hub import FrameUnavailable, LiveFrameSource, ProcessorEndpoint
 
 from ._pixels import frame_to_pil
+from .image import ImageInput, ImageReference, ImageRegistry
 from .tools import Tool
 from .types import StrictRequest
 
@@ -44,6 +48,12 @@ class MarkerTrackingRequest(StrictRequest):
         description="Participant whose current camera frame should be scanned.",
     )
     """Participant whose current camera frame should be scanned."""
+
+    image: ImageReference | None = Field(
+        default=None,
+        description="Previously selected image to scan instead of acquiring another frame.",
+    )
+    """Previously selected image to scan instead of acquiring another frame."""
 
 
 class MarkerPoint(BaseModel):
@@ -102,6 +112,18 @@ def _image_pixels(image: Image.Image | np.ndarray) -> np.ndarray:
     if pixels.ndim not in (2, 3):
         raise ValueError("marker image must be grayscale or color")
     return pixels
+
+
+def _open_image(source: ImageInput) -> Image.Image:
+    if isinstance(source, bytes):
+        opened = Image.open(io.BytesIO(source))
+    else:
+        if isinstance(source, str) and urlsplit(source).scheme:
+            raise ValueError("marker tracking requires bytes or a local image path")
+        opened = Image.open(Path(source))
+    with opened:
+        opened.load()
+        return opened.convert("RGB")
 
 
 def _corners(points: np.ndarray) -> tuple[MarkerPoint, MarkerPoint, MarkerPoint, MarkerPoint]:
@@ -275,6 +297,7 @@ class MarkerTrackingTool(Tool[MarkerTrackingRequest, MarkerTrackingResult]):
         frame_max_age_s: float = 2.0,
         frame_timeout_s: float = 5.0,
         manage_status: bool = True,
+        images: ImageRegistry | None = None,
     ) -> None:
         if frame_max_age_s <= 0.0:
             raise ValueError("frame_max_age_s must be positive")
@@ -287,6 +310,7 @@ class MarkerTrackingTool(Tool[MarkerTrackingRequest, MarkerTrackingResult]):
         self.endpoint = endpoint
         self.marker_types = enabled
         self.manage_status = manage_status
+        self.images = images
         self._aruco_detector = (
             _make_aruco_detector(aruco_dictionary)
             if MarkerType.ARUCO in enabled
@@ -316,15 +340,32 @@ class MarkerTrackingTool(Tool[MarkerTrackingRequest, MarkerTrackingResult]):
         self,
         request: MarkerTrackingRequest,
     ) -> MarkerTrackingResult:
-        try:
-            frame = await self.frames.get(request.participant_id)
-        except FrameUnavailable as exc:
-            return MarkerTrackingResult(available=False, message=str(exc))
+        frame = None
+        source: ImageInput | None = None
+        if request.image is None:
+            try:
+                frame = await self.frames.get(request.participant_id)
+            except FrameUnavailable as exc:
+                return MarkerTrackingResult(available=False, message=str(exc))
+        else:
+            if self.images is None:
+                return MarkerTrackingResult(
+                    available=False,
+                    message="Image input is unsupported by this marker tracker.",
+                )
+            try:
+                source = self.images.resolve(request.image)
+            except (LookupError, ValueError) as exc:
+                return MarkerTrackingResult(available=False, message=str(exc))
 
         if self.manage_status:
             await self.endpoint.set_status("processing", request.participant_id)
         try:
-            image = await asyncio.to_thread(frame_to_pil, frame)
+            if source is None:
+                assert frame is not None
+                image = await asyncio.to_thread(frame_to_pil, frame)
+            else:
+                image = await asyncio.to_thread(_open_image, source)
             markers = await asyncio.to_thread(self._extract, image)
         except Exception:
             _LOGGER.exception("marker extraction failed")

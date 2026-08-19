@@ -6,10 +6,10 @@ import ast
 import importlib.util
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
-import tomllib
 import yaml
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -67,6 +67,7 @@ _ALLOWED_LEGACY_REFERENCES = {
 }
 _HUB_PROJECT = _ROOT / "services" / "xr-media-hub"
 _SAMPLE_WEB_CLIENTS = {
+    "lab-instrument-monitoring": _ROOT / "client-samples" / "web",
     "simple-vlm-example": _ROOT / "client-samples" / "web",
     "xr-render-demo": _ROOT / "client-samples" / "web-xr",
 }

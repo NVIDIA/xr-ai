@@ -63,6 +63,7 @@ endpoint and no local GPU is required for the agent or hub.
 |---|---|
 | model-servers (shared models) | ~58 GB |
 | simple-vlm-example (standalone) | ~23 GB |
+| lab-instrument-monitoring (requires model-servers) | ~55 GB (models) + Piper TTS |
 | xr-render-demo (requires model-servers) | ~55 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 
@@ -134,15 +135,16 @@ frames are dropped if it is closed.
 | Models | `agent-sdk/xr-ai-models/` | Typed model protocols and OpenAI-compatible clients |
 | Voice | `agent-sdk/xr-ai-voice/` | Voice agent, session, transport, and pipeline |
 | Web events | `agent-sdk/xr-ai-web-events/` | Live participant/topic browser views over selected agent events |
-| Agent tools | `agent-sdk/xr-ai-tools/` | Toolkit-independent Relay-managed native tools, including QR-code extraction |
+| Agent tools | `agent-sdk/xr-ai-tools/` | Toolkit-independent Relay-managed native tools, including QR and ArUco marker tracking |
 | Reusable services | `services/` | Model-serving and typed capability processes |
 | Agent demos | `agent-samples/` | End-to-end agent pipelines |
 | Tests | `tests/` | Multi-client / multi-agent integration tests |
 
 Lightweight samples (`simple-vlm-example`) are self-contained — one command
-starts everything.  Heavier demos (`xr-render-demo`) split model loading from
-the demo itself: start `model-servers` once, then run the demo as many times
-as you like without reloading weights.
+starts everything. Heavier samples (`lab-instrument-monitoring` and
+`xr-render-demo`) split model loading from the sample itself: start
+`model-servers` once, then run either sample as many times as you like without
+reloading weights.
 
 Every sample worker depends on `agent-sdk/xr-ai-models` — one SDK that
 abstracts the OpenAI-compatible HTTP wire format for LLM / VLM / STT / TTS /
@@ -346,6 +348,32 @@ NIM containers):
 Each sample has its own `xr_media_hub.yaml` controlling the hub; see
 [`services/xr-media-hub/xr_media_hub.yaml`](services/xr-media-hub/xr_media_hub.yaml)
 for the full option list.
+
+---
+
+### Lab instrument monitoring (marker-associated readings + foreground voice)
+
+This sample provides an on-demand visual observation task per connected
+participant and runs foreground voice or typed queries through a generic
+tool-calling agent. The foreground agent can start, stop, or inspect the
+monitor without giving up the foreground, inspect the current view, or query
+recent monitor history. Accepted STT and typed queries, monitoring records,
+foreground turns, and Relay telemetry are written as JSONL under `artifacts/`;
+the shared connection web client remains available on port 8080.
+
+Start `model-servers`, then run:
+
+```bash
+cd agent-samples/lab-instrument-monitoring
+uv sync
+uv sync --project worker
+uv run lab_instrument_monitoring
+```
+
+Connect an existing glasses or platform client with the authenticated URL and
+token printed by the hub. See the
+[sample README](agent-samples/lab-instrument-monitoring/README.md) for the
+agent topology, output records, transcription semantics, and routing eval.
 
 ---
 

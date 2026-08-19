@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Every final microphone transcript is recorded before this gate. Only accepted
+# turns are sent to the foreground agent.
+magic_phrases:
+  - agent
+  - hey agent
+listening_chime: true
+followup_grace_s: 5.0

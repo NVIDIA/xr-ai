@@ -207,8 +207,9 @@ change = await video.execute(
 ## Marker tracking
 
 Install `xr-ai-tools[marker-tracking]` to use `MarkerTrackingTool`. The finite
-`track_markers` tool acquires a participant's current camera frame and detects
-QR codes with ZXing-C++ and ArUco markers with OpenCV. Its typed result
+`track_markers` tool acquires a participant's current camera frame, or scans an
+image reference selected by another tool, and detects QR codes with ZXing-C++
+and ArUco markers with OpenCV. Its typed result
 distinguishes an unavailable frame from a valid frame with no marker. Every
 marker has the same `marker_type`, `value`, and four-corner contract: `value`
 is decoded text for QR codes and the decimal marker ID for ArUco markers.
@@ -231,8 +232,13 @@ for marker in result.markers:
     print(marker.marker_type, marker.value, marker.corners)
 ```
 
-Both marker families are enabled by default. Select families only while
-initializing the tool; requests and results do not change. ArUco detection uses
+Pass the same `ImageRegistry` to `CurrentFrameTool` and `MarkerTrackingTool`,
+then set `image` on `MarkerTrackingRequest` when marker coordinates must refer
+to one previously selected frame. This prevents a newer live frame from being
+selected between detection and downstream image annotation.
+
+Both marker families are enabled by default. Select families while initializing
+the tool; the result schema is shared across families. ArUco detection uses
 `DICT_4X4_50` by default and accepts any OpenCV predefined dictionary name.
 
 ```python

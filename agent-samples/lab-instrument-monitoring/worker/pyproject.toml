@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lab-instrument-monitoring-worker"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "nemo-relay>=0.7.2,<0.8",
+    "xr-ai-agent-runtime",
+    "xr-ai-hub-client",
+    "xr-ai-logging",
+    "xr-ai-models",
+    "xr-ai-tools[frames,image-editing,marker-tracking,vision]",
+    "xr-ai-voice",
+    "xr-ai-web-events",
+    "xr-ai-voicegate",
+    "loguru>=0.7",
+    "pydantic>=2.12",
+    "pyyaml>=6.0",
+]
+
+[tool.uv.sources]
+xr-ai-agent-runtime = { path = "../../../agent-sdk/xr-ai-runtime", editable = true }
+xr-ai-hub-client = { path = "../../../agent-sdk/xr-ai-hub", editable = true }
+xr-ai-logging = { path = "../../../utils/xr-ai-logging", editable = true }
+xr-ai-models = { path = "../../../agent-sdk/xr-ai-models", editable = true }
+xr-ai-tools = { path = "../../../agent-sdk/xr-ai-tools", editable = true }
+xr-ai-voice = { path = "../../../agent-sdk/xr-ai-voice", editable = true }
+xr-ai-web-events = { path = "../../../agent-sdk/xr-ai-web-events", editable = true }
+xr-ai-voicegate = { path = "../../../utils/xr-ai-voicegate", editable = true }
+
+[project.scripts]
+lab_instrument_monitoring_worker = "lab_instrument_monitoring_worker.__main__:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["lab_instrument_monitoring_worker"]

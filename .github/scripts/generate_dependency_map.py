@@ -13,12 +13,11 @@ from __future__ import annotations
 import argparse
 import difflib
 import re
+import tomllib
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-
-import tomllib
 
 START_MARKER = "<!-- BEGIN GENERATED PYTHON DEPENDENCY MAP -->"
 END_MARKER = "<!-- END GENERATED PYTHON DEPENDENCY MAP -->"

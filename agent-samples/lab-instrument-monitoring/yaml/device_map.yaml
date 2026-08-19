@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+devices:
+  qr_code:
+    device-1: Device1
+    device-2: Device2
+    device-3: Device3
+    device-4: Device4
+    device-5: Device5
+  aruco:
+    "0": Device1
+    "1": Device2
+    "2": Device3
+    "3": Device4
+    "4": Device5
