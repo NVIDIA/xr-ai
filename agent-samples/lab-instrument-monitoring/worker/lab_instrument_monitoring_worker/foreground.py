@@ -558,6 +558,8 @@ class ForegroundAgent(Agent):
             stream = self._vision.stream(ImageQueryRequest(image=frame.image, query=query))
             try:
                 async for chunk in stream:
+                    if first and not chunk.text.strip():
+                        continue
                     chunks.append(chunk.text)
                     await ctx.publish(
                         VOICE_CONTRIBUTION_TOPIC,
@@ -577,6 +579,25 @@ class ForegroundAgent(Agent):
                 close = getattr(stream, "aclose", None)
                 if close is not None:
                     await close()
+            if not chunks:
+                unavailable = (
+                    "Unable to inspect the current frame because the vision model "
+                    "returned no description."
+                )
+                await ctx.publish(
+                    VOICE_CONTRIBUTION_TOPIC,
+                    VoiceOutput(
+                        text=unavailable,
+                        response_id=response_id,
+                        final=False,
+                        interrupt=True,
+                        timestamp_us=timestamp_us,
+                    ),
+                )
+                if delivery is not None:
+                    delivery.spoke = True
+                opened = True
+                return ImageQueryResult(text=unavailable, available=False)
             return ImageQueryResult(text="".join(chunks))
         except asyncio.CancelledError:
             cancelled = True

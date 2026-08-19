@@ -1016,7 +1016,7 @@ async def test_foreground_injects_participant_into_current_frame_tool(tmp_path: 
             image_requests.append(request)
 
             async def chunks():
-                for text in ("A blue ", "notebook."):
+                for text in ("\n", "A blue ", "notebook."):
                     yield SimpleNamespace(text=text)
 
             return chunks()
@@ -1140,7 +1140,7 @@ async def test_foreground_prior_tool_then_current_view_is_spoken_once(tmp_path: 
 
 
 @pytest.mark.asyncio
-async def test_foreground_empty_current_view_stream_uses_fallback(tmp_path: Path) -> None:
+async def test_foreground_empty_current_view_stream_reports_unavailable(tmp_path: Path) -> None:
     class Llm:
         async def chat(self, _messages, **_kwargs):
             return ChatResponse(
@@ -1154,8 +1154,7 @@ async def test_foreground_empty_current_view_stream_uses_fallback(tmp_path: Path
     class Vision:
         def stream(self, _request: ImageQueryRequest):
             async def chunks():
-                if False:
-                    yield SimpleNamespace(text="")
+                yield SimpleNamespace(text="\n")
 
             return chunks()
 
@@ -1184,17 +1183,27 @@ async def test_foreground_empty_current_view_stream_uses_fallback(tmp_path: Path
         prompt="Route tools.",
     )
     agent._vision = Vision()  # type: ignore[assignment]
-    ctx = SimpleNamespace(metadata=SimpleNamespace(message_id="turn-empty"), publish=lambda *_args: None)
+    published: list[VoiceOutput] = []
+
+    class Context:
+        metadata = SimpleNamespace(message_id="turn-empty")
+
+        async def publish(self, _topic, output: VoiceOutput) -> None:
+            published.append(output)
 
     response, tools, spoken = await agent._answer(
         "What do you see?",
         "participant-1",
-        ctx,  # type: ignore[arg-type]
+        Context(),  # type: ignore[arg-type]
     )
 
-    assert response == "Done."
+    assert response == (
+        "Unable to inspect the current frame because the vision model returned no "
+        "description."
+    )
     assert tools == [CURRENT_VIEW_TOOL]
-    assert spoken is False
+    assert spoken is True
+    assert [output.text for output in published] == [response, ""]
 
 
 @pytest.mark.asyncio
