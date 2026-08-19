@@ -20,8 +20,8 @@ local GPU is required for the agent or XR-Media-Hub.
 XR-AI inventories total and currently free VRAM on every physical GPU before
 starting a local model stack. It prints the service reservations, device safety
 reserve, existing compute processes, and pass/fail result per GPU. The checked-in
-reservations in the service YAML files are currently marked ``provisional``
-until replaced by three-run certification artifacts on each supported host.
+reservations are initial estimates until validated by three-run
+measurement on each supported host.
 
 ## Software
 

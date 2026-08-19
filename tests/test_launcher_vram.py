@@ -52,7 +52,6 @@ def _service(tmp_path: Path, name: str, gpu: int, reservation: float) -> Path:
     path.write_text(
         f"port: 81{gpu:02d}\ncuda_visible_devices: \"{gpu}\"\n"
         f"gpu_memory_reservation_gib: {reservation}\n"
-        "gpu_memory_reservation_status: provisional\n"
     )
     return path
 
@@ -101,7 +100,6 @@ def test_legacy_gpu_memory_utilization_remains_supported(tmp_path: Path) -> None
     reservation = load_service_reservation("vlm", config, (_gpu(0),), vllm=True)
     assert reservation is not None
     assert reservation.reservation_gib == 9.0
-    assert reservation.status == "legacy"
 
 
 def test_service_prefers_launcher_derived_utilization(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -129,7 +127,7 @@ def test_certify_updates_service_yaml_and_detects_later_change(
         lambda _command, **_kwargs: "580.0",
     )
     reservation = load_service_reservation("omni", config, (_gpu(1),), vllm=True)
-    assert reservation is not None and reservation.status == "certified"
+    assert reservation is not None
     assert reservation.reservation_gib == 40.5
     config.write_text(config.read_text() + "max_num_seqs: 9\n")
     with pytest.raises(VRAMProfileError, match="changed since"):

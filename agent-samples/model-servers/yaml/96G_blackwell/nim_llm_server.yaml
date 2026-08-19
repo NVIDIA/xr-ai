@@ -9,7 +9,6 @@
 image:     nvcr.io/nim/nvidia/nemotron-3-nano:2.0.10
 http_port: 8110
 gpu_memory_reservation_gib: 45.0
-gpu_memory_reservation_status: provisional
 
 nim_cache: ../../../../models/nim
 

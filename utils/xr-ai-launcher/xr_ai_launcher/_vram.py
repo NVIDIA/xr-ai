@@ -15,7 +15,6 @@ from ._gpu import GPUDevice, GPUHardwareProfile
 VRAM_UTILIZATION_ENV = "XR_AI_GPU_MEMORY_UTILIZATION"
 
 _CERTIFICATION_KEYS = {
-    "gpu_memory_reservation_status",
     "gpu_memory_certification_driver",
     "gpu_memory_certification_git",
     "gpu_memory_certification_sha256",
@@ -34,7 +33,6 @@ class ServiceReservation:
     gpu: int
     reservation_gib: float
     vllm: bool
-    status: str
     config_path: Path
 
 
@@ -44,7 +42,6 @@ class VRAMProfile:
 
     hardware_profile: str
     stack: str
-    status: str
     device_safety_reserve_gib: float
     services: tuple[ServiceReservation, ...]
 
@@ -91,12 +88,13 @@ def service_config_fingerprint(path: str | Path) -> str:
     return hashlib.sha256(body.encode()).hexdigest()
 
 
-def _validate_certification(path: Path, status: str) -> None:
-    if status != "certified":
-        return
+def _validate_certification(path: Path) -> None:
     expected_hash = read_config_scalar(path, "gpu_memory_certification_sha256")
     expected_driver = read_config_scalar(path, "gpu_memory_certification_driver")
-    if not expected_hash or not expected_driver:
+    expected_git = read_config_scalar(path, "gpu_memory_certification_git")
+    if not expected_hash and not expected_driver and not expected_git:
+        return
+    if not expected_hash or not expected_driver or not expected_git:
         raise VRAMProfileError(f"{path}: certified reservation lacks signature fields")
     if service_config_fingerprint(path) != expected_hash:
         raise VRAMProfileError(
@@ -152,28 +150,23 @@ def load_service_reservation(
     try:
         if reservation_text:
             reservation = float(reservation_text)
-            status = read_config_scalar(
-                config_path, "gpu_memory_reservation_status", "provisional",
-            )
         else:
             utilization = float(utilization_text)
             if not 0 < utilization < 1:
                 raise ValueError
             reservation = utilization * by_index[gpu_index].total_memory_gib
-            status = "legacy"
     except ValueError as exc:
         raise VRAMProfileError(
             f"{config_path}: invalid GPU memory reservation/utilization"
         ) from exc
-    if reservation <= 0 or status not in {"legacy", "provisional", "certified"}:
-        raise VRAMProfileError(f"{config_path}: invalid GPU reservation status or size")
-    _validate_certification(config_path, status)
+    if reservation <= 0:
+        raise VRAMProfileError(f"{config_path}: GPU reservation must be positive")
+    _validate_certification(config_path)
     return ServiceReservation(
         service=service,
         gpu=gpu_index,
         reservation_gib=reservation,
         vllm=vllm,
-        status=status,
         config_path=config_path,
     )
 
@@ -192,16 +185,9 @@ def resolve_vram_profile(
     )
     if not reservations:
         raise VRAMProfileError(f"{stack}: selected services declare no GPU reservations")
-    statuses = {item.status for item in reservations}
-    status = (
-        "legacy" if "legacy" in statuses
-        else "certified" if statuses == {"certified"}
-        else "provisional"
-    )
     return VRAMProfile(
         hardware_profile=hardware.name,
         stack=stack,
-        status=status,
         device_safety_reserve_gib=hardware.device_safety_reserve_gib,
         services=reservations,
     )
@@ -291,7 +277,7 @@ def format_vram_preflight(
 ) -> str:
     """Render a compact, user-facing allocation plan."""
     lines = [
-        f"XR-AI GPU preflight: {profile.stack} ({profile.status})",
+        f"XR-AI GPU preflight: {profile.stack}",
     ]
     for result in results:
         lines.extend([

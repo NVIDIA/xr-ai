@@ -21,7 +21,6 @@ hf_token: ""
 
 port: 8100
 gpu_memory_reservation_gib: 22.0
-gpu_memory_reservation_status: provisional
 host: "0.0.0.0"
 cuda_visible_devices: "0"   # share GPU 0 with embeddings; Nemotron/STT use GPU 1
 

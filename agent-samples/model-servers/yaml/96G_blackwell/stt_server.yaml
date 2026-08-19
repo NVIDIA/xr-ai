@@ -6,7 +6,6 @@ model: nvidia/parakeet-tdt-0.6b-v3
 device: auto
 port: 8103
 gpu_memory_reservation_gib: 3.0
-gpu_memory_reservation_status: provisional
 host: "0.0.0.0"
 startup_timeout_s: 600
 model_cache: ../../../../models

@@ -9,6 +9,5 @@ device:      auto
 port:        8103
 cuda_visible_devices: "0"
 gpu_memory_reservation_gib: 3.0
-gpu_memory_reservation_status: provisional
 startup_timeout_s: 600
 model_cache: ../../../models

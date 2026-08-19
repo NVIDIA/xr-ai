@@ -237,7 +237,6 @@ def certify(args: argparse.Namespace) -> int:
     config = Path(args.config)
     _set_yaml_scalars(config, {
         "gpu_memory_reservation_gib": max(reservations),
-        "gpu_memory_reservation_status": "certified",
         "gpu_memory_certification_driver": driver,
         "gpu_memory_certification_git": git_commit,
     })
