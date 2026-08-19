@@ -5,6 +5,17 @@
 
 # Quickstart
 
+## Set up with a coding agent
+
+The fastest path: paste this to your agent and it does the rest, including
+walking you through the choices below. See {doc}`skills` for how it works.
+
+```{literalinclude} /_snippets/agent-setup-prompt.txt
+:language: text
+```
+
+The rest of this page is the manual path.
+
 Every sample follows the same pattern: **start the server, then connect a
 client.** Once it is ready, any supported client — web browser, Android app,
 iOS/visionOS app, or AR glasses — can join the session using the token printed
@@ -78,8 +89,7 @@ Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. Refer to
 
 There are two ways to run it:
 
-**Standalone** (~23 GB VRAM) — starts its own VLM and STT, owns them for the
-session, and stops them when you exit:
+**Standalone** (~23 GB VRAM) — starts its own VLM and STT:
 
 ```bash
 cd agent-samples/simple-vlm-example
@@ -94,7 +104,11 @@ to run without one (refer to the
 
 **With model-servers pre-running** — start `model_servers` to pre-warm VLM
 (port 8100) and STT (port 8103). The demo detects and reuses them.
-When you exit, those services keep running.
+
+In both modes the VLM and STT keep running after you exit so the next run skips
+the model reload (see the {doc}`AI services guide </components/ai-services>`);
+free the VRAM with `cd agent-samples/model-servers && uv run model_servers
+--stop`.
 
 ### Step 1 — Start the server
 
@@ -103,15 +117,20 @@ uv run simple_vlm_example
 ```
 
 The XR-Media-Hub, VLM, STT, and TTS start together (or reuse running services).
-Readiness includes a short 1280x720 streaming VLM warmup.
-When ready the hub prints:
+Worker readiness includes a short 1280x720 streaming VLM warmup.
+The hub prints:
 
 ```
-[hub]   LiveKit URL : wss://0.0.0.0:8080
+[hub]   LiveKit URL : wss://localhost:8080
 [hub]   Room        : xr-room
 [hub]   Token       : eyJ…
 [hub]   Web client  : https://localhost:8080
 ```
+
+This banner appears as soon as the hub itself is ready, while the model
+services and worker are still starting. Clients can connect as soon as it
+appears, but the agent answers queries only after the launcher prints its
+`All processes ready` banner.
 
 ### Step 2 — Connect a client
 
