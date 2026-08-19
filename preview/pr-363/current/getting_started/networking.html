@@ -502,10 +502,11 @@ sudo<span class="w"> </span>firewall-cmd<span class="w"> </span>--reload
 </section>
 <section id="live-agent-event-viewer">
 <h2>Live agent-event viewer<a class="headerlink" href="#live-agent-event-viewer" title="Link to this heading">#</a></h2>
-<p>Samples that use <code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code> serve their live event page at
-<code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code> by default. Because the listener is loopback-only, no
-firewall rule is needed when the browser runs on the XR-AI host. For access
-from a development machine, keep the loopback binding and use an SSH tunnel:</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code> SDK defaults to <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code>. The lab-instrument
+and tea-making samples override that listener to <code class="docutils literal notranslate"><span class="pre">0.0.0.0:8092</span></code>, making their
+event pages directly reachable at <code class="docutils literal notranslate"><span class="pre">http://&lt;xr-host&gt;:8092</span></code>. Restrict TCP port
+8092 to a trusted development network. For a loopback-bound deployment, use an
+SSH tunnel:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ssh<span class="w"> </span>-L<span class="w"> </span><span class="m">8092</span>:127.0.0.1:8092<span class="w"> </span>user@xr-host
 </pre></div>
 </div>
