@@ -42,10 +42,7 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
     assert [argument.flags for argument in commands["tea_making_sample"].arguments] == [
         ("--voice-mode",),
         ("--tts-mode",),
-    ]
-    assert [argument.flags for argument in commands["tea_making_sample"].arguments] == [
-        ("--voice-mode",),
-        ("--tts-mode",),
+        ("--expose-web-events",),
     ]
     assert commands["xr_render_demo"].arguments == ()
 

@@ -39,15 +39,20 @@ Then start the tea stack from the repository root:
 ```bash
 uv run --project agent-samples/tea-making-sample tea_making_sample \
   --tts-mode piper
+
+# Allow direct event-viewer access from a trusted private network.
+uv run --project agent-samples/tea-making-sample tea_making_sample \
+  --tts-mode piper --expose-web-events
 ```
 
 Open `https://localhost:8080`, accept the self-signed certificate on first use,
 allow microphone and camera access, and connect.
-Open `http://<xr-host>:8092` to watch selected foreground, guidance,
-background, and participant events grouped by topic. The viewer starts with the
-worker and listens on all IPv4 interfaces; it does not read or tail the JSONL
-files. Allow TCP port 8092 through the host and cloud firewalls only from your
-trusted development network.
+Open `http://127.0.0.1:8092` on the XR-AI host to watch selected foreground,
+guidance, background, and participant events grouped by topic. The viewer starts
+with the worker and does not read or tail the JSONL files. Pass
+`--expose-web-events` to listen on all IPv4 interfaces and browse
+`http://<xr-host>:8092`; allow TCP port 8092 through the host and cloud
+firewalls only from your trusted development network.
 In wake-word mode, begin commands with “Agent” or “Hey Agent.” For example:
 
 ```text
@@ -102,8 +107,9 @@ application.
 The browser viewer is an independent, bounded in-memory presentation of
 selected events. It is useful while a session is live but is not durable and
 does not replace the JSONL artifacts. Its listener has no application
-authentication or TLS. Do not expose it to the public Internet; restrict access
-to a trusted development network or put it behind an authenticated TLS proxy.
+authentication or TLS. Keep the default loopback binding unless direct access
+is needed. Do not expose it to the public Internet; restrict access to a trusted
+development network or put it behind an authenticated TLS proxy.
 
 ## Configuration
 

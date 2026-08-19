@@ -202,9 +202,11 @@ conversation history or taking ownership of the response.
 
 ## Live inspection and durable output
 
-The worker starts a generic event viewer on all IPv4 interfaces before it
-announces voice readiness. Open `http://<xr-host>:8092` from a trusted
-development network. `TeaWebEventsAgent` explicitly subscribes to the
+The worker starts a generic loopback event viewer before it announces voice
+readiness. Open `http://127.0.0.1:8092` on the XR-AI host, or pass
+`--expose-web-events` to bind all IPv4 interfaces and browse
+`http://<xr-host>:8092` from a trusted development network.
+`TeaWebEventsAgent` explicitly subscribes to the
 foreground, guidance, background, transcript, video-log, and participant
 lifecycle topics and publishes compact `WebEvent` payloads. There is no runtime
 wildcard subscription and no file tailing.
@@ -213,7 +215,8 @@ The viewer keeps only a bounded in-memory history for the current process. The
 participant JSONL files under `artifacts/` remain the durable record and include
 events that may not be selected for live presentation. The listener is
 read-only but has no authentication or TLS. Restrict TCP port 8092 to a trusted
-development network, or place the viewer behind an authenticated TLS proxy.
+development network when `--expose-web-events` is enabled, or place the viewer
+behind an authenticated TLS proxy.
 
 ## Connecting a backend
 

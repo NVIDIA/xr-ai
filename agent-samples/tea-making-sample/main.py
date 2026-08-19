@@ -51,6 +51,14 @@ The LLM and VLM roles both use Nemotron-3-Nano-Omni on port 8108.
         choices=("piper", "magpie"),
         help="piper: lightweight CPU speech; magpie: neural speech on CUDA when available",
     )
+    parser.add_argument(
+        "--expose-web-events",
+        action="store_true",
+        help=(
+            "bind the unauthenticated event viewer to all IPv4 interfaces "
+            "instead of loopback"
+        ),
+    )
     return parser
 
 
@@ -136,7 +144,9 @@ def _build_processes(worker_config: Path, tts_mode: str) -> tuple[list[Process],
     return processes, deployment.required_credentials
 
 
-def _write_config(source: Path, target: Path, overrides: Mapping[str, Path]) -> None:
+def _write_config(
+    source: Path, target: Path, overrides: Mapping[str, str | Path]
+) -> None:
     pending = set(overrides)
     lines: list[str] = []
     for line in source.read_text(encoding="utf-8").splitlines():
@@ -161,7 +171,13 @@ def _write_models_config(target: Path, tts_mode: str) -> None:
     target.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
 
-def _materialize_worker_config(runtime_dir: Path, voice_mode: str, tts_mode: str) -> Path:
+def _materialize_worker_config(
+    runtime_dir: Path,
+    voice_mode: str,
+    tts_mode: str,
+    *,
+    expose_web_events: bool = False,
+) -> Path:
     models = runtime_dir / "models.json"
     _write_models_config(models, tts_mode)
     worker_config = runtime_dir / "tea_making_worker.yaml"
@@ -173,6 +189,7 @@ def _materialize_worker_config(runtime_dir: Path, voice_mode: str, tts_mode: str
             "workflow_config": (_BASE / "yaml/workflow.yaml").resolve(),
             "voice_gate_yaml": _VOICE_CONFIGS[voice_mode].resolve(),
             "artifacts_dir": (_BASE / "artifacts").resolve(),
+            "web_events_host": "0.0.0.0" if expose_web_events else "127.0.0.1",
         },
     )
     return worker_config
@@ -184,15 +201,17 @@ def run(argv: Sequence[str] | None = None) -> None:
         return
     setup_logging("orchestrator", namespace="tea-making-sample")
     logging.getLogger(__name__).info(
-        "launch selection voice_mode=%s tts_mode=%s",
+        "launch selection voice_mode=%s tts_mode=%s expose_web_events=%s",
         args.voice_mode,
         args.tts_mode,
+        args.expose_web_events,
     )
     with tempfile.TemporaryDirectory(prefix="tea-making-config-") as directory:
         worker_config = _materialize_worker_config(
             Path(directory),
             args.voice_mode,
             args.tts_mode,
+            expose_web_events=args.expose_web_events,
         )
         processes, credentials = _build_processes(worker_config, args.tts_mode)
         for credential in credentials:

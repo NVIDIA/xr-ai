@@ -124,14 +124,19 @@ def test_launcher_defaults_to_wake_word_and_allows_always_on() -> None:
     )
 
     assert default is not None and default.voice_mode == "wake-word"
+    assert default is not None and default.expose_web_events is False
     assert explicit is not None and explicit.voice_mode == "always-on"
+    exposed = sample_main._parse_args(
+        ["--tts-mode", "piper", "--expose-web-events"]
+    )
+    assert exposed is not None and exposed.expose_web_events is True
     assert _CLIENT_TEXT_TOPIC == "agent.response"
 
 
 def test_web_event_config_defaults_and_validation(tmp_path: Path) -> None:
     config = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
 
-    assert config.web_events_host == "0.0.0.0"
+    assert config.web_events_host == "127.0.0.1"
     assert config.web_events_port == 8092
     assert config.web_events_max_events == 5_000
 
@@ -145,6 +150,15 @@ def test_web_event_config_defaults_and_validation(tmp_path: Path) -> None:
     invalid.write_text("web_events_max_events: 0\n")
     with pytest.raises(ValueError, match="web_events_max_events"):
         load_config(invalid)
+
+    sample_main = _load_main()
+    exposed_config = sample_main._materialize_worker_config(
+        tmp_path,
+        "wake-word",
+        "piper",
+        expose_web_events=True,
+    )
+    assert load_config(exposed_config).web_events_host == "0.0.0.0"
 
 
 @pytest.mark.asyncio
