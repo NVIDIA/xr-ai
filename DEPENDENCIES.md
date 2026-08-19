@@ -436,7 +436,7 @@ change, even when an individual dependency publishes newer Python wheels.
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `Pillow>=10.0`
+  - `Pillow>=10.1.0`
   - `nemo-relay>=0.7.2,<0.8`
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)

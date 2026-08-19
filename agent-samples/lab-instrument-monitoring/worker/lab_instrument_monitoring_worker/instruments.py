@@ -9,6 +9,7 @@ import asyncio
 import hashlib
 import io
 import json
+import math
 import re
 import time
 from collections import Counter
@@ -178,7 +179,7 @@ class LabInstrumentAgent(Agent):
                     query=self._reading_query(labels),
                 )
             )
-            parsed = _parse_joint_readings(result.text, labels)
+            parsed = _parse_joint_readings(result.text, labels) if result.available else None
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -188,7 +189,19 @@ class LabInstrumentAgent(Agent):
             )
             parsed = None
 
-        if result is None or not result.available or parsed is None:
+        if result is None:
+            return LabInstrumentReadResult(
+                sightings=sightings,
+                available=False,
+                message="Markers were found, but the instrument display response was invalid.",
+            )
+        if not result.available:
+            return LabInstrumentReadResult(
+                sightings=sightings,
+                available=False,
+                message=result.text.strip() or "The instrument vision model was unavailable.",
+            )
+        if parsed is None:
             return LabInstrumentReadResult(
                 sightings=sightings,
                 available=False,
@@ -281,8 +294,15 @@ def _annotate_markers(
         right = max(point[0] for point in points)
         top = min(point[1] for point in points)
         bottom = max(point[1] for point in points)
-        font_size = max(14, min(42, int(min(right - left, bottom - top) * 0.55)))
-        font = ImageFont.load_default(size=font_size)
+        edges = [
+            math.hypot(following[0] - point[0], following[1] - point[1])
+            for point, following in zip(points, (*points[1:], points[0]), strict=True)
+        ]
+        usable_width = max(1, int(min(right - left, min(edges))) - 4)
+        usable_height = max(1, int(min(bottom - top, min(edges))) - 4)
+        font = _fit_label_font(draw, label, usable_width, usable_height)
+        if font is None:
+            continue
         draw.text(
             ((left + right) / 2, (top + bottom) / 2),
             label,
@@ -295,6 +315,20 @@ def _annotate_markers(
     output = io.BytesIO()
     image.save(output, format="PNG")
     return output.getvalue()
+
+
+def _fit_label_font(
+    draw: ImageDraw.ImageDraw,
+    label: str,
+    max_width: int,
+    max_height: int,
+) -> ImageFont.ImageFont | ImageFont.FreeTypeFont | None:
+    for size in range(min(42, max_height), 0, -1):
+        font = ImageFont.load_default(size=size)
+        bounds = draw.textbbox((0, 0), label, font=font, stroke_width=1)
+        if bounds[2] - bounds[0] <= max_width and bounds[3] - bounds[1] <= max_height:
+            return font
+    return None
 
 
 def _parse_joint_readings(text: str, labels: list[str]) -> dict[str, str] | None:

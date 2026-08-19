@@ -96,6 +96,7 @@ from lab_instrument_monitoring_worker.instruments import (  # noqa: E402  # pyri
     LabInstrumentAgent,
     LabInstrumentReadResult,
     ReadLabInstrumentsRequest,
+    _annotate_markers,
     _marker_log_id,
     _parse_joint_readings,
 )
@@ -220,7 +221,7 @@ def test_sample_uses_named_native_agents_and_shared_connection_client() -> None:
         "instruments.py",
     } <= {path.name for path in package.glob("*.py")}
     assert "xr-ai-agent-runtime" in dependencies
-    assert "Pillow>=10.0" in dependencies
+    assert "Pillow>=10.1.0" in dependencies
     assert "xr-ai-tools[frames,marker-tracking,vision]" in dependencies
     assert "xr-ai-voice" in dependencies
     assert "xr-ai-web-events" in dependencies
@@ -494,6 +495,31 @@ def test_joint_instrument_response_requires_exact_labels_and_string_values() -> 
     assert _parse_joint_readings('{"M1":12,"M2":"UNKNOWN"}', ["M1", "M2"]) is None
 
 
+def test_joint_marker_annotation_keeps_multi_digit_label_inside_small_marker() -> None:
+    image = np.full((48, 48, 3), 255, dtype=np.uint8)
+    ok, encoded = cv2.imencode(".png", image)
+    assert ok
+    marker = TrackedMarker(
+        marker_type=MarkerType.QR_CODE,
+        value="small-marker",
+        corners=[
+            MarkerPoint(x=14, y=14),
+            MarkerPoint(x=34, y=14),
+            MarkerPoint(x=34, y=34),
+            MarkerPoint(x=14, y=34),
+        ],
+    )
+
+    annotated = _annotate_markers(encoded.tobytes(), [("M10", marker)])
+    decoded = cv2.imdecode(np.frombuffer(annotated, np.uint8), cv2.IMREAD_COLOR)
+
+    assert decoded is not None
+    outside = decoded.copy()
+    outside[14:35, 14:35] = 255
+    assert np.all(outside == 255)
+    assert np.any(decoded[14:35, 14:35] != 255)
+
+
 def test_unmapped_marker_log_identifier_redacts_payload() -> None:
     marker = TrackedMarker(
         marker_type=MarkerType.QR_CODE,
@@ -513,8 +539,24 @@ def test_unmapped_marker_log_identifier_redacts_payload() -> None:
     assert "secret-value" not in identifier
 
 
+@pytest.mark.parametrize(
+    ("query_result", "expected_message"),
+    [
+        (
+            ImageQueryResult(text='{"M1":"UNKNOWN"}'),
+            "Markers were found, but their instrument displays could not be read.",
+        ),
+        (
+            ImageQueryResult(text="Vision service unavailable.", available=False),
+            "Vision service unavailable.",
+        ),
+    ],
+)
 @pytest.mark.asyncio
-async def test_instrument_reader_returns_sighting_when_display_is_unreadable() -> None:
+async def test_instrument_reader_returns_sighting_when_display_is_unreadable(
+    query_result: ImageQueryResult,
+    expected_message: str,
+) -> None:
     marker = TrackedMarker(
         marker_type=MarkerType.QR_CODE,
         value="meter-a",
@@ -545,7 +587,7 @@ async def test_instrument_reader_returns_sighting_when_display_is_unreadable() -
         return SimpleNamespace(available=True, markers=[marker], message="")
 
     async def unreadable(_request):
-        return ImageQueryResult(text='{"M1":"UNKNOWN"}')
+        return query_result
 
     images.get_current_frame = SimpleNamespace(execute=current_frame)  # type: ignore[assignment]
     images.track_markers = SimpleNamespace(execute=tracked_markers)  # type: ignore[assignment]
@@ -565,6 +607,7 @@ async def test_instrument_reader_returns_sighting_when_display_is_unreadable() -
         )
     ]
     assert result.available is False
+    assert result.message == expected_message
 
 
 @pytest.mark.asyncio
