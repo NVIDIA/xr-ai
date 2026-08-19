@@ -17,7 +17,9 @@ open [Agent Skills](https://agentskills.io) spec.
 
 ## Setup
 
-Download the skill into your agent's skills directory:
+Download the skill into your agent's skills directory. Set `REF` to the ref
+you will build against; releases that predate the bank have no copy, so use
+`REF=main` (and build against `main`):
 
 ```bash
 : "${SKILLS_DIR:?Set SKILLS_DIR to your agent's skills directory}"
