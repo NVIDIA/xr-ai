@@ -5,7 +5,7 @@
 
 Run through an environment that contains ``xr-ai-launcher``::
 
-    python -m xr_ai_launcher.vram_measure measure --label omni \
+    python -m xr_ai_launcher.gpu_memory_measure measure --label omni \
       --output omni.measurement.json --gpu 1 -- <service command>
 """
 from __future__ import annotations
@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ._gpu import GPUDevice, query_gpu_inventory
-from ._vram import service_config_fingerprint
+from ._gpu_memory import service_config_fingerprint
 
 
 def _output(command: list[str]) -> str | None:
@@ -123,7 +123,7 @@ def measure(args: argparse.Namespace) -> int:
     if args.gpu is not None and args.gpu not in indexes:
         raise SystemExit(f"GPU {args.gpu} is not present")
 
-    print(f"Measuring VRAM every {args.interval:.2f}s: {' '.join(command)}", flush=True)
+    print(f"Measuring GPU memory every {args.interval:.2f}s: {' '.join(command)}", flush=True)
     process = subprocess.Popen(command)
     start = time.monotonic()
     samples: list[dict] = []
@@ -155,7 +155,7 @@ def measure(args: argparse.Namespace) -> int:
         summary = {str(args.gpu): summary[str(args.gpu)]}
     artifact = {
         "schema_version": 1,
-        "kind": "xr-ai-vram-measurement",
+        "kind": "xr-ai-gpu-memory-measurement",
         "label": args.label,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "command": command,
@@ -172,7 +172,7 @@ def measure(args: argparse.Namespace) -> int:
     }
     output = Path(args.output)
     output.write_text(json.dumps(artifact, indent=2) + "\n", encoding="utf-8")
-    print(f"VRAM measurement written to {output}", flush=True)
+    print(f"GPU memory measurement written to {output}", flush=True)
     for index, result in summary.items():
         print(
             f"GPU {index}: peak delta {result['observed_peak_delta_gib']:.1f} GiB, "
@@ -209,8 +209,8 @@ def certify(args: argparse.Namespace) -> int:
     for path_text in args.measurement:
         path = Path(path_text)
         raw = json.loads(path.read_text(encoding="utf-8"))
-        if raw.get("kind") != "xr-ai-vram-measurement":
-            raise SystemExit(f"{path} is not an XR-AI VRAM measurement")
+        if raw.get("kind") != "xr-ai-gpu-memory-measurement":
+            raise SystemExit(f"{path} is not an XR-AI GPU memory measurement")
         runs.append((path, raw))
     if len(runs) < args.minimum_runs:
         raise SystemExit(
@@ -243,12 +243,12 @@ def certify(args: argparse.Namespace) -> int:
     _set_yaml_scalars(config, {
         "gpu_memory_certification_sha256": service_config_fingerprint(config),
     })
-    print(f"Certified VRAM reservation written to {config}", flush=True)
+    print(f"Certified GPU memory reservation written to {config}", flush=True)
     return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Measure and certify XR-AI VRAM reservations")
+    parser = argparse.ArgumentParser(description="Measure and certify XR-AI GPU memory reservations")
     subparsers = parser.add_subparsers(dest="action", required=True)
 
     measure_parser = subparsers.add_parser("measure")

@@ -11,7 +11,7 @@ implemented as a thin launcher around vLLM.
 
 An 8B dense Llama 3.1 reasoning model from NVIDIA, post-trained for tool-calling,
 RAG, and chat. Licensed for commercial use under the NVIDIA Open Model License +
-Llama 3.1 Community License (~16 GB VRAM at BF16).
+Llama 3.1 Community License (~16 GB GPU memory at BF16).
 
 ## Quickstart
 

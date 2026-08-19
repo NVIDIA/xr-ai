@@ -11,7 +11,7 @@ implemented as a thin launcher around vLLM.
 
 A 1B-parameter Matryoshka embedding model from NVIDIA. Supports output
 dimensions of 384 / 512 / 768 / 1024 / 2048 via prefix truncation.
-Consumed through `xr-ai-models` for dense semantic retrieval. (~2 GB VRAM at BF16,
+Consumed through `xr-ai-models` for dense semantic retrieval. (~2 GB GPU memory at BF16,
 low `gpu_memory_utilization` default leaves headroom for co-resident VLM/LLM
 servers.)
 

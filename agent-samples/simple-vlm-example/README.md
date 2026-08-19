@@ -42,7 +42,7 @@ uv sync
 uv run simple_vlm_example
 ```
 
-For the local deployment, startup first prints a strict per-GPU VRAM preflight.
+For the local deployment, startup first prints a strict per-device GPU memory preflight.
 The existing `vlm_server.yaml` and `stt_server.yaml` files own their GPU placement,
 ports, and absolute GiB reservations. The shared hardware `gpu_profile.yaml` owns
 the device safety reserve, and vLLM utilization is derived from the detected
@@ -52,7 +52,7 @@ physical total. See the requirements guide for measurement and certification.
 (see [`credentials.md`](../../docs/source/getting_started/credentials.md)).
 
 The VLM and STT keep running after you exit so the next run skips the model
-reload; free the VRAM with `cd ../model-servers && uv run model_servers --stop`.
+reload; free the GPU memory with `cd ../model-servers && uv run model_servers --stop`.
 
 Open the web client shown in the hub banner, connect, and then speak or type a
 question.

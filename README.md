@@ -54,12 +54,12 @@ XR AI is especially useful when you need to:
 **Hardware**
 
 XR AI samples are designed for a single NVIDIA RTX PRO 6000 Blackwell workstation GPU or an
-NVIDIA DGX Spark.  Both provide enough VRAM to run the
+NVIDIA DGX Spark.  Both provide enough GPU memory to run the
 full model stack locally.  If you prefer not to run models on local hardware,
 model endpoints are plain URLs — point the worker config at a cloud NIM or model
 endpoint and no local GPU is required for the agent or hub.
 
-| Sample | Local VRAM needed |
+| Sample | Local GPU memory needed |
 |---|---|
 | model-servers (shared models) | ~58 GB |
 | simple-vlm-example (standalone) | ~23 GB |
@@ -240,7 +240,7 @@ runtime-selection details.
 
 There are two ways to run it:
 
-**Standalone** (~23 GB VRAM) — starts its own VLM and STT:
+**Standalone** (~23 GB GPU memory) — starts its own VLM and STT:
 
 ```bash
 cd agent-samples/simple-vlm-example
@@ -259,7 +259,7 @@ several minutes).  `HF_TOKEN` is required by default; pass
 In both modes the VLM and STT keep running after you exit so the next run
 skips the model reload (see
 [model-server persistence](docs/source/components/ai-services.md#model-server-persistence)); free
-the VRAM with `cd agent-samples/model-servers && uv run model_servers --stop`.
+the GPU memory with `cd agent-samples/model-servers && uv run model_servers --stop`.
 
 #### Step 1 — Start the server
 

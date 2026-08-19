@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Service-YAML VRAM reservations, derived vLLM budgets, and preflight."""
+"""Service-YAML GPU memory reservations, derived vLLM budgets, and preflight."""
 from __future__ import annotations
 
 import hashlib
@@ -12,7 +12,7 @@ from pathlib import Path
 from ._config import read_config_scalar
 from ._gpu import GPUDevice, GPUHardwareProfile
 
-VRAM_UTILIZATION_ENV = "XR_AI_GPU_MEMORY_UTILIZATION"
+GPU_MEMORY_UTILIZATION_ENV = "XR_AI_GPU_MEMORY_UTILIZATION"
 
 _CERTIFICATION_KEYS = {
     "gpu_memory_certification_driver",
@@ -21,7 +21,7 @@ _CERTIFICATION_KEYS = {
 }
 
 
-class VRAMProfileError(ValueError):
+class GPUMemoryError(ValueError):
     """Raised when service reservations are invalid or cannot fit."""
 
 
@@ -37,7 +37,7 @@ class ServiceReservation:
 
 
 @dataclass(frozen=True)
-class VRAMProfile:
+class GPUMemoryPlan:
     """Resolved reservation contract for one selected set of services."""
 
     hardware_profile: str
@@ -47,7 +47,7 @@ class VRAMProfile:
 
 
 @dataclass(frozen=True)
-class GPUPreflight:
+class GPUMemoryPreflight:
     """One GPU's resolved allocation plan."""
 
     gpu: GPUDevice
@@ -70,7 +70,7 @@ def read_service_port(path: str | Path) -> int | None:
     try:
         return int(raw)
     except ValueError as exc:
-        raise VRAMProfileError(f"{config_path}: port must be an integer") from exc
+        raise GPUMemoryError(f"{config_path}: port must be an integer") from exc
 
 
 def service_config_fingerprint(path: str | Path) -> str:
@@ -79,7 +79,7 @@ def service_config_fingerprint(path: str | Path) -> str:
         config_path = Path(path)
         lines = config_path.read_text(encoding="utf-8").splitlines()
     except OSError as exc:
-        raise VRAMProfileError(f"cannot read service config {path}: {exc}") from exc
+        raise GPUMemoryError(f"cannot read service config {path}: {exc}") from exc
     kept = [
         line for line in lines
         if line.split(":", 1)[0].strip() not in _CERTIFICATION_KEYS
@@ -95,10 +95,10 @@ def _validate_certification(path: Path) -> None:
     if not expected_hash and not expected_driver and not expected_git:
         return
     if not expected_hash or not expected_driver or not expected_git:
-        raise VRAMProfileError(f"{path}: certified reservation lacks signature fields")
+        raise GPUMemoryError(f"{path}: certified reservation lacks signature fields")
     if service_config_fingerprint(path) != expected_hash:
-        raise VRAMProfileError(
-            f"{path}: service config changed since its VRAM reservation was certified"
+        raise GPUMemoryError(
+            f"{path}: service config changed since its GPU memory reservation was certified"
         )
     try:
         driver_output = subprocess.check_output(
@@ -106,10 +106,10 @@ def _validate_certification(path: Path) -> None:
             text=True, stderr=subprocess.DEVNULL,
         ).strip()
     except (FileNotFoundError, subprocess.CalledProcessError) as exc:
-        raise VRAMProfileError(f"{path}: cannot validate certified driver") from exc
+        raise GPUMemoryError(f"{path}: cannot validate certified driver") from exc
     driver = ",".join(dict.fromkeys(driver_output.splitlines()))
     if driver != expected_driver:
-        raise VRAMProfileError(
+        raise GPUMemoryError(
             f"{path}: reservation used driver {expected_driver}; current driver is {driver}"
         )
 
@@ -125,25 +125,25 @@ def load_service_reservation(
     config_path = Path(path).resolve()
     gpu_text = read_config_scalar(config_path, "cuda_visible_devices", "0")
     if "," in gpu_text:
-        raise VRAMProfileError(
+        raise GPUMemoryError(
             f"{config_path}: multi-GPU reservations require an explicit placement policy"
         )
     try:
         gpu_index = int(gpu_text)
     except ValueError as exc:
-        raise VRAMProfileError(
+        raise GPUMemoryError(
             f"{config_path}: cuda_visible_devices must be one numeric GPU index"
         ) from exc
     by_index = {gpu.index: gpu for gpu in inventory}
     if gpu_index not in by_index:
-        raise VRAMProfileError(
+        raise GPUMemoryError(
             f"{config_path}: assigns {service!r} to unavailable GPU {gpu_index}"
         )
 
     reservation_text = read_config_scalar(config_path, "gpu_memory_reservation_gib")
     utilization_text = read_config_scalar(config_path, "gpu_memory_utilization")
     if not reservation_text and not utilization_text:
-        raise VRAMProfileError(
+        raise GPUMemoryError(
             f"{config_path}: declare gpu_memory_reservation_gib "
             "(or legacy gpu_memory_utilization)"
         )
@@ -156,11 +156,11 @@ def load_service_reservation(
                 raise ValueError
             reservation = utilization * by_index[gpu_index].total_memory_gib
     except ValueError as exc:
-        raise VRAMProfileError(
+        raise GPUMemoryError(
             f"{config_path}: invalid GPU memory reservation/utilization"
         ) from exc
     if reservation <= 0:
-        raise VRAMProfileError(f"{config_path}: GPU reservation must be positive")
+        raise GPUMemoryError(f"{config_path}: GPU reservation must be positive")
     _validate_certification(config_path)
     return ServiceReservation(
         service=service,
@@ -171,21 +171,21 @@ def load_service_reservation(
     )
 
 
-def resolve_vram_profile(
+def resolve_gpu_memory_plan(
     *,
     stack: str,
     hardware: GPUHardwareProfile,
     inventory: tuple[GPUDevice, ...],
     service_configs: dict[str, tuple[Path, bool]],
-) -> VRAMProfile:
+) -> GPUMemoryPlan:
     """Build the stack contract directly from its selected service YAML files."""
     reservations = tuple(
         load_service_reservation(service, path, inventory, vllm=vllm)
         for service, (path, vllm) in service_configs.items()
     )
     if not reservations:
-        raise VRAMProfileError(f"{stack}: selected services declare no GPU reservations")
-    return VRAMProfile(
+        raise GPUMemoryError(f"{stack}: selected services declare no GPU reservations")
+    return GPUMemoryPlan(
         hardware_profile=hardware.name,
         stack=stack,
         device_safety_reserve_gib=hardware.device_safety_reserve_gib,
@@ -196,25 +196,25 @@ def resolve_vram_profile(
 def derive_gpu_memory_utilization(reservation_gib: float, total_gib: float) -> float:
     """Convert an absolute vLLM reservation to its physical-memory fraction."""
     if reservation_gib <= 0 or total_gib <= 0:
-        raise VRAMProfileError("VRAM reservation and physical total must be positive")
+        raise GPUMemoryError("GPU memory reservation and physical total must be positive")
     utilization = reservation_gib / total_gib
     if utilization >= 1.0:
-        raise VRAMProfileError(
+        raise GPUMemoryError(
             f"{reservation_gib:.1f} GiB reservation cannot fit a {total_gib:.1f} GiB GPU"
         )
     # Round upward so decimal serialization never undercuts the GiB contract.
     return int(utilization * 10_000 + 0.999999) / 10_000
 
 
-def preflight_vram(
-    profile: VRAMProfile,
+def preflight_gpu_memory(
+    profile: GPUMemoryPlan,
     inventory: tuple[GPUDevice, ...],
     *,
     active_services: frozenset[str] = frozenset(),
-) -> tuple[GPUPreflight, ...]:
-    """Validate incremental stack reservations against current per-GPU free VRAM."""
+) -> tuple[GPUMemoryPreflight, ...]:
+    """Validate incremental stack reservations against current per-GPU free GPU memory."""
     by_index = {gpu.index: gpu for gpu in inventory}
-    results: list[GPUPreflight] = []
+    results: list[GPUMemoryPreflight] = []
     for index in sorted({item.gpu for item in profile.services}):
         gpu = by_index[index]
         reservations = tuple(item for item in profile.services if item.gpu == index)
@@ -227,7 +227,7 @@ def preflight_vram(
             if item.service not in active
         )
         remaining = gpu.free_memory_gib - incremental - profile.device_safety_reserve_gib
-        results.append(GPUPreflight(
+        results.append(GPUMemoryPreflight(
             gpu=gpu,
             reservations=reservations,
             active_services=active,
@@ -239,7 +239,7 @@ def preflight_vram(
     return tuple(results)
 
 
-def require_vram_preflight(results: tuple[GPUPreflight, ...]) -> None:
+def require_gpu_memory_preflight(results: tuple[GPUMemoryPreflight, ...]) -> None:
     """Raise a clear capacity error for any failed GPU allocation."""
     failed = [result for result in results if not result.passed]
     if not failed:
@@ -254,11 +254,11 @@ def require_vram_preflight(results: tuple[GPUPreflight, ...]) -> None:
             f"{result.safety_reserve_gib:.1f} GiB safety reserve "
             f"(shortfall {shortfall:.1f} GiB)"
         )
-    raise VRAMProfileError("VRAM PREFLIGHT FAILED\n" + "\n".join(details))
+    raise GPUMemoryError("GPU MEMORY PREFLIGHT FAILED\n" + "\n".join(details))
 
 
 def utilization_overrides(
-    profile: VRAMProfile,
+    profile: GPUMemoryPlan,
     inventory: tuple[GPUDevice, ...],
 ) -> dict[str, str]:
     """Return per-service vLLM utilization values derived from GiB reservations."""
@@ -272,8 +272,8 @@ def utilization_overrides(
     }
 
 
-def format_vram_preflight(
-    profile: VRAMProfile, results: tuple[GPUPreflight, ...],
+def format_gpu_memory_preflight(
+    profile: GPUMemoryPlan, results: tuple[GPUMemoryPreflight, ...],
 ) -> str:
     """Render a compact, user-facing allocation plan."""
     lines = [
@@ -300,7 +300,7 @@ def format_vram_preflight(
         for process in result.gpu.processes:
             used = (
                 f"{process.used_memory_gib:.1f} GiB"
-                if process.used_memory_gib is not None else "unknown VRAM"
+                if process.used_memory_gib is not None else "unknown GPU memory"
             )
             lines.append(f"  Existing PID {process.pid}: {process.name} ({used})")
     return "\n".join(lines)

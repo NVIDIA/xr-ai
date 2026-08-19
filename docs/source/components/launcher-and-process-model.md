@@ -28,7 +28,7 @@ managed, reused, or external service ownership to the orchestrator. The same
 file is loaded by the worker through `xr-ai-models`; see the simple VLM
 sample's `yaml/models.local.json` and `yaml/models.hosted.json` profiles.
 
-GPU-backed samples keep absolute VRAM reservations, GPU placement, and ports in
+GPU-backed samples keep absolute GPU memory reservations, GPU placement, and ports in
 their existing service YAML files. A hardware `gpu_profile.yaml` supplies topology
 matching and the per-device safety reserve. The launcher inventories each physical
 device, validates the complete per-GPU allocation before spawning model processes,

@@ -95,8 +95,8 @@ shown to the end user anyway).
 - **On Hopper (H100) / Ampere (A100)**: FlashInfer will emulate FP4 or fail to
   load the kernel. For those targets swap the model ID to the BF16 variant
   `nvidia/Nemotron-Nano-3-30B-A3B` — same architecture, same tool-call parser,
-  same reasoning plugin, ~60 GB VRAM at BF16 instead of ~20 GB at NVFP4.
-- **VRAM at NVFP4**: ~20 GB (30B params × 4 bits weights + FP8 KV cache +
+  same reasoning plugin, ~60 GB GPU memory at BF16 instead of ~20 GB at NVFP4.
+- **GPU memory at NVFP4**: ~20 GB (30B params × 4 bits weights + FP8 KV cache +
   activations). Fits comfortably on a single B200 or RTX PRO 6000.
 
 ## Swap models

@@ -345,22 +345,22 @@ to skip CUDA graph capture. Eager mode starts faster but can reduce per-token
 throughput; keep the default when steady-state performance matters more than
 cold-start time.
 
-### vLLM exits before readiness with insufficient VRAM
+### vLLM exits before readiness with insufficient GPU memory
 
 **Symptom:** startup previously ended with only `exited before signaling ready`,
 while the detailed log contained `No available memory for the cache blocks`,
 `CUDA out of memory`, or a negative `Available KV cache memory` value.
 
 **Cause:** model weights, encoder profiling, CUDA graphs, other services, and KV
-cache did not fit the service's GPU reservation or the physical free VRAM.
+cache did not fit the service's GPU reservation or the physical free GPU memory.
 
-**Fix:** the vLLM wrapper now classifies these signatures as `INSUFFICIENT VRAM`,
+**Fix:** the vLLM wrapper now classifies these signatures as `INSUFFICIENT GPU MEMORY`,
 and the launcher normally catches the capacity shortfall in its per-GPU preflight.
 Stop the listed existing GPU consumer or re-measure the affected service and
 regenerate its absolute-GiB reservation. Reducing `max_model_len`, concurrency,
 or media limits is preferable to raising a utilization percentage by hand.
 
-### `xr_render_demo` exits but VRAM is still pinned
+### `xr_render_demo` exits but GPU memory is still pinned
 
 **By design.** The vLLM-backed servers (`nemotron_omni_llm_server`,
 `vlm_server`, and `nemotron3_nano_llm_server`) survive stack
@@ -368,7 +368,7 @@ restarts so model weights stay loaded across worker crashes and debug
 restarts. See {doc}`/components/ai-services` → *vLLM model
 persistence*.
 
-**Fix:** to fully release VRAM:
+**Fix:** to fully release GPU memory:
 
 ```bash
 cd xr-ai

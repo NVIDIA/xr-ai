@@ -28,19 +28,19 @@ from dataclasses import replace
 from pathlib import Path
 
 from xr_ai_launcher import (
-    VRAM_UTILIZATION_ENV,
+    GPU_MEMORY_UTILIZATION_ENV,
     GPUHardwareProfile,
     Process,
     detect_gpu_config,
     ensure_credentials,
-    format_vram_preflight,
+    format_gpu_memory_preflight,
     load_model_deployment,
-    preflight_vram,
+    preflight_gpu_memory,
     query_gpu_inventory,
     read_service_port,
     require_credentials,
-    require_vram_preflight,
-    resolve_vram_profile,
+    require_gpu_memory_preflight,
+    resolve_gpu_memory_plan,
     run_stack,
     utilization_overrides,
 )
@@ -107,7 +107,7 @@ def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
     return procs, deployment.required_credentials
 
 
-def _apply_local_vram_plan(
+def _apply_local_gpu_memory_plan(
     processes: list[Process], hardware: GPUHardwareProfile,
 ) -> list[Process]:
     """Preflight GPU services owned by the default local deployment."""
@@ -120,7 +120,7 @@ def _apply_local_vram_plan(
         for process in processes
         if process.config is not None and process.name in {"vlm", "stt"}
     }
-    profile = resolve_vram_profile(
+    profile = resolve_gpu_memory_plan(
         stack="simple-vlm-example/local", hardware=hardware,
         inventory=inventory, service_configs=configs,
     )
@@ -130,15 +130,15 @@ def _apply_local_vram_plan(
         and (port := read_service_port(_BASE / process.config)) is not None
         and _service_is_ready(port)
     )
-    results = preflight_vram(profile, inventory, active_services=active)
-    print(format_vram_preflight(profile, results), flush=True)
-    require_vram_preflight(results)
+    results = preflight_gpu_memory(profile, inventory, active_services=active)
+    print(format_gpu_memory_preflight(profile, results), flush=True)
+    require_gpu_memory_preflight(results)
     overrides = utilization_overrides(profile, inventory)
     return [
         replace(
             process,
             environment=process.environment + (
-                ((VRAM_UTILIZATION_ENV, overrides[process.name]),)
+                ((GPU_MEMORY_UTILIZATION_ENV, overrides[process.name]),)
                 if process.name in overrides else ()
             ),
         )
@@ -172,7 +172,7 @@ def run() -> None:
     processes, credentials = _build_processes()
     deployment = load_model_deployment(_BASE / _WORKER_CONFIG)
     if deployment.profile_path.stem == "models.local":
-        processes = _apply_local_vram_plan(
+        processes = _apply_local_gpu_memory_plan(
             processes, detect_gpu_config(_GPU_PROFILES_ROOT),
         )
     # A missing HF_TOKEN silently stalls the multi-GB first-run download; see

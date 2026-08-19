@@ -13,5 +13,5 @@ nim_cache: ../../../../models/nim
 cuda_visible_devices: "0"
 env:
   # Single-process inference: the default multiprocessing mode runs two
-  # CUDA processes; one is plenty for demo traffic. ~14 GB VRAM either way.
+  # CUDA processes; one is plenty for demo traffic. ~14 GB GPU memory either way.
   NIM_USE_MULTIPROCESSING_FOR_INFERENCE: "false"

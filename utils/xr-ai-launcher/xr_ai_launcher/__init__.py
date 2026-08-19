@@ -50,25 +50,25 @@ from ._gpu import (
     match_gpu_config,
     query_gpu_inventory,
 )
-from ._models import ModelDeployment, load_deployment_profile, load_model_deployment
-from ._processes import ManagedProcess
-from ._stack import Parallel, Process, run_stack
-from ._vram import (
-    VRAM_UTILIZATION_ENV,
-    GPUPreflight,
+from ._gpu_memory import (
+    GPU_MEMORY_UTILIZATION_ENV,
+    GPUMemoryError,
+    GPUMemoryPlan,
+    GPUMemoryPreflight,
     ServiceReservation,
-    VRAMProfile,
-    VRAMProfileError,
     derive_gpu_memory_utilization,
-    format_vram_preflight,
+    format_gpu_memory_preflight,
     load_service_reservation,
-    preflight_vram,
+    preflight_gpu_memory,
     read_service_port,
-    require_vram_preflight,
-    resolve_vram_profile,
+    require_gpu_memory_preflight,
+    resolve_gpu_memory_plan,
     service_config_fingerprint,
     utilization_overrides,
 )
+from ._models import ModelDeployment, load_deployment_profile, load_model_deployment
+from ._processes import ManagedProcess
+from ._stack import Parallel, Process, run_stack
 
 __all__ = [
     "XR_RUNTIME_VAR", "load_cloudxr_env",
@@ -78,11 +78,11 @@ __all__ = [
     "GPUDevice", "GPUHardwareProfile", "GPUInventoryError", "GPUProcess",
     "detect_gpu_config", "load_gpu_hardware_profile", "match_gpu_config",
     "query_gpu_inventory",
-    "VRAM_UTILIZATION_ENV", "GPUPreflight", "ServiceReservation",
-    "VRAMProfile", "VRAMProfileError", "derive_gpu_memory_utilization",
-    "format_vram_preflight", "load_service_reservation", "preflight_vram",
+    "GPU_MEMORY_UTILIZATION_ENV", "GPUMemoryPreflight", "ServiceReservation",
+    "GPUMemoryPlan", "GPUMemoryError", "derive_gpu_memory_utilization",
+    "format_gpu_memory_preflight", "load_service_reservation", "preflight_gpu_memory",
     "read_service_port",
-    "require_vram_preflight", "resolve_vram_profile",
+    "require_gpu_memory_preflight", "resolve_gpu_memory_plan",
     "service_config_fingerprint", "utilization_overrides",
     "ModelDeployment", "load_deployment_profile", "load_model_deployment",
     "ManagedProcess",

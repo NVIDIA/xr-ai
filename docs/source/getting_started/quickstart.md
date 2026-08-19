@@ -47,8 +47,8 @@ uv run model_servers
 ```
 
 GPU profiles are strictly auto-matched (`dual_48G_ada`, `spark`,
-`96G_blackwell`) from each device's count, architecture, and total VRAM. Before
-launch, XR-AI prints a per-GPU allocation table and stops with a VRAM shortfall
+`96G_blackwell`) from each device's count, architecture, and total GPU memory. Before
+launch, XR-AI prints a per-GPU allocation table and stops with a GPU memory shortfall
 instead of beginning a model download that cannot become ready. For measurement,
 certification, and an explicit custom-host override, refer to
 {doc}`GPU profiles and reservations </getting_started/requirements>`.
@@ -92,7 +92,7 @@ Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. Refer to
 
 There are two ways to run it:
 
-**Standalone** (~23 GB VRAM) — starts its own VLM and STT:
+**Standalone** (~23 GB GPU memory) — starts its own VLM and STT:
 
 ```bash
 cd agent-samples/simple-vlm-example
@@ -110,7 +110,7 @@ to run without one (refer to the
 
 In both modes the VLM and STT keep running after you exit so the next run skips
 the model reload (see the {doc}`AI services guide </components/ai-services>`);
-free the VRAM with `cd agent-samples/model-servers && uv run model_servers
+free the GPU memory with `cd agent-samples/model-servers && uv run model_servers
 --stop`.
 
 ### Step 1 — Start the server

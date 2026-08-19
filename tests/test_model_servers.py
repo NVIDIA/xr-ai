@@ -197,7 +197,7 @@ def test_cli_selects_requested_profile(
     monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
     monkeypatch.setattr(
-        _model_servers, "_apply_vram_plan", lambda processes, **_kw: processes,
+        _model_servers, "_apply_gpu_memory_plan", lambda processes, **_kw: processes,
     )
     monkeypatch.setattr(
         _model_servers, "_build_processes",
@@ -249,7 +249,7 @@ def test_cli_requires_profile_credentials(monkeypatch: pytest.MonkeyPatch) -> No
     )
     monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
     monkeypatch.setattr(
-        _model_servers, "_apply_vram_plan", lambda processes, **_kw: processes,
+        _model_servers, "_apply_gpu_memory_plan", lambda processes, **_kw: processes,
     )
     monkeypatch.setattr(
         _model_servers, "_build_processes",

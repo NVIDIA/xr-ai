@@ -23,7 +23,7 @@ _GPU_MEMORY_UTILIZATION_ENV = "XR_AI_GPU_MEMORY_UTILIZATION"
 
 
 def gpu_memory_utilization(cfg: dict, default: float) -> float:
-    """Resolve the launcher-derived VRAM budget before the YAML fallback."""
+    """Resolve the launcher-derived GPU memory budget before the YAML fallback."""
     raw = os.environ.get(_GPU_MEMORY_UTILIZATION_ENV)
     if raw is None:
         raw = cfg.get("gpu_memory_utilization", default)

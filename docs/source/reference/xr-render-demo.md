@@ -143,7 +143,7 @@ settled before LOVR starts its Vulkan device, preventing a transient OOM race.
 
 ## STT — parakeet-tdt-0.6b-v3
 
-Port 8103. NeMo ASR in-process. English-only, ~1.5 GB VRAM.
+Port 8103. NeMo ASR in-process. English-only, ~1.5 GB GPU memory.
 
 ```
 LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceAgent

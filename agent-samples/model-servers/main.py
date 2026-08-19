@@ -47,19 +47,19 @@ from dataclasses import replace
 from pathlib import Path
 
 from xr_ai_launcher import (
-    VRAM_UTILIZATION_ENV,
+    GPU_MEMORY_UTILIZATION_ENV,
     GPUHardwareProfile,
     Process,
     detect_gpu_config,
-    format_vram_preflight,
+    format_gpu_memory_preflight,
     load_deployment_profile,
     load_gpu_hardware_profile,
-    preflight_vram,
+    preflight_gpu_memory,
     query_gpu_inventory,
     read_service_port,
     require_credentials,
-    require_vram_preflight,
-    resolve_vram_profile,
+    require_gpu_memory_preflight,
+    resolve_gpu_memory_plan,
     run_stack,
     utilization_overrides,
 )
@@ -70,7 +70,7 @@ _BASE = Path(__file__).resolve().parent
 
 # service → (project, command, config basename). Order is launch
 # order: NIM containers precede local servers (speech NIMs allocate fixed
-# VRAM while LLM/VLM NIMs grab most of their GPU's free VRAM for KV cache);
+# GPU memory while LLM/VLM NIMs grab most of their device's free memory for KV cache);
 # agent-llm precedes the VLM so its FlashInfer MoE JIT compilation runs with
 # the full GPU free on single-GPU profiles.
 _MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
@@ -152,7 +152,7 @@ def _service_is_ready(port: int) -> bool:
     return False
 
 
-def _apply_vram_plan(
+def _apply_gpu_memory_plan(
     processes: list[Process], *, selection: str, hardware: GPUHardwareProfile,
 ) -> list[Process]:
     """Preflight the complete stack and inject derived vLLM utilization."""
@@ -161,7 +161,7 @@ def _apply_vram_plan(
         process.name: ((_BASE / process.config).resolve(), process.name in _VLLM_SERVICES)
         for process in processes if process.config is not None
     }
-    profile = resolve_vram_profile(
+    profile = resolve_gpu_memory_plan(
         stack=selection, hardware=hardware, inventory=inventory,
         service_configs=configs,
     )
@@ -171,16 +171,16 @@ def _apply_vram_plan(
         and (port := read_service_port(_BASE / process.config)) is not None
         and _service_is_ready(port)
     )
-    results = preflight_vram(profile, inventory, active_services=active)
-    print(format_vram_preflight(profile, results), flush=True)
-    require_vram_preflight(results)
+    results = preflight_gpu_memory(profile, inventory, active_services=active)
+    print(format_gpu_memory_preflight(profile, results), flush=True)
+    require_gpu_memory_preflight(results)
 
     overrides = utilization_overrides(profile, inventory)
     return [
         replace(
             process,
             environment=process.environment + (
-                (VRAM_UTILIZATION_ENV, overrides[process.name]),
+                (GPU_MEMORY_UTILIZATION_ENV, overrides[process.name]),
             ),
         )
         if process.name in overrides else process
@@ -270,7 +270,7 @@ def run() -> None:
     for credential in credentials:
         require_credentials(credential)
     _stop_unselected_services(processes)
-    processes = _apply_vram_plan(
+    processes = _apply_gpu_memory_plan(
         processes, selection=ns.models, hardware=hardware,
     )
     run_stack(processes, _BASE, exit_after_ready=True)

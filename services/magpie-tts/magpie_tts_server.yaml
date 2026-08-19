@@ -7,7 +7,7 @@
 
 # NeMo TTS model name.
 # nvidia/magpie_tts_multilingual_357m  — multilingual, NVIDIA Open Model License;
-#                                         ~1 GB VRAM
+#                                         ~1 GB GPU memory
 model: nvidia/magpie_tts_multilingual_357m
 
 # Pin to a specific HuggingFace commit so we always load the revision that was

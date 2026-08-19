@@ -488,7 +488,7 @@ cleanup.
   `Nemotron-3-Nano-Omni-30B-A3B-Reasoning` (text + video input) at port 8108.
   The YAML auto-selects between three model variants by detected GPU compute
   capability: NVFP4 on Blackwell (SM100+), FP8 on Ada and Hopper, BF16 forced via
-  `use_bf16: true` for highest quality at the largest VRAM cost. Same
+  `use_bf16: true` for highest quality at the largest GPU memory cost. Same
   OpenAI-compatible HTTP contract as the other LLM servers — swap the port to
   swap backends. Hosting backend is selectable per YAML (refer to *Choosing the
   vLLM runtime*); persists across stack restarts in both pip and docker modes.

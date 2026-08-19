@@ -8,7 +8,7 @@
 ## Hardware
 
 The bundled GPU profiles target a single NVIDIA RTX PRO 6000 Blackwell workstation
-GPU or an NVIDIA DGX Spark, both of which have enough VRAM to run the full model
+GPU or an NVIDIA DGX Spark, both of which have enough GPU memory to run the full model
 stack locally. These profiles are turnkey presets, not a hardware allowlist: you
 can run on other NVIDIA GPUs by tuning the per-server GPU-memory split. Refer to
 [Running on other GPUs](#running-on-other-gpus) below.
@@ -17,11 +17,16 @@ If you prefer not to run models on local hardware, model endpoints are plain
 URLs: point the worker configuration at a cloud NIM or model endpoint and no
 local GPU is required for the agent or XR-Media-Hub.
 
-XR-AI inventories total and currently free VRAM on every physical GPU before
+XR-AI inventories total and currently free GPU memory on every physical GPU before
 starting a local model stack. It prints the service reservations, device safety
 reserve, existing compute processes, and pass/fail result per GPU. The checked-in
 reservations are initial estimates until validated by three-run
 measurement on each supported host.
+
+Here, GPU memory means the GPU-visible capacity reported by `nvidia-smi`. It is
+dedicated memory on discrete GPUs and shared unified memory on DGX Spark. Because
+CPU workloads can consume that shared pool, Spark measurements must include
+representative whole-system load and retain a larger safety reserve.
 
 ## Software
 
@@ -112,7 +117,7 @@ setups:
 A hardware profile
 (`agent-samples/model-servers/yaml/<profile>/gpu_profile.yaml`) describes a
 specific topology and its per-device safety reserve, not a loose GPU family.
-Automatic matching verifies GPU count, compute capability, and minimum VRAM
+Automatic matching verifies GPU count, compute capability, and minimum GPU memory
 independently on every device. Failure to run or parse `nvidia-smi` is fatal;
 XR-AI never falls back to an assumed profile.
 
@@ -125,16 +130,16 @@ At runtime XR-AI sums the selected service reservations and derives vLLM's
 service reservation GiB / physical GPU total GiB
 ```
 
-Current non-XR processes remain part of used VRAM; they do not reduce that
+Current non-XR processes remain part of used GPU memory; they do not reduce that
 denominator. Preflight requires current usage, incremental service reservations,
 and the device safety reserve to fit together before model downloads start.
 
 To intentionally use the closest bundled placement on reviewed custom hardware,
 pass `model_servers --gpu-profile <name>`. Preflight still validates actual free
-VRAM. For a durable custom profile, measure it rather than editing utilization
+GPU memory. For a durable custom profile, measure it rather than editing utilization
 percentages by hand.
 
-## Measuring and certifying VRAM
+## Measuring and certifying GPU memory
 
 The stdlib-only measurement tool samples `nvidia-smi` every 250 ms from baseline
 through startup and the final stable window. Run a representative workload before
@@ -145,7 +150,7 @@ median/p95. Its recommendation is the observed peak delta plus 10% and a fixed
 ```bash
 cd xr-ai
 uv run --project agent-samples/model-servers \
-  python -m xr_ai_launcher.vram_measure measure \
+  python -m xr_ai_launcher.gpu_memory_measure measure \
   --label omni-run-1 --gpu 1 --output omni-run-1.json -- \
   uv run --project services/nemotron-omni-llm \
   nemotron_omni_llm_server \
@@ -159,7 +164,7 @@ reservation, and records the config fingerprint in the same file:
 
 ```bash
 uv run --project agent-samples/model-servers \
-  python -m xr_ai_launcher.vram_measure certify \
+  python -m xr_ai_launcher.gpu_memory_measure certify \
   --config agent-samples/model-servers/yaml/dual_48G_ada/nemotron_omni_llm_server.yaml \
   --gpu 1 \
   --measurement omni-run-1.json \

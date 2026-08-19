@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Service-YAML VRAM reservation, preflight, and measurement tests."""
+"""Service-YAML GPU memory reservation, preflight, and measurement tests."""
 from __future__ import annotations
 
 import json
@@ -11,18 +11,18 @@ import pytest
 from xr_ai_launcher import (
     GPUDevice,
     GPUHardwareProfile,
+    GPUMemoryError,
     GPUProcess,
-    VRAMProfileError,
     derive_gpu_memory_utilization,
-    format_vram_preflight,
+    format_gpu_memory_preflight,
     load_gpu_hardware_profile,
     load_service_reservation,
-    preflight_vram,
-    require_vram_preflight,
-    resolve_vram_profile,
+    preflight_gpu_memory,
+    require_gpu_memory_preflight,
+    resolve_gpu_memory_plan,
     utilization_overrides,
 )
-from xr_ai_launcher.vram_measure import main as measure_main
+from xr_ai_launcher.gpu_memory_measure import main as measure_main
 from xr_ai_vllm._config import gpu_memory_utilization
 from xr_ai_vllm._diagnostics import classify_vllm_failure
 
@@ -58,7 +58,7 @@ def _service(tmp_path: Path, name: str, gpu: int, reservation: float) -> Path:
 
 def _profile(tmp_path: Path, reservation: float = 37.0):
     inventory = (_gpu(0), _gpu(1))
-    return resolve_vram_profile(
+    return resolve_gpu_memory_plan(
         stack="test", hardware=_hardware(tmp_path), inventory=inventory,
         service_configs={
             "omni": (_service(tmp_path, "omni", 1, reservation), True),
@@ -69,20 +69,20 @@ def _profile(tmp_path: Path, reservation: float = 37.0):
 
 def test_preflight_accounts_for_complete_per_gpu_stack(tmp_path: Path) -> None:
     profile = _profile(tmp_path)
-    results = preflight_vram(profile, (_gpu(0), _gpu(1)))
+    results = preflight_gpu_memory(profile, (_gpu(0), _gpu(1)))
     assert results[0].incremental_required_gib == 40.0
     assert results[0].remaining_gib == 2.0
-    require_vram_preflight(results)
-    assert "Existing PID 123" in format_vram_preflight(profile, results)
+    require_gpu_memory_preflight(results)
+    assert "Existing PID 123" in format_gpu_memory_preflight(profile, results)
 
 
 def test_preflight_reports_shortfall_and_active_service_is_not_double_counted(
     tmp_path: Path,
 ) -> None:
     profile = _profile(tmp_path, 42.0)
-    with pytest.raises(VRAMProfileError, match=r"shortfall 3\.0 GiB"):
-        require_vram_preflight(preflight_vram(profile, (_gpu(0), _gpu(1))))
-    require_vram_preflight(preflight_vram(
+    with pytest.raises(GPUMemoryError, match=r"shortfall 3\.0 GiB"):
+        require_gpu_memory_preflight(preflight_gpu_memory(profile, (_gpu(0), _gpu(1))))
+    require_gpu_memory_preflight(preflight_gpu_memory(
         profile, (_gpu(0), _gpu(1)), active_services=frozenset({"omni"}),
     ))
 
@@ -115,7 +115,8 @@ def test_certify_updates_service_yaml_and_detects_later_change(
     signature = {"driver_version": "580.0", "git_commit": "abc123"}
     measurement = tmp_path / "omni.measurement.json"
     measurement.write_text(json.dumps({
-        "kind": "xr-ai-vram-measurement", "measurement_signature": signature,
+        "kind": "xr-ai-gpu-memory-measurement",
+        "measurement_signature": signature,
         "summary": {"1": {"recommended_reservation_gib": 40.5}},
     }))
     assert measure_main([
@@ -123,25 +124,27 @@ def test_certify_updates_service_yaml_and_detects_later_change(
         "--minimum-runs", "1", "--measurement", str(measurement),
     ]) == 0
     monkeypatch.setattr(
-        "xr_ai_launcher._vram.subprocess.check_output",
+        "xr_ai_launcher._gpu_memory.subprocess.check_output",
         lambda _command, **_kwargs: "580.0",
     )
     reservation = load_service_reservation("omni", config, (_gpu(1),), vllm=True)
     assert reservation is not None
     assert reservation.reservation_gib == 40.5
     config.write_text(config.read_text() + "max_num_seqs: 9\n")
-    with pytest.raises(VRAMProfileError, match="changed since"):
+    with pytest.raises(GPUMemoryError, match="changed since"):
         load_service_reservation("omni", config, (_gpu(1),), vllm=True)
 
 
-def test_vllm_kv_cache_failure_is_classified_as_insufficient_vram(tmp_path: Path) -> None:
+def test_vllm_kv_cache_failure_is_classified_as_insufficient_gpu_memory(
+    tmp_path: Path,
+) -> None:
     log = tmp_path / "vllm.log"
     log.write_text(
         "Available KV cache memory: -0.17 GiB\n"
         "ValueError: No available memory for the cache blocks.\n"
     )
     diagnosis = classify_vllm_failure(log, ["vllm", "--gpu-memory-utilization", "0.78"])
-    assert diagnosis is not None and diagnosis.startswith("INSUFFICIENT VRAM")
+    assert diagnosis is not None and diagnosis.startswith("INSUFFICIENT GPU MEMORY")
     assert "-0.17 GiB" in diagnosis
 
 
