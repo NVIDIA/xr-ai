@@ -1,0 +1,786 @@
+
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Launcher and process model &#8212; XR AI</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=a95f357e85573c9b56d5"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5" />
+
+
+
+    <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'components/launcher-and-process-model';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+
+    <link rel="icon" href="../_static/favicon.png"/>
+
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="MCP servers" href="mcp-servers.html" />
+    <link rel="prev" title="AI inference servers" href="ai-services.html" />
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+
+
+  </head>
+
+  <body data-default-mode="">
+
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="XR AI - Home"/>
+    <img src="../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="XR AI - Home"/>
+  
+  
+    <p class="title logo__title">XR AI</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="XR AI - Home"/>
+    <img src="../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="XR AI - Home"/>
+  
+  
+    <p class="title logo__title">XR AI</p>
+  
+</a>
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item"><!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+
+
+<div class="version-switcher">
+  <label for="version-select" class="version-switcher__label">Version</label>
+  <select id="version-select" class="version-switcher__select">
+    <option value="0" selected>v0.1.0-beta</option>
+    <option value="1" >main (development)</option>
+  </select>
+</div>
+<script>
+  (function () {
+    // Navigate by index into a build-time list, never by reading the URL back
+    // out of the DOM, so page text can never become a navigation target.
+    var urls = ["launcher-and-process-model.html", "../../main/components/launcher-and-process-model.html"];
+    var select = document.getElementById("version-select");
+    select.addEventListener("change", function () {
+      var url = urls[select.selectedIndex];
+      if (url) {
+        window.location.assign(url);
+      }
+    });
+  })();
+</script>
+</div>
+        <div class="sidebar-primary-item">
+
+
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Table of Contents">
+  <p class="bd-links__title" role="heading" aria-level="1">Table of Contents</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../overview/index.html">Overview</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../overview/architecture.html">Architecture</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../getting_started/index.html">Getting Started</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Components</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk.html">Agent SDK</a></li>
+<li class="toctree-l2"><a class="reference internal" href="ai-services.html">AI inference servers</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Launcher and process model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mcp-servers.html">MCP servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="server-runtime.html">Server runtime</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/changelog.html">Decision changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+</ul>
+</details></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Components</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Launcher and process model</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+<section id="launcher-and-process-model">
+<h1>Launcher and process model<a class="headerlink" href="#launcher-and-process-model" title="Link to this heading">#</a></h1>
+<p>Every sample is self-contained: running it starts the XR-Media-Hub and all required
+processes automatically. No separate server launch step.</p>
+<p>Each sample has <strong>two sub-projects</strong>:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Sub-project</p></th>
+<th class="head"><p>Role</p></th>
+<th class="head"><p>Dependencies</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">&lt;sample&gt;/</span></code></p></td>
+<td><p>Orchestrator — declares process list in code, launches all</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code> only (stdlib)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">&lt;sample&gt;/worker/</span></code></p></td>
+<td><p>Agent worker — connects to hub via IPC, runs agent logic</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-agent</span></code>, numpy, etc.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>Configuration convention</strong> — the YAML configuration path for each process is declared
+explicitly in the orchestrator’s <code class="docutils literal notranslate"><span class="pre">PROCESSES</span></code> list via the <code class="docutils literal notranslate"><span class="pre">config=</span></code> field of
+<code class="docutils literal notranslate"><span class="pre">Process</span></code>. The launcher passes it as <code class="docutils literal notranslate"><span class="pre">--config</span> <span class="pre">&lt;path&gt;</span></code> to the subprocess.
+All sample configuration files live in the <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory. Omit <code class="docutils literal notranslate"><span class="pre">config=</span></code> for
+processes that use their own internal defaults.</p>
+<p>The orchestrator declares the process sequence in code:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">_BASE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span>   <span class="c1"># sample root</span>
+
+<span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../server-runtime"</span><span class="p">,</span> <span class="s2">"xr_media_hub"</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/xr_media_hub.yaml"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span>               <span class="s2">"my_agent_worker"</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/my_agent_worker.yaml"</span><span class="p">),</span>
+    <span class="c1"># Optional shared components — add as needed:</span>
+    <span class="c1"># Process("cloudxr", "../../cloudxr-runtime",       "cloudxr_runtime",</span>
+    <span class="c1">#         config="yaml/cloudxr_runtime.yaml"),</span>
+    <span class="c1"># Process("mcp",     "../../agent-mcp-servers/oxr-mcp", "oxr_mcp_server",</span>
+    <span class="c1">#         config="yaml/oxr_mcp_server.yaml"),</span>
+<span class="p">]</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">run_stack</span><span class="p">(</span><span class="n">PROCESSES</span><span class="p">,</span> <span class="n">_BASE</span><span class="p">)</span>
+</pre></div>
+</div>
+<section id="rules">
+<h2>Rules<a class="headerlink" href="#rules" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>Processes start serially</strong> — each process must create its <code class="docutils literal notranslate"><span class="pre">--ready-file</span></code>
+before the next one starts. Declare processes in dependency order (hub
+before workers, cloudxr before MCP servers that open OpenXR sessions, etc.).</p></li>
+<li><p><strong>Every process accepts <code class="docutils literal notranslate"><span class="pre">--ready-file</span> <span class="pre">&lt;path&gt;</span></code></strong> and must <code class="docutils literal notranslate"><span class="pre">Path(path).touch()</span></code>
+when it is fully initialized and ready to serve requests.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">xr_media_hub</span></code> always runs as its own process — never embedded in-process.</p></li>
+<li><p>The worker never imports anything from <code class="docutils literal notranslate"><span class="pre">server-runtime</span></code> or <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-launcher/</span></code>.</p></li>
+<li><p>Process management lives in <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-launcher/</span></code>, not inside any process it manages.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">run_stack</span></code> is fail-fast: if any process exits, the rest are terminated.</p></li>
+</ul>
+</section>
+<section id="serial-and-parallel-items">
+<h2>Serial and parallel items<a class="headerlink" href="#serial-and-parallel-items" title="Link to this heading">#</a></h2>
+<p>The stack is declared as a sequence of <code class="docutils literal notranslate"><span class="pre">Process</span></code> or <code class="docutils literal notranslate"><span class="pre">Parallel</span></code> items:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Process</span></code> — started alone; the launcher waits for it to signal ready before
+moving on.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Parallel([p1,</span> <span class="pre">p2,</span> <span class="pre">...])</span></code> — all processes in the group are started at once;
+the launcher waits for <em>every</em> member to signal ready before the next item
+in the sequence begins. If any member exits before signaling ready, the
+launcher shuts everything down, just as it would for a serial process.</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../server-runtime"</span><span class="p">,</span> <span class="s2">"xr_media_hub"</span><span class="p">),</span>
+    <span class="n">Parallel</span><span class="p">([</span>
+        <span class="n">Process</span><span class="p">(</span><span class="s2">"stt"</span><span class="p">,</span> <span class="s2">"../../ai-services/stt-server"</span><span class="p">,</span> <span class="s2">"stt_server"</span><span class="p">),</span>
+        <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span> <span class="s2">"../../ai-services/tts/piper"</span><span class="p">,</span>  <span class="s2">"piper_tts_server"</span><span class="p">),</span>
+    <span class="p">]),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"my_agent_worker"</span><span class="p">),</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+</section>
+<section id="how-run-stack-works">
+<h2>How <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> works<a class="headerlink" href="#how-run-stack-works" title="Link to this heading">#</a></h2>
+<p>For each process the launcher:</p>
+<ol class="arabic simple">
+<li><p>Resolves the project directory and YAML configuration from the sample root (<code class="docutils literal notranslate"><span class="pre">base</span></code>
+— all relative paths in <code class="docutils literal notranslate"><span class="pre">Process.project</span></code> and <code class="docutils literal notranslate"><span class="pre">Process.config</span></code> are resolved
+against it).</p></li>
+<li><p>Spawns <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--project</span> <span class="pre">&lt;dir&gt;</span> <span class="pre">&lt;command&gt;</span> <span class="pre">--config</span> <span class="pre">&lt;yaml&gt;</span> <span class="pre">--ready-file</span> <span class="pre">&lt;f&gt;</span></code>
+in a new process group, so the whole group (<code class="docutils literal notranslate"><span class="pre">uv</span></code> plus its children) can be
+torn down together rather than leaving orphans.</p></li>
+<li><p>Waits for the process to create <em><f></em> (the ready file), printing a progress
+line every five seconds so slow starts remain visible.</p></li>
+<li><p>Once all processes are ready, monitors them: any exit triggers a graceful
+shutdown of the rest (SIGTERM, escalating to SIGKILL after a timeout).</p></li>
+</ol>
+<p>Each process is responsible for creating its own ready file at the moment it
+is fully initialized and able to serve requests — after model warm-up, after
+the IPC socket connects, after the HTTP server starts listening, etc.</p>
+<p>Pass <code class="docutils literal notranslate"><span class="pre">exit_after_ready=True</span></code> to <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> to return immediately once
+everything is ready instead of monitoring — useful for launchers whose
+processes are all <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;persist&quot;</span></code> and should outlive the orchestrator
+(e.g. <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>).</p>
+<section id="the-ready-file-protocol">
+<h3>The <code class="docutils literal notranslate"><span class="pre">--ready-file</span></code> protocol<a class="headerlink" href="#the-ready-file-protocol" title="Link to this heading">#</a></h3>
+<p>The launcher injects <code class="docutils literal notranslate"><span class="pre">--ready-file</span> <span class="pre">&lt;path&gt;</span></code> into every spawned command. The
+process must <code class="docutils literal notranslate"><span class="pre">Path(path).touch()</span></code> the moment it is fully initialized and able
+to serve requests. The launcher blocks on the file’s existence; if the process
+exits before creating it, startup is aborted and the whole stack is torn down.
+This makes readiness explicit and process-defined: a model server signals ready
+after weights load, an HTTP server after it starts listening, a worker after
+its IPC socket connects.</p>
+</section>
+<section id="launch-mode-own-persist-reuse">
+<h3><code class="docutils literal notranslate"><span class="pre">launch_mode</span></code>: own, persist, reuse<a class="headerlink" href="#launch-mode-own-persist-reuse" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">Process.launch_mode</span></code> controls spawn and shutdown behaviour:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;own&quot;</span></code> (default) — the launcher spawns this process and kills it on
+shutdown.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;persist&quot;</span></code> — the launcher spawns this process but leaves it running on
+shutdown. Use for heavy model servers that should survive stack restarts
+(e.g. vLLM containers). Cleanup is the caller’s responsibility. The optional
+<code class="docutils literal notranslate"><span class="pre">port</span></code> field is used to stop such persistent services.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;reuse&quot;</span></code> — the launcher does <strong>not</strong> spawn this process; it is assumed to be
+already running (e.g. started by <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>). The entry in the process
+list documents the dependency; the launcher skips it entirely and does not
+kill it on shutdown.</p></li>
+</ul>
+<p>On a clean ready-exit, <code class="docutils literal notranslate"><span class="pre">persist</span></code> and <code class="docutils literal notranslate"><span class="pre">reuse</span></code> processes are left running. On an
+abort during startup (Ctrl-C, or a process exiting before it signals ready)
+the launcher tears down <strong>everything</strong>, including <code class="docutils literal notranslate"><span class="pre">persist</span></code> processes, so no
+half-started service is left behind.</p>
+</section>
+</section>
+<section id="adding-a-new-managed-process">
+<h2>Adding a new managed process<a class="headerlink" href="#adding-a-new-managed-process" title="Link to this heading">#</a></h2>
+<p>There is no per-process launcher module to write — the launcher spawns any uv
+sub-project generically. To add a new process to a stack:</p>
+<ol class="arabic simple">
+<li><p>Make the sub-project’s entry-point command accept <code class="docutils literal notranslate"><span class="pre">--ready-file</span> <span class="pre">&lt;path&gt;</span></code>
+(touch it once ready) and, if it takes configuration, <code class="docutils literal notranslate"><span class="pre">--config</span> <span class="pre">&lt;path&gt;</span></code>.</p></li>
+<li><p>Add a <code class="docutils literal notranslate"><span class="pre">Process</span></code> (or <code class="docutils literal notranslate"><span class="pre">Parallel</span></code>) entry to the orchestrator’s <code class="docutils literal notranslate"><span class="pre">PROCESSES</span></code>
+list, in dependency order, pointing at the sub-project directory and its
+entry-point command — exactly like the <code class="docutils literal notranslate"><span class="pre">hub</span></code> and <code class="docutils literal notranslate"><span class="pre">worker</span></code> entries above.</p></li>
+</ol>
+</section>
+<section id="shared-utils-packages">
+<h2>Shared <code class="docutils literal notranslate"><span class="pre">utils/</span></code> packages<a class="headerlink" href="#shared-utils-packages" title="Link to this heading">#</a></h2>
+<p>The orchestrator’s process management and several cross-cutting concerns live
+in single-purpose packages under <code class="docutils literal notranslate"><span class="pre">utils/</span></code>. Each is small and narrowly scoped,
+and most are deliberately dependency-light so they can be added to any
+sub-project without dragging in a heavy dependency chain.</p>
+<p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code></strong> — process management for the xr-ai stack: the <code class="docutils literal notranslate"><span class="pre">Process</span></code>,
+<code class="docutils literal notranslate"><span class="pre">Parallel</span></code>, and <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> API described above, plus helpers for CloudXR
+environment setup, credential loading, and GPU detection. Intentionally
+stdlib-only so it can be added to any sample without pulling in the dependency
+chain of the processes it manages.</p>
+<p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-logging</span></code></strong> — shared loguru setup for the monorepo. Every process calls
+<code class="docutils literal notranslate"><span class="pre">setup_logging()</span></code> once at startup to get a unified logging stack: a stderr sink
+(level controlled by <code class="docutils literal notranslate"><span class="pre">XR_AI_VERBOSE</span></code>), a DEBUG file sink under
+<code class="docutils literal notranslate"><span class="pre">/tmp/log_&lt;namespace&gt;_&lt;timestamp&gt;/</span></code>, and a stdlib bridge that routes records
+emitted via <code class="docutils literal notranslate"><span class="pre">logging.getLogger(...)</span></code> into loguru — so stdlib-only packages
+(<code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code>) and the agent SDK end up in the same sinks. The orchestrator
+stamps namespace, timestamp, and root env vars so all spawned subprocesses write into
+the same per-run folder.</p>
+<p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-vad</span></code></strong> — shared Silero-VAD utterance detector for agent workers. It
+consumes int16 LE PCM audio and emits int16 PCM utterance bytes via an async
+callback when speech ends, so workers get a single, consistent voice-activity
+boundary without each re-implementing VAD.</p>
+<p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-voicegate</span></code></strong> — the speech-only opt-in gate shared by agent workers.
+It owns the magic-phrase, follow-up, and STOP ladder, the lazy listening chime,
+and the participant-joined greeting hook. Workers feed STT transcripts via
+<code class="docutils literal notranslate"><span class="pre">feed</span></code> and register handlers for the events it emits (query, stop, phrase-only,
+drop, participant-joined).</p>
+<p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-vllm</span></code></strong> — pluggable vLLM backend for inference services. Each
+vLLM-backed service can host vllm via <code class="docutils literal notranslate"><span class="pre">pip</span></code> (the pip-installed <code class="docutils literal notranslate"><span class="pre">vllm</span></code> CLI in
+the wrapper’s venv, the default) or <code class="docutils literal notranslate"><span class="pre">docker</span></code> (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span> <span class="pre">nvcr.io/nvidia/vllm</span></code>,
+an NGC container), chosen per-server via <code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">pip|docker</span></code> in the
+service YAML. Both paths honor identical configuration keys; only the runtime hosting
+vllm differs. Stdlib-only by contract, so the docker path stays light even when
+pip vllm is not installed.</p>
+<p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-nemo-runtime</span></code></strong> — opt-in NGC NeMo container backend for the in-process
+NeMo servers (the STT server and the Magpie TTS server). The NeMo servers load
+torch+NeMo in the wrapper’s venv and inherit the host’s cuDNN/CUDA via
+<code class="docutils literal notranslate"><span class="pre">LD_LIBRARY_PATH</span></code>, which aborts at torch import on hosts whose system cuDNN
+differs from torch’s bundled one. This runs the same FastAPI server inside an
+NGC NeMo image instead — so torch, NeMo, and cuDNN all come from the container
+and the host’s libraries are irrelevant — opted into per-server via
+<code class="docutils literal notranslate"><span class="pre">backend:</span> <span class="pre">docker</span></code> in the service YAML (default <code class="docutils literal notranslate"><span class="pre">pip</span></code> keeps the in-venv
+behavior). It is a bespoke NeMo docker path, deliberately separate from
+<code class="docutils literal notranslate"><span class="pre">xr-ai-vllm</span></code>, and is stdlib-only by contract.</p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="ai-services.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">AI inference servers</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="mcp-servers.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">MCP servers</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+
+
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rules">Rules</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#serial-and-parallel-items">Serial and parallel items</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-run-stack-works">How <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> works</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-ready-file-protocol">The <code class="docutils literal notranslate"><span class="pre">--ready-file</span></code> protocol</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#launch-mode-own-persist-reuse"><code class="docutils literal notranslate"><span class="pre">launch_mode</span></code>: own, persist, reuse</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-a-new-managed-process">Adding a new managed process</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-utils-packages">Shared <code class="docutils literal notranslate"><span class="pre">utils/</span></code> packages</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5"></script>
+
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+<a class="footer-brand logo" href="https://www.nvidia.com">
+  <img src="../_static/nvidia-logo-horiz-rgb-1c-blk-for-screen.svg" class="logo__image only-light" alt="NVIDIA"/>
+  <img src="../_static/nvidia-logo-horiz-rgb-1c-wht-for-screen.svg" class="logo__image only-dark" alt="NVIDIA"/>
+</a></div>
+      
+        <div class="footer-item">
+
+<div class="footer-links">
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/privacy-policy/">Privacy Policy</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/privacy-center/">Your Privacy Choices</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/terms-of-service/">Terms of Service</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/accessibility/">Accessibility</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/company-policies/">Corporate Policies</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/product-security/">Product Security</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/contact/">Contact</a>
+  
+  
+  
+</div>
+</div>
+      
+        <div class="footer-item">
+
+
+
+
+  <p class="copyright">
+    
+      Copyright © 2026, NVIDIA CORPORATION &amp; AFFILIATES.
+      <br/>
+    
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+  </body>
+</html>
