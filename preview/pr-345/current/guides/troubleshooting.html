@@ -33,6 +33,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
@@ -59,7 +60,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Reference" href="../reference/index.html" />
-    <link rel="prev" title="Contributing and conventions" href="contributing-and-conventions.html" />
+    <link rel="prev" title="SPDX license headers" href="spdx-headers.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -290,6 +291,7 @@
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../getting_started/index.html">Getting Started</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
@@ -300,7 +302,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../components/agent-sdk.html">Agent SDK</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/ai-services.html">AI inference servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/launcher-and-process-model.html">Launcher and process model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../components/mcp-servers.html">MCP servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/server-runtime.html">Server runtime</a></li>
 </ul>
 </details></li>
@@ -308,12 +309,56 @@
 <li class="toctree-l2"><a class="reference internal" href="adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../reference/changelog.html">Decision changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
 </ul>
 </details></li>
 </ul>
@@ -457,8 +502,8 @@ loads the wrong runtime and aborts.</p>
 <code class="docutils literal notranslate"><span class="pre">LD_LIBRARY_PATH</span></code> before spawning (logged once as a WARNING), so the
 venv-bundled cuDNN is used. If you hit this running a service <strong>directly</strong>
 (outside the launcher), clear the conflicting path yourself first:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Inspect what&#39;s on the path</span>
-<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$LD_LIBRARY_PATH</span><span class="s2">&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Inspect what's on the path</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">"</span><span class="nv">$LD_LIBRARY_PATH</span><span class="s2">"</span>
 <span class="c1"># Run the service without the host cuDNN shadowing the venv copy</span>
 env<span class="w"> </span>-u<span class="w"> </span>LD_LIBRARY_PATH<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>&lt;command&gt;
 </pre></div>
@@ -477,20 +522,20 @@ env<span class="w"> </span>-u<span class="w"> </span>LD_LIBRARY_PATH<span class=
 NGC vLLM container.</p>
 <p><strong>Fix:</strong> log in with your NGC API key once. Get a key from
 <a class="reference external" href="https://ngc.nvidia.com/setup/api-key">https://ngc.nvidia.com/setup/api-key</a> and run:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>login<span class="w"> </span>nvcr.io<span class="w"> </span>-u<span class="w"> </span><span class="s1">&#39;$oauthtoken&#39;</span><span class="w"> </span>-p<span class="w"> </span><span class="nv">$NGC_API_KEY</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>login<span class="w"> </span>nvcr.io<span class="w"> </span>-u<span class="w"> </span><span class="s1">'$oauthtoken'</span><span class="w"> </span>-p<span class="w"> </span><span class="nv">$NGC_API_KEY</span>
 </pre></div>
 </div>
 <p>The credential is cached in <code class="docutils literal notranslate"><span class="pre">~/.docker/config.json</span></code> and reused on subsequent
 runs. Alternatively, save the key into the xr-ai credential cache so the
 wrapper can auto-login:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">"</span>
 <span class="s2">import json, os, pathlib</span>
-<span class="s2">p = pathlib.Path.home() / &#39;.config/xr-ai/credentials.json&#39;</span>
+<span class="s2">p = pathlib.Path.home() / '.config/xr-ai/credentials.json'</span>
 <span class="s2">d = json.loads(p.read_text()) if p.exists() else {}</span>
-<span class="s2">d[&#39;NGC_API_KEY&#39;] = os.environ[&#39;NGC_API_KEY&#39;]</span>
+<span class="s2">d['NGC_API_KEY'] = os.environ['NGC_API_KEY']</span>
 <span class="s2">p.parent.mkdir(parents=True, exist_ok=True)</span>
 <span class="s2">p.write_text(json.dumps(d, indent=2))</span>
-<span class="s2">&quot;</span>
+<span class="s2">"</span>
 </pre></div>
 </div>
 <p>The orchestrator’s <code class="docutils literal notranslate"><span class="pre">load_credentials()</span></code> injects <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> into the
@@ -507,8 +552,9 @@ environment before each wrapper runs; the docker backend uses it to run
 <p>and the per-run log file under <code class="docutils literal notranslate"><span class="pre">/tmp/log_&lt;sample&gt;_&lt;timestamp&gt;/&lt;service&gt;.log</span></code>
 contains only wrapper messages — nothing from inside the container.</p>
 <p><strong>Health probe</strong> — confirm vLLM never reached the <code class="docutils literal notranslate"><span class="pre">/health</span></code> endpoint:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8107/health<span class="w">   </span><span class="c1"># nemotron3_nano (agent-llm)</span>
-curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8100/health<span class="w">   </span><span class="c1"># vlm_server</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8108/health<span class="w">   </span><span class="c1"># nemotron_omni (default LLM)</span>
+curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8100/health<span class="w">   </span><span class="c1"># vlm_server (default Cosmos VLM)</span>
+curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8107/health<span class="w">   </span><span class="c1"># superseded nemotron3_nano</span>
 </pre></div>
 </div>
 <p><strong>Container post-mortem</strong> — the wrapper streams <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">logs</span> <span class="pre">-f</span></code> into the
@@ -543,8 +589,7 @@ local install.</p>
 <h3>Hub fails immediately with <code class="docutils literal notranslate"><span class="pre">RuntimeError:</span> <span class="pre">missing</span> <span class="pre">libnvcuvid.so</span> <span class="pre">/</span> <span class="pre">libnvidia-encode.so</span></code><a class="headerlink" href="#hub-fails-immediately-with-runtimeerror-missing-libnvcuvid-so-libnvidia-encode-so" title="Link to this heading">#</a></h3>
 <p><strong>Cause:</strong> NVDEC (<code class="docutils literal notranslate"><span class="pre">libnvcuvid.so</span></code>) and NVENC (<code class="docutils literal notranslate"><span class="pre">libnvidia-encode.so</span></code>) are
 required — the XR-Media-Hub refuses to start without them so it never silently falls
-back to OpenH264 (which is royalty-bearing). Refer to the
-<a class="reference internal" href="../reference/changelog.html"><span class="doc">changelog</span></a> entry <strong>2026-04-21 — NVDEC/NVENC required</strong>.</p>
+back to OpenH264, which is royalty-bearing.</p>
 <p><strong>Fix:</strong></p>
 <ul class="simple">
 <li><p><strong>Bare metal:</strong> install or repair the NVIDIA driver. The libraries ship with the
@@ -560,19 +605,17 @@ device nodes) when starting the container.</p></li>
 <h3>Voice session drops or agent goes silent after a few minutes idle<a class="headerlink" href="#voice-session-drops-or-agent-goes-silent-after-a-few-minutes-idle" title="Link to this heading">#</a></h3>
 <p><strong>Cause:</strong> an idle-timeout that auto-cancels the voice pipeline after a stretch
 with no user or bot speech.</p>
-<p><strong>Status:</strong> disabled by default. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> and <code class="docutils literal notranslate"><span class="pre">make_voice_pipeline</span></code> pass
-<code class="docutils literal notranslate"><span class="pre">cancel_on_idle_timeout=False</span></code> (overriding Pipecat’s on-by-default
-<code class="docutils literal notranslate"><span class="pre">IDLE_TIMEOUT_SECS</span></code>), so a quiet session stays connected indefinitely.</p>
+<p><strong>Status:</strong> disabled by default. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> leaves its private Pipecat idle
+timeout disabled, so a quiet session stays connected indefinitely.</p>
 <p><strong>If you want it:</strong> set <code class="docutils literal notranslate"><span class="pre">idle_timeout_secs:</span> <span class="pre">&lt;seconds&gt;</span></code> (e.g. <code class="docutils literal notranslate"><span class="pre">300</span></code> for 5 min)
 in the sample’s worker YAML (<code class="docutils literal notranslate"><span class="pre">simple_vlm_example_worker.yaml</span></code> /
 <code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.yaml</span></code>); <code class="docutils literal notranslate"><span class="pre">0</span></code> or unset keeps it disabled. The knob is
-owned by <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.VoiceSession</span></code> or, for a direct Pipecat consumer,
-<code class="docutils literal notranslate"><span class="pre">xr_ai_pipecat.make_voice_pipeline</span></code>.</p>
+owned by <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.VoiceAgent</span></code>.</p>
 </section>
 <section id="browser-client-connects-but-no-audio-or-no-video">
 <h3>Browser client connects but no audio or no video<a class="headerlink" href="#browser-client-connects-but-no-audio-or-no-video" title="Link to this heading">#</a></h3>
 <p><strong>Most common cause:</strong> firewall blocking WebRTC media on UDP 7882 (LiveKit).</p>
-<p><strong>Fix:</strong> open ports per <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/dec6b4264c1f02a35ff46f267483c5b8788df92b/docs/networking.md"><code class="docutils literal notranslate"><span class="pre">docs/networking.md</span></code></a>. The web client
+<p><strong>Fix:</strong> open ports per <a class="reference internal" href="../getting_started/networking.html"><span class="doc">Networking and firewall</span></a>. The web client
 will appear to connect (signaling on 7880 succeeds) but media frames are
 silently dropped without 7882.</p>
 </section>
@@ -631,13 +674,15 @@ expose the trust toggle for it. Remove the installed profile via
 stale cert and regenerates as a self-signed CA (logged as <code class="docutils literal notranslate"><span class="pre">TLS:</span> <span class="pre">cached</span> <span class="pre">cert</span> <span class="pre">is</span> <span class="pre">not</span> <span class="pre">a</span> <span class="pre">CA</span> <span class="pre">cert</span> <span class="pre">—</span> <span class="pre">regenerating…</span></code>).</p>
 <p>If the toggle was enabled but the wss handshake still fails with
 <code class="docutils literal notranslate"><span class="pre">errSSLBadCert</span></code> or NSURLErrorDomain <code class="docutils literal notranslate"><span class="pre">-1202</span></code> and a message like <em>“pretending
-to be 10.29.90.196”</em> (that is, the IP you typed into the app), the
-certificate’s SubjectAlternativeName doesn’t cover that IP. The hub now detects
-local IPv4 addresses via a UDP-connect probe and auto-regenerates the certificate
-whenever the SAN is missing one (logged as <code class="docutils literal notranslate"><span class="pre">TLS:</span> <span class="pre">cached</span> <span class="pre">cert</span> <span class="pre">SAN</span> <span class="pre">is</span> <span class="pre">missing</span> <span class="pre">local</span> <span class="pre">IP(s)</span> <span class="pre">…</span> <span class="pre">—</span> <span class="pre">regenerating…</span></code>); just restart the hub and
-re-install the profile on the device. To force regen explicitly, delete
-<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code> and <code class="docutils literal notranslate"><span class="pre">web-server.key</span></code> before
-restarting.</p>
+to be 192.168.1.42”</em> (that is, the IP you typed into the app), the
+certificate’s SubjectAlternativeName doesn’t cover that IP. The hub detects
+local IPv4 addresses via a UDP-connect probe and auto-regenerates the
+certificate whenever the SAN is missing one (logged as <code class="docutils literal notranslate"><span class="pre">TLS:</span> <span class="pre">cached</span> <span class="pre">cert</span> <span class="pre">SAN</span> <span class="pre">is</span> <span class="pre">missing</span> <span class="pre">…;</span> <span class="pre">regenerating…</span></code>); just restart the hub and re-install the
+profile on the device. If the dialed address is not on any of the hub’s
+interfaces, add it to <code class="docutils literal notranslate"><span class="pre">web_server_extra_sans</span></code> in <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> and
+restart (see <a class="reference internal" href="../getting_started/networking.html"><span class="std std-doc">Networking</span></a>). To force
+regen explicitly, delete <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code> and
+<code class="docutils literal notranslate"><span class="pre">web-server.key</span></code> before restarting.</p>
 <p>If the certificate is trusted (no <code class="docutils literal notranslate"><span class="pre">-1202</span></code>) but the room connection still fails
 with HTTP 401 / “no permissions to access the room”, the hub’s wss /rtc
 proxy is dropping the <code class="docutils literal notranslate"><span class="pre">Authorization:</span> <span class="pre">Bearer</span> <span class="pre">&lt;token&gt;</span></code> header the Swift
@@ -656,25 +701,37 @@ the IWER emulator built into the web client itself for desktop dev.</p>
 </section>
 <section id="vllm-cold-start-takes-38-minutes">
 <h3>vLLM cold start takes 3–8 minutes<a class="headerlink" href="#vllm-cold-start-takes-38-minutes" title="Link to this heading">#</a></h3>
-<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">vlm_server</span></code> or <code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code> weight load is fast,
+<p><strong>Symptom:</strong> a vLLM server’s weight load is fast,
 but the server then sits silent for several minutes before becoming healthy.</p>
 <p><strong>Cause:</strong> CUDA graph capture + FlashInfer FP4 MoE autotune happen on first
 run after weight load. They are silent.</p>
-<p><strong>Fix:</strong> the shipped YAMLs default to <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> which avoids both.
-Eager mode is 10–20% slower per token but starts in ~5 s after weight load —
-imperceptible at &lt;250 tokens/turn where STT+VAD+TTS dominate latency. Don’t
-flip <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">false</span></code> unless you have a measured reason.</p>
+<p><strong>Fix:</strong> the default Omni profiles set <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">false</span></code> to enable CUDA
+graph capture and maximize steady-state throughput, so this startup delay is
+expected. For development, set <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> in the active model YAML
+to skip CUDA graph capture. Eager mode starts faster but can reduce per-token
+throughput; keep the default when steady-state performance matters more than
+cold-start time.</p>
+</section>
+<section id="vllm-exits-before-readiness-with-insufficient-gpu-memory">
+<h3>vLLM exits before readiness with insufficient GPU memory<a class="headerlink" href="#vllm-exits-before-readiness-with-insufficient-gpu-memory" title="Link to this heading">#</a></h3>
+<p><strong>Symptom:</strong> a vLLM container exits during startup with <code class="docutils literal notranslate"><span class="pre">CUDA</span> <span class="pre">out</span> <span class="pre">of</span> <span class="pre">memory</span></code>,
+<code class="docutils literal notranslate"><span class="pre">No</span> <span class="pre">available</span> <span class="pre">memory</span> <span class="pre">for</span> <span class="pre">the</span> <span class="pre">cache</span> <span class="pre">blocks</span></code>, or a negative available KV-cache
+value buried in its container log.</p>
+<p><strong>Fix:</strong> the wrapper classifies these signatures as <code class="docutils literal notranslate"><span class="pre">INSUFFICIENT</span> <span class="pre">GPU</span> <span class="pre">MEMORY</span></code>
+and prints the configured utilization when available. Free memory held by other
+processes, reduce model context or concurrency, or use a device with more
+GPU-visible memory. The complete original error remains in the reported log file.</p>
 </section>
 <section id="xr-render-demo-exits-but-vram-is-still-pinned">
 <h3><code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code> exits but VRAM is still pinned<a class="headerlink" href="#xr-render-demo-exits-but-vram-is-still-pinned" title="Link to this heading">#</a></h3>
-<p><strong>By design.</strong> The vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>,
-<code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>) survive stack
+<p><strong>By design.</strong> The vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code>,
+<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>, and <code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>) survive stack
 restarts so model weights stay loaded across worker crashes and debug
-restarts. See <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/dec6b4264c1f02a35ff46f267483c5b8788df92b/docs/ai-services.md"><code class="docutils literal notranslate"><span class="pre">docs/ai-services.md</span></code></a> → <em>vLLM model
+restarts. See <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> → <em>vLLM model
 persistence</em>.</p>
 <p><strong>Fix:</strong> to fully release VRAM:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>xr-ai/agent-samples/xr-render-demo
-uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo<span class="w"> </span>--stop
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>xr-ai
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
 <p>For pip-mode servers this sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> to each persisted process, waits up
@@ -687,12 +744,12 @@ to run while the stack is down.</p>
 <p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">simple_vlm_example</span></code> appears to hang at startup the first
 time.</p>
 <p><strong>Cause:</strong> model weights are downloading from HuggingFace into <code class="docutils literal notranslate"><span class="pre">models/</span></code> at
-the repository root (gitignored, ~16 GB for Cosmos-Reason1-7B alone).</p>
+the repository root (gitignored; the Cosmos3 checkpoint alone is tens of GB).</p>
 <p><strong>Fix:</strong> wait. Subsequent runs use the cached weights and start in
 ~30–60 s. If the download makes no progress, note that unauthenticated
 downloads (runs started with <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code>) are rate-limited and can
 stall indefinitely; set <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> and restart
-(see <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/dec6b4264c1f02a35ff46f267483c5b8788df92b/docs/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/credentials.md</span></code></a>).</p>
+(see <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>).</p>
 </section>
 </section>
 </section>
@@ -708,12 +765,12 @@ stall indefinitely; set <code class="docutils literal notranslate"><span class="
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="contributing-and-conventions.html"
+       href="spdx-headers.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Contributing and conventions</p>
+        <p class="prev-next-title">SPDX license headers</p>
       </div>
     </a>
     <a class="right-next"
@@ -765,6 +822,7 @@ stall indefinitely; set <code class="docutils literal notranslate"><span class="
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#ios-and-visionos-connection-fails-with-certificate-trust-errors">iOS and visionOS — connection fails with certificate-trust errors</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#chrome-immersive-web-extension-cannot-be-enabled">Chrome — Immersive Web extension cannot be enabled</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vllm-cold-start-takes-38-minutes">vLLM cold start takes 3–8 minutes</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vllm-exits-before-readiness-with-insufficient-gpu-memory">vLLM exits before readiness with insufficient GPU memory</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-render-demo-exits-but-vram-is-still-pinned"><code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code> exits but VRAM is still pinned</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#first-run-downloads-models-silently">First run downloads models silently</a></li>
 </ul>

@@ -33,6 +33,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
@@ -59,7 +60,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Connecting Clients" href="clients.html" />
-    <link rel="prev" title="Quickstart" href="quickstart.html" />
+    <link rel="prev" title="Skills" href="skills.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -313,6 +314,7 @@
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Getting Started</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="skills.html">Skills</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Requirements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="clients.html">Connecting Clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="networking.html">Networking and firewall</a></li>
@@ -323,7 +325,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../components/agent-sdk.html">Agent SDK</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/ai-services.html">AI inference servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/launcher-and-process-model.html">Launcher and process model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../components/mcp-servers.html">MCP servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/server-runtime.html">Server runtime</a></li>
 </ul>
 </details></li>
@@ -331,12 +332,56 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../reference/changelog.html">Decision changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
 </ul>
 </details></li>
 </ul>
@@ -539,7 +584,7 @@ whitelisting the exact origin in
 was not exercised in the report.</p></li>
 <li><p><strong>Mirrored networking collides with the token server</strong>: Windows’ IP Helper
 service occupies port 8000. Refer to the <code class="docutils literal notranslate"><span class="pre">token_server_port</span></code> note in
-<code class="docutils literal notranslate"><span class="pre">server-runtime/xr_media_hub.yaml</span></code>.</p></li>
+<code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/xr_media_hub.yaml</span></code>.</p></li>
 </ul>
 </section>
 <section id="running-on-other-gpus">
@@ -564,6 +609,15 @@ them if you have spare VRAM.</p></li>
 <li><p>On lower-VRAM GPUs, run fewer models concurrently, or lower <code class="docutils literal notranslate"><span class="pre">max_model_len</span></code> on
 the LLM and VLM servers to reduce the KV-cache footprint.</p></li>
 </ol>
+<p>Then select the reviewed profile explicitly:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--gpu-profile<span class="w"> </span>&lt;profile-directory-name&gt;
+</pre></div>
+</div>
+<p>Automatic detection intentionally accepts only bundled profiles whose hardware
+requirements are known to match. <code class="docutils literal notranslate"><span class="pre">--gpu-profile</span></code> bypasses that selection for a
+profile you have explicitly copied and tuned; it does not validate that the model
+servers fit the selected devices.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>The model weights are independent of the GPU. Any NVIDIA GPU with enough VRAM for
@@ -594,12 +648,12 @@ dropped if it is closed.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="quickstart.html"
+       href="skills.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Quickstart</p>
+        <p class="prev-next-title">Skills</p>
       </div>
     </a>
     <a class="right-next"

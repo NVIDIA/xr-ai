@@ -33,6 +33,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
@@ -313,6 +314,7 @@
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Getting Started</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="requirements.html">Requirements</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Connecting Clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="networking.html">Networking and firewall</a></li>
@@ -323,7 +325,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../components/agent-sdk.html">Agent SDK</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/ai-services.html">AI inference servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/launcher-and-process-model.html">Launcher and process model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../components/mcp-servers.html">MCP servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/server-runtime.html">Server runtime</a></li>
 </ul>
 </details></li>
@@ -331,12 +332,56 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../reference/changelog.html">Decision changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
 </ul>
 </details></li>
 </ul>
@@ -454,7 +499,7 @@ camera, agent-status badge, data channel).</p>
 <h2>The connect flow<a class="headerlink" href="#the-connect-flow" title="Link to this heading">#</a></h2>
 <p>When you start a server sample, the hub prints its connection details on
 startup:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>[hub]   LiveKit URL : wss://0.0.0.0:8080
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>[hub]   LiveKit URL : wss://localhost:8080
 [hub]   Room        : xr-room
 [hub]   Token       : eyJ…
 [hub]   Web client  : https://localhost:8080
@@ -516,6 +561,9 @@ certificate permanently or run over plain HTTP instead, refer to
 directly.</p></li>
 <li><p>Click <strong>Connect</strong>. You are now live in the XR session.</p></li>
 </ol>
+<p>The camera preview displays the same browser track published to the hub and
+adapts to its captured aspect ratio. The browser console logs the published
+track settings when the camera starts.</p>
 </section>
 <section id="web-xr-xr-render-demo">
 <h2>Web-XR (XR render demo)<a class="headerlink" href="#web-xr-xr-render-demo" title="Link to this heading">#</a></h2>
@@ -651,9 +699,6 @@ immersive APIs (Jetpack XR, OpenXR, spatial panels, head tracking, hand input,
 or passthrough), so it will not render head-tracked or spatialized content.</p></li>
 </ul>
 </div>
-<p>A fully immersive Android XR client — spatialized UI, head and hand input, and
-optional CloudXR remote rendering — is future work. For an immersive XR path
-today, refer to the <strong>Web-XR (XR render demo)</strong> client described above.</p>
 </section>
 </section>
 <section id="ios-visionos">

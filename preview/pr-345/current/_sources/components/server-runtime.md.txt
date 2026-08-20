@@ -5,7 +5,7 @@
 
 # Server runtime
 
-The `server-runtime/` package hosts the **XR-Media-Hub** — the single process
+The `services/xr-media-hub/` package hosts the **XR-Media-Hub** — the single process
 clients connect to and agents fan out from. It owns the internal LiveKit
 transport, the shared-memory + ZMQ IPC boundary to agents, the per-participant
 return path, and the same-origin `wss://` proxy that fronts LiveKit signaling.
@@ -19,7 +19,7 @@ python -m xr_media_hub                    # equivalent module form
 ```
 
 Configuration comes from a `xr_media_hub.yaml` file (defaults are used when
-none is found). `server-runtime/xr_media_hub.yaml` is the reference copy
+none is found). `services/xr-media-hub/xr_media_hub.yaml` is the reference copy
 documenting every field; each sample ships its own copy under its `yaml/`
 directory. Relative paths inside the YAML (such as `web_client_dir`) resolve
 against the YAML file's own directory, not the working directory.
@@ -68,9 +68,7 @@ This isolation is a property of the hub's routing, not a limitation of the
 transport. LiveKit natively supports client-to-client communication, and an
 application is free to use those native features directly for peer-to-peer
 media or data. Doing so is **outside the scope of XR AI**: the hub neither
-routes nor guarantees that traffic, and because the transport is an
-implementation detail, a future streaming backend may not offer the same
-client-to-client capability. Build on the hub's participant ↔ agent contract
+routes nor guarantees that traffic. This traffic is outside the hub contract and is not portable across transports. Build on the hub's participant ↔ agent contract
 for behavior that ports across backends.
 ```
 
@@ -103,7 +101,7 @@ checks at startup.
 ## IPC boundary to agents
 
 The hub and its producers and consumers communicate over ZMQ using msgpack-encoded
-messages. The layer lives in `server-runtime/xr_media_hub/ipc/` and defines
+messages. The layer lives in `services/xr-media-hub/xr_media_hub/ipc/` and defines
 three endpoints:
 
 | Endpoint | Role | Who |
@@ -153,7 +151,7 @@ registered at import time via `register_encoder` and `register_decoder`.
 Agent code should import the IPC types and `ProcessorEndpoint` from
 `xr_ai_hub` directly, **not** from `xr_media_hub.ipc`. The agent SDK's only
 runtime dependencies are `pyzmq` and `msgpack` — importing from the agent SDK
-avoids pulling in the full server-runtime dependency tree (LiveKit, FastAPI,
+avoids pulling in the full XR-Media-Hub dependency tree (LiveKit, FastAPI,
 uvicorn, GPU codecs). `xr_media_hub.ipc` re-exports the same names for the
 server side.
 ```
@@ -184,6 +182,32 @@ to the target participant, so it is never broadcast to peers. Return audio is
 paced into LiveKit at audio rate by a per-participant pipe, which a flush can
 drain to interrupt playback.
 
+## Agent status aggregation
+
+`_agent.status` is the one exception to straight-through return data. The hub
+does not forward an agent's status to the client — it records it per
+`(agent_id, participant_id)` and publishes the aggregate, taking the least
+available state across the agents *responsible for that participant*:
+`loading` > `processing` > `idle` > `ready`. Agents that opt into readiness
+announce themselves with `AGENT_PRESENCE` when their receive loop starts and
+detach when it stops, so an agent that is still loading holds the room at
+`loading` rather than being masked by a peer that is already ready.
+
+`AGENT_PRESENCE` carries the agent's scope — the participants it answers for,
+or *None* for all of them. A participant with no responsible agent reads
+`loading`. Passive processors never register, and an agent scoped to one pid
+is excluded from every other pid's aggregate. Repeat aggregates are suppressed, so the agents' periodic
+re-announcements do not become per-agent client traffic.
+
+A status payload without an `agent_id` comes from an SDK predating
+aggregation and is forwarded verbatim.
+
+The hub also answers `SUBSCRIPTION_PROBE` by echoing the token on
+`_probe.{token}`. Subscription commands from one socket are applied in order,
+so the echo tells a processor that its pending SUBSCRIBEs are live — that is
+what keeps a client from being told `ready` before its traffic can reach the
+agent.
+
 ## Same-origin wss proxy
 
 LiveKit server itself runs plain `ws://` on the loopback interface
@@ -195,7 +219,9 @@ When `web_server_tls` is enabled (the default), the web server
 (`_web_server.py`) terminates TLS on `web_server_port` (8080 by default) and
 mounts a `/rtc` route that proxies LiveKit signaling bidirectionally to the
 internal `ws://127.0.0.1:7880` (`_lk_proxy.py`). A self-signed certificate is
-auto-generated on first run; supply `cert_file` and `key_file` to use your own.
+auto-generated on first run (SAN coverage and regeneration:
+[Networking](../getting_started/networking.md)); supply `cert_file` and
+`key_file` to use your own.
 The proxy forwards end-to-end headers so SDK authentication (such as the LiveKit
 Swift SDK's `Authorization: Bearer`) reaches the server, and handles both the
 versioned (`/rtc/v1`) and legacy (`/rtc`) signaling paths.

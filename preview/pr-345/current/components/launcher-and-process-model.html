@@ -33,6 +33,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
@@ -58,7 +59,7 @@
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="MCP servers" href="mcp-servers.html" />
+    <link rel="next" title="Server runtime" href="server-runtime.html" />
     <link rel="prev" title="AI inference servers" href="ai-services.html" />
 
 
@@ -290,6 +291,7 @@
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../getting_started/index.html">Getting Started</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
@@ -300,7 +302,6 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk.html">Agent SDK</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ai-services.html">AI inference servers</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Launcher and process model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="mcp-servers.html">MCP servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="server-runtime.html">Server runtime</a></li>
 </ul>
 </details></li>
@@ -308,12 +309,56 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../reference/changelog.html">Decision changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
 </ul>
 </details></li>
 </ul>
@@ -413,15 +458,13 @@ sample’s <code class="docutils literal notranslate"><span class="pre">yaml/mod
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">_BASE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span>   <span class="c1"># sample root</span>
 
 <span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;hub&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../server-runtime&quot;</span><span class="p">,</span> <span class="s2">&quot;xr_media_hub&quot;</span><span class="p">,</span>
-            <span class="n">config</span><span class="o">=</span><span class="s2">&quot;yaml/xr_media_hub.yaml&quot;</span><span class="p">),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;worker&quot;</span><span class="p">,</span> <span class="s2">&quot;worker&quot;</span><span class="p">,</span>               <span class="s2">&quot;my_agent_worker&quot;</span><span class="p">,</span>
-            <span class="n">config</span><span class="o">=</span><span class="s2">&quot;yaml/my_agent_worker.yaml&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/xr-media-hub"</span><span class="p">,</span> <span class="s2">"xr_media_hub"</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/xr_media_hub.yaml"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span>               <span class="s2">"my_agent_worker"</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/my_agent_worker.yaml"</span><span class="p">),</span>
     <span class="c1"># Optional shared components — add as needed:</span>
-    <span class="c1"># Process(&quot;cloudxr&quot;, &quot;../../cloudxr-runtime&quot;,       &quot;cloudxr_runtime&quot;,</span>
-    <span class="c1">#         config=&quot;yaml/cloudxr_runtime.yaml&quot;),</span>
-    <span class="c1"># Process(&quot;mcp&quot;,     &quot;../../agent-mcp-servers/oxr-mcp&quot;, &quot;oxr_mcp_server&quot;,</span>
-    <span class="c1">#         config=&quot;yaml/oxr_mcp_server.yaml&quot;),</span>
+    <span class="c1"># Process("cloudxr", "../../services/cloudxr-runtime", "cloudxr_runtime",</span>
+    <span class="c1">#         config="yaml/cloudxr_runtime.yaml"),</span>
 <span class="p">]</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -433,16 +476,14 @@ sample’s <code class="docutils literal notranslate"><span class="pre">yaml/mod
 <ul class="simple">
 <li><p><strong>Processes start serially</strong> — each process must create its <code class="docutils literal notranslate"><span class="pre">--ready-file</span></code>
 before the next one starts. Declare processes in dependency order (hub
-before workers, cloudxr before MCP servers that open OpenXR sessions, etc.).</p></li>
+before workers and application processes after the services they call).</p></li>
 <li><p><strong>Every process accepts <code class="docutils literal notranslate"><span class="pre">--ready-file</span> <span class="pre">&lt;path&gt;</span></code></strong> and must <code class="docutils literal notranslate"><span class="pre">Path(path).touch()</span></code>
 when it is fully initialized and ready to serve requests.</p></li>
-<li><p><strong>Native voice workers</strong> pass the ready file to <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code>; <code class="docutils literal notranslate"><span class="pre">run()</span></code>
-touches it only after the input transport’s hub IPC receive loop has started.</p></li>
-<li><p><strong>Direct Pipecat workers</strong> call
-<code class="docutils literal notranslate"><span class="pre">run_voice_pipeline(worker,</span> <span class="pre">transport,</span> <span class="pre">on_ready=ready_file.touch)</span></code> to use the
-same IPC-start readiness boundary.</p></li>
+<li><p><strong>Native voice workers</strong> pass the ready file to <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>; its private
+media session touches it only after the input transport’s hub IPC
+receive loop has started.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">xr_media_hub</span></code> always runs as its own process — never embedded in-process.</p></li>
-<li><p>The worker never imports anything from <code class="docutils literal notranslate"><span class="pre">server-runtime</span></code> or <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-launcher/</span></code>.</p></li>
+<li><p>The worker never imports anything from <code class="docutils literal notranslate"><span class="pre">xr_media_hub</span></code> or <code class="docutils literal notranslate"><span class="pre">xr_ai_launcher</span></code>.</p></li>
 <li><p>Process management lives in <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-launcher/</span></code>, not inside any process it manages.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">run_stack</span></code> is fail-fast: if any process exits, the rest are terminated.</p></li>
 </ul>
@@ -459,12 +500,12 @@ in the sequence begins. If any member exits before signaling ready, the
 launcher shuts everything down, just as it would for a serial process.</p></li>
 </ul>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;hub&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../server-runtime&quot;</span><span class="p">,</span> <span class="s2">&quot;xr_media_hub&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/xr-media-hub"</span><span class="p">,</span> <span class="s2">"xr_media_hub"</span><span class="p">),</span>
     <span class="n">Parallel</span><span class="p">([</span>
-        <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;stt&quot;</span><span class="p">,</span> <span class="s2">&quot;../../ai-services/stt-server&quot;</span><span class="p">,</span> <span class="s2">&quot;stt_server&quot;</span><span class="p">),</span>
-        <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;tts&quot;</span><span class="p">,</span> <span class="s2">&quot;../../ai-services/tts/piper&quot;</span><span class="p">,</span>  <span class="s2">&quot;piper_tts_server&quot;</span><span class="p">),</span>
+        <span class="n">Process</span><span class="p">(</span><span class="s2">"stt"</span><span class="p">,</span> <span class="s2">"../../services/stt-server"</span><span class="p">,</span> <span class="s2">"stt_server"</span><span class="p">),</span>
+        <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span> <span class="s2">"../../services/piper-tts"</span><span class="p">,</span>  <span class="s2">"piper_tts_server"</span><span class="p">),</span>
     <span class="p">]),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;worker&quot;</span><span class="p">,</span> <span class="s2">&quot;worker&quot;</span><span class="p">,</span> <span class="s2">&quot;my_agent_worker&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"my_agent_worker"</span><span class="p">),</span>
 <span class="p">]</span>
 </pre></div>
 </div>
@@ -539,7 +580,9 @@ entry-point command — exactly like the <code class="docutils literal notransla
 <p>The orchestrator’s process management and several cross-cutting concerns live
 in single-purpose packages under <code class="docutils literal notranslate"><span class="pre">utils/</span></code>. Each is small and narrowly scoped,
 and most are deliberately dependency-light so they can be added to any
-sub-project without dragging in a heavy dependency chain.</p>
+sub-project without dragging in a heavy dependency chain. Their public names,
+signatures, types, defaults, fields, and method behavior are generated in the
+<a class="reference internal" href="../reference/python/index.html"><span class="doc">Python API reference</span></a>.</p>
 <p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code></strong> — process management for the xr-ai stack: the <code class="docutils literal notranslate"><span class="pre">Process</span></code>,
 <code class="docutils literal notranslate"><span class="pre">Parallel</span></code>, and <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> API described above, plus helpers for CloudXR
 environment setup, credential loading, and GPU detection. Intentionally
@@ -569,16 +612,6 @@ an NGC container), chosen per-server via <code class="docutils literal notransla
 service YAML. Both paths honor identical configuration keys; only the runtime hosting
 vllm differs. Stdlib-only by contract, so the docker path stays light even when
 pip vllm is not installed.</p>
-<p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-nemo-runtime</span></code></strong> — opt-in NGC NeMo container backend for the in-process
-NeMo servers (the STT server and the Magpie TTS server). The NeMo servers load
-torch+NeMo in the wrapper’s venv and inherit the host’s cuDNN/CUDA via
-<code class="docutils literal notranslate"><span class="pre">LD_LIBRARY_PATH</span></code>, which aborts at torch import on hosts whose system cuDNN
-differs from torch’s bundled one. This runs the same FastAPI server inside an
-NGC NeMo image instead — so torch, NeMo, and cuDNN all come from the container
-and the host’s libraries are irrelevant — opted into per-server via
-<code class="docutils literal notranslate"><span class="pre">backend:</span> <span class="pre">docker</span></code> in the service YAML (default <code class="docutils literal notranslate"><span class="pre">pip</span></code> keeps the in-venv
-behavior). It is a bespoke NeMo docker path, deliberately separate from
-<code class="docutils literal notranslate"><span class="pre">xr-ai-vllm</span></code>, and is stdlib-only by contract.</p>
 </section>
 </section>
 
@@ -602,11 +635,11 @@ behavior). It is a bespoke NeMo docker path, deliberately separate from
       </div>
     </a>
     <a class="right-next"
-       href="mcp-servers.html"
+       href="server-runtime.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">MCP servers</p>
+        <p class="prev-next-title">Server runtime</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

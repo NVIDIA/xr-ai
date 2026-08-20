@@ -33,6 +33,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
@@ -59,7 +60,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Guides" href="../guides/index.html" />
-    <link rel="prev" title="MCP servers" href="mcp-servers.html" />
+    <link rel="prev" title="Launcher and process model" href="launcher-and-process-model.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -313,6 +314,7 @@
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../getting_started/index.html">Getting Started</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
@@ -323,7 +325,6 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk.html">Agent SDK</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ai-services.html">AI inference servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="launcher-and-process-model.html">Launcher and process model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="mcp-servers.html">MCP servers</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Server runtime</a></li>
 </ul>
 </details></li>
@@ -331,12 +332,56 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../reference/changelog.html">Decision changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
 </ul>
 </details></li>
 </ul>
@@ -399,7 +444,7 @@
 -->
 <section id="server-runtime">
 <h1>Server runtime<a class="headerlink" href="#server-runtime" title="Link to this heading">#</a></h1>
-<p>The <code class="docutils literal notranslate"><span class="pre">server-runtime/</span></code> package hosts the <strong>XR-Media-Hub</strong> — the single process
+<p>The <code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/</span></code> package hosts the <strong>XR-Media-Hub</strong> — the single process
 clients connect to and agents fan out from. It owns the internal LiveKit
 transport, the shared-memory + ZMQ IPC boundary to agents, the per-participant
 return path, and the same-origin <code class="docutils literal notranslate"><span class="pre">wss://</span></code> proxy that fronts LiveKit signaling.</p>
@@ -410,7 +455,7 @@ return path, and the same-origin <code class="docutils literal notranslate"><spa
 </pre></div>
 </div>
 <p>Configuration comes from a <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> file (defaults are used when
-none is found). <code class="docutils literal notranslate"><span class="pre">server-runtime/xr_media_hub.yaml</span></code> is the reference copy
+none is found). <code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/xr_media_hub.yaml</span></code> is the reference copy
 documenting every field; each sample ships its own copy under its <code class="docutils literal notranslate"><span class="pre">yaml/</span></code>
 directory. Relative paths inside the YAML (such as <code class="docutils literal notranslate"><span class="pre">web_client_dir</span></code>) resolve
 against the YAML file’s own directory, not the working directory.</p>
@@ -454,9 +499,7 @@ is addressed with <code class="docutils literal notranslate"><span class="pre">d
 transport. LiveKit natively supports client-to-client communication, and an
 application is free to use those native features directly for peer-to-peer
 media or data. Doing so is <strong>outside the scope of XR AI</strong>: the hub neither
-routes nor guarantees that traffic, and because the transport is an
-implementation detail, a future streaming backend may not offer the same
-client-to-client capability. Build on the hub’s participant ↔ agent contract
+routes nor guarantees that traffic. This traffic is outside the hub contract and is not portable across transports. Build on the hub’s participant ↔ agent contract
 for behavior that ports across backends.</p>
 </div>
 </section>
@@ -489,7 +532,7 @@ checks at startup.</p>
 <section id="ipc-boundary-to-agents">
 <h2>IPC boundary to agents<a class="headerlink" href="#ipc-boundary-to-agents" title="Link to this heading">#</a></h2>
 <p>The hub and its producers and consumers communicate over ZMQ using msgpack-encoded
-messages. The layer lives in <code class="docutils literal notranslate"><span class="pre">server-runtime/xr_media_hub/ipc/</span></code> and defines
+messages. The layer lives in <code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/xr_media_hub/ipc/</span></code> and defines
 three endpoints:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
@@ -538,9 +581,9 @@ msgpack payloads.</p>
 <code class="docutils literal notranslate"><span class="pre">&quot;&lt;type&gt;.&lt;participant_id&gt;.&lt;track_or_topic&gt;&quot;</span></code> convention, and ZMQ’s byte-prefix
 subscription lets a consumer subscribe at any granularity:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>audio                    — all audio, all participants
-audio.alice              — all of alice&#39;s audio tracks
-audio.alice.TR_mic_001   — alice&#39;s specific mic track
-data.alice.chat          — alice&#39;s &quot;chat&quot; data channel only
+audio.alice              — all of alice's audio tracks
+audio.alice.TR_mic_001   — alice's specific mic track
+data.alice.chat          — alice's "chat" data channel only
 participant              — join/leave events
 </pre></div>
 </div>
@@ -551,7 +594,7 @@ registered at import time via <code class="docutils literal notranslate"><span c
 <p>Agent code should import the IPC types and <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> from
 <code class="docutils literal notranslate"><span class="pre">xr_ai_hub</span></code> directly, <strong>not</strong> from <code class="docutils literal notranslate"><span class="pre">xr_media_hub.ipc</span></code>. The agent SDK’s only
 runtime dependencies are <code class="docutils literal notranslate"><span class="pre">pyzmq</span></code> and <code class="docutils literal notranslate"><span class="pre">msgpack</span></code> — importing from the agent SDK
-avoids pulling in the full server-runtime dependency tree (LiveKit, FastAPI,
+avoids pulling in the full XR-Media-Hub dependency tree (LiveKit, FastAPI,
 uvicorn, GPU codecs). <code class="docutils literal notranslate"><span class="pre">xr_media_hub.ipc</span></code> re-exports the same names for the
 server side.</p>
 </div>
@@ -581,6 +624,29 @@ to the target participant, so it is never broadcast to peers. Return audio is
 paced into LiveKit at audio rate by a per-participant pipe, which a flush can
 drain to interrupt playback.</p>
 </section>
+<section id="agent-status-aggregation">
+<h2>Agent status aggregation<a class="headerlink" href="#agent-status-aggregation" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">_agent.status</span></code> is the one exception to straight-through return data. The hub
+does not forward an agent’s status to the client — it records it per
+<code class="docutils literal notranslate"><span class="pre">(agent_id,</span> <span class="pre">participant_id)</span></code> and publishes the aggregate, taking the least
+available state across the agents <em>responsible for that participant</em>:
+<code class="docutils literal notranslate"><span class="pre">loading</span></code> &gt; <code class="docutils literal notranslate"><span class="pre">processing</span></code> &gt; <code class="docutils literal notranslate"><span class="pre">idle</span></code> &gt; <code class="docutils literal notranslate"><span class="pre">ready</span></code>. Agents that opt into readiness
+announce themselves with <code class="docutils literal notranslate"><span class="pre">AGENT_PRESENCE</span></code> when their receive loop starts and
+detach when it stops, so an agent that is still loading holds the room at
+<code class="docutils literal notranslate"><span class="pre">loading</span></code> rather than being masked by a peer that is already ready.</p>
+<p><code class="docutils literal notranslate"><span class="pre">AGENT_PRESENCE</span></code> carries the agent’s scope — the participants it answers for,
+or <em>None</em> for all of them. A participant with no responsible agent reads
+<code class="docutils literal notranslate"><span class="pre">loading</span></code>. Passive processors never register, and an agent scoped to one pid
+is excluded from every other pid’s aggregate. Repeat aggregates are suppressed, so the agents’ periodic
+re-announcements do not become per-agent client traffic.</p>
+<p>A status payload without an <code class="docutils literal notranslate"><span class="pre">agent_id</span></code> comes from an SDK predating
+aggregation and is forwarded verbatim.</p>
+<p>The hub also answers <code class="docutils literal notranslate"><span class="pre">SUBSCRIPTION_PROBE</span></code> by echoing the token on
+<code class="docutils literal notranslate"><span class="pre">_probe.{token}</span></code>. Subscription commands from one socket are applied in order,
+so the echo tells a processor that its pending SUBSCRIBEs are live — that is
+what keeps a client from being told <code class="docutils literal notranslate"><span class="pre">ready</span></code> before its traffic can reach the
+agent.</p>
+</section>
 <section id="same-origin-wss-proxy">
 <h2>Same-origin wss proxy<a class="headerlink" href="#same-origin-wss-proxy" title="Link to this heading">#</a></h2>
 <p>LiveKit server itself runs plain <code class="docutils literal notranslate"><span class="pre">ws://</span></code> on the loopback interface
@@ -591,7 +657,9 @@ same-origin <code class="docutils literal notranslate"><span class="pre">wss://<
 (<code class="docutils literal notranslate"><span class="pre">_web_server.py</span></code>) terminates TLS on <code class="docutils literal notranslate"><span class="pre">web_server_port</span></code> (8080 by default) and
 mounts a <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> route that proxies LiveKit signaling bidirectionally to the
 internal <code class="docutils literal notranslate"><span class="pre">ws://127.0.0.1:7880</span></code> (<code class="docutils literal notranslate"><span class="pre">_lk_proxy.py</span></code>). A self-signed certificate is
-auto-generated on first run; supply <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> to use your own.
+auto-generated on first run (SAN coverage and regeneration:
+<a class="reference internal" href="../getting_started/networking.html"><span class="std std-doc">Networking</span></a>); supply <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> and
+<code class="docutils literal notranslate"><span class="pre">key_file</span></code> to use your own.
 The proxy forwards end-to-end headers so SDK authentication (such as the LiveKit
 Swift SDK’s <code class="docutils literal notranslate"><span class="pre">Authorization:</span> <span class="pre">Bearer</span></code>) reaches the server, and handles both the
 versioned (<code class="docutils literal notranslate"><span class="pre">/rtc/v1</span></code>) and legacy (<code class="docutils literal notranslate"><span class="pre">/rtc</span></code>) signaling paths.</p>
@@ -623,12 +691,12 @@ returns a plain
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="mcp-servers.html"
+       href="launcher-and-process-model.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">MCP servers</p>
+        <p class="prev-next-title">Launcher and process model</p>
       </div>
     </a>
     <a class="right-next"
@@ -668,6 +736,7 @@ returns a plain
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#internal-livekit-transport">Internal LiveKit transport</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ipc-boundary-to-agents">IPC boundary to agents</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#per-participant-return-path">Per-participant return path</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-status-aggregation">Agent status aggregation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#same-origin-wss-proxy">Same-origin wss proxy</a></li>
 </ul>
   </nav></div>
