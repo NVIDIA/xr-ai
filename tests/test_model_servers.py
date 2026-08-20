@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os.path
 import sys
 from pathlib import Path
 
@@ -665,7 +666,7 @@ def test_embedding_default_cache_tracks_service_depth(
     project = _REPO_ROOT / "services/embedding-server"
 
     def resolve_cache(_cfg: dict, yaml_dir: Path, *, default: str) -> Path:
-        path = (yaml_dir / default).resolve()
+        path = Path(os.path.normpath(yaml_dir / default))
         resolved.append(path)
         return path
 
