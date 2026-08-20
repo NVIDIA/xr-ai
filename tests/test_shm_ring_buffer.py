@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import array
 import uuid
+from dataclasses import replace
 
 import pytest
 from xr_ai_hub import FrameSignal, PixelFormat, ShmRingBuffer
@@ -26,6 +27,26 @@ def ring():
     finally:
         buffer.close()
         buffer.unlink()
+
+
+def _write_test_signal(ring) -> FrameSignal:
+    slot = ring.write_frame(
+        b"ABCD",
+        width=2,
+        height=2,
+        fmt=PixelFormat.RGBA,
+        pts_us=10,
+        seq=7,
+    )
+    return FrameSignal(
+        slot=slot,
+        seq=7,
+        pts_us=10,
+        width=2,
+        height=2,
+        fmt=PixelFormat.RGBA,
+        data_sz=4,
+    )
 
 
 def test_unlink_tolerates_repeated_same_process_cleanup():
@@ -107,4 +128,66 @@ def test_read_slot_rejects_signal_outside_slot_capacity(ring, data_size):
     )
 
     with pytest.raises(ValueError, match=rf"bytes={data_size}, max_frame_bytes=8"):
+        ring.read_slot(signal)
+
+
+def test_read_slot_rejects_in_capacity_size_mismatch(ring):
+    signal = replace(_write_test_signal(ring), data_sz=8)
+
+    with pytest.raises(ValueError, match="does not match shared-memory slot header"):
+        ring.read_slot(signal)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("seq", 8),
+        ("pts_us", 11),
+        ("width", 3),
+        ("height", 3),
+        ("fmt", PixelFormat.RGB24),
+    ],
+)
+def test_read_slot_rejects_signal_metadata_mismatch(ring, field, value):
+    signal = replace(_write_test_signal(ring), **{field: value})
+
+    with pytest.raises(ValueError, match="does not match shared-memory slot header"):
+        ring.read_slot(signal)
+
+
+@pytest.mark.parametrize("slot", [-1, 2])
+def test_read_slot_rejects_out_of_range_slot_index(ring, slot):
+    signal = replace(_write_test_signal(ring), slot=slot)
+
+    with pytest.raises(ValueError, match="invalid shared-memory slot index"):
+        ring.read_slot(signal)
+
+
+def test_read_slot_rejects_invalid_header_magic(ring):
+    signal = _write_test_signal(ring)
+    header_offset = _GH_SIZE + signal.slot * ring._slot_stride
+    header = list(_SH.unpack_from(ring._buf, header_offset))
+    header[0] = 0
+    _SH.pack_into(ring._buf, header_offset, *header)
+
+    with pytest.raises(RuntimeError, match="invalid shared-memory header magic"):
+        ring.read_slot(signal)
+
+
+def test_read_slot_rejects_header_size_outside_slot_capacity(ring):
+    signal = _write_test_signal(ring)
+    header_offset = _GH_SIZE + signal.slot * ring._slot_stride
+    header = list(_SH.unpack_from(ring._buf, header_offset))
+    header[8] = 9
+    _SH.pack_into(ring._buf, header_offset, *header)
+
+    with pytest.raises(ValueError, match=r"bytes=9, max_frame_bytes=8"):
+        ring.read_slot(signal)
+
+
+def test_read_slot_rejects_non_ready_slot(ring):
+    signal = _write_test_signal(ring)
+    ring.release_slot(signal.slot)
+
+    with pytest.raises(RuntimeError, match="not READY"):
         ring.read_slot(signal)

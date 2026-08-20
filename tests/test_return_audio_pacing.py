@@ -6,10 +6,16 @@ from __future__ import annotations
 
 import asyncio
 import math
+from types import SimpleNamespace
 
 import pytest
 
-from device_io_hub.transport.livekit._room_client import _ReturnAudioPipe
+from device_io_hub.transport.livekit import _room_client as room_client_module
+from device_io_hub.transport.livekit._room_client import (
+    RoomClient,
+    _ReturnAudioPipe,
+)
+from device_io_hub.transport.livekit.config import LiveKitConnectorConfig
 
 pytestmark = pytest.mark.asyncio
 
@@ -33,7 +39,7 @@ class _FakeFrame:
 class _FakeSource:
     """Mock AudioSource that paces capture_frame at audio rate (10 ms/frame)."""
 
-    def __init__(self) -> None:
+    def __init__(self, *_args, **_kwargs) -> None:
         self.captured: list[object] = []
         self.cleared: int = 0
 
@@ -121,7 +127,53 @@ async def test_frame_larger_than_limit_is_dropped():
         await pipe.close()
 
 
-@pytest.mark.parametrize("limit", [0, -1, math.inf, math.nan, "invalid"])
+@pytest.mark.parametrize("limit", [0, -1, math.inf, math.nan, "invalid", True])
 async def test_return_audio_buffer_limit_must_be_positive_and_finite(limit):
-    with pytest.raises(ValueError, match="return-audio max buffer"):
+    with pytest.raises(ValueError, match="return_audio_max_buffer_s"):
         _ReturnAudioPipe(_FakeSource(), max_buffer_s=limit)
+
+
+async def test_room_client_applies_buffer_limit_per_participant(monkeypatch):
+    class _FakeLocalAudioTrack:
+        @staticmethod
+        def create_audio_track(name, source):
+            return SimpleNamespace(name=name, source=source)
+
+    class _FakeLocalParticipant:
+        async def publish_track(self, track):
+            return SimpleNamespace(sid=f"pub-{track.name}")
+
+    monkeypatch.setattr(
+        room_client_module,
+        "rtc",
+        SimpleNamespace(
+            AudioSource=_FakeSource,
+            LocalAudioTrack=_FakeLocalAudioTrack,
+        ),
+    )
+    client = RoomClient.__new__(RoomClient)
+    client._cfg = LiveKitConnectorConfig(
+        api_key="test-key",
+        api_secret="test-secret",
+        return_audio_max_buffer_s=0.02,
+    )
+    client._room = SimpleNamespace(local_participant=_FakeLocalParticipant())
+
+    alice_source, _alice_pub, alice_pipe = await client._publish_return_track(
+        "alice", 48_000, 1
+    )
+    bob_source, _bob_pub, bob_pipe = await client._publish_return_track(
+        "bob", 48_000, 1
+    )
+    try:
+        for i in range(3):
+            alice_pipe.push(_FakeFrame(f"alice-{i}"))
+        bob_pipe.push(_FakeFrame("bob-0"))
+
+        assert alice_pipe.queued_frames == 2
+        assert alice_pipe.dropped_frames == 1
+        assert bob_pipe.queued_frames == 1
+        assert bob_pipe.dropped_frames == 0
+        assert alice_source is not bob_source
+    finally:
+        await asyncio.gather(alice_pipe.close(), bob_pipe.close())

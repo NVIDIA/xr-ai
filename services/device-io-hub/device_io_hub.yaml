@@ -29,6 +29,11 @@ lk_use_external_ip: false
 # validation. Requires lk_use_external_ip: true.
 lk_skip_external_ip_validation: false
 
+# ── Return audio pacing ───────────────────────────────────────────────────────
+# Maximum queued TTS audio per participant. When a burst exceeds this duration,
+# the oldest queued frames are dropped to keep playback latency bounded.
+return_audio_max_buffer_s: 3.0
+
 # ── Web client server ─────────────────────────────────────────────────────────
 enable_web_server: true
 web_server_host:   "0.0.0.0"

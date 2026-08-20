@@ -37,8 +37,13 @@ def test_load_config_requires_both_livekit_credentials(
     if api_secret is not None:
         monkeypatch.setenv("LIVEKIT_API_SECRET", api_secret)
 
-    with pytest.raises(ValueError, match="LiveKit credentials are required"):
+    with pytest.raises(ValueError, match="LiveKit credentials are required") as exc_info:
         load_config()
+
+    message = str(exc_info.value)
+    assert "device_io_hub.yaml" in message
+    assert "LIVEKIT_API_KEY" in message
+    assert "LIVEKIT_API_SECRET" in message
 
 
 def test_load_config_accepts_livekit_credentials_from_environment(

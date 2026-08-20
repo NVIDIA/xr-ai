@@ -13,6 +13,17 @@ and command to `device_io_hub`. Rename `xr_media_hub.yaml` to
 `device_io_hub.yaml` and `XR_MEDIA_HUB_NO_WEB_CLIENT` to
 `DEVICE_IO_HUB_NO_WEB_CLIENT`. The rename has no compatibility aliases.
 
+## Operator-visible runtime changes
+
+- DeviceIOHub no longer falls back to embedded LiveKit development credentials.
+  Set `api_key` and `api_secret` in `device_io_hub.yaml`, or inject
+  `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` through the environment.
+- Return-audio buffering is now bounded independently for each participant.
+  `return_audio_max_buffer_s` defaults to 3 seconds; when a burst exceeds the
+  configured duration, DeviceIOHub drops the oldest queued frames to bound
+  playback latency and memory use. Increase the value for long-form playback,
+  or decrease it for more latency-sensitive deployments.
+
 ## Removed SDK compatibility surfaces
 
 This release removes deprecated SDK aliases and the standalone Pipecat

@@ -298,6 +298,47 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     assert "at most two short sentences" in current_view_prompt
 
 
+@pytest.mark.parametrize(
+    ("raw_value", "expected"),
+    [("false", False), ("true", True)],
+)
+def test_config_parses_quoted_capture_marker_scans(
+    tmp_path: Path,
+    raw_value: str,
+    expected: bool,
+) -> None:
+    config_path = tmp_path / "worker.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "device_map_yaml": str(_SAMPLE / "yaml" / "device_map.yaml"),
+                "capture_marker_scans": raw_value,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert load_config(config_path).capture_marker_scans is expected
+
+
+def test_config_rejects_unknown_capture_marker_scans_string(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "worker.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "device_map_yaml": str(_SAMPLE / "yaml" / "device_map.yaml"),
+                "capture_marker_scans": "sometimes",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="capture_marker_scans"):
+        load_config(config_path)
+
+
 def test_launcher_can_route_visual_inference_to_omni(tmp_path: Path) -> None:
     runtime_dir = tmp_path / "runtime"
     runtime_dir.mkdir()

@@ -16,7 +16,6 @@ The client never publishes media — it is subscribe-only.
 from __future__ import annotations
 
 import asyncio
-import math
 import time
 from typing import NamedTuple
 
@@ -33,34 +32,23 @@ from device_io_hub.ipc import (
 )
 
 from ._token import make_client_token
-from .config import LiveKitConnectorConfig
+from .config import (
+    _DEFAULT_RETURN_AUDIO_MAX_BUFFER_S,
+    LiveKitConnectorConfig,
+    _validate_return_audio_max_buffer_s,
+)
 
 
 def _now_us() -> int:
     return time.time_ns() // 1_000
 
 
-_RETURN_AUDIO_MAX_BUFFER_S = 3.0
 _RETURN_AUDIO_DROP_LOG_INTERVAL_S = 5.0
 
 
 class _QueuedReturnAudioFrame(NamedTuple):
     frame: rtc.AudioFrame
     duration_s: float
-
-
-def _validate_return_audio_max_buffer_s(value: object) -> float:
-    try:
-        max_buffer_s = float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(
-            f"return-audio max buffer must be a positive number, got {value!r}"
-        ) from exc
-    if not math.isfinite(max_buffer_s) or max_buffer_s <= 0:
-        raise ValueError(
-            f"return-audio max buffer must be finite and > 0, got {value!r}"
-        )
-    return max_buffer_s
 
 
 class _ReturnAudioPipe:
@@ -85,7 +73,7 @@ class _ReturnAudioPipe:
         src: rtc.AudioSource,
         *,
         participant_id: str = "unknown",
-        max_buffer_s: float = _RETURN_AUDIO_MAX_BUFFER_S,
+        max_buffer_s: float = _DEFAULT_RETURN_AUDIO_MAX_BUFFER_S,
     ) -> None:
         self._src = src
         self._participant_id = participant_id
@@ -196,8 +184,8 @@ class _ReturnAudioPipe:
                 self._queue.task_done()
 
     async def close(self) -> None:
-        # Cancel rather than enqueue a sentinel — a bounded queue could drop
-        # the None and leak the drainer forever.
+        # Cancellation stops the drainer regardless of how much duration-bounded
+        # audio remains in the otherwise unbounded asyncio queue.
         if not self._task.done():
             self._task.cancel()
         try:
@@ -413,7 +401,11 @@ class RoomClient:
         src   = rtc.AudioSource(sample_rate=sample_rate, num_channels=channels)
         track = rtc.LocalAudioTrack.create_audio_track(f"xr-hub-return-{pid}", src)
         pub   = await self._room.local_participant.publish_track(track)
-        pipe = _ReturnAudioPipe(src, participant_id=pid)
+        pipe = _ReturnAudioPipe(
+            src,
+            participant_id=pid,
+            max_buffer_s=self._cfg.return_audio_max_buffer_s,
+        )
         logger.info("Return audio track published: pid={!r}  sid={!r}", pid, pub.sid)
         return src, pub, pipe
 
