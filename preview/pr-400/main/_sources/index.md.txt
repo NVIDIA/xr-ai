@@ -57,7 +57,7 @@ xr-render demo.
 :::{grid-item-card} 🧩 Architecture
 :link: overview/architecture
 :link-type: doc
-How XR-Media-Hub, the transport, and agents fit together.
+How DeviceIOHub, the transport, and agents fit together.
 :::
 
 :::{grid-item-card} 🛠️ Components

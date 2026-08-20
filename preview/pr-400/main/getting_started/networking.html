@@ -444,7 +444,7 @@
 -->
 <section id="networking-and-firewall">
 <h1>Networking and firewall<a class="headerlink" href="#networking-and-firewall" title="Link to this heading">#</a></h1>
-<p>XR-Media-Hub, CloudXR, and optional application viewers use the following
+<p>DeviceIOHub, CloudXR, and optional application viewers use the following
 ports. Open only the externally reachable ports required by the deployment.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
@@ -499,7 +499,7 @@ proxy, not directly.</p>
 <p>The signaling proxy on port 8080 does not proxy WebRTC media. LiveKit still
 needs to advertise an ICE address that clients can reach on ports 7881 and
 7882. On a cloud VM whose network interface has only a private address, enable
-STUN-based public-IP discovery in the sample’s <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code>:</p>
+STUN-based public-IP discovery in the sample’s <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">lk_use_external_ip</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
@@ -576,11 +576,11 @@ browser, Android, iOS, and visionOS clients use; LiveKit’s native 7880 is
 never reached directly by client traffic.</p>
 <p>On first run a self-signed certificate is generated at
 <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code>. To use your own, set <code class="docutils literal notranslate"><span class="pre">cert_file</span></code>
-and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code>.</p>
+and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>.</p>
 <p>The generated certificate covers <code class="docutils literal notranslate"><span class="pre">localhost</span></code>, the hostname, and every local
 interface IP. When clients dial an address that is not on any local
 interface (the public IP of a NAT’d cloud VM such as Brev, a forwarding
-proxy’s address, or a DNS name), list it in <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> and the
+proxy’s address, or a DNS name), list it in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> and the
 certificate is regenerated to include it on the next hub start:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">web_server_extra_sans</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">203.0.113.7</span>
@@ -618,7 +618,7 @@ Until the certificate is trusted at the OS level, the wss handshake fails.</p>
 </div>
 <p>Production deployments on any platform should replace the auto-generated
 certificate with one from a public CA via <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in
-<code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>.</p>
 </section>
 </section>
 
