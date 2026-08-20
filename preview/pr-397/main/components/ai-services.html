@@ -639,6 +639,12 @@ original <code class="docutils literal notranslate"><span class="pre">services/&
 into <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;name&gt;/yaml/</span></code>, change that value to <code class="docutils literal notranslate"><span class="pre">../../../models</span></code> so
 the cache still resolves to the repository-root <code class="docutils literal notranslate"><span class="pre">models/</span></code> directory. Capability
 and capability configurations without a <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> key need no change.</p>
+<p><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code> keeps these sample-local STT and VLM configs for smaller
+standalone hosts. On hardware with enough capacity for a shipped
+<code class="docutils literal notranslate"><span class="pre">model-servers</span></code> profile, its orchestrator selects that profile’s VLM config
+instead. Matching the complete launch config lets the persistent Cosmos
+container be reused safely, while the standalone fallback retains the larger
+single-GPU memory budget.</p>
 <p>Edit the YAML as needed (model, port, device, etc.). The launcher auto-discovers
 <code class="docutils literal notranslate"><span class="pre">yaml/&lt;command&gt;.yaml</span></code> in the sample root and passes it as <code class="docutils literal notranslate"><span class="pre">--config</span></code>.
 For RAG, also point <code class="docutils literal notranslate"><span class="pre">rag_service.yaml</span></code> at an application-owned document

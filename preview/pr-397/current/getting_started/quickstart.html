@@ -550,10 +550,16 @@ automatically. Click <strong>Connect</strong>.</p>
 </ul>
 <p>A successful round trip: your query appears in the log, the agent responds after
 a moment, and you hear the reply through your speakers.</p>
-<p><strong>Local model</strong> — override the model weights or GPU settings by editing
-<code class="docutils literal notranslate"><span class="pre">vlm_server.yaml</span></code> in the sample directory.</p>
-<p>To use Cosmos-Reason1 instead, set <code class="docutils literal notranslate"><span class="pre">model:</span> <span class="pre">nvidia/Cosmos-Reason1-7B</span></code> in that
-file and select <code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code> as the VLM adapter preset in <code class="docutils literal notranslate"><span class="pre">models.local.json</span></code>.</p>
+<p><strong>Local model</strong> — on a standalone system smaller than the shared model-server
+profiles, override the model weights or GPU settings in
+<code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/yaml/vlm_server.yaml</span></code>. When automatic GPU
+detection selects one of the supported model-server profiles, the sample uses
+<code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/&lt;profile&gt;/vlm_server.yaml</span></code> so a compatible
+server can be reused without reloading its weights.</p>
+<p>To use Cosmos-Reason1 instead, edit the VLM file selected for your hardware:
+set <code class="docutils literal notranslate"><span class="pre">model:</span> <span class="pre">nvidia/Cosmos-Reason1-7B</span></code>, remove the Cosmos3-only <code class="docutils literal notranslate"><span class="pre">hf_overrides</span></code>
+block, and select <code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code> as the VLM adapter preset in
+<code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/yaml/models.local.json</span></code>.</p>
 <p><strong>Remote model</strong> — copy <code class="docutils literal notranslate"><span class="pre">yaml/models.hosted.json</span></code>, point its VLM endpoint at
 your server, and select it in the worker config:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
