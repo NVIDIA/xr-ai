@@ -27,8 +27,7 @@ Register new message types at import time:
     register_decoder(MyMsgType.MY_MSG, lambda p: MyMsg(p[0], p[1]))
 """
 
-# Agent-facing types and endpoint — re-exported from xr_ai_hub for
-# backwards compatibility with code that imports from device_io_hub.ipc.
+# Agent-facing types and endpoint — convenience re-exports from xr_ai_hub.
 from xr_ai_hub import (
     AGENT_STATUS_TOPIC,
     AudioChunk,
