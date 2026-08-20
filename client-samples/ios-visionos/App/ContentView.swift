@@ -152,7 +152,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private var networkSection: some View {
-        let metrics = model.networkMetrics
+        let metrics = model.connectionState == .connected ? model.networkMetrics : nil
         Section("Network") {
             LabeledContent("Quality", value: metrics?.quality.rawValue.capitalized ?? "—")
             LabeledContent("Round-trip time", value: milliseconds(metrics?.roundTripTimeMs))

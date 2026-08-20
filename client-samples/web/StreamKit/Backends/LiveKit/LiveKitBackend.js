@@ -97,9 +97,6 @@ export class LiveKitBackend {
   /** @type {Map<string, HTMLAudioElement>} sid → element, for cleanup on teardown */
   #audioElements = new Map();
 
-  /** @type {Map<string, import('livekit-client').RemoteAudioTrack>} */
-  #remoteAudioTracks = new Map();
-
   /** @type {number | null} */
   #networkMetricsTimer = null;
 
@@ -210,6 +207,9 @@ export class LiveKitBackend {
     this.#room = room;
 
     room.on(RoomEvent.ConnectionStateChanged, (lkState) => {
+      if (lkState === 'disconnected' && this.#room === room) {
+        this.#stopNetworkMetricsReporting();
+      }
       this.onConnectionStateChanged?.(mapState(lkState));
     });
 
@@ -246,7 +246,6 @@ export class LiveKitBackend {
 
     room.on(RoomEvent.TrackSubscribed, (track) => {
       if (track.kind === Track.Kind.Audio) {
-        this.#remoteAudioTracks.set(track.sid, track);
         const el = track.attach();
         el.id = `remote-audio-${track.sid}`;
         el.style.display = 'none';
@@ -260,7 +259,6 @@ export class LiveKitBackend {
 
     room.on(RoomEvent.TrackUnsubscribed, (track) => {
       if (track.kind === Track.Kind.Audio) {
-        this.#remoteAudioTracks.delete(track.sid);
         for (const el of track.detach()) el.remove();
         this.#audioElements.delete(track.sid);
       }
@@ -466,10 +464,7 @@ export class LiveKitBackend {
    * @returns {Promise<void>}
    */
   async #tearDown() {
-    if (this.#networkMetricsTimer !== null) {
-      clearInterval(this.#networkMetricsTimer);
-      this.#networkMetricsTimer = null;
-    }
+    this.#stopNetworkMetricsReporting();
     const room = this.#room;
     this.#room = null;
     try {
@@ -483,7 +478,6 @@ export class LiveKitBackend {
     } finally {
       for (const el of this.#audioElements.values()) el.remove();
       this.#audioElements.clear();
-      this.#remoteAudioTracks.clear();
 
       if (this.#videoTrack) {
         this.#videoTrack.stop();
@@ -500,9 +494,17 @@ export class LiveKitBackend {
   }
 
   #startNetworkMetricsReporting() {
+    this.#stopNetworkMetricsReporting();
     const publish = () => { this.#publishNetworkMetrics().catch(() => {}); };
     publish();
     this.#networkMetricsTimer = setInterval(publish, 1000);
+  }
+
+  #stopNetworkMetricsReporting() {
+    if (this.#networkMetricsTimer !== null) {
+      clearInterval(this.#networkMetricsTimer);
+      this.#networkMetricsTimer = null;
+    }
   }
 
   async #publishNetworkMetrics() {
@@ -512,11 +514,12 @@ export class LiveKitBackend {
 
     this.#networkMetricsPollActive = true;
     try {
-      const tracks = [
-        this.#audioTrack,
-        this.#videoTrack,
-        ...this.#remoteAudioTracks.values(),
-      ].filter(Boolean);
+      const publications = [
+        ...room.localParticipant.trackPublications.values(),
+        ...[...room.remoteParticipants.values()]
+          .flatMap(participant => [...participant.trackPublications.values()]),
+      ];
+      const tracks = publications.map(publication => publication.track).filter(Boolean);
       const reports = (await Promise.allSettled(
         tracks.map(track => track.getRTCStatsReport()),
       )).flatMap(result => result.status === 'fulfilled' && result.value
@@ -525,20 +528,26 @@ export class LiveKitBackend {
 
       let roundTripTimeMs = null;
       let receiveJitterMs = null;
-      for (const report of reports) {
-        for (const stat of report.values()) {
-          if (roundTripTimeMs === null && stat.type === 'candidate-pair'
-              && (stat.nominated || stat.state === 'succeeded')
-              && Number.isFinite(stat.currentRoundTripTime)) {
-            roundTripTimeMs = stat.currentRoundTripTime * 1000;
-          }
-          if (stat.type === 'inbound-rtp' && Number.isFinite(stat.jitter)) {
-            receiveJitterMs = Math.max(receiveJitterMs ?? 0, stat.jitter * 1000);
-          }
+      const stats = reports.flatMap(report => [...report.values()]);
+      const selectedPairIds = new Set(stats
+        .filter(stat => stat.type === 'transport')
+        .map(stat => stat.selectedCandidatePairId)
+        .filter(Boolean));
+      const candidatePairs = stats.filter(stat => stat.type === 'candidate-pair');
+      const activePair = candidatePairs.find(stat => selectedPairIds.has(stat.id))
+        ?? candidatePairs.find(stat => stat.nominated === true || stat.selected === true);
+      if (Number.isFinite(activePair?.currentRoundTripTime)
+          && activePair.currentRoundTripTime >= 0) {
+        roundTripTimeMs = activePair.currentRoundTripTime * 1000;
+      }
+      for (const stat of stats) {
+        if (stat.type === 'inbound-rtp' && Number.isFinite(stat.jitter)
+            && stat.jitter >= 0) {
+          receiveJitterMs = Math.max(receiveJitterMs ?? 0, stat.jitter * 1000);
         }
       }
 
-      if (this.#room !== room) return;
+      if (this.#room !== room || room.state !== 'connected') return;
       this.onNetworkMetrics?.(new NetworkMetrics({
         quality: mapQuality(room.localParticipant.connectionQuality),
         roundTripTimeMs,

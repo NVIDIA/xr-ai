@@ -245,6 +245,7 @@ final class AppModel {
                 }
                 #endif
             case .reconnecting:
+                self.networkMetrics = nil
                 // Preserve camera intent across a transient reconnect: drop the
                 // track now, restore it on `.connected`.
                 if self.isCameraActive {

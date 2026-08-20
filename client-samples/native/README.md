@@ -7,7 +7,7 @@
 
 > **Audience:** Developers who have used LiveKit before and want to embed StreamKit in a native C++ host — e.g. an embedded device, a native game engine plugin, or a CloudXR client.
 
-The `LiveKitBackend` in `StreamKit/src/Backends/LiveKit/LiveKitBackend.cpp` is a working implementation against the upstream LiveKit C++ SDK (`livekit::Room` API). Build it by pointing CMake at a LiveKit SDK install:
+The `LiveKitBackend` in `StreamKit/src/Backends/LiveKit/LiveKitBackend.cpp` is a working implementation against the upstream LiveKit C++ SDK (`livekit::Room` API), tested with the released v0.4.1 SDK. Build it by pointing CMake at a compatible SDK install:
 
 ```bash
 cmake -S . -B build -DLIVEKIT_SDK_ROOT=/path/to/livekit-cpp-sdk
@@ -36,7 +36,7 @@ What's covered:
 | `streamkit_frame_sink_tests` | `FrameSink`'s move-overload default impl correctly forwards to the span overload; backends that override both bypass the forwarder. |
 | `streamkit_audio_sink_tests` | `AudioSink::InjectAudioFrame` delivers every parameter verbatim and dispatches correctly through an `AudioSink&` reference. |
 | `streamkit_session_tests` | Full `StreamSession` lifecycle through a `MockBackend` — connect / start audio / start camera / send / receive / agent status / disconnect, verifying event-hook fan-out. |
-| `streamkit_livekit_backend_tests` | `LiveKitBackend` state-change dedupe — no spurious initial `kDisconnected` on first `Connect()`, no doubled `kConnected` after a successful connect, idempotent `Disconnect()`. |
+| `streamkit_livekit_backend_tests` | `LiveKitBackend` state-change dedupe, idempotent disconnect, and safe disconnect from the telemetry callback's worker thread. |
 
 Useful variants:
 
@@ -113,7 +113,7 @@ Raw LiveKit lets you publish tracks as part of `room.connect()`. StreamKit split
 
 **Why this matters:** Audio/camera failures are isolated. A bad camera never kills the session.
 
-In C++, `connect()` calls `room->Connect(url, token)` and nothing else. `startAudio()` and `startCamera()` are separate calls made by the application after the room is connected.
+In C++, `connect()` calls `room->connect(url, token)` and nothing else. `startAudio()` and `startCamera()` are separate calls made by the application after the room is connected.
 
 ### 2. A typed `ConnectionState` enum
 

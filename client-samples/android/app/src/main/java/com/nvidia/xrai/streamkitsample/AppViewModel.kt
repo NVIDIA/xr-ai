@@ -179,6 +179,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         networkMetrics = null
                         agentResponse = null
                     } else if (state == ConnectionState.RECONNECTING) {
+                        networkMetrics = null
                         // Session persists across a reconnect, so unpublish the
                         // camera (and stop the synthetic feed) to resume from a
                         // known-off state. stopCamera() launches its own

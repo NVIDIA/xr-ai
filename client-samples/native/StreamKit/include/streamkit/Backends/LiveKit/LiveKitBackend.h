@@ -167,7 +167,7 @@ private:
     void HandleNetworkQualityChange(int lk_quality);
     void StartNetworkMetricsReporting();
     void StopNetworkMetricsReporting();
-    void PublishNetworkMetrics() const;
+    void PublishNetworkMetrics();
 
     LiveKitConfig config_;
     SessionConfig session_config_;
@@ -196,7 +196,8 @@ private:
     std::atomic<bool> audio_armed_{false};
     std::atomic<ConnectionState> last_fired_state_{ConnectionState::kDisconnected};
     std::atomic<NetworkQuality> network_quality_{NetworkQuality::kUnknown};
-    std::jthread network_metrics_thread_;
+    std::shared_ptr<std::atomic<bool>> network_metrics_stop_;
+    std::thread network_metrics_thread_;
 
     static constexpr std::string_view kAgentStatusTopic = "_agent.status";
 };

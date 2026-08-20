@@ -20,14 +20,17 @@
 #include "AgentStatusParser.h"
 
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <format>
 #include <future>
+#include <iterator>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -39,6 +42,8 @@
 #include "livekit/local_participant.h"
 #include "livekit/local_video_track.h"
 #include "livekit/participant.h"
+#include "livekit/remote_participant.h"
+#include "livekit/remote_track_publication.h"
 #include "livekit/room.h"
 #include "livekit/room_delegate.h"
 #include "livekit/room_event_types.h"
@@ -150,9 +155,10 @@ public:
     }
 
     void onConnectionQualityChanged(
-        livekit::Room&,
+        livekit::Room& room,
         const livekit::ConnectionQualityChangedEvent& e) override {
-        if (e.participant && e.participant->identity() == owner_->session_config_.identity) {
+        const auto* local = room.localParticipant();
+        if (local && e.participant && e.participant->identity() == local->identity()) {
             owner_->HandleNetworkQualityChange(static_cast<int>(e.quality));
         }
     }
@@ -220,12 +226,12 @@ void LiveKitBackend::Connect(const SessionConfig& session_config) {
     // upstream default flip doesn't silently break remote audio playback.
     opts.auto_subscribe = true;
 
-    const bool ok = room_->Connect(ws_url, token, opts);
+    const bool ok = room_->connect(ws_url, token, opts);
     if (!ok) {
         room_.reset();
         delegate_.reset();
         FireStateChanged(ConnectionState::kDisconnected);
-        throw StreamError("LiveKit Room::Connect returned false for " + ws_url);
+        throw StreamError("LiveKit Room::connect returned false for " + ws_url);
     }
     is_connected_.store(true);
     // The SDK delegate may have already fired kConnected during the
@@ -239,6 +245,7 @@ void LiveKitBackend::Connect(const SessionConfig& session_config) {
     (void)token;
     is_connected_.store(true);
     FireStateChanged(ConnectionState::kConnected);
+    StartNetworkMetricsReporting();
 #endif
 }
 
@@ -543,6 +550,9 @@ void LiveKitBackend::HandleNetworkQualityChange(int lk_quality) {
         case livekit::ConnectionQuality::Lost:
             network_quality_.store(NetworkQuality::kLost);
             break;
+        default:
+            network_quality_.store(NetworkQuality::kUnknown);
+            break;
     }
 #else
     (void)lk_quality;
@@ -550,69 +560,134 @@ void LiveKitBackend::HandleNetworkQualityChange(int lk_quality) {
 }
 
 void LiveKitBackend::StartNetworkMetricsReporting() {
-#if STREAMKIT_HAVE_LIVEKIT
     StopNetworkMetricsReporting();
-    network_metrics_thread_ = std::jthread([this](std::stop_token stop_token) {
-        while (!stop_token.stop_requested()) {
+    auto stop = std::make_shared<std::atomic<bool>>(false);
+    network_metrics_stop_ = stop;
+    std::promise<void> assigned;
+    auto assigned_future = assigned.get_future();
+    std::thread worker([this, stop, assigned = std::move(assigned_future)]() mutable {
+        // The worker must not call Disconnect() before its std::thread has
+        // been moved into network_metrics_thread_.
+        assigned.wait();
+        while (!stop->load()) {
             if (is_connected_.load()) {
                 PublishNetworkMetrics();
             }
-            for (int tenth = 0; tenth < 10 && !stop_token.stop_requested(); ++tenth) {
+            // PublishNetworkMetrics may invoke a callback that destroys this
+            // backend. Only the separately-owned stop flag is safe to touch
+            // after that callback returns.
+            for (int tenth = 0; tenth < 10 && !stop->load(); ++tenth) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
         }
     });
-#endif
+    network_metrics_thread_ = std::move(worker);
+    assigned.set_value();
 }
 
 void LiveKitBackend::StopNetworkMetricsReporting() {
-    if (network_metrics_thread_.joinable()) {
-        network_metrics_thread_.request_stop();
-        network_metrics_thread_.join();
+    if (network_metrics_stop_) {
+        network_metrics_stop_->store(true);
     }
+    if (network_metrics_thread_.joinable()) {
+        if (network_metrics_thread_.get_id() == std::this_thread::get_id()) {
+            network_metrics_thread_.detach();
+        } else {
+            network_metrics_thread_.join();
+        }
+    }
+    network_metrics_stop_.reset();
 }
 
-void LiveKitBackend::PublishNetworkMetrics() const {
+void LiveKitBackend::PublishNetworkMetrics() {
+    const auto callback = on_network_metrics;
+    if (!callback) return;
+
+    NetworkMetrics metrics{
+        .quality = network_quality_.load(),
+        .round_trip_time_ms = std::nullopt,
+        .receive_jitter_ms = std::nullopt,
+    };
 #if STREAMKIT_HAVE_LIVEKIT
     const auto room = room_;
-    if (!room || !on_network_metrics) return;
+    if (!room) return;
 
-    NetworkMetrics metrics{.quality = network_quality_.load()};
     try {
-        auto stats_future = room->getStats();
-        if (stats_future.wait_for(std::chrono::milliseconds(750)) !=
-            std::future_status::ready) {
-            on_network_metrics(metrics);
-            return;
+        std::vector<std::shared_ptr<livekit::Track>> tracks;
+        {
+            std::lock_guard<std::mutex> lock(tracks_mutex_);
+            if (audio_track_) tracks.push_back(audio_track_);
+            if (video_track_) tracks.push_back(video_track_);
         }
-        const auto stats = stats_future.get();
-        const auto inspect = [&metrics](const std::vector<livekit::RtcStats>& records,
-                                        bool include_jitter) {
-            for (const auto& record : records) {
-                if (!metrics.round_trip_time_ms) {
-                    if (const auto* pair = std::get_if<livekit::RtcCandidatePairStats>(&record.stats);
-                        pair && pair->candidate_pair.nominated) {
-                        metrics.round_trip_time_ms =
-                            pair->candidate_pair.current_round_trip_time * 1'000.0;
-                    }
-                }
-                if (include_jitter) {
-                    if (const auto* inbound = std::get_if<livekit::RtcInboundRtpStats>(&record.stats)) {
-                        const double jitter_ms = inbound->received.jitter * 1'000.0;
-                        if (!metrics.receive_jitter_ms || jitter_ms > *metrics.receive_jitter_ms) {
-                            metrics.receive_jitter_ms = jitter_ms;
-                        }
-                    }
+        for (const auto& participant : room->remoteParticipants()) {
+            if (!participant) continue;
+            for (const auto& [_, publication] : participant->trackPublications()) {
+                if (publication && publication->track()) {
+                    tracks.push_back(publication->track());
                 }
             }
-        };
-        inspect(stats.publisher_stats, false);
-        inspect(stats.subscriber_stats, true);
+        }
+
+        std::vector<std::future<std::vector<livekit::RtcStats>>> futures;
+        futures.reserve(tracks.size());
+        for (const auto& track : tracks) {
+            futures.push_back(track->getStats());
+        }
+
+        std::vector<livekit::RtcStats> records;
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::milliseconds(750);
+        for (auto& future : futures) {
+            if (future.wait_until(deadline) != std::future_status::ready) continue;
+            auto track_records = future.get();
+            records.insert(records.end(),
+                           std::make_move_iterator(track_records.begin()),
+                           std::make_move_iterator(track_records.end()));
+        }
+
+        std::unordered_set<std::string> selected_pair_ids;
+        for (const auto& record : records) {
+            if (const auto* transport = std::get_if<livekit::RtcTransportStats>(&record.stats);
+                transport && !transport->transport.selected_candidate_pair_id.empty()) {
+                selected_pair_ids.insert(transport->transport.selected_candidate_pair_id);
+            }
+        }
+
+        const livekit::RtcCandidatePairStats* fallback_pair = nullptr;
+        for (const auto& record : records) {
+            if (const auto* pair = std::get_if<livekit::RtcCandidatePairStats>(&record.stats)) {
+                if (selected_pair_ids.contains(pair->rtc.id)) {
+                    const double seconds = pair->candidate_pair.current_round_trip_time;
+                    if (std::isfinite(seconds) && seconds > 0.0) {
+                        metrics.round_trip_time_ms = seconds * 1'000.0;
+                    }
+                    break;
+                }
+                if (!fallback_pair && pair->candidate_pair.nominated) fallback_pair = pair;
+            }
+        }
+        if (!metrics.round_trip_time_ms && fallback_pair) {
+            const double seconds = fallback_pair->candidate_pair.current_round_trip_time;
+            if (std::isfinite(seconds) && seconds > 0.0) {
+                metrics.round_trip_time_ms = seconds * 1'000.0;
+            }
+        }
+
+        for (const auto& record : records) {
+            if (const auto* inbound = std::get_if<livekit::RtcInboundRtpStats>(&record.stats)) {
+                const double seconds = inbound->received.jitter;
+                if (!std::isfinite(seconds) || seconds < 0.0) continue;
+                const double jitter_ms = seconds * 1'000.0;
+                if (!metrics.receive_jitter_ms || jitter_ms > *metrics.receive_jitter_ms) {
+                    metrics.receive_jitter_ms = jitter_ms;
+                }
+            }
+        }
     } catch (...) {
         // Quality remains useful while RTCStats is temporarily unavailable.
     }
-    on_network_metrics(metrics);
 #endif
+    callback(metrics);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

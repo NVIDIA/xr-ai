@@ -82,6 +82,7 @@ public:
     std::function<void(std::string_view status)> on_agent_status;
 
     /// Called about once per second with network telemetry from the backend.
+    /// May run on a backend worker thread; marshal to the UI thread as needed.
     std::function<void(const NetworkMetrics& metrics)> on_network_metrics;
 
     // ── State ──────────────────────────────────────────────────────────────

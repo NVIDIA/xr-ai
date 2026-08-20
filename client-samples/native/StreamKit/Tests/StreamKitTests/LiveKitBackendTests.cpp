@@ -20,6 +20,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <chrono>
+#include <future>
 #include <stdexcept>
 #include <vector>
 
@@ -103,6 +105,19 @@ int main() {
                            streamkit::PixelFormat::kI420, 0);
 
     session.Disconnect();
+
+    // A telemetry callback is allowed to disconnect the session. The callback
+    // runs on the telemetry worker itself, so teardown must not try to join the
+    // current thread.
+    streamkit::LiveKitBackend callback_backend{lk};
+    std::promise<void> callback_finished;
+    auto callback_future = callback_finished.get_future();
+    callback_backend.on_network_metrics = [&](const streamkit::NetworkMetrics&) {
+        callback_backend.Disconnect();
+        callback_finished.set_value();
+    };
+    callback_backend.Connect(streamkit::SessionConfig::Default());
+    Expect(callback_future.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
 
     return 0;
 }

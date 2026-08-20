@@ -15,6 +15,7 @@ def test_web_camera_capture_behavior() -> None:
         check=False,
         capture_output=True,
         text=True,
+        timeout=15,
     )
 
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"

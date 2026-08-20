@@ -50,9 +50,10 @@ namespace streamkit {
 ///
 /// Methods are called from whichever thread the application chooses.
 /// The implementation is responsible for any required synchronisation.
-/// Callbacks fire from whatever thread the backend's event loop runs on;
-/// use the mechanism appropriate for your platform (dispatch queue, strand,
-/// UI-thread post, etc.) to forward them to your application.
+/// Callbacks fire from whatever thread the backend's event loop runs on and
+/// may call back into the backend, including Disconnect(). Use the mechanism
+/// appropriate for your platform (dispatch queue, strand, UI-thread post,
+/// etc.) to forward them to your application.
 ///
 /// ## Implementing a custom backend
 ///
@@ -116,6 +117,7 @@ public:
     std::function<void(std::string_view status)> on_agent_status;
 
     /// Fired about once per second with transport-neutral network telemetry.
+    /// The built-in LiveKit backend invokes this on its telemetry worker.
     std::function<void(const NetworkMetrics& metrics)> on_network_metrics;
 
     // ── Connection ─────────────────────────────────────────────────────────

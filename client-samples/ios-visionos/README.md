@@ -17,6 +17,7 @@ ai-sdk-sample/
 │   └── Sources/StreamKit/
 │       ├── StreamSession.swift          # Public façade (@MainActor, ObservableObject)
 │       ├── ConnectionState.swift
+│       ├── NetworkMetrics.swift
 │       ├── StreamError.swift
 │       ├── Config/
 │       │   ├── SessionConfig.swift      # Room name, identity, audio + camera settings

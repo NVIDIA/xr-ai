@@ -176,7 +176,7 @@ private fun StreamKitSampleApp(vm: AppViewModel = viewModel()) {
 
 @Composable
 private fun NetworkSection(vm: AppViewModel) {
-    val metrics = vm.networkMetrics
+    val metrics = vm.networkMetrics.takeIf { vm.connectionState == ConnectionState.CONNECTED }
     fun milliseconds(value: Double?) = value?.let { "${it.toInt()} ms" } ?: "—"
 
     SectionCard(title = "Network") {

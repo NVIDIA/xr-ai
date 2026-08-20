@@ -25,7 +25,7 @@ target_compile_features(streamkit PUBLIC cxx_std_20)
 # LiveKitBackend talks to `livekit::Room` and friends from the upstream LiveKit
 # C++ SDK (https://github.com/livekit/rust-sdks → `cpp/`). The SDK ships as a
 # tree containing `inc/livekit/*.h` headers and `lib/liblivekit{,_ffi}.so` plus
-# a vendored protobuf runtime.
+# a vendored protobuf runtime. The supported/tested released API is v0.4.1.
 #
 # Two ways to supply it:
 #

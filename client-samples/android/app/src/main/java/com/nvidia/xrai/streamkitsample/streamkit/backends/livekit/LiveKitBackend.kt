@@ -97,8 +97,8 @@ internal class LiveKitBackend(
 
     // ── Private state ──────────────────────────────────────────────────────────
 
-    private var room: Room? = null
-    private var isConnected = false
+    @Volatile private var room: Room? = null
+    @Volatile private var isConnected = false
 
     /** Coroutine scope active for the lifetime of one connection. */
     private var connectionScope: CoroutineScope? = null
@@ -168,9 +168,18 @@ internal class LiveKitBackend(
         // Successfully connected.
         isConnected = true
         onConnectionStateChanged?.invoke(ConnectionState.CONNECTED)
-        scope.launch {
-            while (isActive && isConnected && room === newRoom) {
-                onNetworkMetrics?.invoke(collectNetworkMetrics(newRoom))
+        scope.launch(Dispatchers.Default) {
+            while (isActive && room === newRoom) {
+                if (isConnected) {
+                    val metrics = collectNetworkMetrics(newRoom)
+                    if (isConnected && room === newRoom) {
+                        withContext(Dispatchers.Main.immediate) {
+                            if (isConnected && room === newRoom) {
+                                onNetworkMetrics?.invoke(metrics)
+                            }
+                        }
+                    }
+                }
                 delay(1_000)
             }
         }
@@ -297,6 +306,7 @@ internal class LiveKitBackend(
     private fun handleEvent(event: RoomEvent) {
         when (event) {
             is RoomEvent.Reconnecting -> {
+                isConnected = false
                 onConnectionStateChanged?.invoke(ConnectionState.RECONNECTING)
             }
             is RoomEvent.Reconnected -> {
@@ -346,27 +356,43 @@ internal class LiveKitBackend(
     }
 
     private suspend fun collectNetworkMetrics(room: Room): NetworkMetrics {
+        val quality = room.localParticipant.connectionQuality.toStreamKitQuality()
+        val hasMediaTracks = room.localParticipant.trackPublications.values.any { it.track != null } ||
+            room.remoteParticipants.values.any { participant ->
+                participant.trackPublications.values.any { it.track != null }
+            }
+        if (!hasMediaTracks) return NetworkMetrics(quality = quality)
+
         val publisher = runCatching { publisherStats(room) }.getOrNull()
         val subscriber = runCatching { subscriberStats(room) }.getOrNull()
         val allStats = listOfNotNull(publisher, subscriber)
             .flatMap { it.statsMap.values }
 
-        val roundTripTimeMs = allStats.firstNotNullOfOrNull { stat ->
-            if (stat.type != "candidate-pair") return@firstNotNullOfOrNull null
-            val nominated = stat.members["nominated"] as? Boolean ?: false
-            val state = stat.members["state"] as? String
-            if (!nominated && state != "succeeded") return@firstNotNullOfOrNull null
-            (stat.members["currentRoundTripTime"] as? Number)?.toDouble()?.times(1_000)
+        val selectedPairIds = allStats.asSequence()
+            .filter { it.type == "transport" }
+            .mapNotNull { it.members["selectedCandidatePairId"] as? String }
+            .toSet()
+        val candidatePairs = allStats.filter { it.type == "candidate-pair" }
+        val selectedPair = candidatePairs.firstOrNull { stat ->
+            stat.id in selectedPairIds
+        } ?: candidatePairs.firstOrNull { stat ->
+            stat.members["nominated"] == true || stat.members["selected"] == true
+        }
+        val roundTripTimeMs = selectedPair?.let { stat ->
+            (stat.members["currentRoundTripTime"] as? Number)?.toDouble()
+                ?.takeIf { it.isFinite() && it >= 0.0 }
+                ?.times(1_000)
         }
         val receiveJitterMs = subscriber?.statsMap?.values
             ?.asSequence()
             ?.filter { it.type == "inbound-rtp" }
             ?.mapNotNull { (it.members["jitter"] as? Number)?.toDouble() }
+            ?.filter { it.isFinite() && it >= 0.0 }
             ?.maxOrNull()
             ?.times(1_000)
 
         return NetworkMetrics(
-            quality = room.localParticipant.connectionQuality.toStreamKitQuality(),
+            quality = quality,
             roundTripTimeMs = roundTripTimeMs,
             receiveJitterMs = receiveJitterMs,
         )

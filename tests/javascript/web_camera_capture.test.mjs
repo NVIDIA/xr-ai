@@ -32,22 +32,34 @@ function makePublishedTrack(mediaTrack) {
   };
 }
 
-function makeRoom(publishTrack) {
-  return {
+function makeRoom(publishTrack, { localTracks = [], remoteTracks = [], quality = 'unknown' } = {}) {
+  const handlers = new Map();
+  const room = {
     state: 'disconnected',
-    remoteParticipants: new Map(),
+    remoteParticipants: new Map(remoteTracks.length ? [[
+      'remote',
+      { trackPublications: new Map(remoteTracks.map((track, i) => [String(i), { track }])) },
+    ]] : []),
     unpublishedTracks: [],
     localParticipant: {
+      connectionQuality: quality,
+      trackPublications: new Map(localTracks.map((track, i) => [String(i), { track }])),
       publishTrack,
       publishData: async () => {},
       unpublishTrack: async track => {
         globalThis.__livekitRoom.unpublishedTracks.push(track);
       },
     },
-    on() {
+    on(event, handler) {
+      handlers.set(event, handler);
       return this;
     },
-    removeAllListeners() {},
+    emit(event, ...args) {
+      handlers.get(event)?.(...args);
+    },
+    removeAllListeners() {
+      handlers.clear();
+    },
     async connect() {
       this.state = 'connected';
     },
@@ -55,10 +67,11 @@ function makeRoom(publishTrack) {
       this.state = 'disconnected';
     },
   };
+  return room;
 }
 
-async function connectedBackend(publishTrack) {
-  const room = makeRoom(publishTrack);
+async function connectedBackend(t, publishTrack, options = {}) {
+  const room = makeRoom(publishTrack, options);
   globalThis.__livekitRoom = room;
   const backend = new LiveKitBackend({
     host: 'localhost',
@@ -68,6 +81,8 @@ async function connectedBackend(publishTrack) {
     tokenURL: null,
     hubIdentity: null,
   });
+  t.after(() => backend.disconnect());
+  options.configure?.(backend);
   await backend.connect({ identity: 'browser-test' });
   return { backend, room };
 }
@@ -130,7 +145,7 @@ function installAppBrowser(model) {
   return { previewCard, video };
 }
 
-test('publishes and previews the captured full-frame camera track', async () => {
+test('publishes and previews the captured full-frame camera track', async (t) => {
   const capturedTracks = [makeMediaTrack(), makeMediaTrack()];
   let currentTrack = capturedTracks[0];
   const captureConstraints = [];
@@ -141,7 +156,7 @@ test('publishes and previews the captured full-frame camera track', async () => 
     return { getVideoTracks: () => [currentTrack] };
   });
 
-  const { backend, room } = await connectedBackend(async mediaTrack => {
+  const { backend, room } = await connectedBackend(t, async mediaTrack => {
     publishedTracks.push(mediaTrack);
     const wrapper = makePublishedTrack(mediaTrack);
     publishedWrappers.push(wrapper);
@@ -193,13 +208,95 @@ test('stops the captured camera track when LiveKit publication fails', async (t)
   const mediaTrack = makeMediaTrack();
   installMediaDevices(async () => ({ getVideoTracks: () => [mediaTrack] }));
   const failure = new Error('publication failed');
-  const { backend } = await connectedBackend(async () => {
+  const { backend } = await connectedBackend(t, async () => {
     throw failure;
   });
-  t.after(() => backend.disconnect());
 
   await assert.rejects(backend.startCamera({ facing: 'environment' }), failure);
 
   assert.equal(mediaTrack.stopCount, 1);
   assert.equal(backend.cameraTrack, null);
+});
+
+test('reports the transport-selected ICE pair and all inbound-track jitter', async (t) => {
+  const report = new Map([
+    ['transport', {
+      id: 'transport', type: 'transport', selectedCandidatePairId: 'active-pair',
+    }],
+    ['stale-pair', {
+      id: 'stale-pair', type: 'candidate-pair', state: 'succeeded',
+      currentRoundTripTime: 0.9,
+    }],
+    ['active-pair', {
+      id: 'active-pair', type: 'candidate-pair', nominated: false,
+      currentRoundTripTime: 0.042,
+    }],
+    ['inbound-audio', { id: 'inbound-audio', type: 'inbound-rtp', jitter: 0.003 }],
+    ['inbound-video', { id: 'inbound-video', type: 'inbound-rtp', jitter: 0.007 }],
+  ]);
+  const track = { getRTCStatsReport: async () => report };
+  let resolveMetrics;
+  const metricsPromise = new Promise(resolve => { resolveMetrics = resolve; });
+
+  await connectedBackend(t, async () => {}, {
+    quality: 'good',
+    remoteTracks: [track],
+    configure: backend => { backend.onNetworkMetrics = resolveMetrics; },
+  });
+
+  const metrics = await metricsPromise;
+  assert.equal(metrics.quality, 'good');
+  assert.equal(metrics.roundTripTimeMs, 42);
+  assert.equal(metrics.receiveJitterMs, 7);
+});
+
+test('maps network quality and rejects invalid RTC measurements', async (t) => {
+  const invalidReport = new Map([
+    ['pair', {
+      id: 'pair', type: 'candidate-pair', nominated: true,
+      currentRoundTripTime: Number.POSITIVE_INFINITY,
+    }],
+    ['inbound', { id: 'inbound', type: 'inbound-rtp', jitter: -1 }],
+  ]);
+  const track = { getRTCStatsReport: async () => invalidReport };
+
+  for (const [quality, expected] of [
+    ['excellent', 'excellent'],
+    ['good', 'good'],
+    ['poor', 'poor'],
+    ['lost', 'lost'],
+    ['unknown', 'unknown'],
+    ['unexpected', 'unknown'],
+  ]) {
+    let resolveMetrics;
+    const metricsPromise = new Promise(resolve => { resolveMetrics = resolve; });
+    await connectedBackend(t, async () => {}, {
+      quality,
+      localTracks: [track],
+      configure: backend => { backend.onNetworkMetrics = resolveMetrics; },
+    });
+    const metrics = await metricsPromise;
+    assert.equal(metrics.quality, expected);
+    assert.equal(metrics.roundTripTimeMs, null);
+    assert.equal(metrics.receiveJitterMs, null);
+  }
+});
+
+test('stops network polling after a terminal room disconnect', async (t) => {
+  let statsCalls = 0;
+  const track = {
+    async getRTCStatsReport() {
+      statsCalls += 1;
+      return new Map();
+    },
+  };
+  const { room } = await connectedBackend(t, async () => {}, { localTracks: [track] });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(statsCalls, 1);
+
+  room.state = 'disconnected';
+  room.emit('connectionStateChanged', 'disconnected');
+  await new Promise(resolve => setTimeout(resolve, 1_100));
+
+  assert.equal(statsCalls, 1);
 });

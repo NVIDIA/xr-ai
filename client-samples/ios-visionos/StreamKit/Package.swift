@@ -35,7 +35,10 @@ let package = Package(
         ),
         .testTarget(
             name: "StreamKitTests",
-            dependencies: ["StreamKit"],
+            dependencies: [
+                "StreamKit",
+                .product(name: "LiveKit", package: "client-sdk-swift"),
+            ],
             path: "Tests/StreamKitTests"
         ),
     ]

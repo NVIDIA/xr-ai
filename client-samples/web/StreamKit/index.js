@@ -12,6 +12,7 @@
  * import {
  *   StreamSession,
  *   ConnectionState,
+ *   NetworkMetrics, NetworkQuality,
  *   StreamError,
  *   AudioConfig, MicrophoneMode,
  *   CameraConfig, CameraFacing,
