@@ -5,7 +5,7 @@
 
 # Networking and firewall
 
-XR-Media-Hub, CloudXR, and optional application viewers use the following
+DeviceIOHub, CloudXR, and optional application viewers use the following
 ports. Open only the externally reachable ports required by the deployment.
 
 | Port | Protocol | Purpose |
@@ -36,7 +36,7 @@ proxy, not directly.
 The signaling proxy on port 8080 does not proxy WebRTC media. LiveKit still
 needs to advertise an ICE address that clients can reach on ports 7881 and
 7882. On a cloud VM whose network interface has only a private address, enable
-STUN-based public-IP discovery in the sample's `xr_media_hub.yaml`:
+STUN-based public-IP discovery in the sample's `device_io_hub.yaml`:
 
 ```yaml
 lk_use_external_ip: true
@@ -126,12 +126,12 @@ never reached directly by client traffic.
 
 On first run a self-signed certificate is generated at
 `~/.local/share/xr-ai/web-server.crt`. To use your own, set `cert_file`
-and `key_file` in `xr_media_hub.yaml`.
+and `key_file` in `device_io_hub.yaml`.
 
 The generated certificate covers `localhost`, the hostname, and every local
 interface IP. When clients dial an address that is not on any local
 interface (the public IP of a NAT'd cloud VM such as Brev, a forwarding
-proxy's address, or a DNS name), list it in `xr_media_hub.yaml` and the
+proxy's address, or a DNS name), list it in `device_io_hub.yaml` and the
 certificate is regenerated to include it on the next hub start:
 
 ```yaml
@@ -173,4 +173,4 @@ Until the certificate is trusted at the OS level, the wss handshake fails.
 
 Production deployments on any platform should replace the auto-generated
 certificate with one from a public CA via `cert_file` and `key_file` in
-`xr_media_hub.yaml`.
+`device_io_hub.yaml`.

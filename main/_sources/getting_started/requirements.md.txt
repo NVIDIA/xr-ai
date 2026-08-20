@@ -15,7 +15,7 @@ can run on other NVIDIA GPUs by tuning the per-server GPU-memory split. Refer to
 
 If you prefer not to run models on local hardware, model endpoints are plain
 URLs: point the worker configuration at a cloud NIM or model endpoint and no
-local GPU is required for the agent or XR-Media-Hub.
+local GPU is required for the agent or DeviceIOHub.
 
 | Sample | Local VRAM needed |
 |---|---|
@@ -106,7 +106,7 @@ setups:
   was not exercised in the report.
 - **Mirrored networking collides with the token server**: Windows' IP Helper
   service occupies port 8000. Refer to the `token_server_port` note in
-  `services/xr-media-hub/xr_media_hub.yaml`.
+  `services/device-io-hub/device_io_hub.yaml`.
 
 ## Running on other GPUs
 
