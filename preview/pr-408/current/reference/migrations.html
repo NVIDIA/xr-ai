@@ -432,11 +432,18 @@ and command to <code class="docutils literal notranslate"><span class="pre">devi
 <li><p>DeviceIOHub no longer falls back to embedded LiveKit development credentials.
 Set <code class="docutils literal notranslate"><span class="pre">api_key</span></code> and <code class="docutils literal notranslate"><span class="pre">api_secret</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>, or inject
 <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_SECRET</span></code> through the environment.</p></li>
-<li><p>Return-audio buffering is now bounded independently for each participant.
-<code class="docutils literal notranslate"><span class="pre">return_audio_max_buffer_s</span></code> defaults to 3 seconds; when a burst exceeds the
-configured duration, DeviceIOHub drops the oldest queued frames to bound
-playback latency and memory use. Increase the value for long-form playback,
-or decrease it for more latency-sensitive deployments.</p></li>
+<li><p>Boolean service settings now require YAML booleans or the strings <code class="docutils literal notranslate"><span class="pre">true</span></code>,
+<code class="docutils literal notranslate"><span class="pre">false</span></code>, <code class="docutils literal notranslate"><span class="pre">yes</span></code>, <code class="docutils literal notranslate"><span class="pre">no</span></code>, <code class="docutils literal notranslate"><span class="pre">on</span></code>, <code class="docutils literal notranslate"><span class="pre">off</span></code>, <code class="docutils literal notranslate"><span class="pre">1</span></code>, or <code class="docutils literal notranslate"><span class="pre">0</span></code> (case-insensitive). Numeric
+<code class="docutils literal notranslate"><span class="pre">1</span></code>/<code class="docutils literal notranslate"><span class="pre">0</span></code>, null values, and arbitrary strings now fail at startup instead of
+being interpreted by Python truthiness. This applies to vLLM eager/tool/
+scheduling flags, Nemotron-Omni BF16 selection, Piper CUDA, voice-gate
+<code class="docutils literal notranslate"><span class="pre">listening_chime</span></code>, and lab-monitoring <code class="docutils literal notranslate"><span class="pre">capture_marker_scans</span></code>.</p></li>
+<li><p>Return-audio staleness is tracked independently for each participant.
+<code class="docutils literal notranslate"><span class="pre">return_audio_max_buffer_s</span></code> defaults to 3 seconds. Fast TTS bursts remain
+intact regardless of utterance length; when newer audio arrives, DeviceIOHub
+drops queued frames older than the configured wall-clock threshold. Increase
+the value for intermittent delivery, or decrease it for latency-sensitive
+deployments.</p></li>
 </ul>
 </section>
 <section id="removed-sdk-compatibility-surfaces">
