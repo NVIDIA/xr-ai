@@ -144,6 +144,13 @@ into `agent-samples/<name>/yaml/`, change that value to `../../../models` so
 the cache still resolves to the repository-root `models/` directory. Capability
 and capability configurations without a `model_cache` key need no change.
 
+`simple-vlm-example` keeps these sample-local STT and VLM configs for smaller
+standalone hosts. On hardware with enough capacity for a shipped
+`model-servers` profile, its orchestrator selects that profile's VLM config
+instead. Matching the complete launch config lets the persistent Cosmos
+container be reused safely, while the standalone fallback retains the larger
+single-GPU memory budget.
+
 Edit the YAML as needed (model, port, device, etc.). The launcher auto-discovers
 `yaml/<command>.yaml` in the sample root and passes it as `--config`.
 For RAG, also point `rag_service.yaml` at an application-owned document

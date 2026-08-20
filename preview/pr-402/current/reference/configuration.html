@@ -1727,6 +1727,49 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 </pre></div>
 </div>
 </section>
+<section id="config-simple-vlm-example-yaml-stt-server-yaml">
+<h3>yaml/stt_server.yaml<a class="headerlink" href="#config-simple-vlm-example-yaml-stt-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Standalone STT configuration. STT reuses an existing healthy server by port,</span>
+<span class="c1"># so this config intentionally avoids model-server-specific GPU placement.</span>
+
+<span class="nt">model</span><span class="p">:</span><span class="w">       </span><span class="l l-Scalar l-Scalar-Plain">nvidia/parakeet-tdt-0.6b-v3</span>
+<span class="nt">device</span><span class="p">:</span><span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">auto</span>
+<span class="nt">port</span><span class="p">:</span><span class="w">        </span><span class="l l-Scalar l-Scalar-Plain">8103</span>
+<span class="nt">startup_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">600</span>
+<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../models</span>
+</pre></div>
+</div>
+</section>
+<section id="config-simple-vlm-example-yaml-vlm-server-yaml">
+<h3>yaml/vlm_server.yaml<a class="headerlink" href="#config-simple-vlm-example-yaml-vlm-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Standalone VLM configuration for systems smaller than the shared</span>
+<span class="c1"># model-server hardware profiles.</span>
+
+<span class="nt">model</span><span class="p">:</span><span class="w">       </span><span class="l l-Scalar l-Scalar-Plain">nvidia/Cosmos3-Nano</span>
+<span class="nt">hf_overrides</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">architectures</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Cosmos3ForConditionalGeneration</span>
+<span class="nt">port</span><span class="p">:</span><span class="w">        </span><span class="l l-Scalar l-Scalar-Plain">8100</span>
+<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../models</span>
+<span class="nt">async_scheduling</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">mm_encoder_tp_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">data</span>
+
+<span class="c1"># Leave enough of a 24 GiB GPU for the 16.8 GiB Reasoner weights and runtime.</span>
+<span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.85</span>
+
+<span class="c1"># vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).</span>
+<span class="c1"># See services/vlm-server/vlm_server.yaml for the full toggle docs.</span>
+<span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
+<span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.07-py3</span>
+</pre></div>
+</div>
+</section>
 <section id="config-simple-vlm-example-yaml-voice-gate-yaml">
 <h3>yaml/voice_gate.yaml<a class="headerlink" href="#config-simple-vlm-example-yaml-voice-gate-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
@@ -2406,6 +2449,8 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-models-vlm-speech-nim-json">yaml/models.vlm_speech_nim.json</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-piper-tts-server-yaml">yaml/piper_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-simple-vlm-example-worker-yaml">yaml/simple_vlm_example_worker.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-stt-server-yaml">yaml/stt_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-vlm-server-yaml">yaml/vlm_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-voice-gate-yaml">yaml/voice_gate.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-xr-media-hub-yaml">yaml/xr_media_hub.yaml</a></li>
 </ul>
