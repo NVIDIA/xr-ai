@@ -422,25 +422,25 @@
 -->
 <section id="server-runtime">
 <h1>Server runtime<a class="headerlink" href="#server-runtime" title="Link to this heading">#</a></h1>
-<p>The <code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/</span></code> package hosts the <strong>XR-Media-Hub</strong> — the single process
+<p>The <code class="docutils literal notranslate"><span class="pre">services/device-io-hub/</span></code> package hosts the <strong>DeviceIOHub</strong> — the single process
 clients connect to and agents fan out from. It owns the internal LiveKit
 transport, the shared-memory + ZMQ IPC boundary to agents, the per-participant
 return path, and the same-origin <code class="docutils literal notranslate"><span class="pre">wss://</span></code> proxy that fronts LiveKit signaling.</p>
 <p>It runs as one process:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">uv</span> <span class="n">run</span> <span class="n">xr_media_hub</span>                       <span class="c1"># auto-discovers ./xr_media_hub.yaml</span>
-<span class="n">uv</span> <span class="n">run</span> <span class="n">xr_media_hub</span> <span class="o">--</span><span class="n">config</span> <span class="n">path</span><span class="o">.</span><span class="n">yaml</span>    <span class="c1"># explicit config</span>
-<span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">xr_media_hub</span>                    <span class="c1"># equivalent module form</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">uv</span> <span class="n">run</span> <span class="n">device_io_hub</span>                       <span class="c1"># auto-discovers ./device_io_hub.yaml</span>
+<span class="n">uv</span> <span class="n">run</span> <span class="n">device_io_hub</span> <span class="o">--</span><span class="n">config</span> <span class="n">path</span><span class="o">.</span><span class="n">yaml</span>    <span class="c1"># explicit config</span>
+<span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">device_io_hub</span>                    <span class="c1"># equivalent module form</span>
 </pre></div>
 </div>
-<p>Configuration comes from a <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> file (defaults are used when
-none is found). <code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/xr_media_hub.yaml</span></code> is the reference copy
+<p>Configuration comes from a <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> file (defaults are used when
+none is found). <code class="docutils literal notranslate"><span class="pre">services/device-io-hub/device_io_hub.yaml</span></code> is the reference copy
 documenting every field; each sample ships its own copy under its <code class="docutils literal notranslate"><span class="pre">yaml/</span></code>
 directory. Relative paths inside the YAML (such as <code class="docutils literal notranslate"><span class="pre">web_client_dir</span></code>) resolve
 against the YAML file’s own directory, not the working directory.</p>
 <p>For where the hub sits in the wider system, refer to
 <a class="reference internal" href="../overview/architecture.html"><span class="doc">Architecture</span></a>.</p>
-<section id="xr-media-hub">
-<h2>XR-Media-Hub<a class="headerlink" href="#xr-media-hub" title="Link to this heading">#</a></h2>
+<section id="deviceiohub">
+<h2>DeviceIOHub<a class="headerlink" href="#deviceiohub" title="Link to this heading">#</a></h2>
 <p>The hub is one hub, many clients, many agents. A single instance fans the
 inbound media stream out to every connected agent and routes any return
 traffic back to the originating client only.</p>
@@ -510,7 +510,7 @@ checks at startup.</p>
 <section id="ipc-boundary-to-agents">
 <h2>IPC boundary to agents<a class="headerlink" href="#ipc-boundary-to-agents" title="Link to this heading">#</a></h2>
 <p>The hub and its producers and consumers communicate over ZMQ using msgpack-encoded
-messages. The layer lives in <code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/xr_media_hub/ipc/</span></code> and defines
+messages. The layer lives in <code class="docutils literal notranslate"><span class="pre">services/device-io-hub/device_io_hub/ipc/</span></code> and defines
 three endpoints:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
@@ -526,7 +526,7 @@ three endpoints:</p>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">HubEndpoint</span></code></p></td>
 <td><p>server: dispatch + fan-out</p></td>
-<td><p>XR-Media-Hub process</p></td>
+<td><p>DeviceIOHub process</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code></p></td>
 <td><p>subscriber + publisher</p></td>
@@ -570,10 +570,10 @@ registered at import time via <code class="docutils literal notranslate"><span c
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Agent code should import the IPC types and <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> from
-<code class="docutils literal notranslate"><span class="pre">xr_ai_hub</span></code> directly, <strong>not</strong> from <code class="docutils literal notranslate"><span class="pre">xr_media_hub.ipc</span></code>. The agent SDK’s only
+<code class="docutils literal notranslate"><span class="pre">xr_ai_hub</span></code> directly, <strong>not</strong> from <code class="docutils literal notranslate"><span class="pre">device_io_hub.ipc</span></code>. The agent SDK’s only
 runtime dependencies are <code class="docutils literal notranslate"><span class="pre">pyzmq</span></code> and <code class="docutils literal notranslate"><span class="pre">msgpack</span></code> — importing from the agent SDK
-avoids pulling in the full XR-Media-Hub dependency tree (LiveKit, FastAPI,
-uvicorn, GPU codecs). <code class="docutils literal notranslate"><span class="pre">xr_media_hub.ipc</span></code> re-exports the same names for the
+avoids pulling in the full DeviceIOHub dependency tree (LiveKit, FastAPI,
+uvicorn, GPU codecs). <code class="docutils literal notranslate"><span class="pre">device_io_hub.ipc</span></code> re-exports the same names for the
 server side.</p>
 </div>
 </section>
@@ -707,7 +707,7 @@ returns a plain
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-media-hub">XR-Media-Hub</a><ul class="nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deviceiohub">DeviceIOHub</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#isolation-contract">Isolation contract</a></li>
 </ul>
 </li>

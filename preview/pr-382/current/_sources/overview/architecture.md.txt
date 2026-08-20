@@ -5,7 +5,7 @@
 
 # Architecture
 
-This page explains how XR-Media-Hub, the transport, and agents fit together.
+This page explains how DeviceIOHub, the transport, and agents fit together.
 
 ## Top-level layout
 
@@ -24,7 +24,7 @@ docs/source/        # User and contributor documentation
 - **One hub, many clients, many agents.** A single hub instance fans the
   inbound stream out to every connected `ProcessorEndpoint` (agent) and
   routes return traffic back to the originating client only — never to peers.
-- **XR-Media-Hub** is transport-agnostic at its IPC boundary. Agents connect
+- **DeviceIOHub** is transport-agnostic at its IPC boundary. Agents connect
   via IPC only.
 - **LiveKit** is an internal transport detail — not exposed to the agent layer.
   When LiveKit is the transport, return audio is published as one track per
@@ -37,13 +37,13 @@ docs/source/        # User and contributor documentation
 - **Native agents compose typed tools in process.** Service-backed tools call
   typed capability services, while deterministic tools run locally.
 - **No API keys or tokens in source files** — use environment variables or
-  `xr_media_hub.yaml` (refer to {doc}`/getting_started/credentials`).
+  `device_io_hub.yaml` (refer to {doc}`/getting_started/credentials`).
 
 Refer to {doc}`/components/server-runtime` for more on the hub and transport.
 
 ## Multi-user sessions
 
-A single XR-Media-Hub session can carry several participants at once, each fully
+A single DeviceIOHub session can carry several participants at once, each fully
 isolated. The hub is not a routing switch between participants: media and data
 flow only between a participant and the agent, never from one participant to
 another. The supported path is always:
@@ -70,9 +70,9 @@ enforcement details.
 
 ## Hub configuration
 
-Each sample provides its own `xr_media_hub.yaml` in its `yaml/` directory
-(e.g. `agent-samples/simple-vlm-example/yaml/xr_media_hub.yaml`).
-`services/xr-media-hub/` also contains a reference copy documenting all available
+Each sample provides its own `device_io_hub.yaml` in its `yaml/` directory
+(e.g. `agent-samples/simple-vlm-example/yaml/device_io_hub.yaml`).
+`services/device-io-hub/` also contains a reference copy documenting all available
 fields.
 
 Paths inside the YAML (e.g. `web_client_dir`) resolve relative to the YAML

@@ -18,7 +18,7 @@ exit terminates the whole stack.
 
 | Role | Directory | Command | Port |
 |---|---|---|---|
-| hub | `services/xr-media-hub/` | `xr_media_hub` | 8080 (https + wss /rtc proxy); LiveKit 7880 stays on 127.0.0.1 |
+| hub | `services/device-io-hub/` | `device_io_hub` | 8080 (https + wss /rtc proxy); LiveKit 7880 stays on 127.0.0.1 |
 | cloudxr | `services/cloudxr-runtime/` | `cloudxr_runtime` | 48322 (WSS proxy) |
 | stt | `services/stt-server/` | `stt_server` | 8103 |
 | tts | `services/piper-tts/` | `piper_tts_server` | 8105 |

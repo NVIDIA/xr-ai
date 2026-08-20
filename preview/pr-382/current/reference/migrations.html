@@ -199,6 +199,10 @@
   
 
   
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
 </div>
 
     </header>
@@ -418,6 +422,16 @@
 -->
 <section id="release-migration">
 <h1>Release migration<a class="headerlink" href="#release-migration" title="Link to this heading">#</a></h1>
+<section id="deviceiohub-rename">
+<h2>DeviceIOHub rename<a class="headerlink" href="#deviceiohub-rename" title="Link to this heading">#</a></h2>
+<p>Update <code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/</span></code> to <code class="docutils literal notranslate"><span class="pre">services/device-io-hub/</span></code>, the
+<code class="docutils literal notranslate"><span class="pre">xr-media-hub</span></code> distribution to <code class="docutils literal notranslate"><span class="pre">device-io-hub</span></code>, and the <code class="docutils literal notranslate"><span class="pre">xr_media_hub</span></code> import
+and command to <code class="docutils literal notranslate"><span class="pre">device_io_hub</span></code>. Rename <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> to
+<code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">XR_MEDIA_HUB_NO_WEB_CLIENT</span></code> to
+<code class="docutils literal notranslate"><span class="pre">DEVICE_IO_HUB_NO_WEB_CLIENT</span></code>. The rename has no compatibility aliases.</p>
+</section>
+<section id="removed-sdk-compatibility-surfaces">
+<h2>Removed SDK compatibility surfaces<a class="headerlink" href="#removed-sdk-compatibility-surfaces" title="Link to this heading">#</a></h2>
 <p>This release removes deprecated SDK aliases and the standalone Pipecat
 compatibility package. Update out-of-tree code as follows:</p>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -436,26 +450,26 @@ compatibility package. Update out-of-tree code as follows:</p>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">run_voice_pipeline</span></code></p></td>
 <td><p>Configure <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> directly and run it with <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">VoiceAgent.run(runtime)</span></code>; its media session is private.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code></p></td>
-<td><p>Configure <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> with STT, TTS, VAD, gating, readiness probes, and closeables, then run it with the shared <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code>. The lower-level media session is no longer public.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">VadConfig</span></code></p></td>
-<td><p>Import the unchanged tuning model from <code class="docutils literal notranslate"><span class="pre">xr_ai_voice</span></code>.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">GatedQueryFrame</span></code></p></td>
-<td><p>Subscribe to the application query topic carrying <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.UserQuery</span></code>.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ParticipantJoinedFrame</span></code>, <code class="docutils literal notranslate"><span class="pre">ParticipantLeftFrame</span></code>, and <code class="docutils literal notranslate"><span class="pre">InterruptionFrame</span></code></p></td>
-<td><p>Subscribe to application topics carrying <code class="docutils literal notranslate"><span class="pre">VoiceParticipantJoined</span></code>, <code class="docutils literal notranslate"><span class="pre">VoiceParticipantLeft</span></code>, and <code class="docutils literal notranslate"><span class="pre">VoiceInterrupted</span></code>. Participant identity comes from runtime metadata; voice-gate greetings remain session-owned.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BrainResponseEndFrame</span></code></p></td>
-<td><p>Publish a finite <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code>, or terminate an incremental response with <code class="docutils literal notranslate"><span class="pre">final=True</span></code>.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">VadSttProcessor</span></code>, <code class="docutils literal notranslate"><span class="pre">VoiceGateProcessor</span></code>, and <code class="docutils literal notranslate"><span class="pre">StreamingTtsProcessor</span></code></p></td>
-<td><p>Configure <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> with <code class="docutils literal notranslate"><span class="pre">VadConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">VoiceGateConfig</span></code>, and <code class="docutils literal notranslate"><span class="pre">text_topic</span></code>; pipeline processors are private implementation details.</p></td>
-</tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">XRMediaHubTransport</span></code></p></td>
 <td><p>Construct <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.HubVoiceTransport</span></code> and pass it to <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> only when another application component must share that existing hub boundary.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code></p></td>
+<td><p>Configure <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> with STT, TTS, VAD, gating, readiness probes, and closeables, then run it with the shared <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code>. The lower-level media session is no longer public.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">VadConfig</span></code></p></td>
+<td><p>Import the unchanged tuning model from <code class="docutils literal notranslate"><span class="pre">xr_ai_voice</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">GatedQueryFrame</span></code></p></td>
+<td><p>Subscribe to the application query topic carrying <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.UserQuery</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ParticipantJoinedFrame</span></code>, <code class="docutils literal notranslate"><span class="pre">ParticipantLeftFrame</span></code>, and <code class="docutils literal notranslate"><span class="pre">InterruptionFrame</span></code></p></td>
+<td><p>Subscribe to application topics carrying <code class="docutils literal notranslate"><span class="pre">VoiceParticipantJoined</span></code>, <code class="docutils literal notranslate"><span class="pre">VoiceParticipantLeft</span></code>, and <code class="docutils literal notranslate"><span class="pre">VoiceInterrupted</span></code>. Participant identity comes from runtime metadata; voice-gate greetings remain session-owned.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BrainResponseEndFrame</span></code></p></td>
+<td><p>Publish a finite <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code>, or terminate an incremental response with <code class="docutils literal notranslate"><span class="pre">final=True</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">VadSttProcessor</span></code>, <code class="docutils literal notranslate"><span class="pre">VoiceGateProcessor</span></code>, and <code class="docutils literal notranslate"><span class="pre">StreamingTtsProcessor</span></code></p></td>
+<td><p>Configure <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> with <code class="docutils literal notranslate"><span class="pre">VadConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">VoiceGateConfig</span></code>, and <code class="docutils literal notranslate"><span class="pre">text_topic</span></code>; pipeline processors are private implementation details.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">SttClient</span></code> and <code class="docutils literal notranslate"><span class="pre">TtsClient</span></code></p></td>
 <td><p>Construct services through <code class="docutils literal notranslate"><span class="pre">xr_ai_models.make_stt</span></code> and <code class="docutils literal notranslate"><span class="pre">make_tts</span></code>, or use <code class="docutils literal notranslate"><span class="pre">OpenAICompatSTT</span></code> and <code class="docutils literal notranslate"><span class="pre">OpenAICompatTTS</span></code> directly.</p></td>
@@ -504,6 +518,7 @@ names do not change.</p>
 <a class="reference internal" href="../components/ai-services.html#migrating-model-caches-from-ai-services"><span class="std std-ref">the model-cache migration</span></a> to
 reuse the ignored caches rather than downloading them again.</p>
 </section>
+</section>
 
 
                 </article>
@@ -540,9 +555,26 @@ reuse the ignored caches rather than downloading them again.</p>
             
             
 
-<div class="bd-sidebar-secondary"></div>
+
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
 
 
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deviceiohub-rename">DeviceIOHub rename</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#removed-sdk-compatibility-surfaces">Removed SDK compatibility surfaces</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
               
             
 

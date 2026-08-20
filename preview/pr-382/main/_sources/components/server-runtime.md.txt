@@ -5,7 +5,7 @@
 
 # Server runtime
 
-The `services/xr-media-hub/` package hosts the **XR-Media-Hub** — the single process
+The `services/device-io-hub/` package hosts the **DeviceIOHub** — the single process
 clients connect to and agents fan out from. It owns the internal LiveKit
 transport, the shared-memory + ZMQ IPC boundary to agents, the per-participant
 return path, and the same-origin `wss://` proxy that fronts LiveKit signaling.
@@ -13,13 +13,13 @@ return path, and the same-origin `wss://` proxy that fronts LiveKit signaling.
 It runs as one process:
 
 ```
-uv run xr_media_hub                       # auto-discovers ./xr_media_hub.yaml
-uv run xr_media_hub --config path.yaml    # explicit config
-python -m xr_media_hub                    # equivalent module form
+uv run device_io_hub                       # auto-discovers ./device_io_hub.yaml
+uv run device_io_hub --config path.yaml    # explicit config
+python -m device_io_hub                    # equivalent module form
 ```
 
-Configuration comes from a `xr_media_hub.yaml` file (defaults are used when
-none is found). `services/xr-media-hub/xr_media_hub.yaml` is the reference copy
+Configuration comes from a `device_io_hub.yaml` file (defaults are used when
+none is found). `services/device-io-hub/device_io_hub.yaml` is the reference copy
 documenting every field; each sample ships its own copy under its `yaml/`
 directory. Relative paths inside the YAML (such as `web_client_dir`) resolve
 against the YAML file's own directory, not the working directory.
@@ -27,7 +27,7 @@ against the YAML file's own directory, not the working directory.
 For where the hub sits in the wider system, refer to
 {doc}`Architecture </overview/architecture>`.
 
-## XR-Media-Hub
+## DeviceIOHub
 
 The hub is one hub, many clients, many agents. A single instance fans the
 inbound media stream out to every connected agent and routes any return
@@ -101,13 +101,13 @@ checks at startup.
 ## IPC boundary to agents
 
 The hub and its producers and consumers communicate over ZMQ using msgpack-encoded
-messages. The layer lives in `services/xr-media-hub/xr_media_hub/ipc/` and defines
+messages. The layer lives in `services/device-io-hub/device_io_hub/ipc/` and defines
 three endpoints:
 
 | Endpoint | Role | Who |
 | --- | --- | --- |
 | `ConnectorEndpoint` | producer + return-traffic receiver | LiveKit connector process |
-| `HubEndpoint` | server: dispatch + fan-out | XR-Media-Hub process |
+| `HubEndpoint` | server: dispatch + fan-out | DeviceIOHub process |
 | `ProcessorEndpoint` | subscriber + publisher | agents, analytics, downstream processors |
 
 The hub binds two sockets (defaults shown):
@@ -149,10 +149,10 @@ registered at import time via `register_encoder` and `register_decoder`.
 
 ```{note}
 Agent code should import the IPC types and `ProcessorEndpoint` from
-`xr_ai_hub` directly, **not** from `xr_media_hub.ipc`. The agent SDK's only
+`xr_ai_hub` directly, **not** from `device_io_hub.ipc`. The agent SDK's only
 runtime dependencies are `pyzmq` and `msgpack` — importing from the agent SDK
-avoids pulling in the full XR-Media-Hub dependency tree (LiveKit, FastAPI,
-uvicorn, GPU codecs). `xr_media_hub.ipc` re-exports the same names for the
+avoids pulling in the full DeviceIOHub dependency tree (LiveKit, FastAPI,
+uvicorn, GPU codecs). `device_io_hub.ipc` re-exports the same names for the
 server side.
 ```
 

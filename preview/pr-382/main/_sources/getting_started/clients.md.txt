@@ -10,7 +10,7 @@ client.** This page covers the clients that ship under `client-samples/`, how
 to set up, build, and run each one, and the shared token-on-startup connect
 flow they all use.
 
-For the server side — starting the XR-Media-Hub and the agent samples — refer to
+For the server side — starting the DeviceIOHub and the agent samples — refer to
 {doc}`quickstart`.
 
 ## Which clients exist
@@ -299,7 +299,7 @@ sample's README for the test matrix and the current backend constraints.
 
 ## Adding a client for a new platform
 
-The XR-Media-Hub speaks standard LiveKit, so you are not limited to the bundled clients.
+The DeviceIOHub speaks standard LiveKit, so you are not limited to the bundled clients.
 If [LiveKit publishes a client SDK](https://docs.livekit.io/reference/) for your
 platform — Unity, Flutter, React Native, Rust, Go, and others — you can build a
 client for it against the same contract the existing samples use:

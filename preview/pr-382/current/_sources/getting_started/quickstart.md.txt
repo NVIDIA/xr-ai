@@ -120,7 +120,7 @@ free the VRAM with `cd agent-samples/model-servers && uv run model_servers
 uv run simple_vlm_example
 ```
 
-The XR-Media-Hub, VLM, STT, and TTS start together (or reuse running services).
+The DeviceIOHub, VLM, STT, and TTS start together (or reuse running services).
 Worker readiness includes a short 1280x720 streaming VLM warmup.
 The hub prints:
 
@@ -202,8 +202,8 @@ it is not stored in YAML; the overlay only names the env var via
 `api_key_env: NGC_API_KEY`. Refer to the credentials and AI-services guides for
 full details (and self-hosted NIM containers).
 
-Each sample has its own `xr_media_hub.yaml` controlling the hub; refer to
-`services/xr-media-hub/xr_media_hub.yaml` for the full option list.
+Each sample has its own `device_io_hub.yaml` controlling the hub; refer to
+`services/device-io-hub/device_io_hub.yaml` for the full option list.
 
 ## Lab instrument monitoring (marker-associated readings + foreground voice)
 
@@ -362,10 +362,10 @@ launcher credential prompt, not in YAML). Refer to the AI-services guide.
 ## Hub only (standalone)
 
 ```bash
-cd services/xr-media-hub
+cd services/device-io-hub
 uv sync
-uv run xr_media_hub
+uv run device_io_hub
 ```
 
 Useful for development or when running an agent in a separate terminal. The
-XR-Media-Hub auto-discovers `services/xr-media-hub/xr_media_hub.yaml`.
+DeviceIOHub auto-discovers `services/device-io-hub/device_io_hub.yaml`.

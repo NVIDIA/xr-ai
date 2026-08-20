@@ -429,6 +429,26 @@ the generated page preserves those comments verbatim.</p>
 credentials, and deployment workflows remain in the handwritten guides.</p>
 <section id="config-lab-instrument-monitoring">
 <h2>lab-instrument-monitoring<a class="headerlink" href="#config-lab-instrument-monitoring" title="Link to this heading">#</a></h2>
+<section id="config-lab-instrument-monitoring-yaml-device-io-hub-yaml">
+<h3>yaml/device_io_hub.yaml<a class="headerlink" href="#config-lab-instrument-monitoring-yaml-device-io-hub-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="nt">api_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">devkey</span>
+<span class="nt">api_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">devsecret-xr-livekit-prototype-2026</span>
+<span class="nt">room_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xr-room</span>
+
+<span class="nt">lk_port_ws</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7880</span>
+<span class="nt">lk_port_tcp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7881</span>
+<span class="nt">lk_port_udp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7882</span>
+
+<span class="nt">enable_web_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">web_server_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="nt">web_client_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../client-samples/web</span>
+<span class="nt">enable_token_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+</section>
 <section id="config-lab-instrument-monitoring-yaml-device-map-yaml">
 <h3>yaml/device_map.yaml<a class="headerlink" href="#config-lab-instrument-monitoring-yaml-device-map-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
@@ -571,26 +591,6 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hey agent</span>
 <span class="nt">listening_chime</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">followup_grace_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
-</pre></div>
-</div>
-</section>
-<section id="config-lab-instrument-monitoring-yaml-xr-media-hub-yaml">
-<h3>yaml/xr_media_hub.yaml<a class="headerlink" href="#config-lab-instrument-monitoring-yaml-xr-media-hub-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="nt">api_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">devkey</span>
-<span class="nt">api_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">devsecret-xr-livekit-prototype-2026</span>
-<span class="nt">room_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xr-room</span>
-
-<span class="nt">lk_port_ws</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7880</span>
-<span class="nt">lk_port_tcp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7881</span>
-<span class="nt">lk_port_udp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7882</span>
-
-<span class="nt">enable_web_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="nt">web_server_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
-<span class="nt">web_client_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../client-samples/web</span>
-<span class="nt">enable_token_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
 </section>
@@ -1465,6 +1465,43 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 </section>
 <section id="config-simple-vlm-example">
 <h2>simple-vlm-example<a class="headerlink" href="#config-simple-vlm-example" title="Link to this heading">#</a></h2>
+<section id="config-simple-vlm-example-yaml-device-io-hub-yaml">
+<h3>yaml/device_io_hub.yaml<a class="headerlink" href="#config-simple-vlm-example-yaml-device-io-hub-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># DeviceIOHub configuration for the vlm-agent sample.</span>
+<span class="c1"># Paths are relative to this file's directory.</span>
+<span class="c1"># See services/device-io-hub/device_io_hub.yaml for all available options.</span>
+
+<span class="c1"># ── LiveKit server ────────────────────────────────────────────────────────────</span>
+<span class="c1"># Development-only placeholders. Replace both values outside local samples.</span>
+<span class="nt">api_key</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">devkey</span>
+<span class="nt">api_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">devsecret-xr-livekit-prototype-2026</span>
+<span class="nt">room_name</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">xr-room</span>
+
+<span class="nt">lk_port_ws</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">7880</span>
+<span class="nt">lk_port_tcp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7881</span>
+<span class="nt">lk_port_udp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7882</span>
+
+<span class="c1"># Cloud VMs behind NAT may need STUN-based public-IP discovery. Also skip</span>
+<span class="c1"># validation when the NAT does not support LiveKit's public-IP self-ping.</span>
+<span class="c1"># lk_use_external_ip: true</span>
+<span class="c1"># lk_skip_external_ip_validation: true</span>
+
+<span class="c1"># ── Web client server ─────────────────────────────────────────────────────────</span>
+<span class="nt">enable_web_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">web_server_port</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="nt">web_client_dir</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">../../../client-samples/web</span>
+
+<span class="c1"># ── Optional: token server ────────────────────────────────────────────────────</span>
+<span class="nt">enable_token_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="c1"># Change if another service holds port 8000 (e.g. iphlpsvc under WSL2 mirrored</span>
+<span class="c1"># networking; see the note in services/device-io-hub/device_io_hub.yaml).</span>
+<span class="c1"># token_server_port: 8000</span>
+</pre></div>
+</div>
+</section>
 <section id="config-simple-vlm-example-yaml-models-hosted-json">
 <h3>yaml/models.hosted.json<a class="headerlink" href="#config-simple-vlm-example-yaml-models-hosted-json" title="Link to this heading">#</a></h3>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
@@ -1798,43 +1835,6 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="c1"># bypasses the gate so "hey agent" → pause → "what am I looking at?"</span>
 <span class="c1"># works as one natural interaction. Set to 0 to disable.</span>
 <span class="nt">followup_grace_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
-</pre></div>
-</div>
-</section>
-<section id="config-simple-vlm-example-yaml-xr-media-hub-yaml">
-<h3>yaml/xr_media_hub.yaml<a class="headerlink" href="#config-simple-vlm-example-yaml-xr-media-hub-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># XR Media Hub configuration for the vlm-agent sample.</span>
-<span class="c1"># Paths are relative to this file's directory.</span>
-<span class="c1"># See services/xr-media-hub/xr_media_hub.yaml for all available options.</span>
-
-<span class="c1"># ── LiveKit server ────────────────────────────────────────────────────────────</span>
-<span class="c1"># Development-only placeholders. Replace both values outside local samples.</span>
-<span class="nt">api_key</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">devkey</span>
-<span class="nt">api_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">devsecret-xr-livekit-prototype-2026</span>
-<span class="nt">room_name</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">xr-room</span>
-
-<span class="nt">lk_port_ws</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">7880</span>
-<span class="nt">lk_port_tcp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7881</span>
-<span class="nt">lk_port_udp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7882</span>
-
-<span class="c1"># Cloud VMs behind NAT may need STUN-based public-IP discovery. Also skip</span>
-<span class="c1"># validation when the NAT does not support LiveKit's public-IP self-ping.</span>
-<span class="c1"># lk_use_external_ip: true</span>
-<span class="c1"># lk_skip_external_ip_validation: true</span>
-
-<span class="c1"># ── Web client server ─────────────────────────────────────────────────────────</span>
-<span class="nt">enable_web_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="nt">web_server_port</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
-<span class="nt">web_client_dir</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">../../../client-samples/web</span>
-
-<span class="c1"># ── Optional: token server ────────────────────────────────────────────────────</span>
-<span class="nt">enable_token_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="c1"># Change if another service holds port 8000 (e.g. iphlpsvc under WSL2 mirrored</span>
-<span class="c1"># networking; see the note in services/xr-media-hub/xr_media_hub.yaml).</span>
-<span class="c1"># token_server_port: 8000</span>
 </pre></div>
 </div>
 </section>
@@ -2316,6 +2316,53 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 </pre></div>
 </div>
 </section>
+<section id="config-xr-render-demo-yaml-device-io-hub-yaml">
+<h3>yaml/device_io_hub.yaml<a class="headerlink" href="#config-xr-render-demo-yaml-device-io-hub-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># DeviceIOHub configuration for the xr-render-demo sample.</span>
+<span class="c1"># Paths are relative to this file's directory.</span>
+<span class="c1"># See services/device-io-hub/device_io_hub.yaml for all available options.</span>
+
+<span class="c1"># ── LiveKit server ────────────────────────────────────────────────────────────</span>
+<span class="c1"># Development-only placeholders. Replace both values outside local samples.</span>
+<span class="nt">api_key</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">devkey</span>
+<span class="nt">api_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">devsecret-xr-livekit-prototype-2026</span>
+<span class="nt">room_name</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">xr-room</span>
+
+<span class="nt">lk_port_ws</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">7880</span>
+<span class="nt">lk_port_tcp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7881</span>
+<span class="nt">lk_port_udp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7882</span>
+
+<span class="c1"># Cloud VMs behind NAT may need STUN-based public-IP discovery. Also skip</span>
+<span class="c1"># validation when the NAT does not support LiveKit's public-IP self-ping.</span>
+<span class="c1"># lk_use_external_ip: true</span>
+<span class="c1"># lk_skip_external_ip_validation: true</span>
+
+<span class="c1"># ── Web client server ─────────────────────────────────────────────────────────</span>
+<span class="c1"># The page serves both stacks: LiveKit (agent audio/data over the WSS proxy on</span>
+<span class="c1"># this port) AND CloudXR (one-tap Launch XR → WebXR over wss://&lt;host&gt;:48322).</span>
+<span class="c1"># Because both live in the same JS context, entering XR does not drop the</span>
+<span class="c1"># agent connection.</span>
+<span class="nt">enable_web_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">web_server_port</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="nt">web_client_dir</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">../../../client-samples/web-xr</span>
+
+<span class="c1"># ── Optional: token server ────────────────────────────────────────────────────</span>
+<span class="nt">enable_token_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="c1"># Change if another service holds port 8000 (e.g. iphlpsvc under WSL2 mirrored</span>
+<span class="c1"># networking; see the note in services/device-io-hub/device_io_hub.yaml).</span>
+<span class="c1"># token_server_port: 8000</span>
+
+<span class="c1"># ── Video recording ──────────────────────────────────────────────────────────</span>
+<span class="c1"># Disabled: xr-render-demo obtains current frames through LiveFrameSource.</span>
+<span class="c1"># Enable this and set recordings_dir in video_memory_service.yaml for history.</span>
+<span class="nt">video_recording</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</pre></div>
+</div>
+</section>
 <section id="config-xr-render-demo-yaml-models-hosted-json">
 <h3>yaml/models.hosted.json<a class="headerlink" href="#config-xr-render-demo-yaml-models-hosted-json" title="Link to this heading">#</a></h3>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
@@ -2657,53 +2704,6 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 </pre></div>
 </div>
 </section>
-<section id="config-xr-render-demo-yaml-xr-media-hub-yaml">
-<h3>yaml/xr_media_hub.yaml<a class="headerlink" href="#config-xr-render-demo-yaml-xr-media-hub-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># XR Media Hub configuration for the xr-render-demo sample.</span>
-<span class="c1"># Paths are relative to this file's directory.</span>
-<span class="c1"># See services/xr-media-hub/xr_media_hub.yaml for all available options.</span>
-
-<span class="c1"># ── LiveKit server ────────────────────────────────────────────────────────────</span>
-<span class="c1"># Development-only placeholders. Replace both values outside local samples.</span>
-<span class="nt">api_key</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">devkey</span>
-<span class="nt">api_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">devsecret-xr-livekit-prototype-2026</span>
-<span class="nt">room_name</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">xr-room</span>
-
-<span class="nt">lk_port_ws</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">7880</span>
-<span class="nt">lk_port_tcp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7881</span>
-<span class="nt">lk_port_udp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7882</span>
-
-<span class="c1"># Cloud VMs behind NAT may need STUN-based public-IP discovery. Also skip</span>
-<span class="c1"># validation when the NAT does not support LiveKit's public-IP self-ping.</span>
-<span class="c1"># lk_use_external_ip: true</span>
-<span class="c1"># lk_skip_external_ip_validation: true</span>
-
-<span class="c1"># ── Web client server ─────────────────────────────────────────────────────────</span>
-<span class="c1"># The page serves both stacks: LiveKit (agent audio/data over the WSS proxy on</span>
-<span class="c1"># this port) AND CloudXR (one-tap Launch XR → WebXR over wss://&lt;host&gt;:48322).</span>
-<span class="c1"># Because both live in the same JS context, entering XR does not drop the</span>
-<span class="c1"># agent connection.</span>
-<span class="nt">enable_web_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="nt">web_server_port</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
-<span class="nt">web_client_dir</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">../../../client-samples/web-xr</span>
-
-<span class="c1"># ── Optional: token server ────────────────────────────────────────────────────</span>
-<span class="nt">enable_token_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="c1"># Change if another service holds port 8000 (e.g. iphlpsvc under WSL2 mirrored</span>
-<span class="c1"># networking; see the note in services/xr-media-hub/xr_media_hub.yaml).</span>
-<span class="c1"># token_server_port: 8000</span>
-
-<span class="c1"># ── Video recording ──────────────────────────────────────────────────────────</span>
-<span class="c1"># Disabled: xr-render-demo obtains current frames through LiveFrameSource.</span>
-<span class="c1"># Enable this and set recordings_dir in video_memory_service.yaml for history.</span>
-<span class="nt">video_recording</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-</pre></div>
-</div>
-</section>
 <section id="config-xr-render-demo-yaml-xr-render-demo-worker-yaml">
 <h3>yaml/xr_render_demo_worker.yaml<a class="headerlink" href="#config-xr-render-demo-yaml-xr-render-demo-worker-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
@@ -2824,13 +2824,13 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-lab-instrument-monitoring">lab-instrument-monitoring</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-lab-instrument-monitoring-yaml-device-io-hub-yaml">yaml/device_io_hub.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-lab-instrument-monitoring-yaml-device-map-yaml">yaml/device_map.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-lab-instrument-monitoring-yaml-lab-instrument-monitoring-worker-yaml">yaml/lab_instrument_monitoring_worker.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-lab-instrument-monitoring-yaml-models-local-json">yaml/models.local.json</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-lab-instrument-monitoring-yaml-models-omni-json">yaml/models.omni.json</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-lab-instrument-monitoring-yaml-piper-tts-server-yaml">yaml/piper_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-lab-instrument-monitoring-yaml-voice-gate-yaml">yaml/voice_gate.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-lab-instrument-monitoring-yaml-xr-media-hub-yaml">yaml/xr_media_hub.yaml</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers">model-servers</a><ul class="nav section-nav flex-column">
@@ -2865,6 +2865,7 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example">simple-vlm-example</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-device-io-hub-yaml">yaml/device_io_hub.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-models-hosted-json">yaml/models.hosted.json</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-models-local-json">yaml/models.local.json</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-models-omni-json">yaml/models.omni.json</a></li>
@@ -2875,7 +2876,6 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-stt-server-yaml">yaml/stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-vlm-server-yaml">yaml/vlm_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-voice-gate-yaml">yaml/voice_gate.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-xr-media-hub-yaml">yaml/xr_media_hub.yaml</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample">tea-making-sample</a><ul class="nav section-nav flex-column">
@@ -2893,6 +2893,7 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo">xr-render-demo</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-scene-scene-service-yaml">scene/scene_service.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-cloudxr-runtime-yaml">yaml/cloudxr_runtime.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-device-io-hub-yaml">yaml/device_io_hub.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-models-hosted-json">yaml/models.hosted.json</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-models-local-json">yaml/models.local.json</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-models-vlm-llm-nim-json">yaml/models.vlm_llm_nim.json</a></li>
@@ -2901,7 +2902,6 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-stt-server-yaml">yaml/stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-video-memory-service-yaml">yaml/video_memory_service.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-voice-gate-yaml">yaml/voice_gate.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-xr-media-hub-yaml">yaml/xr_media_hub.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-xr-render-demo-worker-yaml">yaml/xr_render_demo_worker.yaml</a></li>
 </ul>
 </li>

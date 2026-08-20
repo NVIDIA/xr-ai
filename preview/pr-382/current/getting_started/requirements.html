@@ -431,7 +431,7 @@ can run on other NVIDIA GPUs by tuning the per-server GPU-memory split. Refer to
 <a class="reference internal" href="#running-on-other-gpus">Running on other GPUs</a> below.</p>
 <p>If you prefer not to run models on local hardware, model endpoints are plain
 URLs: point the worker configuration at a cloud NIM or model endpoint and no
-local GPU is required for the agent or XR-Media-Hub.</p>
+local GPU is required for the agent or DeviceIOHub.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Sample</p></th>
@@ -562,7 +562,7 @@ whitelisting the exact origin in
 was not exercised in the report.</p></li>
 <li><p><strong>Mirrored networking collides with the token server</strong>: Windows’ IP Helper
 service occupies port 8000. Refer to the <code class="docutils literal notranslate"><span class="pre">token_server_port</span></code> note in
-<code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/xr_media_hub.yaml</span></code>.</p></li>
+<code class="docutils literal notranslate"><span class="pre">services/device-io-hub/device_io_hub.yaml</span></code>.</p></li>
 </ul>
 </section>
 <section id="running-on-other-gpus">

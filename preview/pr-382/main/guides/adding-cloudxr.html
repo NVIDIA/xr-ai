@@ -451,7 +451,7 @@ orchestrator pattern, refer to <a class="reference internal" href="adding-a-samp
 <section id="add-the-process-to-the-orchestrator">
 <h2>1 — Add the process to the orchestrator<a class="headerlink" href="#add-the-process-to-the-orchestrator" title="Link to this heading">#</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>     <span class="s2">"../../services/xr-media-hub"</span><span class="p">,</span>  <span class="s2">"xr_media_hub"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>     <span class="s2">"../../services/device-io-hub"</span><span class="p">,</span>  <span class="s2">"device_io_hub"</span><span class="p">),</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"cloudxr"</span><span class="p">,</span> <span class="s2">"../../services/cloudxr-runtime"</span><span class="p">,</span> <span class="s2">"cloudxr_runtime"</span><span class="p">),</span>  <span class="c1"># ← add this</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span>  <span class="s2">"worker"</span><span class="p">,</span>                <span class="s2">"my_agent_worker"</span><span class="p">),</span>
 <span class="p">]</span>
@@ -514,7 +514,7 @@ are also accepted when their fixed device defaults are preferred.</p>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading">#</a></h2>
 <ul>
-<li><p>CloudXR and the XR-Media-Hub are <strong>independent stacks</strong>. CloudXR streams
+<li><p>CloudXR and the DeviceIOHub are <strong>independent stacks</strong>. CloudXR streams
 simulation and render content through the transport selected by the device
 profile; the hub handles agent media via LiveKit. They share no ports.</p></li>
 <li><p>The <code class="docutils literal notranslate"><span class="pre">auto-webrtc</span></code> profile starts a WSS proxy on port 48322 for WebRTC

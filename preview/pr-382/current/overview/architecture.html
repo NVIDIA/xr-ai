@@ -422,7 +422,7 @@
 -->
 <section id="architecture">
 <h1>Architecture<a class="headerlink" href="#architecture" title="Link to this heading">#</a></h1>
-<p>This page explains how XR-Media-Hub, the transport, and agents fit together.</p>
+<p>This page explains how DeviceIOHub, the transport, and agents fit together.</p>
 <section id="top-level-layout">
 <h2>Top-level layout<a class="headerlink" href="#top-level-layout" title="Link to this heading">#</a></h2>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">client</span><span class="o">-</span><span class="n">samples</span><span class="o">/</span>     <span class="c1"># Platform clients (Android, iOS/visionOS, Web)</span>
@@ -441,7 +441,7 @@
 <li><p><strong>One hub, many clients, many agents.</strong> A single hub instance fans the
 inbound stream out to every connected <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> (agent) and
 routes return traffic back to the originating client only — never to peers.</p></li>
-<li><p><strong>XR-Media-Hub</strong> is transport-agnostic at its IPC boundary. Agents connect
+<li><p><strong>DeviceIOHub</strong> is transport-agnostic at its IPC boundary. Agents connect
 via IPC only.</p></li>
 <li><p><strong>LiveKit</strong> is an internal transport detail — not exposed to the agent layer.
 When LiveKit is the transport, return audio is published as one track per
@@ -454,13 +454,13 @@ or uvicorn.</p></li>
 <li><p><strong>Native agents compose typed tools in process.</strong> Service-backed tools call
 typed capability services, while deterministic tools run locally.</p></li>
 <li><p><strong>No API keys or tokens in source files</strong> — use environment variables or
-<code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> (refer to <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>).</p></li>
+<code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> (refer to <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>).</p></li>
 </ul>
 <p>Refer to <a class="reference internal" href="../components/server-runtime.html"><span class="doc">Server runtime</span></a> for more on the hub and transport.</p>
 </section>
 <section id="multi-user-sessions">
 <h2>Multi-user sessions<a class="headerlink" href="#multi-user-sessions" title="Link to this heading">#</a></h2>
-<p>A single XR-Media-Hub session can carry several participants at once, each fully
+<p>A single DeviceIOHub session can carry several participants at once, each fully
 isolated. The hub is not a routing switch between participants: media and data
 flow only between a participant and the agent, never from one participant to
 another. The supported path is always:</p>
@@ -484,9 +484,9 @@ enforcement details.</p>
 </section>
 <section id="hub-configuration">
 <h2>Hub configuration<a class="headerlink" href="#hub-configuration" title="Link to this heading">#</a></h2>
-<p>Each sample provides its own <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> in its <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory
-(e.g. <code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/yaml/xr_media_hub.yaml</span></code>).
-<code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/</span></code> also contains a reference copy documenting all available
+<p>Each sample provides its own <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> in its <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory
+(e.g. <code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/yaml/device_io_hub.yaml</span></code>).
+<code class="docutils literal notranslate"><span class="pre">services/device-io-hub/</span></code> also contains a reference copy documenting all available
 fields.</p>
 <p>Paths inside the YAML (e.g. <code class="docutils literal notranslate"><span class="pre">web_client_dir</span></code>) resolve relative to the YAML
 file’s own directory, not CWD. <code class="docutils literal notranslate"><span class="pre">HubLauncher</span></code> finds the YAML automatically by

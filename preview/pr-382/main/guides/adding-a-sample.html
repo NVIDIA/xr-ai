@@ -508,7 +508,7 @@ entry point.</p>
 ├── pyproject.toml                  ← orchestrator project
 ├── main.py                         ← orchestrator (declare PROCESSES, call run_stack)
 ├── yaml/                           ← all YAML configs for this sample
-│   ├── xr_media_hub.yaml
+│   ├── device_io_hub.yaml
 │   ├── &lt;command&gt;.yaml              ← one per launchable process
 │   ├── models.local.json           ← adapter, endpoint, and deployment specs
 │   └── …
@@ -623,7 +623,7 @@ packages = ["&lt;snake_name&gt;_worker"]
 <span class="n">_BASE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span>
 
 <span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/xr-media-hub"</span><span class="p">,</span> <span class="s2">"xr_media_hub"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/device-io-hub"</span><span class="p">,</span> <span class="s2">"device_io_hub"</span><span class="p">),</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span>               <span class="s2">"&lt;snake_name&gt;_worker"</span><span class="p">),</span>
 <span class="p">]</span>
 
