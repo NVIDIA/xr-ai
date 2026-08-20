@@ -6,3 +6,48 @@ plugins {
     alias(libs.plugins.kotlin.android) apply false
     alias(libs.plugins.kotlin.compose) apply false
 }
+
+// AGP's UTP test tooling pulls io.netty 4.1.93.Final (via grpc-netty), which has known
+// CVEs; lift anything older to the pinned version. Buildscript and project configurations
+// resolve separately, so both need the rule.
+val nettyPin = libs.versions.netty.get()
+val nettyPinParts = nettyPin.split('.').mapNotNull { it.toIntOrNull() }
+
+fun belowNettyPin(version: String): Boolean {
+    if (!version.startsWith("4.")) return false
+    val parts = version.split('.').mapNotNull { it.toIntOrNull() }
+    nettyPinParts.forEachIndexed { i, pin ->
+        val requested = parts.getOrElse(i) { 0 }
+        if (requested != pin) return requested < pin
+    }
+    return false
+}
+
+fun Configuration.forceNettyVersion() = resolutionStrategy.eachDependency {
+    if (requested.group == "io.netty" && belowNettyPin(requested.version.orEmpty())) {
+        useVersion(nettyPin)
+    }
+}
+
+allprojects {
+    buildscript.configurations.configureEach { forceNettyVersion() }
+    configurations.configureEach { forceNettyVersion() }
+}
+
+// CI runs this so the lift fails loudly if a Gradle or AGP change stops it applying.
+tasks.register("verifyNettyPin") {
+    doLast {
+        val offenders = allprojects.flatMap { p ->
+            (p.buildscript.configurations.toList() +
+                p.configurations.filter { it.name.contains("unified-test-platform") })
+                .filter { it.isCanBeResolved }
+                .flatMap { c ->
+                    runCatching { c.resolvedConfiguration.lenientConfiguration.allModuleDependencies }
+                        .getOrDefault(emptySet())
+                        .filter { it.moduleGroup == "io.netty" && belowNettyPin(it.moduleVersion) }
+                        .map { "${c.name}: ${it.moduleGroup}:${it.moduleName}:${it.moduleVersion}" }
+                }
+        }
+        check(offenders.isEmpty()) { "io.netty below $nettyPin:\n" + offenders.joinToString("\n") }
+    }
+}
