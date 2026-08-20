@@ -78,7 +78,7 @@ Wire your own agent worker into the stack.
 :hidden:
 :maxdepth: 2
 
-overview/index
+overview/architecture
 getting_started/index
 components/index
 guides/index
