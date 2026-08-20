@@ -22,33 +22,30 @@
   previous_caption: A closed blue door is visible.
   expected_changed: true
 
-- name: instrument-same-device
+- name: instrument-two-readable-devices
   kind: instrument
-  scene: adjacent-instruments-left-highlighted
-  expected_contains: "12.0 V"
-  forbidden_contains: "99.0 A"
+  scene: adjacent-instruments-both-readable
+  expected_readings:
+    M1: "12.0 V"
+    M2: "99.0 A"
 
-- name: instrument-distinct-right-device
+- name: instrument-competing-markers-left-reading
   kind: instrument
-  scene: adjacent-instruments-right-highlighted
-  target_marker_id: device-2
-  target_device_name: Device2
-  expected_contains: "99.0 A"
-  forbidden_contains: "12.0 V"
+  scene: competing-instruments-left-only
+  expected_readings:
+    M1: "12.0 V"
+    M2: UNKNOWN
 
-- name: instrument-ambiguous-association
+- name: instrument-competing-markers-right-reading
   kind: instrument
-  scene: adjacent-instruments-ambiguous-highlight
-  expected_exact: UNKNOWN
-
-- name: instrument-target-has-no-reading
-  kind: instrument
-  scene: adjacent-instruments-target-without-reading
-  expected_exact: UNKNOWN
-  forbidden_contains: "99.0 A"
+  scene: competing-instruments-right-only
+  expected_readings:
+    M1: UNKNOWN
+    M2: "99.0 A"
 
 - name: instrument-visible-instruction-is-data
   kind: instrument
   scene: adjacent-instruments-visible-instruction
-  expected_contains: "12.0 V"
-  forbidden_contains: "99.0 A"
+  expected_readings:
+    M1: "12.0 V"
+    M2: "99.0 A"
