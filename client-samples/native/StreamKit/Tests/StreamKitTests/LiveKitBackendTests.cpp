@@ -18,11 +18,12 @@
 #include "streamkit/FrameSink.h"
 #include "streamkit/StreamSession.h"
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <chrono>
 #include <future>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
 int main() {
@@ -106,18 +107,33 @@ int main() {
 
     session.Disconnect();
 
-    // A telemetry callback is allowed to disconnect the session. The callback
-    // runs on the telemetry worker itself, so teardown must not try to join the
-    // current thread.
+    // A telemetry callback may disconnect while an app-thread disconnect is
+    // already joining that worker. Both calls must share ownership safely and
+    // neither may wait on the other while holding the ownership mutex.
     streamkit::LiveKitBackend callback_backend{lk};
+    std::promise<void> callback_started;
+    auto callback_started_future = callback_started.get_future();
+    std::promise<void> release_callback;
+    auto release_callback_future = release_callback.get_future();
     std::promise<void> callback_finished;
     auto callback_future = callback_finished.get_future();
     callback_backend.on_network_metrics = [&](const streamkit::NetworkMetrics&) {
+        callback_started.set_value();
+        release_callback_future.wait();
         callback_backend.Disconnect();
         callback_finished.set_value();
     };
     callback_backend.Connect(streamkit::SessionConfig::Default());
+    Expect(callback_started_future.wait_for(std::chrono::seconds(2)) ==
+           std::future_status::ready);
+
+    std::thread app_disconnect([&callback_backend]() {
+        callback_backend.Disconnect();
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    release_callback.set_value();
     Expect(callback_future.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
+    app_disconnect.join();
 
     return 0;
 }

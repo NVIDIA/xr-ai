@@ -196,6 +196,10 @@ private:
     std::atomic<bool> audio_armed_{false};
     std::atomic<ConnectionState> last_fired_state_{ConnectionState::kDisconnected};
     std::atomic<NetworkQuality> network_quality_{NetworkQuality::kUnknown};
+    // Protects ownership changes to the stop flag and std::thread. Joining is
+    // deliberately performed after releasing this mutex so a worker callback
+    // can make an overlapping Disconnect() call without deadlocking.
+    std::mutex network_metrics_mutex_;
     std::shared_ptr<std::atomic<bool>> network_metrics_stop_;
     std::thread network_metrics_thread_;
 

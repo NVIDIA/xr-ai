@@ -562,7 +562,6 @@ void LiveKitBackend::HandleNetworkQualityChange(int lk_quality) {
 void LiveKitBackend::StartNetworkMetricsReporting() {
     StopNetworkMetricsReporting();
     auto stop = std::make_shared<std::atomic<bool>>(false);
-    network_metrics_stop_ = stop;
     std::promise<void> assigned;
     auto assigned_future = assigned.get_future();
     std::thread worker([this, stop, assigned = std::move(assigned_future)]() mutable {
@@ -581,22 +580,42 @@ void LiveKitBackend::StartNetworkMetricsReporting() {
             }
         }
     });
-    network_metrics_thread_ = std::move(worker);
+    bool installed = false;
+    {
+        std::lock_guard<std::mutex> lock(network_metrics_mutex_);
+        if (is_connected_.load()) {
+            network_metrics_stop_ = stop;
+            network_metrics_thread_ = std::move(worker);
+            installed = true;
+        } else {
+            stop->store(true);
+        }
+    }
     assigned.set_value();
+    if (!installed) {
+        worker.join();
+    }
 }
 
 void LiveKitBackend::StopNetworkMetricsReporting() {
-    if (network_metrics_stop_) {
-        network_metrics_stop_->store(true);
-    }
-    if (network_metrics_thread_.joinable()) {
-        if (network_metrics_thread_.get_id() == std::this_thread::get_id()) {
-            network_metrics_thread_.detach();
-        } else {
-            network_metrics_thread_.join();
+    std::thread worker_to_join;
+    {
+        std::lock_guard<std::mutex> lock(network_metrics_mutex_);
+        if (network_metrics_stop_) {
+            network_metrics_stop_->store(true);
         }
+        if (network_metrics_thread_.joinable()) {
+            if (network_metrics_thread_.get_id() == std::this_thread::get_id()) {
+                network_metrics_thread_.detach();
+            } else {
+                worker_to_join = std::move(network_metrics_thread_);
+            }
+        }
+        network_metrics_stop_.reset();
     }
-    network_metrics_stop_.reset();
+    if (worker_to_join.joinable()) {
+        worker_to_join.join();
+    }
 }
 
 void LiveKitBackend::PublishNetworkMetrics() {
