@@ -39,6 +39,14 @@ Attributes
    xr_ai_launcher.XR_RUNTIME_VAR
 
 
+Exceptions
+----------
+
+.. autoapisummary::
+
+   xr_ai_launcher.GPUInventoryError
+
+
 Classes
 -------
 
@@ -144,17 +152,19 @@ Package Contents
    token is visible early without blocking startup on an interactive prompt.
 
 
+.. py:exception:: GPUInventoryError
+
+
+
+   Raised when visible GPUs cannot be inventoried or safely classified.
+
+
 .. py:function:: detect_gpu_config() -> str
 
-   Return the GPU config profile by querying nvidia-smi.
+   Select an existing config only when the complete topology is supported.
 
-   Profiles
-   --------
-   dual_48G_ada   — 2× ADA 48 GB (default / current dev box)
-   spark          — 1× Blackwell GB10 (DGX Spark; ~96 GiB GPU-visible HBM)
-   96G_blackwell  — 1× Blackwell ~96 GB
-
-   Falls back to ``dual_48G_ada`` on any detection failure.
+   This compatibility bridge remains until capability-based service planning
+   replaces named config selection. It deliberately has no fallback.
 
 
 .. py:class:: ModelDeployment
