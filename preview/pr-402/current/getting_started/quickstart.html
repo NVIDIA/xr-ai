@@ -461,9 +461,13 @@ uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>model_servers
 </pre></div>
 </div>
-<p>GPU profiles are auto-detected (<code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, <code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>). These
-are presets for common configurations; to run on a different GPU, refer to
+<p>GPU profiles are auto-detected (<code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, <code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>). The
+profiles are presets for common configurations; to run on a different GPU, refer to
 <a class="reference internal" href="requirements.html"><span class="doc">Running on other GPUs</span></a>.
+Detection inventories every visible device. If <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code> fails, returns
+malformed data, or reports a topology without an existing model-server
+configuration, startup stops with the detected per-GPU capacity instead of
+assuming a fallback.
 On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.</p>
 <p>Which servers start is a deployment profile selected with
@@ -548,10 +552,10 @@ automatically. Click <strong>Connect</strong>.</p>
 a moment, and you hear the reply through your speakers.</p>
 <p><strong>Local model</strong> — on a standalone system smaller than the shared model-server
 profiles, override the model weights or GPU settings in
-<code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/yaml/vlm_server.yaml</span></code>. On two GPUs with at
-least 40 GiB each, or a Blackwell/Spark system with at least 80 GiB total, the
-sample instead uses <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/&lt;profile&gt;/vlm_server.yaml</span></code>
-so a compatible server can be reused without reloading its weights.</p>
+<code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/yaml/vlm_server.yaml</span></code>. When automatic GPU
+detection selects one of the supported model-server profiles, the sample uses
+<code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/&lt;profile&gt;/vlm_server.yaml</span></code> so a compatible
+server can be reused without reloading its weights.</p>
 <p>To use Cosmos-Reason1 instead, edit the VLM file selected for your hardware:
 set <code class="docutils literal notranslate"><span class="pre">model:</span> <span class="pre">nvidia/Cosmos-Reason1-7B</span></code>, remove the Cosmos3-only <code class="docutils literal notranslate"><span class="pre">hf_overrides</span></code>
 block, and select <code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code> as the VLM adapter preset in
