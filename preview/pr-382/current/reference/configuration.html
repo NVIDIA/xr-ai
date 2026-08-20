@@ -1841,6 +1841,26 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 </section>
 <section id="config-tea-making-sample">
 <h2>tea-making-sample<a class="headerlink" href="#config-tea-making-sample" title="Link to this heading">#</a></h2>
+<section id="config-tea-making-sample-yaml-device-io-hub-yaml">
+<h3>yaml/device_io_hub.yaml<a class="headerlink" href="#config-tea-making-sample-yaml-device-io-hub-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="nt">api_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">devkey</span>
+<span class="nt">api_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">devsecret-xr-livekit-prototype-2026</span>
+<span class="nt">room_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xr-room</span>
+
+<span class="nt">lk_port_ws</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7880</span>
+<span class="nt">lk_port_tcp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7881</span>
+<span class="nt">lk_port_udp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7882</span>
+
+<span class="nt">enable_web_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">web_server_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="nt">web_client_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../client-samples/web</span>
+<span class="nt">enable_token_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+</section>
 <section id="config-tea-making-sample-yaml-magpie-tts-server-yaml">
 <h3>yaml/magpie_tts_server.yaml<a class="headerlink" href="#config-tea-making-sample-yaml-magpie-tts-server-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
@@ -2237,26 +2257,6 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="w">      </span><span class="nt">enter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Steep for {{ steep_duration_s | duration }}.</span>
 <span class="w">      </span><span class="nt">complete</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Steeping is complete. Remove the tea, then say next to finish.</span>
 <span class="w">      </span><span class="nt">skip</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Timer skipped; remove the tea when it tastes right.</span>
-</pre></div>
-</div>
-</section>
-<section id="config-tea-making-sample-yaml-xr-media-hub-yaml">
-<h3>yaml/xr_media_hub.yaml<a class="headerlink" href="#config-tea-making-sample-yaml-xr-media-hub-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="nt">api_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">devkey</span>
-<span class="nt">api_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">devsecret-xr-livekit-prototype-2026</span>
-<span class="nt">room_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xr-room</span>
-
-<span class="nt">lk_port_ws</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7880</span>
-<span class="nt">lk_port_tcp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7881</span>
-<span class="nt">lk_port_udp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7882</span>
-
-<span class="nt">enable_web_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="nt">web_server_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
-<span class="nt">web_client_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../client-samples/web</span>
-<span class="nt">enable_token_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
 </section>
@@ -2879,6 +2879,7 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample">tea-making-sample</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-device-io-hub-yaml">yaml/device_io_hub.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-magpie-tts-server-yaml">yaml/magpie_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-models-local-json">yaml/models.local.json</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-piper-tts-server-yaml">yaml/piper_tts_server.yaml</a></li>
@@ -2887,7 +2888,6 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-voice-gate-always-on-yaml">yaml/voice_gate.always-on.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-voice-gate-yaml">yaml/voice_gate.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-workflow-yaml">yaml/workflow.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-xr-media-hub-yaml">yaml/xr_media_hub.yaml</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo">xr-render-demo</a><ul class="nav section-nav flex-column">
