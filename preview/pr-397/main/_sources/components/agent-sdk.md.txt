@@ -63,9 +63,11 @@ Applications with multiple speech producers may place
 `VoiceAggregationAgent` before `VoiceAgent`. Producers publish candidate
 finite or incremental responses to `voice.contribution`; the aggregator owns
 participant-scoped ordering, preserves a lone stream, coalesces simultaneous
-finite updates through the configured `LLMService`, holds an active response
-for a bounded, open-loop estimate of its spoken duration, and publishes only
-the result to `voice.output`. Pending work is capacity-bounded with a
+finite updates through the configured `LLMService`, publishes completed raw or
+rewritten text immediately, then reserves a bounded, open-loop estimate of its
+spoken duration only for scheduling subsequent speech. Consequently the
+client's completed-response data echo does not wait for playback pacing.
+Pending work is capacity-bounded with a
 priority-aware drop policy: routine work never displaces an alert, while a new
 alert replaces the oldest pending routine update or, if necessary, the oldest
 alert. Urgent output bypasses coalescing and rewriting, retains displaced
