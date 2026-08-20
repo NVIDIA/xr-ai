@@ -219,7 +219,9 @@ When `web_server_tls` is enabled (the default), the web server
 (`_web_server.py`) terminates TLS on `web_server_port` (8080 by default) and
 mounts a `/rtc` route that proxies LiveKit signaling bidirectionally to the
 internal `ws://127.0.0.1:7880` (`_lk_proxy.py`). A self-signed certificate is
-auto-generated on first run; supply `cert_file` and `key_file` to use your own.
+auto-generated on first run (SAN coverage and regeneration:
+[Networking](../getting_started/networking.md)); supply `cert_file` and
+`key_file` to use your own.
 The proxy forwards end-to-end headers so SDK authentication (such as the LiveKit
 Swift SDK's `Authorization: Bearer`) reaches the server, and handles both the
 versioned (`/rtc/v1`) and legacy (`/rtc`) signaling paths.

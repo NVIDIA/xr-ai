@@ -509,34 +509,31 @@ in the dependency chain of the processes it manages.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.read_config_scalar" title="xr_ai_launcher.read_config_scalar"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_config_scalar</span></code></a>(→ str)</p></td>
 <td><p>Read one scalar from a top-level YAML worker configuration.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.read_service_port" title="xr_ai_launcher.read_service_port"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_service_port</span></code></a>(→ int | None)</p></td>
-<td><p>Read a service's top-level HTTP port from its YAML configuration.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.ensure_credentials" title="xr_ai_launcher.ensure_credentials"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ensure_credentials</span></code></a>(→ None)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.ensure_credentials" title="xr_ai_launcher.ensure_credentials"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ensure_credentials</span></code></a>(→ None)</p></td>
 <td><p>Ensure each named token is available in os.environ.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.load_credentials" title="xr_ai_launcher.load_credentials"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_credentials</span></code></a>(→ None)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.load_credentials" title="xr_ai_launcher.load_credentials"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_credentials</span></code></a>(→ None)</p></td>
 <td><p>Inject saved credentials into os.environ.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.require_credentials" title="xr_ai_launcher.require_credentials"><code class="xref py py-obj docutils literal notranslate"><span class="pre">require_credentials</span></code></a>(→ None)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.require_credentials" title="xr_ai_launcher.require_credentials"><code class="xref py py-obj docutils literal notranslate"><span class="pre">require_credentials</span></code></a>(→ None)</p></td>
 <td><p>Exit non-zero unless each named token is available; NEVER prompts.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.warn_if_missing" title="xr_ai_launcher.warn_if_missing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">warn_if_missing</span></code></a>(→ None)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.warn_if_missing" title="xr_ai_launcher.warn_if_missing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">warn_if_missing</span></code></a>(→ None)</p></td>
 <td><p>Non-interactively surface missing optional tokens — NEVER prompts.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.detect_gpu_config" title="xr_ai_launcher.detect_gpu_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">detect_gpu_config</span></code></a>(→ str)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.detect_gpu_config" title="xr_ai_launcher.detect_gpu_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">detect_gpu_config</span></code></a>(→ str)</p></td>
 <td><p>Select an existing config only when the complete topology is supported.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.load_deployment_profile" title="xr_ai_launcher.load_deployment_profile"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_deployment_profile</span></code></a>(→ ModelDeployment)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.load_deployment_profile" title="xr_ai_launcher.load_deployment_profile"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_deployment_profile</span></code></a>(→ ModelDeployment)</p></td>
 <td><p>Load a JSON deployment profile directly (no worker YAML indirection).</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.load_model_deployment" title="xr_ai_launcher.load_model_deployment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_model_deployment</span></code></a>(→ ModelDeployment)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.load_model_deployment" title="xr_ai_launcher.load_model_deployment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_model_deployment</span></code></a>(→ ModelDeployment)</p></td>
 <td><p>Load the JSON profile selected by a YAML worker configuration.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.ManagedProcess" title="xr_ai_launcher.ManagedProcess"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ManagedProcess</span></code></a>(name, cmd[, cwd, env])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.ManagedProcess" title="xr_ai_launcher.ManagedProcess"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ManagedProcess</span></code></a>(name, cmd[, cwd, env])</p></td>
 <td><p>Run <em>cmd</em> as a subprocess and terminate it cleanly when the context exits.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.run_stack" title="xr_ai_launcher.run_stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_stack</span></code></a>(→ None)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.run_stack" title="xr_ai_launcher.run_stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_stack</span></code></a>(→ None)</p></td>
 <td><p>Start <em>processes</em> in declaration order, waiting for each item to signal</p></td>
 </tr>
 </tbody>
@@ -587,12 +584,6 @@ in the dependency chain of the processes it manages.</p>
 
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#xr_ai_launcher.read_config_scalar" title="Link to this definition">#</a></dt>
 <dd><p>Read one scalar from a top-level YAML worker configuration.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="xr_ai_launcher.read_service_port">
-<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">read_service_port</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_launcher.read_service_port" title="Link to this definition">#</a></dt>
-<dd><p>Read a service’s top-level HTTP port from its YAML configuration.</p>
 </dd></dl>
 
 <dl class="py function">
@@ -919,7 +910,6 @@ and <code class="docutils literal notranslate"><span class="pre">Process.config<
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.load_cloudxr_env"><code class="docutils literal notranslate"><span class="pre">load_cloudxr_env()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.read_device_profile"><code class="docutils literal notranslate"><span class="pre">read_device_profile()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.read_config_scalar"><code class="docutils literal notranslate"><span class="pre">read_config_scalar()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.read_service_port"><code class="docutils literal notranslate"><span class="pre">read_service_port()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.ensure_credentials"><code class="docutils literal notranslate"><span class="pre">ensure_credentials()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.load_credentials"><code class="docutils literal notranslate"><span class="pre">load_credentials()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.require_credentials"><code class="docutils literal notranslate"><span class="pre">require_credentials()</span></code></a></li>

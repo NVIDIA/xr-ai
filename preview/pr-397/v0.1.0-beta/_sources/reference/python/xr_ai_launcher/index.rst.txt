@@ -66,7 +66,6 @@ Functions
    xr_ai_launcher.load_cloudxr_env
    xr_ai_launcher.read_device_profile
    xr_ai_launcher.read_config_scalar
-   xr_ai_launcher.read_service_port
    xr_ai_launcher.ensure_credentials
    xr_ai_launcher.load_credentials
    xr_ai_launcher.require_credentials
@@ -111,11 +110,6 @@ Package Contents
 .. py:function:: read_config_scalar(path: pathlib.Path, key: str, default: str = '') -> str
 
    Read one scalar from a top-level YAML worker configuration.
-
-
-.. py:function:: read_service_port(path: pathlib.Path) -> int | None
-
-   Read a service's top-level HTTP port from its YAML configuration.
 
 
 .. py:function:: ensure_credentials(*names: str) -> None
