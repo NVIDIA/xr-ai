@@ -14,7 +14,7 @@ orchestrator pattern, refer to {doc}`adding-a-sample <adding-a-sample>`.
 
 ```python
 PROCESSES = [
-    Process("hub",     "../../services/xr-media-hub",  "xr_media_hub"),
+    Process("hub",     "../../services/device-io-hub",  "device_io_hub"),
     Process("cloudxr", "../../services/cloudxr-runtime", "cloudxr_runtime"),  # ← add this
     Process("worker",  "worker",                "my_agent_worker"),
 ]
@@ -60,7 +60,7 @@ are also accepted when their fixed device defaults are preferred.
 
 ## Notes
 
-- CloudXR and the XR-Media-Hub are **independent stacks**. CloudXR streams
+- CloudXR and the DeviceIOHub are **independent stacks**. CloudXR streams
   simulation and render content through the transport selected by the device
   profile; the hub handles agent media via LiveKit. They share no ports.
 - The `auto-webrtc` profile starts a WSS proxy on port 48322 for WebRTC

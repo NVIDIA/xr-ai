@@ -207,7 +207,7 @@ local install.
 ### Hub fails immediately with `RuntimeError: missing libnvcuvid.so / libnvidia-encode.so`
 
 **Cause:** NVDEC (`libnvcuvid.so`) and NVENC (`libnvidia-encode.so`) are
-required — the XR-Media-Hub refuses to start without them so it never silently falls
+required — the DeviceIOHub refuses to start without them so it never silently falls
 back to OpenH264, which is royalty-bearing.
 
 **Fix:**
@@ -246,7 +246,7 @@ silently dropped without 7882.
 
 **Cause:** a stale client build (or a hand-rolled configuration) is pointing at
 LiveKit's native 7880 instead of the same-origin `wss://<host>:8080/rtc`
-proxy the XR-Media-Hub exposes.
+proxy the DeviceIOHub exposes.
 
 **Fix:** rebuild against the current `client-samples/web` or `web-xr` —
 both auto-detect the page's protocol and use the wss proxy. If you're
@@ -272,7 +272,7 @@ validates against the system and user CA store, the same as iOS.
    automatically.
 
 Repeat for each hub host. Replace the auto-generated certificate with one from a
-public CA via `cert_file` or `key_file` in `xr_media_hub.yaml` for
+public CA via `cert_file` or `key_file` in `device_io_hub.yaml` for
 production.
 
 ### iOS and visionOS — connection fails with certificate-trust errors
@@ -308,7 +308,7 @@ local IPv4 addresses via a UDP-connect probe and auto-regenerates the
 certificate whenever the SAN is missing one (logged as `TLS: cached cert
 SAN is missing …; regenerating…`); just restart the hub and re-install the
 profile on the device. If the dialed address is not on any of the hub's
-interfaces, add it to `web_server_extra_sans` in `xr_media_hub.yaml` and
+interfaces, add it to `web_server_extra_sans` in `device_io_hub.yaml` and
 restart (see [Networking](../getting_started/networking.md)). To force
 regen explicitly, delete `~/.local/share/xr-ai/web-server.crt` and
 `web-server.key` before restarting.
@@ -316,11 +316,11 @@ regen explicitly, delete `~/.local/share/xr-ai/web-server.crt` and
 If the certificate is trusted (no `-1202`) but the room connection still fails
 with HTTP 401 / "no permissions to access the room", the hub's wss /rtc
 proxy is dropping the `Authorization: Bearer <token>` header the Swift
-SDK sends. Update to the latest XR-Media-Hub and restart; the proxy
+SDK sends. Update to the latest DeviceIOHub and restart; the proxy
 forwards the `Authorization` header on `/rtc/validate` and the WebSocket.
 
 Repeat the install step per hub host, or replace the auto-generated certificate
-with a public-CA certificate via `cert_file` or `key_file` in `xr_media_hub.yaml`
+with a public-CA certificate via `cert_file` or `key_file` in `device_io_hub.yaml`
 for production.
 
 ### Chrome — Immersive Web extension cannot be enabled
