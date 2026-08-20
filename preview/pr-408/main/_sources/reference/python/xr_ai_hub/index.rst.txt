@@ -560,7 +560,10 @@ Package Contents
       Raises
       ------
       RuntimeError
-          If the indicated slot is not ready for consumption.
+          If the indicated slot header is invalid or not ready for consumption.
+      ValueError
+          If the signal identifies an invalid slot or disagrees with the
+          canonical metadata stored in the slot header.
 
 
 

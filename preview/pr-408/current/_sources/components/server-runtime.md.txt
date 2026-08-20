@@ -182,7 +182,10 @@ and refreshes subscribe permissions so each participant may subscribe only to
 their own return track. Return data is sent with `destination_identities` set
 to the target participant, so it is never broadcast to peers. Return audio is
 paced into LiveKit at audio rate by a per-participant pipe, which a flush can
-drain to interrupt playback.
+drain to interrupt playback. Each participant's queued audio is independently
+bounded by `return_audio_max_buffer_s` (3 seconds by default); when a burst
+exceeds that duration, the oldest queued frames for that participant are
+dropped without affecting any other participant.
 
 ## Agent status aggregation
 

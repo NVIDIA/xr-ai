@@ -1062,7 +1062,10 @@ slot and must not be retained afterward.</p>
 <section id="id10">
 <h4>Raises<a class="headerlink" href="#id10" title="Link to this heading">#</a></h4>
 <dl class="simple">
-<dt>RuntimeError</dt><dd><p>If the indicated slot is not ready for consumption.</p>
+<dt>RuntimeError</dt><dd><p>If the indicated slot header is invalid or not ready for consumption.</p>
+</dd>
+<dt>ValueError</dt><dd><p>If the signal identifies an invalid slot or disagrees with the
+canonical metadata stored in the slot header.</p>
 </dd>
 </dl>
 </section>

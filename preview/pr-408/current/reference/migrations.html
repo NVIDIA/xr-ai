@@ -285,10 +285,7 @@
      aria-label="Table of Contents">
   <p class="bd-links__title" role="heading" aria-level="1">Table of Contents</p>
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
-<li class="toctree-l1 has-children"><a class="reference internal" href="../overview/index.html">Overview</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../overview/architecture.html">Architecture</a></li>
-</ul>
-</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../overview/architecture.html">Architecture</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../getting_started/index.html">Getting Started</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
@@ -428,6 +425,19 @@
 and command to <code class="docutils literal notranslate"><span class="pre">device_io_hub</span></code>. Rename <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> to
 <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">XR_MEDIA_HUB_NO_WEB_CLIENT</span></code> to
 <code class="docutils literal notranslate"><span class="pre">DEVICE_IO_HUB_NO_WEB_CLIENT</span></code>. The rename has no compatibility aliases.</p>
+</section>
+<section id="operator-visible-runtime-changes">
+<h2>Operator-visible runtime changes<a class="headerlink" href="#operator-visible-runtime-changes" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>DeviceIOHub no longer falls back to embedded LiveKit development credentials.
+Set <code class="docutils literal notranslate"><span class="pre">api_key</span></code> and <code class="docutils literal notranslate"><span class="pre">api_secret</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>, or inject
+<code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_SECRET</span></code> through the environment.</p></li>
+<li><p>Return-audio buffering is now bounded independently for each participant.
+<code class="docutils literal notranslate"><span class="pre">return_audio_max_buffer_s</span></code> defaults to 3 seconds; when a burst exceeds the
+configured duration, DeviceIOHub drops the oldest queued frames to bound
+playback latency and memory use. Increase the value for long-form playback,
+or decrease it for more latency-sensitive deployments.</p></li>
+</ul>
 </section>
 <section id="removed-sdk-compatibility-surfaces">
 <h2>Removed SDK compatibility surfaces<a class="headerlink" href="#removed-sdk-compatibility-surfaces" title="Link to this heading">#</a></h2>
@@ -572,6 +582,7 @@ reuse the ignored caches rather than downloading them again.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deviceiohub-rename">DeviceIOHub rename</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#operator-visible-runtime-changes">Operator-visible runtime changes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#removed-sdk-compatibility-surfaces">Removed SDK compatibility surfaces</a></li>
 </ul>
   </nav></div>
