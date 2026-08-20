@@ -82,6 +82,7 @@ class VideoLogRecord(_Event):
 
 
 class ParticipantCleanupComplete(_Event):
+    generation: str = Field(min_length=1)
     producer: Literal[
         "guidance",
         "foreground",

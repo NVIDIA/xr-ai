@@ -118,7 +118,10 @@ development network or put it behind an authenticated TLS proxy.
 ## Configuration
 
 - `yaml/models.local.json` maps both `llm` and `vlm` to Omni on port 8108 and
-  declares STT, embedding, and TTS endpoints.
+  declares STT, embedding, and TTS endpoints. The shared Omni launcher accepts
+  one image per request by default; this sample's visual tools intentionally
+  preserve that contract. Configure the model server before adopting a
+  multi-image tool such as `query_images`.
 - `yaml/tea_making_worker.yaml` controls VAD, frame timeouts, observation
   intervals, artifact output, the web-events host/port/history, RAG,
   and workflow paths.

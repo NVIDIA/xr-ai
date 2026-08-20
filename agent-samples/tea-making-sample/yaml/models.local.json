@@ -10,6 +10,7 @@
       "adapter": {
         "kind": "openai_compat",
         "model_name": "llm",
+        "reasoning_field": "reasoning_content",
         "capabilities": {"streaming": true, "vision": true},
         "default_extras": {
           "max_tokens": 128,

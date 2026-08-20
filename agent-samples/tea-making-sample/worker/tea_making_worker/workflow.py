@@ -208,7 +208,10 @@ class GuidanceAgent(Agent):
         self._publish_locks.pop(participant_id, None)
         await ctx.publish(
             PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
-            ParticipantCleanupComplete(producer="guidance"),
+            ParticipantCleanupComplete(
+                generation=ctx.metadata.message_id,
+                producer="guidance",
+            ),
         )
 
     async def stop(self) -> None:

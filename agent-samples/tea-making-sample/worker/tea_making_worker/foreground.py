@@ -107,7 +107,10 @@ class ForegroundAgent(Agent):
         await self._cancel(self._participant(ctx))
         await ctx.publish(
             PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
-            ParticipantCleanupComplete(producer="foreground"),
+            ParticipantCleanupComplete(
+                generation=ctx.metadata.message_id,
+                producer="foreground",
+            ),
         )
 
     @subscribe(INTERRUPTED_TOPIC)
@@ -253,7 +256,9 @@ class ForegroundAgent(Agent):
         return (
             result.content.strip() or fallback,
             calls,
-            result.return_direct and calls == ["current_view"],
+            result.return_direct
+            and bool(result.tool_calls)
+            and result.tool_calls[-1].call.name == "current_view",
         )
 
     def _root_tools(

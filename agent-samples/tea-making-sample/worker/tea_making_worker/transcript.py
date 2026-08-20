@@ -176,7 +176,10 @@ class TranscriptAgent(Agent):
         await self._cancel(self._participant(ctx))
         await ctx.publish(
             PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
-            ParticipantCleanupComplete(producer="transcript"),
+            ParticipantCleanupComplete(
+                generation=ctx.metadata.message_id,
+                producer="transcript",
+            ),
         )
 
     async def stop(self) -> None:

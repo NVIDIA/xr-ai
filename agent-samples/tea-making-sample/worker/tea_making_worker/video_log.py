@@ -172,7 +172,10 @@ class VideoLogAgent(Agent):
         await self._cancel(self._participant(ctx))
         await ctx.publish(
             PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
-            ParticipantCleanupComplete(producer="video_log"),
+            ParticipantCleanupComplete(
+                generation=ctx.metadata.message_id,
+                producer="video_log",
+            ),
         )
 
     async def stop(self) -> None:

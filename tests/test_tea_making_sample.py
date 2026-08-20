@@ -13,11 +13,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import nemo_relay
 import pytest
 import yaml
-from xr_ai_models import ChatResponse, ToolCall
+from xr_ai_models import ChatMessage, ChatResponse, ToolCall
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
+from xr_ai_tools import ToolSet
 from xr_ai_tools.image import ImageReference, ImageRegistry
+from xr_ai_tools.tool_calling import ToolCallRecord, ToolLoopResult
 from xr_ai_tools.vision import ImageQueryChunk, ImageQueryResult
 from xr_ai_voice import (
     VOICE_CONTRIBUTION_TOPIC,
@@ -33,9 +36,11 @@ _SAMPLE = _ROOT / "agent-samples" / "tea-making-sample"
 _WORKER = _SAMPLE / "worker"
 sys.path.insert(0, str(_WORKER))
 
+import tea_making_worker.foreground as foreground_module  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     _CLIENT_TEXT_TOPIC,
     _ParticipantVoiceAggregationAgent,
+    _relay_event_log,
 )
 from tea_making_worker.background_context import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     BackgroundContextAgent,
@@ -91,6 +96,7 @@ def test_omni_supplies_both_language_and_vision() -> None:
     assert models["llm"]["endpoint"]["base_url"] == "http://localhost:8108"
     assert models["vlm"]["endpoint"]["base_url"] == "http://localhost:8108"
     assert models["vlm"]["adapter"]["capabilities"]["vision"] is True
+    assert models["vlm"]["adapter"]["reasoning_field"] == "reasoning_content"
     assert "cosmos" not in json.dumps(models).lower()
 
 
@@ -642,6 +648,65 @@ async def test_active_current_view_preserves_structured_question() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mixed_tool_turn_with_streamed_current_view_is_already_spoken(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = (
+        ToolCallRecord(
+            call=ToolCall(
+                id="rag-1",
+                name="rag_lookup",
+                arguments='{"query":"Earl Grey"}',
+            ),
+            message=ChatMessage(
+                role="tool",
+                content="Reference result",
+                tool_call_id="rag-1",
+            ),
+            return_direct=False,
+        ),
+        ToolCallRecord(
+            call=ToolCall(
+                id="view-1",
+                name="current_view",
+                arguments='{"question":"What do you see?"}',
+            ),
+            message=ChatMessage(
+                role="tool",
+                content="A kettle is visible.",
+                tool_call_id="view-1",
+            ),
+            return_direct=True,
+        ),
+    )
+
+    async def run_loop(*_args, **_kwargs):
+        return ToolLoopResult(
+            content="A kettle is visible.",
+            messages=(),
+            tool_calls=records,
+            iterations=2,
+            return_direct=True,
+        )
+
+    monkeypatch.setattr(foreground_module, "run_tool_loop", run_loop)
+    foreground = object.__new__(ForegroundAgent)
+    foreground._guidance = SimpleNamespace(active_context=lambda _pid: None)
+    foreground._root_tools = lambda *_args, **_kwargs: ToolSet(())
+    foreground._prompt = "Route."
+    foreground._llm = SimpleNamespace()
+
+    response, calls, spoken = await foreground._answer(
+        "Use the reference, then tell me what you see.",
+        "participant-mixed-view",
+    )
+
+    assert response == "A kettle is visible."
+    assert calls == ["rag_lookup", "current_view"]
+    assert spoken is True
+
+
+@pytest.mark.asyncio
 async def test_streaming_current_view_uses_question_and_times_out() -> None:
     observed: list[str] = []
     published: list[VoiceOutput] = []
@@ -817,8 +882,18 @@ async def test_images_release_after_every_producer_finishes_cleanup() -> None:
     released: list[str] = []
     images = object.__new__(ParticipantImageAgent)
     images._cleanup = {}
+    images._leaving_generation = {}
     images.get_current_frame = SimpleNamespace(release=released.append)
-    ctx = SimpleNamespace(metadata=SimpleNamespace(participant_id="participant-images"))
+    ctx = SimpleNamespace(
+        metadata=SimpleNamespace(
+            participant_id="participant-images",
+            message_id="leave-1",
+        )
+    )
+    await images.participant_left(
+        VoiceParticipantLeft(),
+        ctx,  # type: ignore[arg-type]
+    )
     producers = (
         "guidance",
         "foreground",
@@ -829,18 +904,131 @@ async def test_images_release_after_every_producer_finishes_cleanup() -> None:
 
     for producer in producers[:-1]:
         await images.participant_cleanup_complete(
-            ParticipantCleanupComplete(producer=producer),
+            ParticipantCleanupComplete(generation="leave-1", producer=producer),
             ctx,  # type: ignore[arg-type]
         )
     assert released == []
 
     await images.participant_cleanup_complete(
-        ParticipantCleanupComplete(producer=producers[-1]),
+        ParticipantCleanupComplete(generation="leave-1", producer=producers[-1]),
         ctx,  # type: ignore[arg-type]
     )
 
     assert released == ["participant-images"]
     assert images._cleanup == {}
+
+
+@pytest.mark.asyncio
+async def test_cleanup_quorum_does_not_mix_rejoin_generations() -> None:
+    participant_id = "participant-rejoin"
+    producers = (
+        "guidance",
+        "foreground",
+        "change_watch",
+        "transcript",
+        "video_log",
+    )
+
+    def context(message_id: str):
+        return SimpleNamespace(
+            metadata=SimpleNamespace(
+                participant_id=participant_id,
+                message_id=message_id,
+            )
+        )
+
+    files = object.__new__(FileOutputAgent)
+    files._sessions_lock = asyncio.Lock()
+    files._sessions = {participant_id: object()}
+    files._cleanup = {}
+    files._leaving_generation = {}
+    files._closed = set()
+    files._state = AsyncMock(return_value=files._sessions[participant_id])
+
+    async def close_participant(closing_participant_id: str) -> None:
+        files._sessions.pop(closing_participant_id, None)
+        files._cleanup.pop(closing_participant_id, None)
+        files._leaving_generation.pop(closing_participant_id, None)
+
+    files._close_participant = close_participant
+    await files.participant_joined(
+        VoiceParticipantJoined(),
+        context("join-1"),  # type: ignore[arg-type]
+    )
+    await files.participant_left(
+        VoiceParticipantLeft(),
+        context("leave-1"),  # type: ignore[arg-type]
+    )
+    for producer in producers[:-1]:
+        await files.participant_cleanup_complete(
+            ParticipantCleanupComplete(generation="leave-1", producer=producer),
+            context("cleanup-old"),  # type: ignore[arg-type]
+        )
+
+    await files.participant_joined(
+        VoiceParticipantJoined(),
+        context("join-2"),  # type: ignore[arg-type]
+    )
+    await files.participant_cleanup_complete(
+        ParticipantCleanupComplete(generation="leave-1", producer=producers[-1]),
+        context("cleanup-stale"),  # type: ignore[arg-type]
+    )
+    await files.participant_left(
+        VoiceParticipantLeft(),
+        context("leave-2"),  # type: ignore[arg-type]
+    )
+    for producer in producers[:-1]:
+        await files.participant_cleanup_complete(
+            ParticipantCleanupComplete(generation="leave-2", producer=producer),
+            context("cleanup-new"),  # type: ignore[arg-type]
+        )
+
+    assert participant_id in files._sessions
+    await files.participant_cleanup_complete(
+        ParticipantCleanupComplete(generation="leave-1", producer=producers[-1]),
+        context("cleanup-stale-again"),  # type: ignore[arg-type]
+    )
+    assert participant_id in files._sessions
+
+    await files.participant_cleanup_complete(
+        ParticipantCleanupComplete(generation="leave-2", producer=producers[-1]),
+        context("cleanup-final"),  # type: ignore[arg-type]
+    )
+    assert participant_id not in files._sessions
+
+    released: list[str] = []
+    images = object.__new__(ParticipantImageAgent)
+    images._cleanup = {}
+    images._leaving_generation = {}
+    images.get_current_frame = SimpleNamespace(release=released.append)
+    await images.participant_joined(
+        VoiceParticipantJoined(),
+        context("join-images"),  # type: ignore[arg-type]
+    )
+    await images.participant_cleanup_complete(
+        ParticipantCleanupComplete(generation="leave-old", producer="guidance"),
+        context("cleanup-images-old"),  # type: ignore[arg-type]
+    )
+    await images.participant_left(
+        VoiceParticipantLeft(),
+        context("leave-images-new"),  # type: ignore[arg-type]
+    )
+    for producer in producers:
+        generation = "leave-old" if producer == "video_log" else "leave-images-new"
+        await images.participant_cleanup_complete(
+            ParticipantCleanupComplete(generation=generation, producer=producer),
+            context("cleanup-images"),  # type: ignore[arg-type]
+        )
+    assert released == []
+
+    await images.participant_cleanup_complete(
+        ParticipantCleanupComplete(
+            generation="leave-images-new",
+            producer="video_log",
+        ),
+        context("cleanup-images-final"),  # type: ignore[arg-type]
+    )
+    assert released == [participant_id]
 
 
 @pytest.mark.parametrize("case", ["initial", "complete_when", "state_on_skip"])
@@ -867,6 +1055,19 @@ async def test_file_output_writes_session_bounded_jsonl(tmp_path: Path) -> None:
     files = FileOutputAgent(tmp_path, history_size=4)
     runtime = AgentRuntime()
     runtime.register("files", files)
+    leave_generation: str | None = None
+
+    class LeaveObserver(Agent):
+        @subscribe(PARTICIPANT_LEFT_TOPIC)
+        async def participant_left(
+            self,
+            _event: VoiceParticipantLeft,
+            ctx: RuntimeContext,
+        ) -> None:
+            nonlocal leave_generation
+            leave_generation = ctx.metadata.message_id
+
+    runtime.register("leave-observer", LeaveObserver())
 
     async with runtime:
         await runtime.publish(
@@ -889,6 +1090,7 @@ async def test_file_output_writes_session_bounded_jsonl(tmp_path: Path) -> None:
             VoiceParticipantLeft(),
             participant_id="glasses/user",
         )
+        assert leave_generation is not None
         for producer in (
             "foreground",
             "change_watch",
@@ -897,7 +1099,10 @@ async def test_file_output_writes_session_bounded_jsonl(tmp_path: Path) -> None:
         ):
             await runtime.publish(
                 PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
-                ParticipantCleanupComplete(producer=producer),
+                ParticipantCleanupComplete(
+                    generation=leave_generation,
+                    producer=producer,
+                ),
                 participant_id="glasses/user",
             )
         await runtime.publish(
@@ -912,7 +1117,10 @@ async def test_file_output_writes_session_bounded_jsonl(tmp_path: Path) -> None:
         )
         await runtime.publish(
             PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
-            ParticipantCleanupComplete(producer="guidance"),
+            ParticipantCleanupComplete(
+                generation=leave_generation,
+                producer="guidance",
+            ),
             participant_id="glasses/user",
         )
 
@@ -929,6 +1137,46 @@ async def test_file_output_writes_session_bounded_jsonl(tmp_path: Path) -> None:
     ]
     assert guidance[-2]["event"] == "participant.left"
     assert guidance[-1]["type"] == "session_end"
+
+
+@pytest.mark.asyncio
+async def test_relay_event_log_buffers_and_excludes_stream_chunks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    callback = None
+
+    def register(_name, registered_callback):
+        nonlocal callback
+        callback = registered_callback
+
+    async def flush_async() -> None:
+        return None
+
+    monkeypatch.setattr(nemo_relay.subscribers, "register", register)
+    monkeypatch.setattr(nemo_relay.subscribers, "flush_async", flush_async)
+    monkeypatch.setattr(nemo_relay.subscribers, "deregister", lambda _name: None)
+
+    class Event:
+        def __init__(self, name: str) -> None:
+            self.kind = "mark"
+            self.name = name
+
+        def to_json(self) -> str:
+            return json.dumps({"name": self.name})
+
+    async with _relay_event_log(tmp_path):
+        assert callback is not None
+        callback(Event("llm.chunk"))
+        callback(Event("turn.summary"))
+
+    events = [
+        yaml.safe_load(line)
+        for line in (tmp_path / "relay-events.jsonl").read_text().splitlines()
+    ]
+    names = [event["name"] for event in events]
+    assert "llm.chunk" not in names
+    assert "turn.summary" in names
 
 
 def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:

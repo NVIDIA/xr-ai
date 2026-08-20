@@ -180,7 +180,10 @@ class ChangeWatchAgent(Agent):
         await self._cancel(self._participant(ctx))
         await ctx.publish(
             PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
-            ParticipantCleanupComplete(producer="change_watch"),
+            ParticipantCleanupComplete(
+                generation=ctx.metadata.message_id,
+                producer="change_watch",
+            ),
         )
 
     async def stop(self) -> None:

@@ -5,10 +5,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from threading import Lock
 
 import nemo_relay
 from loguru import logger
@@ -66,29 +66,54 @@ class _ParticipantVoiceAggregationAgent(VoiceAggregationAgent):
 @asynccontextmanager
 async def _relay_event_log(output_dir: Path) -> AsyncIterator[Path]:
     path = output_dir / "relay-events.jsonl"
-    sink = path.open("w", encoding="utf-8")
-    lock = Lock()
+    await asyncio.to_thread(path.write_text, "", encoding="utf-8")
+    pending: asyncio.Queue[str | None] = asyncio.Queue()
+    loop = asyncio.get_running_loop()
     subscriber = "tea-making-event-log"
 
     def write_event(event: nemo_relay.Event) -> None:
         if event.kind == "mark" and event.name == "llm.chunk":
             return
-        with lock:
-            sink.write(event.to_json())
-            sink.write("\n")
-            sink.flush()
+        loop.call_soon_threadsafe(pending.put_nowait, f"{event.to_json()}\n")
+
+    async def write_events() -> None:
+        while True:
+            line = await pending.get()
+            if line is None:
+                return
+            lines = [line]
+            while True:
+                try:
+                    queued = pending.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+                if queued is None:
+                    await asyncio.to_thread(_append_relay_events, path, tuple(lines))
+                    return
+                lines.append(queued)
+            await asyncio.to_thread(_append_relay_events, path, tuple(lines))
+
+    writer = asyncio.create_task(write_events(), name="tea-making-relay-event-log")
 
     try:
         nemo_relay.subscribers.register(subscriber, write_event)
     except Exception:
-        sink.close()
+        pending.put_nowait(None)
+        await writer
         raise
     try:
         yield path
     finally:
         await nemo_relay.subscribers.flush_async()
         nemo_relay.subscribers.deregister(subscriber)
-        sink.close()
+        await asyncio.sleep(0)
+        pending.put_nowait(None)
+        await writer
+
+
+def _append_relay_events(path: Path, lines: tuple[str, ...]) -> None:
+    with path.open("a", encoding="utf-8") as sink:
+        sink.writelines(lines)
 
 
 async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> None:
