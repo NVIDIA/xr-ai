@@ -5,103 +5,208 @@
 
 # Architecture
 
-This page explains how DeviceIOHub, the transport, and agents fit together.
+XR AI connects interactive XR clients to agent workers and AI services without
+making transport, media, or model implementation details part of application
+logic. The system is process-oriented: the device I/O hub, workers, model servers,
+and optional capability services run independently and communicate through
+small, explicit interfaces.
 
-## Top-level layout
+This page describes the system shape, runtime paths, and ownership boundaries.
+The component pages linked under [Where details live](#where-details-live)
+contain configuration, protocol, and operational details.
 
-```
-client-samples/     # Platform clients (Android, iOS/visionOS, Web)
-agent-sdk/          # runtime, IPC, model, native-tool, and voice SDK packages
-utils/              # Shared infra: launcher, logging, vad, vllm, voicegate
-services/           # XR hub, CloudXR, model-serving, and typed XR capability services
-agent-samples/      # End-to-end agent demos
-tests/              # Multi-client / multi-agent integration tests
-docs/source/        # User and contributor documentation
-```
+## System context
 
-## Architecture boundaries
-
-- **One hub, many clients, many agents.** A single hub instance fans the
-  inbound stream out to every connected `ProcessorEndpoint` (agent) and
-  routes return traffic back to the originating client only — never to peers.
-- **DeviceIOHub** is transport-agnostic at its IPC boundary. Agents connect
-  via IPC only.
-- **LiveKit** is an internal transport detail — not exposed to the agent layer.
-  When LiveKit is the transport, return audio is published as one track per
-  participant (`xr-hub-return-{pid}`) with subscribe permissions restricted to
-  that participant; return data uses `destination_identities` for the same
-  reason. Agents never need to know.
-- **`agent-sdk/xr-ai-hub`** contains only the agent-facing IPC layer. Its
-  sole runtime dependencies are `pyzmq` and `msgpack` — no LiveKit, FastAPI,
-  or uvicorn.
-- **Native agents compose typed tools in process.** Service-backed tools call
-  typed capability services, while deterministic tools run locally.
-- **No API keys or tokens in source files** — use environment variables or
-  `device_io_hub.yaml` (refer to {doc}`/getting_started/credentials`).
-
-Refer to {doc}`/components/server-runtime` for more on the hub and transport.
-
-## Multi-user sessions
-
-A single DeviceIOHub session can carry several participants at once, each fully
-isolated. The hub is not a routing switch between participants: media and data
-flow only between a participant and the agent, never from one participant to
-another. The supported path is always:
-
-```
-participant → hub → agent → hub → same participant
+```text
+                                     control plane
+                          sample orchestrator + launcher
+                         starts, orders, and monitors processes
+                                         |
+                                         v
++-------------+   media and data   +----------------+   IPC events   +----------------+
+| XR clients  | <----------------> | DeviceIOHub    | <------------> | agent workers  |
+| web/mobile  |                    | + transport    |                | + agent SDK     |
++-------------+                    +----------------+                +-------+--------+
+                                                                            |
+                                                   typed model/tool calls   |
+                                                +---------------------------+--------+
+                                                |                                    |
+                                                v                                    v
+                                      +-------------------+               +--------------------+
+                                      | AI model services |               | capability services|
+                                      | local or hosted   |               | or local tools     |
+                                      +-------------------+               +--------------------+
 ```
 
-The hub enforces this per participant:
+The architecture has four cooperating planes:
 
-- Return audio is published as one LiveKit track per participant, with subscribe
-  permission restricted to that participant.
-- Return data is addressed to the originating participant's identity.
-- Return-traffic topics are matched on a terminated identity segment, so one
-  participant id cannot be a prefix of another (`user1` never matches `user10`).
+- **Media plane:** DeviceIOHub receives client audio, video, and data through
+  a transport connector, then fans participant-tagged events out to workers.
+- **Application plane:** agent workers own application behavior, participant
+  state, model and tool orchestration, concurrency, and cancellation.
+- **Service plane:** typed model clients and tools isolate workers from model
+  hosting and capability-process protocols.
+- **Control plane:** each sample's orchestrator uses `xr-ai-launcher` to start
+  processes in dependency order and monitor their readiness and lifetime.
 
-Because every response is addressed back to the participant it came from, a
-single agent process can serve several participants concurrently without
-cross-talk: it receives each participant's audio, video, and data tagged with
-that participant's id, and addresses its replies to the same id. A sample may choose a narrower concurrency policy, while the transport and isolation guarantees hold for any number of connected participants.
+These planes are boundaries of responsibility, not required deployment hosts.
+They can run on one machine, while model endpoints can also be persistent local
+services or externally hosted APIs.
 
-Refer to the {doc}`Isolation contract </components/server-runtime>` for the
-enforcement details.
+## Components and ownership
 
-## Hub configuration
+| Component | Owns | Does not own |
+|---|---|---|
+| XR clients | Device capture, presentation, and user interaction | Agent execution or service orchestration |
+| Transport connector | Transport-specific sessions and conversion to hub events | Agent-facing APIs or application policy |
+| DeviceIOHub | Media fan-out, participant identity, return routing, and shared-media access | Agent state, model calls, or tools |
+| Agent SDK | Lightweight hub IPC, typed runtime events, model protocols, voice composition, and tool primitives | Application lifecycle and decision policy |
+| Agent worker | Application state, tasks, prompts, model/tool loops, concurrency, and cleanup | Transport internals or model-server lifecycle |
+| AI model services | Inference and model-specific serving behavior | Participant routing or application policy |
+| Tools and capability services | Bounded application capabilities | General agent orchestration |
+| Sample orchestrator | Process declarations, startup ordering, readiness, and shutdown | Runtime business logic |
 
-Each sample provides its own `device_io_hub.yaml` in its `yaml/` directory
-(e.g. `agent-samples/simple-vlm-example/yaml/device_io_hub.yaml`).
-`services/device-io-hub/` also contains a reference copy documenting all available
-fields.
+The separation lets a worker change model deployment or client transport
+without rewriting its application logic. It also keeps heavy transport and
+model dependencies out of the minimal agent-to-hub IPC package.
 
-Paths inside the YAML (e.g. `web_client_dir`) resolve relative to the YAML
-file's own directory, not CWD. `HubLauncher` finds the YAML automatically by
-searching upward from CWD when the orchestrator runs.
+## Runtime data paths
 
-## Known limitations
+### Client media and participant events
 
-Refer to {doc}`/guides/troubleshooting` for runtime symptoms and fixes that
-aren't architectural.
+1. A client joins through the configured transport and publishes audio, video,
+   and data.
+2. The transport connector converts that input into participant-tagged hub
+   events. Audio, data, and participant events travel inline; video pixels stay
+   in shared memory and frame notifications remain lightweight.
+3. DeviceIOHub fans subscribed events out to `ProcessorEndpoint` consumers.
+   Multiple agents or passive processors can subscribe to the same input.
+4. A worker requests video pixels only when its application needs a frame.
+5. Return audio and data name the originating participant. The hub validates
+   the target and the connector delivers the response only to that participant.
 
-### LiveKit signaling is fronted by a same-origin wss:// proxy
+The resulting portable contract is:
 
-LiveKit-server itself still runs plain `ws://` on the loopback interface
-(`127.0.0.1:7880`). The hub's web server (`_web_server.py`) terminates TLS
-on `web_server_port` (`8080` by default) and exposes a same-origin
-`wss://<host>:8080/rtc` route that proxies LiveKit signaling
-bidirectionally (`_lk_proxy.py`). Every external client — browser, web-xr,
-Android, iOS, visionOS — connects only to that wss URL; nothing reaches
-LiveKit's 7880 from off-box.
+```text
+participant -> hub -> subscribed worker -> hub -> same participant
+```
 
-The `/token` endpoint returns `url: wss://<host>:<web_server_port>` when
-`web_server_tls: true` (the default), so the URL the client SDK uses comes
-straight from the server — no client-side toggle needed.
+LiveKit currently provides the client transport, but it remains behind the hub
+boundary. Workers communicate only through XR AI's msgpack/ZMQ IPC and do not
+import or address LiveKit directly. See {doc}`Server runtime
+</components/server-runtime>` for shared-memory behavior, topics, and transport
+implementation details.
 
-WebRTC media (7881/TCP fallback, 7882/UDP) is DTLS/SRTP regardless, so no
-extra encryption is needed on those ports.
+### Agent, model, and tool execution
 
-To run a fully plain stack for `localhost` development, set
-`web_server_tls: false` — `/token` then returns `ws://`, and the same-origin
-proxy serves plain WebSocket. `localhost` is the only context where browsers
-grant camera and microphone permissions without HTTPS.
+A voice-capable application commonly composes this path:
+
+```text
+audio -> voice input -> STT -> application agent -> LLM/VLM -> voice output -> TTS
+                                  |                 ^                         |
+video -- on-demand frame access --+                 |                         |
+                                  +---- tools ------+                         v
+                                                               return audio and data
+```
+
+This is composition rather than a fixed pipeline. An application may consume
+text instead of speech, omit models, execute deterministic tools locally, call
+typed capability services, or publish events for another agent to consume.
+
+Workers obtain LLM, VLM, STT, TTS, and embedding clients from
+`xr_ai_models`. Model profiles keep three concerns separate:
+
+- adapter behavior and model-specific wire details;
+- endpoint location, credentials, and health behavior;
+- deployment ownership by the current stack, a reused service, or an external
+  provider.
+
+Tools are ordinary in-process `Tool` or `AsyncTool` objects. A tool can perform
+local work or call a typed service, but application agents retain ownership of
+tool selection, task lifetime, retries, and participant context. See
+{doc}`Agent SDK </components/agent-sdk>` and {doc}`AI services
+</components/ai-services>` for the concrete interfaces and profiles.
+
+## Process and deployment model
+
+Each sample is an executable process graph declared by a small orchestrator.
+DeviceIOHub always runs as its own process; workers and capability services
+run separately so their dependencies, failures, and cleanup remain isolated.
+
+The launcher starts processes serially or in explicit parallel groups. Each
+process signals readiness only after its own initialization is complete. A
+premature process exit fails the stack and triggers coordinated shutdown, so a
+client is not presented with a partially initialized application.
+
+Model services use the same ownership model without forcing every sample to
+reload large weights:
+
+- **Managed:** the current orchestrator starts and owns the service.
+- **Reused:** the service is expected to be running already, commonly from the
+  shared `model-servers` stack.
+- **External:** XR AI connects to an endpoint it neither starts nor stops.
+
+Heavy model servers can use a persistent launch mode and remain hot across
+sample restarts. The model profile is shared by the orchestrator and worker, so
+process ownership and endpoint selection cannot silently diverge. Detailed
+startup, shutdown, and persistence behavior belongs in {doc}`Launcher and
+process model </components/launcher-and-process-model>`.
+
+## Architectural invariants
+
+The following constraints define the supported system boundary:
+
+- **One hub, many clients, many agents.** The hub may fan one participant's
+  input out to several consumers, but it never uses the return path to route
+  one participant's data to another.
+- **Transport details stop at the hub.** Workers use `xr_ai_hub`; transport
+  SDKs and server packages do not enter agent APIs.
+- **Raw media stays on the media path.** Video pixels remain in shared memory
+  until explicitly requested, and raw media is not embedded in runtime events
+  or tool results.
+- **Applications own behavior and resources.** An agent owns its state,
+  background tasks, lifecycle, queues, cancellation, and concurrency policy.
+  Shared runtime packages provide delivery and composition rather than taking
+  over that ownership.
+- **Models are reached through typed factories.** Vendor protocols and
+  model-specific quirks remain behind `xr_ai_models`, rather than spreading
+  through workers.
+- **Process dependencies are explicit.** Orchestrators declare startup order,
+  readiness, and ownership instead of relying on import-time side effects or
+  an implicit global runtime.
+- **Readiness is scoped.** Processes report only their own readiness. The hub
+  separately aggregates the participating agents' status for each connected
+  participant.
+
+These constraints are the stable architecture. Individual transports, model
+backends, tools, and sample workflows are replaceable implementations within
+it.
+
+## Extension points
+
+| To add or replace | Extend at this boundary |
+|---|---|
+| XR client | Join through the client transport and consume participant-scoped return media/data |
+| Transport | Implement the connector side of the hub IPC contract |
+| Agent application | Add a worker that uses `xr_ai_hub` and the relevant SDK packages |
+| Model or provider | Add model configuration and an adapter behind the typed model protocols |
+| Local capability | Implement an in-process tool |
+| Shared or isolated capability | Implement a typed service and a service-backed tool |
+| Managed process | Add a launcher `Process` entry and signal readiness from the process |
+
+For the repository conventions and concrete file layout used by new samples,
+see {doc}`Adding a sample </guides/adding-a-sample>`.
+
+## Where details live
+
+This page intentionally stops at system structure and contracts. Use these
+pages for implementation and operational detail:
+
+| Topic | Authoritative page |
+|---|---|
+| Hub IPC, shared memory, participant isolation, and LiveKit integration | {doc}`Server runtime </components/server-runtime>` |
+| SDK package boundaries, agents, voice, runtime events, and tools | {doc}`Agent SDK </components/agent-sdk>` |
+| Model protocols, deployment profiles, NIM, vLLM, and persistent servers | {doc}`AI services </components/ai-services>` |
+| Process ordering, readiness, launch modes, and shutdown | {doc}`Launcher and process model </components/launcher-and-process-model>` |
+| External ports, TLS, proxies, and firewall requirements | {doc}`Networking and firewall </getting_started/networking>` |
+| API keys and credential storage | {doc}`Credentials </getting_started/credentials>` |

@@ -57,7 +57,7 @@ xr-render demo.
 :::{grid-item-card} 🧩 Architecture
 :link: overview/architecture
 :link-type: doc
-How DeviceIOHub, the transport, and agents fit together.
+How clients, DeviceIOHub, agents, models, services, and the launcher fit together.
 :::
 
 :::{grid-item-card} 🛠️ Components

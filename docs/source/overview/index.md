@@ -5,7 +5,8 @@
 
 # Overview
 
-How DeviceIOHub, the transport, and agents fit together.
+The system topology, runtime data paths, ownership boundaries, and extension
+points that connect XR clients, agents, and AI services.
 
 ```{toctree}
 :glob:
