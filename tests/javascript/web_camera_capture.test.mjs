@@ -218,10 +218,13 @@ test('stops the captured camera track when LiveKit publication fails', async (t)
   assert.equal(backend.cameraTrack, null);
 });
 
-test('reports the transport-selected ICE pair and all inbound-track jitter', async (t) => {
+test('reports the highest selected-transport RTT and all inbound-track jitter', async (t) => {
   const report = new Map([
     ['transport', {
       id: 'transport', type: 'transport', selectedCandidatePairId: 'active-pair',
+    }],
+    ['transport-2', {
+      id: 'transport-2', type: 'transport', selectedCandidatePairId: 'active-pair-2',
     }],
     ['stale-pair', {
       id: 'stale-pair', type: 'candidate-pair', state: 'succeeded',
@@ -230,6 +233,10 @@ test('reports the transport-selected ICE pair and all inbound-track jitter', asy
     ['active-pair', {
       id: 'active-pair', type: 'candidate-pair', nominated: false,
       currentRoundTripTime: 0.042,
+    }],
+    ['active-pair-2', {
+      id: 'active-pair-2', type: 'candidate-pair', nominated: false,
+      currentRoundTripTime: 0.055,
     }],
     ['inbound-audio', { id: 'inbound-audio', type: 'inbound-rtp', jitter: 0.003 }],
     ['inbound-video', { id: 'inbound-video', type: 'inbound-rtp', jitter: 0.007 }],
@@ -246,7 +253,7 @@ test('reports the transport-selected ICE pair and all inbound-track jitter', asy
 
   const metrics = await metricsPromise;
   assert.equal(metrics.quality, 'good');
-  assert.equal(metrics.roundTripTimeMs, 42);
+  assert.equal(metrics.roundTripTimeMs, 55);
   assert.equal(metrics.receiveJitterMs, 7);
 });
 

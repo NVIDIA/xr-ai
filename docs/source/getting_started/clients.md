@@ -36,7 +36,8 @@ sample prints them to stdout. Each exposes the values through StreamKit's
 `onNetworkMetrics` callback (spelled `on_network_metrics` in C++):
 
 - **Quality** — LiveKit's connection-quality estimate for the local participant.
-- **Round-trip time** — the selected ICE candidate pair's current RTT.
+- **Round-trip time** — the highest current RTT across the publisher and
+  subscriber transports' selected ICE candidate pairs.
 - **Receive jitter** — the highest inbound RTP jitter in the current sample.
 
 `LiveKitBackend` samples LiveKit's existing WebRTC statistics about once per

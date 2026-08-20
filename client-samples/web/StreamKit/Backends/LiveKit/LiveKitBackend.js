@@ -534,11 +534,15 @@ export class LiveKitBackend {
         .map(stat => stat.selectedCandidatePairId)
         .filter(Boolean));
       const candidatePairs = stats.filter(stat => stat.type === 'candidate-pair');
-      const activePair = candidatePairs.find(stat => selectedPairIds.has(stat.id))
-        ?? candidatePairs.find(stat => stat.nominated === true || stat.selected === true);
-      if (Number.isFinite(activePair?.currentRoundTripTime)
-          && activePair.currentRoundTripTime >= 0) {
-        roundTripTimeMs = activePair.currentRoundTripTime * 1000;
+      const selectedPairs = candidatePairs.filter(stat => selectedPairIds.has(stat.id));
+      const activePairs = selectedPairs.length > 0
+        ? selectedPairs
+        : candidatePairs.filter(stat => stat.nominated === true || stat.selected === true);
+      const roundTripTimes = activePairs
+        .map(stat => stat.currentRoundTripTime)
+        .filter(value => Number.isFinite(value) && value >= 0);
+      if (roundTripTimes.length > 0) {
+        roundTripTimeMs = Math.max(...roundTripTimes) * 1000;
       }
       for (const stat of stats) {
         if (stat.type === 'inbound-rtp' && Number.isFinite(stat.jitter)

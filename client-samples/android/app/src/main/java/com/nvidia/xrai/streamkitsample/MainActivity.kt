@@ -89,6 +89,7 @@ import com.nvidia.xrai.streamkitsample.streamkit.ui.rememberCameraPreviewAspectR
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 // ── Color tokens (match web client's CSS variables) ───────────────────────────
 
@@ -177,7 +178,7 @@ private fun StreamKitSampleApp(vm: AppViewModel = viewModel()) {
 @Composable
 private fun NetworkSection(vm: AppViewModel) {
     val metrics = vm.networkMetrics.takeIf { vm.connectionState == ConnectionState.CONNECTED }
-    fun milliseconds(value: Double?) = value?.let { "${it.toInt()} ms" } ?: "—"
+    fun milliseconds(value: Double?) = value?.let { "${it.roundToInt()} ms" } ?: "—"
 
     SectionCard(title = "Network") {
         CardRow {

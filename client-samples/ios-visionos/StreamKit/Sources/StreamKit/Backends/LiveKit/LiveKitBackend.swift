@@ -431,10 +431,15 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         let statistics = tracks.compactMap(\.statistics)
         let selectedPairIDs = Set(statistics.compactMap { $0.transportStats?.selectedCandidatePairId })
         let candidatePairs = statistics.flatMap(\.iceCandidatePair)
-        let selectedPair = candidatePairs.first(where: { selectedPairIDs.contains($0.id) })
-            ?? candidatePairs.first(where: { $0.nominated == true })
-        let roundTripTimeMs = selectedPair?.currentRoundTripTime
-            .flatMap { $0.isFinite && $0 >= 0 ? $0 * 1_000 : nil }
+        let selectedPairs = candidatePairs.filter { selectedPairIDs.contains($0.id) }
+        let activePairs = selectedPairs.isEmpty
+            ? candidatePairs.filter { $0.nominated == true }
+            : selectedPairs
+        let roundTripTimeMs = activePairs
+            .compactMap(\.currentRoundTripTime)
+            .filter { $0.isFinite && $0 >= 0 }
+            .max()
+            .map { $0 * 1_000 }
         let receiveJitterMs = statistics
             .lazy
             .flatMap(\.inboundRtpStream)

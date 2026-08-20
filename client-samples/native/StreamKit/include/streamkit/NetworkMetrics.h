@@ -11,7 +11,8 @@ namespace streamkit {
 enum class NetworkQuality { kUnknown, kExcellent, kGood, kPoor, kLost };
 
 /// A once-per-second snapshot of LiveKit's native WebRTC telemetry.
-/// RTT and jitter are milliseconds and remain empty until stats are available.
+/// RTT is the highest active-transport RTT, jitter is the highest inbound RTP
+/// jitter, and both remain empty until stats are available.
 struct NetworkMetrics {
     NetworkQuality quality = NetworkQuality::kUnknown;
     std::optional<double> round_trip_time_ms;

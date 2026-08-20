@@ -19,6 +19,7 @@
 
 #include "AgentStatusParser.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -56,6 +57,8 @@
 namespace streamkit {
 
 namespace {
+
+thread_local LiveKitBackend* metrics_callback_backend = nullptr;
 
 #if STREAMKIT_HAVE_LIVEKIT
 // Lazy one-shot initialise of the SDK's global state. livekit::initialize()
@@ -214,6 +217,7 @@ void LiveKitBackend::Connect(const SessionConfig& session_config) {
         throw MissingTokenError{};
     }
 
+    teardown_complete_.store(false);
     FireStateChanged(ConnectionState::kConnecting);
 
 #if STREAMKIT_HAVE_LIVEKIT
@@ -233,18 +237,14 @@ void LiveKitBackend::Connect(const SessionConfig& session_config) {
         FireStateChanged(ConnectionState::kDisconnected);
         throw StreamError("LiveKit Room::connect returned false for " + ws_url);
     }
-    is_connected_.store(true);
-    // The SDK delegate may have already fired kConnected during the
-    // blocking Room::Connect above. FireStateChanged dedupes so consumers
-    // see exactly one transition into kConnected regardless of which path
-    // fired first.
-    FireStateChanged(ConnectionState::kConnected);
+    // The SDK delegate may have already fired kConnected during the blocking
+    // Room::connect above. FireStateChanged dedupes the explicit transition.
+    ApplyConnectionState(ConnectionState::kConnected);
     StartNetworkMetricsReporting();
 #else
     (void)ws_url;
     (void)token;
-    is_connected_.store(true);
-    FireStateChanged(ConnectionState::kConnected);
+    ApplyConnectionState(ConnectionState::kConnected);
     StartNetworkMetricsReporting();
 #endif
 }
@@ -502,12 +502,52 @@ void LiveKitBackend::Send(std::span<const std::byte> data,
 
 void LiveKitBackend::HandleConnectionStateChange(int lk_state) {
 #if STREAMKIT_HAVE_LIVEKIT
-    const auto sk = MapState(static_cast<livekit::ConnectionState>(lk_state));
-    is_connected_.store(sk == ConnectionState::kConnected);
-    FireStateChanged(sk);
+    ApplyConnectionState(MapState(static_cast<livekit::ConnectionState>(lk_state)));
 #else
     (void)lk_state;
 #endif
+}
+
+void LiveKitBackend::ApplyConnectionState(ConnectionState state) {
+    if (state != ConnectionState::kConnected) {
+        BlockNetworkMetricsDelivery();
+        FireStateChanged(state);
+        return;
+    }
+
+    std::uint64_t connection_epoch;
+    {
+        if (teardown_in_progress_.load() || teardown_complete_.load()) return;
+        std::lock_guard<std::recursive_mutex> delivery_lock(
+            network_metrics_delivery_->mutex);
+        if (teardown_in_progress_.load() || teardown_complete_.load()) return;
+        connection_epoch = connection_epoch_.load();
+        is_connected_.store(true);
+        network_metrics_delivery_->blocked = true;
+    }
+    try {
+        FireStateChanged(state);
+    } catch (...) {
+        std::lock_guard<std::recursive_mutex> lock(network_metrics_delivery_->mutex);
+        if (is_connected_.load() && connection_epoch_.load() == connection_epoch) {
+            network_metrics_delivery_->blocked = false;
+        }
+        throw;
+    }
+    {
+        std::lock_guard<std::recursive_mutex> lock(network_metrics_delivery_->mutex);
+        if (is_connected_.load() && connection_epoch_.load() == connection_epoch) {
+            network_metrics_delivery_->blocked = false;
+        }
+    }
+}
+
+void LiveKitBackend::BlockNetworkMetricsDelivery() {
+    const auto delivery = network_metrics_delivery_;
+    std::lock_guard<std::recursive_mutex> lock(delivery->mutex);
+    is_connected_.store(false);
+    connection_epoch_.fetch_add(1);
+    delivery->blocked = true;
 }
 
 void LiveKitBackend::FireStateChanged(ConnectionState state) {
@@ -570,7 +610,7 @@ void LiveKitBackend::StartNetworkMetricsReporting() {
         assigned.wait();
         while (!stop->load()) {
             if (is_connected_.load()) {
-                PublishNetworkMetrics();
+                PublishNetworkMetrics(connection_epoch_.load());
             }
             // PublishNetworkMetrics may invoke a callback that destroys this
             // backend. Only the separately-owned stop flag is safe to touch
@@ -618,10 +658,7 @@ void LiveKitBackend::StopNetworkMetricsReporting() {
     }
 }
 
-void LiveKitBackend::PublishNetworkMetrics() {
-    const auto callback = on_network_metrics;
-    if (!callback) return;
-
+void LiveKitBackend::PublishNetworkMetrics(std::uint64_t connection_epoch) {
     NetworkMetrics metrics{
         .quality = network_quality_.load(),
         .round_trip_time_ms = std::nullopt,
@@ -672,23 +709,30 @@ void LiveKitBackend::PublishNetworkMetrics() {
             }
         }
 
-        const livekit::RtcCandidatePairStats* fallback_pair = nullptr;
+        bool found_selected_pair = false;
         for (const auto& record : records) {
             if (const auto* pair = std::get_if<livekit::RtcCandidatePairStats>(&record.stats)) {
                 if (selected_pair_ids.contains(pair->rtc.id)) {
+                    found_selected_pair = true;
                     const double seconds = pair->candidate_pair.current_round_trip_time;
                     if (std::isfinite(seconds) && seconds > 0.0) {
-                        metrics.round_trip_time_ms = seconds * 1'000.0;
+                        const double rtt_ms = seconds * 1'000.0;
+                        metrics.round_trip_time_ms = std::max(
+                            metrics.round_trip_time_ms.value_or(0.0), rtt_ms);
                     }
-                    break;
                 }
-                if (!fallback_pair && pair->candidate_pair.nominated) fallback_pair = pair;
             }
         }
-        if (!metrics.round_trip_time_ms && fallback_pair) {
-            const double seconds = fallback_pair->candidate_pair.current_round_trip_time;
-            if (std::isfinite(seconds) && seconds > 0.0) {
-                metrics.round_trip_time_ms = seconds * 1'000.0;
+        if (!found_selected_pair) {
+            for (const auto& record : records) {
+                const auto* pair = std::get_if<livekit::RtcCandidatePairStats>(&record.stats);
+                if (!pair || !pair->candidate_pair.nominated) continue;
+                const double seconds = pair->candidate_pair.current_round_trip_time;
+                if (std::isfinite(seconds) && seconds > 0.0) {
+                    const double rtt_ms = seconds * 1'000.0;
+                    metrics.round_trip_time_ms = std::max(
+                        metrics.round_trip_time_ms.value_or(0.0), rtt_ms);
+                }
             }
         }
 
@@ -706,7 +750,28 @@ void LiveKitBackend::PublishNetworkMetrics() {
         // Quality remains useful while RTCStats is temporarily unavailable.
     }
 #endif
-    callback(metrics);
+    DeliverNetworkMetrics(metrics, connection_epoch);
+}
+
+void LiveKitBackend::DeliverNetworkMetrics(NetworkMetrics metrics,
+                                           std::uint64_t connection_epoch) {
+    std::function<void(const NetworkMetrics&)> callback;
+    const auto delivery = network_metrics_delivery_;
+    std::lock_guard<std::recursive_mutex> lock(delivery->mutex);
+    if (delivery->blocked || !is_connected_.load() ||
+        connection_epoch_.load() != connection_epoch || !on_network_metrics) {
+        return;
+    }
+    callback = on_network_metrics;
+
+    auto* previous_backend = metrics_callback_backend;
+    metrics_callback_backend = this;
+    try {
+        callback(metrics);
+    } catch (...) {
+        // User callback failures do not stop telemetry or escape the worker.
+    }
+    metrics_callback_backend = previous_backend;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -714,26 +779,45 @@ void LiveKitBackend::PublishNetworkMetrics() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 void LiveKitBackend::TearDown() {
-    is_connected_.store(false);
-    StopNetworkMetricsReporting();
-    network_quality_.store(NetworkQuality::kUnknown);
-    camera_armed_.store(false);
-    audio_armed_.store(false);
+    std::unique_lock<std::recursive_mutex> teardown_lock(teardown_mutex_, std::defer_lock);
+    if (metrics_callback_backend == this) {
+        // An application-thread teardown may be joining this worker. In that
+        // case this call is redundant and must not wait for the owner.
+        if (!teardown_lock.try_lock()) return;
+    } else {
+        teardown_lock.lock();
+    }
+    if (teardown_complete_.load()) return;
+    teardown_in_progress_.store(true);
+
+    try {
+        BlockNetworkMetricsDelivery();
+        StopNetworkMetricsReporting();
+        network_quality_.store(NetworkQuality::kUnknown);
+        camera_armed_.store(false);
+        audio_armed_.store(false);
 
 #if STREAMKIT_HAVE_LIVEKIT
-    {
-        std::lock_guard<std::mutex> lock(tracks_mutex_);
-        video_track_.reset();
-        video_source_.reset();
-        audio_track_.reset();
-        audio_source_.reset();
-    }
-    if (room_) {
-        room_->setDelegate(nullptr);
-        room_.reset();
-    }
-    delegate_.reset();
+        {
+            std::lock_guard<std::mutex> lock(tracks_mutex_);
+            video_track_.reset();
+            video_source_.reset();
+            audio_track_.reset();
+            audio_source_.reset();
+        }
+        if (room_) {
+            room_->setDelegate(nullptr);
+            room_.reset();
+        }
+        delegate_.reset();
 #endif
+    } catch (...) {
+        teardown_complete_.store(true);
+        teardown_in_progress_.store(false);
+        throw;
+    }
+    teardown_complete_.store(true);
+    teardown_in_progress_.store(false);
 
     // FireStateChanged dedupes — a fresh ctor + first Connect goes
     // kDisconnected -> kConnecting -> kConnected without an initial

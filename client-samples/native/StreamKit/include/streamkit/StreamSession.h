@@ -83,6 +83,7 @@ public:
 
     /// Called about once per second with network telemetry from the backend.
     /// May run on a backend worker thread; marshal to the UI thread as needed.
+    /// Exceptions are contained by the built-in LiveKit backend.
     std::function<void(const NetworkMetrics& metrics)> on_network_metrics;
 
     // ── State ──────────────────────────────────────────────────────────────

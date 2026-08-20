@@ -184,6 +184,9 @@ public final class StreamSession: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 connectionState = state
+                if state != .connected {
+                    networkMetrics = nil
+                }
                 onConnectionStateChanged?(state)
             }
         }
@@ -202,6 +205,7 @@ public final class StreamSession: ObservableObject {
         backend.onNetworkMetrics = { [weak self] metrics in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                guard connectionState == .connected else { return }
                 networkMetrics = metrics
                 onNetworkMetrics?(metrics)
             }

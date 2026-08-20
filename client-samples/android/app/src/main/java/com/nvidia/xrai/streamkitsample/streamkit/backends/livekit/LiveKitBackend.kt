@@ -373,16 +373,17 @@ internal class LiveKitBackend(
             .mapNotNull { it.members["selectedCandidatePairId"] as? String }
             .toSet()
         val candidatePairs = allStats.filter { it.type == "candidate-pair" }
-        val selectedPair = candidatePairs.firstOrNull { stat ->
-            stat.id in selectedPairIds
-        } ?: candidatePairs.firstOrNull { stat ->
-            stat.members["nominated"] == true || stat.members["selected"] == true
+        val selectedPairs = candidatePairs.filter { it.id in selectedPairIds }
+        val activePairs = selectedPairs.ifEmpty {
+            candidatePairs.filter { stat ->
+                stat.members["nominated"] == true || stat.members["selected"] == true
+            }
         }
-        val roundTripTimeMs = selectedPair?.let { stat ->
-            (stat.members["currentRoundTripTime"] as? Number)?.toDouble()
-                ?.takeIf { it.isFinite() && it >= 0.0 }
-                ?.times(1_000)
-        }
+        val roundTripTimeMs = activePairs.asSequence()
+            .mapNotNull { (it.members["currentRoundTripTime"] as? Number)?.toDouble() }
+            .filter { it.isFinite() && it >= 0.0 }
+            .maxOrNull()
+            ?.times(1_000)
         val receiveJitterMs = subscriber?.statsMap?.values
             ?.asSequence()
             ?.filter { it.type == "inbound-rtp" }

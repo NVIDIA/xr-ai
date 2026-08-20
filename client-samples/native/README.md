@@ -36,7 +36,7 @@ What's covered:
 | `streamkit_frame_sink_tests` | `FrameSink`'s move-overload default impl correctly forwards to the span overload; backends that override both bypass the forwarder. |
 | `streamkit_audio_sink_tests` | `AudioSink::InjectAudioFrame` delivers every parameter verbatim and dispatches correctly through an `AudioSink&` reference. |
 | `streamkit_session_tests` | Full `StreamSession` lifecycle through a `MockBackend` — connect / start audio / start camera / send / receive / agent status / disconnect, verifying event-hook fan-out. |
-| `streamkit_livekit_backend_tests` | `LiveKitBackend` state-change dedupe, idempotent disconnect, and safe overlapping disconnects from the telemetry callback and application threads. |
+| `streamkit_livekit_backend_tests` | `LiveKitBackend` state-change dedupe, idempotent and overlapping disconnects, stale-epoch metric suppression, and callback exception containment. |
 
 Useful variants:
 

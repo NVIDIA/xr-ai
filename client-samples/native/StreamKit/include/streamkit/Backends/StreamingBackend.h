@@ -118,6 +118,7 @@ public:
 
     /// Fired about once per second with transport-neutral network telemetry.
     /// The built-in LiveKit backend invokes this on its telemetry worker.
+    /// Exceptions are contained and reporting continues.
     std::function<void(const NetworkMetrics& metrics)> on_network_metrics;
 
     // ── Connection ─────────────────────────────────────────────────────────
