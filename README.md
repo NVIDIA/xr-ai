@@ -189,7 +189,10 @@ uv sync
 uv run model_servers
 ```
 
-GPU profiles are auto-detected (`dual_48G_ada` / `spark` / `96G_blackwell`).
+Known GPU profiles are auto-detected (`dual_48G_ada` / `spark` /
+`96G_blackwell`). Unsupported or ambiguous topologies stop with the complete
+inventory instead of assuming a profile; use `--gpu-profile NAME` only after
+copying and reviewing a custom YAML profile for that hardware.
 On first run the stack downloads tens of GB from Hugging Face and can take
 tens of minutes. On subsequent runs the containers restart in under a minute.
 
