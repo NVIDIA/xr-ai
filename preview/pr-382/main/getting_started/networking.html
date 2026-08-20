@@ -513,6 +513,9 @@ validation:</p>
 <p>Skipping validation does not make a closed port reachable. Ensure the VM’s
 cloud firewall and host firewall allow 7881/TCP and 7882/UDP. Keep both options
 disabled for local and private-network deployments.</p>
+<p>NAT also affects the TLS certificate: clients dial the VM’s public IP, which
+must be listed in the certificate’s SAN via <code class="docutils literal notranslate"><span class="pre">web_server_extra_sans</span></code>; see
+<a class="reference internal" href="#tls-for-the-web-client">TLS for the web client</a> below.</p>
 </section>
 <section id="rhel-fedora-or-centos-firewall-cmd">
 <h2>RHEL, Fedora, or CentOS (<code class="docutils literal notranslate"><span class="pre">firewall-cmd</span></code>)<a class="headerlink" href="#rhel-fedora-or-centos-firewall-cmd" title="Link to this heading">#</a></h2>
@@ -574,6 +577,16 @@ never reached directly by client traffic.</p>
 <p>On first run a self-signed certificate is generated at
 <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code>. To use your own, set <code class="docutils literal notranslate"><span class="pre">cert_file</span></code>
 and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code>.</p>
+<p>The generated certificate covers <code class="docutils literal notranslate"><span class="pre">localhost</span></code>, the hostname, and every local
+interface IP. When clients dial an address that is not on any local
+interface (the public IP of a NAT’d cloud VM such as Brev, a forwarding
+proxy’s address, or a DNS name), list it in <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> and the
+certificate is regenerated to include it on the next hub start:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">web_server_extra_sans</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">203.0.113.7</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub.example.com</span>
+</pre></div>
+</div>
 <p>To <strong>disable</strong> TLS for <code class="docutils literal notranslate"><span class="pre">localhost</span></code>-only dev where the certificate warning is
 noise, set <code class="docutils literal notranslate"><span class="pre">web_server_tls:</span> <span class="pre">false</span></code>. With TLS off, the same-origin proxy
 serves plain <code class="docutils literal notranslate"><span class="pre">ws://</span></code> instead of <code class="docutils literal notranslate"><span class="pre">wss://</span></code>, and <code class="docutils literal notranslate"><span class="pre">localhost</span></code> is the only

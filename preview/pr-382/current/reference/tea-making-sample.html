@@ -709,6 +709,12 @@ voice path as <code class="docutils literal notranslate"><span class="pre">simpl
 the visual answer.
 Each turn contains the system prompt, current query, and current workflow
 context—no accumulated conversation history.</p>
+<p>The checked-in Omni deployment accepts one image per request by default, and
+every visual tool in this sample sends exactly one image. If an adaptation adds
+a multi-image tool such as <code class="docutils literal notranslate"><span class="pre">query_images</span></code>, configure the model server’s
+<code class="docutils literal notranslate"><span class="pre">--limit-mm-per-prompt</span></code> value before exposing that tool. The explicit
+<code class="docutils literal notranslate"><span class="pre">reasoning_field</span></code> in <code class="docutils literal notranslate"><span class="pre">models.local.json</span></code> also keeps the inline VLM adapter
+aligned with the Nemotron Omni preset.</p>
 <p>This makes routing easy to reason about: application state decides which
 capabilities exist, and the model decides how to use only those capabilities.</p>
 </section>

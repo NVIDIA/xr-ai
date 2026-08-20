@@ -180,6 +180,13 @@ the visual answer.
 Each turn contains the system prompt, current query, and current workflow
 context—no accumulated conversation history.
 
+The checked-in Omni deployment accepts one image per request by default, and
+every visual tool in this sample sends exactly one image. If an adaptation adds
+a multi-image tool such as ``query_images``, configure the model server's
+``--limit-mm-per-prompt`` value before exposing that tool. The explicit
+``reasoning_field`` in ``models.local.json`` also keeps the inline VLM adapter
+aligned with the Nemotron Omni preset.
+
 This makes routing easy to reason about: application state decides which
 capabilities exist, and the model decides how to use only those capabilities.
 
