@@ -449,6 +449,59 @@ step implicitly.</p>
 workflow state machine, foreground routing, observation loop, background-agent
 ownership, and event composition are reusable.</p>
 </section>
+<section id="quick-start">
+<h2>Quick start<a class="headerlink" href="#quick-start" title="Link to this heading">#</a></h2>
+<p>Run commands from the repository root. The tea sample reuses the shared Omni,
+STT, and embedding services, so start them once in a separate terminal:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
+</pre></div>
+</div>
+<p>Then launch the sample with Piper speech:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample<span class="w"> </span>tea_making_sample<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tts-mode<span class="w"> </span>piper
+</pre></div>
+</div>
+<p>Open <code class="docutils literal notranslate"><span class="pre">https://localhost:8080</span></code>, accept the development certificate, allow camera
+and microphone access, and connect. Wake-word mode is the default; try:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Agent, help me make tea.
+Agent, what is the current step?
+Agent, what do you see?
+Agent, start watching for spills.
+Agent, start recording the transcript.
+</pre></div>
+</div>
+<p>The launcher options are:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Behavior</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--tts-mode</span> <span class="pre">piper</span></code></p></td>
+<td><p>Required choice for lightweight CPU speech on port 8105</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--tts-mode</span> <span class="pre">magpie</span></code></p></td>
+<td><p>Required choice for neural speech on port 8104; uses CUDA when available</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--voice-mode</span> <span class="pre">wake-word</span></code></p></td>
+<td><p>Default; require “Agent” or “Hey Agent” and allow a short follow-up window</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--voice-mode</span> <span class="pre">always-on</span></code></p></td>
+<td><p>Dispatch every finalized utterance without a wake phrase</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code></p></td>
+<td><p>Bind the unauthenticated live event viewer to all IPv4 interfaces instead of loopback</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The live event viewer is available at <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code> on the XR-AI
+host. With <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code>, use <code class="docutils literal notranslate"><span class="pre">http://&lt;xr-host&gt;:8092</span></code> from a trusted
+development network and restrict TCP port 8092 accordingly. Durable JSONL
+records remain under <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/artifacts/</span></code>; the viewer
+is only a bounded view of the current worker process.</p>
+</section>
 <section id="architecture">
 <h2>Architecture<a class="headerlink" href="#architecture" title="Link to this heading">#</a></h2>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>camera frames ────────────────&gt; ParticipantImageAgent
@@ -477,7 +530,12 @@ events. The runtime fans typed events out to peer agents. Agents call peer
 tools directly, and each background agent owns its participant tasks.
 Wake-word gating is the sample default; callers can explicitly select
 always-on speech. Every spoken response is also sent to the connection client
-on <code class="docutils literal notranslate"><span class="pre">agent.response</span></code> so the client can render accessible text alongside audio.</p>
+on <code class="docutils literal notranslate"><span class="pre">agent.response</span></code> so the client can render accessible text alongside audio.
+Raw streamed responses are finalized there as soon as their content completes,
+and batched responses are finalized as soon as their rewrite completes. The
+voice aggregator’s playback reservation affects only subsequent speech
+scheduling, not when the text appears. An urgent barge-in can still stop audio
+after the full intended utterance has reached the client.</p>
 </section>
 <section id="agent-responsibilities">
 <h2>Agent responsibilities<a class="headerlink" href="#agent-responsibilities" title="Link to this heading">#</a></h2>
@@ -805,7 +863,9 @@ suppress, batch, or redirect notices there. Background applications remain
 text/event producers unless a dedicated voice subscriber chooses otherwise.
 Foreground responses and guidance notices publish to <code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code>,
 which combines non-urgent output produced during an active utterance before it
-reaches <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>.</p>
+reaches <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>. The response text reaches the connection client’s Agent
+panel as soon as that raw or rewritten response is complete; the aggregator’s
+open-loop playback estimate remains private scheduling state.</p>
 </section>
 </section>
 <section id="lifecycle-invariants">
@@ -904,6 +964,7 @@ until another concrete application requires the same contract.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-to-copy">What to copy</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#quick-start">Quick start</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#architecture">Architecture</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-responsibilities">Agent responsibilities</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#source-map">Source map</a></li>

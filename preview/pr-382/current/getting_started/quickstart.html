@@ -462,9 +462,13 @@ uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>model_servers
 </pre></div>
 </div>
-<p>GPU profiles are auto-detected (<code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, <code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>). These
-are presets for common configurations; to run on a different GPU, refer to
+<p>GPU profiles are auto-detected (<code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, <code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>). The
+profiles are presets for common configurations; to run on a different GPU, refer to
 <a class="reference internal" href="requirements.html"><span class="doc">Running on other GPUs</span></a>.
+Detection inventories every visible device. If <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code> fails, returns
+malformed data, or reports a topology without an existing model-server
+configuration, startup stops with the detected per-GPU capacity instead of
+assuming a fallback.
 On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.</p>
 <p>Which servers start is a deployment profile selected with
@@ -547,10 +551,16 @@ automatically. Click <strong>Connect</strong>.</p>
 </ul>
 <p>A successful round trip: your query appears in the log, the agent responds after
 a moment, and you hear the reply through your speakers.</p>
-<p><strong>Local model</strong> — override the model weights or GPU settings by editing
-<code class="docutils literal notranslate"><span class="pre">vlm_server.yaml</span></code> in the sample directory.</p>
-<p>To use Cosmos-Reason1 instead, set <code class="docutils literal notranslate"><span class="pre">model:</span> <span class="pre">nvidia/Cosmos-Reason1-7B</span></code> in that
-file and select <code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code> as the VLM adapter preset in <code class="docutils literal notranslate"><span class="pre">models.local.json</span></code>.</p>
+<p><strong>Local model</strong> — on a standalone system smaller than the shared model-server
+profiles, override the model weights or GPU settings in
+<code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/yaml/vlm_server.yaml</span></code>. When automatic GPU
+detection selects one of the supported model-server profiles, the sample uses
+<code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/&lt;profile&gt;/vlm_server.yaml</span></code> so a compatible
+server can be reused without reloading its weights.</p>
+<p>To use Cosmos-Reason1 instead, edit the VLM file selected for your hardware:
+set <code class="docutils literal notranslate"><span class="pre">model:</span> <span class="pre">nvidia/Cosmos-Reason1-7B</span></code>, remove the Cosmos3-only <code class="docutils literal notranslate"><span class="pre">hf_overrides</span></code>
+block, and select <code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code> as the VLM adapter preset in
+<code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/yaml/models.local.json</span></code>.</p>
 <p><strong>Remote model</strong> — copy <code class="docutils literal notranslate"><span class="pre">yaml/models.hosted.json</span></code>, point its VLM endpoint at
 your server, and select it in the worker config:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
@@ -613,7 +623,8 @@ recipes.</p>
 <p>This sample combines an interactive tea guide with optional background change,
 transcript, and video observation. Nemotron-3 Nano Omni supplies both language
 and visual inference. Records are written as JSON Lines under the sample’s
-<code class="docutils literal notranslate"><span class="pre">artifacts/</span></code> directory; there is no separate monitoring dashboard.</p>
+<code class="docutils literal notranslate"><span class="pre">artifacts/</span></code> directory. A separate live event viewer presents selected runtime
+events without replacing those durable records.</p>
 <p>Start the shared model services first, then launch the sample with explicit
 voice and speech modes:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
@@ -628,6 +639,10 @@ self-signed certificate on first use, allow camera and microphone access, and
 connect. In wake-word mode, begin with “Agent” or “Hey Agent.” Use
 <code class="docutils literal notranslate"><span class="pre">--voice-mode</span> <span class="pre">always-on</span></code> to dispatch every finalized utterance, or
 <code class="docutils literal notranslate"><span class="pre">--tts-mode</span> <span class="pre">magpie</span></code> for neural speech on a supported GPU.</p>
+<p>Open <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code> on the XR-AI host for the live event viewer. To
+view it directly from another trusted machine, add <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code> and
+use <code class="docutils literal notranslate"><span class="pre">http://&lt;xr-host&gt;:8092</span></code>; restrict that unauthenticated port to the trusted
+development network.</p>
 <p>The tea workflow changes steps only after an explicit user command. Visual
 observations can satisfy the current step’s evidence requirements, but never
 advance the workflow silently. Refer to the

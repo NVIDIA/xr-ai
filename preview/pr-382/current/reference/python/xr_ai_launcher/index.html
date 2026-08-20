@@ -453,6 +453,17 @@ in the dependency chain of the processes it manages.</p>
 </table>
 </div>
 </section>
+<section id="exceptions">
+<h2>Exceptions<a class="headerlink" href="#exceptions" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.GPUInventoryError" title="xr_ai_launcher.GPUInventoryError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GPUInventoryError</span></code></a></p></td>
+<td><p>Raised when visible GPUs cannot be inventoried or safely classified.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
 <section id="classes">
 <h2>Classes<a class="headerlink" href="#classes" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
@@ -499,7 +510,7 @@ in the dependency chain of the processes it manages.</p>
 <td><p>Non-interactively surface missing optional tokens — NEVER prompts.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.detect_gpu_config" title="xr_ai_launcher.detect_gpu_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">detect_gpu_config</span></code></a>(→ str)</p></td>
-<td><p>Return the GPU config profile by querying nvidia-smi.</p></td>
+<td><p>Select an existing config only when the complete topology is supported.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.load_deployment_profile" title="xr_ai_launcher.load_deployment_profile"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_deployment_profile</span></code></a>(→ ModelDeployment)</p></td>
 <td><p>Load a JSON deployment profile directly (no worker YAML indirection).</p></td>
@@ -606,17 +617,18 @@ actionable notice per still-missing token and continues, so a missing
 token is visible early without blocking startup on an interactive prompt.</p>
 </dd></dl>
 
+<dl class="py exception">
+<dt class="sig sig-object py" id="xr_ai_launcher.GPUInventoryError">
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">GPUInventoryError</span></span><a class="headerlink" href="#xr_ai_launcher.GPUInventoryError" title="Link to this definition">#</a></dt>
+<dd><p>Raised when visible GPUs cannot be inventoried or safely classified.</p>
+</dd></dl>
+
 <dl class="py function">
 <dt class="sig sig-object py" id="xr_ai_launcher.detect_gpu_config">
 <span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">detect_gpu_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#xr_ai_launcher.detect_gpu_config" title="Link to this definition">#</a></dt>
-<dd><p>Return the GPU config profile by querying nvidia-smi.</p>
-<section id="profiles">
-<h3>Profiles<a class="headerlink" href="#profiles" title="Link to this heading">#</a></h3>
-<p>dual_48G_ada   — 2× ADA 48 GB (default / current dev box)
-spark          — 1× Blackwell GB10 (DGX Spark; ~96 GiB GPU-visible HBM)
-96G_blackwell  — 1× Blackwell ~96 GB</p>
-<p>Falls back to <code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code> on any detection failure.</p>
-</section>
+<dd><p>Select an existing config only when the complete topology is supported.</p>
+<p>This compatibility bridge remains until capability-based service planning
+replaces named config selection. It deliberately has no fallback.</p>
 </dd></dl>
 
 <dl class="py class">
@@ -876,6 +888,7 @@ and <code class="docutils literal notranslate"><span class="pre">Process.config<
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#attributes">Attributes</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exceptions">Exceptions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#classes">Classes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#functions">Functions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#package-contents">Package Contents</a><ul class="nav section-nav flex-column">
@@ -889,6 +902,7 @@ and <code class="docutils literal notranslate"><span class="pre">Process.config<
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.load_credentials"><code class="docutils literal notranslate"><span class="pre">load_credentials()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.require_credentials"><code class="docutils literal notranslate"><span class="pre">require_credentials()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.warn_if_missing"><code class="docutils literal notranslate"><span class="pre">warn_if_missing()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.GPUInventoryError"><code class="docutils literal notranslate"><span class="pre">GPUInventoryError</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.detect_gpu_config"><code class="docutils literal notranslate"><span class="pre">detect_gpu_config()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.ModelDeployment"><code class="docutils literal notranslate"><span class="pre">ModelDeployment</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.ModelDeployment.profile_path"><code class="docutils literal notranslate"><span class="pre">profile_path</span></code></a></li>

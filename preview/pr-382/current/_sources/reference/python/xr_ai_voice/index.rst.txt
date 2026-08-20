@@ -63,12 +63,13 @@ Package Contents
    Serialize and coalesce candidate speech independently per participant.
 
    A lone finite contribution passes through without a model call after the
-   short coalescing window. The aggregator keeps that response open for its
-   estimated spoken duration, so updates arriving while it is being spoken
-   wait and coalesce instead of building a speech queue. Multiple pending
-   finite contributions are rewritten into one response. A lone incremental
-   response streams through immediately and uses the same playback estimate
-   after its final chunk. An urgent contribution interrupts the active output.
+   short coalescing window. Completed text is finalized downstream immediately,
+   while the aggregator independently reserves its estimated spoken duration
+   so later updates wait and coalesce instead of building a speech queue.
+   Multiple pending finite contributions are rewritten into one response. A
+   lone incremental response streams through immediately and uses the same
+   scheduling reservation after its final chunk. An urgent contribution
+   interrupts the active output.
 
 
    .. py:method:: contribute(output: xr_ai_voice.VoiceOutput, ctx: xr_ai_runtime.RuntimeContext) -> None

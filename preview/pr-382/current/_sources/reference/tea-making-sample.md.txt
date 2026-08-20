@@ -34,6 +34,49 @@ Tea names, temperatures, timers, and step prompts are sample-specific. The
 workflow state machine, foreground routing, observation loop, background-agent
 ownership, and event composition are reusable.
 
+## Quick start
+
+Run commands from the repository root. The tea sample reuses the shared Omni,
+STT, and embedding services, so start them once in a separate terminal:
+
+```bash
+uv run --project agent-samples/model-servers model_servers
+```
+
+Then launch the sample with Piper speech:
+
+```bash
+uv run --project agent-samples/tea-making-sample tea_making_sample \
+  --tts-mode piper
+```
+
+Open `https://localhost:8080`, accept the development certificate, allow camera
+and microphone access, and connect. Wake-word mode is the default; try:
+
+```text
+Agent, help me make tea.
+Agent, what is the current step?
+Agent, what do you see?
+Agent, start watching for spills.
+Agent, start recording the transcript.
+```
+
+The launcher options are:
+
+| Option | Behavior |
+|---|---|
+| `--tts-mode piper` | Required choice for lightweight CPU speech on port 8105 |
+| `--tts-mode magpie` | Required choice for neural speech on port 8104; uses CUDA when available |
+| `--voice-mode wake-word` | Default; require “Agent” or “Hey Agent” and allow a short follow-up window |
+| `--voice-mode always-on` | Dispatch every finalized utterance without a wake phrase |
+| `--expose-web-events` | Bind the unauthenticated live event viewer to all IPv4 interfaces instead of loopback |
+
+The live event viewer is available at `http://127.0.0.1:8092` on the XR-AI
+host. With `--expose-web-events`, use `http://<xr-host>:8092` from a trusted
+development network and restrict TCP port 8092 accordingly. Durable JSONL
+records remain under `agent-samples/tea-making-sample/artifacts/`; the viewer
+is only a bounded view of the current worker process.
+
 ## Architecture
 
 ```text
@@ -64,6 +107,11 @@ tools directly, and each background agent owns its participant tasks.
 Wake-word gating is the sample default; callers can explicitly select
 always-on speech. Every spoken response is also sent to the connection client
 on `agent.response` so the client can render accessible text alongside audio.
+Raw streamed responses are finalized there as soon as their content completes,
+and batched responses are finalized as soon as their rewrite completes. The
+voice aggregator's playback reservation affects only subsequent speech
+scheduling, not when the text appears. An urgent barge-in can still stop audio
+after the full intended utterance has reached the client.
 
 ## Agent responsibilities
 
@@ -291,7 +339,9 @@ suppress, batch, or redirect notices there. Background applications remain
 text/event producers unless a dedicated voice subscriber chooses otherwise.
 Foreground responses and guidance notices publish to `VoiceAggregationAgent`,
 which combines non-urgent output produced during an active utterance before it
-reaches `VoiceAgent`.
+reaches `VoiceAgent`. The response text reaches the connection client's Agent
+panel as soon as that raw or rewritten response is complete; the aggregator's
+open-loop playback estimate remains private scheduling state.
 
 ## Lifecycle invariants
 

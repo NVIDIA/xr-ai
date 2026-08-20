@@ -643,9 +643,10 @@ example verbatim.</p></li>
 <code class="docutils literal notranslate"><span class="pre">capture_marker_scans</span></code> is enabled.</p></li>
 <li><p>Detect every QR and ArUco marker in the frame.</p></li>
 <li><p>Resolve each marker through <code class="docutils literal notranslate"><span class="pre">DeviceMap</span></code>.</p></li>
-<li><p>Create a derived image that marks the detected polygon.</p></li>
-<li><p>Pass structured marker identity to a VLM governed by the packaged
-instrument-reading system prompt.</p></li>
+<li><p>Create one derived image that overlays every detected polygon with a unique
+temporary label.</p></li>
+<li><p>Ask the VLM once for a strict JSON map from every temporary label to its own
+display reading or <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code>.</p></li>
 <li><p>Return mapped <code class="docutils literal notranslate"><span class="pre">InstrumentSighting</span></code> values independently from successful
 <code class="docutils literal notranslate"><span class="pre">InstrumentReading</span></code> values.</p></li>
 </ol>
@@ -677,14 +678,16 @@ application policy and belongs in the tracker rather than the VLM prompt or
 voice agent.</p>
 <p>Only marker identities present in <code class="docutils literal notranslate"><span class="pre">device_map.yaml</span></code> are treated as instruments.
 Unknown QR payloads and ArUco IDs are logged and ignored, preventing detector
-false positives from becoming names such as <code class="docutils literal notranslate"><span class="pre">ArUco</span> <span class="pre">17</span></code>. The one-frame reader
-requires visible evidence that the highlighted marker and display share one
-continuous physical instrument housing. Proximity, alignment, or being the only
-readable display does not establish ownership. The reader returns <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code>
-when the target housing has no readable display or an adjacent display cannot
-be excluded. These fixed rules are supplied as a system prompt; marker identity
-is structured user data and visible text is treated as evidence, never as
-instructions.</p>
+false positives from becoming names such as <code class="docutils literal notranslate"><span class="pre">ArUco</span> <span class="pre">17</span></code>. They are still given a
+temporary visual label so the VLM can reason about competing housings. The
+one-frame reader requires visible evidence that each labelled marker and
+display share one continuous physical instrument housing. Proximity, alignment,
+or being the only readable display does not establish ownership, and one
+display may not be assigned to multiple markers. The reader returns <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code>
+when a housing has no readable display or an adjacent display cannot be
+excluded. These fixed rules are supplied as a system prompt; decoded marker
+identities remain outside the prompt and visible text is treated as evidence,
+never as instructions.</p>
 </section>
 <section id="connecting-a-backend">
 <h2>Connecting a backend<a class="headerlink" href="#connecting-a-backend" title="Link to this heading">#</a></h2>

@@ -618,6 +618,12 @@ original <code class="docutils literal notranslate"><span class="pre">services/&
 into <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;name&gt;/yaml/</span></code>, change that value to <code class="docutils literal notranslate"><span class="pre">../../../models</span></code> so
 the cache still resolves to the repository-root <code class="docutils literal notranslate"><span class="pre">models/</span></code> directory. Capability
 and capability configurations without a <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> key need no change.</p>
+<p><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code> keeps these sample-local STT and VLM configs for smaller
+standalone hosts. On hardware with enough capacity for a shipped
+<code class="docutils literal notranslate"><span class="pre">model-servers</span></code> profile, its orchestrator selects that profile’s VLM config
+instead. Matching the complete launch config lets the persistent Cosmos
+container be reused safely, while the standalone fallback retains the larger
+single-GPU memory budget.</p>
 <p>Edit the YAML as needed (model, port, device, etc.). The launcher auto-discovers
 <code class="docutils literal notranslate"><span class="pre">yaml/&lt;command&gt;.yaml</span></code> in the sample root and passes it as <code class="docutils literal notranslate"><span class="pre">--config</span></code>.
 For RAG, also point <code class="docutils literal notranslate"><span class="pre">rag_service.yaml</span></code> at an application-owned document
@@ -943,7 +949,7 @@ wire format (<code class="docutils literal notranslate"><span class="pre">finish
 <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">on&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">off&quot;</span></code> in a system or user
 message; reasoning preamble is <strong>not</strong> stripped server-side. Hosting backend
 is selectable per YAML (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0de078452dae84899a86dbb53cb8ea1a3d9bff0a/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/3a8b24a32644406ad10aa9d5bec1c0e66fc9483c/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
 for the full HTTP contract and tuning knobs.</p></li>
 <li><p><strong>nemotron3-nano-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</span></code> (auto-selected by GPU compute
@@ -954,7 +960,7 @@ FlashInfer FP4 MoE kernels. Requires a Blackwell-class GPU (B200 or RTX PRO
 <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> by default to avoid the silent 3–8 min CUDA graph and
 FlashInfer autotune on cold start. Hosting backend is selectable per YAML
 (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0de078452dae84899a86dbb53cb8ea1a3d9bff0a/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/3a8b24a32644406ad10aa9d5bec1c0e66fc9483c/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
 for the vLLM flags it forwards and Blackwell prerequisites.</p></li>
 <li><p><strong>nemotron-omni-llm</strong> is a vLLM-backed multimodal LLM serving
 <code class="docutils literal notranslate"><span class="pre">Nemotron-3-Nano-Omni-30B-A3B-Reasoning</span></code> (text + video input) at port 8108.

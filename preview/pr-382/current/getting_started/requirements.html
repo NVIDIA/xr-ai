@@ -587,6 +587,15 @@ them if you have spare VRAM.</p></li>
 <li><p>On lower-VRAM GPUs, run fewer models concurrently, or lower <code class="docutils literal notranslate"><span class="pre">max_model_len</span></code> on
 the LLM and VLM servers to reduce the KV-cache footprint.</p></li>
 </ol>
+<p>Then select the reviewed profile explicitly:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--gpu-profile<span class="w"> </span>&lt;profile-directory-name&gt;
+</pre></div>
+</div>
+<p>Automatic detection intentionally accepts only bundled profiles whose hardware
+requirements are known to match. <code class="docutils literal notranslate"><span class="pre">--gpu-profile</span></code> bypasses that selection for a
+profile you have explicitly copied and tuned; it does not validate that the model
+servers fit the selected devices.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>The model weights are independent of the GPU. Any NVIDIA GPU with enough VRAM for
