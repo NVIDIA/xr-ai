@@ -92,6 +92,7 @@ class RenderAgent(Agent):
                     transcript=query.text,
                     participant_id=participant_id,
                     timestamp_us=query.timestamp_us,
+                    trace_id=response_id or "",
                 )
             )
             await ctx.publish(

@@ -6,8 +6,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections import defaultdict
 from pathlib import Path
 
+from loguru import logger
 from xr_ai_models import ChatMessage, LLMService, VLMService
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameTool
@@ -127,6 +129,7 @@ class SceneSupervisor:
         self._toolset = ToolSet(subagent_tools)
         self._tool_defs = tool_definitions(self._toolset)
         self._prompt = _PROMPT.read_text(encoding="utf-8").strip()
+        self._participant_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
     async def _recent_conversation(self, participant_id: str) -> tuple[str, str]:
         recalled = await self._text_memory.recall_conversation.execute(
@@ -154,6 +157,14 @@ class SceneSupervisor:
         if _is_truncated(request.transcript):
             return SceneReply(response=_truncated_reply(request.transcript))
 
+        async with self._participant_locks[request.participant_id]:
+            return await self._handle(request)
+
+    async def _handle(self, request: SceneRequest) -> SceneReply:
+        logger.debug(
+            "supervisor turn participant={} trace={} transcript={!r}",
+            request.participant_id, request.trace_id, request.transcript[:80],
+        )
         conversation, pending_truncation = await self._recent_conversation(request.participant_id)
         transcript = request.transcript
         if pending_truncation:

@@ -338,6 +338,41 @@ for the case format and the watch-mode loop. Run with:
 uv run --project agent-samples/xr-render-demo/eval xr_render_demo_eval
 ```
 
+## Tracing and debugging
+
+Every turn carries a `trace_id` derived from the runtime's `message_id`
+(set by `xr-ai-runtime` when it dispatches the `UserQuery`). The id is
+logged at supervisor entry:
+
+```
+[worker] DEBUG supervisor turn participant=alice trace=<uuid> transcript="make a red sphere"
+```
+
+To trace one complete turn, filter worker logs by `trace=<uuid>` or by
+`participant=<id>` and `timestamp_us=<value>` when the trace id is
+unavailable (e.g. in offline eval). Key log landmarks:
+
+| Event | Logger | Level |
+|---|---|---|
+| Turn received | `xr_render_demo_worker.supervisor` | DEBUG |
+| Subagent delegated | `xr_render_demo_worker.agents.*` | DEBUG |
+| Tool call rejected (expected) | `xr_render_demo_worker._loop` | DEBUG |
+| Tool call failed (unexpected) | `xr_render_demo_worker._loop` | ERROR + traceback |
+| Turn failed | `xr_render_demo_worker.agent` | ERROR + traceback |
+
+**Error policy.** Expected degradation paths (camera unavailable, scene
+not started) surface as subagent result strings and reach the user as a
+clarifying reply. Unexpected exceptions (`ValueError` on bad tool input
+logs at DEBUG; all other exceptions log at ERROR with full traceback via
+`logger.exception`) propagate so the runtime remains fail-fast and the
+turn is recorded as failed in the runtime event log.
+
+**Concurrent participants.** Each participant's turns are serialized by
+the supervisor's per-participant lock. Different participants can run
+concurrently; their scene mutations are isolated by participant-scoped
+delegation flags (`mark_mutating`, `mark_delegated`) and the underlying
+scene service serializes conflicting writes.
+
 ### Prompt/eval overlap audit
 
 Per `AGENTS.md` "Prompt-driven samples", the harness audits every worker

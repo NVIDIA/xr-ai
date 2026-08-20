@@ -10,10 +10,11 @@ Architecture (per AGENTS.md + the Agentic AI for XR design doc):
   Web client ── WebRTC ──► cloudxr-runtime
                         worker ──native tool──► scene ──► LOVR (OpenXR)
 
-The worker consumes audio from the hub, computes a sphere radius from voice
-loudness, and invokes sample-local native scene tools. The sample-local
-scene process owns LOVR and scene state. CloudXR runs alongside as
-its own stream — neither stack passes through the other.
+The worker receives voice queries from the hub and routes them through a
+supervisor plus five focused subagents (placement, appearance, object,
+vision, memory). Each subagent calls sample-local scene tools to read and
+mutate the XR scene. The scene process owns LOVR and scene state. CloudXR
+runs alongside as its own stream; neither stack passes through the other.
 
 Prerequisites
 -------------
@@ -40,7 +41,8 @@ To use a custom LOVR build instead of the auto-downloaded one:
     export LOVR_BIN=/path/to/your/lovr      # or set lovr_bin: in scene/scene_service.yaml
 
 Then open https://<host>:8080, click "Start Mic", click "Launch XR" (or the
-WebXR DevUI on desktop). Speak; the sphere tracks your voice in the headset.
+WebXR DevUI on desktop). Speak a scene command; the agent interprets it and
+mutates the XR scene (move, recolor, add, remove, etc.).
 
 The CloudXR EULA is accepted via cloudxr_runtime.yaml (see ``accept_eula``).
 """

@@ -11,6 +11,7 @@ class SceneRequest(BaseModel):
     transcript: str
     participant_id: str = ""
     timestamp_us: int = 0
+    trace_id: str = ""
 
 
 class SceneReply(BaseModel):
