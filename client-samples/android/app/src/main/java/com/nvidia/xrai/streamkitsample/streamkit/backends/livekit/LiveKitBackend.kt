@@ -136,7 +136,7 @@ internal class LiveKitBackend(
         // DISCONNECTED events that arrive immediately after a connect.
         scope.launch {
             newRoom.events.collect { event ->
-                handleEvent(event)
+                handleEvent(newRoom, event)
             }
         }
 
@@ -303,7 +303,8 @@ internal class LiveKitBackend(
 
     // ── Event dispatcher ───────────────────────────────────────────────────────
 
-    private fun handleEvent(event: RoomEvent) {
+    private fun handleEvent(eventRoom: Room, event: RoomEvent) {
+        if (room !== eventRoom) return
         when (event) {
             is RoomEvent.Reconnecting -> {
                 isConnected = false
@@ -315,6 +316,9 @@ internal class LiveKitBackend(
             }
             is RoomEvent.Disconnected -> {
                 isConnected = false
+                room = null
+                connectionScope?.cancel()
+                connectionScope = null
                 onConnectionStateChanged?.invoke(ConnectionState.DISCONNECTED)
             }
             is RoomEvent.DataReceived -> handleData(event)

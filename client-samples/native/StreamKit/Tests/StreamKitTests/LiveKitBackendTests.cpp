@@ -132,6 +132,22 @@ int main() {
 
     session.Disconnect();
 
+    // Disconnecting from kConnecting cancels the outer Connect call before it
+    // can establish or report a connected session.
+    streamkit::LiveKitBackend cancelled_connect_backend{lk};
+    std::vector<ConnectionState> cancelled_connect_states;
+    cancelled_connect_backend.on_connection_state_changed =
+        [&](ConnectionState state) {
+            cancelled_connect_states.push_back(state);
+            if (state == ConnectionState::kConnecting) {
+                cancelled_connect_backend.Disconnect();
+            }
+        };
+    cancelled_connect_backend.Connect(streamkit::SessionConfig::Default());
+    ExpectEq(cancelled_connect_states.size(), std::size_t{2});
+    Expect(cancelled_connect_states[0] == ConnectionState::kConnecting);
+    Expect(cancelled_connect_states[1] == ConnectionState::kDisconnected);
+
     // A telemetry callback may disconnect while an app-thread disconnect is
     // already joining that worker. Both calls must share ownership safely and
     // neither may wait on the other while holding the ownership mutex.

@@ -217,20 +217,34 @@ void LiveKitBackend::Connect(const SessionConfig& session_config) {
         throw MissingTokenError{};
     }
 
+    std::unique_lock<std::recursive_mutex> connect_lock(teardown_mutex_);
     teardown_complete_.store(false);
+    const auto connect_generation = connect_generation_.fetch_add(1) + 1;
     FireStateChanged(ConnectionState::kConnecting);
+    if (teardown_complete_.load() ||
+        connect_generation_.load() != connect_generation) {
+        return;
+    }
 
 #if STREAMKIT_HAVE_LIVEKIT
-    room_ = std::make_shared<livekit::Room>();
+    const auto room = std::make_shared<livekit::Room>();
+    room_ = room;
     delegate_ = std::make_shared<Delegate>(this);
-    room_->setDelegate(delegate_.get());
+    room->setDelegate(delegate_.get());
 
     livekit::RoomOptions opts;
     // auto_subscribe=true is the SDK default; spelled out so a future
     // upstream default flip doesn't silently break remote audio playback.
     opts.auto_subscribe = true;
 
-    const bool ok = room_->connect(ws_url, token, opts);
+    connect_lock.unlock();
+    const bool ok = room->connect(ws_url, token, opts);
+    connect_lock.lock();
+    if (teardown_complete_.load() ||
+        connect_generation_.load() != connect_generation) {
+        room->setDelegate(nullptr);
+        return;
+    }
     if (!ok) {
         room_.reset();
         delegate_.reset();
@@ -240,13 +254,17 @@ void LiveKitBackend::Connect(const SessionConfig& session_config) {
     // The SDK delegate may have already fired kConnected during the blocking
     // Room::connect above. FireStateChanged dedupes the explicit transition.
     ApplyConnectionState(ConnectionState::kConnected);
-    StartNetworkMetricsReporting();
 #else
     (void)ws_url;
     (void)token;
     ApplyConnectionState(ConnectionState::kConnected);
-    StartNetworkMetricsReporting();
 #endif
+    if (teardown_complete_.load() ||
+        connect_generation_.load() != connect_generation) {
+        return;
+    }
+    connect_lock.unlock();
+    StartNetworkMetricsReporting();
 }
 
 void LiveKitBackend::Disconnect() {
@@ -789,6 +807,7 @@ void LiveKitBackend::TearDown() {
     }
     if (teardown_complete_.load()) return;
     teardown_in_progress_.store(true);
+    connect_generation_.fetch_add(1);
 
     try {
         BlockNetworkMetricsDelivery();

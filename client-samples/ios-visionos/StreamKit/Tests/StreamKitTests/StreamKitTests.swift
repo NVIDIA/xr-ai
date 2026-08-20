@@ -7,7 +7,7 @@ import Testing
 @testable import StreamKit
 
 private final class MockStreamingBackend: StreamingBackend, @unchecked Sendable {
-    var onConnectionStateChanged: (@Sendable (ConnectionState) -> Void)?
+    var onConnectionStateChanged: (@Sendable (StreamKit.ConnectionState) -> Void)?
     var onDataReceived: (@Sendable (String, Data) -> Void)?
     var onAgentStatus: (@Sendable (String) -> Void)?
     var onNetworkMetrics: (@Sendable (NetworkMetrics) -> Void)?
@@ -24,8 +24,8 @@ private final class MockStreamingBackend: StreamingBackend, @unchecked Sendable 
 @Suite("ConnectionState")
 struct ConnectionStateTests {
     @Test func equatable() {
-        #expect(ConnectionState.connected == .connected)
-        #expect(ConnectionState.disconnected != .connected)
+        #expect(StreamKit.ConnectionState.connected == .connected)
+        #expect(StreamKit.ConnectionState.disconnected != .connected)
     }
 }
 

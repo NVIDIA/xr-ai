@@ -420,6 +420,12 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         for participant in room.remoteParticipants.values {
             tracks.append(contentsOf: participant.trackPublications.values.compactMap(\.track))
         }
+        let currentTrackIDs = Set(tracks.map { ObjectIdentifier($0) })
+        let departedTracks = statisticsTracks.filter { !currentTrackIDs.contains($0.key) }
+        for (id, track) in departedTracks {
+            await track.set(reportStatistics: false)
+            statisticsTracks.removeValue(forKey: id)
+        }
         for track in tracks {
             let id = ObjectIdentifier(track)
             if statisticsTracks[id] == nil {

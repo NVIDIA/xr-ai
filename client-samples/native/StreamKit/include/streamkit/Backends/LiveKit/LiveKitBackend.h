@@ -204,6 +204,7 @@ private:
     std::atomic<ConnectionState> last_fired_state_{ConnectionState::kDisconnected};
     std::atomic<NetworkQuality> network_quality_{NetworkQuality::kUnknown};
     std::atomic<std::uint64_t> connection_epoch_{0};
+    std::atomic<std::uint64_t> connect_generation_{0};
     // Serializes liveness checks, delivery, and state transitions. Shared
     // ownership lets a callback finish unlocking if it destroys the backend.
     struct NetworkMetricsDeliveryState {
