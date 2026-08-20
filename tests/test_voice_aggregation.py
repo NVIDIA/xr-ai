@@ -116,7 +116,7 @@ async def test_single_contribution_bypasses_llm() -> None:
     output, metadata = recorder.outputs[0]
     assert output.text == "The timer is done."
     assert output.timestamp_us == 11
-    assert output.final is False
+    assert output.final is True
     assert output.response_id
     assert metadata.participant_id == "alice"
     assert metadata.source == "voice-aggregation"
@@ -125,7 +125,7 @@ async def test_single_contribution_bypasses_llm() -> None:
 
 async def test_simultaneous_contributions_are_rewritten_once() -> None:
     llm = _LLM("Temperature rose to 24 degrees, and the timer is done.")
-    runtime, aggregator, recorder = await _start(llm)
+    runtime, aggregator, recorder = await _start(llm, minimum_playback_s=0.2)
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
@@ -140,6 +140,8 @@ async def test_simultaneous_contributions_are_rewritten_once() -> None:
             source="timer",
         )
         await recorder.wait_for(1)
+        assert aggregator._states["alice"].task is not None
+        assert not aggregator._states["alice"].task.done()
     finally:
         await _stop(runtime, aggregator)
 
@@ -147,7 +149,7 @@ async def test_simultaneous_contributions_are_rewritten_once() -> None:
     assert output.text == "Temperature rose to 24 degrees, and the timer is done."
     assert output.interrupt is False
     assert output.timestamp_us == 10
-    assert output.final is False
+    assert output.final is True
     assert output.response_id
     assert len(llm.calls) == 1
     messages, kwargs = llm.calls[0]
@@ -220,11 +222,11 @@ async def test_lone_stream_passes_through_while_pending_updates_coalesce() -> No
             participant_id="alice",
             source="foreground",
         )
-        await recorder.wait_for(5)
+        await recorder.wait_for(3)
     finally:
         await _stop(runtime, aggregator)
 
-    first, second, stream_end, third, batch_end = [output for output, _metadata in recorder.outputs]
+    first, second, third = [output for output, _metadata in recorder.outputs]
     assert first.text == "I can see "
     assert first.final is False
     assert first.response_id
@@ -232,13 +234,11 @@ async def test_lone_stream_passes_through_while_pending_updates_coalesce() -> No
     assert second == VoiceOutput(
         text="a beaker.",
         response_id=first.response_id,
-        final=False,
+        final=True,
     )
-    assert stream_end == VoiceOutput(response_id=first.response_id)
     assert third.text == "Temperature changed, and the timer completed."
-    assert third.final is False
+    assert third.final is True
     assert third.response_id
-    assert batch_end == VoiceOutput(response_id=third.response_id)
     assert len(llm.calls) == 1
 
 
@@ -268,19 +268,18 @@ async def test_stream_buffered_during_playback_keeps_all_chunks() -> None:
             participant_id="alice",
             source="foreground",
         )
-        await recorder.wait_for(5)
+        await recorder.wait_for(3)
     finally:
         await _stop(runtime, aggregator)
 
     outputs = [output for output, _metadata in recorder.outputs]
-    assert outputs[1] == VoiceOutput(response_id=outputs[0].response_id)
-    assert outputs[2].text == "Buffered "
-    assert outputs[3] == VoiceOutput(
+    assert outputs[0].final is True
+    assert outputs[1].text == "Buffered "
+    assert outputs[2] == VoiceOutput(
         text="stream.",
-        response_id=outputs[2].response_id,
-        final=False,
+        response_id=outputs[1].response_id,
+        final=True,
     )
-    assert outputs[4] == VoiceOutput(response_id=outputs[2].response_id)
 
 
 async def test_interleaved_streams_keep_each_stream_ordered() -> None:
@@ -299,29 +298,26 @@ async def test_interleaved_streams_keep_each_stream_ordered() -> None:
                 participant_id="alice",
                 source=source,
             )
-        await recorder.wait_for(6)
+        await recorder.wait_for(4)
     finally:
         await _stop(runtime, aggregator)
 
     outputs = [output for output, _metadata in recorder.outputs]
     first_id = outputs[0].response_id
-    second_id = outputs[3].response_id
+    second_id = outputs[2].response_id
     assert [output.text for output in outputs] == [
         "First ",
         "stream.",
-        "",
         "Second ",
         "stream.",
-        "",
     ]
     assert [output.response_id for output in outputs] == [
         first_id,
         first_id,
-        first_id,
-        second_id,
         second_id,
         second_id,
     ]
+    assert [output.final for output in outputs] == [False, True, False, True]
 
 
 async def test_updates_during_estimated_playback_coalesce_after_current_output() -> None:
@@ -351,17 +347,15 @@ async def test_updates_during_estimated_playback_coalesce_after_current_output()
             participant_id="alice",
             source="timer",
         )
-        await recorder.wait_for(4)
+        await recorder.wait_for(2)
     finally:
         await _stop(runtime, aggregator)
 
-    first, first_end, combined, combined_end = [output for output, _metadata in recorder.outputs]
+    first, combined = [output for output, _metadata in recorder.outputs]
     assert first.text == "This response remains active while it is spoken."
-    assert first.final is False
-    assert first_end == VoiceOutput(response_id=first.response_id)
+    assert first.final is True
     assert combined.text == "Temperature changed, and the timer completed."
-    assert combined.final is False
-    assert combined_end == VoiceOutput(response_id=combined.response_id)
+    assert combined.final is True
     assert len(llm.calls) == 1
 
 
@@ -494,7 +488,7 @@ async def test_discarded_stream_does_not_resume_after_other_interrupts() -> None
             participant_id="alice",
             source="stream",
         )
-        await recorder.wait_for(5)
+        await recorder.wait_for(4)
 
         state = aggregator._states["alice"]
         a_key = ("stream", "A")
@@ -506,7 +500,7 @@ async def test_discarded_stream_does_not_resume_after_other_interrupts() -> None
             source="stream",
         )
         await asyncio.sleep(0.02)
-        assert len(recorder.outputs) == 5
+        assert len(recorder.outputs) == 4
         assert state.discarded_streams[a_key] > old_expiry
 
         await runtime.publish(
@@ -528,8 +522,8 @@ async def test_discarded_stream_does_not_resume_after_other_interrupts() -> None
         "B-start",
         "C-start",
         "C-end",
-        "",
     ]
+    assert recorder.outputs[-1][0].final is True
 
 
 async def test_discarded_stream_can_restart_after_idle_expiry() -> None:
@@ -565,7 +559,7 @@ async def test_discarded_stream_can_restart_after_idle_expiry() -> None:
             participant_id="alice",
             source="stream",
         )
-        await recorder.wait_for(4)
+        await recorder.wait_for(3)
         await asyncio.sleep(0.04)
 
         await runtime.publish(
@@ -574,14 +568,14 @@ async def test_discarded_stream_can_restart_after_idle_expiry() -> None:
             participant_id="alice",
             source="stream",
         )
-        await recorder.wait_for(5)
+        await recorder.wait_for(4)
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
             VoiceOutput(text="A-end", response_id="A"),
             participant_id="alice",
             source="stream",
         )
-        await recorder.wait_for(7)
+        await recorder.wait_for(5)
     finally:
         await _stop(runtime, aggregator)
 
@@ -589,11 +583,11 @@ async def test_discarded_stream_can_restart_after_idle_expiry() -> None:
         "A-old",
         "B-start",
         "B-end",
-        "",
         "A-new",
         "A-end",
-        "",
     ]
+    assert recorder.outputs[2][0].final is True
+    assert recorder.outputs[4][0].final is True
 
 
 async def test_expired_discarded_streams_are_pruned_by_finite_work() -> None:
@@ -620,7 +614,7 @@ async def test_expired_discarded_streams_are_pruned_by_finite_work() -> None:
             participant_id="alice",
             source="monitor",
         )
-        await recorder.wait_for(3)
+        await recorder.wait_for(2)
 
         assert state.discarded_streams == {}
     finally:
@@ -715,17 +709,16 @@ async def test_urgent_batch_speaks_alert_first_and_retains_routine_order() -> No
             participant_id="alice",
             source="safety",
         )
-        await recorder.wait_for(4)
+        await recorder.wait_for(2)
     finally:
         await _stop(runtime, aggregator)
 
     assert [output.text for output, _metadata in recorder.outputs] == [
         "Move away.",
-        "",
         "Routine one, then routine two.",
-        "",
     ]
     assert recorder.outputs[0][0].interrupt is True
+    assert all(output.final for output, _metadata in recorder.outputs)
     assert len(llm.calls) == 1
     assert "Routine one." in str(llm.calls[0][0][-1].content)
     assert "Routine two." in str(llm.calls[0][0][-1].content)
@@ -765,20 +758,18 @@ async def test_stream_boundary_does_not_hide_queued_urgent_output() -> None:
             participant_id="alice",
             source="foreground",
         )
-        await recorder.wait_for(7)
+        await recorder.wait_for(4)
     finally:
         await _stop(runtime, aggregator)
 
     assert [output.text for output, _metadata in recorder.outputs] == [
         "Move now.",
-        "",
         "Routine.",
-        "",
         "Stream start",
         "Stream end",
-        "",
     ]
     assert recorder.outputs[0][0].interrupt is True
+    assert recorder.outputs[-1][0].final is True
     assert llm.calls == []
 
 
@@ -829,14 +820,14 @@ async def test_urgent_contribution_cancels_in_flight_rewrite() -> None:
         )
         await recorder.wait_for(1)
         gate.set()
-        await recorder.wait_for(3)
+        await recorder.wait_for(2)
     finally:
         await _stop(runtime, aggregator)
 
     assert llm.cancelled is True
     assert recorder.outputs[0][0].text == "Move away now."
     assert recorder.outputs[0][0].interrupt is True
-    assert recorder.outputs[2][0].text == "Combined update."
+    assert recorder.outputs[1][0].text == "Combined update."
     assert len(llm.calls) == 2
     assert "First routine update." in str(llm.calls[1][0][-1].content)
     assert "Second routine update." in str(llm.calls[1][0][-1].content)
