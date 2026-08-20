@@ -55,6 +55,10 @@ Skipping validation does not make a closed port reachable. Ensure the VM's
 cloud firewall and host firewall allow 7881/TCP and 7882/UDP. Keep both options
 disabled for local and private-network deployments.
 
+NAT also affects the TLS certificate: clients dial the VM's public IP, which
+must be listed in the certificate's SAN via `web_server_extra_sans`; see
+[TLS for the web client](#tls-for-the-web-client) below.
+
 ## RHEL, Fedora, or CentOS (`firewall-cmd`)
 
 ```bash
@@ -123,6 +127,18 @@ never reached directly by client traffic.
 On first run a self-signed certificate is generated at
 `~/.local/share/xr-ai/web-server.crt`. To use your own, set `cert_file`
 and `key_file` in `xr_media_hub.yaml`.
+
+The generated certificate covers `localhost`, the hostname, and every local
+interface IP. When clients dial an address that is not on any local
+interface (the public IP of a NAT'd cloud VM such as Brev, a forwarding
+proxy's address, or a DNS name), list it in `xr_media_hub.yaml` and the
+certificate is regenerated to include it on the next hub start:
+
+```yaml
+web_server_extra_sans:
+  - 203.0.113.7
+  - hub.example.com
+```
 
 To **disable** TLS for `localhost`-only dev where the certificate warning is
 noise, set `web_server_tls: false`. With TLS off, the same-origin proxy

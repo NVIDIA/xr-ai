@@ -69,6 +69,10 @@ class LiveKitConnectorConfig:
     # loopback; (b) localhost-only dev where browsers grant camera/mic on
     # http://localhost and the cert dance adds friction with no benefit.
     web_server_tls:    bool = True
+    # Extra hostnames/IPs added to the auto-generated cert's SAN: addresses
+    # clients dial that are on no local interface (a NAT'd cloud VM's public
+    # IP, a forwarding proxy's address, or a DNS name).
+    web_server_extra_sans: list[str] = field(default_factory=list)
 
     # ── Shared-memory ring buffer ──────────────────────────────────────────────
     shm_num_slots:       int = 10

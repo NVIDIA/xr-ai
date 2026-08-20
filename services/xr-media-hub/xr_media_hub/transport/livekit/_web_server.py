@@ -111,7 +111,10 @@ class WebServer:
             cert = self._cfg.cert_file or None
             key  = self._cfg.key_file  or None
             if not cert or not key:
-                cert, key = ensure_self_signed_cert()
+                # Off-loop: cert generation does RSA keygen and network probes.
+                cert, key = await asyncio.to_thread(
+                    ensure_self_signed_cert, self._cfg.web_server_extra_sans
+                )
                 logger.info("TLS: using auto-generated self-signed cert  {}", cert)
             ssl_kwargs = {"ssl_certfile": cert, "ssl_keyfile": key}
             scheme = "https"

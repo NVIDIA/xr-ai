@@ -8,6 +8,7 @@ import datetime
 import ipaddress
 import pathlib
 import socket
+from collections.abc import Sequence
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -42,13 +43,31 @@ def _is_ca_cert(cert: x509.Certificate) -> bool:
         return False
 
 
-def _cert_ipv4_san(cert: x509.Certificate) -> set[str]:
+def _cert_san_entries(cert: x509.Certificate) -> set[str]:
     try:
         san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
     except x509.ExtensionNotFound:
         return set()
-    return {str(ip) for ip in san.get_values_for_type(x509.IPAddress)
-            if isinstance(ip, ipaddress.IPv4Address)}
+    return ({str(ip) for ip in san.get_values_for_type(x509.IPAddress)}
+            | set(san.get_values_for_type(x509.DNSName)))
+
+
+def _normalize_san(entry: str) -> str:
+    try:
+        return str(ipaddress.ip_address(entry))
+    except ValueError:
+        return entry
+
+
+def _san_general_name(entry: str) -> x509.GeneralName | None:
+    try:
+        return x509.IPAddress(ipaddress.ip_address(entry))
+    except ValueError:
+        pass
+    try:
+        return x509.DNSName(entry)
+    except (ValueError, TypeError):
+        return None
 
 
 def _local_ipv4_addrs() -> set[str]:
@@ -78,26 +97,49 @@ def _local_ipv4_addrs() -> set[str]:
     return ips
 
 
-def ensure_self_signed_cert() -> tuple[str, str]:
-    """Return (cert_path, key_path), generating them once and reusing thereafter."""
+def _wanted_san_entries(extra_sans: Sequence[str]) -> set[str]:
+    """Normalized, encodable SAN entries the cert must cover."""
+    candidates = {"localhost", socket.gethostname(), "127.0.0.1"} | _local_ipv4_addrs()
+    for entry in extra_sans:
+        if isinstance(entry, str) and entry.strip():
+            candidates.add(_normalize_san(entry.strip()))
+        else:
+            logger.warning("TLS: ignoring invalid web_server_extra_sans entry {!r}", entry)
+    wanted: set[str] = set()
+    for entry in candidates:
+        if _san_general_name(entry) is None:
+            logger.warning("TLS: cannot encode SAN entry {!r}, skipping", entry)
+        else:
+            wanted.add(entry)
+    return wanted
+
+
+def ensure_self_signed_cert(extra_sans: Sequence[str] = ()) -> tuple[str, str]:
+    """Return (cert_path, key_path), generating them once and reusing thereafter.
+
+    extra_sans lists hostnames or IPs clients dial that are on no local
+    interface, e.g. a NAT'd cloud VM's public IP or a forwarding proxy.
+    """
     _CERT_DIR.mkdir(parents=True, exist_ok=True)
 
-    detected_ips = _local_ipv4_addrs()
+    wanted = _wanted_san_entries(extra_sans)
+    cached_entries: set[str] = set()
     reasons: list[str] = []
 
     if _CERT_FILE.exists() and _KEY_FILE.exists():
         cached = _load_cert(_CERT_FILE)
         if cached is not None:
+            cached_entries = _cert_san_entries(cached)
             if not _is_ca_cert(cached):
                 reasons.append(
                     "cached cert is not a CA cert — regenerating so iOS Full "
                     "Trust toggle appears"
                 )
-            if missing := detected_ips - _cert_ipv4_san(cached):
+            if missing := wanted - cached_entries:
                 reasons.append(
-                    f"cached cert SAN is missing local IP(s) {sorted(missing)} "
-                    "— regenerating so clients connecting via those addresses "
-                    "can validate the host"
+                    f"cached cert SAN is missing {sorted(missing)}; "
+                    "regenerating so clients dialing those addresses can "
+                    "validate the host"
                 )
             if not reasons:
                 return str(_CERT_FILE), str(_KEY_FILE)
@@ -107,16 +149,14 @@ def ensure_self_signed_cert() -> tuple[str, str]:
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     hostname = socket.gethostname()
-    san: list[x509.GeneralName] = [
-        x509.DNSName("localhost"),
-        x509.DNSName(hostname),
-        x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
-    ]
-    for ip in sorted(detected_ips):
-        try:
-            san.append(x509.IPAddress(ipaddress.IPv4Address(ip)))
-        except (ipaddress.AddressValueError, ValueError):
-            continue
+    # Union in the cached entries so the SAN only grows: an interface that is
+    # down at regen time isn't dropped, which would re-trigger regeneration
+    # (and another round of device profile reinstalls) when it comes back.
+    san: list[x509.GeneralName] = []
+    for entry in sorted(wanted | cached_entries):
+        name = _san_general_name(entry)
+        if name is not None:
+            san.append(name)
 
     public_key = key.public_key()
     now  = datetime.datetime.now(datetime.timezone.utc)

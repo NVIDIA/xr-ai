@@ -72,6 +72,16 @@ def load_config() -> LiveKitConnectorConfig:
         if data.get(key):
             data[key] = _resolve_path(data[key], base)
 
+    if "web_server_extra_sans" in data:
+        sans = data["web_server_extra_sans"]
+        if sans is None:
+            data["web_server_extra_sans"] = []
+        elif isinstance(sans, str):
+            data["web_server_extra_sans"] = [sans]
+        elif not isinstance(sans, list):
+            logger.warning("web_server_extra_sans must be a list of strings; ignoring {!r}", sans)
+            data["web_server_extra_sans"] = []
+
     # Filter to only fields that exist on the dataclass.
     valid = {f.name for f in dataclasses.fields(LiveKitConnectorConfig)}
     filtered = {k: v for k, v in data.items() if k in valid}
