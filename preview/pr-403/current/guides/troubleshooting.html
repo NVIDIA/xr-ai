@@ -712,6 +712,16 @@ to skip CUDA graph capture. Eager mode starts faster but can reduce per-token
 throughput; keep the default when steady-state performance matters more than
 cold-start time.</p>
 </section>
+<section id="vllm-exits-before-readiness-with-insufficient-gpu-memory">
+<h3>vLLM exits before readiness with insufficient GPU memory<a class="headerlink" href="#vllm-exits-before-readiness-with-insufficient-gpu-memory" title="Link to this heading">#</a></h3>
+<p><strong>Symptom:</strong> a vLLM container exits during startup with <code class="docutils literal notranslate"><span class="pre">CUDA</span> <span class="pre">out</span> <span class="pre">of</span> <span class="pre">memory</span></code>,
+<code class="docutils literal notranslate"><span class="pre">No</span> <span class="pre">available</span> <span class="pre">memory</span> <span class="pre">for</span> <span class="pre">the</span> <span class="pre">cache</span> <span class="pre">blocks</span></code>, or a negative available KV-cache
+value buried in its container log.</p>
+<p><strong>Fix:</strong> the wrapper classifies these signatures as <code class="docutils literal notranslate"><span class="pre">INSUFFICIENT</span> <span class="pre">GPU</span> <span class="pre">MEMORY</span></code>
+and prints the configured utilization when available. Free memory held by other
+processes, reduce model context or concurrency, or use a device with more
+GPU-visible memory. The complete original error remains in the reported log file.</p>
+</section>
 <section id="xr-render-demo-exits-but-vram-is-still-pinned">
 <h3><code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code> exits but VRAM is still pinned<a class="headerlink" href="#xr-render-demo-exits-but-vram-is-still-pinned" title="Link to this heading">#</a></h3>
 <p><strong>By design.</strong> The vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code>,
@@ -812,6 +822,7 @@ stall indefinitely; set <code class="docutils literal notranslate"><span class="
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#ios-and-visionos-connection-fails-with-certificate-trust-errors">iOS and visionOS — connection fails with certificate-trust errors</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#chrome-immersive-web-extension-cannot-be-enabled">Chrome — Immersive Web extension cannot be enabled</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vllm-cold-start-takes-38-minutes">vLLM cold start takes 3–8 minutes</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vllm-exits-before-readiness-with-insufficient-gpu-memory">vLLM exits before readiness with insufficient GPU memory</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-render-demo-exits-but-vram-is-still-pinned"><code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code> exits but VRAM is still pinned</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#first-run-downloads-models-silently">First run downloads models silently</a></li>
 </ul>
