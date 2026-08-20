@@ -435,7 +435,7 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 <section id="model-servers">
 <h2>model_servers<a class="headerlink" href="#model-servers" title="Link to this heading">#</a></h2>
 <p>model-servers orchestrator — starts one shared AI inference stack and exits.</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span><span class="o">[</span>--stop<span class="o">]</span><span class="w"> </span><span class="o">[</span>--models<span class="w"> </span>NAME_OR_PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--allow-anonymous<span class="o">]</span>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span><span class="o">[</span>--stop<span class="o">]</span><span class="w"> </span><span class="o">[</span>--models<span class="w"> </span>NAME_OR_PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--allow-anonymous<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-profile<span class="w"> </span>NAME<span class="o">]</span>
 </pre></div>
 </div>
 <p class="rubric">Options</p>
@@ -445,6 +445,8 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 <dt><code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">NAME_OR_PATH</span></code></dt><dd><p>Deployment profile to start: a shipped name (default, vlm_llm_nim, vlm_speech_nim) or a path to a profile JSON.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code></dt><dd><p>Start without HF_TOKEN (unauthenticated downloads of the multi-GB checkpoints may stall indefinitely).</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code></dt><dd><p>Use a named YAML GPU profile instead of automatic detection. Intended for explicitly reviewed custom hardware profiles.</p>
 </dd>
 </dl>
 </section>
