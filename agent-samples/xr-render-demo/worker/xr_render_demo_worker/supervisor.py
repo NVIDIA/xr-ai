@@ -15,6 +15,7 @@ from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.text_memory import RecallConversationRequest, TextMemoryTools
 from xr_ai_tools.tool_calling import tool_definitions
 from xr_ai_tools.tracking import TrackingTools
+from xr_ai_tools.video_memory import VideoMemoryTools
 from xr_ai_tools.vision import ImageQueryTool
 from xr_render_scene import SceneTools
 
@@ -98,6 +99,7 @@ class SceneSupervisor:
         vlm: VLMService | None = None,
         images: ImageRegistry | None = None,
         current_frame: CurrentFrameTool | None = None,
+        video: VideoMemoryTools | None = None,
         *,
         subagent_tools: list[Tool] | None = None,
     ) -> None:
@@ -116,7 +118,7 @@ class SceneSupervisor:
                 make_placement_agent(llm, scene, tracking, context),
                 make_appearance_agent(llm, scene, context),
                 make_object_agent(llm, scene, tracking, context),
-                make_vision_agent(llm, current_frame, image_query, context),
+                make_vision_agent(llm, current_frame, image_query, context, video),
                 make_memory_agent(llm, text_memory),
             ]
         self._llm = llm

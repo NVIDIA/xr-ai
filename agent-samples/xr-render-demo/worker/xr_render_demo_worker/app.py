@@ -64,6 +64,7 @@ async def run_app(
             vlm=vlm,
             images=images,
             current_frame=current_frame,
+            video=video,
         )
 
         render = RenderAgent(

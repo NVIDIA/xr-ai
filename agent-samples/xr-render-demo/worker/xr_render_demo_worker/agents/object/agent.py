@@ -37,7 +37,6 @@ def make_object_agent(
 
     async def handle(request: SubagentTask) -> SubagentResult:
         logger.debug("object agent instruction={!r}", request.instruction[:200])
-        context.mark_mutating(request.participant_id)
         async with delegation_lock:
             guard = TurnGuard()
             ledger = CreationLedger()
@@ -61,6 +60,7 @@ def make_object_agent(
                 )),
             ]
             result = await tool_loop(llm, messages, tool_definitions(toolset), toolset)
+            context.mark_mutating(request.participant_id)
             return SubagentResult(result=result or "Done.")
 
     return Tool(name="object_agent", description=DESCRIPTION,

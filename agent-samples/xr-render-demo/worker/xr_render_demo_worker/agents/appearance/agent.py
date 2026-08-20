@@ -32,7 +32,6 @@ def make_appearance_agent(
 
     async def handle(request: SubagentTask) -> SubagentResult:
         logger.debug("appearance agent instruction={!r}", request.instruction[:200])
-        context.mark_mutating(request.participant_id)
         async with delegation_lock:
             guard = TurnGuard()
             tools = make_appearance_tools(scene, guard=guard)
@@ -55,6 +54,7 @@ def make_appearance_agent(
                 )),
             ]
             result = await tool_loop(llm, messages, tool_definitions(toolset), toolset)
+            context.mark_mutating(request.participant_id)
             return SubagentResult(result=result or "Done.")
 
     return Tool(name="appearance_agent", description=DESCRIPTION,

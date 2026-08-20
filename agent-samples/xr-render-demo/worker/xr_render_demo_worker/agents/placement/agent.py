@@ -37,7 +37,6 @@ def make_placement_agent(
 
     async def handle(request: SubagentTask) -> SubagentResult:
         logger.debug("placement agent instruction={!r}", request.instruction[:200])
-        context.mark_mutating(request.participant_id)
         async with delegation_lock:
             guard = TurnGuard()
             tools = make_placement_tools(scene, tracking, guard=guard)
@@ -60,6 +59,7 @@ def make_placement_agent(
                 )),
             ]
             result = await tool_loop(llm, messages, tool_definitions(toolset), toolset)
+            context.mark_mutating(request.participant_id)
             return SubagentResult(result=result or "Done.")
 
     return Tool(name="placement_agent", description=DESCRIPTION,

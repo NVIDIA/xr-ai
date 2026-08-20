@@ -11,6 +11,7 @@ from xr_ai_models import ChatMessage, LLMService
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.tool_calling import tool_definitions
+from xr_ai_tools.video_memory import HistoricalFrameRequest, VideoMemoryTools
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult, ImageQueryTool
 
 from ..._loop import tool_loop
@@ -36,6 +37,7 @@ def make_vision_agent(
     current_frame: CurrentFrameTool,
     image_query: ImageQueryTool,
     context: SceneContext | None = None,
+    video: VideoMemoryTools | None = None,
 ) -> Tool:
     async def handle(request: SubagentTask) -> SubagentResult:
         logger.debug("vision agent instruction={!r}", request.instruction[:200])
@@ -58,6 +60,23 @@ def make_vision_agent(
                 _LiveQuestion, ImageQueryResult, look,
             ),
         ]
+        if video is not None:
+            class _PastQuestion(BaseModel):
+                question: str = Field(min_length=1, description="Specific question about the recorded frame.")
+                seconds_ago: int = Field(gt=0, le=300, description="Whole seconds before the utterance timestamp.")
+
+            async def look_past(req: _PastQuestion) -> ImageQueryResult:
+                start_us = reference_time_us - req.seconds_ago * 1_000_000
+                frame = await video.get_historical_frame.execute(
+                    HistoricalFrameRequest(participant_id=participant_id, start_us=start_us)
+                )
+                return await image_query.execute(ImageQueryRequest(image=frame.image, query=req.question))
+
+            tools.append(Tool(
+                "look_at_past_frame",
+                "Inspect a recorded camera frame from seconds_ago seconds before the utterance timestamp.",
+                _PastQuestion, ImageQueryResult, look_past,
+            ))
         toolset = ToolSet(tools)
         scene_block = ""
         if context is not None:

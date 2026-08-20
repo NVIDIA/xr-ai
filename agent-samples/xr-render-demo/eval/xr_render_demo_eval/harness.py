@@ -590,10 +590,10 @@ async def run_corpus_case(case: dict[str, Any]) -> bool:
         supervisor = _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
                                       fake_current_frame, fake_image_query)
         if case.get("recent_moves"):
-            supervisor._context._recent_moves[_PARTICIPANT] = [
+            supervisor._context.set_recent_moves(_PARTICIPANT, [
                 f"{object_id}: previously at {before}, now at {after}"
                 for object_id, before, after in case.get("recent_moves", ())
-            ]
+            ])
         try:
             reply = await supervisor.handle(
                 SceneRequest(
