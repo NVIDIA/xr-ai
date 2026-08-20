@@ -259,7 +259,7 @@ async def run_case(case: RoutingCase) -> bool:
     fake_tools = [
         _make_fake_agent(name, desc, calls) for name, desc in _DESCRIPTIONS.items()
     ]
-    llm = make_llm(load_models_config(harness._CONFIG.models_yaml), "agent_llm")
+    llm = make_llm(load_models_config(harness._CONFIG.models_config), "agent_llm")
     try:
         fake_scene, fake_tracking, fake_text_memory, _, _ = scene.make_tools()
         supervisor = SceneSupervisor(

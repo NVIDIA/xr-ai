@@ -5,19 +5,18 @@
 
 from __future__ import annotations
 
-import pathlib
 from pathlib import Path
 
 from loguru import logger
 from xr_ai_logging import setup_logging
-from xr_ai_models import make_llm, make_stt, make_tts, make_vlm
+from xr_ai_models import load_models_config, make_llm, make_stt, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.text_memory import TextMemoryTools
 from xr_ai_tools.tracking import TrackingTools
 from xr_ai_tools.video_memory import VideoMemoryTools
-from xr_ai_voice import VadConfig, VoiceAgent, VoiceSession
+from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 from xr_render_scene import SceneTools
 
@@ -27,47 +26,32 @@ from .agent import (
     USER_QUERY_TOPIC,
     RenderAgent,
 )
-from .config import WorkerConfig, load_models
+from .config import WorkerConfig
 from .supervisor import SceneSupervisor
 from .xr_session import XRSessionController
 
 
 async def run_app(
     config: WorkerConfig,
-    config_path: pathlib.Path | None = None,
     *,
     ready_file: Path | None = None,
 ) -> None:
     """Run the render sample until the runtime exits."""
     setup_logging("worker")
-    models = load_models(config_path)
+    models = load_models_config(config.models_config)
     llm = make_llm(models, "agent_llm")
     stt = make_stt(models, "stt")
     tts = make_tts(models, "tts")
     vlm = make_vlm(models, "vlm")
 
-    session = VoiceSession(
-        stt=stt,
-        tts=tts,
-        vad=VadConfig(
-            silence_duration=config.silence_duration,
-            min_speech=config.min_speech,
-            silero_threshold=config.silero_threshold,
-        ),
-        voice_gate=load_voice_gate_config(Path(config.voice_gate_yaml)),
-        probes={"agent-llm": llm.health, "vlm": vlm.health},
-        ready_file=ready_file,
-        closeables=(llm, vlm),
-        idle_timeout_secs=config.idle_timeout_secs,
-    )
-
+    transport = HubVoiceTransport()
     scene = SceneTools(config.scene_endpoint)
     tracking = TrackingTools(config.openxr_endpoint)
     text_memory = TextMemoryTools(config.text_memory_dir)
     video = VideoMemoryTools(config.video_memory_endpoint)
     images = ImageRegistry(allow_external=True)
     current_frame = CurrentFrameTool(
-        endpoint=session.transport.endpoint,
+        endpoint=transport.endpoint,
         images=images,
     )
 
@@ -87,9 +71,20 @@ async def run_app(
             on_participant_left=current_frame.release,
         )
         voice = VoiceAgent(
-            session,
             query_topic=USER_QUERY_TOPIC,
-            text_ignore_topics={"xr.session.started"},
+            stt=stt,
+            tts=tts,
+            vad=VadConfig(
+                silence_duration=config.silence_duration,
+                min_speech=config.min_speech,
+                silero_threshold=config.silero_threshold,
+            ),
+            voice_gate=load_voice_gate_config(config.voice_gate_yaml),
+            probes={"agent-llm": llm.health, "vlm": vlm.health},
+            ready_file=ready_file,
+            closeables=(llm, vlm),
+            idle_timeout_secs=config.idle_timeout_secs,
+            transport=transport,
             participant_left_topic=PARTICIPANT_LEFT_TOPIC,
             interrupted_topic=INTERRUPTED_TOPIC,
         )
@@ -98,7 +93,7 @@ async def run_app(
         runtime.register("xr-render", render)
 
         XRSessionController(
-            session=session,
+            transport=transport,
             start_xr=scene.start_xr,
             get_render_health=scene.get_health,
         ).attach()

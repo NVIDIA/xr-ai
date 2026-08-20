@@ -11,7 +11,7 @@ import time
 from loguru import logger
 from xr_ai_hub import DataMessage
 from xr_ai_tools import Tool
-from xr_ai_voice import VoiceSession
+from xr_ai_voice import HubVoiceTransport
 from xr_render_scene import EmptyRequest
 
 _START = "xr.session.started"
@@ -28,11 +28,11 @@ class XRSessionController:
     def __init__(
         self,
         *,
-        session: VoiceSession,
+        transport: HubVoiceTransport,
         start_xr: Tool,
         get_render_health: Tool,
     ) -> None:
-        self.transport = session.transport
+        self.transport = transport
         self.start_xr = start_xr
         self.get_render_health = get_render_health
         self.started = False

@@ -155,7 +155,7 @@ async def snapshot(scene):
 async def run_turn(scene, endpoint, participant, turn, ids):
     before = await snapshot(scene)
     await endpoint.inject_data(DataMessage(
-        participant_id=participant, topic="live.smoke.text",
+        participant_id=participant, topic="",
         pts_us=time.time_ns() // 1_000, data=turn["prompt"].encode()))
     if turn["kind"] == "change":
         deadline = asyncio.get_running_loop().time() + 75

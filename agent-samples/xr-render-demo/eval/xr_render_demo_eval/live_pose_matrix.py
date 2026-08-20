@@ -84,11 +84,12 @@ async def main() -> None:
                 participant = f"live-pose-{int(time.time())}-{case_index}"
                 await endpoint.inject_participant_event(ParticipantEvent(
                     participant_id=participant, joined=True, pts_us=time.time_ns() // 1_000))
+                await asyncio.sleep(0.5)
                 try:
                     await clear_scene(scene)
                     before = {i.id for i in (await scene.get_scene_state(EmptyRequest())).objects}
                     await endpoint.inject_data(DataMessage(
-                        participant_id=participant, topic="live.smoke.text",
+                        participant_id=participant, topic="",
                         pts_us=time.time_ns() // 1_000, data=prompt.encode()))
                     new = None
                     deadline = asyncio.get_running_loop().time() + 75

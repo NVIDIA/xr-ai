@@ -584,7 +584,7 @@ def _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
 
 async def run_corpus_case(case: dict[str, Any]) -> bool:
     scene = FakeScene.from_corpus_case(case)
-    llm = make_llm(load_models_config(_CONFIG.models_yaml), "agent_llm")
+    llm = make_llm(load_models_config(_CONFIG.models_config), "agent_llm")
     try:
         fake_scene, fake_tracking, fake_text_memory, fake_current_frame, fake_image_query = scene.make_tools()
         supervisor = _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
@@ -849,7 +849,7 @@ UTTERANCES = (
 
 async def run_case(case: Case) -> bool:
     scene = FakeScene.from_case(case)
-    llm = make_llm(load_models_config(_CONFIG.models_yaml), "agent_llm")
+    llm = make_llm(load_models_config(_CONFIG.models_config), "agent_llm")
     try:
         fake_scene, fake_tracking, fake_text_memory, fake_current_frame, fake_image_query = scene.make_tools()
         supervisor = _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,

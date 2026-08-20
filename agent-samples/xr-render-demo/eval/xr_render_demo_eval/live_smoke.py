@@ -25,7 +25,7 @@ async def main() -> None:
     await asyncio.sleep(1.0)
     await endpoint.inject_data(DataMessage(
         participant_id=participant,
-        topic="live.smoke.text",
+        topic="",
         pts_us=time.time_ns() // 1_000,
         data=prompt.encode(),
     ))

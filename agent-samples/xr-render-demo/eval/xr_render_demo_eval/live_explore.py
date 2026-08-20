@@ -123,7 +123,7 @@ async def main() -> None:
                     prim_type=prim_type, x=x, y=y, z=z, r=r, g=g, b=b, size=size))
             before = await snapshot(scene)
             await endpoint.inject_data(DataMessage(
-                participant_id=participant, topic="live.smoke.text",
+                participant_id=participant, topic="",
                 pts_us=time.time_ns() // 1_000, data=utterance.encode()))
             # Expected-change intents may finish early; restraint intents must
             # wait out the window.

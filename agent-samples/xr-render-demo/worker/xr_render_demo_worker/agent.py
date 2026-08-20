@@ -85,6 +85,7 @@ class RenderAgent(Agent):
     async def _run_turn(self, query: UserQuery, ctx: RuntimeContext) -> None:
         participant_id = ctx.metadata.participant_id
         response_id = ctx.metadata.message_id
+        opened = False
         try:
             reply = await self._supervisor.handle(
                 SceneRequest(
@@ -102,18 +103,20 @@ class RenderAgent(Agent):
                     timestamp_us=query.timestamp_us,
                 ),
             )
+            opened = True
         except asyncio.CancelledError:
             raise
         except Exception as error:
             logger.exception("xr-render turn failed for {}: {!r}", participant_id, error)
         finally:
-            try:
-                await ctx.publish(
-                    VOICE_OUTPUT_TOPIC,
-                    VoiceOutput(response_id=response_id, timestamp_us=query.timestamp_us),
-                )
-            except Exception:
-                pass
+            if opened:
+                try:
+                    await ctx.publish(
+                        VOICE_OUTPUT_TOPIC,
+                        VoiceOutput(response_id=response_id, timestamp_us=query.timestamp_us),
+                    )
+                except Exception:
+                    pass
 
     async def _cancel(self, participant_id: str) -> None:
         task = self._tasks.pop(participant_id, None)

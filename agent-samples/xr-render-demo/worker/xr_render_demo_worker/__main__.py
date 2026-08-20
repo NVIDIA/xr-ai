@@ -19,7 +19,7 @@ def run() -> None:
     p.add_argument("--ready-file", type=pathlib.Path, default=None)
     ns, _ = p.parse_known_args()
     cfg = load_config(ns.config)
-    asyncio.run(run_app(cfg, ns.config, ready_file=ns.ready_file))
+    asyncio.run(run_app(cfg, ready_file=ns.ready_file))
 
 
 if __name__ == "__main__":

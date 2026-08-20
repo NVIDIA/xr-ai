@@ -175,7 +175,7 @@ async def main() -> None:
                 ids.append(result.id)
             snapshot = {i.id: i for i in (await scene.get_scene_state(EmptyRequest())).objects}
             await endpoint.inject_data(DataMessage(
-                participant_id=participant, topic="live.smoke.text",
+                participant_id=participant, topic="",
                 pts_us=time.time_ns() // 1_000, data=case["prompt"].encode()))
             verdict = "PASS" if case.get("no_change_ok") else "FAIL"
             detail = "no change within 75s"

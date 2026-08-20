@@ -559,7 +559,7 @@ async def run_case(case: SubagentCase) -> bool:
         case.vision_error,
         case.memory,
     )
-    llm = make_llm(load_models_config(harness._CONFIG.models_yaml), "agent_llm")
+    llm = make_llm(load_models_config(harness._CONFIG.models_config), "agent_llm")
     try:
         fake_scene, fake_tracking, fake_text_memory, fake_current_frame, fake_image_query = scene.make_tools()
         context = SceneContext(fake_scene, fake_tracking)

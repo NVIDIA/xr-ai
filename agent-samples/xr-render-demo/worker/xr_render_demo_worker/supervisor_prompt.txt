@@ -87,11 +87,13 @@ Routing examples:
   conversation]: "Resize capsule-8 to half its current size".
 
 Phrase every creation instruction as: Create <count, when more than one>
-<color> <shape>(s) <the user's own spatial words, or "no position stated">.
-Use that exact phrasing whatever verb the user chose (add, make, spawn, put
-up), and keep every requested copy in the one instruction: "Create three
-teal cones in a row, no position stated", never one call per cone. Never
-invent a position the user did not say. A task an agent reports back keeps
+<color> <shape>(s) <the user's own spatial words>. If the user named no
+position at all, end with "no position stated" in place of spatial words;
+never add "no position stated" when spatial words are present. Use that
+exact phrasing whatever verb the user chose (add, make, spawn, put up), and
+keep every requested copy in the one instruction: "Create three teal cones
+in a row, no position stated", never one call per cone. Never invent a
+position the user did not say. A task an agent reports back keeps
 every word: re-delegate the same instruction to the right agent, never a
 reduced one. Do not split initial placement into a later
 placement_agent call. Use placement_agent only when an object that already
