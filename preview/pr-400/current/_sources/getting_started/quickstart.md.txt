@@ -25,8 +25,8 @@ on startup.
 
 `model-servers` starts the shared inference services used across demos and exits
 immediately — the services keep running in the background with weights hot.
-Start this once before running `xr-render-demo`, or whenever you want to
-pre-warm models:
+Start this once before running `xr-render-demo` or `tea-making-sample`, or
+whenever you want to pre-warm models:
 
 :::{important}
 After updating, stop any existing model servers before starting this stack:
@@ -233,6 +233,43 @@ available on port 8080 together with the shared connection web client. Refer to
 the {doc}`lab instrument architecture guide </reference/lab-instrument-monitoring>`
 for reusable agent patterns, marker setup, output contracts, and adaptation
 recipes.
+
+## Tea-making guidance (voice + visual workflow)
+
+This sample combines an interactive tea guide with optional background change,
+transcript, and video observation. Nemotron-3 Nano Omni supplies both language
+and visual inference. Records are written as JSON Lines under the sample's
+`artifacts/` directory. A separate live event viewer presents selected runtime
+events without replacing those durable records.
+
+Start the shared model services first, then launch the sample with explicit
+voice and speech modes:
+
+```bash
+uv run --project agent-samples/model-servers model_servers
+
+uv run --project agent-samples/tea-making-sample tea_making_sample \
+  --voice-mode wake-word \
+  --tts-mode piper
+```
+
+Open the XR-Media-Hub connection page at `https://localhost:8080`, accept the
+self-signed certificate on first use, allow camera and microphone access, and
+connect. In wake-word mode, begin with “Agent” or “Hey Agent.” Use
+`--voice-mode always-on` to dispatch every finalized utterance, or
+`--tts-mode magpie` for neural speech on a supported GPU.
+
+Open `http://127.0.0.1:8092` on the XR-AI host for the live event viewer. To
+view it directly from another trusted machine, add `--expose-web-events` and
+use `http://<xr-host>:8092`; restrict that unauthenticated port to the trusted
+development network.
+
+The tea workflow changes steps only after an explicit user command. Visual
+observations can satisfy the current step's evidence requirements, but never
+advance the workflow silently. Refer to the
+{doc}`tea-making architecture guide </reference/tea-making-sample>` for
+reusable workflow patterns, background-agent contracts, backend integration,
+and adaptation recipes.
 
 ## XR render demo (voice-driven sphere in CloudXR)
 

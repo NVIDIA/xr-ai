@@ -344,6 +344,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
@@ -464,8 +465,8 @@ on startup.</p>
 <h2>Model servers (shared AI services)<a class="headerlink" href="#model-servers-shared-ai-services" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">model-servers</span></code> starts the shared inference services used across demos and exits
 immediately — the services keep running in the background with weights hot.
-Start this once before running <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>, or whenever you want to
-pre-warm models:</p>
+Start this once before running <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code> or <code class="docutils literal notranslate"><span class="pre">tea-making-sample</span></code>, or
+whenever you want to pre-warm models:</p>
 <div class="admonition important">
 <p class="admonition-title">Important</p>
 <p>After updating, stop any existing model servers before starting this stack:</p>
@@ -637,6 +638,38 @@ the <a class="reference internal" href="../reference/lab-instrument-monitoring.h
 for reusable agent patterns, marker setup, output contracts, and adaptation
 recipes.</p>
 </section>
+<section id="tea-making-guidance-voice-visual-workflow">
+<h2>Tea-making guidance (voice + visual workflow)<a class="headerlink" href="#tea-making-guidance-voice-visual-workflow" title="Link to this heading">#</a></h2>
+<p>This sample combines an interactive tea guide with optional background change,
+transcript, and video observation. Nemotron-3 Nano Omni supplies both language
+and visual inference. Records are written as JSON Lines under the sample’s
+<code class="docutils literal notranslate"><span class="pre">artifacts/</span></code> directory. A separate live event viewer presents selected runtime
+events without replacing those durable records.</p>
+<p>Start the shared model services first, then launch the sample with explicit
+voice and speech modes:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
+
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample<span class="w"> </span>tea_making_sample<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--voice-mode<span class="w"> </span>wake-word<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tts-mode<span class="w"> </span>piper
+</pre></div>
+</div>
+<p>Open the XR-Media-Hub connection page at <code class="docutils literal notranslate"><span class="pre">https://localhost:8080</span></code>, accept the
+self-signed certificate on first use, allow camera and microphone access, and
+connect. In wake-word mode, begin with “Agent” or “Hey Agent.” Use
+<code class="docutils literal notranslate"><span class="pre">--voice-mode</span> <span class="pre">always-on</span></code> to dispatch every finalized utterance, or
+<code class="docutils literal notranslate"><span class="pre">--tts-mode</span> <span class="pre">magpie</span></code> for neural speech on a supported GPU.</p>
+<p>Open <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code> on the XR-AI host for the live event viewer. To
+view it directly from another trusted machine, add <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code> and
+use <code class="docutils literal notranslate"><span class="pre">http://&lt;xr-host&gt;:8092</span></code>; restrict that unauthenticated port to the trusted
+development network.</p>
+<p>The tea workflow changes steps only after an explicit user command. Visual
+observations can satisfy the current step’s evidence requirements, but never
+advance the workflow silently. Refer to the
+<a class="reference internal" href="../reference/tea-making-sample.html"><span class="doc">tea-making architecture guide</span></a> for
+reusable workflow patterns, background-agent contracts, backend integration,
+and adaptation recipes.</p>
+</section>
 <section id="xr-render-demo-voice-driven-sphere-in-cloudxr">
 <h2>XR render demo (voice-driven sphere in CloudXR)<a class="headerlink" href="#xr-render-demo-voice-driven-sphere-in-cloudxr" title="Link to this heading">#</a></h2>
 <p>Speak to the web client and a sphere in the streamed scene tracks your voice —
@@ -782,6 +815,7 @@ DeviceIOHub auto-discovers <code class="docutils literal notranslate"><span clas
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lab-instrument-monitoring-marker-associated-readings-foreground-voice">Lab instrument monitoring (marker-associated readings + foreground voice)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tea-making-guidance-voice-visual-workflow">Tea-making guidance (voice + visual workflow)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-render-demo-voice-driven-sphere-in-cloudxr">XR render demo (voice-driven sphere in CloudXR)</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-start-model-servers-once">Step 1 — Start model servers (once)</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-start-the-demo">Step 2 — Start the demo</a></li>
