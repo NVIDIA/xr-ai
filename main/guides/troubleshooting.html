@@ -697,13 +697,15 @@ expose the trust toggle for it. Remove the installed profile via
 stale cert and regenerates as a self-signed CA (logged as <code class="docutils literal notranslate"><span class="pre">TLS:</span> <span class="pre">cached</span> <span class="pre">cert</span> <span class="pre">is</span> <span class="pre">not</span> <span class="pre">a</span> <span class="pre">CA</span> <span class="pre">cert</span> <span class="pre">—</span> <span class="pre">regenerating…</span></code>).</p>
 <p>If the toggle was enabled but the wss handshake still fails with
 <code class="docutils literal notranslate"><span class="pre">errSSLBadCert</span></code> or NSURLErrorDomain <code class="docutils literal notranslate"><span class="pre">-1202</span></code> and a message like <em>“pretending
-to be 10.29.90.196”</em> (that is, the IP you typed into the app), the
-certificate’s SubjectAlternativeName doesn’t cover that IP. The hub now detects
-local IPv4 addresses via a UDP-connect probe and auto-regenerates the certificate
-whenever the SAN is missing one (logged as <code class="docutils literal notranslate"><span class="pre">TLS:</span> <span class="pre">cached</span> <span class="pre">cert</span> <span class="pre">SAN</span> <span class="pre">is</span> <span class="pre">missing</span> <span class="pre">local</span> <span class="pre">IP(s)</span> <span class="pre">…</span> <span class="pre">—</span> <span class="pre">regenerating…</span></code>); just restart the hub and
-re-install the profile on the device. To force regen explicitly, delete
-<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code> and <code class="docutils literal notranslate"><span class="pre">web-server.key</span></code> before
-restarting.</p>
+to be 192.168.1.42”</em> (that is, the IP you typed into the app), the
+certificate’s SubjectAlternativeName doesn’t cover that IP. The hub detects
+local IPv4 addresses via a UDP-connect probe and auto-regenerates the
+certificate whenever the SAN is missing one (logged as <code class="docutils literal notranslate"><span class="pre">TLS:</span> <span class="pre">cached</span> <span class="pre">cert</span> <span class="pre">SAN</span> <span class="pre">is</span> <span class="pre">missing</span> <span class="pre">…;</span> <span class="pre">regenerating…</span></code>); just restart the hub and re-install the
+profile on the device. If the dialed address is not on any of the hub’s
+interfaces, add it to <code class="docutils literal notranslate"><span class="pre">web_server_extra_sans</span></code> in <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> and
+restart (see <a class="reference internal" href="../getting_started/networking.html"><span class="std std-doc">Networking</span></a>). To force
+regen explicitly, delete <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code> and
+<code class="docutils literal notranslate"><span class="pre">web-server.key</span></code> before restarting.</p>
 <p>If the certificate is trusted (no <code class="docutils literal notranslate"><span class="pre">-1202</span></code>) but the room connection still fails
 with HTTP 401 / “no permissions to access the room”, the hub’s wss /rtc
 proxy is dropping the <code class="docutils literal notranslate"><span class="pre">Authorization:</span> <span class="pre">Bearer</span> <span class="pre">&lt;token&gt;</span></code> header the Swift
