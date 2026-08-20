@@ -58,12 +58,15 @@ def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.parametrize("gpu_profile", ["dual_48G_ada", "spark", "96G_blackwell"])
-def test_simple_vlm_shares_local_model_server_launch_configs(
+def test_simple_vlm_shares_supported_model_server_vlm_config(
     monkeypatch: pytest.MonkeyPatch,
     gpu_profile: str,
 ) -> None:
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: gpu_profile)
     monkeypatch.setattr(_simple_vlm, "detect_gpu_config", lambda: gpu_profile)
+    monkeypatch.setattr(
+        _simple_vlm, "_supports_shared_vlm_config", lambda _profile: True
+    )
 
     shared = {
         process.name: process
@@ -74,19 +77,144 @@ def test_simple_vlm_shares_local_model_server_launch_configs(
         for process in _simple_vlm._build_processes()[0]
     }
 
-    for service in ("stt", "vlm"):
-        model_servers_config = (
-            _REPO_ROOT
-            / "agent-samples/model-servers"
-            / shared[service].config
-        ).resolve()
-        simple_vlm_config = (
-            _REPO_ROOT
-            / "agent-samples/simple-vlm-example"
-            / sample[service].config
-        ).resolve()
-        assert simple_vlm_config == model_servers_config
-        assert sample[service].launch_mode == "own"
+    model_servers_config = (
+        _REPO_ROOT
+        / "agent-samples/model-servers"
+        / shared["vlm"].config
+    ).resolve()
+    simple_vlm_config = (
+        _REPO_ROOT
+        / "agent-samples/simple-vlm-example"
+        / sample["vlm"].config
+    ).resolve()
+    assert simple_vlm_config == model_servers_config
+    assert sample["vlm"].project == shared["vlm"].project
+    assert sample["vlm"].command == shared["vlm"].command
+    assert sample["vlm"].launch_mode == "own"
+
+    stt_config = (
+        _REPO_ROOT
+        / "agent-samples/simple-vlm-example"
+        / sample["stt"].config
+    ).resolve()
+    assert stt_config == (
+        _REPO_ROOT / "agent-samples/simple-vlm-example/yaml/stt_server.yaml"
+    )
+    assert "cuda_visible_devices" not in yaml.safe_load(stt_config.read_text())
+
+
+def test_simple_vlm_uses_standalone_config_on_smaller_hardware(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_simple_vlm, "detect_gpu_config", lambda: "dual_48G_ada")
+    monkeypatch.setattr(
+        _simple_vlm, "_supports_shared_vlm_config", lambda _profile: False
+    )
+
+    sample = {
+        process.name: process
+        for process in _simple_vlm._build_processes()[0]
+    }
+    vlm_config = (
+        _REPO_ROOT
+        / "agent-samples/simple-vlm-example"
+        / sample["vlm"].config
+    ).resolve()
+    config = yaml.safe_load(vlm_config.read_text())
+
+    assert vlm_config == (
+        _REPO_ROOT / "agent-samples/simple-vlm-example/yaml/vlm_server.yaml"
+    )
+    assert config["gpu_memory_utilization"] == 0.85
+    assert "cuda_visible_devices" not in config
+
+
+@pytest.mark.parametrize(
+    "profile_name",
+    ["models.local.json", "models.hosted.json", "models.omni.json"],
+)
+def test_simple_vlm_profiles_keep_stt_standalone(
+    monkeypatch: pytest.MonkeyPatch,
+    profile_name: str,
+) -> None:
+    profile_path = (
+        _REPO_ROOT / "agent-samples/simple-vlm-example/yaml" / profile_name
+    )
+    monkeypatch.setattr(
+        _simple_vlm,
+        "load_model_deployment",
+        lambda _worker: _model_servers.load_deployment_profile(profile_path),
+    )
+    monkeypatch.setattr(_simple_vlm, "detect_gpu_config", lambda: "dual_48G_ada")
+    monkeypatch.setattr(
+        _simple_vlm, "_supports_shared_vlm_config", lambda _profile: False
+    )
+
+    sample = {
+        process.name: process
+        for process in _simple_vlm._build_processes()[0]
+    }
+    stt_config = (
+        _REPO_ROOT
+        / "agent-samples/simple-vlm-example"
+        / sample["stt"].config
+    ).resolve()
+
+    assert stt_config == (
+        _REPO_ROOT / "agent-samples/simple-vlm-example/yaml/stt_server.yaml"
+    )
+
+
+def test_simple_vlm_rejects_missing_shared_vlm_config(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(_simple_vlm, "detect_gpu_config", lambda: "spark")
+    monkeypatch.setattr(
+        _simple_vlm, "_supports_shared_vlm_config", lambda _profile: True
+    )
+    monkeypatch.setattr(_simple_vlm, "_MODEL_SERVERS_YAML", tmp_path)
+
+    with pytest.raises(FileNotFoundError, match="shared VLM config does not exist"):
+        _simple_vlm._build_processes()
+
+
+@pytest.mark.parametrize(
+    ("gpu_profile", "memory_output", "expected"),
+    [
+        ("dual_48G_ada", "49140\n49140\n", True),
+        ("dual_48G_ada", "24576\n", False),
+        ("dual_48G_ada", "24576\n24576\n", False),
+        ("96G_blackwell", "98304\n", True),
+        ("96G_blackwell", "49152\n", False),
+        ("spark", "119296\n", True),
+        ("unknown", "119296\n", False),
+    ],
+)
+def test_simple_vlm_shared_config_requires_profile_capacity(
+    monkeypatch: pytest.MonkeyPatch,
+    gpu_profile: str,
+    memory_output: str,
+    expected: bool,
+) -> None:
+    monkeypatch.setattr(
+        _simple_vlm.subprocess,
+        "check_output",
+        lambda *_args, **_kwargs: memory_output,
+    )
+
+    assert _simple_vlm._supports_shared_vlm_config(gpu_profile) is expected
+
+
+def test_simple_vlm_falls_back_when_gpu_capacity_is_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail(*_args, **_kwargs):
+        raise FileNotFoundError("nvidia-smi")
+
+    monkeypatch.setattr(_simple_vlm.subprocess, "check_output", fail)
+
+    assert not _simple_vlm._supports_shared_vlm_config("dual_48G_ada")
 
 
 def test_nim_profile_mixes_nim_containers_and_local_servers(

@@ -18,11 +18,15 @@ profile. The default profile owns local STT, VLM, and TTS services; the hosted
 profile replaces only the VLM with NVIDIA NIM; models.vlm_llm_nim.json and
 models.vlm_speech_nim.json reuse self-hosted NIM containers from the
 model-servers nim / vlm_speech_nim stacks (start the matching stack first).
+On hardware supported by the shared model-server layouts, the local VLM uses
+the same launch config so a compatible persistent container is reused. Smaller
+standalone systems keep the sample-local VLM and STT resource settings.
 
 How to run (from agent-samples/simple-vlm-example/):
     uv sync && uv run simple_vlm_example
 """
 import argparse
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 
@@ -38,6 +42,8 @@ from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
 _MODEL_SERVERS_YAML = _BASE.parent / "model-servers" / "yaml"
+_MIN_DUAL_GPU_MEMORY_MIB = 40 * 1024
+_MIN_SINGLE_GPU_MEMORY_MIB = 80 * 1024
 
 _WORKER_CONFIG = "yaml/simple_vlm_example_worker.yaml"
 
@@ -55,6 +61,7 @@ _MODEL_PROCESSES = {
     ),
     "vlm": Process(
         "vlm", "../../services/vlm-server", "vlm_server",
+        config="yaml/vlm_server.yaml",
     ),
     "vlm-omni": Process(
         "vlm-omni",
@@ -63,12 +70,39 @@ _MODEL_PROCESSES = {
     ),
     "stt": Process(
         "stt", "../../services/stt-server", "stt_server",
+        config="yaml/stt_server.yaml",
     ),
     "tts": Process(
         "tts", "../../services/piper-tts", "piper_tts_server",
         config="yaml/piper_tts_server.yaml",
     ),
 }
+
+
+def _supports_shared_vlm_config(gpu_profile: str) -> bool:
+    """Whether this host has the capacity assumed by a model-server profile."""
+    try:
+        raw = subprocess.check_output(
+            [
+                "nvidia-smi",
+                "--query-gpu=memory.total",
+                "--format=csv,noheader,nounits",
+            ],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip().splitlines()
+        memory_mib = [int(float(value.strip())) for value in raw if value.strip()]
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return False
+
+    if gpu_profile == "dual_48G_ada":
+        return (
+            len(memory_mib) >= 2
+            and min(memory_mib) >= _MIN_DUAL_GPU_MEMORY_MIB
+        )
+    if gpu_profile in {"spark", "96G_blackwell"}:
+        return sum(memory_mib) >= _MIN_SINGLE_GPU_MEMORY_MIB
+    return False
 
 
 def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
@@ -82,20 +116,23 @@ def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
         Process("hub", "../../services/xr-media-hub", "xr_media_hub",
                 config="yaml/xr_media_hub.yaml"),
     ]
-    gpu_config: str | None = None
     for service, process in _MODEL_PROCESSES.items():
         launch_mode = deployment.launch_mode(service)
         if launch_mode is not None:
-            if launch_mode == "own" and service in {"stt", "vlm"}:
+            if launch_mode == "own" and service == "vlm":
                 # Share the complete launch contract with model-servers so a
-                # compatible persistent server has the same fingerprint.
-                gpu_config = gpu_config or detect_gpu_config()
-                process = replace(
-                    process,
-                    config=_MODEL_SERVERS_YAML
-                    / gpu_config
-                    / f"{service}_server.yaml",
-                )
+                # compatible persistent server has the same fingerprint, but
+                # only when this host meets that profile's resource budget.
+                gpu_config = detect_gpu_config()
+                if _supports_shared_vlm_config(gpu_config):
+                    shared_config = (
+                        _MODEL_SERVERS_YAML / gpu_config / "vlm_server.yaml"
+                    )
+                    if not shared_config.is_file():
+                        raise FileNotFoundError(
+                            f"shared VLM config does not exist: {shared_config}"
+                        )
+                    process = replace(process, config=shared_config)
             procs.append(replace(process, launch_mode=launch_mode))
     procs.append(
         Process(
