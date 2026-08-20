@@ -321,6 +321,7 @@
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
@@ -1835,6 +1836,428 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 </div>
 </section>
 </section>
+<section id="config-tea-making-sample">
+<h2>tea-making-sample<a class="headerlink" href="#config-tea-making-sample" title="Link to this heading">#</a></h2>
+<section id="config-tea-making-sample-yaml-device-io-hub-yaml">
+<h3>yaml/device_io_hub.yaml<a class="headerlink" href="#config-tea-making-sample-yaml-device-io-hub-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="nt">api_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">devkey</span>
+<span class="nt">api_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">devsecret-xr-livekit-prototype-2026</span>
+<span class="nt">room_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xr-room</span>
+
+<span class="nt">lk_port_ws</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7880</span>
+<span class="nt">lk_port_tcp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7881</span>
+<span class="nt">lk_port_udp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7882</span>
+
+<span class="nt">enable_web_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">web_server_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="nt">web_client_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../client-samples/web</span>
+<span class="nt">enable_token_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+</section>
+<section id="config-tea-making-sample-yaml-magpie-tts-server-yaml">
+<h3>yaml/magpie_tts_server.yaml<a class="headerlink" href="#config-tea-making-sample-yaml-magpie-tts-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/magpie_tts_multilingual_357m</span>
+<span class="nt">model_revision</span><span class="p">:</span><span class="w"> </span><span class="s">"34d7e40da85cabc97f92198889b65cea27bc7fd1"</span>
+<span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto</span>
+<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8104</span>
+<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
+<span class="nt">sample_rate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">22050</span>
+<span class="nt">speed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../models</span>
+</pre></div>
+</div>
+</section>
+<section id="config-tea-making-sample-yaml-models-local-json">
+<h3>yaml/models.local.json<a class="headerlink" href="#config-tea-making-sample-yaml-models-local-json" title="Link to this heading">#</a></h3>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8108"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"omni"</span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"reasoning_field"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reasoning_content"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"streaming"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"vision"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">},</span>
+<span class="w">        </span><span class="nt">"default_extras"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">"max_tokens"</span><span class="p">:</span><span class="w"> </span><span class="mi">128</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">"temperature"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.0</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">"chat_template_kwargs"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"enable_thinking"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8108"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"omni"</span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"stt"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"parakeet_stt"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8103"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stt"</span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"embedding"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_embedding"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8109"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"embedding"</span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"tts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"piper_tts"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8105"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tts"</span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="config-tea-making-sample-yaml-piper-tts-server-yaml">
+<h3>yaml/piper_tts_server.yaml<a class="headerlink" href="#config-tea-making-sample-yaml-piper-tts-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="nt">voice</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">en_US-lessac-medium</span>
+<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8105</span>
+<span class="nt">use_cuda</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../models</span>
+</pre></div>
+</div>
+</section>
+<section id="config-tea-making-sample-yaml-rag-service-yaml">
+<h3>yaml/rag_service.yaml<a class="headerlink" href="#config-tea-making-sample-yaml-rag-service-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="nt">endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tcp://0.0.0.0:8340</span>
+<span class="nt">documents_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../rag-documents</span>
+<span class="nt">models_config</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">models.local.json</span>
+<span class="nt">embedding_role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">embedding</span>
+<span class="nt">cache_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../models/tea-making-rag-cache</span>
+<span class="nt">chunk_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">700</span>
+<span class="nt">overlap</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+<span class="nt">embedding_dim</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">768</span>
+<span class="nt">batch_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">16</span>
+<span class="nt">min_score</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.3</span>
+</pre></div>
+</div>
+</section>
+<section id="config-tea-making-sample-yaml-tea-making-worker-yaml">
+<h3>yaml/tea_making_worker.yaml<a class="headerlink" href="#config-tea-making-sample-yaml-tea-making-worker-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># The launcher materializes these three paths for the selected runtime modes.</span>
+<span class="nt">models_config</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">models.local.json</span>
+<span class="nt">workflow_config</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workflow.yaml</span>
+<span class="nt">voice_gate_yaml</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">voice_gate.yaml</span>
+
+<span class="nt">rag_endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tcp://127.0.0.1:8340</span>
+<span class="nt">artifacts_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../artifacts</span>
+
+<span class="nt">web_events_host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">127.0.0.1</span>
+<span class="nt">web_events_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8092</span>
+<span class="nt">web_events_max_events</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5000</span>
+
+<span class="nt">frame_max_age_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3.0</span>
+<span class="nt">frame_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
+<span class="nt">vlm_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15.0</span>
+
+<span class="nt">change_watch_interval_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+<span class="nt">transcript_summary_interval_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">120.0</span>
+<span class="nt">video_log_interval_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+<span class="nt">background_history_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50</span>
+
+<span class="nt">change_watch_default_instruction</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<span class="w">  </span><span class="no">important changes involving people, objects, actions, or possible hazards</span>
+
+<span class="nt">silero_threshold</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.3</span>
+<span class="nt">silence_duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.2</span>
+<span class="nt">min_speech</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.15</span>
+<span class="nt">idle_timeout_secs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+</pre></div>
+</div>
+</section>
+<section id="config-tea-making-sample-yaml-voice-gate-always-on-yaml">
+<h3>yaml/voice_gate.always-on.yaml<a class="headerlink" href="#config-tea-making-sample-yaml-voice-gate-always-on-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="nt">magic_phrases</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="nt">listening_chime</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="nt">followup_grace_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
+</pre></div>
+</div>
+</section>
+<section id="config-tea-making-sample-yaml-voice-gate-yaml">
+<h3>yaml/voice_gate.yaml<a class="headerlink" href="#config-tea-making-sample-yaml-voice-gate-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="nt">magic_phrases</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">agent</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hey agent</span>
+<span class="nt">listening_chime</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">followup_grace_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
+</pre></div>
+</div>
+</section>
+<section id="config-tea-making-sample-yaml-workflow-yaml">
+<h3>yaml/workflow.yaml<a class="headerlink" href="#config-tea-making-sample-yaml-workflow-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="nt">task</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tea making</span>
+<span class="w">  </span><span class="nt">start_step</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">identify</span>
+<span class="w">  </span><span class="nt">foreground_prompt</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">This workflow guides tea making.</span>
+<span class="w">  </span><span class="nt">complete_message</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Tea guidance complete. Enjoy your tea.</span>
+
+<span class="nt">state</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">tea_name</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">string</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Tea name from the current caption.</span>
+<span class="w">  </span><span class="nt">target_temperature_c</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">number</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Brewing temperature in Celsius.</span>
+<span class="w">  </span><span class="nt">steep_duration_s</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">integer</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Steep duration in seconds.</span>
+<span class="w">  </span><span class="nt">guidance_source</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">string</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Package or retrieved source.</span>
+<span class="w">  </span><span class="nt">tea_ready</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">boolean</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">True only when all preceding fields are supported.</span>
+<span class="w">  </span><span class="nt">water_filled</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">boolean</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Whether water is visibly in the heating vessel.</span>
+<span class="w">    </span><span class="nt">initial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="nt">heating_started</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">boolean</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Whether a heater-on indicator or unit-bearing temperature was seen.</span>
+<span class="w">    </span><span class="nt">initial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="nt">steeping_started_at_us</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">integer</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Start time returned by clock__now.</span>
+<span class="w">  </span><span class="nt">steeping_started</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">boolean</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Whether tea is immersed and its start time is recorded.</span>
+<span class="w">    </span><span class="nt">initial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="nt">steeping_complete</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">boolean</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Whether the fresh timer result is expired.</span>
+<span class="w">    </span><span class="nt">initial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+
+<span class="nt">steps</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">identify</span>
+<span class="w">    </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Identify the tea</span>
+<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">    </span><span class="nt">writes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">tea_name</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">target_temperature_c</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steep_duration_s</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">guidance_source</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">tea_ready</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">trigger</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">current_view</span>
+<span class="w">      </span><span class="nt">interval_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.5</span>
+<span class="w">      </span><span class="nt">arguments</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">question</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<span class="w">          </span><span class="no">Read the front label brand and tea/blend name, plus visible brewing</span>
+<span class="w">          </span><span class="no">temperature/time. Ignore slogans, claims, bag count, weight, and</span>
+<span class="w">          </span><span class="no">badges. Transcribe exactly; never infer. If no brand or tea/blend is</span>
+<span class="w">          </span><span class="no">legible, say label unreadable.</span>
+<span class="w">      </span><span class="nt">result_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">answer</span>
+<span class="w">    </span><span class="nt">evidence</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"(?is)^(?!.*\\b(none|nothing|dark|blurry|blurred|unreadable|unclear|unknown|absent|obscured|unable|cannot|can't|discern)\\b)(?!.*\\b(no|not|without)\\b.{0,32}\\b(tea|package|box|label|tag|texts?)\\b)(?=.*[a-z]{3}).+$"</span>
+<span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<span class="w">        </span><span class="no">Identify tea only from the current caption, never state or RAG.</span>
+<span class="w">        </span><span class="no">If the tea name is unreadable, commit nothing; do not retrieve. Prefer</span>
+<span class="w">        </span><span class="no">visible values. If temperature/time is missing,</span>
+<span class="w">        </span><span class="no">call rag_lookup once with "&lt;exact name&gt; water temperature steep time",</span>
+<span class="w">        </span><span class="no">top_k 2; accept only a section naming it. If every writable field is</span>
+<span class="w">        </span><span class="no">supported, commit all with tea_ready true. Otherwise commit nothing;</span>
+<span class="w">        </span><span class="no">never write tea_ready false.</span>
+<span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">rag_lookup</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<span class="w">        </span><span class="no">Tea identity comes only from state tea_name or current_view, never RAG.</span>
+<span class="w">        </span><span class="no">If the exact name is unknown, inspect the current frame. Retrieve only</span>
+<span class="w">        </span><span class="no">missing temperature or duration after the exact name is known. Never</span>
+<span class="w">        </span><span class="no">replace package values. Answer only what was asked.</span>
+<span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">current_view</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">rag_lookup</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">complete_when</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">tea_ready</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fill_water</span>
+<span class="w">    </span><span class="nt">state_on_skip</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">tea_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic tea</span>
+<span class="w">      </span><span class="nt">target_temperature_c</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">93</span>
+<span class="w">      </span><span class="nt">steep_duration_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">180</span>
+<span class="w">      </span><span class="nt">guidance_source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic fallback</span>
+<span class="w">      </span><span class="nt">tea_ready</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">messages</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">enter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Hold the tea package or tag in view so I can read it.</span>
+<span class="w">      </span><span class="nt">complete</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">I found the tea instructions. Say next when ready.</span>
+<span class="w">      </span><span class="nt">skip</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">I will use generic tea defaults.</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fill_water</span>
+<span class="w">    </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Fill the heating vessel</span>
+<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">    </span><span class="nt">writes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">water_filled</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">trigger</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">current_view</span>
+<span class="w">      </span><span class="nt">interval_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">      </span><span class="nt">arguments</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">question</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<span class="w">          </span><span class="no">Describe visible heating vessel interior and contents. Report</span>
+<span class="w">          </span><span class="no">concrete water cues: surface, level, reflections, or active</span>
+<span class="w">          </span><span class="no">pouring into it. Water outside or beside it does not count. Say when</span>
+<span class="w">          </span><span class="no">interior or water is not visible. Never infer.</span>
+<span class="w">      </span><span class="nt">result_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">answer</span>
+<span class="w">    </span><span class="nt">evidence</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|empty|obscured|cannot|can't)\\b)(?!.*\\b(no|not)\\s+(visible\\s+)?water\\b)(?=.*\\b(kettle|pot|vessel|container)\\b)(?=.*\\bwater\\b)(?=.*\\b(surface|level|reflection|pouring|inside|contains)\\b).+$"</span>
+<span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<span class="w">        </span><span class="no">Set water_filled true only when this caption clearly shows the vessel</span>
+<span class="w">        </span><span class="no">interior plus a water surface, level, reflection, or pouring into it.</span>
+<span class="w">        </span><span class="no">Water nearby, a closed vessel, a user report, or unclear contents do</span>
+<span class="w">        </span><span class="no">not count. Otherwise commit empty updates/message.</span>
+<span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<span class="w">        </span><span class="no">Give instructions or verify with current_view. A user report is not</span>
+<span class="w">        </span><span class="no">visual confirmation. Confirm filled only from state water_filled or a</span>
+<span class="w">        </span><span class="no">current view showing the vessel interior and concrete water cues;</span>
+<span class="w">        </span><span class="no">otherwise say it is not yet visually confirmed.</span>
+<span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">current_view</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">complete_when</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">water_filled</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">heat_water</span>
+<span class="w">    </span><span class="nt">state_on_skip</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">water_filled</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">messages</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">enter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Fill a kettle or pot with fresh water and keep it in view.</span>
+<span class="w">      </span><span class="nt">complete</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">The vessel has water. Say next when ready.</span>
+<span class="w">      </span><span class="nt">skip</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">I will assume the vessel is filled.</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">heat_water</span>
+<span class="w">    </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Heat the water</span>
+<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">target_temperature_c</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">writes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">heating_started</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">trigger</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">current_view</span>
+<span class="w">      </span><span class="nt">interval_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">      </span><span class="nt">arguments</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">question</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<span class="w">          </span><span class="no">Describe visible heater-on indicators and transcribe the exact current</span>
+<span class="w">          </span><span class="no">numeric kettle or thermometer reading. Write the unit as Celsius or</span>
+<span class="w">          </span><span class="no">Fahrenheit. Mention hazards. If missing, say what is not visible. Do</span>
+<span class="w">          </span><span class="no">not convert or judge readiness.</span>
+<span class="w">      </span><span class="nt">result_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">answer</span>
+<span class="w">    </span><span class="nt">evidence</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"(?is)^(?:(?=.*\\b\\d{2,3}\\s*(°|degrees|c|f)\\b).+|(?!(?:.*\\b(no|not|without)\\b.{0,24}\\b(heater|heating|power|indicator|display|light)\\b|.*\\b(heater|heating|power|indicator|display|light)\\b.{0,24}\\b(off|inactive|not)\\b))(?=.*\\b(heater|heating|power|indicator|display|light)\\b.{0,24}\\b(on|active|running|lit|illuminated)\\b).+)$"</span>
+<span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<span class="w">        </span><span class="no">Set heating_started true only when input is false and the caption shows</span>
+<span class="w">        </span><span class="no">an active heater indicator or a numeric temperature followed by Celsius</span>
+<span class="w">        </span><span class="no">or Fahrenheit. Otherwise commit empty updates/message. Do not compare</span>
+<span class="w">        </span><span class="no">temperatures or track whether the water is ready.</span>
+<span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<span class="w">        </span><span class="no">Explain target from state. For a reading, call current_view and</span>
+<span class="w">        </span><span class="no">repeat the visible number and unit; do not verify. For hot-enough</span>
+<span class="w">        </span><span class="no">checks, call current_view, then temperature__verify only with an exact</span>
+<span class="w">        </span><span class="no">number and Celsius or Fahrenheit unit. Report result. If missing,</span>
+<span class="w">        </span><span class="no">say the reading is unavailable.</span>
+<span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">current_view</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">temperature__verify</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">complete_when</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">heating_started</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">start_steeping</span>
+<span class="w">    </span><span class="nt">state_on_skip</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">heating_started</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">messages</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">enter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Heat the water to {{ target_temperature_c | temperature_c }}.</span>
+<span class="w">      </span><span class="nt">complete</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Heating is underway. Wait for the water to reach the target temperature.</span>
+<span class="w">      </span><span class="nt">skip</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">I will assume heating has started.</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">start_steeping</span>
+<span class="w">    </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Start steeping</span>
+<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">writes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">steeping_started_at_us</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steeping_started</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">trigger</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">current_view</span>
+<span class="w">      </span><span class="nt">interval_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">      </span><span class="nt">arguments</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">question</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<span class="w">          </span><span class="no">Look for two separately visible facts in one vessel: a water surface</span>
+<span class="w">          </span><span class="no">or level; and a tea bag, infuser, or leaves entering or immersed in</span>
+<span class="w">          </span><span class="no">that water. If either water or tea-water contact is not visible, say</span>
+<span class="w">          </span><span class="no">it is unconfirmed. Note hazards.</span>
+<span class="w">      </span><span class="nt">result_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">answer</span>
+<span class="w">    </span><span class="nt">evidence</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|outside|cannot|can't)\\b)(?!.*\\b(no|not)\\b.{0,80}\\b(immersed|submerged|in</span><span class="nv"> </span><span class="s">(the</span><span class="nv"> </span><span class="s">)?water)\\b)(?=.*\\b(tea</span><span class="nv"> </span><span class="s">bag|infuser|leaves)\\b)(?=.*\\b(immersed|submerged|in</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">water)\\b).+$"</span>
+<span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<span class="w">        </span><span class="no">Only when the caption explicitly confirms both visible water and a tea</span>
+<span class="w">        </span><span class="no">bag, infuser, or leaves entering or immersed in it, call clock__now once</span>
+<span class="w">        </span><span class="no">and commit epoch_us as steeping_started_at_us with steeping_started true.</span>
+<span class="w">        </span><span class="no">A tea item in an empty vessel or without visible water contact is no</span>
+<span class="w">        </span><span class="no">start: do not call clock__now; commit empty updates/message. Never</span>
+<span class="w">        </span><span class="no">replace a start time.</span>
+<span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">clock__now</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<span class="w">        </span><span class="no">Give instructions or verify with current_view. A report or tea item in</span>
+<span class="w">        </span><span class="no">a vessel is not confirmation. Require both visible water and visible</span>
+<span class="w">        </span><span class="no">tea-water contact. The observation loop, not this answer, starts the</span>
+<span class="w">        </span><span class="no">timer.</span>
+<span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">current_view</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">complete_when</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">steeping_started</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">steep_timer</span>
+<span class="w">    </span><span class="nt">complete_on_skip</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">state_on_skip</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">steeping_started</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">messages</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">enter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Put the tea in the water; I will start the timer when I see it immersed.</span>
+<span class="w">      </span><span class="nt">complete</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Steeping timer started. Say next to monitor it.</span>
+<span class="w">      </span><span class="nt">skip</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Steeping detection and the timer were skipped.</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">steep_timer</span>
+<span class="w">    </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Wait for steeping</span>
+<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">steeping_started_at_us</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">writes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">steeping_complete</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">trigger</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">clock__timer</span>
+<span class="w">      </span><span class="nt">interval_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">      </span><span class="nt">arguments</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">started_at_us</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">$state.steeping_started_at_us</span>
+<span class="w">        </span><span class="nt">duration_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">$state.steep_duration_s</span>
+<span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<span class="w">        </span><span class="no">Copy the fresh clock__timer expired boolean: set steeping_complete true</span>
+<span class="w">        </span><span class="no">only when expired is true. While false, commit empty updates/message.</span>
+<span class="w">        </span><span class="no">Never infer from elapsed text, wall time, or prior state.</span>
+<span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<span class="w">        </span><span class="no">Call clock__timer for every timer or completion question. Report only</span>
+<span class="w">        </span><span class="no">its fresh remaining time or completion; never calculate from state,</span>
+<span class="w">        </span><span class="no">prior answers, or wall-clock time.</span>
+<span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">clock__timer</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">complete_when</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">steeping_complete</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span>
+<span class="w">    </span><span class="nt">state_on_skip</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">steeping_complete</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">messages</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">enter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Steep for {{ steep_duration_s | duration }}.</span>
+<span class="w">      </span><span class="nt">complete</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Steeping is complete. Remove the tea, then say next to finish.</span>
+<span class="w">      </span><span class="nt">skip</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Timer skipped; remove the tea when it tastes right.</span>
+</pre></div>
+</div>
+</section>
+</section>
 <section id="config-xr-render-demo">
 <h2>xr-render-demo<a class="headerlink" href="#config-xr-render-demo" title="Link to this heading">#</a></h2>
 <section id="config-xr-render-demo-scene-scene-service-yaml">
@@ -2455,6 +2878,18 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-stt-server-yaml">yaml/stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-vlm-server-yaml">yaml/vlm_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-voice-gate-yaml">yaml/voice_gate.yaml</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample">tea-making-sample</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-device-io-hub-yaml">yaml/device_io_hub.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-magpie-tts-server-yaml">yaml/magpie_tts_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-models-local-json">yaml/models.local.json</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-piper-tts-server-yaml">yaml/piper_tts_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-rag-service-yaml">yaml/rag_service.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-tea-making-worker-yaml">yaml/tea_making_worker.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-voice-gate-always-on-yaml">yaml/voice_gate.always-on.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-voice-gate-yaml">yaml/voice_gate.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-workflow-yaml">yaml/workflow.yaml</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo">xr-render-demo</a><ul class="nav section-nav flex-column">

@@ -344,6 +344,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
@@ -611,11 +612,12 @@ start successfully without network access. Recreate project environments with
 <span class="p">]</span>
 </pre></div>
 </div>
-<p>The agent samples in this repository (<code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code> and <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>)
-default to Piper TTS — it runs on CPU with ~100 ms/sentence latency and avoids
-the NeMo dep tree. Magpie is still a supported NVIDIA TTS option with better
-voice quality and multilingual support when GPU is available; swap the
-<code class="docutils literal notranslate"><span class="pre">Process</span></code> row and YAML.</p>
+<p>The agent samples in this repository (<code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code>,
+<code class="docutils literal notranslate"><span class="pre">tea-making-sample</span></code>, and <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>) support Piper TTS — it runs on CPU
+with ~100 ms/sentence latency and avoids the NeMo dep tree. Magpie is still a
+supported NVIDIA TTS option with better voice quality and multilingual support
+when GPU is available; select the corresponding process and YAML. The tea
+sample exposes this choice through <code class="docutils literal notranslate"><span class="pre">--tts-mode</span></code>.</p>
 <p><strong>2 — Copy the reference YAML to your sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory:</strong></p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>-p<span class="w"> </span>yaml
 cp<span class="w"> </span>../../services/vlm-server/vlm_server.yaml<span class="w"> </span>./yaml/vlm_server.yaml
