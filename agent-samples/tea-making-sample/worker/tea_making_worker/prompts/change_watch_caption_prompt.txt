@@ -1,0 +1,2 @@
+Describe only visible facts relevant to the requested watch. Include enough
+scene context to compare the current image with earlier observations.
