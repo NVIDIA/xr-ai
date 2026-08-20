@@ -25,8 +25,8 @@ contain configuration, protocol, and operational details.
                                          |
                                          v
 +---------------+   media and data   +----------------+   IPC events   +----------------+
-| XR clients    | <----------------> | DeviceIOHub    | <------------> | agent workers  |
-| web/mobile/XR |                    | + transport    |                | + agent SDK     |
+| Clients       | <----------------> | DeviceIOHub    | <------------> | agent workers  |
+| (web/mobile/XR)|                   | + transport    |                | + agent SDK     |
 +---------------+                    +----------------+                +-------+--------+
                                                                             |
                                                    typed model/tool calls   |
