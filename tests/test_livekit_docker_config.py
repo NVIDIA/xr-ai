@@ -26,7 +26,8 @@ def _render_config(cfg: LiveKitConnectorConfig) -> dict:
 
 
 def test_livekit_nat_options_are_disabled_by_default() -> None:
-    rtc = _render_config(LiveKitConnectorConfig())["rtc"]
+    cfg = LiveKitConnectorConfig(api_key="test-key", api_secret="test-secret")
+    rtc = _render_config(cfg)["rtc"]
 
     assert rtc["use_external_ip"] is False
     assert rtc["skip_external_ip_validation"] is False
@@ -34,6 +35,8 @@ def test_livekit_nat_options_are_disabled_by_default() -> None:
 
 def test_livekit_nat_options_can_be_enabled() -> None:
     cfg = LiveKitConnectorConfig(
+        api_key="test-key",
+        api_secret="test-secret",
         lk_use_external_ip=True,
         lk_skip_external_ip_validation=True,
     )
@@ -46,7 +49,8 @@ def test_livekit_nat_options_can_be_enabled() -> None:
 def test_livekit_config_file_is_owner_only(tmp_path: Path) -> None:
     cfg_path = tmp_path / "livekit.yaml"
 
-    _write_livekit_config(cfg_path, LiveKitConnectorConfig())
+    cfg = LiveKitConnectorConfig(api_key="test-key", api_secret="test-secret")
+    _write_livekit_config(cfg_path, cfg)
 
     assert stat.S_IMODE(cfg_path.stat().st_mode) == 0o600
 
@@ -67,8 +71,9 @@ def test_docker_run_uses_pinned_image(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_docker_mod.asyncio, "create_subprocess_exec", fake_exec)
     monkeypatch.setattr(_docker_mod.subprocess, "run", lambda *a, **k: None)
 
+    cfg = LiveKitConnectorConfig(api_key="test-key", api_secret="test-secret")
     with pytest.raises(StartupError):
-        asyncio.run(LiveKitDocker(LiveKitConnectorConfig()).start())
+        asyncio.run(LiveKitDocker(cfg).start())
 
     image_at = argv.index(_docker_mod._LIVEKIT_IMAGE)
     # Everything after the image is passed to the container, not to docker.

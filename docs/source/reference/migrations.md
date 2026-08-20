@@ -41,6 +41,7 @@ compatibility package. Update out-of-tree code as follows:
 | `get_frame_from_time(reference_time_us, second_ago)` | Subtract the offset in the caller and use `get_historical_frame(start_us)`. |
 | `HistoricalFrameResult.path` and `SampledVideoFrame.path` | Read the canonical exported-frame location from `result.image.uri`. |
 | `xr_ai_tools.qr_code.QRCodeTool` | Initialize `xr_ai_tools.marker_tracking.MarkerTrackingTool`; select QR and/or ArUco with `marker_types`, then use the same `track_markers` request and result contract for either family. |
+| Implicit development credentials from `LiveKitConnectorConfig()` or `LiveKitConnector()` | Pass a `LiveKitConnectorConfig` with explicit `api_key` and `api_secret`. The YAML loader also accepts `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`. |
 
 Pipecat remains an internal implementation detail of `xr-ai-voice`; applications
 no longer assemble or subclass its frame processors.

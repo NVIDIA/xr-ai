@@ -24,6 +24,8 @@ from loguru import logger
 from device_io_hub.transport.livekit.config import LiveKitConnectorConfig
 
 DEFAULT_CONFIG_NAME = "device_io_hub.yaml"
+LIVEKIT_API_KEY_ENV = "LIVEKIT_API_KEY"
+LIVEKIT_API_SECRET_ENV = "LIVEKIT_API_SECRET"
 
 # Clears web_client_dir when set; /token, /cert, /rtc stay up.
 NO_WEB_CLIENT_ENV = "DEVICE_IO_HUB_NO_WEB_CLIENT"
@@ -38,13 +40,22 @@ def _resolve_path(value: str, base: Path) -> str:
     return str((base / p).resolve()) if not p.is_absolute() else value
 
 
+def _apply_env_credentials(data: dict) -> None:
+    if os.environ.get(LIVEKIT_API_KEY_ENV):
+        data["api_key"] = os.environ[LIVEKIT_API_KEY_ENV]
+    if os.environ.get(LIVEKIT_API_SECRET_ENV):
+        data["api_secret"] = os.environ[LIVEKIT_API_SECRET_ENV]
+    data.setdefault("api_key", "")
+    data.setdefault("api_secret", "")
+
+
 def load_config() -> LiveKitConnectorConfig:
     """
     Parse --config from argv, load the YAML file if it exists, and return
     a fully populated LiveKitConnectorConfig.
 
     If no --config flag is given and no device_io_hub.yaml exists in CWD,
-    returns default config (web server disabled, no client dir).
+    returns non-secret defaults with LiveKit credentials from the environment.
     """
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--config", default=None)
@@ -56,13 +67,16 @@ def load_config() -> LiveKitConnectorConfig:
         if args.config:
             raise FileNotFoundError(f"Config file not found: {config_path}")
         logger.debug("No {} found — using defaults", DEFAULT_CONFIG_NAME)
-        return LiveKitConnectorConfig(enable_web_server=False, web_client_dir="")
+        data: dict = {"enable_web_server": False, "web_client_dir": ""}
+        _apply_env_credentials(data)
+        return LiveKitConnectorConfig(**data)
 
     logger.info("Loading config from {}", config_path)
     base = config_path.parent
 
     with config_path.open() as f:
         data: dict = yaml.safe_load(f) or {}
+    _apply_env_credentials(data)
 
     if _web_client_disabled():
         data["web_client_dir"] = ""

@@ -8,11 +8,13 @@ stays in sync automatically.
 """
 from __future__ import annotations
 
+import array
 import asyncio
 
 import pytest
+import device_io_hub.ipc._hub as hub_module
 
-from xr_ai_hub import ParticipantEvent, PixelFormat
+from xr_ai_hub import ConnectorRegistration, ParticipantEvent, PixelFormat
 
 pytestmark = pytest.mark.asyncio
 
@@ -160,3 +162,54 @@ async def test_connector_reregistration_releases_held_slots(hub, make_connector,
     )
     await settle()
     assert ("alice", "cam") in hub._latest_slots
+
+
+async def test_connector_reregistration_open_failure_drops_stale_ring(monkeypatch):
+    """A failed replacement must not retain the closed old ring."""
+
+    class CloseTrackingRing:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    def fail_open(*, name: str, create: bool):
+        raise RuntimeError(f"cannot open {name} create={create}")
+
+    hub = hub_module.HubEndpoint.__new__(hub_module.HubEndpoint)
+    old_ring = CloseTrackingRing()
+    hub._latest_slots = {}
+    hub._ring_registry = {"conn": old_ring}
+    monkeypatch.setattr(hub_module, "ShmRingBuffer", fail_open)
+
+    hub._handle_registration(
+        ConnectorRegistration(connector_id="conn", shm_name="missing")
+    )
+
+    assert old_ring.closed is True
+    assert "conn" not in hub._ring_registry
+
+
+async def test_connector_signals_memoryview_byte_size(hub, make_connector, settle):
+    connector = make_connector()
+    await connector.register()
+    await settle()
+    await connector.notify_participant_joined("alice", pts_us=0)
+    await settle()
+
+    payload = memoryview(array.array("H", range(5)))
+    await connector.push_frame(
+        payload,
+        width=5,
+        height=1,
+        fmt=PixelFormat.RGB24,
+        pts_us=1,
+        participant_id="alice",
+        track_id="cam",
+    )
+    await settle()
+
+    _, view = hub._latest_slots[("alice", "cam")]
+    assert view.signal.data_sz == payload.nbytes
+    assert len(view.data) == payload.nbytes
