@@ -112,6 +112,7 @@ def test_serve_nim_uses_world_writable_per_container_cache(tmp_path, monkeypatch
     leaf = tmp_path / "nim" / "xr-ai-nim-llama"
     assert leaf.stat().st_mode & 0o777 == 0o777
     assert f"{leaf}:/opt/nim/.cache" in captured["argv"]
+    assert "diagnostic_argv" not in captured
 
 
 def test_serve_nim_tolerates_foreign_cache_dir_if_world_writable(

@@ -58,12 +58,13 @@ class VoiceAggregationAgent(Agent):
     """Serialize and coalesce candidate speech independently per participant.
 
     A lone finite contribution passes through without a model call after the
-    short coalescing window. The aggregator keeps that response open for its
-    estimated spoken duration, so updates arriving while it is being spoken
-    wait and coalesce instead of building a speech queue. Multiple pending
-    finite contributions are rewritten into one response. A lone incremental
-    response streams through immediately and uses the same playback estimate
-    after its final chunk. An urgent contribution interrupts the active output.
+    short coalescing window. Completed text is finalized downstream immediately,
+    while the aggregator independently reserves its estimated spoken duration
+    so later updates wait and coalesce instead of building a speech queue.
+    Multiple pending finite contributions are rewritten into one response. A
+    lone incremental response streams through immediately and uses the same
+    scheduling reservation after its final chunk. An urgent contribution
+    interrupts the active output.
     """
 
     def __init__(
@@ -444,11 +445,13 @@ class VoiceAggregationAgent(Agent):
                         )
                     spoken_text += contribution.output.text
                     state.in_flight_count = 1
+                    # Downstream finality follows content availability. The
+                    # playback reservation below is only scheduler state and
+                    # must not delay the client's completed-text echo.
                     await self._publish_stream(
                         contribution,
                         output_id,
                         interrupt=False,
-                        final=False,
                     )
                     state.in_flight_count = 0
                     if contribution.output.final:
@@ -465,7 +468,6 @@ class VoiceAggregationAgent(Agent):
                                 urgent,
                             )
                             return
-                        await self._publish_stream_end(first, output_id)
                         return
                     continue
 
@@ -512,7 +514,6 @@ class VoiceAggregationAgent(Agent):
         response_id: str,
         *,
         interrupt: bool,
-        final: bool | None = None,
     ) -> None:
         try:
             await contribution.ctx.publish(
@@ -520,7 +521,7 @@ class VoiceAggregationAgent(Agent):
                 VoiceOutput(
                     text=contribution.output.text,
                     response_id=response_id,
-                    final=contribution.output.final if final is None else final,
+                    final=contribution.output.final,
                     interrupt=interrupt,
                     timestamp_us=contribution.output.timestamp_us,
                 ),
@@ -609,7 +610,9 @@ class VoiceAggregationAgent(Agent):
             output=VoiceOutput(
                 text=text,
                 response_id=output_id,
-                final=False,
+                # The rewrite/raw batch is complete before playback pacing.
+                # Closing it here lets the data echo reach the client now.
+                final=True,
                 interrupt=interrupts,
                 timestamp_us=timestamp_us,
             ),
@@ -634,7 +637,6 @@ class VoiceAggregationAgent(Agent):
                 urgent_contribution,
             )
             return
-        await self._publish_stream_end(output, output_id)
 
     async def _hold_output(
         self,
