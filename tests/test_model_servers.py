@@ -19,6 +19,14 @@ assert _SPEC and _SPEC.loader
 _model_servers = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_model_servers)
 
+_SIMPLE_MAIN_PATH = _REPO_ROOT / "agent-samples/simple-vlm-example/main.py"
+_SIMPLE_SPEC = importlib.util.spec_from_file_location(
+    "simple_vlm_example_main", _SIMPLE_MAIN_PATH
+)
+assert _SIMPLE_SPEC and _SIMPLE_SPEC.loader
+_simple_vlm = importlib.util.module_from_spec(_SIMPLE_SPEC)
+_SIMPLE_SPEC.loader.exec_module(_simple_vlm)
+
 _OMNI_PATH = (
     _REPO_ROOT
     / "services/nemotron-omni-llm/nemotron_omni_llm_server/__main__.py"
@@ -47,6 +55,38 @@ def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch) -
     assert [process.name for process in processes] == ["stt", "omni", "vlm", "embedding"]
     assert [process.port for process in processes] == [8103, 8108, 8100, 8109]
     assert credentials == ()
+
+
+@pytest.mark.parametrize("gpu_profile", ["dual_48G_ada", "spark", "96G_blackwell"])
+def test_simple_vlm_shares_local_model_server_launch_configs(
+    monkeypatch: pytest.MonkeyPatch,
+    gpu_profile: str,
+) -> None:
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: gpu_profile)
+    monkeypatch.setattr(_simple_vlm, "detect_gpu_config", lambda: gpu_profile)
+
+    shared = {
+        process.name: process
+        for process in _model_servers._build_processes("default")[0]
+    }
+    sample = {
+        process.name: process
+        for process in _simple_vlm._build_processes()[0]
+    }
+
+    for service in ("stt", "vlm"):
+        model_servers_config = (
+            _REPO_ROOT
+            / "agent-samples/model-servers"
+            / shared[service].config
+        ).resolve()
+        simple_vlm_config = (
+            _REPO_ROOT
+            / "agent-samples/simple-vlm-example"
+            / sample[service].config
+        ).resolve()
+        assert simple_vlm_config == model_servers_config
+        assert sample[service].launch_mode == "own"
 
 
 def test_nim_profile_mixes_nim_containers_and_local_servers(

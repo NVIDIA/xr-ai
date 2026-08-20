@@ -28,6 +28,7 @@ from pathlib import Path
 
 from xr_ai_launcher import (
     Process,
+    detect_gpu_config,
     ensure_credentials,
     load_model_deployment,
     require_credentials,
@@ -36,6 +37,7 @@ from xr_ai_launcher import (
 from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
+_MODEL_SERVERS_YAML = _BASE.parent / "model-servers" / "yaml"
 
 _WORKER_CONFIG = "yaml/simple_vlm_example_worker.yaml"
 
@@ -53,7 +55,6 @@ _MODEL_PROCESSES = {
     ),
     "vlm": Process(
         "vlm", "../../services/vlm-server", "vlm_server",
-        config="yaml/vlm_server.yaml",
     ),
     "vlm-omni": Process(
         "vlm-omni",
@@ -62,7 +63,6 @@ _MODEL_PROCESSES = {
     ),
     "stt": Process(
         "stt", "../../services/stt-server", "stt_server",
-        config="yaml/stt_server.yaml",
     ),
     "tts": Process(
         "tts", "../../services/piper-tts", "piper_tts_server",
@@ -82,9 +82,20 @@ def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
         Process("hub", "../../services/xr-media-hub", "xr_media_hub",
                 config="yaml/xr_media_hub.yaml"),
     ]
+    gpu_config: str | None = None
     for service, process in _MODEL_PROCESSES.items():
         launch_mode = deployment.launch_mode(service)
         if launch_mode is not None:
+            if launch_mode == "own" and service in {"stt", "vlm"}:
+                # Share the complete launch contract with model-servers so a
+                # compatible persistent server has the same fingerprint.
+                gpu_config = gpu_config or detect_gpu_config()
+                process = replace(
+                    process,
+                    config=_MODEL_SERVERS_YAML
+                    / gpu_config
+                    / f"{service}_server.yaml",
+                )
             procs.append(replace(process, launch_mode=launch_mode))
     procs.append(
         Process(

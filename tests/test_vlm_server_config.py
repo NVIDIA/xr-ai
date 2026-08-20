@@ -18,7 +18,6 @@ _SAMPLES = _REPO_ROOT / "agent-samples"
 _MODEL_PROFILES = _SAMPLES / "model-servers" / "yaml"
 _LOCAL_VLM_CONFIGS = (
     _SERVER_YAML,
-    _SAMPLES / "simple-vlm-example" / "yaml" / "vlm_server.yaml",
     _MODEL_PROFILES / "96G_blackwell" / "vlm_server.yaml",
     _MODEL_PROFILES / "dual_48G_ada" / "vlm_server.yaml",
     _MODEL_PROFILES / "spark" / "vlm_server.yaml",
