@@ -57,7 +57,7 @@ xr-render demo.
 :::{grid-item-card} 🧩 Architecture
 :link: overview/architecture
 :link-type: doc
-How XR-Media-Hub, the transport, and agents fit together.
+How clients, DeviceIOHub, agents, models, services, and the launcher fit together.
 :::
 
 :::{grid-item-card} 🛠️ Components
@@ -78,7 +78,7 @@ Wire your own agent worker into the stack.
 :hidden:
 :maxdepth: 2
 
-overview/index
+overview/architecture
 getting_started/index
 components/index
 guides/index

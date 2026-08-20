@@ -308,10 +308,7 @@
      aria-label="Table of Contents">
   <p class="bd-links__title" role="heading" aria-level="1">Table of Contents</p>
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
-<li class="toctree-l1 has-children"><a class="reference internal" href="../overview/index.html">Overview</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../overview/architecture.html">Architecture</a></li>
-</ul>
-</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../overview/architecture.html">Architecture</a></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Getting Started</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Quickstart</a></li>
 <li class="toctree-l2"><a class="reference internal" href="skills.html">Skills</a></li>
@@ -542,7 +539,7 @@ free the VRAM with <code class="docutils literal notranslate"><span class="pre">
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example
 </pre></div>
 </div>
-<p>The XR-Media-Hub, VLM, STT, and TTS start together (or reuse running services).
+<p>The DeviceIOHub, VLM, STT, and TTS start together (or reuse running services).
 Worker readiness includes a short 1280x720 streaming VLM warmup.
 The hub prints:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>[hub]   LiveKit URL : wss://localhost:8080
@@ -610,8 +607,8 @@ an <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</spa
 it is not stored in YAML; the overlay only names the env var via
 <code class="docutils literal notranslate"><span class="pre">api_key_env:</span> <span class="pre">NGC_API_KEY</span></code>. Refer to the credentials and AI-services guides for
 full details (and self-hosted NIM containers).</p>
-<p>Each sample has its own <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> controlling the hub; refer to
-<code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/xr_media_hub.yaml</span></code> for the full option list.</p>
+<p>Each sample has its own <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> controlling the hub; refer to
+<code class="docutils literal notranslate"><span class="pre">services/device-io-hub/device_io_hub.yaml</span></code> for the full option list.</p>
 </section>
 </section>
 <section id="lab-instrument-monitoring-marker-associated-readings-foreground-voice">
@@ -718,13 +715,13 @@ launcher credential prompt, not in YAML). Refer to the AI-services guide.</p>
 </section>
 <section id="hub-only-standalone">
 <h2>Hub only (standalone)<a class="headerlink" href="#hub-only-standalone" title="Link to this heading">#</a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>services/xr-media-hub
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>services/device-io-hub
 uv<span class="w"> </span>sync
-uv<span class="w"> </span>run<span class="w"> </span>xr_media_hub
+uv<span class="w"> </span>run<span class="w"> </span>device_io_hub
 </pre></div>
 </div>
 <p>Useful for development or when running an agent in a separate terminal. The
-XR-Media-Hub auto-discovers <code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/xr_media_hub.yaml</span></code>.</p>
+DeviceIOHub auto-discovers <code class="docutils literal notranslate"><span class="pre">services/device-io-hub/device_io_hub.yaml</span></code>.</p>
 </section>
 </section>
 
