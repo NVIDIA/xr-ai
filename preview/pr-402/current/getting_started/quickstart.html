@@ -546,10 +546,13 @@ automatically. Click <strong>Connect</strong>.</p>
 </ul>
 <p>A successful round trip: your query appears in the log, the agent responds after
 a moment, and you hear the reply through your speakers.</p>
-<p><strong>Local model</strong> — override the model weights or GPU settings by editing
-<code class="docutils literal notranslate"><span class="pre">vlm_server.yaml</span></code> in the sample directory.</p>
-<p>To use Cosmos-Reason1 instead, set <code class="docutils literal notranslate"><span class="pre">model:</span> <span class="pre">nvidia/Cosmos-Reason1-7B</span></code> in that
-file and select <code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code> as the VLM adapter preset in <code class="docutils literal notranslate"><span class="pre">models.local.json</span></code>.</p>
+<p><strong>Local model</strong> — override the model weights or GPU settings in
+<code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/&lt;profile&gt;/vlm_server.yaml</span></code>, where <code class="docutils literal notranslate"><span class="pre">&lt;profile&gt;</span></code>
+is the hardware profile reported by the launcher (<code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>). The standalone sample and <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> share this config.</p>
+<p>To use Cosmos-Reason1 instead, set <code class="docutils literal notranslate"><span class="pre">model:</span> <span class="pre">nvidia/Cosmos-Reason1-7B</span></code> and remove
+the Cosmos3-only <code class="docutils literal notranslate"><span class="pre">hf_overrides</span></code> block in that file, then select <code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code> as
+the VLM adapter preset in <code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/yaml/models.local.json</span></code>.</p>
 <p><strong>Remote model</strong> — copy <code class="docutils literal notranslate"><span class="pre">yaml/models.hosted.json</span></code>, point its VLM endpoint at
 your server, and select it in the worker config:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
