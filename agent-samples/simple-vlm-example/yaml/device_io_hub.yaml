@@ -1,9 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# XR Media Hub configuration for the xr-render-demo sample.
+# DeviceIOHub configuration for the vlm-agent sample.
 # Paths are relative to this file's directory.
-# See services/xr-media-hub/xr_media_hub.yaml for all available options.
+# See services/device-io-hub/device_io_hub.yaml for all available options.
 
 # ── LiveKit server ────────────────────────────────────────────────────────────
 # Development-only placeholders. Replace both values outside local samples.
@@ -21,22 +21,12 @@ lk_port_udp: 7882
 # lk_skip_external_ip_validation: true
 
 # ── Web client server ─────────────────────────────────────────────────────────
-# The page serves both stacks: LiveKit (agent audio/data over the WSS proxy on
-# this port) AND CloudXR (one-tap Launch XR → WebXR over wss://<host>:48322).
-# Because both live in the same JS context, entering XR does not drop the
-# agent connection.
 enable_web_server: true
 web_server_port:   8080
-web_client_dir:    ../../../client-samples/web-xr
+web_client_dir:    ../../../client-samples/web
 
 # ── Optional: token server ────────────────────────────────────────────────────
 enable_token_server: true
 # Change if another service holds port 8000 (e.g. iphlpsvc under WSL2 mirrored
-# networking; see the note in services/xr-media-hub/xr_media_hub.yaml).
+# networking; see the note in services/device-io-hub/device_io_hub.yaml).
 # token_server_port: 8000
-
-# ── Video recording ──────────────────────────────────────────────────────────
-# Disabled: xr-render-demo obtains current frames through LiveFrameSource.
-# Enable this and set recordings_dir in video_memory_service.yaml for history.
-video_recording:
-  enabled: false

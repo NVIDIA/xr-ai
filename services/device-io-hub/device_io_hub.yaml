@@ -1,15 +1,15 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# XR Media Hub — reference configuration
+# DeviceIOHub — reference configuration
 #
 # All available options are listed here with their defaults.
 # Copy this file (or a subset of it) to your agent sample directory and
 # edit as needed.  Relative paths are resolved from this file's directory.
 #
-# Run from services/xr-media-hub/:
-#   uv run xr_media_hub            # auto-discovers this file
-#   uv run xr_media_hub --config xr_media_hub.yaml
+# Run from services/device-io-hub/:
+#   uv run device_io_hub            # auto-discovers this file
+#   uv run device_io_hub --config device_io_hub.yaml
 
 # ── LiveKit server ────────────────────────────────────────────────────────────
 api_key:    devkey

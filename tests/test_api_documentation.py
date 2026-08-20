@@ -358,15 +358,15 @@ def test_generated_reference_rejects_private_implementation_details(
     voice = tmp_path / "reference" / "python" / "xr_ai_voice" / "index.html"
     voice.parent.mkdir(parents=True)
     voice.write_text(
-        "Pipecat XRMediaHubInputTransport XRMediaHubOutputTransport",
+        "Pipecat DeviceIOHubInputTransport DeviceIOHubOutputTransport",
         encoding="utf-8",
     )
 
     assert reference_check.validate_generated_api(tmp_path) == [
         "generated API exposes private module path: xr_ai_models._protocols.LLMService",
+        "generated API exposes private implementation detail: DeviceIOHubInputTransport",
+        "generated API exposes private implementation detail: DeviceIOHubOutputTransport",
         "generated API exposes private implementation detail: Pipecat",
-        "generated API exposes private implementation detail: XRMediaHubInputTransport",
-        "generated API exposes private implementation detail: XRMediaHubOutputTransport",
     ]
 
 

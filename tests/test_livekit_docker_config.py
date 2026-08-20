@@ -11,14 +11,14 @@ from pathlib import Path
 
 import pytest
 import yaml
-from xr_media_hub._errors import StartupError
-from xr_media_hub.transport.livekit import _docker as _docker_mod
-from xr_media_hub.transport.livekit._docker import (
+from device_io_hub._errors import StartupError
+from device_io_hub.transport.livekit import _docker as _docker_mod
+from device_io_hub.transport.livekit._docker import (
     LiveKitDocker,
     _render_livekit_config,
     _write_livekit_config,
 )
-from xr_media_hub.transport.livekit.config import LiveKitConnectorConfig
+from device_io_hub.transport.livekit.config import LiveKitConnectorConfig
 
 
 def _render_config(cfg: LiveKitConnectorConfig) -> dict:

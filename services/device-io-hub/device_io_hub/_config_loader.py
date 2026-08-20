@@ -4,7 +4,7 @@
 """
 Loads LiveKitConnectorConfig from a YAML file.
 
-Looks for xr_media_hub.yaml in the current working directory by default.
+Looks for device_io_hub.yaml in the current working directory by default.
 Pass --config <path> on the command line to use a different file.
 
 Relative paths in the YAML (e.g. web_client_dir: ../../client-samples/web) are
@@ -21,12 +21,12 @@ from pathlib import Path
 import yaml
 from loguru import logger
 
-from xr_media_hub.transport.livekit.config import LiveKitConnectorConfig
+from device_io_hub.transport.livekit.config import LiveKitConnectorConfig
 
-DEFAULT_CONFIG_NAME = "xr_media_hub.yaml"
+DEFAULT_CONFIG_NAME = "device_io_hub.yaml"
 
 # Clears web_client_dir when set; /token, /cert, /rtc stay up.
-NO_WEB_CLIENT_ENV = "XR_MEDIA_HUB_NO_WEB_CLIENT"
+NO_WEB_CLIENT_ENV = "DEVICE_IO_HUB_NO_WEB_CLIENT"
 
 
 def _web_client_disabled() -> bool:
@@ -43,7 +43,7 @@ def load_config() -> LiveKitConnectorConfig:
     Parse --config from argv, load the YAML file if it exists, and return
     a fully populated LiveKitConnectorConfig.
 
-    If no --config flag is given and no xr_media_hub.yaml exists in CWD,
+    If no --config flag is given and no device_io_hub.yaml exists in CWD,
     returns default config (web server disabled, no client dir).
     """
     parser = argparse.ArgumentParser(add_help=False)

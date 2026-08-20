@@ -46,7 +46,7 @@ jobs:
             tests/pyproject.toml
             tests/uv.lock
             agent-sdk/xr-ai-hub/pyproject.toml
-            services/xr-media-hub/pyproject.toml
+            services/device-io-hub/pyproject.toml
 
       - name: Install Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}

@@ -5,7 +5,7 @@
 
 # xr-ai-hub
 
-The minimal agent-side client for XR-Media-Hub. It depends only on pyzmq and
+The minimal agent-side client for DeviceIOHub. It depends only on pyzmq and
 msgpack and deliberately contains no LiveKit, web-server, model, NAT, or voice
 pipeline code.
 

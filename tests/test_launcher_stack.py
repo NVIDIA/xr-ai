@@ -13,10 +13,10 @@ import xr_ai_launcher._stack as _stack
 
 class TestProcessDataclass:
     def test_defaults(self):
-        p = _stack.Process("hub", "../../services/xr-media-hub", "xr_media_hub")
+        p = _stack.Process("hub", "../../services/device-io-hub", "device_io_hub")
         assert p.name == "hub"
-        assert p.project == "../../services/xr-media-hub"
-        assert p.command == "xr_media_hub"
+        assert p.project == "../../services/device-io-hub"
+        assert p.command == "device_io_hub"
         assert p.config is None
         assert p.gpu is None
         assert p.launch_mode == "own"
@@ -36,7 +36,7 @@ class TestProcessDataclass:
         assert p.port == 8100
 
     def test_frozen_immutability(self):
-        p = _stack.Process("hub", "../../services/xr-media-hub", "xr_media_hub")
+        p = _stack.Process("hub", "../../services/device-io-hub", "device_io_hub")
         with pytest.raises((AttributeError, TypeError)):
             p.name = "other"  # type: ignore[misc]
 

@@ -5,6 +5,8 @@
 
 # Release migration
 
+## Removed SDK compatibility surfaces
+
 This release removes deprecated SDK aliases and the standalone Pipecat
 compatibility package. Update out-of-tree code as follows:
 
@@ -19,7 +21,6 @@ compatibility package. Update out-of-tree code as follows:
 | `ParticipantJoinedFrame`, `ParticipantLeftFrame`, and `InterruptionFrame` | Subscribe to application topics carrying `VoiceParticipantJoined`, `VoiceParticipantLeft`, and `VoiceInterrupted`. Participant identity comes from runtime metadata; voice-gate greetings remain session-owned. |
 | `BrainResponseEndFrame` | Publish a finite `VoiceOutput`, or terminate an incremental response with `final=True`. |
 | `VadSttProcessor`, `VoiceGateProcessor`, and `StreamingTtsProcessor` | Configure `VoiceAgent` with `VadConfig`, `VoiceGateConfig`, and `text_topic`; pipeline processors are private implementation details. |
-| `XRMediaHubTransport` | Construct `xr_ai_voice.HubVoiceTransport` and pass it to `VoiceAgent` only when another application component must share that existing hub boundary. |
 | `SttClient` and `TtsClient` | Construct services through `xr_ai_models.make_stt` and `make_tts`, or use `OpenAICompatSTT` and `OpenAICompatTTS` directly. |
 | `http_probe`, `mcp_probe`, and `wait_for_services` | Pass additional readiness callables through `VoiceAgent(probes=...)`; MCP readiness is no longer part of the voice SDK. |
 | `xr_ai_pipecat.audio` conversion helpers | Let `VoiceAgent` own media conversion. Applications that truly need raw hub media should use `xr_ai_hub` types and own their format conversion. |

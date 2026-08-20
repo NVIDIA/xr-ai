@@ -57,8 +57,8 @@ def test_config_catalog_preserves_source_and_language() -> None:
     assert "lovr_bin" in scene.content
 
     for path in (
-        "agent-samples/simple-vlm-example/yaml/xr_media_hub.yaml",
-        "agent-samples/xr-render-demo/yaml/xr_media_hub.yaml",
+        "agent-samples/simple-vlm-example/yaml/device_io_hub.yaml",
+        "agent-samples/xr-render-demo/yaml/device_io_hub.yaml",
     ):
         assert "# Development-only placeholders." in configs[path].content
 

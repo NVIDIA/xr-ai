@@ -228,7 +228,7 @@ def test_sample_uses_named_native_agents_and_shared_connection_client() -> None:
     assert "xr-ai-nat" not in dependencies
     assert "xr-ai-pipecat" not in dependencies
     assert all("mcp" not in dependency.lower() for dependency in dependencies)
-    hub = yaml.safe_load((_SAMPLE / "yaml" / "xr_media_hub.yaml").read_text())
+    hub = yaml.safe_load((_SAMPLE / "yaml" / "device_io_hub.yaml").read_text())
     assert hub["enable_token_server"] is True
     assert (_SAMPLE / "yaml" / hub["web_client_dir"]).resolve() == _REPO / "client-samples" / "web"
     assert not any(path.name == "web" for path in _SAMPLE.iterdir())

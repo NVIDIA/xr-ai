@@ -18,7 +18,7 @@ dependencies = [
     "xr-ai-tools[frames,image-editing,marker-tracking,services,vision]",
     "xr-ai-voice",
     "xr-ai-web-events",
-    "xr-media-hub",
+    "device-io-hub",
     "xr-ai-launcher",
     "xr-ai-logging",
     "xr-ai-vad",
@@ -44,7 +44,7 @@ xr-ai-models          = { path = "../agent-sdk/xr-ai-models",           editable
 xr-ai-tools           = { path = "../agent-sdk/xr-ai-tools",            editable = true }
 xr-ai-voice           = { path = "../agent-sdk/xr-ai-voice",            editable = true }
 xr-ai-web-events      = { path = "../agent-sdk/xr-ai-web-events",       editable = true }
-xr-media-hub          = { path = "../services/xr-media-hub",             editable = true }
+device-io-hub          = { path = "../services/device-io-hub",             editable = true }
 xr-ai-launcher        = { path = "../utils/xr-ai-launcher",             editable = true }
 xr-ai-logging         = { path = "../utils/xr-ai-logging",              editable = true }
 xr-ai-vad             = { path = "../utils/xr-ai-vad",                  editable = true }

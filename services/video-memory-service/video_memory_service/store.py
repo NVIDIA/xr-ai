@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Read the timestamped H.264 chunks written by XR Media Hub."""
+"""Read the timestamped H.264 chunks written by DeviceIOHub."""
 
 import json
 from pathlib import Path

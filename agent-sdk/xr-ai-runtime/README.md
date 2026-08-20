@@ -104,7 +104,7 @@ head-of-line blocking on unrelated or streaming tools.
 Domain controls such as `start_monitoring`, `stop_monitoring`, and `status` are
 ordinary tools. Agent lifetime itself is not a model tool. Model loops,
 planning, memory, and model clients remain agent implementations. Raw video
-stays on the XR-Media-Hub path. `VoiceAgent` publishes final pre-gate STT
+stays on the DeviceIOHub path. `VoiceAgent` publishes final pre-gate STT
 results on `voice.transcript` for explicit subscribers. Its media session is
 private, and its bounded transcript-delivery queue prevents slow subscribers
 from delaying STT or command gating.

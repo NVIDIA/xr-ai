@@ -235,7 +235,7 @@ def _spawn(proc: Process, base: Path, ready_file: Path) -> subprocess.Popen:
                 key,
             )
 
-    # start_new_session=True puts uv + its children (e.g. xr_media_hub) in a
+    # start_new_session=True puts uv + its children (e.g. device_io_hub) in a
     # new process group.  _shutdown then kills the whole group so grandchild
     # processes don't survive as orphans when uv exits without forwarding signals.
     p = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -434,8 +434,8 @@ def run_stack(
         _BASE = Path(__file__).resolve().parent
 
         PROCESSES = [
-            Process("hub",    "../../services/xr-media-hub", "xr_media_hub",
-                    config="yaml/xr_media_hub.yaml"),
+            Process("hub",    "../../services/device-io-hub", "device_io_hub",
+                    config="yaml/device_io_hub.yaml"),
             Parallel([
                 Process("stt", "../../services/stt-server", "stt_server"),
                 Process("tts", "../../services/piper-tts",  "piper_tts_server"),

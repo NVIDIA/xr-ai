@@ -26,7 +26,7 @@ _REQUIRED_SERVICES = {
     "stt-server",
     "video-memory-service",
     "vlm-server",
-    "xr-media-hub",
+    "device-io-hub",
 }
 _MODEL_SERVICES = {
     "embedding-server": ("embedding-server", "embedding_server", 8109),
@@ -65,7 +65,7 @@ _ALLOWED_LEGACY_REFERENCES = {
     Path("tests/test_service_layout.py"),
     Path("docs/source/reference/migrations.md"),
 }
-_HUB_PROJECT = _ROOT / "services" / "xr-media-hub"
+_HUB_PROJECT = _ROOT / "services" / "device-io-hub"
 _SAMPLE_WEB_CLIENTS = {
     "lab-instrument-monitoring": _ROOT / "client-samples" / "web",
     "simple-vlm-example": _ROOT / "client-samples" / "web",
@@ -93,8 +93,6 @@ _RETIRED_AGENT_SDK_REFERENCES = (
     "agent-sdk/xr-ai-hub-client/",
     "agent-sdk/xr-ai-agent-runtime/",
 )
-
-
 def _tracked_paths() -> list[Path]:
     try:
         output = subprocess.run(
@@ -219,17 +217,17 @@ def test_model_service_projects_preserve_their_public_contracts() -> None:
         assert (project / default).resolve() == _ROOT / "models"
 
 
-def test_xr_media_hub_preserves_its_package_and_command() -> None:
+def test_device_io_hub_preserves_its_package_and_command() -> None:
     metadata = tomllib.loads((_HUB_PROJECT / "pyproject.toml").read_text())
 
-    assert metadata["project"]["name"] == "xr-media-hub"
+    assert metadata["project"]["name"] == "device-io-hub"
     assert metadata["project"]["scripts"] == {
-        "xr_media_hub": "xr_media_hub.__main__:run"
+        "device_io_hub": "device_io_hub.__main__:run"
     }
     assert metadata["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == [
-        "xr_media_hub"
+        "device_io_hub"
     ]
-    assert (_HUB_PROJECT / "xr_media_hub" / "__main__.py").is_file()
+    assert (_HUB_PROJECT / "device_io_hub" / "__main__.py").is_file()
 
 
 def test_sample_process_projects_resolve(monkeypatch) -> None:
@@ -297,19 +295,19 @@ def test_sample_hub_projects_resolve() -> None:
 
 
 def test_hub_configuration_web_client_paths_resolve(monkeypatch) -> None:
-    from xr_media_hub._config_loader import load_config
+    from device_io_hub._config_loader import load_config
 
-    reference_path = _HUB_PROJECT / "xr_media_hub.yaml"
+    reference_path = _HUB_PROJECT / "device_io_hub.yaml"
     monkeypatch.setattr(
         sys,
         "argv",
-        ["xr_media_hub", "--config", str(reference_path)],
+        ["device_io_hub", "--config", str(reference_path)],
     )
     reference = load_config()
     assert Path(reference.web_client_dir) == _ROOT / "client-samples" / "web"
 
     config_paths = sorted(
-        (_ROOT / "agent-samples").glob("*/yaml/xr_media_hub.yaml")
+        (_ROOT / "agent-samples").glob("*/yaml/device_io_hub.yaml")
     )
     assert {path.parents[1].name for path in config_paths} == _SAMPLE_WEB_CLIENTS.keys()
     for config_path in config_paths:
@@ -353,7 +351,6 @@ def test_tracked_text_has_no_retired_service_paths() -> None:
             for legacy in _RETIRED_AGENT_SDK_REFERENCES
             if legacy in line
         )
-
     assert not stale, f"retired service paths remain: {stale}"
 
 

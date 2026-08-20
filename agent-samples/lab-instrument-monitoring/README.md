@@ -124,7 +124,7 @@ read-only event viewer defaults to `http://127.0.0.1:8092`. Pass
 files remain the durable output. Allow TCP port 8092 through the host firewall
 only from a trusted network when connecting remotely.
 
-The event viewer does not reuse media-hub authentication and serves plain HTTP.
+The event viewer does not reuse DeviceIOHub authentication and serves plain HTTP.
 Use `--expose-web-events` only on a trusted network; put an authenticated TLS
 reverse proxy in front of it before broader exposure.
 

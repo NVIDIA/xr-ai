@@ -123,9 +123,9 @@ def _build_processes(worker_config: Path = _WORKER_CONFIG) -> tuple[list[Process
     processes = [
         Process(
             "hub",
-            "../../services/xr-media-hub",
-            "xr_media_hub",
-            config="yaml/xr_media_hub.yaml",
+            "../../services/device-io-hub",
+            "device_io_hub",
+            config="yaml/device_io_hub.yaml",
         )
     ]
     for service, process in _MODEL_PROCESSES.items():

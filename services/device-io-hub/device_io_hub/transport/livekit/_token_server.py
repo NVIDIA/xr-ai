@@ -96,7 +96,7 @@ def build_app(cfg: LiveKitConnectorConfig) -> FastAPI:
     proxy_client = httpx.AsyncClient(timeout=5.0)
 
     app = FastAPI(
-        title="XR-Media-Hub Token Server",
+        title="DeviceIOHub Token Server",
         lifespan=_proxy_client_lifespan(proxy_client),
     )
     app.add_middleware(

@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Entry point for xr_media_hub.
+Entry point for device_io_hub.
 
-    uv run xr_media_hub          # via pyproject.toml script
-    python -m xr_media_hub       # direct module invocation
+    uv run device_io_hub          # via pyproject.toml script
+    python -m device_io_hub       # direct module invocation
 """
 from __future__ import annotations
 
@@ -20,10 +20,10 @@ from pathlib import Path
 from loguru import logger
 from xr_ai_logging import setup_logging
 
-from xr_media_hub._config_loader import load_config
-from xr_media_hub._errors import StartupError
-from xr_media_hub.ipc import AudioChunk, DataMessage, HubEndpoint, ParticipantEvent, SlotView
-from xr_media_hub.transport.livekit import LiveKitConnector, make_client_token
+from device_io_hub._config_loader import load_config
+from device_io_hub._errors import StartupError
+from device_io_hub.ipc import AudioChunk, DataMessage, HubEndpoint, ParticipantEvent, SlotView
+from device_io_hub.transport.livekit import LiveKitConnector, make_client_token
 
 STATS_INTERVAL = 5.0
 
@@ -100,7 +100,7 @@ async def main(ready_file: Path | None = None) -> None:
 
     vr_cfg = cfg.video_recording or {}
     if vr_cfg.get("enabled"):
-        from xr_media_hub.video import VideoRecorder, VideoRecorderConfig
+        from device_io_hub.video import VideoRecorder, VideoRecorderConfig
         rc_defaults = VideoRecorderConfig()
         rc = VideoRecorderConfig(
             out_dir         = vr_cfg.get("out_dir",         rc_defaults.out_dir),
@@ -139,7 +139,7 @@ async def main(ready_file: Path | None = None) -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
 
-    logger.info("XR-Media-Hub running — press Ctrl-C to exit")
+    logger.info("DeviceIOHub running — press Ctrl-C to exit")
     hub_task   = asyncio.create_task(hub.run(),       name="hub")
     conn_task  = asyncio.create_task(connector.run(), name="connector")
     stats_task = asyncio.create_task(_stats_loop(),   name="stats")

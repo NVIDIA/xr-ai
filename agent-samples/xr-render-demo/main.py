@@ -6,7 +6,7 @@ xr-render-demo orchestrator. Runs the process stack for this sample.
 
 Architecture (per AGENTS.md + the Agentic AI for XR design doc):
 
-  Web client ── LiveKit ──► xr-media-hub ──IPC──► worker (this sample's agent)
+  Web client ── LiveKit ──► DeviceIOHub ──IPC──► worker (this sample's agent)
   Web client ── WebRTC ──► cloudxr-runtime
                         worker ──native tool──► scene ──► LOVR (OpenXR)
 
@@ -71,7 +71,7 @@ _WORKER_CONFIG = "yaml/xr_render_demo_worker.yaml"
 _CLOUDXR_CONFIG = "yaml/cloudxr_runtime.yaml"
 
 # Must match _config_loader.NO_WEB_CLIENT_ENV.
-_NO_WEB_CLIENT_ENV = "XR_MEDIA_HUB_NO_WEB_CLIENT"
+_NO_WEB_CLIENT_ENV = "DEVICE_IO_HUB_NO_WEB_CLIENT"
 
 
 # ── Process stack ─────────────────────────────────────────────────────────────
@@ -121,8 +121,8 @@ def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
         if launch_mode is not None:
             procs.append(replace(process, launch_mode=launch_mode))
     procs += [
-        Process("hub",        "../../services/xr-media-hub",                "xr_media_hub",
-                config="yaml/xr_media_hub.yaml"),
+        Process("hub",        "../../services/device-io-hub",                "device_io_hub",
+                config="yaml/device_io_hub.yaml"),
         Process("cloudxr",    "../../services/cloudxr-runtime",               "cloudxr_runtime",
                 config="yaml/cloudxr_runtime.yaml"),
         Process("video-memory", "../../services/video-memory-service", "video_memory_service",

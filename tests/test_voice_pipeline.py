@@ -1996,7 +1996,7 @@ async def test_streaming_tts_observes_each_wav_through_gate():
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# XRMediaHubInputTransport
+# DeviceIOHubInputTransport
 # ════════════════════════════════════════════════════════════════════════════
 
 
@@ -2005,11 +2005,11 @@ async def test_input_transport_releases_startup_barrier_after_endpoint_starts():
     """The startup barrier releases independently of roster convergence."""
     from pipecat.frames.frames import StartFrame
     from pipecat.transports.base_transport import TransportParams
-    from xr_ai_voice._transport import SAMPLE_RATE, XRMediaHubInputTransport
+    from xr_ai_voice._transport import SAMPLE_RATE, DeviceIOHubInputTransport
 
     endpoint = _CallbackStubEndpoint()
     started = asyncio.Event()
-    transport = XRMediaHubInputTransport(
+    transport = DeviceIOHubInputTransport(
         endpoint,
         TransportParams(
             audio_in_enabled=True,
@@ -2043,7 +2043,7 @@ async def test_input_transport_populates_transport_source_from_chunk_pid():
     from xr_ai_hub import AudioChunk
     from xr_ai_voice._transport import (
         SAMPLE_RATE,
-        XRMediaHubInputTransport,
+        DeviceIOHubInputTransport,
     )
     from pipecat.transports.base_transport import TransportParams
 
@@ -2053,7 +2053,7 @@ async def test_input_transport_populates_transport_source_from_chunk_pid():
         audio_in_sample_rate=SAMPLE_RATE,
         audio_in_channels=1,
     )
-    transport = XRMediaHubInputTransport(ep, params)
+    transport = DeviceIOHubInputTransport(ep, params)
     # Mark started without spinning up the ZMQ run loop; the audio
     # callback gates on this flag.
     transport._started = True
@@ -2089,11 +2089,11 @@ async def test_input_transport_emits_participant_joined_frame():
     ``ParticipantJoinedFrame`` on the pipecat pipeline — otherwise the
     voice gate never greets and the assistant never steers the output
     transport at a participant, so every TTS chunk gets dropped by
-    ``XRMediaHubOutputTransport.write_audio_frame``."""
+    ``DeviceIOHubOutputTransport.write_audio_frame``."""
     from xr_ai_hub import ParticipantEvent
     from xr_ai_voice._transport import (
         SAMPLE_RATE,
-        XRMediaHubInputTransport,
+        DeviceIOHubInputTransport,
     )
     from pipecat.transports.base_transport import TransportParams
 
@@ -2103,7 +2103,7 @@ async def test_input_transport_emits_participant_joined_frame():
         audio_in_sample_rate=SAMPLE_RATE,
         audio_in_channels=1,
     )
-    transport = XRMediaHubInputTransport(ep, params)
+    transport = DeviceIOHubInputTransport(ep, params)
     transport._started = True
 
     pushed: list[Frame] = []
@@ -2135,7 +2135,7 @@ async def test_input_transport_emits_participant_left_frame():
     from xr_ai_hub import ParticipantEvent
     from xr_ai_voice._transport import (
         SAMPLE_RATE,
-        XRMediaHubInputTransport,
+        DeviceIOHubInputTransport,
     )
     from pipecat.transports.base_transport import TransportParams
 
@@ -2145,7 +2145,7 @@ async def test_input_transport_emits_participant_left_frame():
         audio_in_sample_rate=SAMPLE_RATE,
         audio_in_channels=1,
     )
-    transport = XRMediaHubInputTransport(ep, params)
+    transport = DeviceIOHubInputTransport(ep, params)
     transport._started = True
 
     pushed: list[Frame] = []
@@ -2173,7 +2173,7 @@ async def test_input_transport_drops_participant_event_before_start():
     from xr_ai_hub import ParticipantEvent
     from xr_ai_voice._transport import (
         SAMPLE_RATE,
-        XRMediaHubInputTransport,
+        DeviceIOHubInputTransport,
     )
     from pipecat.transports.base_transport import TransportParams
 
@@ -2183,7 +2183,7 @@ async def test_input_transport_drops_participant_event_before_start():
         audio_in_sample_rate=SAMPLE_RATE,
         audio_in_channels=1,
     )
-    transport = XRMediaHubInputTransport(ep, params)
+    transport = DeviceIOHubInputTransport(ep, params)
     # Intentionally leave transport._started == False.
 
     pushed: list[Frame] = []
@@ -2259,12 +2259,12 @@ async def test_private_pipeline_assembly_connects_audio_in_to_audio_out(monkeypa
         kinds = [type(p).__name__ for p in pipeline.processors]
         assert kinds == [
             "PipelineSource",
-            "XRMediaHubInputTransport",
+            "DeviceIOHubInputTransport",
             "VadSttProcessor",
             "VoiceGateProcessor",
             "_EchoAssistant",
             "StreamingTtsProcessor",
-            "XRMediaHubOutputTransport",
+            "DeviceIOHubOutputTransport",
             "PipelineSink",
         ]
     finally:
@@ -2795,7 +2795,7 @@ async def test_output_transport_handle_frame_routes_pid_to_default_sender(monkey
     the base class so the default sender picks it up; the hub layer
     routes by ``_target_participant``.
     """
-    from xr_ai_voice._transport import XRMediaHubOutputTransport
+    from xr_ai_voice._transport import DeviceIOHubOutputTransport
     from pipecat.transports.base_output import BaseOutputTransport
     from pipecat.transports.base_transport import TransportParams
 
@@ -2803,7 +2803,7 @@ async def test_output_transport_handle_frame_routes_pid_to_default_sender(monkey
         async def send_return_audio(self, *_a, **_kw) -> None:
             return
 
-    transport = XRMediaHubOutputTransport(_StubEndpoint(), TransportParams())
+    transport = DeviceIOHubOutputTransport(_StubEndpoint(), TransportParams())
 
     # Capture what the super-class sees so the assertion focuses on the
     # destination rewrite without needing the full media-sender lifecycle.
@@ -2845,7 +2845,7 @@ async def test_output_transport_writes_audio_to_target_participant():
     from xr_ai_hub import AudioChunk
     from xr_ai_voice._transport import (
         TTS_NATIVE_SAMPLE_RATE,
-        XRMediaHubOutputTransport,
+        DeviceIOHubOutputTransport,
     )
     from pipecat.transports.base_transport import TransportParams
 
@@ -2860,7 +2860,7 @@ async def test_output_transport_writes_audio_to_target_participant():
         audio_out_sample_rate=TTS_NATIVE_SAMPLE_RATE,
         audio_out_channels=1,
     )
-    transport = XRMediaHubOutputTransport(_StubEndpoint(), params)
+    transport = DeviceIOHubOutputTransport(_StubEndpoint(), params)
     transport.set_target_participant("web-client")
 
     pcm = b"\x00\x00" * 320  # 320 int16 samples = 20 ms @ 16 kHz
@@ -2879,7 +2879,7 @@ async def test_output_transport_releases_media_sender_on_participant_left():
     """A departing participant's per-pid ``MediaSender`` is torn down so a
     long-lived hub with join/leave churn does not retain idle senders until
     pipeline shutdown."""
-    from xr_ai_voice._transport import XRMediaHubOutputTransport
+    from xr_ai_voice._transport import DeviceIOHubOutputTransport
     from pipecat.transports.base_transport import TransportParams
 
     class _StubEndpoint:
@@ -2893,7 +2893,7 @@ async def test_output_transport_releases_media_sender_on_participant_left():
         async def cancel(self, _frame) -> None:
             self.cancelled = True
 
-    transport = XRMediaHubOutputTransport(_StubEndpoint(), TransportParams())
+    transport = DeviceIOHubOutputTransport(_StubEndpoint(), TransportParams())
     sender = _StubSender()
     transport._media_senders["alice"] = sender      # noqa: SLF001
     transport.set_target_participant("alice")
@@ -2921,7 +2921,7 @@ async def test_output_transport_routes_audio_by_frame_pid_not_single_target():
     from xr_ai_hub import AudioChunk
     from xr_ai_voice._transport import (
         TTS_NATIVE_SAMPLE_RATE,
-        XRMediaHubOutputTransport,
+        DeviceIOHubOutputTransport,
     )
     from pipecat.transports.base_transport import TransportParams
 
@@ -2936,7 +2936,7 @@ async def test_output_transport_routes_audio_by_frame_pid_not_single_target():
         audio_out_sample_rate=TTS_NATIVE_SAMPLE_RATE,
         audio_out_channels=1,
     )
-    transport = XRMediaHubOutputTransport(_StubEndpoint(), params)
+    transport = DeviceIOHubOutputTransport(_StubEndpoint(), params)
     # Simulate the pre-fix steering: assistant set the room-wide target to the
     # last participant that joined. Per-frame routing must override this.
     transport.set_target_participant("bob")
@@ -2960,7 +2960,7 @@ async def test_output_transport_write_audio_frame_returns_false_without_target()
     boundary instead of emitting an unaddressable AudioChunk. Returning
     False also tells pipecat to skip the downstream push so a tail tap
     doesn't see a half-routed frame."""
-    from xr_ai_voice._transport import XRMediaHubOutputTransport
+    from xr_ai_voice._transport import DeviceIOHubOutputTransport
     from pipecat.transports.base_transport import TransportParams
 
     captured: list = []
@@ -2969,7 +2969,7 @@ async def test_output_transport_write_audio_frame_returns_false_without_target()
         async def send_return_audio(self, chunk) -> None:
             captured.append(chunk)
 
-    transport = XRMediaHubOutputTransport(_StubEndpoint(), TransportParams())
+    transport = DeviceIOHubOutputTransport(_StubEndpoint(), TransportParams())
     frame = OutputAudioRawFrame(audio=b"\x00\x00", sample_rate=22050, num_channels=1)
     ok = await transport.write_audio_frame(frame)
     assert ok is False
@@ -2998,7 +2998,7 @@ async def test_gated_query_drives_audio_through_full_pipeline_to_transport():
     from xr_ai_hub import AudioChunk
     from xr_ai_voice._transport import (
         TTS_NATIVE_SAMPLE_RATE,
-        XRMediaHubOutputTransport,
+        DeviceIOHubOutputTransport,
     )
     from pipecat.transports.base_transport import TransportParams
 
@@ -3013,7 +3013,7 @@ async def test_gated_query_drives_audio_through_full_pipeline_to_transport():
         audio_out_sample_rate=TTS_NATIVE_SAMPLE_RATE,
         audio_out_channels=1,
     )
-    output = XRMediaHubOutputTransport(_StubEndpoint(), params)
+    output = DeviceIOHubOutputTransport(_StubEndpoint(), params)
     output.set_target_participant("web-client")
 
     tts  = _FakeTts(sample_rate=TTS_NATIVE_SAMPLE_RATE)
@@ -3072,7 +3072,7 @@ async def test_private_pipeline_assembly_routes_text_through_streaming_tts(monke
 # ════════════════════════════════════════════════════════════════════════════
 
 
-def test_xr_media_hub_transport_subscribes_to_video_frames():
+def test_device_io_hub_transport_subscribes_to_video_frames():
     """The ProcessorEndpoint must subscribe to the video category so
     that camera FrameSignals reach assistant consumers (e.g. VLM workers
     that bind ``ep.on_frame``). A previous version of the transport

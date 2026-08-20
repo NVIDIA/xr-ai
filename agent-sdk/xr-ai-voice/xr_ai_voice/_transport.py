@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-XR-Media-Hub transport for Pipecat.
+DeviceIOHub transport for Pipecat.
 
 Bridges ``ProcessorEndpoint`` (ZMQ IPC) to Pipecat's frame pipeline.
 
@@ -75,7 +75,7 @@ def _hub_pcm_to_mono_16k(pcm_int16: bytes, channels: int, sample_rate: int) -> b
 
 # ── Input ─────────────────────────────────────────────────────────────────────
 
-class XRMediaHubInputTransport(BaseInputTransport):
+class DeviceIOHubInputTransport(BaseInputTransport):
     """Hub → Pipecat: float32 hub audio → 16 kHz int16 pipecat frames."""
 
     def __init__(
@@ -103,7 +103,7 @@ class XRMediaHubInputTransport(BaseInputTransport):
         await self._ep.wait_until_running()
         if self._started_event:
             self._started_event.set()
-        logger.info("XRMediaHubInputTransport started")
+        logger.info("DeviceIOHubInputTransport started")
 
     async def stop(self, frame: EndFrame):
         self._started = False
@@ -164,7 +164,7 @@ class XRMediaHubInputTransport(BaseInputTransport):
         ``ParticipantJoinedFrame`` / ``ParticipantLeftFrame``. Without
         this bridge the gate never greets and the assistant never steers the
         output transport at a participant, so every TTS chunk is dropped
-        by ``XRMediaHubOutputTransport.write_audio_frame``.
+        by ``DeviceIOHubOutputTransport.write_audio_frame``.
 
         Same ``_started`` guard as ``_on_hub_audio``: a late event after
         teardown is a no-op rather than racing the pipeline shutdown.
@@ -183,7 +183,7 @@ class XRMediaHubInputTransport(BaseInputTransport):
 
 # ── Output ────────────────────────────────────────────────────────────────────
 
-class XRMediaHubOutputTransport(BaseOutputTransport):
+class DeviceIOHubOutputTransport(BaseOutputTransport):
     """Pipecat → Hub: int16 TTS frames → float32 ``AudioChunk``s."""
 
     def __init__(self, ep: ProcessorEndpoint, params: TransportParams, **kwargs):
@@ -385,21 +385,21 @@ class HubVoiceTransport(BaseTransport):
         )
 
         self._input_started = asyncio.Event()
-        self._input = XRMediaHubInputTransport(
+        self._input = DeviceIOHubInputTransport(
             self._ep,
             params,
             name=self._input_name,
             started_event=self._input_started,
         )
-        self._output = XRMediaHubOutputTransport(self._ep, params, name=self._output_name)
+        self._output = DeviceIOHubOutputTransport(self._ep, params, name=self._output_name)
 
-    def input(self) -> XRMediaHubInputTransport:
-        """Return the Pipecat input transport backed by the media hub."""
+    def input(self) -> DeviceIOHubInputTransport:
+        """Return the Pipecat input transport backed by DeviceIOHub."""
 
         return self._input
 
-    def output(self) -> XRMediaHubOutputTransport:
-        """Return the Pipecat output transport backed by the media hub."""
+    def output(self) -> DeviceIOHubOutputTransport:
+        """Return the Pipecat output transport backed by DeviceIOHub."""
 
         return self._output
 

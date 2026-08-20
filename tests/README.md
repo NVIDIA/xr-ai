@@ -5,7 +5,7 @@
 
 # xr-ai integration tests
 
-Multi-client / multi-agent coverage for the XR-Media-Hub IPC pipeline.
+Multi-client / multi-agent coverage for the DeviceIOHub IPC pipeline.
 
 ## Layout
 

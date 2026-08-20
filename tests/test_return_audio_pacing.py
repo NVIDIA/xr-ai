@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from xr_media_hub.transport.livekit._room_client import _ReturnAudioPipe
+from device_io_hub.transport.livekit._room_client import _ReturnAudioPipe
 
 pytestmark = pytest.mark.asyncio
 

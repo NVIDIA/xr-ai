@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-NVENC video recorder for XR-Media-Hub.
+NVENC video recorder for DeviceIOHub.
 
 Records incoming video frames per participant to H.264 Annex B chunk files.
 Each chunk starts with SPS+PPS+IDR and is independently decodable.
@@ -53,7 +53,7 @@ from loguru import logger
 from xr_ai_hub import PixelFormat
 
 if TYPE_CHECKING:
-    from xr_media_hub.ipc import SlotView
+    from device_io_hub.ipc import SlotView
 
 
 # Default chunk root. /dev/shm is tmpfs on Linux (auto-mounted at boot),
@@ -96,7 +96,7 @@ class VideoRecorder:
         except ModuleNotFoundError:
             raise ModuleNotFoundError(
                 "PyNvVideoCodec is required for video recording. "
-                "Install it with: uv sync  (in services/xr-media-hub/)"
+                "Install it with: uv sync  (in services/device-io-hub/)"
             ) from None
 
         self._cfg          = cfg

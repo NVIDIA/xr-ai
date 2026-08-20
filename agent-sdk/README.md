@@ -10,7 +10,7 @@ its own environment and README.
 
 | Directory | Import | Distribution | Use it for |
 |---|---|---|---|
-| [`xr-ai-hub`](xr-ai-hub/) | `xr_ai_hub` | `xr-ai-hub-client` | Minimal msgpack/ZMQ IPC with XR-Media-Hub |
+| [`xr-ai-hub`](xr-ai-hub/) | `xr_ai_hub` | `xr-ai-hub-client` | Minimal msgpack/ZMQ IPC with DeviceIOHub |
 | [`xr-ai-models`](xr-ai-models/) | `xr_ai_models` | `xr-ai-models` | Typed model services and OpenAI-compatible clients |
 | [`xr-ai-runtime`](xr-ai-runtime/) | `xr_ai_runtime` | `xr-ai-agent-runtime` | Agent registration and typed publish/fan-out |
 | [`xr-ai-tools`](xr-ai-tools/) | `xr_ai_tools` | `xr-ai-tools` | Relay-managed tools and model tool-call helpers |

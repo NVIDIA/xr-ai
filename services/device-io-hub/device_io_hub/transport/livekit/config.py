@@ -56,7 +56,7 @@ class LiveKitConnectorConfig:
     enable_web_server: bool = False
     web_server_host:   str  = "0.0.0.0"
     web_server_port:   int  = 8080
-    # Absolute path to the web client directory. Set via xr_media_hub.yaml.
+    # Absolute path to the web client directory. Set via device_io_hub.yaml.
     web_client_dir:    str  = ""
     # HTTPS is on by default — required for camera access from any device that
     # isn't localhost, and required so the same-origin /rtc proxy can carry
@@ -79,7 +79,7 @@ class LiveKitConnectorConfig:
     shm_max_frame_bytes: int = 12_441_600   # 4K NV12
 
     # ── Video recording (NVENC, optional) ─────────────────────────────────────
-    # Set video_recording.enabled: true in xr_media_hub.yaml to activate.
+    # Set video_recording.enabled: true in device_io_hub.yaml to activate.
     # Frames are encoded via NVENC (pynvvideocodec) and written as H.264
     # Annex B chunks to video_recording.out_dir.
     video_recording: Any = field(default=None)

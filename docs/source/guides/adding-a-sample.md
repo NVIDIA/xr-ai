@@ -37,7 +37,7 @@ agent-samples/<name>/
 ├── pyproject.toml                  ← orchestrator project
 ├── main.py                         ← orchestrator (declare PROCESSES, call run_stack)
 ├── yaml/                           ← all YAML configs for this sample
-│   ├── xr_media_hub.yaml
+│   ├── device_io_hub.yaml
 │   ├── <command>.yaml              ← one per launchable process
 │   ├── models.local.json           ← adapter, endpoint, and deployment specs
 │   └── …
@@ -141,7 +141,7 @@ from xr_ai_launcher import Process, run_stack
 _BASE = Path(__file__).resolve().parent
 
 PROCESSES = [
-    Process("hub",    "../../services/xr-media-hub", "xr_media_hub"),
+    Process("hub",    "../../services/device-io-hub", "device_io_hub"),
     Process("worker", "worker",               "<snake_name>_worker"),
 ]
 

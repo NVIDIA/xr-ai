@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from cryptography import x509
-from xr_media_hub.transport.livekit import _tls
+from device_io_hub.transport.livekit import _tls
 
 
 @pytest.fixture()
@@ -121,9 +121,9 @@ def test_unencodable_entries_do_not_regen_loop(cert_env: Path) -> None:
 def test_loader_coerces_extra_sans(
     yaml_value: str, expected: list[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from xr_media_hub._config_loader import load_config
+    from device_io_hub._config_loader import load_config
 
-    cfg_file = tmp_path / "xr_media_hub.yaml"
+    cfg_file = tmp_path / "device_io_hub.yaml"
     cfg_file.write_text(yaml_value + "\n")
     monkeypatch.setattr("sys.argv", ["prog", "--config", str(cfg_file)])
 

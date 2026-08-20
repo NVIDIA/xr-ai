@@ -127,7 +127,7 @@ frames are dropped if it is closed.
 | Layer | Directory | Description |
 |---|---|---|
 | Clients | `client-samples/` | Android, iOS/visionOS, Web, and native StreamKit clients |
-| Hub service | `services/xr-media-hub/` | XR-Media-Hub + LiveKit internal transport |
+| Hub service | `services/device-io-hub/` | DeviceIOHub + LiveKit internal transport |
 | Launcher | `utils/xr-ai-launcher/` | stdlib-only process manager used by samples |
 | Logging | `utils/xr-ai-logging/` | shared loguru sink + stdlib bridge for every process |
 | Hub IPC | `agent-sdk/xr-ai-hub/` | Minimal agent-facing msgpack/ZMQ client |
@@ -354,8 +354,8 @@ prompt) — it is not stored in YAML; the overlay only names the env var via
 NIM containers):
 [`docs/source/components/ai-services.md`](docs/source/components/ai-services.md#hosting-models-on-nvidia-nim).
 
-Each sample has its own `xr_media_hub.yaml` controlling the hub; see
-[`services/xr-media-hub/xr_media_hub.yaml`](services/xr-media-hub/xr_media_hub.yaml)
+Each sample has its own `device_io_hub.yaml` controlling the hub; see
+[`services/device-io-hub/device_io_hub.yaml`](services/device-io-hub/device_io_hub.yaml)
 for the full option list.
 
 ---
@@ -485,13 +485,13 @@ launcher credential prompt, not in YAML). See
 ### Hub only (standalone)
 
 ```bash
-cd services/xr-media-hub
+cd services/device-io-hub
 uv sync
-uv run xr_media_hub
+uv run device_io_hub
 ```
 
 Useful for development or when running an agent in a separate terminal.
-The hub auto-discovers `services/xr-media-hub/xr_media_hub.yaml`.
+The hub auto-discovers `services/device-io-hub/device_io_hub.yaml`.
 
 ## Clients
 

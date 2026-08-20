@@ -6,7 +6,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "xr-media-hub"
+name = "device-io-hub"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
@@ -35,11 +35,11 @@ dependencies = [
 ]
 
 [project.scripts]
-xr_media_hub = "xr_media_hub.__main__:run"
+device_io_hub = "device_io_hub.__main__:run"
 
 [tool.uv.sources]
 xr-ai-hub-client = { path = "../../agent-sdk/xr-ai-hub", editable = true }
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
 
 [tool.hatch.build.targets.wheel]
-packages = ["xr_media_hub"]
+packages = ["device_io_hub"]

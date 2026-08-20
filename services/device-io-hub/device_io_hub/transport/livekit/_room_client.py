@@ -22,7 +22,7 @@ import numpy as np
 from livekit import rtc
 from loguru import logger
 
-from xr_media_hub.ipc import (
+from device_io_hub.ipc import (
     AudioChunk,
     ConnectorEndpoint,
     DataMessage,
