@@ -422,7 +422,7 @@
 orchestrator pattern that wires servers into a sample, refer to
 <a class="reference internal" href="../guides/adding-a-sample.html"><span class="doc">Adding a new sample</span></a>.</p>
 <p>Multiple reusable HTTP servers are available as launchable peers of
-<code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/</span></code>. All expose an OpenAI-compatible REST API so agent workers
+<code class="docutils literal notranslate"><span class="pre">services/device-io-hub/</span></code>. All expose an OpenAI-compatible REST API so agent workers
 can call them with any OpenAI SDK client or plain <code class="docutils literal notranslate"><span class="pre">httpx</span></code> or <code class="docutils literal notranslate"><span class="pre">requests</span></code>.
 Reference services cover vision-language reasoning, speech recognition,
 text-to-speech, embeddings, and large language models. The projects are direct
@@ -569,7 +569,7 @@ start successfully without network access. Recreate project environments with
 <h2>Adding a server to a sample<a class="headerlink" href="#adding-a-server-to-a-sample" title="Link to this heading">#</a></h2>
 <p><strong>1 — Add the process to the orchestrator:</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/xr-media-hub"</span><span class="p">,</span>                    <span class="s2">"xr_media_hub"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/device-io-hub"</span><span class="p">,</span>                    <span class="s2">"device_io_hub"</span><span class="p">),</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"vlm"</span><span class="p">,</span>    <span class="s2">"../../services/vlm-server"</span><span class="p">,</span>               <span class="s2">"vlm_server"</span><span class="p">),</span>   <span class="c1"># ← add as needed</span>
     <span class="c1"># Pick ONE LLM backend per sample — they bind different default ports</span>
     <span class="c1"># (8106 / 8107) so running more than one at once is allowed but</span>
@@ -944,7 +944,7 @@ wire format (<code class="docutils literal notranslate"><span class="pre">finish
 <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">on&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">off&quot;</span></code> in a system or user
 message; reasoning preamble is <strong>not</strong> stripped server-side. Hosting backend
 is selectable per YAML (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/a60e2099c30a26fe3d0599be02ff3ce8c5c5410c/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/9495281024cc58b02f5caa4081ab57e9efbadd99/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
 for the full HTTP contract and tuning knobs.</p></li>
 <li><p><strong>nemotron3-nano-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</span></code> (auto-selected by GPU compute
@@ -955,7 +955,7 @@ FlashInfer FP4 MoE kernels. Requires a Blackwell-class GPU (B200 or RTX PRO
 <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> by default to avoid the silent 3–8 min CUDA graph and
 FlashInfer autotune on cold start. Hosting backend is selectable per YAML
 (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/a60e2099c30a26fe3d0599be02ff3ce8c5c5410c/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/9495281024cc58b02f5caa4081ab57e9efbadd99/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
 for the vLLM flags it forwards and Blackwell prerequisites.</p></li>
 <li><p><strong>nemotron-omni-llm</strong> is a vLLM-backed multimodal LLM serving
 <code class="docutils literal notranslate"><span class="pre">Nemotron-3-Nano-Omni-30B-A3B-Reasoning</span></code> (text + video input) at port 8108.

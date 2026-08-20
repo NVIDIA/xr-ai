@@ -418,7 +418,7 @@
 -->
 <section id="launcher-and-process-model">
 <h1>Launcher and process model<a class="headerlink" href="#launcher-and-process-model" title="Link to this heading">#</a></h1>
-<p>Every sample is self-contained: running it starts the XR-Media-Hub and all required
+<p>Every sample is self-contained: running it starts the DeviceIOHub and all required
 processes automatically. No separate server launch step.</p>
 <p>Each sample has <strong>two sub-projects</strong>:</p>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -455,8 +455,8 @@ sample’s <code class="docutils literal notranslate"><span class="pre">yaml/mod
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">_BASE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span>   <span class="c1"># sample root</span>
 
 <span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/xr-media-hub"</span><span class="p">,</span> <span class="s2">"xr_media_hub"</span><span class="p">,</span>
-            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/xr_media_hub.yaml"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/device-io-hub"</span><span class="p">,</span> <span class="s2">"device_io_hub"</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/device_io_hub.yaml"</span><span class="p">),</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span>               <span class="s2">"my_agent_worker"</span><span class="p">,</span>
             <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/my_agent_worker.yaml"</span><span class="p">),</span>
     <span class="c1"># Optional shared components — add as needed:</span>
@@ -481,8 +481,8 @@ when it is fully initialized and ready to serve requests.</p></li>
 <li><p><strong>Native voice workers</strong> pass the ready file to <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>; its private
 media session touches it only after the input transport’s hub IPC
 receive loop has started.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">xr_media_hub</span></code> always runs as its own process — never embedded in-process.</p></li>
-<li><p>The worker never imports anything from <code class="docutils literal notranslate"><span class="pre">xr_media_hub</span></code> or <code class="docutils literal notranslate"><span class="pre">xr_ai_launcher</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">device_io_hub</span></code> always runs as its own process — never embedded in-process.</p></li>
+<li><p>The worker never imports anything from <code class="docutils literal notranslate"><span class="pre">device_io_hub</span></code> or <code class="docutils literal notranslate"><span class="pre">xr_ai_launcher</span></code>.</p></li>
 <li><p>Process management lives in <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-launcher/</span></code>, not inside any process it manages.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">run_stack</span></code> is fail-fast: if any process exits, the rest are terminated.</p></li>
 </ul>
@@ -499,7 +499,7 @@ in the sequence begins. If any member exits before signaling ready, the
 launcher shuts everything down, just as it would for a serial process.</p></li>
 </ul>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/xr-media-hub"</span><span class="p">,</span> <span class="s2">"xr_media_hub"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/device-io-hub"</span><span class="p">,</span> <span class="s2">"device_io_hub"</span><span class="p">),</span>
     <span class="n">Parallel</span><span class="p">([</span>
         <span class="n">Process</span><span class="p">(</span><span class="s2">"stt"</span><span class="p">,</span> <span class="s2">"../../services/stt-server"</span><span class="p">,</span> <span class="s2">"stt_server"</span><span class="p">),</span>
         <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span> <span class="s2">"../../services/piper-tts"</span><span class="p">,</span>  <span class="s2">"piper_tts_server"</span><span class="p">),</span>

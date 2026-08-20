@@ -5,7 +5,7 @@
 
 # Overview
 
-How XR-Media-Hub, the transport, and agents fit together.
+How DeviceIOHub, the transport, and agents fit together.
 
 ```{toctree}
 :glob:

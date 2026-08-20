@@ -5,6 +5,16 @@
 
 # Release migration
 
+## DeviceIOHub rename
+
+Update `services/xr-media-hub/` to `services/device-io-hub/`, the
+`xr-media-hub` distribution to `device-io-hub`, and the `xr_media_hub` import
+and command to `device_io_hub`. Rename `xr_media_hub.yaml` to
+`device_io_hub.yaml` and `XR_MEDIA_HUB_NO_WEB_CLIENT` to
+`DEVICE_IO_HUB_NO_WEB_CLIENT`. The rename has no compatibility aliases.
+
+## Removed SDK compatibility surfaces
+
 This release removes deprecated SDK aliases and the standalone Pipecat
 compatibility package. Update out-of-tree code as follows:
 
@@ -13,13 +23,13 @@ compatibility package. Update out-of-tree code as follows:
 | `xr_ai_agent` | Import `ProcessorEndpoint` and IPC types from `xr_ai_hub`. |
 | `BrainProcessor` and `make_voice_pipeline` | Put application behavior in an `xr_ai_runtime.Agent` subscriber and let `xr_ai_voice.VoiceAgent` own the voice pipeline. |
 | `run_voice_pipeline` | Configure `VoiceAgent` directly and run it with `await VoiceAgent.run(runtime)`; its media session is private. |
+| `XRMediaHubTransport` | Construct `xr_ai_voice.HubVoiceTransport` and pass it to `VoiceAgent` only when another application component must share that existing hub boundary. |
 | `VoiceSession` | Configure `VoiceAgent` with STT, TTS, VAD, gating, readiness probes, and closeables, then run it with the shared `AgentRuntime`. The lower-level media session is no longer public. |
 | `VadConfig` | Import the unchanged tuning model from `xr_ai_voice`. |
 | `GatedQueryFrame` | Subscribe to the application query topic carrying `xr_ai_voice.UserQuery`. |
 | `ParticipantJoinedFrame`, `ParticipantLeftFrame`, and `InterruptionFrame` | Subscribe to application topics carrying `VoiceParticipantJoined`, `VoiceParticipantLeft`, and `VoiceInterrupted`. Participant identity comes from runtime metadata; voice-gate greetings remain session-owned. |
 | `BrainResponseEndFrame` | Publish a finite `VoiceOutput`, or terminate an incremental response with `final=True`. |
 | `VadSttProcessor`, `VoiceGateProcessor`, and `StreamingTtsProcessor` | Configure `VoiceAgent` with `VadConfig`, `VoiceGateConfig`, and `text_topic`; pipeline processors are private implementation details. |
-| `XRMediaHubTransport` | Construct `xr_ai_voice.HubVoiceTransport` and pass it to `VoiceAgent` only when another application component must share that existing hub boundary. |
 | `SttClient` and `TtsClient` | Construct services through `xr_ai_models.make_stt` and `make_tts`, or use `OpenAICompatSTT` and `OpenAICompatTTS` directly. |
 | `http_probe`, `mcp_probe`, and `wait_for_services` | Pass additional readiness callables through `VoiceAgent(probes=...)`; MCP readiness is no longer part of the voice SDK. |
 | `xr_ai_pipecat.audio` conversion helpers | Let `VoiceAgent` own media conversion. Applications that truly need raw hub media should use `xr_ai_hub` types and own their format conversion. |

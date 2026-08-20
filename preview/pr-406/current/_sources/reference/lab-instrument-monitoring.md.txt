@@ -53,7 +53,7 @@ accepted speech / typed query          ├─> current frame + generic VLM query
 
 `VoiceAgent` publishes participant-scoped queries and lifecycle events into
 `AgentRuntime`. Agents call peer tools directly, while typed topics fan results
-out to independent consumers. LiveKit remains inside XR-Media-Hub and does not
+out to independent consumers. LiveKit remains inside DeviceIOHub and does not
 appear in the worker's agent contracts.
 
 ## Agent responsibilities

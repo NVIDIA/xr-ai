@@ -17,7 +17,7 @@ xr_ai_launcher
        _BASE = Path(__file__).resolve().parent
 
        PROCESSES = [
-           Process("hub",    "../../services/xr-media-hub", "xr_media_hub"),
+           Process("hub",    "../../services/device-io-hub", "device_io_hub"),
            Parallel([
                Process("stt", "../../services/stt-server", "stt_server"),
                Process("tts", "../../services/piper-tts",  "piper_tts_server"),
@@ -367,8 +367,8 @@ Package Contents
        _BASE = Path(__file__).resolve().parent
 
        PROCESSES = [
-           Process("hub",    "../../services/xr-media-hub", "xr_media_hub",
-                   config="yaml/xr_media_hub.yaml"),
+           Process("hub",    "../../services/device-io-hub", "device_io_hub",
+                   config="yaml/device_io_hub.yaml"),
            Parallel([
                Process("stt", "../../services/stt-server", "stt_server"),
                Process("tts", "../../services/piper-tts",  "piper_tts_server"),
