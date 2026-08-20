@@ -54,12 +54,14 @@ maps each marker family and raw ID to the device name used in readings, state,
 logs, and voice alerts. Ready-to-print PNGs for every configured device and a
 mapping table are available in [`sample-markers/`](sample-markers/).
 Detections absent from the device map are logged and ignored; they never become
-invented device names or voice alerts. For each mapped marker, the VLM must
-visibly establish that the highlighted marker and display share one continuous
-instrument housing. A nearby or lone readable display is not sufficient; the
-reader returns `UNKNOWN` whenever ownership cannot be proved from the image. A
-dedicated VLM system prompt owns these rules; marker identity is passed as
-structured, untrusted data.
+invented device names or voice alerts. The reader overlays every detected marker
+with a temporary label and asks the VLM for one joint label-to-reading JSON map.
+For each mapped marker, the VLM must visibly establish that the labelled marker
+and display share one continuous instrument housing. A nearby or lone readable
+display is not sufficient; the reader returns `UNKNOWN` whenever ownership
+cannot be proved from the image. The temporary labels are mapped back to the
+CV-decoded identities after inference, so marker payloads are not placed in the
+VLM prompt.
 
 `InstrumentMonitorAgent` owns all participant-scoped instrument state. It
 normalizes numeric readings, retains a known unit when a later VLM result omits

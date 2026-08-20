@@ -32,7 +32,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from . import _lifecycle
+from . import _diagnostics, _lifecycle
 
 log = logging.getLogger(__name__)
 
@@ -615,6 +615,7 @@ def run(
         reuse_banner=f"vLLM already running on port {port} — reusing",
         ready_banner=f"Ready  →  http://localhost:{port}/v1  (docker: {container_name})",
         ready_file=ready_file,
+        diagnostic_argv=vllm_argv,
     )
 
 
@@ -630,6 +631,7 @@ def run_container(
     reuse_banner: str,
     ready_banner: str,
     ready_file: Path | None,
+    diagnostic_argv: list[str] | None = None,
 ) -> None:
     """Shared container lifecycle for the vLLM docker backend and NIMs.
 
@@ -650,10 +652,15 @@ def run_container(
     # handler, SIGTERM kills *this* wrapper but leaves the dockerd-managed
     # container running (still pulling the image / downloading weights). The
     # --stop path can't clean that up either: it gates on /health 200 and a
-    # mid-download container is never healthy. So the wrapper stops its own
-    # container by name (works regardless of health) when it receives a signal.
-    # On a clean run no signal arrives and these handlers stay dormant.
-    _state: dict[str, object] = {"proc": None, "streamer": None, "handling": False}
+    # mid-download container is never healthy. So the wrapper cleans up a
+    # container whose startup it initiated, but leaves a running container
+    # adopted from another wrapper untouched.
+    _state: dict[str, object] = {
+        "proc": None,
+        "streamer": None,
+        "handling": False,
+        "cleanup_mode": None,
+    }
     orig_int  = signal.getsignal(signal.SIGINT)
     orig_term = signal.getsignal(signal.SIGTERM)
 
@@ -663,18 +670,24 @@ def run_container(
         if _state["handling"]:
             return
         _state["handling"] = True
-        print(
-            f"[{log_prefix}] signal received — stopping container {container_name}…",
-            flush=True,
-        )
+        cleanup_mode = _state["cleanup_mode"]
+        if cleanup_mode == "remove":
+            action = f"stopping and removing container {container_name}"
+        elif cleanup_mode == "stop":
+            action = f"stopping restarted container {container_name}"
+        else:
+            action = f"leaving adopted container {container_name} running"
+        print(f"[{log_prefix}] signal received — {action}…", flush=True)
         cp = _state["proc"]
         if isinstance(cp, subprocess.Popen) and cp.poll() is None:
             cp.terminate()
         # Modest timeout so this completes inside the launcher's _STOP_TIMEOUT
         # (20s) window before it escalates to SIGKILL. Both helpers work by
         # name and are idempotent regardless of container health.
-        stop_container(container_name, timeout_s=10)
-        remove_container(container_name)
+        if cleanup_mode in {"remove", "stop"}:
+            stop_container(container_name, timeout_s=10)
+        if cleanup_mode == "remove":
+            remove_container(container_name)
         sp = _state["streamer"]
         if isinstance(sp, _LogStreamer):
             sp.stop()
@@ -767,6 +780,7 @@ def run_container(
             f"{container_name}",
             flush=True,
         )
+        _state["cleanup_mode"] = "stop"
         if not start_container(container_name):
             log.error("could not restart container %s", container_name)
             sys.exit(1)
@@ -787,6 +801,7 @@ def run_container(
 
         _maybe_ngc_login(image)
         print(f"[{log_prefix}] {launch_banner}", flush=True)
+        _state["cleanup_mode"] = "remove"
         proc = subprocess.Popen(argv, start_new_session=True)
     _state["proc"] = proc
 
@@ -812,6 +827,12 @@ def run_container(
         time.sleep(0.5)
         streamer.stop()
         _append_post_mortem(container_name, streamer.log_path)
+        diagnosis = (
+            _diagnostics.classify_vllm_failure(streamer.log_path, diagnostic_argv)
+            if diagnostic_argv is not None else None
+        )
+        if diagnosis:
+            log.error("%s", diagnosis)
         log.error("container %s failed — see %s", container_name, streamer.log_path)
         raise
 

@@ -8,11 +8,24 @@ from pathlib import Path
 
 import pytest
 from xr_ai_launcher import load_deployment_profile, load_model_deployment
+from xr_ai_launcher._config import _resolve_config_variant
 from xr_ai_models import load_models_config
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SIMPLE_VLM_YAML = _ROOT / "agent-samples" / "simple-vlm-example" / "yaml"
 _RENDER_YAML = _ROOT / "agent-samples" / "xr-render-demo" / "yaml"
+
+
+def test_service_config_variant_precedes_default(tmp_path: Path) -> None:
+    default = tmp_path / "vlm_server.yaml"
+    variant = tmp_path / "vlm_server_default.yaml"
+    default.write_text("model: default\n", encoding="utf-8")
+
+    assert _resolve_config_variant(tmp_path, "vlm_server", "default") == default
+
+    variant.write_text("model: variant\n", encoding="utf-8")
+
+    assert _resolve_config_variant(tmp_path, "vlm_server", "default") == variant
 
 
 def _write_profile(path: Path, *, credential: str | None = None) -> None:
