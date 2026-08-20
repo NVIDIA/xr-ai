@@ -49,6 +49,7 @@ from xr_ai_launcher import (
     Process,
     detect_gpu_config,
     load_deployment_profile,
+    read_config_scalar,
     require_credentials,
     run_stack,
 )
@@ -75,35 +76,32 @@ def _gpu_profile_name(value: str) -> str:
         )
     return value
 
-# service → (project, command, config basename, port). Order is launch
+# service → (project, command, config basename). Order is launch
 # order: NIM containers precede local servers (speech NIMs allocate fixed
 # VRAM while LLM/VLM NIMs grab most of their GPU's free VRAM for KV cache);
 # agent-llm precedes the VLM so its FlashInfer MoE JIT compilation runs with
 # the full GPU free on single-GPU profiles.
-_MODEL_SERVICES: dict[str, tuple[str, str, str, int]] = {
-    "stt-nim":   ("../../services/nim-server", "nim_server", "nim_stt_server", 9010),
-    "tts-nim":   ("../../services/nim-server", "nim_server", "nim_tts_server", 9011),
-    "llm-nim":   ("../../services/nim-server", "nim_server", "nim_llm_server", 8110),
-    "vlm-nim":   ("../../services/nim-server", "nim_server", "nim_vlm_server", 8100),
-    "stt":       ("../../services/stt-server", "stt_server", "stt_server", 8103),
+_MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
+    "stt-nim":   ("../../services/nim-server", "nim_server", "nim_stt_server"),
+    "tts-nim":   ("../../services/nim-server", "nim_server", "nim_tts_server"),
+    "llm-nim":   ("../../services/nim-server", "nim_server", "nim_llm_server"),
+    "vlm-nim":   ("../../services/nim-server", "nim_server", "nim_vlm_server"),
+    "stt":       ("../../services/stt-server", "stt_server", "stt_server"),
     "agent-llm": (
         "../../services/nemotron3-nano-llm",
         "nemotron3_nano_llm_server",
         "nemotron3_nano_llm_server",
-        8107,
     ),
     "omni": (
         "../../services/nemotron-omni-llm",
         "nemotron_omni_llm_server",
         "nemotron_omni_llm_server",
-        8108,
     ),
-    "vlm":       ("../../services/vlm-server", "vlm_server", "vlm_server", 8100),
+    "vlm":       ("../../services/vlm-server", "vlm_server", "vlm_server"),
     "embedding": (
         "../../services/embedding-server",
         "embedding_server",
         "embedding_server",
-        8109,
     ),
 }
 
@@ -112,6 +110,20 @@ def _profile_path(selection: str) -> Path:
     if "/" in selection or selection.endswith(".json"):
         return Path(selection)
     return _BASE / "yaml" / f"models.{selection}.json"
+
+
+def _read_service_port(path: Path) -> int | None:
+    """Read and validate the HTTP port used by one model-server config."""
+    raw = read_config_scalar(path, "port") or read_config_scalar(path, "http_port")
+    if not raw:
+        return None
+    try:
+        port = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{path}: port must be an integer, got {raw!r}") from exc
+    if not 1 <= port <= 65535:
+        raise ValueError(f"{path}: port must be between 1 and 65535, got {port}")
+    return port
 
 
 def _build_processes(
@@ -126,8 +138,8 @@ def _build_processes(
     profile_name = gpu_profile or detect_gpu_config()
     config_dir = _BASE / "yaml" / profile_name
     profile_key = profile_path.stem.removeprefix("models.")
-    processes = []
-    for service, (project, command, config_base, port) in _MODEL_SERVICES.items():
+    processes: list[Process] = []
+    for service, (project, command, config_base) in _MODEL_SERVICES.items():
         if deployment.launch_mode(service) != "own":
             continue
         config = _resolve_config_variant(config_dir, config_base, profile_key)
@@ -136,22 +148,33 @@ def _build_processes(
                 f"GPU profile {profile_name!r} is incomplete: missing {config} "
                 f"for service {service!r}"
             )
+        port = _read_service_port(config)
+        if port is None:
+            raise ValueError(f"{config}: service config must declare port or http_port")
         processes.append(Process(
-            service, project, command,
-            config=config,
+            service, project, command, config=config,
             launch_mode="persist", port=port,
         ))
     return processes, deployment.required_credentials
+
+
+def _known_service_ports() -> list[tuple[str, int]]:
+    """Discover cleanup targets from the YAML files that own their ports."""
+    targets: set[tuple[str, int]] = set()
+    for service, (project, _, config_base) in _MODEL_SERVICES.items():
+        configs = list((_BASE / "yaml").glob(f"*/{config_base}*.yaml"))
+        configs.append((_BASE / project / f"{config_base}.yaml").resolve())
+        for config in configs:
+            if config.is_file() and (port := _read_service_port(config)) is not None:
+                targets.add((service, port))
+    return sorted(targets)
 
 
 def _stop_models() -> None:
     # Surface docker/ss/lsof failures so operators see why --stop aborted
     # instead of a silent traceback exit.
     try:
-        stop_persistent_servers([
-            (service, port)
-            for service, (_, _, _, port) in _MODEL_SERVICES.items()
-        ])
+        stop_persistent_servers(_known_service_ports())
     except Exception as exc:
         print(f"model-servers: failed to stop persistent servers: {exc}", flush=True)
 
@@ -166,7 +189,7 @@ def _stop_unselected_services(processes: list[Process]) -> None:
     selected_ports = {process.port for process in processes}
     unselected = [
         (service, port)
-        for service, (_, _, _, port) in _MODEL_SERVICES.items()
+        for service, port in _known_service_ports()
         if port not in selected_ports
     ]
     if not stop_persistent_servers(unselected):
