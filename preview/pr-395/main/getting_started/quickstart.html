@@ -484,9 +484,13 @@ uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>model_servers
 </pre></div>
 </div>
-<p>GPU profiles are auto-detected (<code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, <code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>). These
-are presets for common configurations; to run on a different GPU, refer to
+<p>GPU profiles are auto-detected (<code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, <code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>). The
+profiles are presets for common configurations; to run on a different GPU, refer to
 <a class="reference internal" href="requirements.html"><span class="doc">Running on other GPUs</span></a>.
+Detection inventories every visible device. If <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code> fails, returns
+malformed data, or reports a topology without an existing model-server
+configuration, startup stops with the detected per-GPU capacity instead of
+assuming a fallback.
 On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.</p>
 <p>Which servers start is a deployment profile selected with
