@@ -321,6 +321,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
@@ -588,11 +589,12 @@ start successfully without network access. Recreate project environments with
 <span class="p">]</span>
 </pre></div>
 </div>
-<p>The agent samples in this repository (<code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code> and <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>)
-default to Piper TTS — it runs on CPU with ~100 ms/sentence latency and avoids
-the NeMo dep tree. Magpie is still a supported NVIDIA TTS option with better
-voice quality and multilingual support when GPU is available; swap the
-<code class="docutils literal notranslate"><span class="pre">Process</span></code> row and YAML.</p>
+<p>The agent samples in this repository (<code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code>,
+<code class="docutils literal notranslate"><span class="pre">tea-making-sample</span></code>, and <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>) support Piper TTS — it runs on CPU
+with ~100 ms/sentence latency and avoids the NeMo dep tree. Magpie is still a
+supported NVIDIA TTS option with better voice quality and multilingual support
+when GPU is available; select the corresponding process and YAML. The tea
+sample exposes this choice through <code class="docutils literal notranslate"><span class="pre">--tts-mode</span></code>.</p>
 <p><strong>2 — Copy the reference YAML to your sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory:</strong></p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>-p<span class="w"> </span>yaml
 cp<span class="w"> </span>../../services/vlm-server/vlm_server.yaml<span class="w"> </span>./yaml/vlm_server.yaml
@@ -944,7 +946,7 @@ wire format (<code class="docutils literal notranslate"><span class="pre">finish
 <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">on&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">off&quot;</span></code> in a system or user
 message; reasoning preamble is <strong>not</strong> stripped server-side. Hosting backend
 is selectable per YAML (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0d9fecd9ff8547638f35b634077793a6ba9e43b8/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/7e5737d98f285fb9691b55c4f95b507c5ab8088c/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
 for the full HTTP contract and tuning knobs.</p></li>
 <li><p><strong>nemotron3-nano-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</span></code> (auto-selected by GPU compute
@@ -955,7 +957,7 @@ FlashInfer FP4 MoE kernels. Requires a Blackwell-class GPU (B200 or RTX PRO
 <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> by default to avoid the silent 3–8 min CUDA graph and
 FlashInfer autotune on cold start. Hosting backend is selectable per YAML
 (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0d9fecd9ff8547638f35b634077793a6ba9e43b8/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/7e5737d98f285fb9691b55c4f95b507c5ab8088c/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
 for the vLLM flags it forwards and Blackwell prerequisites.</p></li>
 <li><p><strong>nemotron-omni-llm</strong> is a vLLM-backed multimodal LLM serving
 <code class="docutils literal notranslate"><span class="pre">Nemotron-3-Nano-Omni-30B-A3B-Reasoning</span></code> (text + video input) at port 8108.
