@@ -238,18 +238,19 @@ is:
 
 If you installed the profile and toggled Full Trust on but the wss
 handshake still errors out with NSURLErrorDomain `-1202` and a message
-like *"pretending to be 10.29.90.196"*, the cert's SubjectAlternativeName
+like *"pretending to be 192.168.1.42"*, the cert's SubjectAlternativeName
 does not cover the IP you're typing into the app. This happens when the
 hub generated the cert before that interface was up, or via an
 `/etc/hosts` loopback alias (the Ubuntu default of `127.0.1.1` instead of
 the LAN IP).
 
-**Fix:** the hub now probes the kernel's outbound IPv4 addresses at cert
-load and regenerates the cert whenever its SAN is missing a current local
-IP. Restart the hub — it logs `TLS: cached cert SAN is missing local
-IP(s) [10.29.90.196] — regenerating…` — then on the device remove the
-old profile under **VPN & Device Management** and reinstall from
-`https://<host>:8080/cert` exactly as above.
+**Fix:** the hub probes the kernel's outbound IPv4 addresses at cert load
+and regenerates the cert whenever its SAN is missing a current local IP.
+Restart the hub (it logs `TLS: cached cert SAN is missing …;
+regenerating…`), then on the device remove the old profile under **VPN &
+Device Management** and reinstall from `https://<host>:8080/cert` exactly
+as above. If the address you type into the app is not on any of the hub's
+interfaces, add it to `web_server_extra_sans` in `xr_media_hub.yaml` first.
 
 ### TLS succeeds but the room rejects the token with 401
 

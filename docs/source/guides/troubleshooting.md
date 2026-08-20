@@ -302,14 +302,16 @@ cert is not a CA cert — regenerating…`).
 
 If the toggle was enabled but the wss handshake still fails with
 `errSSLBadCert` or NSURLErrorDomain `-1202` and a message like *"pretending
-to be 10.29.90.196"* (that is, the IP you typed into the app), the
-certificate's SubjectAlternativeName doesn't cover that IP. The hub now detects
-local IPv4 addresses via a UDP-connect probe and auto-regenerates the certificate
-whenever the SAN is missing one (logged as `TLS: cached cert SAN is
-missing local IP(s) … — regenerating…`); just restart the hub and
-re-install the profile on the device. To force regen explicitly, delete
-`~/.local/share/xr-ai/web-server.crt` and `web-server.key` before
-restarting.
+to be 192.168.1.42"* (that is, the IP you typed into the app), the
+certificate's SubjectAlternativeName doesn't cover that IP. The hub detects
+local IPv4 addresses via a UDP-connect probe and auto-regenerates the
+certificate whenever the SAN is missing one (logged as `TLS: cached cert
+SAN is missing …; regenerating…`); just restart the hub and re-install the
+profile on the device. If the dialed address is not on any of the hub's
+interfaces, add it to `web_server_extra_sans` in `xr_media_hub.yaml` and
+restart (see [Networking](../getting_started/networking.md)). To force
+regen explicitly, delete `~/.local/share/xr-ai/web-server.crt` and
+`web-server.key` before restarting.
 
 If the certificate is trusted (no `-1202`) but the room connection still fails
 with HTTP 401 / "no permissions to access the room", the hub's wss /rtc
