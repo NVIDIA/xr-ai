@@ -1,14 +1,20 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for the generated LiveKit server configuration."""
+"""Unit tests for the LiveKit server configuration and docker run command."""
 from __future__ import annotations
 
+import asyncio
+import re
 import stat
 from pathlib import Path
 
+import pytest
 import yaml
+from xr_media_hub._errors import StartupError
+from xr_media_hub.transport.livekit import _docker as _docker_mod
 from xr_media_hub.transport.livekit._docker import (
+    LiveKitDocker,
     _render_livekit_config,
     _write_livekit_config,
 )
@@ -43,3 +49,28 @@ def test_livekit_config_file_is_owner_only(tmp_path: Path) -> None:
     _write_livekit_config(cfg_path, LiveKitConnectorConfig())
 
     assert stat.S_IMODE(cfg_path.stat().st_mode) == 0o600
+
+
+def test_livekit_image_is_pinned() -> None:
+    assert re.fullmatch(
+        r"livekit/livekit-server:v\d+\.\d+\.\d+", _docker_mod._LIVEKIT_IMAGE
+    )
+
+
+def test_docker_run_uses_pinned_image(monkeypatch: pytest.MonkeyPatch) -> None:
+    argv: list[str] = []
+
+    async def fake_exec(*cmd: str, **_kwargs: object) -> None:
+        argv.extend(cmd)
+        raise FileNotFoundError
+
+    monkeypatch.setattr(_docker_mod.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(_docker_mod.subprocess, "run", lambda *a, **k: None)
+
+    with pytest.raises(StartupError):
+        asyncio.run(LiveKitDocker(LiveKitConnectorConfig()).start())
+
+    image_at = argv.index(_docker_mod._LIVEKIT_IMAGE)
+    # Everything after the image is passed to the container, not to docker.
+    assert argv[image_at + 1] == "--config"
+    assert not any(arg.endswith(":latest") for arg in argv)
