@@ -501,6 +501,22 @@ def test_custom_gpu_profile_must_contain_every_selected_service_config(
         _model_servers._build_processes(str(profile), "custom")
 
 
+def test_selected_service_config_must_declare_http_port(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = tmp_path / "yaml" / "custom" / "stt_server.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("host: 0.0.0.0\n", encoding="utf-8")
+    profile = _REPO_ROOT / "agent-samples/model-servers/yaml/models.default.json"
+    monkeypatch.setattr(_model_servers, "_BASE", tmp_path)
+
+    with pytest.raises(
+        ValueError,
+        match=r"stt_server\.yaml: service config must declare port or http_port",
+    ):
+        _model_servers._build_processes(str(profile), "custom")
+
+
 def test_cli_reports_gpu_inventory_error_without_traceback(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
