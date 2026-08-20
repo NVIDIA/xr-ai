@@ -23,13 +23,14 @@ and command to `device_io_hub`. Rename `xr_media_hub.yaml` to
   `1`/`0`, null values, and arbitrary strings now fail at startup instead of
   being interpreted by Python truthiness. This applies to vLLM eager/tool/
   scheduling flags, Nemotron-Omni BF16 selection, Piper CUDA, voice-gate
-  `listening_chime`, and lab-monitoring `capture_marker_scans`.
-- Return-audio staleness is tracked independently for each participant.
-  `return_audio_max_buffer_s` defaults to 3 seconds. Fast TTS bursts remain
-  intact regardless of utterance length; when newer audio arrives, DeviceIOHub
-  drops queued frames older than the configured wall-clock threshold. Increase
-  the value for intermittent delivery, or decrease it for latency-sensitive
-  deployments.
+  `listening_chime`, lab-monitoring `capture_marker_scans`, and tea-workflow
+  `complete_on_skip`.
+- Return audio is paced before IPC by the built-in voice transport and bounded
+  independently for each participant in DeviceIOHub.
+  `return_audio_max_buffer_s` defaults to 3 seconds; a custom or faulty producer
+  that exceeds the queued-audio duration limit loses its oldest queued frames.
+  Increase the value for intentionally bursty custom producers, or decrease it
+  for a tighter memory and latency bound.
 
 ## Removed SDK compatibility surfaces
 

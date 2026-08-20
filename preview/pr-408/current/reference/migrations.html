@@ -438,13 +438,14 @@ Set <code class="docutils literal notranslate"><span class="pre">api_key</span><
 <code class="docutils literal notranslate"><span class="pre">1</span></code>/<code class="docutils literal notranslate"><span class="pre">0</span></code>, null values, and arbitrary strings now fail at startup instead of
 being interpreted by Python truthiness. This applies to vLLM eager/tool/
 scheduling flags, Nemotron-Omni BF16 selection, Piper CUDA, voice-gate
-<code class="docutils literal notranslate"><span class="pre">listening_chime</span></code>, and lab-monitoring <code class="docutils literal notranslate"><span class="pre">capture_marker_scans</span></code>.</p></li>
-<li><p>Return-audio staleness is tracked independently for each participant.
-<code class="docutils literal notranslate"><span class="pre">return_audio_max_buffer_s</span></code> defaults to 3 seconds. Fast TTS bursts remain
-intact regardless of utterance length; when newer audio arrives, DeviceIOHub
-drops queued frames older than the configured wall-clock threshold. Increase
-the value for intermittent delivery, or decrease it for latency-sensitive
-deployments.</p></li>
+<code class="docutils literal notranslate"><span class="pre">listening_chime</span></code>, lab-monitoring <code class="docutils literal notranslate"><span class="pre">capture_marker_scans</span></code>, and tea-workflow
+<code class="docutils literal notranslate"><span class="pre">complete_on_skip</span></code>.</p></li>
+<li><p>Return audio is paced before IPC by the built-in voice transport and bounded
+independently for each participant in DeviceIOHub.
+<code class="docutils literal notranslate"><span class="pre">return_audio_max_buffer_s</span></code> defaults to 3 seconds; a custom or faulty producer
+that exceeds the queued-audio duration limit loses its oldest queued frames.
+Increase the value for intentionally bursty custom producers, or decrease it
+for a tighter memory and latency bound.</p></li>
 </ul>
 </section>
 <section id="removed-sdk-compatibility-surfaces">

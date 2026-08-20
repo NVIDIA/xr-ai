@@ -598,12 +598,12 @@ client lazily publishes one <code class="docutils literal notranslate"><span cla
 and refreshes subscribe permissions so each participant may subscribe only to
 their own return track. Return data is sent with <code class="docutils literal notranslate"><span class="pre">destination_identities</span></code> set
 to the target participant, so it is never broadcast to peers. Return audio is
-paced into LiveKit at audio rate by a per-participant pipe, which a flush can
-drain to interrupt playback. <code class="docutils literal notranslate"><span class="pre">return_audio_max_buffer_s</span></code> (3 seconds by default)
-is a per-participant wall-clock staleness threshold: a fast TTS burst remains
-intact even when its utterance is longer, while queued frames older than the
-threshold are dropped when newer audio arrives. A stale participant never
-affects any other participant’s queue.</p>
+paced before IPC by the built-in voice transport, then fed into LiveKit by a
+per-participant pipe that a flush can drain to interrupt playback.
+<code class="docutils literal notranslate"><span class="pre">return_audio_max_buffer_s</span></code> (3 seconds by default) is also a hard
+per-participant duration bound: if a custom or faulty producer runs ahead of
+playback, the oldest queued frames are dropped without affecting any other
+participant.</p>
 </section>
 <section id="agent-status-aggregation">
 <h2>Agent status aggregation<a class="headerlink" href="#agent-status-aggregation" title="Link to this heading">#</a></h2>

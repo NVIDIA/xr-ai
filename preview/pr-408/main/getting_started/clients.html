@@ -492,6 +492,22 @@ flow they all use.</p>
 <code class="docutils literal notranslate"><span class="pre">LiveKitBackend</span></code> as the only component that imports LiveKit directly. The web,
 Android, and iOS/visionOS clients are feature-equivalent (connection, audio,
 camera, agent-status badge, data channel).</p>
+<section id="network-telemetry">
+<h3>Network telemetry<a class="headerlink" href="#network-telemetry" title="Link to this heading">#</a></h3>
+<p>Every graphical sample displays the same three network values; the native C++
+sample prints them to stdout. Each exposes the values through StreamKit’s
+<code class="docutils literal notranslate"><span class="pre">onNetworkMetrics</span></code> callback (spelled <code class="docutils literal notranslate"><span class="pre">on_network_metrics</span></code> in C++):</p>
+<ul class="simple">
+<li><p><strong>Quality</strong> — LiveKit’s connection-quality estimate for the local participant.</p></li>
+<li><p><strong>Round-trip time</strong> — the highest current RTT across the publisher and
+subscriber transports’ selected ICE candidate pairs.</p></li>
+<li><p><strong>Receive jitter</strong> — the highest inbound RTP jitter in the current sample.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">LiveKitBackend</span></code> samples LiveKit’s existing WebRTC statistics about once per
+second and converts seconds to milliseconds. No hub messages or additional
+telemetry service are involved. RTT and jitter display as unavailable until the
+SDK has a matching stats record, such as before a media track is active.</p>
+</section>
 </section>
 <section id="the-connect-flow">
 <h2>The connect flow<a class="headerlink" href="#the-connect-flow" title="Link to this heading">#</a></h2>
@@ -788,7 +804,7 @@ engine plugin, or a CloudXR client.</p>
 <section id="id2">
 <h3>Build and run<a class="headerlink" href="#id2" title="Link to this heading">#</a></h3>
 <p>Point CMake at a LiveKit SDK install, build, and run with <code class="docutils literal notranslate"><span class="pre">--host</span></code> and
-<code class="docutils literal notranslate"><span class="pre">--token</span></code>:</p>
+<code class="docutils literal notranslate"><span class="pre">--token</span></code>. The backend is tested against the released LiveKit C++ SDK v0.4.1:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DLIVEKIT_SDK_ROOT<span class="o">=</span>/path/to/livekit-cpp-sdk
 cmake<span class="w"> </span>--build<span class="w"> </span>build
 ./build/bin/streamkit_sample<span class="w"> </span>--host<span class="w"> </span><span class="m">192</span>.168.1.100<span class="w"> </span>--token<span class="w"> </span>&lt;jwt&gt;
@@ -877,7 +893,10 @@ plain-HTTP options.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#which-clients-exist">Which clients exist</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#which-clients-exist">Which clients exist</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#network-telemetry">Network telemetry</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-connect-flow">The connect flow</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#self-signed-certificate-trust">Self-signed certificate trust</a></li>
 </ul>

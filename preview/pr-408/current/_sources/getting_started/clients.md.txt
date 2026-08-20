@@ -29,6 +29,22 @@ All five share the same **StreamKit** shape: a single transport-agnostic
 Android, and iOS/visionOS clients are feature-equivalent (connection, audio,
 camera, agent-status badge, data channel).
 
+### Network telemetry
+
+Every graphical sample displays the same three network values; the native C++
+sample prints them to stdout. Each exposes the values through StreamKit's
+`onNetworkMetrics` callback (spelled `on_network_metrics` in C++):
+
+- **Quality** — LiveKit's connection-quality estimate for the local participant.
+- **Round-trip time** — the highest current RTT across the publisher and
+  subscriber transports' selected ICE candidate pairs.
+- **Receive jitter** — the highest inbound RTP jitter in the current sample.
+
+`LiveKitBackend` samples LiveKit's existing WebRTC statistics about once per
+second and converts seconds to milliseconds. No hub messages or additional
+telemetry service are involved. RTT and jitter display as unavailable until the
+SDK has a matching stats record, such as before a media track is active.
+
 ## The connect flow
 
 When you start a server sample, the hub prints its connection details on
@@ -280,7 +296,7 @@ engine plugin, or a CloudXR client.
 ### Build and run
 
 Point CMake at a LiveKit SDK install, build, and run with `--host` and
-`--token`:
+`--token`. The backend is tested against the released LiveKit C++ SDK v0.4.1:
 
 ```bash
 cmake -S . -B build -DLIVEKIT_SDK_ROOT=/path/to/livekit-cpp-sdk
