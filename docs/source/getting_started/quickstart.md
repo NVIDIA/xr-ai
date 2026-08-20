@@ -239,7 +239,8 @@ recipes.
 This sample combines an interactive tea guide with optional background change,
 transcript, and video observation. Nemotron-3 Nano Omni supplies both language
 and visual inference. Records are written as JSON Lines under the sample's
-`artifacts/` directory; there is no separate monitoring dashboard.
+`artifacts/` directory. A separate live event viewer presents selected runtime
+events without replacing those durable records.
 
 Start the shared model services first, then launch the sample with explicit
 voice and speech modes:
@@ -257,6 +258,11 @@ self-signed certificate on first use, allow camera and microphone access, and
 connect. In wake-word mode, begin with “Agent” or “Hey Agent.” Use
 `--voice-mode always-on` to dispatch every finalized utterance, or
 `--tts-mode magpie` for neural speech on a supported GPU.
+
+Open `http://127.0.0.1:8092` on the XR-AI host for the live event viewer. To
+view it directly from another trusted machine, add `--expose-web-events` and
+use `http://<xr-host>:8092`; restrict that unauthenticated port to the trusted
+development network.
 
 The tea workflow changes steps only after an explicit user command. Visual
 observations can satisfy the current step's evidence requirements, but never

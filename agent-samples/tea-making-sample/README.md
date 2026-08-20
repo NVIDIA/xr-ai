@@ -73,7 +73,11 @@ Wake-word mode is enabled by default:
 The connection page is provided by XR-Media-Hub and remains part of the sample.
 Only the old monitoring-specific UI is omitted.
 Spoken agent responses are also published on the connection client's
-`agent.response` text channel so the page can display accessible captions.
+`agent.response` text channel so the page can display accessible captions. Raw
+streamed text is finalized when its content completes, and aggregated text is
+finalized when its rewrite completes; playback pacing does not delay the Agent
+panel. An urgent interruption may stop audio after the complete intended text
+has already appeared.
 
 ## Behavior
 
