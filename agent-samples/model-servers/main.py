@@ -52,6 +52,7 @@ from xr_ai_launcher import (
     require_credentials,
     run_stack,
 )
+from xr_ai_launcher._config import _resolve_config_variant
 from xr_ai_logging import setup_logging
 from xr_ai_vllm import stop_persistent_servers
 
@@ -113,14 +114,6 @@ def _profile_path(selection: str) -> Path:
     return _BASE / "yaml" / f"models.{selection}.json"
 
 
-def _service_config(gpu_dir: str, config_base: str, profile_key: str) -> str:
-    """Per-profile config variant when present, the service default otherwise."""
-    variant = f"{gpu_dir}/{config_base}_{profile_key}.yaml"
-    if (_BASE / variant).exists():
-        return variant
-    return f"{gpu_dir}/{config_base}.yaml"
-
-
 def _build_processes(
     selection: str, gpu_profile: str | None = None,
 ) -> tuple[list[Process], tuple[str, ...]]:
@@ -131,14 +124,14 @@ def _build_processes(
         raise ValueError(f"model profile declares unknown services: {sorted(unknown)}")
 
     profile_name = gpu_profile or detect_gpu_config()
-    gpu_dir = f"yaml/{profile_name}"
+    config_dir = _BASE / "yaml" / profile_name
     profile_key = profile_path.stem.removeprefix("models.")
     processes = []
     for service, (project, command, config_base, port) in _MODEL_SERVICES.items():
         if deployment.launch_mode(service) != "own":
             continue
-        config = _service_config(gpu_dir, config_base, profile_key)
-        if not (_BASE / config).is_file():
+        config = _resolve_config_variant(config_dir, config_base, profile_key)
+        if not config.is_file():
             raise ValueError(
                 f"GPU profile {profile_name!r} is incomplete: missing {config} "
                 f"for service {service!r}"

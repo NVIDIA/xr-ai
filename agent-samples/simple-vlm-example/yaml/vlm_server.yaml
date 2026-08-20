@@ -1,10 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# vlm-server configuration for vlm-agent.
-# Auto-discovered by the launcher and passed as --config to vlm_server.
-# hf_overrides selects the Reasoner runtime; details are documented in
-# docs/source/components/ai-services.md#per-server-notes.
+# Standalone VLM configuration for systems smaller than the shared
+# model-server hardware profiles.
 
 model:       nvidia/Cosmos3-Nano
 hf_overrides:
@@ -14,6 +12,9 @@ port:        8100
 model_cache: ../../../models
 async_scheduling: true
 mm_encoder_tp_mode: data
+
+# Leave enough of a 24 GiB GPU for the 16.8 GiB Reasoner weights and runtime.
+gpu_memory_utilization: 0.85
 
 # vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).
 # See services/vlm-server/vlm_server.yaml for the full toggle docs.
