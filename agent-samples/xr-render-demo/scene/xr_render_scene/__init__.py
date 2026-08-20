@@ -23,6 +23,8 @@ __all__ = [
     "MutationResult",
     "RemovePrimitiveRequest",
     "SceneClient",
+    "SceneObject",
+    "SceneState",
     "SceneTools",
     "UpdatePrimitiveRequest",
 ]

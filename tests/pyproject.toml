@@ -24,6 +24,8 @@ dependencies = [
     "xr-ai-vad",
     "xr-ai-voicegate",
     "xr-ai-vllm",
+    "xr-render-demo-eval",
+    "xr-render-demo-worker",
     "xr-render-scene",
     "xr-video-memory-service",
     "xr-rag-service",
@@ -50,7 +52,9 @@ xr-ai-logging         = { path = "../utils/xr-ai-logging",              editable
 xr-ai-vad             = { path = "../utils/xr-ai-vad",                  editable = true }
 xr-ai-voicegate       = { path = "../utils/xr-ai-voicegate",            editable = true }
 xr-ai-vllm            = { path = "../utils/xr-ai-vllm",                 editable = true }
-xr-render-scene       = { path = "../agent-samples/xr-render-demo/scene", editable = true }
+xr-render-demo-eval   = { path = "../agent-samples/xr-render-demo/eval",   editable = true }
+xr-render-demo-worker = { path = "../agent-samples/xr-render-demo/worker", editable = true }
+xr-render-scene       = { path = "../agent-samples/xr-render-demo/scene",  editable = true }
 xr-video-memory-service = { path = "../services/video-memory-service", editable = true }
 xr-rag-service          = { path = "../services/rag-service", editable = true }
 

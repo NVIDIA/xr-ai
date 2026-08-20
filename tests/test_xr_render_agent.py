@@ -298,7 +298,6 @@ async def test_global_interruption_cancels_every_participant() -> None:
 
 async def test_lifecycle_starts_xr_waits_for_lovr_and_acknowledges_participant() -> None:
     transport = _Transport()
-    runtime = AgentRuntime()
     controller = XRSessionController(
         transport=transport,  # type: ignore[arg-type]
         start_xr=_tool("start_xr"),
