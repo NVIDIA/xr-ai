@@ -5,11 +5,12 @@
 
 # Architecture
 
-XR AI connects interactive XR clients to agent workers and AI services without
-making transport, media, or model implementation details part of application
-logic. The system is process-oriented: the device I/O hub, workers, model servers,
-and optional capability services run independently and communicate through
-small, explicit interfaces.
+XR AI connects interactive clients, including XR glasses and headsets, phones,
+and web browsers, to agent workers and AI services without making transport,
+media, or model implementation details part of application logic. The system
+is process-oriented: the device I/O hub, workers, model servers, and optional
+capability services run independently and communicate through small, explicit
+interfaces.
 
 This page describes the system shape, runtime paths, and ownership boundaries.
 The component pages linked under [Where details live](#where-details-live)
@@ -23,17 +24,17 @@ contain configuration, protocol, and operational details.
                          starts, orders, and monitors processes
                                          |
                                          v
-+-------------+   media and data   +----------------+   IPC events   +----------------+
-| XR clients  | <----------------> | DeviceIOHub    | <------------> | agent workers  |
-| web/mobile  |                    | + transport    |                | + agent SDK     |
-+-------------+                    +----------------+                +-------+--------+
++---------------+   media and data   +----------------+   IPC events   +----------------+
+| XR clients    | <----------------> | DeviceIOHub    | <------------> | agent workers  |
+| web/mobile/XR |                    | + transport    |                | + agent SDK     |
++---------------+                    +----------------+                +-------+--------+
                                                                             |
                                                    typed model/tool calls   |
                                                 +---------------------------+--------+
                                                 |                                    |
                                                 v                                    v
                                       +-------------------+               +--------------------+
-                                      | AI model services |               | capability services|
+                                      | AI model services |               | capability services |
                                       | local or hosted   |               | or local tools     |
                                       +-------------------+               +--------------------+
 ```
@@ -111,7 +112,8 @@ video -- on-demand frame access --+                 |                         |
 
 This is composition rather than a fixed pipeline. An application may consume
 text instead of speech, omit models, execute deterministic tools locally, call
-typed capability services, or publish events for another agent to consume.
+typed capability services, or publish events for another in-process agent
+registered with the same `AgentRuntime` to consume.
 
 Workers obtain LLM, VLM, STT, TTS, and embedding clients from
 `xr_ai_models`. Model profiles keep three concerns separate:
@@ -133,10 +135,11 @@ Each sample is an executable process graph declared by a small orchestrator.
 DeviceIOHub always runs as its own process; workers and capability services
 run separately so their dependencies, failures, and cleanup remain isolated.
 
-The launcher starts processes serially or in explicit parallel groups. Each
-process signals readiness only after its own initialization is complete. A
-premature process exit fails the stack and triggers coordinated shutdown, so a
-client is not presented with a partially initialized application.
+Stack items start in declaration order; members of a `Parallel` item start
+concurrently, and the next item waits for every member to signal ready. Each
+ready-file reports only that process's initialization. A premature process
+exit fails the stack and triggers coordinated shutdown. Ready-files order
+process startup; they do not determine whether a client may connect.
 
 Model services use the same ownership model without forcing every sample to
 reload large weights:
@@ -147,10 +150,12 @@ reload large weights:
 - **External:** XR AI connects to an endpoint it neither starts nor stops.
 
 Heavy model servers can use a persistent launch mode and remain hot across
-sample restarts. The model profile is shared by the orchestrator and worker, so
-process ownership and endpoint selection cannot silently diverge. Detailed
-startup, shutdown, and persistence behavior belongs in {doc}`Launcher and
-process model </components/launcher-and-process-model>`.
+sample restarts. The model profile co-locates process ownership and endpoint
+choices used by the orchestrator and worker, reducing configuration drift. The
+launcher does not validate an endpoint's `base_url` against the launched
+service's separate configuration. Detailed startup, shutdown, and persistence
+behavior belongs in {doc}`Launcher and process model
+</components/launcher-and-process-model>`.
 
 ## Architectural invariants
 
@@ -174,9 +179,11 @@ The following constraints define the supported system boundary:
 - **Process dependencies are explicit.** Orchestrators declare startup order,
   readiness, and ownership instead of relying on import-time side effects or
   an implicit global runtime.
-- **Readiness is scoped.** Processes report only their own readiness. The hub
-  separately aggregates the participating agents' status for each connected
-  participant.
+- **Process and client readiness are distinct.** Ready-files order launcher
+  items and report only process readiness. DeviceIOHub owns client readiness.
+  Agents opt in with `announces_readiness=True`, report only their own
+  `_agent.status`, and gate only subscribed participants; the hub aggregates
+  their status per participant. Passive processors do not gate clients.
 
 These constraints are the stable architecture. Individual transports, model
 backends, tools, and sample workflows are replaceable implementations within

@@ -79,7 +79,8 @@ agent-samples/<kebab-name>/
 
 - Orchestrators depend on `xr-ai-launcher`, declare `PROCESSES`, and call
   `run_stack`.
-- Processes start serially, touch their `--ready-file` when ready, and fail the
+- Stack items start in declaration order; members of a `Parallel` item start
+  concurrently. The launcher waits for each item to signal ready, and fails the
   stack if any process exits.
 - `device_io_hub` always runs as its own process.
 - Raw IPC workers keep hub addresses as module constants, use async callbacks,
