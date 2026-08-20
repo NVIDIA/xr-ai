@@ -51,6 +51,14 @@ NUM_CHANNELS           = 1
 TTS_NATIVE_SAMPLE_RATE = 22_050
 
 
+def _monotonic_s() -> float:
+    return asyncio.get_running_loop().time()
+
+
+async def _sleep_s(delay_s: float) -> None:
+    await asyncio.sleep(delay_s)
+
+
 def _hub_pcm_to_mono_16k(pcm_int16: bytes, channels: int, sample_rate: int) -> bytes:
     """Convert hub int16 PCM to mono 16 kHz int16 for the (mono) STT path.
 
@@ -197,6 +205,11 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
         # StartFrame stashed at start() so per-participant MediaSenders can
         # be created on demand (they need it to .start()).
         self._start_frame: StartFrame | None = None
+        # Pace each participant independently before IPC. DeviceIOHub keeps a
+        # hard safety bound, but normal long replies should arrive near playback
+        # rate instead of looking like an unbounded producer burst.
+        self._return_audio_deadline_s: dict[str, float] = {}
+        self._return_audio_locks: dict[str, asyncio.Lock] = {}
 
     @property
     def target_participant(self) -> str:
@@ -263,6 +276,8 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
 
     async def _release_destination(self, pid: str) -> None:
         """Tear down a departed participant's ``MediaSender``."""
+        self._return_audio_deadline_s.pop(pid, None)
+        self._return_audio_locks.pop(pid, None)
         sender = self._media_senders.pop(pid, None)
         if sender is None:
             return
@@ -274,9 +289,13 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
             self._target_participant = ""
 
     async def stop(self, frame: EndFrame):
+        self._return_audio_deadline_s.clear()
+        self._return_audio_locks.clear()
         await super().stop(frame)
 
     async def cancel(self, frame: CancelFrame):
+        self._return_audio_deadline_s.clear()
+        self._return_audio_locks.clear()
         await super().cancel(frame)
 
     async def _handle_frame(self, frame: Frame) -> None:
@@ -341,18 +360,26 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
                 )
                 self._missing_target_warned = True
             return False
-        pcm_float32 = int16_to_float32(frame.audio)
         num_samples = len(frame.audio) // (2 * frame.num_channels)
-        chunk = AudioChunk(
-            pts_us=time.time_ns() // 1_000,
-            sample_rate=frame.sample_rate,
-            channels=frame.num_channels,
-            samples=num_samples,
-            data=pcm_float32,
-            participant_id=pid,
-            track_id="tts",
-        )
-        await self._ep.send_return_audio(chunk)
+        duration_s = num_samples / frame.sample_rate
+        lock = self._return_audio_locks.setdefault(pid, asyncio.Lock())
+        async with lock:
+            now_s = _monotonic_s()
+            deadline_s = self._return_audio_deadline_s.get(pid, now_s)
+            if deadline_s > now_s:
+                await _sleep_s(deadline_s - now_s)
+
+            chunk = AudioChunk(
+                pts_us=time.time_ns() // 1_000,
+                sample_rate=frame.sample_rate,
+                channels=frame.num_channels,
+                samples=num_samples,
+                data=int16_to_float32(frame.audio),
+                participant_id=pid,
+                track_id="tts",
+            )
+            await self._ep.send_return_audio(chunk)
+            self._return_audio_deadline_s[pid] = _monotonic_s() + duration_s
         return True
 
 

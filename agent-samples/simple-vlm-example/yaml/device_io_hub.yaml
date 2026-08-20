@@ -6,7 +6,8 @@
 # See services/device-io-hub/device_io_hub.yaml for all available options.
 
 # ── LiveKit server ────────────────────────────────────────────────────────────
-# Development-only placeholders. Replace both values outside local samples.
+# Development-only placeholders. For deployed setups, replace both values or
+# remove them and set LIVEKIT_API_KEY and LIVEKIT_API_SECRET in the environment.
 api_key:    devkey
 api_secret: devsecret-xr-livekit-prototype-2026
 room_name:  xr-room

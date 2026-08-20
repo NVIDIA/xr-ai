@@ -41,12 +41,15 @@ def _resolve_path(value: str, base: Path) -> str:
 
 
 def _apply_env_credentials(data: dict) -> None:
-    if os.environ.get(LIVEKIT_API_KEY_ENV):
+    if LIVEKIT_API_KEY_ENV in os.environ:
         data["api_key"] = os.environ[LIVEKIT_API_KEY_ENV]
-    if os.environ.get(LIVEKIT_API_SECRET_ENV):
+    if LIVEKIT_API_SECRET_ENV in os.environ:
         data["api_secret"] = os.environ[LIVEKIT_API_SECRET_ENV]
     data.setdefault("api_key", "")
     data.setdefault("api_secret", "")
+    for key in ("api_key", "api_secret"):
+        if isinstance(data[key], str):
+            data[key] = data[key].strip()
 
 
 def load_config() -> LiveKitConnectorConfig:

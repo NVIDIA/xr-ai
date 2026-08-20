@@ -61,6 +61,23 @@ def test_load_config_accepts_livekit_credentials_from_environment(
     assert cfg.enable_web_server is False
 
 
+def test_load_config_strips_livekit_credentials(tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "device_io_hub.yaml"
+    config_path.write_text(
+        "api_key: ' yaml-key  '\napi_secret: ' yaml-secret  '\n",
+        encoding="utf-8",
+    )
+    _reset_argv(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LIVEKIT_API_KEY", " env-key\n")
+    monkeypatch.setenv("LIVEKIT_API_SECRET", " env-secret\n")
+
+    cfg = load_config()
+
+    assert cfg.api_key == "env-key"
+    assert cfg.api_secret == "env-secret"
+
+
 def test_load_config_environment_overrides_yaml_credentials(
     tmp_path, monkeypatch
 ) -> None:
@@ -98,3 +115,18 @@ def test_load_config_accepts_yaml_credentials(tmp_path, monkeypatch) -> None:
 
     assert cfg.api_key == "yaml-key"
     assert cfg.api_secret == "yaml-secret"
+
+
+def test_load_config_rejects_existing_yaml_without_credentials(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "device_io_hub.yaml"
+    config_path.write_text("room_name: yaml-room\n", encoding="utf-8")
+    _reset_argv(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("LIVEKIT_API_KEY", raising=False)
+    monkeypatch.delenv("LIVEKIT_API_SECRET", raising=False)
+
+    with pytest.raises(ValueError, match="LiveKit credentials are required"):
+        load_config()

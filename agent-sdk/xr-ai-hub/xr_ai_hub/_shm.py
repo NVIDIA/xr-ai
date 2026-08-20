@@ -166,7 +166,13 @@ class ShmRingBuffer:
                 )
             )
 
-        payload = data.cast("B") if isinstance(data, memoryview) else data
+        if isinstance(data, memoryview):
+            try:
+                payload = data.cast("B")
+            except TypeError as exc:
+                raise ValueError("frame data must be C-contiguous") from exc
+        else:
+            payload = data
         slot    = self._claim_slot()
         hdr_off = _GH_SIZE + slot * self._slot_stride
         dat_off = hdr_off + _SH_SIZE
@@ -277,8 +283,24 @@ class ShmRingBuffer:
 
     def release_slot(self, slot: int) -> None:
         """Mark a consumed slot as free so the producer can reuse it."""
+        if (
+            not isinstance(slot, int)
+            or isinstance(slot, bool)
+            or not 0 <= slot < self._num_slots
+        ):
+            raise ValueError(
+                f"invalid shared-memory slot index {slot!r} "
+                f"(num_slots={self._num_slots})"
+            )
         hdr_off = _GH_SIZE + slot * self._slot_stride
         hdr     = _SH.unpack_from(self._buf, hdr_off)
+        if hdr[0] != _MAGIC_SLOT:
+            raise RuntimeError(
+                f"slot {slot} has invalid shared-memory header magic "
+                f"0x{hdr[0]:08x}"
+            )
+        if hdr[1] != _STATE_READY:
+            raise RuntimeError(f"slot {slot} not READY (state={hdr[1]})")
         _SH.pack_into(self._buf, hdr_off, _MAGIC_SLOT, _STATE_FREE, hdr[2], 0, hdr[4], hdr[5], hdr[6], hdr[7], 0)
 
     # ── internal ──────────────────────────────────────────────────────────────

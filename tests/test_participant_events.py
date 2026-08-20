@@ -10,11 +10,18 @@ from __future__ import annotations
 
 import array
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 import device_io_hub.ipc._hub as hub_module
 
-from xr_ai_hub import ConnectorRegistration, ParticipantEvent, PixelFormat
+from xr_ai_hub import (
+    ConnectorRegistration,
+    FrameSignal,
+    MsgType,
+    ParticipantEvent,
+    PixelFormat,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -170,6 +177,10 @@ async def test_connector_reregistration_open_failure_drops_stale_ring(monkeypatc
     class CloseTrackingRing:
         def __init__(self) -> None:
             self.closed = False
+            self.released_slots = []
+
+        def release_slot(self, slot: int) -> None:
+            self.released_slots.append(slot)
 
         def close(self) -> None:
             self.closed = True
@@ -179,7 +190,12 @@ async def test_connector_reregistration_open_failure_drops_stale_ring(monkeypatc
 
     hub = hub_module.HubEndpoint.__new__(hub_module.HubEndpoint)
     old_ring = CloseTrackingRing()
-    hub._latest_slots = {}
+    held_data = memoryview(b"held")
+    held_view = SimpleNamespace(
+        data=held_data,
+        signal=SimpleNamespace(slot=2),
+    )
+    hub._latest_slots = {("alice", "cam"): (old_ring, held_view)}
     hub._ring_registry = {"conn": old_ring}
     monkeypatch.setattr(hub_module, "ShmRingBuffer", fail_open)
 
@@ -188,7 +204,168 @@ async def test_connector_reregistration_open_failure_drops_stale_ring(monkeypatc
     )
 
     assert old_ring.closed is True
+    assert old_ring.released_slots == [2]
+    assert hub._latest_slots == {}
+    with pytest.raises(ValueError, match="released memoryview"):
+        held_data.tobytes()
     assert "conn" not in hub._ring_registry
+
+
+async def test_rejected_frame_signal_releases_new_ring_slot(
+    hub,
+    make_connector,
+    settle,
+):
+    connector = make_connector()
+    await connector.register()
+    await settle()
+    await connector.notify_participant_joined("alice", pts_us=0)
+    await settle()
+
+    # More rejected signals than the four-slot test ring must not exhaust it.
+    for seq in range(1, 7):
+        slot = connector._ring.write_frame(
+            _FRAME,
+            width=_W,
+            height=_H,
+            fmt=PixelFormat.I420,
+            pts_us=seq,
+            seq=seq,
+        )
+        bad_signal = FrameSignal(
+            slot=slot,
+            seq=seq,
+            pts_us=seq,
+            width=_W,
+            height=_H,
+            fmt=PixelFormat.I420,
+            data_sz=len(_FRAME) + 1,
+            participant_id="alice",
+            track_id="cam",
+        )
+
+        await hub._dispatch(MsgType.FRAME_SIGNAL, bad_signal)
+
+    assert ("alice", "cam") not in hub._latest_slots
+
+    slot = connector._ring.write_frame(
+        _FRAME,
+        width=_W,
+        height=_H,
+        fmt=PixelFormat.I420,
+        pts_us=10,
+        seq=10,
+    )
+    valid_signal = FrameSignal(
+        slot=slot,
+        seq=10,
+        pts_us=10,
+        width=_W,
+        height=_H,
+        fmt=PixelFormat.I420,
+        data_sz=len(_FRAME),
+        participant_id="alice",
+        track_id="cam",
+    )
+    await hub._dispatch(MsgType.FRAME_SIGNAL, valid_signal)
+
+    assert ("alice", "cam") in hub._latest_slots
+
+
+async def test_duplicate_frame_signal_keeps_held_slot_occupied(
+    hub,
+    make_connector,
+    settle,
+):
+    connector = make_connector()
+    await connector.register()
+    await settle()
+    await connector.notify_participant_joined("alice", pts_us=0)
+    await settle()
+
+    slot = connector._ring.write_frame(
+        _FRAME,
+        width=_W,
+        height=_H,
+        fmt=PixelFormat.I420,
+        pts_us=1,
+        seq=1,
+    )
+    signal = FrameSignal(
+        slot=slot,
+        seq=1,
+        pts_us=1,
+        width=_W,
+        height=_H,
+        fmt=PixelFormat.I420,
+        data_sz=len(_FRAME),
+        participant_id="alice",
+        track_id="cam",
+    )
+    await hub._dispatch(MsgType.FRAME_SIGNAL, signal)
+    held_before = hub._latest_slots[("alice", "cam")]
+
+    await hub._dispatch(MsgType.FRAME_SIGNAL, signal)
+
+    assert hub._latest_slots[("alice", "cam")] is held_before
+    for seq in range(2, 5):
+        connector._ring.write_frame(
+            _FRAME,
+            width=_W,
+            height=_H,
+            fmt=PixelFormat.I420,
+            pts_us=seq,
+            seq=seq,
+        )
+    with pytest.raises(RuntimeError, match="all slots occupied"):
+        connector._ring.write_frame(
+            b"WXYZ",
+            width=2,
+            height=2,
+            fmt=PixelFormat.RGBA,
+            pts_us=5,
+            seq=5,
+        )
+    assert bytes(held_before[1].data) == _FRAME
+
+
+async def test_participant_leave_continues_when_held_slot_release_fails():
+    class FailingRing:
+        def release_slot(self, _slot: int) -> None:
+            raise RuntimeError("corrupt slot header")
+
+    class FakePublisher:
+        def __init__(self) -> None:
+            self.messages = []
+
+        async def send_multipart(self, parts) -> None:
+            self.messages.append(parts)
+
+    hub = hub_module.HubEndpoint.__new__(hub_module.HubEndpoint)
+    view_data = memoryview(b"held")
+    view = SimpleNamespace(
+        data=view_data,
+        signal=SimpleNamespace(slot=0),
+    )
+    hub._participant_connector = {"alice": "conn"}
+    hub._published_status = {"alice": "ready"}
+    hub._agent_status = {"agent": {"alice": "ready"}}
+    hub._latest_slots = {("alice", "cam"): (FailingRing(), view)}
+    hub._participant_cbs = []
+    hub._pub = FakePublisher()
+    event = ParticipantEvent(
+        participant_id="alice",
+        joined=False,
+        pts_us=1,
+        connector_id="conn",
+    )
+
+    await hub._dispatch(MsgType.PARTICIPANT_EVENT, event)
+
+    assert hub._latest_slots == {}
+    assert hub._pub.messages
+    with pytest.raises(ValueError, match="released memoryview"):
+        view_data.tobytes()
 
 
 async def test_connector_signals_memoryview_byte_size(hub, make_connector, settle):

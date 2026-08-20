@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# Development-only placeholders. For deployed setups, replace both values or
+# remove them and set LIVEKIT_API_KEY and LIVEKIT_API_SECRET in the environment.
 api_key: devkey
 api_secret: devsecret-xr-livekit-prototype-2026
 room_name: xr-room

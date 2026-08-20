@@ -114,6 +114,22 @@ def test_write_frame_checks_memoryview_byte_size(ring):
     assert ring._write_pos == 0
 
 
+def test_write_frame_rejects_noncontiguous_memoryview(ring):
+    payload = memoryview(bytearray(range(8)))[::2]
+
+    with pytest.raises(ValueError, match="C-contiguous"):
+        ring.write_frame(
+            payload,
+            width=2,
+            height=2,
+            fmt=PixelFormat.RGBA,
+            pts_us=1,
+            seq=1,
+        )
+
+    assert ring._write_pos == 0
+
+
 @pytest.mark.parametrize("data_size", [-1, 9])
 def test_read_slot_rejects_signal_outside_slot_capacity(ring, data_size):
     slot = ring.write_frame(b"A" * 8, 2, 2, PixelFormat.RGBA, 1, 1)

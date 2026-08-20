@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections import deque
 from typing import NamedTuple
 
 import numpy as np
@@ -61,11 +62,13 @@ class _ReturnAudioPipe:
     audio chunks in the ZMQ SUB buffer — by the time flush is delivered,
     the audio is already past us.
 
-    With it, ``push`` is a non-blocking ``put_nowait`` so the connector
-    loop stays responsive; a background task drains the queue into
-    ``capture_frame`` at audio rate; ``flush`` drops the bounded local
-    backlog and LiveKit queue. Only the client's jitter buffer (~100 ms)
-    remains irreducibly outside our control.
+    With it, ``push`` appends without awaiting so the connector loop stays
+    responsive; a background task drains the queue into
+    ``capture_frame`` at audio rate; ``flush`` drops the local backlog and
+    LiveKit queue. The built-in voice output paces frames before IPC, while the
+    duration bound prevents custom or faulty producers from growing a
+    participant's queue indefinitely. Only the client's jitter buffer
+    (~100 ms) remains irreducibly outside our control.
     """
 
     def __init__(
@@ -82,46 +85,55 @@ class _ReturnAudioPipe:
         self._dropped_frames = 0
         self._dropped_s = 0.0
         self._last_drop_log_s = 0.0
-        self._queue: asyncio.Queue[_QueuedReturnAudioFrame] = asyncio.Queue()
+        self._queue: deque[_QueuedReturnAudioFrame] = deque()
+        self._has_frames = asyncio.Event()
         self._task = asyncio.create_task(self._drain(), name="return_audio_pipe")
 
     def push(self, frame: rtc.AudioFrame) -> None:
-        duration_s = self._frame_duration_s(frame)
+        try:
+            duration_s = self._frame_duration_s(frame)
+        except (TypeError, ValueError, OverflowError) as exc:
+            self._record_drop(1, 0.0, reason=str(exc))
+            return
+
         if duration_s > self._max_buffer_s:
-            self._record_drop(1, duration_s)
+            self._record_drop(
+                1,
+                duration_s,
+                reason=f"frame exceeds {self._max_buffer_s:.3g}-second limit",
+            )
             return
 
         dropped_frames = 0
         dropped_s = 0.0
         while (
-            self._queued_s + duration_s > self._max_buffer_s + 1e-9
-            and not self._queue.empty()
+            self._queue
+            and self._queued_s + duration_s > self._max_buffer_s + 1e-9
         ):
-            dropped = self._queue.get_nowait()
-            self._queue.task_done()
+            dropped = self._queue.popleft()
             self._queued_s = max(0.0, self._queued_s - dropped.duration_s)
             dropped_frames += 1
             dropped_s += dropped.duration_s
 
-        self._queue.put_nowait(_QueuedReturnAudioFrame(frame, duration_s))
+        self._queue.append(_QueuedReturnAudioFrame(frame, duration_s))
         self._queued_s += duration_s
+        self._has_frames.set()
         if dropped_frames:
-            self._record_drop(dropped_frames, dropped_s)
+            self._record_drop(
+                dropped_frames,
+                dropped_s,
+                reason=f"backlog exceeds {self._max_buffer_s:.3g}-second limit",
+            )
 
     def flush(self) -> None:
-        try:
-            while True:
-                dropped = self._queue.get_nowait()
-                self._queue.task_done()
-                self._queued_s = max(0.0, self._queued_s - dropped.duration_s)
-        except asyncio.QueueEmpty:
-            pass
+        self._queue.clear()
+        self._has_frames.clear()
         self._queued_s = 0.0
         self._src.clear_queue()
 
     @property
     def queued_frames(self) -> int:
-        return self._queue.qsize()
+        return len(self._queue)
 
     @property
     def queued_duration_s(self) -> float:
@@ -146,7 +158,13 @@ class _ReturnAudioPipe:
             )
         return samples_per_channel / sample_rate
 
-    def _record_drop(self, dropped_frames: int, dropped_s: float) -> None:
+    def _record_drop(
+        self,
+        dropped_frames: int,
+        dropped_s: float,
+        *,
+        reason: str,
+    ) -> None:
         self._dropped_frames += dropped_frames
         self._dropped_s += dropped_s
         now_s = time.monotonic()
@@ -157,13 +175,13 @@ class _ReturnAudioPipe:
             return
         self._last_drop_log_s = now_s
         logger.warning(
-            "Return audio backlog for {!r} exceeded {:.0f} ms; "
-            "dropped {} frame(s) ({:.0f} ms), queued {} frame(s) ({:.0f} ms), "
+            "Return audio for {!r} dropped {} frame(s) ({:.0f} ms): {}; "
+            "queued {} frame(s) ({:.0f} ms), "
             "total dropped {} frame(s) ({:.0f} ms)",
             self._participant_id,
-            self._max_buffer_s * 1000,
             dropped_frames,
             dropped_s * 1000,
+            reason,
             self.queued_frames,
             self.queued_duration_s * 1000,
             self._dropped_frames,
@@ -172,7 +190,13 @@ class _ReturnAudioPipe:
 
     async def _drain(self) -> None:
         while True:
-            queued = await self._queue.get()
+            await self._has_frames.wait()
+            if not self._queue:
+                self._has_frames.clear()
+                continue
+            queued = self._queue.popleft()
+            if not self._queue:
+                self._has_frames.clear()
             self._queued_s = max(0.0, self._queued_s - queued.duration_s)
             try:
                 await self._src.capture_frame(queued.frame)
@@ -180,12 +204,10 @@ class _ReturnAudioPipe:
                 raise
             except Exception:
                 logger.exception("capture_frame failed")
-            finally:
-                self._queue.task_done()
 
     async def close(self) -> None:
-        # Cancellation stops the drainer regardless of how much duration-bounded
-        # audio remains in the otherwise unbounded asyncio queue.
+        # Cancellation stops the drainer regardless of how much audio remains
+        # in the participant-local backlog.
         if not self._task.done():
             self._task.cancel()
         try:

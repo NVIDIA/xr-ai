@@ -103,8 +103,8 @@ class LiveKitConnectorConfig:
     shm_max_frame_bytes: int = 12_441_600   # 4K NV12
 
     # ── Return audio pacing ───────────────────────────────────────────────────
-    # Maximum queued TTS audio per participant. The oldest queued frames are
-    # dropped when a burst exceeds this duration.
+    # Maximum queued TTS audio duration per participant. The oldest queued
+    # frames are dropped when a producer exceeds this hard bound.
     return_audio_max_buffer_s: float = _DEFAULT_RETURN_AUDIO_MAX_BUFFER_S
     """Maximum seconds of queued return audio retained per participant."""
 

@@ -2875,6 +2875,43 @@ async def test_output_transport_writes_audio_to_target_participant():
 
 
 @pytest.mark.asyncio
+async def test_output_transport_paces_return_audio_before_ipc(monkeypatch):
+    """Normal TTS cannot flood DeviceIOHub's hard participant queue bound."""
+    from xr_ai_voice import _transport as transport_module
+    from xr_ai_voice._transport import DeviceIOHubOutputTransport
+    from pipecat.transports.base_transport import TransportParams
+
+    now_s = 100.0
+    sent_at: list[float] = []
+    sleeps: list[float] = []
+
+    async def fake_sleep(delay_s: float) -> None:
+        nonlocal now_s
+        sleeps.append(delay_s)
+        now_s += delay_s
+
+    class _StubEndpoint:
+        async def send_return_audio(self, _chunk) -> None:
+            sent_at.append(now_s)
+
+    monkeypatch.setattr(transport_module, "_monotonic_s", lambda: now_s)
+    monkeypatch.setattr(transport_module, "_sleep_s", fake_sleep)
+    transport = DeviceIOHubOutputTransport(_StubEndpoint(), TransportParams())
+    transport.set_target_participant("web-client")
+    frame = OutputAudioRawFrame(
+        audio=b"\x00\x00" * 320,
+        sample_rate=16_000,
+        num_channels=1,
+    )
+
+    for _ in range(60):
+        assert await transport.write_audio_frame(frame) is True
+
+    assert sent_at == pytest.approx([100.0 + i * 0.02 for i in range(60)])
+    assert sleeps == pytest.approx([0.02] * 59)
+
+
+@pytest.mark.asyncio
 async def test_output_transport_releases_media_sender_on_participant_left():
     """A departing participant's per-pid ``MediaSender`` is torn down so a
     long-lived hub with join/leave churn does not retain idle senders until

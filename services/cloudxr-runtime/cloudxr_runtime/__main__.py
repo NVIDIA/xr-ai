@@ -62,9 +62,14 @@ async def _wait_with_progress(
     return False
 
 
+def _run_runtime_process() -> None:
+    setup_logging("cloudxr")
+    runtime_run()
+
+
 def _start_runtime_process() -> multiprocessing.Process:
     runtime_process = multiprocessing.get_context("spawn").Process(
-        target=runtime_run
+        target=_run_runtime_process
     )
     runtime_process.start()
     return runtime_process

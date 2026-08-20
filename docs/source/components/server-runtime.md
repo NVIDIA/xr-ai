@@ -181,11 +181,12 @@ client lazily publishes one `xr-hub-return-{pid}` audio track per participant
 and refreshes subscribe permissions so each participant may subscribe only to
 their own return track. Return data is sent with `destination_identities` set
 to the target participant, so it is never broadcast to peers. Return audio is
-paced into LiveKit at audio rate by a per-participant pipe, which a flush can
-drain to interrupt playback. Each participant's queued audio is independently
-bounded by `return_audio_max_buffer_s` (3 seconds by default); when a burst
-exceeds that duration, the oldest queued frames for that participant are
-dropped without affecting any other participant.
+paced before IPC by the built-in voice transport, then fed into LiveKit by a
+per-participant pipe that a flush can drain to interrupt playback.
+`return_audio_max_buffer_s` (3 seconds by default) is also a hard
+per-participant duration bound: if a custom or faulty producer runs ahead of
+playback, the oldest queued frames are dropped without affecting any other
+participant.
 
 ## Agent status aggregation
 

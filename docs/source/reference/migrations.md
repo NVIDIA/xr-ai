@@ -18,11 +18,19 @@ and command to `device_io_hub`. Rename `xr_media_hub.yaml` to
 - DeviceIOHub no longer falls back to embedded LiveKit development credentials.
   Set `api_key` and `api_secret` in `device_io_hub.yaml`, or inject
   `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` through the environment.
-- Return-audio buffering is now bounded independently for each participant.
-  `return_audio_max_buffer_s` defaults to 3 seconds; when a burst exceeds the
-  configured duration, DeviceIOHub drops the oldest queued frames to bound
-  playback latency and memory use. Increase the value for long-form playback,
-  or decrease it for more latency-sensitive deployments.
+- Boolean service settings now require YAML booleans or the strings `true`,
+  `false`, `yes`, `no`, `on`, `off`, `1`, or `0` (case-insensitive). Numeric
+  `1`/`0`, null values, and arbitrary strings now fail at startup instead of
+  being interpreted by Python truthiness. This applies to vLLM eager/tool/
+  scheduling flags, Nemotron-Omni BF16 selection, Piper CUDA, voice-gate
+  `listening_chime`, lab-monitoring `capture_marker_scans`, and tea-workflow
+  `complete_on_skip`.
+- Return audio is paced before IPC by the built-in voice transport and bounded
+  independently for each participant in DeviceIOHub.
+  `return_audio_max_buffer_s` defaults to 3 seconds; a custom or faulty producer
+  that exceeds the queued-audio duration limit loses its oldest queued frames.
+  Increase the value for intentionally bursty custom producers, or decrease it
+  for a tighter memory and latency bound.
 
 ## Removed SDK compatibility surfaces
 

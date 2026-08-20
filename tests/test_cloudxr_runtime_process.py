@@ -102,8 +102,23 @@ def test_start_runtime_process_uses_spawn_context(monkeypatch):
         process = module._start_runtime_process()
 
         assert requested_contexts == ["spawn"]
-        assert started_targets == [module.runtime_run]
-        assert process.target is module.runtime_run
+        assert started_targets == [module._run_runtime_process]
+        assert process.target is module._run_runtime_process
+    finally:
+        sys.modules.pop("cloudxr_runtime.__main__", None)
+        sys.modules.pop("cloudxr_runtime", None)
+
+
+def test_spawned_runtime_process_configures_logging(monkeypatch):
+    module = _import_cloudxr_runtime(monkeypatch)
+    calls = []
+    monkeypatch.setattr(module, "setup_logging", lambda name: calls.append(("log", name)))
+    monkeypatch.setattr(module, "runtime_run", lambda: calls.append(("run", None)))
+
+    try:
+        module._run_runtime_process()
+
+        assert calls == [("log", "cloudxr"), ("run", None)]
     finally:
         sys.modules.pop("cloudxr_runtime.__main__", None)
         sys.modules.pop("cloudxr_runtime", None)

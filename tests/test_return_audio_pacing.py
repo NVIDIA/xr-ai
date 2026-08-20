@@ -127,6 +127,44 @@ async def test_frame_larger_than_limit_is_dropped():
         await pipe.close()
 
 
+async def test_large_burst_cannot_grow_queue_past_duration_bound():
+    pipe = _ReturnAudioPipe(_FakeSource(), max_buffer_s=0.03)
+    try:
+        for i in range(10_000):
+            pipe.push(_FakeFrame(f"frame-{i}"))
+
+        assert pipe.queued_frames == 3
+        assert pipe.queued_duration_s == pytest.approx(0.03)
+        assert pipe.dropped_frames == 9_997
+    finally:
+        await pipe.close()
+
+
+@pytest.mark.parametrize(
+    ("samples_per_channel", "sample_rate"),
+    [(0, 48_000), (-1, 48_000), (480, 0), (480, -1)],
+)
+async def test_invalid_frame_duration_is_recorded_as_drop(
+    samples_per_channel,
+    sample_rate,
+):
+    pipe = _ReturnAudioPipe(_FakeSource())
+    try:
+        pipe.push(
+            _FakeFrame(
+                "invalid",
+                samples_per_channel=samples_per_channel,
+                sample_rate=sample_rate,
+            )
+        )
+
+        assert pipe.queued_frames == 0
+        assert pipe.dropped_frames == 1
+        assert pipe.dropped_duration_s == 0.0
+    finally:
+        await pipe.close()
+
+
 @pytest.mark.parametrize("limit", [0, -1, math.inf, math.nan, "invalid", True])
 async def test_return_audio_buffer_limit_must_be_positive_and_finite(limit):
     with pytest.raises(ValueError, match="return_audio_max_buffer_s"):
