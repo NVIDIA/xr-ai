@@ -5,9 +5,9 @@
 
 # xr-ai-models
 
-Unified service protocols and OpenAI-compatible HTTP clients for the xr-ai
+Unified service protocols and model HTTP clients for the xr-ai
 model layer. Worker code depends on the typed protocols `LLMService`,
-`VLMService`, `STTService`, `TTSService`, and `EmbeddingService`, and constructs
+`VLMService`, `OCRService`, `STTService`, `TTSService`, and `EmbeddingService`, and constructs
 concrete clients from a model deployment profile — no hand-rolled httpx calls
 in callers, no model quirks leaking out of this package.
 
@@ -57,6 +57,7 @@ Built-in presets — see `xr_ai_models/presets/`:
 | `nemotron3_nano` | nemotron3-nano-llm-server | reasoning field: `reasoning` |
 | `nemotron_omni`  | nemotron-omni-llm-server  | default LLM; reasoning field: `reasoning_content`, thinking off unless requested, vision + video |
 | `nemotron_embedding` | embedding-server | OpenAI-compatible dense embeddings |
+| `nemotron_ocr_v2` | NVIDIA Image OCR NIM | Text, confidence, and normalized bounding boxes |
 | `parakeet_stt`   | stt-server               | |
 | `piper_tts`      | tts/piper                | |
 | `magpie_tts`     | tts/magpie               | |
@@ -142,10 +143,10 @@ the behavioral rules that span multiple calls or implementations.
 `reasoning_field` knob normalizes `reasoning_content` (nemotron_v3 parser)
 into the same surface.
 
-`LLMService` and `VLMService` request methods accept optional string-valued
-per-call headers for execution context such as Relay session lineage. The model
-profile remains the authority for credentials: callers cannot supply an
-`Authorization` header.
+`LLMService`, `VLMService`, and `OCRService` request methods accept optional
+string-valued per-call headers for execution context such as Relay session
+lineage. The model profile remains the authority for credentials: callers
+cannot supply an `Authorization` header.
 
 `ask_image()` and `stream()` are one-image wrappers over `ask_images()` and
 `stream_images()`. Multi-image calls preserve caller order and place every
@@ -211,6 +212,80 @@ build.nvidia.com, and `health_check: false` (no health surface).
 
 Future non-OpenAI-compat backends (LiteLLM, vendor SDKs) plug in as new
 `kind`s in `_factory.py::make_*`; the protocols and callers do not change.
+
+## Nemotron OCR v2
+
+`make_ocr(config, "ocr")` returns the same `OCRService` for local Nemotron OCR,
+hosted NVIDIA inference, or a VLM used as an OCR fallback. The native OCR path
+preserves text regions, confidence scores, normalized bounding boxes, and
+reading order. Each service advertises these structured-output capabilities;
+the VLM fallback supports paragraph transcription only and returns no invented
+regions, confidence scores, or geometry.
+
+For a local NVIDIA Image OCR NIM whose weights are downloaded from Hugging
+Face, use the `nemotron_ocr_v2` preset with the NIM root URL:
+
+```json
+{
+  "models": {
+    "ocr": {
+      "adapter": {"preset": "nemotron_ocr_v2"},
+      "endpoint": {"base_url": "http://localhost:8000", "readiness": "health"},
+      "deployment": {"ownership": "external"}
+    }
+  }
+}
+```
+
+Launch the official NIM with
+`NIM_ENGINE_MODEL_DOWNLOAD_PROVIDER=hf` and `HF_TOKEN`; the NVIDIA
+[getting-started guide](https://docs.nvidia.com/nim/ingestion/image-ocr/latest/getting-started.html)
+lists the image, cache mounts, and GPU flags. The model's
+[Hugging Face card](https://huggingface.co/nvidia/nemotron-ocr-v2) also covers
+direct checkpoint use.
+
+Hosted inference uses the full build.nvidia.com invoke URL, disables the local
+health probe, and clears the preset's appended `/v1/ocr` path:
+
+```json
+{
+  "models": {
+    "ocr": {
+      "adapter": {"preset": "nemotron_ocr_v2", "request_path": null},
+      "endpoint": {
+        "base_url": "https://ai.api.nvidia.com/v1/cv/nvidia/nemotron-ocr-v2",
+        "api_key_env": "NGC_API_KEY",
+        "readiness": "none"
+      },
+      "deployment": {"ownership": "external"}
+    }
+  }
+}
+```
+
+To use any OpenAI-compatible VLM instead, change only the OCR role's adapter:
+
+```json
+{
+  "models": {
+    "ocr": {
+      "category": "ocr",
+      "adapter": {
+        "kind": "openai_compat",
+        "model_name": "vlm",
+        "capabilities": {"vision": true},
+        "prompt": "Transcribe all visible text and numbers. Return only the transcription."
+      },
+      "endpoint": {"base_url": "http://localhost:8100", "readiness": "health"},
+      "deployment": {"ownership": "reused", "service": "vlm"}
+    }
+  }
+}
+```
+
+`request_path` is specific to the `nvidia_ocr` adapter and is rejected on the
+OpenAI-compatible VLM fallback. The endpoint-level `health_path` is honored by
+both backends.
 
 ## Tests
 

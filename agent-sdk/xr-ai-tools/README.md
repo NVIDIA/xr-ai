@@ -305,3 +305,67 @@ result = await fill_polygon.execute(
     )
 )
 ```
+
+`ImageCropTool` uses the same extra and registry to create a deterministic crop
+from a normalized axis-aligned box. Bounds are clamped to the image, rounded
+outward to pixel edges, and reported on the result. This makes a region selected
+by a detector reusable by OCR or a VLM without copying pixels into a model turn:
+
+```python
+from xr_ai_tools.image import NormalizedImageBox
+from xr_ai_tools.image_crop import ImageCropRequest, ImageCropTool
+
+crop = ImageCropTool(images=images)
+cropped = await crop.execute(
+    ImageCropRequest(
+        image=source,
+        box=NormalizedImageBox(left=0.2, top=0.3, right=0.8, bottom=0.7),
+    )
+)
+```
+
+## Image OCR
+
+Install `xr-ai-tools[ocr]` for finite native tools that read text and numeric
+equipment values from registered PNG or JPEG images. They accept an injected
+`OCRService`, so model selection remains in the model profile:
+
+```python
+from pathlib import Path
+
+from xr_ai_models import load_models_config, make_ocr
+from xr_ai_tools.image import ImageRegistry
+from xr_ai_tools.ocr import OCRRequest, OCRSpansRequest, OCRTools
+
+models = load_models_config("yaml/models.local.json")
+ocr = make_ocr(models, "ocr")
+images = ImageRegistry()
+image = images.put(Path("meter.png"), owner="alice")
+tools = OCRTools(images=images, ocr=ocr)
+
+result = await tools.read_image_text.execute(
+    OCRRequest(image=image, merge_level="word")
+)
+print(result.text)
+if result.result is not None and result.truncated:
+    next_page = await tools.get_ocr_spans.execute(
+        OCRSpansRequest(result=result.result, offset=len(result.spans))
+    )
+await ocr.close()
+```
+
+The OCR request accepts only `ImageReference`; image bytes and locations stay in
+the shared bounded `ImageRegistry`. External paths and URLs therefore follow the
+registry's application-controlled policy instead of a second OCR-specific
+policy. NVIDIA OCR returns reading-order spans, confidence scores, normalized
+polygons, and derived axis-aligned boxes. Aggregate text is capped at 4,000
+characters and the first response contains at most 32 short span previews. The
+complete provider output stays behind a bounded `xr-ocr://` handle, and
+`get_ocr_spans` retrieves at most 32 spans at a time. Release handles with
+`OCRTools.release_owner(...)` when the associated participant or workflow ends.
+
+Switching to hosted Nemotron OCR v2, a self-hosted NIM using Hugging Face
+weights, or a VLM fallback still changes only the model profile. The result
+reports backend capabilities explicitly: the VLM fallback provides aggregate
+paragraph transcription but does not fabricate confidence or geometry, while
+the native OCR adapter provides structured spans.

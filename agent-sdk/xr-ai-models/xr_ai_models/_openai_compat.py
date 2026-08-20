@@ -82,9 +82,9 @@ def _request_headers(
     result: dict[str, str] = {}
     for name, value in (headers or {}).items():
         if not isinstance(name, str) or not isinstance(value, str):
-            raise TypeError("LLM request headers must be strings")
+            raise TypeError("model request headers must be strings")
         if name.lower() == "authorization":
-            raise ValueError("LLM request headers cannot override Authorization")
+            raise ValueError("model request headers cannot override Authorization")
         result[name] = value
     result.update(_auth_headers(api_key))
     return result
