@@ -51,6 +51,7 @@ from xr_ai_launcher import (
     require_credentials,
     run_stack,
 )
+from xr_ai_launcher._config import _resolve_config_variant
 from xr_ai_logging import setup_logging
 from xr_ai_vllm import stop_persistent_servers
 
@@ -95,14 +96,6 @@ def _profile_path(selection: str) -> Path:
     return _BASE / "yaml" / f"models.{selection}.json"
 
 
-def _service_config(gpu_dir: str, config_base: str, profile_key: str) -> str:
-    """Per-profile config variant when present, the service default otherwise."""
-    variant = f"{gpu_dir}/{config_base}_{profile_key}.yaml"
-    if (_BASE / variant).exists():
-        return variant
-    return f"{gpu_dir}/{config_base}.yaml"
-
-
 def _build_processes(selection: str) -> tuple[list[Process], tuple[str, ...]]:
     profile_path = _profile_path(selection)
     deployment = load_deployment_profile(profile_path)
@@ -110,12 +103,12 @@ def _build_processes(selection: str) -> tuple[list[Process], tuple[str, ...]]:
     if unknown:
         raise ValueError(f"model profile declares unknown services: {sorted(unknown)}")
 
-    gpu_dir = f"yaml/{detect_gpu_config()}"
+    config_dir = _BASE / "yaml" / detect_gpu_config()
     profile_key = profile_path.stem.removeprefix("models.")
     processes = [
         Process(
             service, project, command,
-            config=_service_config(gpu_dir, config_base, profile_key),
+            config=_resolve_config_variant(config_dir, config_base, profile_key),
             launch_mode="persist", port=port,
         )
         for service, (project, command, config_base, port) in _MODEL_SERVICES.items()

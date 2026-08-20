@@ -306,9 +306,10 @@ after a moment, and you hear the reply through your speakers.
 **Local model** — on a standalone system smaller than the shared model-server
 profiles, override the model weights or GPU settings in
 `agent-samples/simple-vlm-example/yaml/vlm_server.yaml`. On two GPUs with at
-least 40 GiB each, or a Blackwell/Spark system with at least 80 GiB total, the
-sample instead uses `agent-samples/model-servers/yaml/<profile>/vlm_server.yaml`
-so a compatible server can be reused without reloading its weights.
+least 40 GiB each, or a Blackwell/Spark profile with at least 80 GiB available
+on one GPU (including Spark unified memory), the sample instead uses
+`agent-samples/model-servers/yaml/<profile>/vlm_server.yaml` so a compatible
+server can be reused without reloading its weights.
 
 To use Cosmos-Reason1 instead, edit the VLM file selected for your hardware:
 set `model: nvidia/Cosmos-Reason1-7B`, remove the Cosmos3-only `hf_overrides`

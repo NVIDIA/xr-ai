@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Minimal scalar reads for stdlib-only orchestrators."""
+"""Minimal configuration helpers for stdlib-only orchestrators."""
 from __future__ import annotations
 
 import re
@@ -34,3 +34,15 @@ def read_config_scalar(path: Path, key: str, default: str = "") -> str:
         comment = re.search(r"[ \t]+#", raw)
         return raw[:comment.start()].rstrip() if comment else raw
     return default
+
+
+def _resolve_config_variant(
+    config_dir: Path,
+    config_base: str,
+    profile_key: str,
+) -> Path:
+    """Select a profile-specific service config when one exists."""
+    variant = config_dir / f"{config_base}_{profile_key}.yaml"
+    if variant.is_file():
+        return variant
+    return config_dir / f"{config_base}.yaml"

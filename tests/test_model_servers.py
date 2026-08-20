@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from xr_ai_vllm import _docker as _vllm_docker
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _MAIN_PATH = _REPO_ROOT / "agent-samples/model-servers/main.py"
@@ -26,6 +27,14 @@ _SIMPLE_SPEC = importlib.util.spec_from_file_location(
 assert _SIMPLE_SPEC and _SIMPLE_SPEC.loader
 _simple_vlm = importlib.util.module_from_spec(_SIMPLE_SPEC)
 _SIMPLE_SPEC.loader.exec_module(_simple_vlm)
+
+_VLM_MAIN_PATH = _REPO_ROOT / "services/vlm-server/vlm_server/__main__.py"
+_VLM_SPEC = importlib.util.spec_from_file_location(
+    "model_server_fingerprint_vlm", _VLM_MAIN_PATH
+)
+assert _VLM_SPEC and _VLM_SPEC.loader
+_vlm_server = importlib.util.module_from_spec(_VLM_SPEC)
+_VLM_SPEC.loader.exec_module(_vlm_server)
 
 _OMNI_PATH = (
     _REPO_ROOT
@@ -45,6 +54,66 @@ _EMBEDDING_SPEC = importlib.util.spec_from_file_location(
 assert _EMBEDDING_SPEC and _EMBEDDING_SPEC.loader
 _embedding = importlib.util.module_from_spec(_EMBEDDING_SPEC)
 _EMBEDDING_SPEC.loader.exec_module(_embedding)
+
+
+def _vlm_launch_fingerprint(
+    config_path: Path,
+    hf_token: str | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> str | None:
+    config = yaml.safe_load(config_path.read_text())
+    raw_cache = Path(config["model_cache"])
+    model_cache = (
+        raw_cache
+        if raw_cache.is_absolute()
+        else (config_path.parent / raw_cache).resolve()
+    )
+    captured: dict = {}
+
+    monkeypatch.setattr(_vlm_server, "setup_logging", lambda _name: None)
+    monkeypatch.setattr(
+        _vlm_server,
+        "load_config",
+        lambda: (config, config_path.parent, None),
+    )
+    monkeypatch.setattr(
+        _vlm_server,
+        "resolve_model_cache",
+        lambda *_args, **_kwargs: model_cache,
+    )
+    monkeypatch.setattr(
+        _vlm_server,
+        "setup_hf_env",
+        lambda cfg, _cache: (
+            str(cfg["cuda_visible_devices"])
+            if "cuda_visible_devices" in cfg
+            else None
+        ),
+    )
+    if hf_token is None:
+        monkeypatch.delenv("HF_TOKEN", raising=False)
+    else:
+        monkeypatch.setenv("HF_TOKEN", hf_token)
+    monkeypatch.setattr(
+        _vllm_docker,
+        "run",
+        lambda **kwargs: captured.update(kwargs),
+    )
+
+    _vlm_server.run()
+
+    argv = _vllm_docker.build_run_argv(
+        image=captured["image"],
+        container_name=captured["container_name"],
+        port=captured["port"],
+        model_cache=captured["model_cache"],
+        hf_token=captured["hf_token"],
+        cuda_visible_devices=captured["cuda_visible_devices"],
+        extra_env=captured["extra_env"],
+        extra_pip=captured["extra_pip"],
+        vllm_argv=captured["vllm_argv"],
+    )
+    return _vllm_docker._requested_fingerprint(argv)
 
 
 def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -101,6 +170,39 @@ def test_simple_vlm_shares_supported_model_server_vlm_config(
         _REPO_ROOT / "agent-samples/simple-vlm-example/yaml/stt_server.yaml"
     )
     assert "cuda_visible_devices" not in yaml.safe_load(stt_config.read_text())
+
+
+@pytest.mark.parametrize("gpu_profile", ["dual_48G_ada", "spark", "96G_blackwell"])
+@pytest.mark.parametrize("hf_token", [None, "hf_test_token"])
+def test_simple_vlm_matches_full_model_server_launch_fingerprint(
+    monkeypatch: pytest.MonkeyPatch,
+    gpu_profile: str,
+    hf_token: str | None,
+) -> None:
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: gpu_profile)
+    monkeypatch.setattr(_simple_vlm, "detect_gpu_config", lambda: gpu_profile)
+    monkeypatch.setattr(
+        _simple_vlm, "_supports_shared_vlm_config", lambda _profile: True
+    )
+
+    shared = {
+        process.name: process
+        for process in _model_servers._build_processes("default")[0]
+    }
+    sample = {
+        process.name: process
+        for process in _simple_vlm._build_processes()[0]
+    }
+
+    shared_fingerprint = _vlm_launch_fingerprint(
+        Path(shared["vlm"].config), hf_token, monkeypatch
+    )
+    sample_fingerprint = _vlm_launch_fingerprint(
+        Path(sample["vlm"].config), hf_token, monkeypatch
+    )
+
+    assert shared_fingerprint is not None
+    assert sample_fingerprint == shared_fingerprint
 
 
 def test_simple_vlm_uses_standalone_config_on_smaller_hardware(
@@ -187,7 +289,10 @@ def test_simple_vlm_rejects_missing_shared_vlm_config(
         ("dual_48G_ada", "24576\n24576\n", False),
         ("96G_blackwell", "98304\n", True),
         ("96G_blackwell", "49152\n", False),
+        ("96G_blackwell", "49152\n49152\n", False),
         ("spark", "119296\n", True),
+        ("spark", "N/A\n", True),
+        ("96G_blackwell", "N/A\n", False),
         ("unknown", "119296\n", False),
     ],
 )
@@ -396,7 +501,10 @@ def test_profile_path_argument_loads_custom_profile(tmp_path, monkeypatch) -> No
     assert [process.name for process in processes] == ["vlm"]
     # Config variants key off the profile filename stem; a custom name has
     # no variants and falls back to the service defaults.
-    assert str(processes[0].config) == "yaml/dual_48G_ada/vlm_server.yaml"
+    assert Path(processes[0].config) == (
+        _REPO_ROOT
+        / "agent-samples/model-servers/yaml/dual_48G_ada/vlm_server.yaml"
+    )
 
 
 def test_cli_requires_profile_credentials(monkeypatch: pytest.MonkeyPatch) -> None:

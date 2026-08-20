@@ -38,6 +38,7 @@ from xr_ai_launcher import (
     require_credentials,
     run_stack,
 )
+from xr_ai_launcher._config import _resolve_config_variant
 from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
@@ -91,17 +92,29 @@ def _supports_shared_vlm_config(gpu_profile: str) -> bool:
             text=True,
             stderr=subprocess.DEVNULL,
         ).strip().splitlines()
-        memory_mib = [int(float(value.strip())) for value in raw if value.strip()]
-    except (OSError, subprocess.SubprocessError, ValueError):
+    except (OSError, subprocess.SubprocessError):
         return False
+
+    memory_mib: list[int] = []
+    for value in raw:
+        for token in value.replace(",", " ").split():
+            try:
+                memory_mib.append(int(float(token)))
+                break
+            except ValueError:
+                continue
 
     if gpu_profile == "dual_48G_ada":
         return (
             len(memory_mib) >= 2
             and min(memory_mib) >= _MIN_DUAL_GPU_MEMORY_MIB
         )
+    if gpu_profile == "spark" and raw and not memory_mib:
+        # DGX Spark can report unified memory without a numeric memory.total;
+        # detect_gpu_config identifies it by its GB10/B10 product name.
+        return True
     if gpu_profile in {"spark", "96G_blackwell"}:
-        return sum(memory_mib) >= _MIN_SINGLE_GPU_MEMORY_MIB
+        return bool(memory_mib) and max(memory_mib) >= _MIN_SINGLE_GPU_MEMORY_MIB
     return False
 
 
@@ -125,8 +138,10 @@ def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
                 # only when this host meets that profile's resource budget.
                 gpu_config = detect_gpu_config()
                 if _supports_shared_vlm_config(gpu_config):
-                    shared_config = (
-                        _MODEL_SERVERS_YAML / gpu_config / "vlm_server.yaml"
+                    shared_config = _resolve_config_variant(
+                        _MODEL_SERVERS_YAML / gpu_config,
+                        "vlm_server",
+                        "default",
                     )
                     if not shared_config.is_file():
                         raise FileNotFoundError(
