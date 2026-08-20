@@ -634,7 +634,9 @@ same-origin <code class="docutils literal notranslate"><span class="pre">wss://<
 (<code class="docutils literal notranslate"><span class="pre">_web_server.py</span></code>) terminates TLS on <code class="docutils literal notranslate"><span class="pre">web_server_port</span></code> (8080 by default) and
 mounts a <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> route that proxies LiveKit signaling bidirectionally to the
 internal <code class="docutils literal notranslate"><span class="pre">ws://127.0.0.1:7880</span></code> (<code class="docutils literal notranslate"><span class="pre">_lk_proxy.py</span></code>). A self-signed certificate is
-auto-generated on first run; supply <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> to use your own.
+auto-generated on first run (SAN coverage and regeneration:
+<a class="reference internal" href="../getting_started/networking.html"><span class="std std-doc">Networking</span></a>); supply <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> and
+<code class="docutils literal notranslate"><span class="pre">key_file</span></code> to use your own.
 The proxy forwards end-to-end headers so SDK authentication (such as the LiveKit
 Swift SDK’s <code class="docutils literal notranslate"><span class="pre">Authorization:</span> <span class="pre">Bearer</span></code>) reaches the server, and handles both the
 versioned (<code class="docutils literal notranslate"><span class="pre">/rtc/v1</span></code>) and legacy (<code class="docutils literal notranslate"><span class="pre">/rtc</span></code>) signaling paths.</p>
