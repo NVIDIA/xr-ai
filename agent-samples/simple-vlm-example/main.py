@@ -18,6 +18,9 @@ profile. The default profile owns local STT, VLM, and TTS services; the hosted
 profile replaces only the VLM with NVIDIA NIM; models.vlm_llm_nim.json and
 models.vlm_speech_nim.json reuse self-hosted NIM containers from the
 model-servers nim / vlm_speech_nim stacks (start the matching stack first).
+On hardware supported by the shared model-server layouts, the local VLM uses
+the same launch config so a compatible persistent container is reused. Smaller
+standalone systems keep the sample-local VLM and STT resource settings.
 
 How to run (from agent-samples/simple-vlm-example/):
     uv sync && uv run simple_vlm_example
@@ -27,15 +30,19 @@ from dataclasses import replace
 from pathlib import Path
 
 from xr_ai_launcher import (
+    GPUInventoryError,
     Process,
+    detect_gpu_config,
     ensure_credentials,
     load_model_deployment,
     require_credentials,
     run_stack,
 )
+from xr_ai_launcher._config import _resolve_config_variant
 from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
+_MODEL_SERVERS_YAML = _BASE.parent / "model-servers" / "yaml"
 
 _WORKER_CONFIG = "yaml/simple_vlm_example_worker.yaml"
 
@@ -85,6 +92,25 @@ def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
     for service, process in _MODEL_PROCESSES.items():
         launch_mode = deployment.launch_mode(service)
         if launch_mode is not None:
+            if launch_mode == "own" and service == "vlm":
+                # Share the complete launch contract with model-servers so a
+                # compatible persistent server has the same fingerprint, but
+                # retain the standalone config on unsupported hardware.
+                try:
+                    gpu_config = detect_gpu_config()
+                except GPUInventoryError:
+                    gpu_config = None
+                if gpu_config is not None:
+                    shared_config = _resolve_config_variant(
+                        _MODEL_SERVERS_YAML / gpu_config,
+                        "vlm_server",
+                        "default",
+                    )
+                    if not shared_config.is_file():
+                        raise FileNotFoundError(
+                            f"shared VLM config does not exist: {shared_config}"
+                        )
+                    process = replace(process, config=shared_config)
             procs.append(replace(process, launch_mode=launch_mode))
     procs.append(
         Process(

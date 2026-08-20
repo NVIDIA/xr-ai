@@ -10,12 +10,13 @@ name = "lab-instrument-monitoring-worker"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
+    "Pillow>=10.1.0",
     "nemo-relay>=0.7.2,<0.8",
     "xr-ai-agent-runtime",
     "xr-ai-hub-client",
     "xr-ai-logging",
     "xr-ai-models",
-    "xr-ai-tools[frames,image-editing,marker-tracking,vision]",
+    "xr-ai-tools[frames,marker-tracking,vision]",
     "xr-ai-voice",
     "xr-ai-web-events",
     "xr-ai-voicegate",
