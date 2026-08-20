@@ -518,12 +518,13 @@ audio framing, and pipeline processors are implementation details.</p>
 <span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_voice.VoiceAggregationAgent" title="Link to this definition">#</a></dt>
 <dd><p>Serialize and coalesce candidate speech independently per participant.</p>
 <p>A lone finite contribution passes through without a model call after the
-short coalescing window. The aggregator keeps that response open for its
-estimated spoken duration, so updates arriving while it is being spoken
-wait and coalesce instead of building a speech queue. Multiple pending
-finite contributions are rewritten into one response. A lone incremental
-response streams through immediately and uses the same playback estimate
-after its final chunk. An urgent contribution interrupts the active output.</p>
+short coalescing window. Completed text is finalized downstream immediately,
+while the aggregator independently reserves its estimated spoken duration
+so later updates wait and coalesce instead of building a speech queue.
+Multiple pending finite contributions are rewritten into one response. A
+lone incremental response streams through immediately and uses the same
+scheduling reservation after its final chunk. An urgent contribution
+interrupts the active output.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_voice.VoiceAggregationAgent.contribute">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">contribute</span></span><span class="sig-paren">(</span>
