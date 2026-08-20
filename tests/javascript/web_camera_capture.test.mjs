@@ -189,13 +189,14 @@ test('publishes and previews the captured full-frame camera track', async () => 
   assert.equal(previewCard.style.aspectRatio, '');
 });
 
-test('stops the captured camera track when LiveKit publication fails', async () => {
+test('stops the captured camera track when LiveKit publication fails', async (t) => {
   const mediaTrack = makeMediaTrack();
   installMediaDevices(async () => ({ getVideoTracks: () => [mediaTrack] }));
   const failure = new Error('publication failed');
   const { backend } = await connectedBackend(async () => {
     throw failure;
   });
+  t.after(() => backend.disconnect());
 
   await assert.rejects(backend.startCamera({ facing: 'environment' }), failure);
 
