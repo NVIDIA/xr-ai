@@ -49,9 +49,11 @@ def run() -> None:
 
 ## Rules
 
-- **Processes start serially** — each process must create its `--ready-file`
-  before the next one starts. Declare processes in dependency order (hub
-  before workers and application processes after the services they call).
+- **Stack items start in declaration order** — members of a `Parallel` item
+  start concurrently, and the launcher waits for each `Process` or every
+  `Parallel` member to create its `--ready-file` before starting the next item.
+  Declare items in dependency order (hub before workers and application
+  processes after the services they call).
 - **Every process accepts `--ready-file <path>`** and must `Path(path).touch()`
   when it is fully initialized and ready to serve requests.
 - **Native voice workers** pass the ready file to `VoiceAgent`; its private

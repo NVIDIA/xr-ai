@@ -415,11 +415,12 @@
 -->
 <section id="architecture">
 <h1>Architecture<a class="headerlink" href="#architecture" title="Link to this heading">#</a></h1>
-<p>XR AI connects interactive XR clients to agent workers and AI services without
-making transport, media, or model implementation details part of application
-logic. The system is process-oriented: the media hub, workers, model servers,
-and optional capability services run independently and communicate through
-small, explicit interfaces.</p>
+<p>XR AI connects interactive clients, including XR glasses and headsets, phones,
+and web browsers, to agent workers and AI services without making transport,
+media, or model implementation details part of application logic. The system
+is process-oriented: the device I/O hub, workers, model servers, and optional
+capability services run independently and communicate through small, explicit
+interfaces.</p>
 <p>This page describes the system shape, runtime paths, and ownership boundaries.
 The component pages linked under <a class="reference internal" href="#where-details-live">Where details live</a>
 contain configuration, protocol, and operational details.</p>
@@ -430,24 +431,24 @@ contain configuration, protocol, and operational details.</p>
                          starts, orders, and monitors processes
                                          |
                                          v
-+-------------+   media and data   +----------------+   IPC events   +----------------+
-| XR clients  | &lt;----------------&gt; | XR-Media-Hub   | &lt;------------&gt; | agent workers  |
-| web/mobile  |                    | + transport    |                | + agent SDK     |
-+-------------+                    +----------------+                +-------+--------+
++---------------+   media and data   +----------------+   IPC events   +----------------+
+| XR clients    | &lt;----------------&gt; | DeviceIOHub    | &lt;------------&gt; | agent workers  |
+| web/mobile/XR |                    | + transport    |                | + agent SDK     |
++---------------+                    +----------------+                +-------+--------+
                                                                             |
                                                    typed model/tool calls   |
                                                 +---------------------------+--------+
                                                 |                                    |
                                                 v                                    v
                                       +-------------------+               +--------------------+
-                                      | AI model services |               | capability services|
+                                      | AI model services |               | capability services |
                                       | local or hosted   |               | or local tools     |
                                       +-------------------+               +--------------------+
 </pre></div>
 </div>
 <p>The architecture has four cooperating planes:</p>
 <ul class="simple">
-<li><p><strong>Media plane:</strong> XR-Media-Hub receives client audio, video, and data through
+<li><p><strong>Media plane:</strong> DeviceIOHub receives client audio, video, and data through
 a transport connector, then fans participant-tagged events out to workers.</p></li>
 <li><p><strong>Application plane:</strong> agent workers own application behavior, participant
 state, model and tool orchestration, concurrency, and cancellation.</p></li>
@@ -478,7 +479,7 @@ services or externally hosted APIs.</p>
 <td><p>Transport-specific sessions and conversion to hub events</p></td>
 <td><p>Agent-facing APIs or application policy</p></td>
 </tr>
-<tr class="row-even"><td><p>XR-Media-Hub</p></td>
+<tr class="row-even"><td><p>DeviceIOHub</p></td>
 <td><p>Media fan-out, participant identity, return routing, and shared-media access</p></td>
 <td><p>Agent state, model calls, or tools</p></td>
 </tr>
@@ -519,7 +520,7 @@ and data.</p></li>
 <li><p>The transport connector converts that input into participant-tagged hub
 events. Audio, data, and participant events travel inline; video pixels stay
 in shared memory and frame notifications remain lightweight.</p></li>
-<li><p>XR-Media-Hub fans subscribed events out to <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> consumers.
+<li><p>DeviceIOHub fans subscribed events out to <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> consumers.
 Multiple agents or passive processors can subscribe to the same input.</p></li>
 <li><p>A worker requests video pixels only when its application needs a frame.</p></li>
 <li><p>Return audio and data name the originating participant. The hub validates
@@ -546,7 +547,8 @@ video -- on-demand frame access --+                 |                         |
 </div>
 <p>This is composition rather than a fixed pipeline. An application may consume
 text instead of speech, omit models, execute deterministic tools locally, call
-typed capability services, or publish events for another agent to consume.</p>
+typed capability services, or publish events for another in-process agent
+registered with the same <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code> to consume.</p>
 <p>Workers obtain LLM, VLM, STT, TTS, and embedding clients from
 <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code>. Model profiles keep three concerns separate:</p>
 <ul class="simple">
@@ -564,12 +566,13 @@ tool selection, task lifetime, retries, and participant context. See
 <section id="process-and-deployment-model">
 <h2>Process and deployment model<a class="headerlink" href="#process-and-deployment-model" title="Link to this heading">#</a></h2>
 <p>Each sample is an executable process graph declared by a small orchestrator.
-XR-Media-Hub always runs as its own process; workers and capability services
+DeviceIOHub always runs as its own process; workers and capability services
 run separately so their dependencies, failures, and cleanup remain isolated.</p>
-<p>The launcher starts processes serially or in explicit parallel groups. Each
-process signals readiness only after its own initialization is complete. A
-premature process exit fails the stack and triggers coordinated shutdown, so a
-client is not presented with a partially initialized application.</p>
+<p>Stack items start in declaration order; members of a <code class="docutils literal notranslate"><span class="pre">Parallel</span></code> item start
+concurrently, and the next item waits for every member to signal ready. Each
+ready-file reports only that process’s initialization. A premature process
+exit fails the stack and triggers coordinated shutdown. Ready-files order
+process startup; they do not determine whether a client may connect.</p>
 <p>Model services use the same ownership model without forcing every sample to
 reload large weights:</p>
 <ul class="simple">
@@ -579,9 +582,11 @@ shared <code class="docutils literal notranslate"><span class="pre">model-server
 <li><p><strong>External:</strong> XR AI connects to an endpoint it neither starts nor stops.</p></li>
 </ul>
 <p>Heavy model servers can use a persistent launch mode and remain hot across
-sample restarts. The model profile is shared by the orchestrator and worker, so
-process ownership and endpoint selection cannot silently diverge. Detailed
-startup, shutdown, and persistence behavior belongs in <a class="reference internal" href="../components/launcher-and-process-model.html"><span class="doc">Launcher and process model</span></a>.</p>
+sample restarts. The model profile co-locates process ownership and endpoint
+choices used by the orchestrator and worker, reducing configuration drift. The
+launcher does not validate an endpoint’s <code class="docutils literal notranslate"><span class="pre">base_url</span></code> against the launched
+service’s separate configuration. Detailed startup, shutdown, and persistence
+behavior belongs in <a class="reference internal" href="../components/launcher-and-process-model.html"><span class="doc">Launcher and process model</span></a>.</p>
 </section>
 <section id="architectural-invariants">
 <h2>Architectural invariants<a class="headerlink" href="#architectural-invariants" title="Link to this heading">#</a></h2>
@@ -605,9 +610,11 @@ through workers.</p></li>
 <li><p><strong>Process dependencies are explicit.</strong> Orchestrators declare startup order,
 readiness, and ownership instead of relying on import-time side effects or
 an implicit global runtime.</p></li>
-<li><p><strong>Readiness is scoped.</strong> Processes report only their own readiness. The hub
-separately aggregates the participating agents’ status for each connected
-participant.</p></li>
+<li><p><strong>Process and client readiness are distinct.</strong> Ready-files order launcher
+items and report only process readiness. DeviceIOHub owns client readiness.
+Agents opt in with <code class="docutils literal notranslate"><span class="pre">announces_readiness=True</span></code>, report only their own
+<code class="docutils literal notranslate"><span class="pre">_agent.status</span></code>, and gate only subscribed participants; the hub aggregates
+their status per participant. Passive processors do not gate clients.</p></li>
 </ul>
 <p>These constraints are the stable architecture. Individual transports, model
 backends, tools, and sample workflows are replaceable implementations within
