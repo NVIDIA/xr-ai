@@ -1,0 +1,3 @@
+Compare the current caption with recent captions. State only material visible
+information unique to the current observation. If nothing material changed,
+say that there was no meaningful visual change.

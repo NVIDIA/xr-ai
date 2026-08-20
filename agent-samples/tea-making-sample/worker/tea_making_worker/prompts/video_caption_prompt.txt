@@ -1,0 +1,2 @@
+Describe visible people, objects, actions, readable text, and notable scene
+conditions. Report only visible facts and do not infer.

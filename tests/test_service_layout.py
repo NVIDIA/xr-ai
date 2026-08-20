@@ -69,6 +69,7 @@ _HUB_PROJECT = _ROOT / "services" / "device-io-hub"
 _SAMPLE_WEB_CLIENTS = {
     "lab-instrument-monitoring": _ROOT / "client-samples" / "web",
     "simple-vlm-example": _ROOT / "client-samples" / "web",
+    "tea-making-sample": _ROOT / "client-samples" / "web",
     "xr-render-demo": _ROOT / "client-samples" / "web-xr",
 }
 _RETIRED_AGENT_SDK_PATHS = (

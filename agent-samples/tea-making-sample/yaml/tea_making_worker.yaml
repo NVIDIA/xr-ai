@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# The launcher materializes these three paths for the selected runtime modes.
+models_config: models.local.json
+workflow_config: workflow.yaml
+voice_gate_yaml: voice_gate.yaml
+
+rag_endpoint: tcp://127.0.0.1:8340
+artifacts_dir: ../artifacts
+
+web_events_host: 127.0.0.1
+web_events_port: 8092
+web_events_max_events: 5000
+
+frame_max_age_s: 3.0
+frame_timeout_s: 5.0
+vlm_timeout_s: 15.0
+
+change_watch_interval_s: 2.0
+transcript_summary_interval_s: 120.0
+video_log_interval_s: 2.0
+background_history_size: 50
+
+change_watch_default_instruction: >-
+  important changes involving people, objects, actions, or possible hazards
+
+silero_threshold: 0.3
+silence_duration: 1.2
+min_speech: 0.15
+idle_timeout_secs: 0

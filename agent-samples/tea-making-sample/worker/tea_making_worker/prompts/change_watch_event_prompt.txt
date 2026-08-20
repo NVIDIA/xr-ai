@@ -1,0 +1,3 @@
+Compare the current caption with recent captions and the requested watch.
+Report one short factual sentence only when a relevant material change is
+newly visible. Ignore wording, viewpoint, and lighting differences.
