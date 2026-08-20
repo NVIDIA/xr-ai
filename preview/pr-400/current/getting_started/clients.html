@@ -473,8 +473,9 @@ Android, and iOS/visionOS clients are feature-equivalent (connection, audio,
 camera, agent-status badge, data channel).</p>
 <section id="network-telemetry">
 <h3>Network telemetry<a class="headerlink" href="#network-telemetry" title="Link to this heading">#</a></h3>
-<p>Every client displays the same three network values and exposes them through
-StreamKit’s <code class="docutils literal notranslate"><span class="pre">onNetworkMetrics</span></code> callback (spelled <code class="docutils literal notranslate"><span class="pre">on_network_metrics</span></code> in C++):</p>
+<p>Every graphical sample displays the same three network values; the native C++
+sample prints them to stdout. Each exposes the values through StreamKit’s
+<code class="docutils literal notranslate"><span class="pre">onNetworkMetrics</span></code> callback (spelled <code class="docutils literal notranslate"><span class="pre">on_network_metrics</span></code> in C++):</p>
 <ul class="simple">
 <li><p><strong>Quality</strong> — LiveKit’s connection-quality estimate for the local participant.</p></li>
 <li><p><strong>Round-trip time</strong> — the selected ICE candidate pair’s current RTT.</p></li>
@@ -781,7 +782,7 @@ engine plugin, or a CloudXR client.</p>
 <section id="id2">
 <h3>Build and run<a class="headerlink" href="#id2" title="Link to this heading">#</a></h3>
 <p>Point CMake at a LiveKit SDK install, build, and run with <code class="docutils literal notranslate"><span class="pre">--host</span></code> and
-<code class="docutils literal notranslate"><span class="pre">--token</span></code>:</p>
+<code class="docutils literal notranslate"><span class="pre">--token</span></code>. The backend is tested against the released LiveKit C++ SDK v0.4.1:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DLIVEKIT_SDK_ROOT<span class="o">=</span>/path/to/livekit-cpp-sdk
 cmake<span class="w"> </span>--build<span class="w"> </span>build
 ./build/bin/streamkit_sample<span class="w"> </span>--host<span class="w"> </span><span class="m">192</span>.168.1.100<span class="w"> </span>--token<span class="w"> </span>&lt;jwt&gt;

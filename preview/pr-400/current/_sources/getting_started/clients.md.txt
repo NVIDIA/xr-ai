@@ -31,8 +31,9 @@ camera, agent-status badge, data channel).
 
 ### Network telemetry
 
-Every client displays the same three network values and exposes them through
-StreamKit's `onNetworkMetrics` callback (spelled `on_network_metrics` in C++):
+Every graphical sample displays the same three network values; the native C++
+sample prints them to stdout. Each exposes the values through StreamKit's
+`onNetworkMetrics` callback (spelled `on_network_metrics` in C++):
 
 - **Quality** — LiveKit's connection-quality estimate for the local participant.
 - **Round-trip time** — the selected ICE candidate pair's current RTT.
@@ -294,7 +295,7 @@ engine plugin, or a CloudXR client.
 ### Build and run
 
 Point CMake at a LiveKit SDK install, build, and run with `--host` and
-`--token`:
+`--token`. The backend is tested against the released LiveKit C++ SDK v0.4.1:
 
 ```bash
 cmake -S . -B build -DLIVEKIT_SDK_ROOT=/path/to/livekit-cpp-sdk

@@ -1732,8 +1732,8 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># STT server configuration for echo-agent.</span>
-<span class="c1"># Auto-discovered by the launcher and passed as --config to stt_server.</span>
+<span class="c1"># Standalone STT configuration. STT reuses an existing healthy server by port,</span>
+<span class="c1"># so this config intentionally avoids model-server-specific GPU placement.</span>
 
 <span class="nt">model</span><span class="p">:</span><span class="w">       </span><span class="l l-Scalar l-Scalar-Plain">nvidia/parakeet-tdt-0.6b-v3</span>
 <span class="nt">device</span><span class="p">:</span><span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">auto</span>
@@ -1748,10 +1748,8 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># vlm-server configuration for vlm-agent.</span>
-<span class="c1"># Auto-discovered by the launcher and passed as --config to vlm_server.</span>
-<span class="c1"># hf_overrides selects the Reasoner runtime; details are documented in</span>
-<span class="c1"># docs/source/components/ai-services.md#per-server-notes.</span>
+<span class="c1"># Standalone VLM configuration for systems smaller than the shared</span>
+<span class="c1"># model-server hardware profiles.</span>
 
 <span class="nt">model</span><span class="p">:</span><span class="w">       </span><span class="l l-Scalar l-Scalar-Plain">nvidia/Cosmos3-Nano</span>
 <span class="nt">hf_overrides</span><span class="p">:</span>
@@ -1761,6 +1759,9 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../models</span>
 <span class="nt">async_scheduling</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">mm_encoder_tp_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">data</span>
+
+<span class="c1"># Leave enough of a 24 GiB GPU for the 16.8 GiB Reasoner weights and runtime.</span>
+<span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.85</span>
 
 <span class="c1"># vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).</span>
 <span class="c1"># See services/vlm-server/vlm_server.yaml for the full toggle docs.</span>
