@@ -588,7 +588,7 @@ local install.</p>
 <section id="hub-fails-immediately-with-runtimeerror-missing-libnvcuvid-so-libnvidia-encode-so">
 <h3>Hub fails immediately with <code class="docutils literal notranslate"><span class="pre">RuntimeError:</span> <span class="pre">missing</span> <span class="pre">libnvcuvid.so</span> <span class="pre">/</span> <span class="pre">libnvidia-encode.so</span></code><a class="headerlink" href="#hub-fails-immediately-with-runtimeerror-missing-libnvcuvid-so-libnvidia-encode-so" title="Link to this heading">#</a></h3>
 <p><strong>Cause:</strong> NVDEC (<code class="docutils literal notranslate"><span class="pre">libnvcuvid.so</span></code>) and NVENC (<code class="docutils literal notranslate"><span class="pre">libnvidia-encode.so</span></code>) are
-required — the XR-Media-Hub refuses to start without them so it never silently falls
+required — the DeviceIOHub refuses to start without them so it never silently falls
 back to OpenH264, which is royalty-bearing.</p>
 <p><strong>Fix:</strong></p>
 <ul class="simple">
@@ -625,7 +625,7 @@ silently dropped without 7882.</p>
 <code class="docutils literal notranslate"><span class="pre">ws://&lt;host&gt;:7880/…</span></code> from an HTTPS page.</p>
 <p><strong>Cause:</strong> a stale client build (or a hand-rolled configuration) is pointing at
 LiveKit’s native 7880 instead of the same-origin <code class="docutils literal notranslate"><span class="pre">wss://&lt;host&gt;:8080/rtc</span></code>
-proxy the XR-Media-Hub exposes.</p>
+proxy the DeviceIOHub exposes.</p>
 <p><strong>Fix:</strong> rebuild against the current <code class="docutils literal notranslate"><span class="pre">client-samples/web</span></code> or <code class="docutils literal notranslate"><span class="pre">web-xr</span></code> —
 both auto-detect the page’s protocol and use the wss proxy. If you’re
 holding a <code class="docutils literal notranslate"><span class="pre">LiveKitConfig</span></code> directly, set <code class="docutils literal notranslate"><span class="pre">port</span></code> to the hub’s
@@ -648,7 +648,7 @@ the system certificate-install dialog.</p></li>
 automatically.</p></li>
 </ol>
 <p>Repeat for each hub host. Replace the auto-generated certificate with one from a
-public CA via <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> or <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> for
+public CA via <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> or <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> for
 production.</p>
 </section>
 <section id="ios-and-visionos-connection-fails-with-certificate-trust-errors">
@@ -679,17 +679,17 @@ certificate’s SubjectAlternativeName doesn’t cover that IP. The hub detects
 local IPv4 addresses via a UDP-connect probe and auto-regenerates the
 certificate whenever the SAN is missing one (logged as <code class="docutils literal notranslate"><span class="pre">TLS:</span> <span class="pre">cached</span> <span class="pre">cert</span> <span class="pre">SAN</span> <span class="pre">is</span> <span class="pre">missing</span> <span class="pre">…;</span> <span class="pre">regenerating…</span></code>); just restart the hub and re-install the
 profile on the device. If the dialed address is not on any of the hub’s
-interfaces, add it to <code class="docutils literal notranslate"><span class="pre">web_server_extra_sans</span></code> in <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> and
+interfaces, add it to <code class="docutils literal notranslate"><span class="pre">web_server_extra_sans</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> and
 restart (see <a class="reference internal" href="../getting_started/networking.html"><span class="std std-doc">Networking</span></a>). To force
 regen explicitly, delete <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code> and
 <code class="docutils literal notranslate"><span class="pre">web-server.key</span></code> before restarting.</p>
 <p>If the certificate is trusted (no <code class="docutils literal notranslate"><span class="pre">-1202</span></code>) but the room connection still fails
 with HTTP 401 / “no permissions to access the room”, the hub’s wss /rtc
 proxy is dropping the <code class="docutils literal notranslate"><span class="pre">Authorization:</span> <span class="pre">Bearer</span> <span class="pre">&lt;token&gt;</span></code> header the Swift
-SDK sends. Update to the latest XR-Media-Hub and restart; the proxy
+SDK sends. Update to the latest DeviceIOHub and restart; the proxy
 forwards the <code class="docutils literal notranslate"><span class="pre">Authorization</span></code> header on <code class="docutils literal notranslate"><span class="pre">/rtc/validate</span></code> and the WebSocket.</p>
 <p>Repeat the install step per hub host, or replace the auto-generated certificate
-with a public-CA certificate via <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> or <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code>
+with a public-CA certificate via <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> or <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>
 for production.</p>
 </section>
 <section id="chrome-immersive-web-extension-cannot-be-enabled">
