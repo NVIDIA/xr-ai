@@ -17,6 +17,7 @@ ai-sdk-sample/
 │   └── Sources/StreamKit/
 │       ├── StreamSession.swift          # Public façade (@MainActor, ObservableObject)
 │       ├── ConnectionState.swift
+│       ├── NetworkMetrics.swift
 │       ├── StreamError.swift
 │       ├── Config/
 │       │   ├── SessionConfig.swift      # Room name, identity, audio + camera settings
@@ -423,6 +424,10 @@ session.onDataReceived = { data in
     print("received \(data.count) bytes")
 }
 
+session.onNetworkMetrics = { metrics in
+    print("quality=\(metrics.quality) rtt=\(String(describing: metrics.roundTripTimeMs)) ms")
+}
+
 // 4. Send data
 try await session.send(Data("hello".utf8))
 
@@ -442,6 +447,7 @@ final class MyBackend: StreamingBackend {
 
     var onConnectionStateChanged: (@Sendable (ConnectionState) -> Void)?
     var onDataReceived: (@Sendable (Data) -> Void)?
+    var onNetworkMetrics: (@Sendable (NetworkMetrics) -> Void)?
 
     func connect(config: SessionConfig) async throws {
         // establish your connection …

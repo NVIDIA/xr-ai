@@ -27,6 +27,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     public var onConnectionStateChanged: (@Sendable (ConnectionState) -> Void)?
     public var onDataReceived: (@Sendable (_ topic: String, _ data: Data) -> Void)?
     public var onAgentStatus: (@Sendable (String) -> Void)?
+    public var onNetworkMetrics: (@Sendable (NetworkMetrics) -> Void)?
 
     // MARK: Private constants
 
@@ -39,6 +40,8 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     private let config: LiveKitConfig
     private var room: Room?
     private var sessionConfig: SessionConfig = .default
+    private var networkMetricsTask: Task<Void, Never>?
+    private var statisticsTracks: [ObjectIdentifier: Track] = [:]
 
     /// Publication for the device camera track (iOS) or ARKit track (visionOS).
     /// Nil on simulator — all video goes through the buffer track path.
@@ -163,6 +166,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
                 }
             }
         }
+        startNetworkMetricsReporting(for: room)
     }
 
     public func disconnect() async {
@@ -367,6 +371,15 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     }
 
     private func tearDown() async {
+        let metricsTask = networkMetricsTask
+        metricsTask?.cancel()
+        networkMetricsTask = nil
+        await metricsTask?.value
+        let reportedTracks = Array(statisticsTracks.values)
+        statisticsTracks.removeAll()
+        for track in reportedTracks {
+            await track.set(reportStatistics: false)
+        }
         #if targetEnvironment(simulator)
         simulatorFrameTask?.cancel()
         simulatorFrameTask = nil
@@ -381,6 +394,71 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         bufferPublication = nil
         bufferTrack = nil
         localCameraTrack = nil
+    }
+
+    private func startNetworkMetricsReporting(for room: Room) {
+        networkMetricsTask?.cancel()
+        networkMetricsTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, self.room === room else { return }
+                guard room.connectionState != .disconnected else { return }
+                if room.connectionState == .connected {
+                    let metrics = await self.collectNetworkMetrics(from: room)
+                    if !Task.isCancelled,
+                       self.room === room,
+                       room.connectionState == .connected {
+                        self.onNetworkMetrics?(metrics)
+                    }
+                }
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
+    }
+
+    private func collectNetworkMetrics(from room: Room) async -> NetworkMetrics {
+        var tracks = room.localParticipant.trackPublications.values.compactMap(\.track)
+        for participant in room.remoteParticipants.values {
+            tracks.append(contentsOf: participant.trackPublications.values.compactMap(\.track))
+        }
+        let currentTrackIDs = Set(tracks.map { ObjectIdentifier($0) })
+        let departedTracks = statisticsTracks.filter { !currentTrackIDs.contains($0.key) }
+        for (id, track) in departedTracks {
+            await track.set(reportStatistics: false)
+            statisticsTracks.removeValue(forKey: id)
+        }
+        for track in tracks {
+            let id = ObjectIdentifier(track)
+            if statisticsTracks[id] == nil {
+                statisticsTracks[id] = track
+                await track.set(reportStatistics: true)
+            }
+        }
+
+        let statistics = tracks.compactMap(\.statistics)
+        let selectedPairIDs = Set(statistics.compactMap { $0.transportStats?.selectedCandidatePairId })
+        let candidatePairs = statistics.flatMap(\.iceCandidatePair)
+        let selectedPairs = candidatePairs.filter { selectedPairIDs.contains($0.id) }
+        let activePairs = selectedPairs.isEmpty
+            ? candidatePairs.filter { $0.nominated == true }
+            : selectedPairs
+        let roundTripTimeMs = activePairs
+            .compactMap(\.currentRoundTripTime)
+            .filter { $0.isFinite && $0 >= 0 }
+            .max()
+            .map { $0 * 1_000 }
+        let receiveJitterMs = statistics
+            .lazy
+            .flatMap(\.inboundRtpStream)
+            .compactMap(\.jitter)
+            .filter { $0.isFinite && $0 >= 0 }
+            .max()
+            .map { $0 * 1_000 }
+
+        return NetworkMetrics(
+            quality: room.localParticipant.connectionQuality.toStreamKitQuality(),
+            roundTripTimeMs: roundTripTimeMs,
+            receiveJitterMs: receiveJitterMs
+        )
     }
 
     // MARK: - Track factories
@@ -694,6 +772,18 @@ extension LiveKitBackend: RoomDelegate {
         guard participant is LocalParticipant else { return }
         mediaLog.info("livekit local didUpdateIsMuted: source=\(String(describing: trackPublication.source), privacy: .public) muted=\(isMuted, privacy: .public)")
         #endif
+    }
+}
+
+extension LiveKit.ConnectionQuality {
+    func toStreamKitQuality() -> NetworkQuality {
+        switch self {
+        case .excellent: return .excellent
+        case .good: return .good
+        case .poor: return .poor
+        case .lost: return .lost
+        case .unknown: return .unknown
+        }
     }
 }
 

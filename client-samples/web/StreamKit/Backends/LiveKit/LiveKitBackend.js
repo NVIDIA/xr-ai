@@ -22,6 +22,7 @@ import {
 } from 'livekit-client';
 
 import { ConnectionState } from '../../ConnectionState.js';
+import { NetworkMetrics, NetworkQuality } from '../../NetworkMetrics.js';
 import { StreamError } from '../../StreamError.js';
 import { MicrophoneMode } from '../../Config/AudioConfig.js';
 
@@ -47,6 +48,16 @@ function mapState(lkState) {
     case 'reconnecting':  return ConnectionState.RECONNECTING;
     case 'disconnected':
     default:              return ConnectionState.DISCONNECTED;
+  }
+}
+
+function mapQuality(lkQuality) {
+  switch (String(lkQuality ?? '').toLowerCase()) {
+    case 'excellent': return NetworkQuality.EXCELLENT;
+    case 'good':      return NetworkQuality.GOOD;
+    case 'poor':      return NetworkQuality.POOR;
+    case 'lost':      return NetworkQuality.LOST;
+    default:          return NetworkQuality.UNKNOWN;
   }
 }
 
@@ -86,6 +97,11 @@ export class LiveKitBackend {
   /** @type {Map<string, HTMLAudioElement>} sid → element, for cleanup on teardown */
   #audioElements = new Map();
 
+  /** @type {number | null} */
+  #networkMetricsTimer = null;
+
+  #networkMetricsPollActive = false;
+
   // ── Public event hooks ──────────────────────────────────────────────────────
 
   /**
@@ -111,6 +127,9 @@ export class LiveKitBackend {
    * @type {((status: string) => void) | null}
    */
   onAgentStatus = null;
+
+  /** @type {((metrics: NetworkMetrics) => void) | null} */
+  onNetworkMetrics = null;
 
   /** @type {string} Reserved LiveKit topic for internal SDK status messages. */
   static #STATUS_TOPIC = '_agent.status';
@@ -188,6 +207,9 @@ export class LiveKitBackend {
     this.#room = room;
 
     room.on(RoomEvent.ConnectionStateChanged, (lkState) => {
+      if (lkState === 'disconnected' && this.#room === room) {
+        this.#stopNetworkMetricsReporting();
+      }
       this.onConnectionStateChanged?.(mapState(lkState));
     });
 
@@ -258,6 +280,7 @@ export class LiveKitBackend {
         }
       }
     }
+    this.#startNetworkMetricsReporting();
   }
 
   /**
@@ -441,6 +464,7 @@ export class LiveKitBackend {
    * @returns {Promise<void>}
    */
   async #tearDown() {
+    this.#stopNetworkMetricsReporting();
     const room = this.#room;
     this.#room = null;
     try {
@@ -466,6 +490,75 @@ export class LiveKitBackend {
       }
 
       this.#sessionConfig = null;
+    }
+  }
+
+  #startNetworkMetricsReporting() {
+    this.#stopNetworkMetricsReporting();
+    const publish = () => { this.#publishNetworkMetrics().catch(() => {}); };
+    publish();
+    this.#networkMetricsTimer = setInterval(publish, 1000);
+  }
+
+  #stopNetworkMetricsReporting() {
+    if (this.#networkMetricsTimer !== null) {
+      clearInterval(this.#networkMetricsTimer);
+      this.#networkMetricsTimer = null;
+    }
+  }
+
+  async #publishNetworkMetrics() {
+    if (this.#networkMetricsPollActive) return;
+    const room = this.#room;
+    if (!room || room.state !== 'connected') return;
+
+    this.#networkMetricsPollActive = true;
+    try {
+      const publications = [
+        ...room.localParticipant.trackPublications.values(),
+        ...[...room.remoteParticipants.values()]
+          .flatMap(participant => [...participant.trackPublications.values()]),
+      ];
+      const tracks = publications.map(publication => publication.track).filter(Boolean);
+      const reports = (await Promise.allSettled(
+        tracks.map(track => track.getRTCStatsReport()),
+      )).flatMap(result => result.status === 'fulfilled' && result.value
+        ? [result.value]
+        : []);
+
+      let roundTripTimeMs = null;
+      let receiveJitterMs = null;
+      const stats = reports.flatMap(report => [...report.values()]);
+      const selectedPairIds = new Set(stats
+        .filter(stat => stat.type === 'transport')
+        .map(stat => stat.selectedCandidatePairId)
+        .filter(Boolean));
+      const candidatePairs = stats.filter(stat => stat.type === 'candidate-pair');
+      const selectedPairs = candidatePairs.filter(stat => selectedPairIds.has(stat.id));
+      const activePairs = selectedPairs.length > 0
+        ? selectedPairs
+        : candidatePairs.filter(stat => stat.nominated === true || stat.selected === true);
+      const roundTripTimes = activePairs
+        .map(stat => stat.currentRoundTripTime)
+        .filter(value => Number.isFinite(value) && value >= 0);
+      if (roundTripTimes.length > 0) {
+        roundTripTimeMs = Math.max(...roundTripTimes) * 1000;
+      }
+      for (const stat of stats) {
+        if (stat.type === 'inbound-rtp' && Number.isFinite(stat.jitter)
+            && stat.jitter >= 0) {
+          receiveJitterMs = Math.max(receiveJitterMs ?? 0, stat.jitter * 1000);
+        }
+      }
+
+      if (this.#room !== room || room.state !== 'connected') return;
+      this.onNetworkMetrics?.(new NetworkMetrics({
+        quality: mapQuality(room.localParticipant.connectionQuality),
+        roundTripTimeMs,
+        receiveJitterMs,
+      }));
+    } finally {
+      this.#networkMetricsPollActive = false;
     }
   }
 

@@ -18,10 +18,38 @@
 #include "streamkit/FrameSink.h"
 #include "streamkit/StreamSession.h"
 
+#include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <future>
 #include <stdexcept>
+#include <thread>
 #include <vector>
+
+namespace streamkit {
+
+struct LiveKitBackendTestAccess {
+    static std::uint64_t ConnectionEpoch(const LiveKitBackend& backend) {
+        return backend.connection_epoch_.load();
+    }
+
+    static void StopNetworkMetricsReporting(LiveKitBackend& backend) {
+        backend.StopNetworkMetricsReporting();
+    }
+
+    static void DeliverNetworkMetrics(LiveKitBackend& backend,
+                                      NetworkMetrics metrics,
+                                      std::uint64_t connection_epoch) {
+        backend.DeliverNetworkMetrics(std::move(metrics), connection_epoch);
+    }
+
+    static bool TearDownInProgress(LiveKitBackend& backend) {
+        return backend.teardown_in_progress_.load();
+    }
+};
+
+} // namespace streamkit
 
 int main() {
     using streamkit::ConnectionState;
@@ -103,6 +131,101 @@ int main() {
                            streamkit::PixelFormat::kI420, 0);
 
     session.Disconnect();
+
+    // Disconnecting from kConnecting cancels the outer Connect call before it
+    // can establish or report a connected session.
+    streamkit::LiveKitBackend cancelled_connect_backend{lk};
+    std::vector<ConnectionState> cancelled_connect_states;
+    cancelled_connect_backend.on_connection_state_changed =
+        [&](ConnectionState state) {
+            cancelled_connect_states.push_back(state);
+            if (state == ConnectionState::kConnecting) {
+                cancelled_connect_backend.Disconnect();
+            }
+        };
+    cancelled_connect_backend.Connect(streamkit::SessionConfig::Default());
+    ExpectEq(cancelled_connect_states.size(), std::size_t{2});
+    Expect(cancelled_connect_states[0] == ConnectionState::kConnecting);
+    Expect(cancelled_connect_states[1] == ConnectionState::kDisconnected);
+
+    // A telemetry callback may disconnect while an app-thread disconnect is
+    // already joining that worker. Both calls must share ownership safely and
+    // neither may wait on the other while holding the ownership mutex.
+    streamkit::LiveKitBackend callback_backend{lk};
+    std::promise<void> callback_started;
+    auto callback_started_future = callback_started.get_future();
+    std::promise<void> release_callback;
+    auto release_callback_future = release_callback.get_future();
+    std::promise<void> callback_finished;
+    auto callback_future = callback_finished.get_future();
+    callback_backend.on_network_metrics = [&](const streamkit::NetworkMetrics&) {
+        callback_started.set_value();
+        release_callback_future.wait();
+        callback_backend.Disconnect();
+        callback_finished.set_value();
+    };
+    callback_backend.Connect(streamkit::SessionConfig::Default());
+    Expect(callback_started_future.wait_for(std::chrono::seconds(2)) ==
+           std::future_status::ready);
+
+    std::thread app_disconnect([&callback_backend]() {
+        callback_backend.Disconnect();
+    });
+    const auto teardown_deadline = std::chrono::steady_clock::now() +
+                                   std::chrono::seconds(2);
+    while (!streamkit::LiveKitBackendTestAccess::TearDownInProgress(callback_backend) &&
+           std::chrono::steady_clock::now() < teardown_deadline) {
+        std::this_thread::yield();
+    }
+    Expect(streamkit::LiveKitBackendTestAccess::TearDownInProgress(callback_backend));
+    release_callback.set_value();
+    Expect(callback_future.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
+    app_disconnect.join();
+
+    // A stats result from an earlier connection epoch must not be delivered
+    // after a disconnect/reconnect cycle makes the backend connected again.
+    streamkit::LiveKitBackend stale_backend{lk};
+    stale_backend.Connect(streamkit::SessionConfig::Default());
+    const auto stale_epoch =
+        streamkit::LiveKitBackendTestAccess::ConnectionEpoch(stale_backend);
+    stale_backend.Disconnect();
+    stale_backend.Connect(streamkit::SessionConfig::Default());
+    streamkit::LiveKitBackendTestAccess::StopNetworkMetricsReporting(stale_backend);
+
+    int delivered_metrics = 0;
+    stale_backend.on_network_metrics = [&delivered_metrics](const streamkit::NetworkMetrics&) {
+        ++delivered_metrics;
+    };
+    streamkit::NetworkMetrics metrics{
+        .quality = streamkit::NetworkQuality::kGood,
+        .round_trip_time_ms = std::nullopt,
+        .receive_jitter_ms = std::nullopt,
+    };
+    streamkit::LiveKitBackendTestAccess::DeliverNetworkMetrics(
+        stale_backend, metrics, stale_epoch);
+    ExpectEq(delivered_metrics, 0);
+    streamkit::LiveKitBackendTestAccess::DeliverNetworkMetrics(
+        stale_backend, metrics,
+        streamkit::LiveKitBackendTestAccess::ConnectionEpoch(stale_backend));
+    ExpectEq(delivered_metrics, 1);
+    stale_backend.Disconnect();
+
+    // User callback exceptions are contained at the delivery boundary and do
+    // not terminate the telemetry worker.
+    streamkit::LiveKitBackend throwing_backend{lk};
+    std::atomic<int> throwing_callback_count{0};
+    std::promise<void> throwing_callback_repeated;
+    auto throwing_callback_future = throwing_callback_repeated.get_future();
+    throwing_backend.on_network_metrics = [&](const streamkit::NetworkMetrics&) {
+        if (throwing_callback_count.fetch_add(1) == 1) {
+            throwing_callback_repeated.set_value();
+        }
+        throw std::runtime_error("callback failure");
+    };
+    throwing_backend.Connect(streamkit::SessionConfig::Default());
+    Expect(throwing_callback_future.wait_for(std::chrono::seconds(3)) ==
+           std::future_status::ready);
+    throwing_backend.Disconnect();
 
     return 0;
 }

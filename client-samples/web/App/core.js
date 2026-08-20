@@ -138,11 +138,30 @@ export function createBaseModel() {
     selectedCameraId:  null,
     /** @type {string|null} */
     agentStatus:       null,
+    /** @type {import('/StreamKit/index.js').NetworkMetrics|null} */
+    networkMetrics:    null,
     /** @type {Array<{id: string, text: string, timestamp: Date}>} */
     receivedMessages:  [],
     /** @type {string|null} */
     lastError:         null,
   };
+}
+
+function renderNetworkMetrics(model) {
+  const quality = $('network-quality');
+  if (!quality) return;
+
+  const isConnected = model.connectionState === ConnectionState.CONNECTED;
+  const metrics = model.networkMetrics;
+  quality.textContent = isConnected && metrics
+    ? metrics.quality[0].toUpperCase() + metrics.quality.slice(1)
+    : '—';
+  $('network-rtt').textContent = isConnected && metrics?.roundTripTimeMs != null
+    ? `${Math.round(metrics.roundTripTimeMs)} ms`
+    : '—';
+  $('network-jitter').textContent = isConnected && metrics?.receiveJitterMs != null
+    ? `${Math.round(metrics.receiveJitterMs)} ms`
+    : '—';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -288,6 +307,9 @@ export function renderBase(model) {
     }
   }
 
+  // ── Network telemetry ──────────────────────────────────────────────────────
+  renderNetworkMetrics(model);
+
   // ── Data channel ───────────────────────────────────────────────────────────
   $('send-btn').disabled = !isConnected || $('message-input').value.trim() === '';
 
@@ -343,8 +365,11 @@ export async function connect(model, {
   startCamera: _startCamera, stopCamera: _sc,
   onStateChange, onDataReceived,
 }) {
+  if (model.connectionState !== ConnectionState.DISCONNECTED) return;
+  model.connectionState = ConnectionState.CONNECTING;
   model.lastError        = null;
   model.receivedMessages = [];
+  render();
 
   const lkConfig = new LiveKitConfig({
     host:     model.host,
@@ -359,6 +384,7 @@ export async function connect(model, {
     newSession = await StreamSession.create(BackendConfiguration.liveKit(lkConfig));
   } catch (err) {
     showError(err instanceof StreamError ? err.message : String(err));
+    model.connectionState = ConnectionState.DISCONNECTED;
     render();
     return;
   }
@@ -375,6 +401,7 @@ export async function connect(model, {
       model.isAudioActive  = false;
       model.isCameraActive = false;
       model.agentStatus    = null;
+      model.networkMetrics = null;
     } else if (state === ConnectionState.RECONNECTING) {
       // Stop the camera when the connection drops so the server and client
       // both start from a known-off state after reconnect.
@@ -387,6 +414,11 @@ export async function connect(model, {
   newSession.onAgentStatus = (status) => {
     model.agentStatus = status;
     render();
+  };
+
+  newSession.onNetworkMetrics = (metrics) => {
+    model.networkMetrics = metrics;
+    renderNetworkMetrics(model);
   };
 
   newSession.onDataReceived = (topic, data) => {
@@ -423,6 +455,7 @@ export async function connect(model, {
     await newSession.connect(sessionConfig);
   } catch (err) {
     showError(err instanceof StreamError ? err.message : String(err));
+    await newSession.disconnect().catch(() => {});
     model.session         = null;
     model.connectionState = ConnectionState.DISCONNECTED;
   }
@@ -437,6 +470,7 @@ export async function disconnect(model, render) {
   model.connectionState  = ConnectionState.DISCONNECTED;
   model.isAudioActive    = false;
   model.isCameraActive   = false;
+  model.networkMetrics   = null;
   render();
 }
 

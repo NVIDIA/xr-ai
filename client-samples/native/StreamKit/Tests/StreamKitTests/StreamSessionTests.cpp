@@ -78,6 +78,9 @@ struct MockBackend : streamkit::StreamingBackend {
     void fire_agent_status(std::string_view status) const {
         if (on_agent_status) on_agent_status(status);
     }
+    void fire_network_metrics(const streamkit::NetworkMetrics& metrics) const {
+        if (on_network_metrics) on_network_metrics(metrics);
+    }
 };
 
 }  // namespace
@@ -117,6 +120,12 @@ int main() {
         ++agent_calls;
         last_agent_status = std::string(status);
     };
+    int metrics_calls = 0;
+    streamkit::NetworkMetrics last_metrics;
+    session.on_network_metrics = [&metrics_calls, &last_metrics](const auto& metrics) {
+        ++metrics_calls;
+        last_metrics = metrics;
+    };
 
     // ── Connect lifecycle ──────────────────────────────────────────────────
     Expect(session.connection_state() == streamkit::ConnectionState::kDisconnected);
@@ -125,6 +134,14 @@ int main() {
     ExpectEq(state_changes, 2);
     Expect(last_state == streamkit::ConnectionState::kConnected);
     Expect(session.connection_state() == streamkit::ConnectionState::kConnected);
+    raw->fire_network_metrics(streamkit::NetworkMetrics{
+        .quality = streamkit::NetworkQuality::kGood,
+        .round_trip_time_ms = 24.0,
+        .receive_jitter_ms = 3.0,
+    });
+    ExpectEq(metrics_calls, 1);
+    Expect(last_metrics.quality == streamkit::NetworkQuality::kGood);
+    ExpectEq(*last_metrics.round_trip_time_ms, 24.0);
 
     // ── Media independent of connection ────────────────────────────────────
     session.StartAudio();

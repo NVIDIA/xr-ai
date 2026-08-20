@@ -17,11 +17,13 @@
 
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <span>
 #include <string>
 #include <string_view>
+#include <thread>
 
 #include "streamkit/AudioSink.h"
 #include "streamkit/Backends/StreamingBackend.h"
@@ -139,6 +141,8 @@ protected:
                                    const std::string& identity);
 
 private:
+    friend struct LiveKitBackendTestAccess;
+
     // Forward-declared in the .cpp; subclasses livekit::RoomDelegate and
     // bridges its event callbacks into this backend's on_* event hooks.
     class Delegate;
@@ -162,6 +166,15 @@ private:
     /// fires on_data_received for everything else.
     void HandleDataReceived(std::string_view topic,
                             std::span<const std::byte> payload) const;
+
+    void ApplyConnectionState(ConnectionState state);
+    void BlockNetworkMetricsDelivery();
+    void HandleNetworkQualityChange(int lk_quality);
+    void StartNetworkMetricsReporting();
+    void StopNetworkMetricsReporting();
+    void PublishNetworkMetrics(std::uint64_t connection_epoch);
+    void DeliverNetworkMetrics(NetworkMetrics metrics,
+                               std::uint64_t connection_epoch);
 
     LiveKitConfig config_;
     SessionConfig session_config_;
@@ -189,6 +202,27 @@ private:
     std::atomic<bool> camera_armed_{false};
     std::atomic<bool> audio_armed_{false};
     std::atomic<ConnectionState> last_fired_state_{ConnectionState::kDisconnected};
+    std::atomic<NetworkQuality> network_quality_{NetworkQuality::kUnknown};
+    std::atomic<std::uint64_t> connection_epoch_{0};
+    std::atomic<std::uint64_t> connect_generation_{0};
+    // Serializes liveness checks, delivery, and state transitions. Shared
+    // ownership lets a callback finish unlocking if it destroys the backend.
+    struct NetworkMetricsDeliveryState {
+        std::recursive_mutex mutex;
+        bool blocked = true;
+    };
+    std::shared_ptr<NetworkMetricsDeliveryState> network_metrics_delivery_ =
+        std::make_shared<NetworkMetricsDeliveryState>();
+    // Protects ownership changes to the stop flag and std::thread. Joining is
+    // deliberately performed after releasing this mutex so a worker callback
+    // can make an overlapping Disconnect() call without deadlocking.
+    std::mutex network_metrics_mutex_;
+    std::shared_ptr<std::atomic<bool>> network_metrics_stop_;
+    std::thread network_metrics_thread_;
+    // Owns the complete teardown, not just the telemetry thread fields.
+    std::recursive_mutex teardown_mutex_;
+    std::atomic<bool> teardown_in_progress_{false};
+    std::atomic<bool> teardown_complete_{true};
 
     static constexpr std::string_view kAgentStatusTopic = "_agent.status";
 };

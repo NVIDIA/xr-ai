@@ -101,6 +101,12 @@ void StreamSession::WireCallbacks() {
             on_agent_status(status);
         }
     };
+
+    backend_->on_network_metrics = [this](const NetworkMetrics& metrics) {
+        if (on_network_metrics) {
+            on_network_metrics(metrics);
+        }
+    };
 }
 
 } // namespace streamkit

@@ -125,6 +125,26 @@ int main(int argc, char** argv) {
         std::cout << "[agent] status='" << status << "'\n";
     };
 
+    session.on_network_metrics = [](const streamkit::NetworkMetrics& metrics) {
+        const auto quality = [&]() -> std::string_view {
+            switch (metrics.quality) {
+                case streamkit::NetworkQuality::kExcellent: return "excellent";
+                case streamkit::NetworkQuality::kGood: return "good";
+                case streamkit::NetworkQuality::kPoor: return "poor";
+                case streamkit::NetworkQuality::kLost: return "lost";
+                case streamkit::NetworkQuality::kUnknown: return "unknown";
+            }
+            return "unknown";
+        }();
+        std::cout << "[network] quality=" << quality << " rtt=";
+        if (metrics.round_trip_time_ms) std::cout << *metrics.round_trip_time_ms << "ms";
+        else std::cout << "—";
+        std::cout << " jitter=";
+        if (metrics.receive_jitter_ms) std::cout << *metrics.receive_jitter_ms << "ms";
+        else std::cout << "—";
+        std::cout << "\n";
+    };
+
     // ── Connect ───────────────────────────────────────────────────────────
     try {
         std::cout << "Connecting to " << args.host << ":" << args.port

@@ -17,6 +17,7 @@ Identical to the web client:
 | Audio | Start / stop microphone; three modes (Voice Processing, Software AEC, Raw) |
 | Camera | Start / stop camera; selector auto-populated from Camera2 (front, back, any extra lens, USB cameras) |
 | Agent status | Live badge (`idle` / `processing`) driven by the `_agent.status` channel |
+| Network telemetry | Once-per-second LiveKit quality, RTT, and receive jitter |
 | Data channel | Send arbitrary UTF-8 messages |
 | Received messages | Scrollable list with per-message timestamps |
 | Error display | Snackbar toast, auto-dismissed after 4 s |
@@ -27,6 +28,7 @@ Identical to the web client:
 app/src/main/java/com/nvidia/xrai/streamkitsample/
 ├── streamkit/                      ← StreamKit library (mirrors web StreamKit/ + Swift StreamKit/)
 │   ├── ConnectionState.kt
+│   ├── NetworkMetrics.kt
 │   ├── StreamError.kt
 │   ├── StreamSession.kt            ← public API — transport-agnostic
 │   ├── config/

@@ -23,6 +23,7 @@ struct ContentView: View {
                 cameraPreviewSection
                 agentSection
                 connectionSection
+                networkSection
                 mediaSection
                 dataSection
                 if !model.receivedMessages.isEmpty {
@@ -145,6 +146,22 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Network section
+
+    @ViewBuilder
+    private var networkSection: some View {
+        let metrics = model.connectionState == .connected ? model.networkMetrics : nil
+        Section("Network") {
+            LabeledContent("Quality", value: metrics?.quality.rawValue.capitalized ?? "—")
+            LabeledContent("Round-trip time", value: milliseconds(metrics?.roundTripTimeMs))
+            LabeledContent("Receive jitter", value: milliseconds(metrics?.receiveJitterMs))
+        }
+    }
+
+    private func milliseconds(_ value: Double?) -> String {
+        value.map { "\(Int($0.rounded())) ms" } ?? "—"
     }
 
     // MARK: - Media section

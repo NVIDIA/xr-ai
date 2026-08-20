@@ -12,6 +12,7 @@
  * import {
  *   StreamSession,
  *   ConnectionState,
+ *   NetworkMetrics, NetworkQuality,
  *   StreamError,
  *   AudioConfig, MicrophoneMode,
  *   CameraConfig, CameraFacing,
@@ -24,6 +25,7 @@
 
 export { StreamSession }                          from './StreamSession.js';
 export { ConnectionState }                        from './ConnectionState.js';
+export { NetworkMetrics, NetworkQuality }          from './NetworkMetrics.js';
 export { StreamError }                            from './StreamError.js';
 export { AudioConfig, MicrophoneMode }            from './Config/AudioConfig.js';
 export { CameraConfig, CameraFacing }             from './Config/CameraConfig.js';

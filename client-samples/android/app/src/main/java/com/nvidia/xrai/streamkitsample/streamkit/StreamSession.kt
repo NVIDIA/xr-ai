@@ -76,6 +76,9 @@ class StreamSession(private val backend: StreamingBackend) {
      */
     var onAgentStatus: ((status: String) -> Unit)? = null
 
+    /** Called about once per second with LiveKit-native network telemetry. */
+    var onNetworkMetrics: ((metrics: NetworkMetrics) -> Unit)? = null
+
     init {
         wireCallbacks()
     }
@@ -201,5 +204,6 @@ class StreamSession(private val backend: StreamingBackend) {
         backend.onConnectionStateChanged = { state -> onConnectionStateChanged?.invoke(state) }
         backend.onDataReceived = { topic, data -> onDataReceived?.invoke(topic, data) }
         backend.onAgentStatus = { status -> onAgentStatus?.invoke(status) }
+        backend.onNetworkMetrics = { metrics -> onNetworkMetrics?.invoke(metrics) }
     }
 }
