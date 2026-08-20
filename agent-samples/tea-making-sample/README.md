@@ -70,7 +70,7 @@ Wake-word mode is enabled by default:
 - `--tts-mode piper` runs lightweight CPU speech on port 8105. `magpie` runs
   neural speech on port 8104 and uses CUDA when available.
 
-The connection page is provided by XR-Media-Hub and remains part of the sample.
+The connection page is provided by DeviceIOHub and remains part of the sample.
 Only the old monitoring-specific UI is omitted.
 Spoken agent responses are also published on the connection client's
 `agent.response` text channel so the page can display accessible captions. Raw
