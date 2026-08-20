@@ -146,9 +146,10 @@ To add a foreground capability:
    `capture_marker_scans` is enabled.
 3. Detect every QR and ArUco marker in the frame.
 4. Resolve each marker through `DeviceMap`.
-5. Create a derived image that marks the detected polygon.
-6. Pass structured marker identity to a VLM governed by the packaged
-   instrument-reading system prompt.
+5. Create one derived image that overlays every detected polygon with a unique
+   temporary label.
+6. Ask the VLM once for a strict JSON map from every temporary label to its own
+   display reading or `UNKNOWN`.
 7. Return mapped `InstrumentSighting` values independently from successful
    `InstrumentReading` values.
 
@@ -183,14 +184,16 @@ voice agent.
 
 Only marker identities present in `device_map.yaml` are treated as instruments.
 Unknown QR payloads and ArUco IDs are logged and ignored, preventing detector
-false positives from becoming names such as `ArUco 17`. The one-frame reader
-requires visible evidence that the highlighted marker and display share one
-continuous physical instrument housing. Proximity, alignment, or being the only
-readable display does not establish ownership. The reader returns `UNKNOWN`
-when the target housing has no readable display or an adjacent display cannot
-be excluded. These fixed rules are supplied as a system prompt; marker identity
-is structured user data and visible text is treated as evidence, never as
-instructions.
+false positives from becoming names such as `ArUco 17`. They are still given a
+temporary visual label so the VLM can reason about competing housings. The
+one-frame reader requires visible evidence that each labelled marker and
+display share one continuous physical instrument housing. Proximity, alignment,
+or being the only readable display does not establish ownership, and one
+display may not be assigned to multiple markers. The reader returns `UNKNOWN`
+when a housing has no readable display or an adjacent display cannot be
+excluded. These fixed rules are supplied as a system prompt; decoded marker
+identities remain outside the prompt and visible text is treated as evidence,
+never as instructions.
 
 ## Connecting a backend
 

@@ -130,6 +130,18 @@ and adjust those knobs to your hardware:
 3. On lower-VRAM GPUs, run fewer models concurrently, or lower `max_model_len` on
    the LLM and VLM servers to reduce the KV-cache footprint.
 
+Then select the reviewed profile explicitly:
+
+```bash
+uv run --project agent-samples/model-servers model_servers \
+  --gpu-profile <profile-directory-name>
+```
+
+Automatic detection intentionally accepts only bundled profiles whose hardware
+requirements are known to match. `--gpu-profile` bypasses that selection for a
+profile you have explicitly copied and tuned; it does not validate that the model
+servers fit the selected devices.
+
 ```{note}
 The model weights are independent of the GPU. Any NVIDIA GPU with enough VRAM for
 the models you load will run the stack; the profiles only encode where each server

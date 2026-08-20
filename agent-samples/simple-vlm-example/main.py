@@ -26,11 +26,11 @@ How to run (from agent-samples/simple-vlm-example/):
     uv sync && uv run simple_vlm_example
 """
 import argparse
-import subprocess
 from dataclasses import replace
 from pathlib import Path
 
 from xr_ai_launcher import (
+    GPUInventoryError,
     Process,
     detect_gpu_config,
     ensure_credentials,
@@ -43,8 +43,6 @@ from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
 _MODEL_SERVERS_YAML = _BASE.parent / "model-servers" / "yaml"
-_MIN_DUAL_GPU_MEMORY_MIB = 40 * 1024
-_MIN_SINGLE_GPU_MEMORY_MIB = 80 * 1024
 
 _WORKER_CONFIG = "yaml/simple_vlm_example_worker.yaml"
 
@@ -80,44 +78,6 @@ _MODEL_PROCESSES = {
 }
 
 
-def _supports_shared_vlm_config(gpu_profile: str) -> bool:
-    """Whether this host has the capacity assumed by a model-server profile."""
-    try:
-        raw = subprocess.check_output(
-            [
-                "nvidia-smi",
-                "--query-gpu=memory.total",
-                "--format=csv,noheader,nounits",
-            ],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        ).strip().splitlines()
-    except (OSError, subprocess.SubprocessError):
-        return False
-
-    memory_mib: list[int] = []
-    for value in raw:
-        for token in value.replace(",", " ").split():
-            try:
-                memory_mib.append(int(float(token)))
-                break
-            except ValueError:
-                continue
-
-    if gpu_profile == "dual_48G_ada":
-        return (
-            len(memory_mib) >= 2
-            and min(memory_mib) >= _MIN_DUAL_GPU_MEMORY_MIB
-        )
-    if gpu_profile == "spark" and raw and not memory_mib:
-        # DGX Spark can report unified memory without a numeric memory.total;
-        # detect_gpu_config identifies it by its GB10/B10 product name.
-        return True
-    if gpu_profile in {"spark", "96G_blackwell"}:
-        return bool(memory_mib) and max(memory_mib) >= _MIN_SINGLE_GPU_MEMORY_MIB
-    return False
-
-
 def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
     deployment = load_model_deployment(_BASE / _WORKER_CONFIG)
     unknown_services = deployment.services.keys() - _MODEL_PROCESSES.keys()
@@ -135,9 +95,12 @@ def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
             if launch_mode == "own" and service == "vlm":
                 # Share the complete launch contract with model-servers so a
                 # compatible persistent server has the same fingerprint, but
-                # only when this host meets that profile's resource budget.
-                gpu_config = detect_gpu_config()
-                if _supports_shared_vlm_config(gpu_config):
+                # retain the standalone config on unsupported hardware.
+                try:
+                    gpu_config = detect_gpu_config()
+                except GPUInventoryError:
+                    gpu_config = None
+                if gpu_config is not None:
                     shared_config = _resolve_config_variant(
                         _MODEL_SERVERS_YAML / gpu_config,
                         "vlm_server",

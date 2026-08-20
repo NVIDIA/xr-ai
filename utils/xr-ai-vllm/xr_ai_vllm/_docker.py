@@ -32,7 +32,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from . import _lifecycle
+from . import _diagnostics, _lifecycle
 
 log = logging.getLogger(__name__)
 
@@ -615,6 +615,7 @@ def run(
         reuse_banner=f"vLLM already running on port {port} — reusing",
         ready_banner=f"Ready  →  http://localhost:{port}/v1  (docker: {container_name})",
         ready_file=ready_file,
+        diagnostic_argv=vllm_argv,
     )
 
 
@@ -630,6 +631,7 @@ def run_container(
     reuse_banner: str,
     ready_banner: str,
     ready_file: Path | None,
+    diagnostic_argv: list[str] | None = None,
 ) -> None:
     """Shared container lifecycle for the vLLM docker backend and NIMs.
 
@@ -825,6 +827,12 @@ def run_container(
         time.sleep(0.5)
         streamer.stop()
         _append_post_mortem(container_name, streamer.log_path)
+        diagnosis = (
+            _diagnostics.classify_vllm_failure(streamer.log_path, diagnostic_argv)
+            if diagnostic_argv is not None else None
+        )
+        if diagnosis:
+            log.error("%s", diagnosis)
         log.error("container %s failed — see %s", container_name, streamer.log_path)
         raise
 

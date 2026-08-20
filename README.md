@@ -189,7 +189,10 @@ uv sync
 uv run model_servers
 ```
 
-GPU profiles are auto-detected (`dual_48G_ada` / `spark` / `96G_blackwell`).
+Known GPU profiles are auto-detected (`dual_48G_ada` / `spark` /
+`96G_blackwell`). Unsupported or ambiguous topologies stop with the complete
+inventory instead of assuming a profile; use `--gpu-profile NAME` only after
+copying and reviewing a custom YAML profile for that hardware.
 On first run the stack downloads tens of GB from Hugging Face and can take
 tens of minutes. On subsequent runs the containers restart in under a minute.
 
@@ -305,9 +308,8 @@ after a moment, and you hear the reply through your speakers.
 
 **Local model** — on a standalone system smaller than the shared model-server
 profiles, override the model weights or GPU settings in
-`agent-samples/simple-vlm-example/yaml/vlm_server.yaml`. On two GPUs with at
-least 40 GiB each, or a Blackwell/Spark profile with at least 80 GiB available
-on one GPU (including Spark unified memory), the sample instead uses
+`agent-samples/simple-vlm-example/yaml/vlm_server.yaml`. When automatic GPU
+detection selects one of the supported model-server profiles, the sample uses
 `agent-samples/model-servers/yaml/<profile>/vlm_server.yaml` so a compatible
 server can be reused without reloading its weights.
 

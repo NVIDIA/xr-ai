@@ -133,9 +133,6 @@ def test_simple_vlm_shares_supported_model_server_vlm_config(
 ) -> None:
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: gpu_profile)
     monkeypatch.setattr(_simple_vlm, "detect_gpu_config", lambda: gpu_profile)
-    monkeypatch.setattr(
-        _simple_vlm, "_supports_shared_vlm_config", lambda _profile: True
-    )
 
     shared = {
         process.name: process
@@ -181,9 +178,6 @@ def test_simple_vlm_matches_full_model_server_launch_fingerprint(
 ) -> None:
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: gpu_profile)
     monkeypatch.setattr(_simple_vlm, "detect_gpu_config", lambda: gpu_profile)
-    monkeypatch.setattr(
-        _simple_vlm, "_supports_shared_vlm_config", lambda _profile: True
-    )
 
     shared = {
         process.name: process
@@ -208,10 +202,10 @@ def test_simple_vlm_matches_full_model_server_launch_fingerprint(
 def test_simple_vlm_uses_standalone_config_on_smaller_hardware(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(_simple_vlm, "detect_gpu_config", lambda: "dual_48G_ada")
-    monkeypatch.setattr(
-        _simple_vlm, "_supports_shared_vlm_config", lambda _profile: False
-    )
+    def unsupported_hardware() -> str:
+        raise _simple_vlm.GPUInventoryError("unsupported GPU topology")
+
+    monkeypatch.setattr(_simple_vlm, "detect_gpu_config", unsupported_hardware)
 
     sample = {
         process.name: process
@@ -247,10 +241,10 @@ def test_simple_vlm_profiles_keep_stt_standalone(
         "load_model_deployment",
         lambda _worker: _model_servers.load_deployment_profile(profile_path),
     )
-    monkeypatch.setattr(_simple_vlm, "detect_gpu_config", lambda: "dual_48G_ada")
-    monkeypatch.setattr(
-        _simple_vlm, "_supports_shared_vlm_config", lambda _profile: False
-    )
+    def unsupported_hardware() -> str:
+        raise _simple_vlm.GPUInventoryError("unsupported GPU topology")
+
+    monkeypatch.setattr(_simple_vlm, "detect_gpu_config", unsupported_hardware)
 
     sample = {
         process.name: process
@@ -272,54 +266,21 @@ def test_simple_vlm_rejects_missing_shared_vlm_config(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(_simple_vlm, "detect_gpu_config", lambda: "spark")
-    monkeypatch.setattr(
-        _simple_vlm, "_supports_shared_vlm_config", lambda _profile: True
-    )
     monkeypatch.setattr(_simple_vlm, "_MODEL_SERVERS_YAML", tmp_path)
 
     with pytest.raises(FileNotFoundError, match="shared VLM config does not exist"):
         _simple_vlm._build_processes()
 
+def test_explicit_gpu_profile_bypasses_detection(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_detection() -> str:
+        raise AssertionError("automatic detection must not run for an explicit profile")
 
-@pytest.mark.parametrize(
-    ("gpu_profile", "memory_output", "expected"),
-    [
-        ("dual_48G_ada", "49140\n49140\n", True),
-        ("dual_48G_ada", "24576\n", False),
-        ("dual_48G_ada", "24576\n24576\n", False),
-        ("96G_blackwell", "98304\n", True),
-        ("96G_blackwell", "49152\n", False),
-        ("96G_blackwell", "49152\n49152\n", False),
-        ("spark", "119296\n", True),
-        ("spark", "N/A\n", True),
-        ("96G_blackwell", "N/A\n", False),
-        ("unknown", "119296\n", False),
-    ],
-)
-def test_simple_vlm_shared_config_requires_profile_capacity(
-    monkeypatch: pytest.MonkeyPatch,
-    gpu_profile: str,
-    memory_output: str,
-    expected: bool,
-) -> None:
-    monkeypatch.setattr(
-        _simple_vlm.subprocess,
-        "check_output",
-        lambda *_args, **_kwargs: memory_output,
-    )
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", fail_detection)
 
-    assert _simple_vlm._supports_shared_vlm_config(gpu_profile) is expected
+    processes, _ = _model_servers._build_processes("default", "spark")
 
-
-def test_simple_vlm_falls_back_when_gpu_capacity_is_unknown(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def fail(*_args, **_kwargs):
-        raise FileNotFoundError("nvidia-smi")
-
-    monkeypatch.setattr(_simple_vlm.subprocess, "check_output", fail)
-
-    assert not _simple_vlm._supports_shared_vlm_config("dual_48G_ada")
+    expected_dir = _REPO_ROOT / "agent-samples/model-servers/yaml/spark"
+    assert all(Path(process.config).parent == expected_dir for process in processes)
 
 
 def test_nim_profile_mixes_nim_containers_and_local_servers(
@@ -464,7 +425,7 @@ def test_cli_selects_requested_profile(
     monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
     monkeypatch.setattr(
         _model_servers, "_build_processes",
-        lambda selection: (selected.append(selection) or [], ()),
+        lambda selection, _gpu_profile=None: (selected.append(selection) or [], ()),
     )
     monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: None)
     monkeypatch.setattr(sys, "argv", ["model_servers", *argv])
@@ -472,6 +433,74 @@ def test_cli_selects_requested_profile(
     _model_servers.run()
 
     assert selected == [expected]
+
+
+def test_cli_passes_explicit_gpu_profile(monkeypatch: pytest.MonkeyPatch) -> None:
+    selected: list[tuple[str, str | None]] = []
+    monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
+    monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
+    monkeypatch.setattr(
+        _model_servers,
+        "_build_processes",
+        lambda selection, gpu_profile=None: (
+            selected.append((selection, gpu_profile)) or [], ()
+        ),
+    )
+    monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        sys, "argv", ["model_servers", "--gpu-profile", "dual_48G_ada"],
+    )
+
+    _model_servers.run()
+
+    assert selected == [("default", "dual_48G_ada")]
+
+
+def test_invalid_gpu_profile_name_is_rejected() -> None:
+    with pytest.raises(
+        _model_servers.argparse.ArgumentTypeError, match="unknown GPU profile",
+    ):
+        _model_servers._gpu_profile_name("does-not-exist")
+
+
+def test_gpu_profile_discovery_tolerates_missing_yaml_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_model_servers, "_BASE", tmp_path)
+
+    assert _model_servers._gpu_profile_names() == ()
+
+
+def test_custom_gpu_profile_must_contain_every_selected_service_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "yaml" / "custom").mkdir(parents=True)
+    profile = _REPO_ROOT / "agent-samples/model-servers/yaml/models.default.json"
+    monkeypatch.setattr(_model_servers, "_BASE", tmp_path)
+
+    with pytest.raises(ValueError, match="profile 'custom' is incomplete.*stt_server"):
+        _model_servers._build_processes(str(profile), "custom")
+
+
+def test_cli_reports_gpu_inventory_error_without_traceback(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fail_inventory(*_args, **_kwargs):
+        raise _model_servers.GPUInventoryError("GPU memory telemetry unavailable")
+
+    monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(_model_servers, "_build_processes", fail_inventory)
+    monkeypatch.setattr(sys, "argv", ["model_servers"])
+
+    with pytest.raises(SystemExit) as error:
+        _model_servers.run()
+
+    assert error.value.code == 2
+    stderr = capsys.readouterr().err
+    assert "model_servers: error: GPU memory telemetry unavailable" in stderr
+    assert "--gpu-profile NAME" in stderr
+    assert "Traceback" not in stderr
 
 
 def test_build_processes_rejects_unknown_services(tmp_path, monkeypatch) -> None:
@@ -517,7 +546,7 @@ def test_cli_requires_profile_credentials(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
     monkeypatch.setattr(
         _model_servers, "_build_processes",
-        lambda _selection: ([], ("NGC_API_KEY",)),
+        lambda _selection, _gpu_profile=None: ([], ("NGC_API_KEY",)),
     )
     monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: None)
     monkeypatch.setattr(sys, "argv", ["model_servers", "--models", "vlm_llm_nim"])
@@ -535,7 +564,8 @@ def test_cli_aborts_when_unselected_services_cannot_stop(
     monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "stop_persistent_servers", lambda _services: False)
     monkeypatch.setattr(
-        _model_servers, "_build_processes", lambda _selection: ([], ()),
+        _model_servers, "_build_processes",
+        lambda _selection, _gpu_profile=None: ([], ()),
     )
     monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: started.append(True))
     monkeypatch.setattr(sys, "argv", ["model_servers"])
