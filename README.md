@@ -303,11 +303,14 @@ You are now live in the XR session.  To test the agent:
 A successful round trip: your query appears in the log, the agent responds
 after a moment, and you hear the reply through your speakers.
 
-**Local model** — override the model weights or GPU settings by editing
-`vlm_server.yaml` in the sample directory.
+**Local model** — override the model weights or GPU settings in
+`agent-samples/model-servers/yaml/<profile>/vlm_server.yaml`, where `<profile>`
+is the hardware profile reported by the launcher (`dual_48G_ada`, `spark`, or
+`96G_blackwell`). The standalone sample and `model_servers` share this config.
 
-To use Cosmos-Reason1 instead, set `model: nvidia/Cosmos-Reason1-7B` in that
-file and select `cosmos_vlm` as the VLM adapter preset in `models.local.json`.
+To use Cosmos-Reason1 instead, set `model: nvidia/Cosmos-Reason1-7B` and remove
+the Cosmos3-only `hf_overrides` block in that file, then select `cosmos_vlm` as
+the VLM adapter preset in `agent-samples/simple-vlm-example/yaml/models.local.json`.
 
 **Remote model** — copy `yaml/models.hosted.json`, point its VLM endpoint at
 your server, and select it in the worker config:
