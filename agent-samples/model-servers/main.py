@@ -49,7 +49,7 @@ from xr_ai_launcher import (
     Process,
     detect_gpu_config,
     load_deployment_profile,
-    read_service_port,
+    read_config_scalar,
     require_credentials,
     run_stack,
 )
@@ -112,6 +112,20 @@ def _profile_path(selection: str) -> Path:
     return _BASE / "yaml" / f"models.{selection}.json"
 
 
+def _read_service_port(path: Path) -> int | None:
+    """Read and validate the HTTP port used by one model-server config."""
+    raw = read_config_scalar(path, "port") or read_config_scalar(path, "http_port")
+    if not raw:
+        return None
+    try:
+        port = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{path}: port must be an integer, got {raw!r}") from exc
+    if not 1 <= port <= 65535:
+        raise ValueError(f"{path}: port must be between 1 and 65535, got {port}")
+    return port
+
+
 def _build_processes(
     selection: str, gpu_profile: str | None = None,
 ) -> tuple[list[Process], tuple[str, ...]]:
@@ -134,7 +148,7 @@ def _build_processes(
                 f"GPU profile {profile_name!r} is incomplete: missing {config} "
                 f"for service {service!r}"
             )
-        port = read_service_port(config)
+        port = _read_service_port(config)
         if port is None:
             raise ValueError(f"{config}: service config must declare port or http_port")
         processes.append(Process(
@@ -151,7 +165,7 @@ def _known_service_ports() -> list[tuple[str, int]]:
         configs = list((_BASE / "yaml").glob(f"*/{config_base}*.yaml"))
         configs.append((_BASE / project / f"{config_base}.yaml").resolve())
         for config in configs:
-            if config.is_file() and (port := read_service_port(config)) is not None:
+            if config.is_file() and (port := _read_service_port(config)) is not None:
                 targets.add((service, port))
     return sorted(targets)
 

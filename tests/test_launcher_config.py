@@ -7,11 +7,7 @@ import json
 from pathlib import Path
 
 import pytest
-from xr_ai_launcher import (
-    load_deployment_profile,
-    load_model_deployment,
-    read_service_port,
-)
+from xr_ai_launcher import load_deployment_profile, load_model_deployment
 from xr_ai_launcher._config import _resolve_config_variant
 from xr_ai_models import load_models_config
 
@@ -30,35 +26,6 @@ def test_service_config_variant_precedes_default(tmp_path: Path) -> None:
     variant.write_text("model: variant\n", encoding="utf-8")
 
     assert _resolve_config_variant(tmp_path, "vlm_server", "default") == variant
-
-
-@pytest.mark.parametrize(
-    ("body", "expected"),
-    [
-        ("port: 8100\n", 8100),
-        ("http_port: 9010\n", 9010),
-        ("port: '8109' # API\n", 8109),
-        ("host: 0.0.0.0\n", None),
-    ],
-)
-def test_read_service_port_uses_top_level_yaml(
-    tmp_path: Path, body: str, expected: int | None,
-) -> None:
-    config = tmp_path / "service.yaml"
-    config.write_text(body, encoding="utf-8")
-
-    assert read_service_port(config) == expected
-
-
-@pytest.mark.parametrize("value", ["not-a-port", "0", "65536"])
-def test_read_service_port_rejects_invalid_values(
-    tmp_path: Path, value: str,
-) -> None:
-    config = tmp_path / "service.yaml"
-    config.write_text(f"port: {value}\n", encoding="utf-8")
-
-    with pytest.raises(ValueError, match="port"):
-        read_service_port(config)
 
 
 def _write_profile(path: Path, *, credential: str | None = None) -> None:

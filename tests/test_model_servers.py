@@ -287,6 +287,35 @@ def test_service_catalog_does_not_duplicate_yaml_ports() -> None:
     assert all(len(service) == 3 for service in _model_servers._MODEL_SERVICES.values())
 
 
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        ("port: 8100\n", 8100),
+        ("http_port: 9010\n", 9010),
+        ("port: '8109' # API\n", 8109),
+        ("host: 0.0.0.0\n", None),
+    ],
+)
+def test_read_service_port_uses_top_level_yaml(
+    tmp_path: Path, body: str, expected: int | None,
+) -> None:
+    config = tmp_path / "service.yaml"
+    config.write_text(body, encoding="utf-8")
+
+    assert _model_servers._read_service_port(config) == expected
+
+
+@pytest.mark.parametrize("value", ["not-a-port", "0", "65536"])
+def test_read_service_port_rejects_invalid_values(
+    tmp_path: Path, value: str,
+) -> None:
+    config = tmp_path / "service.yaml"
+    config.write_text(f"port: {value}\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="port"):
+        _model_servers._read_service_port(config)
+
+
 def test_known_ports_are_discovered_from_service_yaml() -> None:
     assert set(_model_servers._known_service_ports()) == {
         ("stt-nim", 9010),
