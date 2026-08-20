@@ -11,7 +11,7 @@ dependency paths, operational ownership, and standalone commands predictable.
 
 | Service | Responsibility | Default port or endpoint |
 |---|---|---|
-| `xr-media-hub/` | XR-Media-Hub and its internal LiveKit transport | 8080 (HTTPS and WSS proxy) |
+| `device-io-hub/` | DeviceIOHub and its internal LiveKit transport | 8080 (HTTPS and WSS proxy) |
 | `cloudxr-runtime/` | CloudXR OpenXR runtime and WebRTC signaling proxy | 49100 (native), 48322 (WSS) |
 | `vlm-server/` | Cosmos vision-language inference | 8100 |
 | `stt-server/` | Parakeet speech recognition | 8103 |

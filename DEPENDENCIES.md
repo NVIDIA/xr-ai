@@ -207,6 +207,29 @@ change, even when an individual dependency publishes newer Python wheels.
 - Commands:
   - `cloudxr_runtime` → `cloudxr_runtime.__main__:run`
 
+#### `device-io-hub` — [`services/device-io-hub/`](services/device-io-hub/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `pyzmq>=27.0`
+  - `livekit>=1.0`
+  - `livekit-api>=1.0`
+  - `fastapi>=0.111`
+  - `uvicorn[standard]>=0.29`
+  - `httpx>=0.27`
+  - `websockets>=12.0`
+  - `numpy>=1.24`
+  - `pyyaml>=6.0`
+  - `cryptography>=42.0`
+  - `PyNvVideoCodec>=2.2`
+- Optional dependency groups: none
+- Commands:
+  - `device_io_hub` → `device_io_hub.__main__:run`
+
 #### `embedding-server` — [`services/embedding-server/`](services/embedding-server/)
 
 - Python: `>=3.11,<3.13`
@@ -393,29 +416,6 @@ change, even when an individual dependency publishes newer Python wheels.
 - Commands:
   - `vlm_server` → `vlm_server.__main__:run`
 
-#### `xr-media-hub` — [`services/xr-media-hub/`](services/xr-media-hub/)
-
-- Python: `>=3.11,<3.13`
-- Build dependencies:
-  - `hatchling`
-- Runtime dependencies:
-  - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
-  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `pyzmq>=27.0`
-  - `livekit>=1.0`
-  - `livekit-api>=1.0`
-  - `fastapi>=0.111`
-  - `uvicorn[standard]>=0.29`
-  - `httpx>=0.27`
-  - `websockets>=12.0`
-  - `numpy>=1.24`
-  - `pyyaml>=6.0`
-  - `cryptography>=42.0`
-  - `PyNvVideoCodec>=2.2`
-- Optional dependency groups: none
-- Commands:
-  - `xr_media_hub` → `xr_media_hub.__main__:run`
-
 ### Agent samples
 
 #### `lab-instrument-monitoring` — [`agent-samples/lab-instrument-monitoring/`](agent-samples/lab-instrument-monitoring/)
@@ -561,7 +561,7 @@ change, even when an individual dependency publishes newer Python wheels.
   - `xr-ai-tools[frames,image-editing,marker-tracking,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
   - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
-  - `xr-media-hub` → [`xr-media-hub`](services/xr-media-hub/) (local, editable)
+  - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)
@@ -627,7 +627,7 @@ Keep non-obvious fan-out in the same change:
 | Component changed | Also update |
 |---|---|
 | `agent-sdk/xr-ai-hub/` API or IPC types | [Agent SDK](docs/source/components/agent-sdk.md), [hub reference](docs/source/reference/agent-sdk-hub.md), and affected sample workers |
-| `services/xr-media-hub/` configuration | Its reference YAML and every sample `xr_media_hub.yaml` |
+| `services/device-io-hub/` configuration | Its reference YAML and every sample `device_io_hub.yaml` |
 | `utils/xr-ai-launcher/` process API | [Process model](docs/source/components/launcher-and-process-model.md) and sample orchestrators |
 | `utils/xr-ai-vllm/` API or `vllm_backend` / `vllm_image` keys | Every vLLM service wrapper and YAML, every per-profile sample copy, and [AI services](docs/source/components/ai-services.md) |
 | Model-service command, port, model, or container name | Service and sample configuration, model-server orchestration and cleanup, this operational table, and [AI services](docs/source/components/ai-services.md) |
@@ -653,7 +653,7 @@ Keep non-obvious fan-out in the same change:
 - `agent-sdk/xr-ai-tools/` keeps capability-specific dependencies optional;
   spatial math remains CPU-only.
 - Agent workers use public SDK packages and task-specific libraries. They never
-  import `xr_media_hub` or `xr_ai_launcher`.
+  import `device_io_hub` or `xr_ai_launcher`.
 - Internal Python dependencies must have a local `[tool.uv.sources]` path that
   resolves to the project declaring the matching distribution name. The
   generator rejects missing, unused, mismatched, and repository-escaping paths.

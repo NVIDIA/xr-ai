@@ -6,7 +6,7 @@
 # Video memory service
 
 `video-memory-service` is a private typed RPC service for recorded XR camera
-history. XR Media Hub writes the H.264 chunks; this process reads those chunks,
+history. DeviceIOHub writes the H.264 chunks; this process reads those chunks,
 extracts PNG frames with NVDEC, and writes requested clips or frames to
 `out_dir`. It does not subscribe to live hub frames.
 
@@ -57,7 +57,7 @@ out_dir: /tmp/xr_video_queries
 gpu_id: 0
 ```
 
-`recordings_dir` must match XR Media Hub's `video_recording.out_dir`. Omit it
+`recordings_dir` must match DeviceIOHub's `video_recording.out_dir`. Omit it
 only when running the service for a compatibility health check.
 `list_recorded_participants` then returns an empty list; the remaining recorded
 operations return `recording_disabled`.

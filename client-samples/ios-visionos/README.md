@@ -209,7 +209,7 @@ LiveKit WebSocket. Install the cert once:
 
 The connection now completes without warnings. To switch hubs, repeat for
 each new host or replace the auto-generated cert with one from a public
-CA (`cert_file` / `key_file` in `xr_media_hub.yaml`).
+CA (`cert_file` / `key_file` in `device_io_hub.yaml`).
 
 ### "Enable Full Trust" toggle does not appear
 
@@ -250,7 +250,7 @@ Restart the hub (it logs `TLS: cached cert SAN is missing …;
 regenerating…`), then on the device remove the old profile under **VPN &
 Device Management** and reinstall from `https://<host>:8080/cert` exactly
 as above. If the address you type into the app is not on any of the hub's
-interfaces, add it to `web_server_extra_sans` in `xr_media_hub.yaml` first.
+interfaces, add it to `web_server_extra_sans` in `device_io_hub.yaml` first.
 
 ### TLS succeeds but the room rejects the token with 401
 

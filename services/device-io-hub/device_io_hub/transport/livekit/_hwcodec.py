@@ -19,7 +19,7 @@ Override (development only)
 ───────────────────────────
 Set the environment variable to bypass the check at your own risk:
 
-    XR_AI_SKIP_HWCODEC_CHECK=1 uv run xr_media_hub
+    XR_AI_SKIP_HWCODEC_CHECK=1 uv run device_io_hub
 
 This will log a prominent warning and continue. Do NOT set this in
 production — OpenH264 must not be used in distributed software.
@@ -33,7 +33,7 @@ import sys
 
 from loguru import logger
 
-from xr_media_hub._errors import StartupError
+from device_io_hub._errors import StartupError
 
 _SKIP_ENV = "XR_AI_SKIP_HWCODEC_CHECK"
 

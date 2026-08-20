@@ -2,22 +2,22 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-xr_media_hub.ipc — extensible IPC layer for XR-Media-Hub.
+device_io_hub.ipc — extensible IPC layer for DeviceIOHub.
 
 Endpoints
 ---------
 ConnectorEndpoint   — producer (LiveKit connector process)
-HubEndpoint         — server  (XR-Media-Hub process)
+HubEndpoint         — server  (DeviceIOHub process)
 ProcessorEndpoint   — subscriber + publisher (agents, analytics, downstream processors)
 
 Agent code should import from `xr_ai_hub` directly rather than this module —
-it avoids pulling in the full XR-Media-Hub dependency tree.
+it avoids pulling in the full DeviceIOHub dependency tree.
 
 Extensibility
 -------------
 Register new message types at import time:
 
-    from xr_media_hub.ipc import register_encoder, register_decoder, MsgType
+    from device_io_hub.ipc import register_encoder, register_decoder, MsgType
     from enum import IntEnum
 
     class MyMsgType(IntEnum):
@@ -27,8 +27,7 @@ Register new message types at import time:
     register_decoder(MyMsgType.MY_MSG, lambda p: MyMsg(p[0], p[1]))
 """
 
-# Agent-facing types and endpoint — re-exported from xr_ai_hub for
-# backwards compatibility with code that imports from xr_media_hub.ipc.
+# Agent-facing types and endpoint — convenience re-exports from xr_ai_hub.
 from xr_ai_hub import (
     AGENT_STATUS_TOPIC,
     AudioChunk,
@@ -53,7 +52,7 @@ from xr_ai_hub import (
     register_encoder,
 )
 
-# Server-side endpoints — only available when xr-media-hub is installed.
+# Server-side endpoints — only available when device-io-hub is installed.
 from ._connector import ConnectorEndpoint
 from ._hub import (
     TOPIC_AUDIO,

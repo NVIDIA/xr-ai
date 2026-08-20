@@ -8,7 +8,7 @@ Manages the full lifecycle of the LiveKit transport:
   1. Starts the LiveKit server Docker container.
   2. Optionally starts the browser-facing token server (only needed when clients
      are on HTTPS and cannot connect to the LiveKit WS directly).
-  3. Registers this process as a ConnectorEndpoint with the XR-Media-Hub IPC layer.
+  3. Registers this process as a ConnectorEndpoint with the DeviceIOHub IPC layer.
   4. Connects the Python room client to the LiveKit room.
   5. Runs the IPC return-traffic loop and the room client concurrently.
 
@@ -33,7 +33,7 @@ from typing import Awaitable, Callable
 
 from loguru import logger
 
-from xr_media_hub.ipc import AudioChunk, ConnectorEndpoint, DataMessage
+from device_io_hub.ipc import AudioChunk, ConnectorEndpoint, DataMessage
 
 from ._docker import LiveKitDocker
 from ._hwcodec import require_nvidia_video_codecs

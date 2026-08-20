@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-xr_media_hub.video — NVENC video recording for the XR-Media-Hub.
+device_io_hub.video — NVENC video recording for the DeviceIOHub.
 
 Records incoming video frames to Annex B H.264 chunk files using NVENC
 for consistent-quality hardware encoding.  Chunks are concatenable with

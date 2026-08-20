@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-xr_ai_hub — lightweight agent-side SDK for XR-Media-Hub.
+xr_ai_hub — lightweight agent-side SDK for DeviceIOHub.
 
 Agents only need this package (pyzmq + msgpack). The hub implementation and
 its LiveKit, FastAPI, and uvicorn dependencies are not included.

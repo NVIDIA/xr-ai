@@ -16,8 +16,8 @@ _PRIVATE_MODULE_REFERENCE = re.compile(
 )
 _PRIVATE_TERMS = {
     "pipecat": "Pipecat",
-    "xrmediahubinputtransport": "XRMediaHubInputTransport",
-    "xrmediahuboutputtransport": "XRMediaHubOutputTransport",
+    "deviceiohubinputtransport": "DeviceIOHubInputTransport",
+    "deviceiohuboutputtransport": "DeviceIOHubOutputTransport",
 }
 
 

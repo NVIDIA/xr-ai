@@ -35,7 +35,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from xr_media_hub._errors import StartupError
+from device_io_hub._errors import StartupError
 
 from .config import LiveKitConnectorConfig
 

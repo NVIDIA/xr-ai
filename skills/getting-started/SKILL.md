@@ -1,6 +1,6 @@
 ---
 name: getting-started
-description: Get set up to build on the NVIDIA xr-ai stack (XR AI / XR-Media-Hub). Use when a user asks to install, clone, or do initial setup of xr-ai; not for routine work in an already-set-up clone.
+description: Get set up to build on the NVIDIA xr-ai stack (XR AI / DeviceIOHub). Use when a user asks to install, clone, or do initial setup of xr-ai; not for routine work in an already-set-up clone.
 ---
 
 <!--

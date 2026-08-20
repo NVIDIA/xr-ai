@@ -28,11 +28,11 @@ import pytest
 from livekit import rtc
 
 from _helpers_subprocess import pick_free_port
-from xr_media_hub.ipc                       import ConnectorEndpoint
-from xr_media_hub.transport.livekit         import _docker as _docker_mod
-from xr_media_hub.transport.livekit._docker import LiveKitDocker
-from xr_media_hub.transport.livekit._room_client import RoomClient
-from xr_media_hub.transport.livekit.config       import LiveKitConnectorConfig
+from device_io_hub.ipc                       import ConnectorEndpoint
+from device_io_hub.transport.livekit         import _docker as _docker_mod
+from device_io_hub.transport.livekit._docker import LiveKitDocker
+from device_io_hub.transport.livekit._room_client import RoomClient
+from device_io_hub.transport.livekit.config       import LiveKitConnectorConfig
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 

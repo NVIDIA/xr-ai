@@ -27,7 +27,7 @@ from typing import Callable
 
 from xr_ai_hub      import (AGENT_STATUS_TOPIC, AudioChunk, DataMessage,
                             ReturnAudioFlush)
-from xr_media_hub.ipc import ConnectorEndpoint
+from device_io_hub.ipc import ConnectorEndpoint
 
 
 def kill_orphan_vllm(port: int, wait_s: float = 20.0) -> None:

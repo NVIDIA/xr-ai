@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-GPU integration tests for ``xr_media_hub.video._recorder.VideoRecorder``.
+GPU integration tests for ``device_io_hub.video._recorder.VideoRecorder``.
 
 These exercise the real NVENC path end-to-end: feed synthetic NV12 frames in,
 assert that an H.264 chunk + JSON sidecar land on disk. They are skipped on
@@ -30,7 +30,7 @@ from xr_ai_hub import FrameSignal, PixelFormat, SlotView  # noqa: E402
 
 from video_memory_service.service import VideoMemoryService  # noqa: E402
 from video_memory_service.store import ChunkStore  # noqa: E402
-from xr_media_hub.video import VideoRecorder, VideoRecorderConfig  # noqa: E402
+from device_io_hub.video import VideoRecorder, VideoRecorderConfig  # noqa: E402
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 

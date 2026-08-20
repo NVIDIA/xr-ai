@@ -86,8 +86,8 @@ def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
             f"model profile declares unknown services: {sorted(unknown_services)}"
         )
     procs = [
-        Process("hub", "../../services/xr-media-hub", "xr_media_hub",
-                config="yaml/xr_media_hub.yaml"),
+        Process("hub", "../../services/device-io-hub", "device_io_hub",
+                config="yaml/device_io_hub.yaml"),
     ]
     for service, process in _MODEL_PROCESSES.items():
         launch_mode = deployment.launch_mode(service)

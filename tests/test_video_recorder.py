@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import pytest
-from xr_media_hub.video._recorder import _append_encoded_packets
+from device_io_hub.video._recorder import _append_encoded_packets
 
 
 @pytest.mark.parametrize(

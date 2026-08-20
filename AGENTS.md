@@ -39,7 +39,7 @@ skills/          Skill bank that sets coding agents up
   gRPC, so the optional `riva` extra adds `nvidia-riva-client` behind
   `kind: riva_grpc`, with the import deferred into `make_stt`/`make_tts`;
   the base install stays httpx-only.
-- Workers never import `xr_media_hub` or `xr_ai_launcher`. Use public SDK
+- Workers never import `device_io_hub` or `xr_ai_launcher`. Use public SDK
   packages and task-specific libraries.
 - Tools are native, in-process `Tool` or `AsyncTool` instances from
   `xr_ai_tools`. Every execution passes through NeMo Relay. The repository does
@@ -81,7 +81,7 @@ agent-samples/<kebab-name>/
   `run_stack`.
 - Processes start serially, touch their `--ready-file` when ready, and fail the
   stack if any process exits.
-- `xr_media_hub` always runs as its own process.
+- `device_io_hub` always runs as its own process.
 - Raw IPC workers keep hub addresses as module constants, use async callbacks,
   cancel tasks before `ProcessorEndpoint.stop()` and `.close()`, and move
   CPU-bound work to an executor.

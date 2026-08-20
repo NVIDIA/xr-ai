@@ -2,14 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-xr_media_hub.transport.livekit — LiveKit connector for XR-Media-Hub.
+device_io_hub.transport.livekit — LiveKit connector for DeviceIOHub.
 
 The LiveKit connector is an internal transport implementation detail.
-It is not exposed to the agent or MCP layer — only to XR-Media-Hub.
+It is not exposed to the agent or MCP layer — only to DeviceIOHub.
 
 Quick start
 -----------
-    from xr_media_hub.transport.livekit import LiveKitConnector, LiveKitConnectorConfig
+    from device_io_hub.transport.livekit import LiveKitConnector, LiveKitConnectorConfig
 
     cfg  = LiveKitConnectorConfig(room_name="xr-room", api_key="...", api_secret="...")
     conn = LiveKitConnector(cfg)

@@ -5,7 +5,7 @@
 
 # Launcher and process model
 
-Every sample is self-contained: running it starts the XR-Media-Hub and all required
+Every sample is self-contained: running it starts the DeviceIOHub and all required
 processes automatically. No separate server launch step.
 
 Each sample has **two sub-projects**:
@@ -34,8 +34,8 @@ The orchestrator declares the process sequence in code:
 _BASE = Path(__file__).resolve().parent   # sample root
 
 PROCESSES = [
-    Process("hub",    "../../services/xr-media-hub", "xr_media_hub",
-            config="yaml/xr_media_hub.yaml"),
+    Process("hub",    "../../services/device-io-hub", "device_io_hub",
+            config="yaml/device_io_hub.yaml"),
     Process("worker", "worker",               "my_agent_worker",
             config="yaml/my_agent_worker.yaml"),
     # Optional shared components — add as needed:
@@ -57,8 +57,8 @@ def run() -> None:
 - **Native voice workers** pass the ready file to `VoiceAgent`; its private
   media session touches it only after the input transport's hub IPC
   receive loop has started.
-- `xr_media_hub` always runs as its own process — never embedded in-process.
-- The worker never imports anything from `xr_media_hub` or `xr_ai_launcher`.
+- `device_io_hub` always runs as its own process — never embedded in-process.
+- The worker never imports anything from `device_io_hub` or `xr_ai_launcher`.
 - Process management lives in `utils/xr-ai-launcher/`, not inside any process it manages.
 - `run_stack` is fail-fast: if any process exits, the rest are terminated.
 
@@ -75,7 +75,7 @@ The stack is declared as a sequence of `Process` or `Parallel` items:
 
 ```python
 PROCESSES = [
-    Process("hub",    "../../services/xr-media-hub", "xr_media_hub"),
+    Process("hub",    "../../services/device-io-hub", "device_io_hub"),
     Parallel([
         Process("stt", "../../services/stt-server", "stt_server"),
         Process("tts", "../../services/piper-tts",  "piper_tts_server"),
