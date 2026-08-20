@@ -101,12 +101,12 @@ struct ContentView: View {
                 TextField("Host / IP", text: $m.host)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
-                    #if os(iOS)
-                    .keyboardType(.decimalPad)
+                    #if os(iOS) || os(visionOS)
+                    .keyboardType(.numbersAndPunctuation)
                     #endif
 
                 TextField("Port", text: $m.port)
-                    #if os(iOS)
+                    #if os(iOS) || os(visionOS)
                     .keyboardType(.numberPad)
                     #endif
 
@@ -118,7 +118,7 @@ struct ContentView: View {
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .onSubmit {}
-                    #if os(iOS)
+                    #if os(iOS) || os(visionOS)
                     .keyboardType(.URL)
                     #endif
 
