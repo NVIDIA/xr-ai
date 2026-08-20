@@ -586,7 +586,7 @@ For engineers and agents working in the repo:
 | [`DEPENDENCIES.md`](DEPENDENCIES.md) | Authoritative dependency map (update with every `pyproject.toml` change) |
 | [Versioned documentation](https://nvidia.github.io/xr-ai/) | Latest release by default, plus `main` development and release-tag documentation |
 | [`skills/README.md`](skills/README.md) | Skill bank: setup skills for coding agents |
-| [`docs/source/overview/architecture.md`](docs/source/overview/architecture.md) | Hub ↔ transport ↔ agent boundaries; known limitations |
+| [`docs/source/overview/architecture.md`](docs/source/overview/architecture.md) | System topology, runtime data paths, ownership, and extension boundaries |
 | [`docs/source/components/launcher-and-process-model.md`](docs/source/components/launcher-and-process-model.md) | `Process` / `run_stack` mechanics; ready-file protocol |
 | [`docs/source/components/ai-services.md`](docs/source/components/ai-services.md) | VLM / STT / TTS / LLM / embedding server reference + worker call examples |
 | [`docs/source/reference/xr-render-demo.md`](docs/source/reference/xr-render-demo.md) | xr-render-demo architecture: native functions, agentic loop, XR lifecycle |
