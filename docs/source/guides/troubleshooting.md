@@ -345,6 +345,17 @@ to skip CUDA graph capture. Eager mode starts faster but can reduce per-token
 throughput; keep the default when steady-state performance matters more than
 cold-start time.
 
+### vLLM exits before readiness with insufficient GPU memory
+
+**Symptom:** a vLLM container exits during startup with `CUDA out of memory`,
+`No available memory for the cache blocks`, or a negative available KV-cache
+value buried in its container log.
+
+**Fix:** the wrapper classifies these signatures as `INSUFFICIENT GPU MEMORY`
+and prints the configured utilization when available. Free memory held by other
+processes, reduce model context or concurrency, or use a device with more
+GPU-visible memory. The complete original error remains in the reported log file.
+
 ### `xr_render_demo` exits but VRAM is still pinned
 
 **By design.** The vLLM-backed servers (`nemotron_omni_llm_server`,

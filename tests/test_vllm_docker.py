@@ -433,6 +433,31 @@ def _expected_fingerprint(kwargs):
 
 
 class TestRun:
+    def test_preserves_original_vllm_argv_for_failure_diagnostics(
+        self, tmp_path, monkeypatch,
+    ):
+        kwargs = _run_kwargs(tmp_path)
+        captured: dict = {}
+        monkeypatch.setattr(
+            _docker, "run_container", lambda **values: captured.update(values),
+        )
+
+        run(**kwargs)
+
+        assert captured["argv"] == build_run_argv(
+            image=kwargs["image"],
+            container_name=kwargs["container_name"],
+            port=kwargs["port"],
+            model_cache=kwargs["model_cache"],
+            hf_token=kwargs["hf_token"],
+            cuda_visible_devices=kwargs["cuda_visible_devices"],
+            extra_env=kwargs["extra_env"],
+            extra_pip=kwargs["extra_pip"],
+            vllm_argv=kwargs["vllm_argv"],
+        )
+        assert "--gpu-memory-utilization" not in captured["argv"]
+        assert captured["diagnostic_argv"] == kwargs["vllm_argv"]
+
     def test_healthy_unowned_listener_is_rejected(self, tmp_path):
         kwargs = _run_kwargs(tmp_path)
         with (
@@ -684,6 +709,125 @@ class TestRunContainer:
         running["v"] = False
         assert is_alive() is False
 
+    def test_abort_leaves_adopted_running_container_untouched(
+        self, monkeypatch, tmp_path,
+    ):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: False)
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
+        monkeypatch.setattr(_docker, "container_running", lambda name: True)
+        monkeypatch.setattr(
+            _docker,
+            "container_on_port_checked",
+            lambda port: ("xr-ai-test-ctr", True),
+        )
+        handlers: dict = {}
+        monkeypatch.setattr(_docker.signal, "getsignal", lambda sig: None)
+        monkeypatch.setattr(
+            _docker.signal,
+            "signal",
+            lambda sig, handler: handlers.__setitem__(sig, handler),
+        )
+
+        def _interrupt(*_args, **_kwargs):
+            handlers[_docker.signal.SIGTERM](_docker.signal.SIGTERM, None)
+
+        monkeypatch.setattr(_docker._lifecycle, "wait_until_healthy", _interrupt)
+
+        def _must_not_cleanup(*_args, **_kwargs):
+            raise AssertionError("an adopted container belongs to its original wrapper")
+
+        monkeypatch.setattr(_docker, "stop_container", _must_not_cleanup)
+        monkeypatch.setattr(_docker, "remove_container", _must_not_cleanup)
+
+        with pytest.raises(SystemExit, match="130"):
+            _docker.run_container(**self._kwargs(tmp_path))
+
+    def test_abort_removes_container_created_by_wrapper(
+        self, monkeypatch, tmp_path,
+    ):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: False)
+        handlers: dict = {}
+        monkeypatch.setattr(_docker.signal, "getsignal", lambda sig: None)
+        monkeypatch.setattr(
+            _docker.signal,
+            "signal",
+            lambda sig, handler: handlers.__setitem__(sig, handler),
+        )
+
+        class _FakePopen:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def poll(self):
+                return None
+
+            def terminate(self):
+                pass
+
+        monkeypatch.setattr(_docker.subprocess, "Popen", _FakePopen)
+
+        def _interrupt(*_args, **_kwargs):
+            handlers[_docker.signal.SIGTERM](_docker.signal.SIGTERM, None)
+
+        monkeypatch.setattr(_docker._lifecycle, "wait_until_healthy", _interrupt)
+        cleaned: list[tuple[str, str]] = []
+        monkeypatch.setattr(
+            _docker,
+            "stop_container",
+            lambda name, **_kwargs: cleaned.append(("stop", name)) or True,
+        )
+        monkeypatch.setattr(
+            _docker,
+            "remove_container",
+            lambda name: cleaned.append(("remove", name)) or True,
+        )
+
+        with pytest.raises(SystemExit, match="130"):
+            _docker.run_container(**self._kwargs(tmp_path))
+
+        assert cleaned == [
+            ("stop", "xr-ai-test-ctr"),
+            ("remove", "xr-ai-test-ctr"),
+        ]
+
+    def test_abort_stops_but_keeps_restarted_container(
+        self, monkeypatch, tmp_path,
+    ):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: False)
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
+        monkeypatch.setattr(_docker, "container_running", lambda name: False)
+        handlers: dict = {}
+        monkeypatch.setattr(_docker.signal, "getsignal", lambda sig: None)
+        monkeypatch.setattr(
+            _docker.signal,
+            "signal",
+            lambda sig, handler: handlers.__setitem__(sig, handler),
+        )
+
+        def _interrupt(*_args, **_kwargs):
+            handlers[_docker.signal.SIGTERM](_docker.signal.SIGTERM, None)
+
+        monkeypatch.setattr(_docker._lifecycle, "wait_until_healthy", _interrupt)
+        stopped: list[str] = []
+        monkeypatch.setattr(
+            _docker,
+            "stop_container",
+            lambda name, **_kwargs: stopped.append(name) or True,
+        )
+
+        def _must_not_remove(*_args, **_kwargs):
+            raise AssertionError("a restarted container must remain reusable")
+
+        monkeypatch.setattr(_docker, "remove_container", _must_not_remove)
+
+        with pytest.raises(SystemExit, match="130"):
+            _docker.run_container(**self._kwargs(tmp_path))
+
+        assert stopped == ["xr-ai-test-ctr"]
+
     def test_matching_stopped_container_is_restarted(self, monkeypatch, tmp_path):
         self._common_stubs(monkeypatch, _docker)
         monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: False)
@@ -885,6 +1029,57 @@ class TestRunContainer:
         kwargs = self._kwargs(tmp_path)
         _docker.run_container(**kwargs)
         assert evictions == [1]
+
+    @pytest.mark.parametrize("with_vllm_context", [False, True])
+    def test_failure_diagnostics_are_vllm_only(
+        self, monkeypatch, tmp_path, with_vllm_context,
+    ):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: False)
+
+        def fail_startup(*_args, **_kwargs):
+            raise SystemExit(1)
+
+        monkeypatch.setattr(
+            _docker._lifecycle,
+            "wait_until_healthy",
+            fail_startup,
+        )
+
+        class _FakeProc:
+            def poll(self):
+                return None
+
+        class _Streamer:
+            log_path = tmp_path / "container.log"
+
+            def __init__(self, _name):
+                self.log_path.write_text("CUDA out of memory", encoding="utf-8")
+
+            def stop(self):
+                pass
+
+        monkeypatch.setattr(_docker.subprocess, "Popen", lambda *_a, **_kw: _FakeProc())
+        monkeypatch.setattr(_docker, "_LogStreamer", _Streamer)
+        monkeypatch.setattr(_docker, "_append_post_mortem", lambda *_a, **_kw: None)
+        monkeypatch.setattr(_docker.time, "sleep", lambda _seconds: None)
+        captured: list[list[str]] = []
+        monkeypatch.setattr(
+            _docker._diagnostics,
+            "classify_vllm_failure",
+            lambda _path, argv: captured.append(argv) or "diagnosis",
+        )
+        kwargs = self._kwargs(tmp_path)
+        diagnostic_argv = [
+            "vllm", "serve", "model", "--gpu-memory-utilization", "0.78",
+        ]
+        if with_vllm_context:
+            kwargs["diagnostic_argv"] = diagnostic_argv
+
+        with pytest.raises(SystemExit, match="1"):
+            _docker.run_container(**kwargs)
+
+        assert captured == ([diagnostic_argv] if with_vllm_context else [])
 
 
 class TestEvictLocalListener:

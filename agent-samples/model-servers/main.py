@@ -45,16 +45,35 @@ import argparse
 from pathlib import Path
 
 from xr_ai_launcher import (
+    GPUInventoryError,
     Process,
     detect_gpu_config,
     load_deployment_profile,
     require_credentials,
     run_stack,
 )
+from xr_ai_launcher._config import _resolve_config_variant
 from xr_ai_logging import setup_logging
 from xr_ai_vllm import stop_persistent_servers
 
 _BASE = Path(__file__).resolve().parent
+
+
+def _gpu_profile_names() -> tuple[str, ...]:
+    root = _BASE / "yaml"
+    if not root.is_dir():
+        return ()
+    return tuple(path.name for path in sorted(root.iterdir()) if path.is_dir())
+
+
+def _gpu_profile_name(value: str) -> str:
+    names = _gpu_profile_names()
+    if value not in names:
+        available = ", ".join(names) or "none"
+        raise argparse.ArgumentTypeError(
+            f"unknown GPU profile {value!r}; available profiles: {available}"
+        )
+    return value
 
 # service → (project, command, config basename, port). Order is launch
 # order: NIM containers precede local servers (speech NIMs allocate fixed
@@ -95,32 +114,33 @@ def _profile_path(selection: str) -> Path:
     return _BASE / "yaml" / f"models.{selection}.json"
 
 
-def _service_config(gpu_dir: str, config_base: str, profile_key: str) -> str:
-    """Per-profile config variant when present, the service default otherwise."""
-    variant = f"{gpu_dir}/{config_base}_{profile_key}.yaml"
-    if (_BASE / variant).exists():
-        return variant
-    return f"{gpu_dir}/{config_base}.yaml"
-
-
-def _build_processes(selection: str) -> tuple[list[Process], tuple[str, ...]]:
+def _build_processes(
+    selection: str, gpu_profile: str | None = None,
+) -> tuple[list[Process], tuple[str, ...]]:
     profile_path = _profile_path(selection)
     deployment = load_deployment_profile(profile_path)
     unknown = deployment.services.keys() - _MODEL_SERVICES.keys()
     if unknown:
         raise ValueError(f"model profile declares unknown services: {sorted(unknown)}")
 
-    gpu_dir = f"yaml/{detect_gpu_config()}"
+    profile_name = gpu_profile or detect_gpu_config()
+    config_dir = _BASE / "yaml" / profile_name
     profile_key = profile_path.stem.removeprefix("models.")
-    processes = [
-        Process(
+    processes = []
+    for service, (project, command, config_base, port) in _MODEL_SERVICES.items():
+        if deployment.launch_mode(service) != "own":
+            continue
+        config = _resolve_config_variant(config_dir, config_base, profile_key)
+        if not config.is_file():
+            raise ValueError(
+                f"GPU profile {profile_name!r} is incomplete: missing {config} "
+                f"for service {service!r}"
+            )
+        processes.append(Process(
             service, project, command,
-            config=_service_config(gpu_dir, config_base, profile_key),
+            config=config,
             launch_mode="persist", port=port,
-        )
-        for service, (project, command, config_base, port) in _MODEL_SERVICES.items()
-        if deployment.launch_mode(service) == "own"
-    ]
+        ))
     return processes, deployment.required_credentials
 
 
@@ -171,13 +191,26 @@ def run() -> None:
     p.add_argument("--allow-anonymous", action="store_true",
                    help="Start without HF_TOKEN (unauthenticated downloads "
                         "of the multi-GB checkpoints may stall indefinitely).")
+    p.add_argument(
+        "--gpu-profile", metavar="NAME", type=_gpu_profile_name,
+        help="Use a named YAML GPU profile instead of automatic detection. "
+             "Intended for explicitly reviewed custom hardware profiles.",
+    )
     ns, _ = p.parse_known_args()
 
     if ns.stop:
         _stop_models()
         return
 
-    processes, credentials = _build_processes(ns.models)
+    try:
+        processes, credentials = _build_processes(ns.models, ns.gpu_profile)
+    except GPUInventoryError as exc:
+        p.error(
+            f"{exc}\nUse --gpu-profile NAME to select an explicitly reviewed "
+            "custom YAML profile."
+        )
+    except ValueError as exc:
+        p.error(str(exc))
 
     # A missing HF_TOKEN silently stalls the multi-GB first-run download; see
     # docs/source/getting_started/credentials.md.

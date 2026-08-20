@@ -54,7 +54,11 @@ question.
 The worker and orchestrator consume the deployment profile selected by
 `models_config` in `yaml/simple_vlm_example_worker.yaml`:
 
-- `models.local.json` manages local STT, VLM, and TTS services.
+- `models.local.json` manages local STT, VLM, and TTS services. STT keeps the
+  sample-local placement and reuses an existing healthy server. On hardware
+  with enough capacity for a shared `model-servers` profile, VLM uses that
+  profile's launch config so a compatible container is reused; smaller hosts
+  use the sample-local standalone config.
 - `models.hosted.json` uses hosted NVIDIA NIM for VLM and omits the local VLM
   process.
 - `models.omni.json` reuses the Nemotron-Omni VLM service on port 8108.
