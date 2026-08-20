@@ -118,7 +118,10 @@ class FileOutputAgent(Agent):
             )
             ready = _CLEANUP_PRODUCERS <= completed
         if ready:
-            await self._close_participant(participant_id)
+            await self._close_participant(
+                participant_id,
+                expected_generation=generation,
+            )
 
     @subscribe(FOREGROUND_RECORD_TOPIC)
     async def write_foreground(
@@ -192,7 +195,10 @@ class FileOutputAgent(Agent):
                 and _CLEANUP_PRODUCERS <= completed
             )
         if ready:
-            await self._close_participant(participant_id)
+            await self._close_participant(
+                participant_id,
+                expected_generation=event.generation,
+            )
 
     async def stop(self) -> None:
         """Close every active session before the runtime shuts down."""
@@ -275,8 +281,19 @@ class FileOutputAgent(Agent):
             tuple(records),
         )
 
-    async def _close_participant(self, participant_id: str) -> None:
+    async def _close_participant(
+        self,
+        participant_id: str,
+        *,
+        expected_generation: str | None = None,
+    ) -> None:
         async with self._sessions_lock:
+            if (
+                expected_generation is not None
+                and self._leaving_generation.get(participant_id)
+                != expected_generation
+            ):
+                return
             state = self._sessions.pop(participant_id, None)
             self._cleanup.pop(participant_id, None)
             self._leaving_generation.pop(participant_id, None)

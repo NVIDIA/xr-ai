@@ -945,7 +945,17 @@ async def test_cleanup_quorum_does_not_mix_rejoin_generations() -> None:
     files._closed = set()
     files._state = AsyncMock(return_value=files._sessions[participant_id])
 
-    async def close_participant(closing_participant_id: str) -> None:
+    async def close_participant(
+        closing_participant_id: str,
+        *,
+        expected_generation: str | None = None,
+    ) -> None:
+        if (
+            expected_generation is not None
+            and files._leaving_generation.get(closing_participant_id)
+            != expected_generation
+        ):
+            return
         files._sessions.pop(closing_participant_id, None)
         files._cleanup.pop(closing_participant_id, None)
         files._leaving_generation.pop(closing_participant_id, None)
@@ -1029,6 +1039,87 @@ async def test_cleanup_quorum_does_not_mix_rejoin_generations() -> None:
         context("cleanup-images-final"),  # type: ignore[arg-type]
     )
     assert released == [participant_id]
+
+
+@pytest.mark.asyncio
+async def test_rejoin_wins_race_with_ready_cleanup() -> None:
+    participant_id = "participant-rejoin-race"
+    producers = (
+        "guidance",
+        "foreground",
+        "change_watch",
+        "transcript",
+        "video_log",
+    )
+
+    def context(message_id: str):
+        return SimpleNamespace(
+            metadata=SimpleNamespace(
+                participant_id=participant_id,
+                message_id=message_id,
+            )
+        )
+
+    files = object.__new__(FileOutputAgent)
+    files._sessions_lock = asyncio.Lock()
+    original_state = SimpleNamespace(active=True)
+    files._sessions = {participant_id: original_state}
+    files._cleanup = {}
+    files._leaving_generation = {}
+    files._closed = set()
+    files._state = AsyncMock(return_value=original_state)
+    await files.participant_joined(
+        VoiceParticipantJoined(),
+        context("join-1"),  # type: ignore[arg-type]
+    )
+    await files.participant_left(
+        VoiceParticipantLeft(),
+        context("leave-1"),  # type: ignore[arg-type]
+    )
+    for producer in producers[:-1]:
+        await files.participant_cleanup_complete(
+            ParticipantCleanupComplete(generation="leave-1", producer=producer),
+            context("cleanup"),  # type: ignore[arg-type]
+        )
+
+    close_started = asyncio.Event()
+    continue_close = asyncio.Event()
+    close_participant = files._close_participant
+
+    async def delayed_close(
+        closing_participant_id: str,
+        *,
+        expected_generation: str | None = None,
+    ) -> None:
+        close_started.set()
+        await continue_close.wait()
+        await close_participant(
+            closing_participant_id,
+            expected_generation=expected_generation,
+        )
+
+    files._close_participant = delayed_close  # type: ignore[method-assign]
+    final_cleanup = asyncio.create_task(
+        files.participant_cleanup_complete(
+            ParticipantCleanupComplete(
+                generation="leave-1",
+                producer=producers[-1],
+            ),
+            context("cleanup-final"),  # type: ignore[arg-type]
+        )
+    )
+    await asyncio.wait_for(close_started.wait(), timeout=1.0)
+    await files.participant_joined(
+        VoiceParticipantJoined(),
+        context("join-2"),  # type: ignore[arg-type]
+    )
+    continue_close.set()
+    await asyncio.wait_for(final_cleanup, timeout=1.0)
+
+    assert files._sessions[participant_id] is original_state
+    assert participant_id not in files._closed
+    assert participant_id not in files._leaving_generation
+    assert original_state.active
 
 
 @pytest.mark.parametrize("case", ["initial", "complete_when", "state_on_skip"])
