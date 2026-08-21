@@ -8,7 +8,8 @@
 The root [`CONTRIBUTING.md`](https://github.com/NVIDIA/xr-ai/blob/main/CONTRIBUTING.md)
 explains setup, testing, pull requests, and DCO sign-off.
 [`AGENTS.md`](https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md) contains the
-architecture and change constraints used by both humans and coding agents.
+architecture, change constraints, and documentation house style used by both
+humans and coding agents.
 [`DEPENDENCIES.md`](https://github.com/NVIDIA/xr-ai/blob/main/DEPENDENCIES.md)
 is the package dependency map.
 
@@ -33,9 +34,10 @@ The user-facing command catalog is generated from top-level sample
 descriptions in `help=` and do not repeat flag tables in narrative pages.
 
 Sample configuration examples and field-level guidance live in checked-in
-YAML/JSON and adjacent YAML comments. The generated catalog enrolls files under
-a top-level sample's `yaml/` tree and files beside a direct capability
-subproject, then renders them verbatim. Narrative docs should cover only
+YAML and JSON, with field-level guidance in adjacent YAML comments. The
+generated catalog enrolls files under a top-level sample's `yaml/` tree and
+files beside a direct capability
+subproject, then renders them verbatim. Narrative docs cover only
 workflows, operational decisions, credentials, and process relationships.
 
 After a `pyproject.toml` change, run
@@ -43,4 +45,4 @@ After a `pyproject.toml` change, run
 normally regenerates the Python inventory in `DEPENDENCIES.md` automatically,
 and CI rejects drift. Do not edit that generated section by hand. Regenerate the
 affected project's gitignored `uv.lock` locally. New source files require an
-SPDX header; see [SPDX headers](spdx-headers.md).
+SPDX header; refer to {doc}`SPDX headers <spdx-headers>`.

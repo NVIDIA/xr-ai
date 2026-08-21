@@ -8,9 +8,9 @@
 The tea-making sample is a reference for applications that combine a guided
 procedure, visual evidence, foreground questions, independent background
 observers, and voice output. Start with the
-{doc}`quickstart </getting_started/quickstart>` to run it. This page explains
-how to adapt its architecture to another procedure rather than merely changing
-model settings.
+{doc}`quickstart </getting_started/quickstart>` to run it. This architecture
+reference explains how to adapt the sample to another procedure rather than
+merely changing model settings.
 
 The defining pattern is a deterministic workflow around an agentic core. YAML
 declares the steps and state contract. Application code owns transitions and
@@ -81,7 +81,7 @@ is only a bounded view of the current worker process.
 ```text
 camera frames ────────────────> ParticipantImageAgent
                                       │
-accepted speech / typed query          ├─> GuidanceAgent observation loop
+accepted speech or typed query         ├─> GuidanceAgent observation loop
               │                       ├─> ChangeWatchAgent
               v                       └─> VideoLogAgent
         ForegroundAgent
@@ -145,7 +145,7 @@ locks, and participant cleanup.
 | `workflow.py` | Participant sessions and visual observation loop | Add another trigger or evidence source |
 | `foreground.py` | Root-versus-active tool routing and current-query loop | Change interactive behavior |
 | `images.py` | Shared participant image acquisition | Add another image selector |
-| `background_context.py` | Recent-fact store and query tool | Change foreground/background context policy |
+| `background_context.py` | Recent-fact store and query tool | Change foreground and background context policy |
 | `change_watch.py` | Focused visual observer | Build another event-oriented monitor |
 | `transcript.py` | Transcript recording and summarization | Forward or classify laboratory dialogue |
 | `video_log.py` | Periodic caption and delta observer | Build a visual journal |
@@ -209,7 +209,8 @@ restart controls change the participant's position.
 
 The model can propose state only through the commit tool. It cannot mutate the
 session object directly. Deterministic clock and temperature tools perform
-calculations that should not be left to language-model arithmetic.
+calculations that require deterministic arithmetic rather than language-model
+arithmetic.
 
 ## Visual observation loop
 
@@ -298,8 +299,8 @@ class JournalBackendAgent(Agent):
 
 Register the subscriber beside `FileOutputAgent`. A customer system can consume
 guidance records, background facts, transcripts, or video deltas independently.
-If it runs in another process, expose the boundary through a typed msgpack/ZMQ
-service rather than bypassing the repository's service model.
+If it runs in another process, expose the boundary through a typed msgpack over
+ZMQ service rather than bypassing the repository's service model.
 
 ## Adapting the sample
 
@@ -326,10 +327,11 @@ public `execute()` boundary so validation and Relay tracing are preserved.
 ### Add another background observer
 
 Follow the same contract as the three existing applications: an agent-owned
-task per participant, idempotent start/stop/status tools, cancellation on leave,
-a typed durable record topic, and optional compact `BackgroundFact` output.
-Decide explicitly whether the result should be spoken; do not make every
-background record a voice message.
+task per participant, idempotent start, stop, and status tools, cancellation on
+leave, a typed durable record topic, and optional compact `BackgroundFact`
+output.
+Decide explicitly whether to speak the result; do not make every background
+record a voice message.
 
 ### Replace files with production persistence
 
@@ -342,7 +344,7 @@ or voice by accident.
 
 `GuidanceVoiceAgent` is intentionally separate from `GuidanceAgent`. Add,
 suppress, batch, or redirect notices there. Background applications remain
-text/event producers unless a dedicated voice subscriber chooses otherwise.
+text and event producers unless a dedicated voice subscriber chooses otherwise.
 Foreground responses and guidance notices publish to `VoiceAggregationAgent`,
 which combines non-urgent output produced during an active utterance before it
 reaches `VoiceAgent`. The response text reaches the connection client's Agent
@@ -371,7 +373,7 @@ cleanup are one design decision, not separate implementation details.
 
 Test deterministic behavior separately from model quality:
 
-1. Validate workflow YAML, field types, readable/writable sets, and step links.
+1. Validate workflow YAML, field types, readable and writable sets, and step links.
 2. Unit-test atomic commits, evidence counts, explicit advancement, skips,
    resets, and no mutation after completion.
 3. Test root-versus-active tool visibility and the absence of conversation
@@ -384,7 +386,7 @@ When debugging, inspect the workflow, background, foreground, and Relay JSONL
 files as separate stages. This shows whether the problem came from evidence,
 tool selection, state policy, event delivery, or presentation.
 
-## What should become shared
+## What belongs in shared code
 
 Reuse public SDK blocks directly when they already express the contract:
 `VoiceAgent`, `AgentRuntime`, `run_tool_loop`, `CurrentFrameTool`,

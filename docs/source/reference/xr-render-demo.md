@@ -5,9 +5,9 @@
 
 # xr-render-demo — architecture
 
-This page describes the architecture of the xr-render-demo sample. Start with
+This architecture reference describes the xr-render-demo sample. Start with
 {doc}`/getting_started/quickstart` to run it. For inference-server mechanics
-shared with other samples, see {doc}`/components/ai-services`.
+shared with other samples, refer to {doc}`/components/ai-services`.
 
 ## Process stack
 
@@ -18,7 +18,7 @@ any owned process exit terminates the application stack.
 
 | Role | Ownership | Directory | Command | Port |
 |---|---|---|---|---|
-| hub | sample | `services/device-io-hub/` | `device_io_hub` | 8080 (https + wss /rtc proxy); LiveKit 7880 stays on 127.0.0.1 |
+| hub | sample | `services/device-io-hub/` | `device_io_hub` | 8080 (HTTPS and `/rtc` WSS proxy); LiveKit 7880 stays on 127.0.0.1 |
 | cloudxr | sample | `services/cloudxr-runtime/` | `cloudxr_runtime` | 48322 (WSS proxy) |
 | stt | reused | `services/stt-server/` | `stt_server` | 8103 |
 | tts | reused | `services/piper-tts/` | `piper_tts_server` | 8105 |
@@ -136,7 +136,7 @@ LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceAgent
       pre-roll buffer    last 10 chunks (~320 ms) kept at all times;
                          prepended to the utterance buffer on speech onset
                          so the first word's attack isn't clipped
-      VAD                Silero (ONNX, 512-sample / 32 ms windows,
+      VAD                Silero (ONNX, 512-sample (32 ms) windows,
                          probability threshold) via shared xr-ai-vad util
       accumulates        audio while speaking
       finalizes when     silence ≥ 0.8s AND speech ≥ 0.15s
@@ -260,7 +260,7 @@ is worked-example heavy and opens with pronoun and reference resolution.
 The placement agent's prompt maps utterance shapes to tools with contrast
 pairs: a stated distance is a shift (`nudge`); a user-anchored destination
 uses `move_user_relative`; a destination anchored on another object uses
-`move_object_relative` (stacking is relation `above`); "into/inside" is
+`move_object_relative` (stacking is relation `above`); `into` or `inside` is
 containment (`move_inside`). Every rule has a paired worked example, and
 the highest-leakage failure modes carry explicit contrast examples.
 
@@ -278,7 +278,7 @@ a streaming client connects. LOVR cannot start before then.
 5. Worker polls `get_health` every 500 ms (up to 120s)
    lovr_started: true  → send `render.ready` to client → XR session unlocked
    spawn_error: "..."  → log + abort
-6. On reconnect / refresh: `xr.session.started` arrives again
+6. On reconnect or refresh: `xr.session.started` arrives again
    → `_xr_started` is already True → skip spawn, send `render.ready`
    immediately
 ```
@@ -327,10 +327,10 @@ turn is recorded as failed in the runtime event log.
 
 **Concurrent participants.** Each participant's turns are serialized by
 the supervisor's per-participant lock, and a global scene lock serializes
-the snapshot/mutation/verification window across participants, so scene
+the snapshot, mutation, and verification window across participants, so scene
 turns from different participants queue rather than interleave.
 
-### Prompt/eval overlap audit
+### Prompt and evaluation overlap audit
 
 Per `AGENTS.md` "Prompt-driven samples", the harness audits every worker
 prompt against every tier's case inputs at startup and warns on overlap:

@@ -8,13 +8,13 @@
 ## Set up with a coding agent
 
 The fastest path: paste this to your agent and it does the rest, including
-walking you through the choices below. See {doc}`skills` for how it works.
+walking you through the choices below. Refer to {doc}`skills` for how it works.
 
 ```{literalinclude} /_snippets/agent-setup-prompt.txt
 :language: text
 ```
 
-The rest of this page is the manual path.
+The remainder of this quickstart is the manual path.
 
 Every sample follows the same pattern: **start the server, then connect a
 client.** Once it is ready, any supported client — web browser, Android app,

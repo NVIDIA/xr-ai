@@ -49,7 +49,7 @@ skills/          Skill bank that sets coding agents up
   tasks. Agents own their state, resources, lifecycle, background tasks, and
   concurrency policy.
 - Application-specific capabilities stay with their application. Shared
-  process boundaries use typed msgpack/ZMQ services, not MCP.
+  process boundaries use typed msgpack over ZMQ services, not MCP.
 - Image selection and visual inference are separate tools. Selection returns
   lightweight image references; single-image, multi-image, and timestamped
   video-frame query tools resolve them through `VLMService`. Raw media remains
@@ -128,6 +128,37 @@ Comments explain a non-obvious invariant or failure mode. Do not narrate the
 code, debugging history, rejected alternatives, or plans. Keep architectural
 docs about the current system; issue trackers and Git history hold proposals
 and past decisions.
+
+The following house style applies to customer-facing Markdown and
+reStructuredText. Match the surrounding document and keep edits scoped. If a
+task or maintainer establishes a different convention, follow it and update
+this section so the repository guidance remains authoritative.
+
+- **Cross-references:** Introduce documentation links with **Refer to** or
+  **refer to**, not “See” or “see.” Prefer MyST `{doc}` links in Markdown and
+  `:doc:` or `:ref:` roles in reStructuredText. Use a descriptive Markdown link
+  when the target is source code or an external resource, and link directly to
+  the authoritative target rather than through a thin redirect page.
+- **Slashes in prose:** Do not use `/` to mean “or” or “and.” Rewrite with the
+  conjunction or a list. Keep established technical forms such as `I/O`,
+  `iOS/visionOS`, `STUN/TURN`, `VR/AR`, `LLM/VLM`, `pub/sub`, and `and/or`.
+  Keep literal UI text, URLs, paths, endpoints, and code unchanged.
+- **Terminology:** Prefer full words over informal shortenings in paraphrased
+  prose: for example, use **certificate**, not **cert**. Preserve shortenings
+  that are part of literal UI text, logs, filenames, paths, endpoints, or code.
+- **Clarity and consistency:** Use direct word order and specific self-reference
+  nouns such as “This sample,” “This workflow,” or “This reference” instead of
+  “This page” or “This guide.” Keep article usage consistent within a
+  procedure. Hyphenate compound adjectives when they precede a noun.
+- **Requirement strength:** Use **must** for requirements, an imperative for
+  instructions, and explicit softer wording such as **can** or **recommended**
+  for guidance. Avoid ambiguous **should** wording when the intended strength
+  can be stated directly.
+- **Punctuation and headings:** Use a colon to introduce an explanation or
+  list. Use the document's established em-dash style for an aside; do not use a
+  narrative `--`. Keep code markup out of headings when it makes the table of
+  contents or navigation harder to scan. In reStructuredText, make title
+  underlines span the full title.
 
 Use these canonical references when working in their area:
 

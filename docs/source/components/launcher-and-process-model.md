@@ -106,8 +106,8 @@ the IPC socket connects, after the HTTP server starts listening, etc.
 
 Pass `exit_after_ready=True` to `run_stack` to return immediately once
 everything is ready instead of monitoring — useful for launchers whose
-processes are all `launch_mode="persist"` and should outlive the orchestrator
-(e.g. `model-servers`).
+processes are all `launch_mode="persist"` and are designed to outlive the
+orchestrator (e.g. `model-servers`).
 
 ### The `--ready-file` protocol
 
@@ -126,7 +126,7 @@ its IPC receive loop is active.
 - `"own"` (default) — the launcher spawns this process and kills it on
   shutdown.
 - `"persist"` — the launcher spawns this process but leaves it running on
-  shutdown. Use for heavy model servers that should survive stack restarts
+  shutdown. Use for heavy model servers that need to survive stack restarts
   (e.g. vLLM containers). Cleanup is the caller's responsibility. The optional
   `port` field is used to stop such persistent services.
 - `"reuse"` — the launcher does **not** spawn this process; it is assumed to be

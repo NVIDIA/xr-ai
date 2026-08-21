@@ -6,9 +6,9 @@
 # Connecting Clients
 
 Every sample follows the same pattern: **start the server, then connect a
-client.** This page covers the clients that ship under `client-samples/`, how
-to set up, build, and run each one, and the shared token-on-startup connect
-flow they all use.
+client.** This client reference covers the clients that ship under
+`client-samples/`, how to set up, build, and run each one, and the shared
+token-on-startup connection flow they all use.
 
 For the server side — starting the DeviceIOHub and the agent samples — refer to
 {doc}`quickstart`.
@@ -198,10 +198,10 @@ against the system + user CA store automatically.
 ### Android XR
 
 The Android client is a standard Android app (`targetSdk` 34, `minSdk` 24) with
-no XR-specific code. Android XR runs unmodified Android apps, so the sample
-should install and launch on an Android XR device or emulator as a flat 2D
-windowed panel, and the LiveKit audio and data paths, agent-status badge, and
-token flow work the same as on a phone.
+no XR-specific code. Android XR runs unmodified Android apps, so the sample is
+designed to install and launch on an Android XR device or emulator as a flat 2D
+windowed panel. The LiveKit audio and data paths, agent-status badge, and token
+flow use the same behavior as on a phone.
 
 ```{warning}
 Android XR support is **not yet validated**. The sample has not been tested on
@@ -235,7 +235,7 @@ Following the sample's README, create a Multiplatform SwiftUI app, then:
    Product Name `StreamKitSample`, Interface SwiftUI, Language Swift.
 2. **Add destinations** — select the project root, then **Supported
    Destinations → +**; add **visionOS**, remove **macOS** if auto-added. You
-   should be left with iOS and visionOS.
+   must leave iOS and visionOS selected.
 3. **Add the StreamKit package** — **File → Add Package Dependencies… → Add
    Local…**, navigate to `client-samples/ios-visionos/StreamKit/`, and add it,
    ticking **StreamKit** and your app target.
