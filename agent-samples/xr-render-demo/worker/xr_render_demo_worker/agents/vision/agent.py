@@ -48,7 +48,11 @@ def make_vision_agent(
 
         async def look(req: _LiveQuestion) -> ImageQueryResult:
             from xr_ai_tools.current_frame import CurrentFrameRequest
-            frame = await current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
+            try:
+                frame = await current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
+            except Exception as error:
+                # Camera unavailability is expected degradation, not a crash.
+                raise ValueError(f"the current camera view is unavailable ({error})") from None
             return await image_query.execute(ImageQueryRequest(image=frame.image, query=req.question))
 
         tools = [
@@ -66,9 +70,14 @@ def make_vision_agent(
 
             async def look_past(req: _PastQuestion) -> ImageQueryResult:
                 start_us = reference_time_us - req.seconds_ago * 1_000_000
-                frame = await video.get_historical_frame.execute(
-                    HistoricalFrameRequest(participant_id=participant_id, start_us=start_us)
-                )
+                try:
+                    frame = await video.get_historical_frame.execute(
+                        HistoricalFrameRequest(participant_id=participant_id, start_us=start_us)
+                    )
+                except Exception as error:
+                    # Recording may be disabled or hold no frame for this
+                    # window; expected degradation, not a crash.
+                    raise ValueError(f"recorded video is unavailable ({error})") from None
                 return await image_query.execute(ImageQueryRequest(image=frame.image, query=req.question))
 
             tools.append(Tool(

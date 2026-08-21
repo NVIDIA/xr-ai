@@ -13,13 +13,13 @@ from pathlib import Path
 from loguru import logger
 from xr_ai_models import ChatMessage, LLMService, VLMService
 from xr_ai_tools import Tool, ToolSet
-from xr_ai_tools.current_frame import CurrentFrameTool
+from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.text_memory import AddTranscriptRequest, RecallConversationRequest, TextMemoryTools
 from xr_ai_tools.tool_calling import ToolLoopError, run_tool_loop
 from xr_ai_tools.tracking import TrackingTools
 from xr_ai_tools.video_memory import VideoMemoryTools
-from xr_ai_tools.vision import ImageQueryTool
+from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 from xr_render_scene import SceneTools
 
 from ._trace import current_participant_id, current_reference_time_us, current_trace_id
@@ -61,9 +61,21 @@ def _wants_mutation(transcript: str) -> bool:
     return any(word.strip(".,!?;:") in _ACTION_VERBS for word in transcript.lower().split())
 
 
+_INTERROGATIVES = frozenset(
+    "what which who whom whose where when why how "
+    "is are was were am do does did can could should would will".split()
+)
+
+
 def _is_truncated(transcript: str) -> bool:
     words = transcript.strip().rstrip(".?!,;").lower().split()
-    return bool(words) and words[-1] in _DANGLING_WORDS
+    if not words or words[-1] not in _DANGLING_WORDS:
+        return False
+    # Complete questions legitimately end in a preposition ("What am I
+    # looking at?"); only statements can dangle.
+    if transcript.strip().endswith("?") or words[0] in _INTERROGATIVES:
+        return False
+    return True
 
 
 def _truncated_reply(transcript: str) -> str:
@@ -124,10 +136,22 @@ class SceneSupervisor:
                 vlm=vlm,
                 system_prompt="Answer directly from the visible camera image in one short plain-English sentence.",
             )
+
+            async def physical_color(color_words: str) -> str:
+                frame = await current_frame.execute(
+                    CurrentFrameRequest(participant_id=current_participant_id.get())
+                )
+                result = await image_query.execute(ImageQueryRequest(
+                    image=frame.image,
+                    query=(f"What color is {color_words}? Answer with three numbers "
+                           "r, g, b, each between 0 and 1."),
+                ))
+                return result.text
+
             subagent_tools = [
                 make_placement_agent(llm, scene, tracking, context),
-                make_appearance_agent(llm, scene, context),
-                make_object_agent(llm, scene, tracking, context),
+                make_appearance_agent(llm, scene, context, physical_color),
+                make_object_agent(llm, scene, tracking, context, physical_color),
                 make_vision_agent(llm, current_frame, image_query, context, video),
                 make_memory_agent(llm, text_memory),
             ]

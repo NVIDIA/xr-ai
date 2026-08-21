@@ -584,10 +584,17 @@ def _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
     )
     from xr_render_demo_worker.scene import SceneContext
     context = SceneContext(fake_scene, fake_tracking)
+
+    async def physical_color(color_words: str) -> str:
+        from types import SimpleNamespace
+        result = await fake_image_query.execute(
+            SimpleNamespace(query=f"What color is {color_words}?"))
+        return result.text
+
     subagent_tools = [
         make_placement_agent(llm, fake_scene, fake_tracking, context),
-        make_appearance_agent(llm, fake_scene, context),
-        make_object_agent(llm, fake_scene, fake_tracking, context),
+        make_appearance_agent(llm, fake_scene, context, physical_color),
+        make_object_agent(llm, fake_scene, fake_tracking, context, physical_color),
         make_vision_agent(llm, fake_current_frame, fake_image_query, context),
         make_memory_agent(llm, fake_text_memory),
     ]
@@ -651,6 +658,87 @@ _BASICS_HISTORY = (
 _FORBID_MUTATIONS = _MUTATING
 
 UTTERANCES = (
+    Case(
+        name="basics_physical_color_source",
+        request="Make the cylinder the same color as the ceiling.",
+        scene=(
+            {"id": "cylinder-0", "type": "cylinder",
+             "position": {"x": 0.0, "y": 1.5, "z": -1.3},
+             "color": {"r": 1, "g": 1, "b": 1}, "size": 0.1},
+        ),
+        vision="The ceiling is purple.",
+        required_tools=frozenset({"look_at_current_frame", "update_primitive"}),
+        required_order=("look_at_current_frame", "update_primitive"),
+    ),
+    Case(
+        name="basics_holding_color_creates",
+        request="Make a sphere the color of what I'm holding.",
+        vision="A hand holding a blue lid.",
+        required_tools=frozenset({"look_at_current_frame", "add_primitive"}),
+        required_order=("look_at_current_frame", "add_primitive"),
+        expected_colors=(("sphere-0", (0.0, 0.4, 1.0)),),
+    ),
+    Case(
+        name="basics_preposition_final_question",
+        request="What am I looking at right now?",
+        vision="A hand holding a blue lid.",
+        required_tools=frozenset({"look_at_current_frame"}),
+        forbidden_tools=_FORBID_MUTATIONS,
+    ),
+    Case(
+        name="basics_holding_after_camera_chatter",
+        request="What am I holding?",
+        vision="A hand holding a blue lid.",
+        scene=(
+            {"id": "sphere-0", "type": "sphere",
+             "position": {"x": 0.0, "y": 1.6, "z": -1.5},
+             "color": {"r": 0, "g": 0.8, "b": 0}, "size": 0.1},
+            {"id": "box-0", "type": "box",
+             "position": {"x": 0.5, "y": 1.4, "z": -1.2},
+             "color": {"r": 1, "g": 0.5, "b": 0}, "size": 0.1},
+        ),
+        history=(
+            ("No cameras cannot see the scene.",
+             "The scene is empty, so there are no objects for the camera to see."),
+            ("The camera doesn't look at the scene.",
+             "The camera is not currently viewing any objects in the scene."),
+            ("Okay.", "What would you like me to do?"),
+            ("What am I looking at?", "You are looking at the camera."),
+            ("True.", "What would you like me to do?"),
+            ("Make a spear the color of the thing I am holding.",
+             "What are you holding?"),
+            ("Look for yourself.",
+             "I see a green sphere and an orange box in the scene."),
+        ),
+        required_tools=frozenset({"look_at_current_frame"}),
+        forbidden_tools=_FORBID_MUTATIONS,
+    ),
+    Case(
+        name="basics_holding_color_with_history",
+        request="Make a spear the color of the thing I am holding.",
+        vision="A hand holding a blue lid.",
+        history=(
+            ("The camera doesn't look at the scene.",
+             "I'm sorry, but I can't help with that."),
+            ("What am I looking at?", "You are looking at a blue plastic lid."),
+        ),
+        required_tools=frozenset({"look_at_current_frame", "add_primitive"}),
+        required_order=("look_at_current_frame", "add_primitive"),
+        expected_colors=(("sphere-0", (0.0, 0.4, 1.0)),),
+    ),
+    Case(
+        name="basics_recall_beyond_window",
+        request="What color was the very first thing I created?",
+        history=(
+            ("Add a green capsule.", "Created a green capsule."),
+            ("Move it to my left.", "Moved the capsule to your left."),
+            ("Add a white cylinder behind it.", "Created a white cylinder."),
+            ("Make the cylinder bigger.", "Enlarged the cylinder."),
+            ("Swap the capsule and the cylinder.", "Swapped them."),
+        ),
+        expected_call_counts=(("recall_conversation", 2),),
+        forbidden_tools=_FORBID_MUTATIONS,
+    ),
     Case(
         name="basics_create_cube",
         request="Make a red cube.",

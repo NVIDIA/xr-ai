@@ -78,6 +78,7 @@ class SubagentCase:
     required_tools: tuple[str, ...] = ()
     forbid_tools: tuple[str, ...] = ()
     answer_contains: str = ""
+    video_error: str = ""
 
 
 # Expected args: a (lo, hi) tuple is an inclusive range, anything else is exact.
@@ -455,6 +456,22 @@ CASES = (
         answer_contains="purple",
     ),
     SubagentCase(
+        name="holding_question_looks_first",
+        agent="vision",
+        instruction="What is the user holding right now?",
+        vision_answer="A hand holding a blue lid.",
+        required_tools=("look_at_current_frame",),
+        answer_contains="blue",
+    ),
+    SubagentCase(
+        name="past_recording_disabled_degrades",
+        agent="vision",
+        instruction="What color was the object the user held twenty seconds before the utterance timestamp?",
+        video_error="recording disabled",
+        required_tools=("look_at_past_frame",),
+        forbid_tools=("add_primitive", "update_primitive", "remove_primitive"),
+    ),
+    SubagentCase(
         name="vision_dead_camera_degrades",
         agent="vision",
         instruction=(
@@ -506,9 +523,29 @@ CASES = (
     ),
 )
 
+def _make_fake_video(fake, video_error: str):
+    from types import SimpleNamespace
+
+    from xr_ai_tools import Tool
+    from xr_ai_tools.image import ImageReference
+    from xr_ai_tools.video_memory import HistoricalFrameRequest, HistoricalFrameResult
+
+    async def historical(req: HistoricalFrameRequest) -> HistoricalFrameResult:
+        fake.calls.append(("look_at_past_frame", {"start_us": req.start_us}))
+        if video_error:
+            raise ValueError(video_error)
+        return HistoricalFrameResult(
+            image=ImageReference(uri="fake://past"), timestamp_us=max(req.start_us, 0),
+            width=640, height=480)
+
+    return SimpleNamespace(get_historical_frame=Tool(
+        "get_historical_frame", "Recorded frame nearest a timestamp.",
+        HistoricalFrameRequest, HistoricalFrameResult, historical))
+
+
 def _make_agent(
     case_agent, llm, fake_scene, fake_tracking, fake_text_memory,
-    fake_current_frame, fake_image_query, context,
+    fake_current_frame, fake_image_query, context, video=None,
 ):
     if case_agent == "placement":
         return make_placement_agent(llm, fake_scene, fake_tracking, context)
@@ -517,7 +554,7 @@ def _make_agent(
     if case_agent == "object":
         return make_object_agent(llm, fake_scene, fake_tracking, context)
     if case_agent == "vision":
-        return make_vision_agent(llm, fake_current_frame, fake_image_query, context)
+        return make_vision_agent(llm, fake_current_frame, fake_image_query, context, video)
     if case_agent == "memory":
         return make_memory_agent(llm, fake_text_memory)
     raise ValueError(f"unknown agent: {case_agent!r}")
@@ -596,9 +633,10 @@ async def run_case(case: SubagentCase) -> bool:
         agent = _make_agent(
             case.agent, llm, fake_scene, fake_tracking, fake_text_memory,
             fake_current_frame, fake_image_query, context,
+            video=_make_fake_video(scene, case.video_error),
         )
         current_participant_id.set(_PARTICIPANT)
-        current_reference_time_us.set(10_000_000)
+        current_reference_time_us.set(1_700_000_000_000_000)
         errored = False
         try:
             reply = await agent.execute(SubagentTask(instruction=case.instruction))
