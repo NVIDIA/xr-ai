@@ -28,21 +28,21 @@ durable operational records remain JSON Lines files under `artifacts/`.
 
 ## Run it
 
-Start the reusable model services in one terminal:
+Start the reusable model services, then start Piper TTS in a terminal:
 
 ```bash
 uv run --project agent-samples/model-servers model_servers
+uv run --project services/piper-tts piper_tts_server
 ```
 
 Then start the tea stack from the repository root:
 
 ```bash
-uv run --project agent-samples/tea-making-sample tea_making_sample \
-  --tts-mode piper
+uv run --project agent-samples/tea-making-sample tea_making_sample
 
 # Allow direct event-viewer access from a trusted private network.
 uv run --project agent-samples/tea-making-sample tea_making_sample \
-  --tts-mode piper --expose-web-events
+  --expose-web-events
 ```
 
 Open `https://localhost:8080`, accept the self-signed certificate on first use,
@@ -62,13 +62,9 @@ Agent, start watching for spills.
 Agent, start recording the transcript.
 ```
 
-Wake-word mode is enabled by default:
-
-- The default `--voice-mode wake-word` requires the configured wake phrase and
-  allows a short follow-up window. Pass `--voice-mode always-on` explicitly to
-  dispatch every finalized utterance.
-- `--tts-mode piper` runs lightweight CPU speech on port 8105. `magpie` runs
-  neural speech on port 8104 and uses CUDA when available.
+Wake-word behavior comes from the `voice_gate_yaml` selected in
+`yaml/tea_making_worker.yaml`; the checked-in configuration requires the wake
+phrase and allows a short follow-up window. Piper TTS is reused on port 8105.
 
 The connection page is provided by DeviceIOHub and remains part of the sample.
 Only the old monitoring-specific UI is omitted.
@@ -129,14 +125,15 @@ development network or put it behind an authenticated TLS proxy.
   user-facing messages.
 - `worker/tea_making_worker/prompts/` is the default source for model prompts;
   explicit inline YAML values override those files.
-- `yaml/voice_gate.yaml` is the wake-word profile. The launcher selects the
-  always-on profile when requested.
+- `yaml/voice_gate.yaml` is the checked-in wake-word configuration. Set
+  `voice_gate_yaml: voice_gate.always-on.yaml` in the worker YAML to dispatch
+  every finalized utterance without a wake phrase.
 - `yaml/rag_service.yaml` indexes Markdown and text files under
   `rag-documents/` and exposes retrieval over typed msgpack/ZMQ RPC.
 
-Model profiles declare the heavy services as reusable. Their health checks must
-pass before voice input becomes ready. The sample owns its selected TTS process,
-RAG service, hub, and worker.
+The model configuration declares LLM, VLM, STT, embedding, and TTS as reusable.
+Their health checks must pass before voice input becomes ready. The sample owns
+only its RAG service, hub, and worker.
 
 ## Safety
 

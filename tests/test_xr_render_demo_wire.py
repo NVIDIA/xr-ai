@@ -39,9 +39,9 @@ _PACKAGE = _WORKER_DIR / "xr_render_demo_worker"
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
-_MODELS_PROFILE = (
+_MODELS_CONFIG = (
     Path(__file__).resolve().parent.parent
-    / "agent-samples" / "xr-render-demo" / "yaml" / "models.local.json"
+    / "agent-samples" / "xr-render-demo" / "yaml" / "models.json"
 )
 
 
@@ -59,8 +59,8 @@ def _make_llm(stub: StubOpenAI, *, model_name: str = "llm",
 
 
 def _make_spec_llm(stub: StubOpenAI, name: str) -> OpenAICompatLLM:
-    """Build an LLM client from the shipped local profile spec for *name*."""
-    spec = load_models_config(_MODELS_PROFILE).llm(name)
+    """Build an LLM client from the shipped model config for *name*."""
+    spec = load_models_config(_MODELS_CONFIG).llm(name)
     return _make_llm(
         stub,
         model_name=spec.model_name,
@@ -71,6 +71,7 @@ def _make_spec_llm(stub: StubOpenAI, name: str) -> OpenAICompatLLM:
 
 def test_worker_config_loads_sample_yaml() -> None:
     config = load_config(_SAMPLE / "yaml/xr_render_demo_worker.yaml")
+    assert config.models_config == _SAMPLE / "yaml/models.json"
     assert config.voice_gate_yaml.exists()
 
 
@@ -136,9 +137,9 @@ def test_truncated_transcripts_detected() -> None:
 # ── models profile round-trip ─────────────────────────────────────────────────
 
 
-def test_models_profile_loads() -> None:
-    """The bundled local profile parses without error and exposes expected names."""
-    cfg = load_models_config(_MODELS_PROFILE)
+def test_models_config_loads() -> None:
+    """The bundled model config parses and exposes the expected names."""
+    cfg = load_models_config(_MODELS_CONFIG)
     llm_spec      = cfg.llm("llm")
     agent_llm_spec = cfg.llm("agent_llm")
     stt_spec      = cfg.stt("stt")

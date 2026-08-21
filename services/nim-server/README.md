@@ -25,7 +25,8 @@ Riva speech NIMs (parakeet ASR, magpie TTS) additionally set `grpc_port:`,
 the gRPC endpoint workers reach via the `riva_grpc` model kind; `http_port`
 then only serves health.
 
-The samples launch one of these per managed NIM service in the
-`models.vlm_llm_nim.json` deployment profile (the worker reads the same
-profile's model entries). See `docs/source/components/ai-services.md` "Hosting models on
-NVIDIA NIM".
+The shared model-server stack launches one of these per managed NIM service in
+the `models.vlm_llm_nim.json` deployment profile. Samples reuse those
+endpoints by copying the relevant model entries and changing their ownership
+to `reused`; the model-server YAML comments identify the exact mapping. See
+`docs/source/components/ai-services.md` "Hosting models on NVIDIA NIM".

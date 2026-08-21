@@ -37,7 +37,7 @@ def test_render_cloudxr_project_and_config_paths_resolve() -> None:
     namespace = runpy.run_path(str(_RENDER_ROOT / "main.py"))
     cloudxr = next(
         process
-        for process in namespace["_build_processes"]()[0]
+        for process in namespace["_build_processes"]()
         if process.name == "cloudxr"
     )
 

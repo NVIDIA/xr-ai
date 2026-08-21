@@ -33,7 +33,7 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
     idle_timeout = data.get("idle_timeout_secs")
 
     return WorkerConfig(
-        models_config = _resolve(path, str(data.get("models_config", "models.local.json"))),
+        models_config = _resolve(path, "models.json"),
         voice_gate_yaml = _resolve(path, str(data.get("voice_gate_yaml", "voice_gate.yaml"))),
         scene_endpoint = data.get("scene_endpoint", "tcp://127.0.0.1:8320"),
         openxr_endpoint = data.get("openxr_endpoint", "tcp://127.0.0.1:8330"),

@@ -49,9 +49,9 @@ def test_config_catalog_preserves_source_and_language() -> None:
     assert "# Frame freshness" in worker.content
     assert "frame_max_age_s: 5.0" in worker.content
 
-    models = configs["agent-samples/simple-vlm-example/yaml/models.local.json"]
+    models = configs["agent-samples/simple-vlm-example/yaml/models.json"]
     assert models.language == "json"
-    assert '"ownership": "managed"' in models.content
+    assert models.content.count('"ownership": "reused"') == 3
 
     scene = configs["agent-samples/xr-render-demo/scene/scene_service.yaml"]
     assert "lovr_bin" in scene.content

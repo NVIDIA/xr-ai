@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# The launcher materializes these three paths for the selected runtime modes.
+# The launcher materializes these paths for runtime path resolution.
 models_config: models.local.json
 workflow_config: workflow.yaml
 voice_gate_yaml: voice_gate.yaml
