@@ -8,13 +8,14 @@ from pathlib import Path
 from loguru import logger
 from pydantic import BaseModel, Field
 from xr_ai_models import ChatMessage, LLMService
-from xr_ai_tools import Tool, ToolSet
+from xr_ai_tools import Tool
 from xr_ai_tools.current_frame import CurrentFrameTool
-from xr_ai_tools.tool_calling import tool_definitions
+from xr_ai_tools.tool_calling import ToolLoopError, run_tool_loop
 from xr_ai_tools.video_memory import HistoricalFrameRequest, VideoMemoryTools
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult, ImageQueryTool
 
-from ..._loop import tool_loop
+from ..._tolerant import tolerant_toolset
+from ..._trace import current_trace_id
 from ...models import SubagentResult, SubagentTask
 from ...scene import SceneContext
 
@@ -40,7 +41,7 @@ def make_vision_agent(
     video: VideoMemoryTools | None = None,
 ) -> Tool:
     async def handle(request: SubagentTask) -> SubagentResult:
-        logger.debug("vision agent instruction={!r}", request.instruction[:200])
+        logger.debug("vision agent instruction={!r} trace={}", request.instruction[:200], current_trace_id.get())
         if context is not None:
             context.mark_delegated(request.participant_id)
 
@@ -77,7 +78,7 @@ def make_vision_agent(
                 "Inspect a recorded camera frame from seconds_ago seconds before the utterance timestamp.",
                 _PastQuestion, ImageQueryResult, look_past,
             ))
-        toolset = ToolSet(tools)
+        toolset = tolerant_toolset(tools)
         scene_block = ""
         if context is not None:
             scene_block = f"{await context.describe(request.participant_id)}\n\n"
@@ -90,8 +91,13 @@ def make_vision_agent(
                 f"Focused instruction: {request.instruction}"
             )),
         ]
-        result = await tool_loop(llm, messages, tool_definitions(toolset), toolset)
-        return SubagentResult(result=result or "Done.")
+        async def _call_model(transcript, definitions):
+            return await llm.chat(transcript, tools=list(definitions) or None, max_tokens=2048, temperature=0.0)
+        try:
+            loop_result = await run_tool_loop(messages, toolset, _call_model)
+        except ToolLoopError:
+            return SubagentResult(result="I couldn't complete that. Please try again.")
+        return SubagentResult(result=loop_result.content or "Done.")
 
     return Tool(name="vision_agent", description=DESCRIPTION,
                 request_model=SubagentTask, result_model=SubagentResult, handler=handle)

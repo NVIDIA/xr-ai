@@ -39,7 +39,7 @@ uv run xr_render_demo_eval_supervisor
 uv run xr_render_demo_eval_subagents placement
 ```
 
-The offline tiers need only the agent LLM (default `http://localhost:8107`);
+The offline tiers need only the agent LLM (default `http://localhost:8108`);
 they do not require the demo stack, capability services, or LOVR.
 
 ## Live drivers

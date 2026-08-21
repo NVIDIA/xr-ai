@@ -124,7 +124,7 @@ def run() -> None:
         "--served-model-name", served_name,
         "--trust-remote-code",
         "--enable-auto-tool-choice",
-        "--tool-call-parser", "step3p5",
+        "--tool-call-parser", "qwen3_coder",
         "--reasoning-parser-plugin", str(parser_path),
         "--reasoning-parser", "nano_v3",
         "--max-num-seqs", str(max_seqs),

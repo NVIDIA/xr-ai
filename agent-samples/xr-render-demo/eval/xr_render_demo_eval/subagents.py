@@ -36,7 +36,7 @@ from xr_render_scene import SceneObject
 from . import harness
 
 _PARTICIPANT = "eval-user"
-_MUTATING = frozenset({"add_primitive", "update_primitive", "remove_primitive"})
+_MUTATING = harness._MUTATING
 
 # Fixture vocabulary stays distinct from prompt worked examples (see README).
 _CONE = {
@@ -113,6 +113,31 @@ CASES = (
             {
                 "tool": "update_primitive",
                 "args": {"obj_id": "ring-1", "x": (1.15, 1.35), "z": (-1.7, -1.5)},
+            },
+        ),
+    ),
+    SubagentCase(
+        name="stack_on_object",
+        agent="placement",
+        instruction="Put ring-1 on cone-0.",
+        scene=(_CONE, _RING),
+        # Stacking, not containment: the ring must end above the cone.
+        expect=(
+            {
+                "tool": "update_primitive",
+                "args": {"obj_id": "ring-1", "x": (0.4, 0.6), "y": (1.45, 2.0), "z": (-1.7, -1.5)},
+            },
+        ),
+    ),
+    SubagentCase(
+        name="move_into_container",
+        agent="placement",
+        instruction="Put ring-1 in capsule-2.",
+        scene=(_CONE, _RING, _CAPSULE),
+        expect=(
+            {
+                "tool": "update_primitive",
+                "args": {"obj_id": "ring-1", "x": (1.95, 2.05), "y": (1.35, 1.45), "z": (-1.65, -1.55)},
             },
         ),
     ),
@@ -512,7 +537,7 @@ def _args_match(actual: dict[str, Any], expected: dict[str, Any]) -> bool:
 
 
 def check(calls: list[tuple[str, dict[str, Any]]], case: SubagentCase, reply: str) -> tuple[bool, str]:
-    """Match expected mutations order-independently; reject duplicate creation."""
+    """Match expected mutations order-independently; reject any extra mutation."""
     names = {name for name, _args in calls}
     missing = set(case.required_tools) - names
     if missing:
@@ -536,6 +561,9 @@ def check(calls: list[tuple[str, dict[str, Any]]], case: SubagentCase, reply: st
         else:
             actual = [f"{name}({args})" for name, args in mutations]
             return False, f"unmatched {item['tool']}({item['args']}) | actual: {actual}"
+    if remaining:
+        actual = [f"{name}({args})" for name, args in remaining]
+        return False, f"unexpected mutation(s): {actual}"
     return True, f"matched {len(case.expect)} mutation(s)"
 
 
@@ -568,6 +596,7 @@ async def run_case(case: SubagentCase) -> bool:
             case.agent, llm, fake_scene, fake_tracking, fake_text_memory,
             fake_current_frame, fake_image_query, context,
         )
+        errored = False
         try:
             reply = await agent.execute(
                 SubagentTask(
@@ -578,9 +607,12 @@ async def run_case(case: SubagentCase) -> bool:
             )
         except Exception as exc:
             reply = SubagentResult(result=f"<workflow error: {exc}>")
+            errored = True
     finally:
         await llm.close()
     ok, why = check(scene.calls, case, reply.result)
+    if errored:
+        ok, why = False, f"workflow error | {why}"
     status = "PASS" if ok else f"FAIL {why}"
     print(f"{status:32} {case.agent}/{case.name}: {reply.result}")
     return ok

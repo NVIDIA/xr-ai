@@ -8,9 +8,11 @@ import math
 import sys
 import time
 
-from xr_ai_hub import DataMessage, ParticipantEvent, ProcessorEndpoint
+from xr_ai_hub import DataMessage
 from xr_ai_tools.rpc import RPCClient
 from xr_render_scene import EmptyRequest, SceneClient
+
+from ._live_endpoint import LiveEvalEndpoint, live_participant
 
 CANONICAL = {"position": {"x": 0, "y": 1.6, "z": 0}, "forward": {"x": 0, "y": 0, "z": -1},
              "right": {"x": 1, "y": 0, "z": 0}, "up": {"x": 0, "y": 1, "z": 0},
@@ -65,8 +67,7 @@ async def main() -> None:
     tracking = RPCClient("tcp://127.0.0.1:8330", timeout_s=10.0)
     scene = SceneClient("tcp://127.0.0.1:8320")
     await clear_scene(scene)
-    endpoint = ProcessorEndpoint(sub_addr="ipc:///tmp/xr_hub_pub", push_addr="ipc:///tmp/xr_hub_in")
-    run_task = asyncio.create_task(endpoint.run())
+    endpoint = LiveEvalEndpoint()
     await asyncio.sleep(0.5)
 
     failed = 0
@@ -82,10 +83,7 @@ async def main() -> None:
                 raise SystemExit(2) from None
             for prompt, distance in PROMPT_SETS[pose_name]:
                 participant = f"live-pose-{int(time.time())}-{case_index}"
-                await endpoint.inject_participant_event(ParticipantEvent(
-                    participant_id=participant, joined=True, pts_us=time.time_ns() // 1_000))
-                await asyncio.sleep(0.5)
-                try:
+                async with live_participant(endpoint, participant):
                     await clear_scene(scene)
                     before = {i.id for i in (await scene.get_scene_state(EmptyRequest())).objects}
                     await endpoint.inject_data(DataMessage(
@@ -121,9 +119,6 @@ async def main() -> None:
                           f"expected ({ex:.2f},{ey:.2f},{ez:.2f}) miss={miss:.2f}")
                     passed += verdict == "PASS"
                     failed += verdict == "FAIL"
-                finally:
-                    await endpoint.inject_participant_event(ParticipantEvent(
-                        participant_id=participant, joined=False, pts_us=time.time_ns() // 1_000))
                 case_index += 1
         print(f"\npose matrix: {passed} passed, {failed} failed", flush=True)
     finally:
@@ -133,7 +128,7 @@ async def main() -> None:
             pass
         await scene.close()
         await tracking.close()
-        run_task.cancel()
+        await endpoint.close()
     sys.exit(1 if failed else 0)
 
 

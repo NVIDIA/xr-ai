@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from xr_ai_tools.rpc import RPCError
 from xr_ai_tools.tracking import TrackingTools
 from xr_ai_tools.types import EmptyRequest, SpatialFrame
 from xr_render_scene import SceneState, SceneTools
@@ -18,12 +19,7 @@ class SceneContext:
         self._tracking = tracking
         self._recent_moves: dict[str, list[str]] = {}
         self._recent_moves_age: dict[str, int] = {}
-        self._mutating_delegations: set[str] = set()
         self._any_delegations: set[str] = set()
-
-    def mark_mutating(self, participant_id: str) -> None:
-        self._mutating_delegations.add(participant_id)
-        self._any_delegations.add(participant_id)
 
     def mark_delegated(self, participant_id: str) -> None:
         self._any_delegations.add(participant_id)
@@ -31,12 +27,6 @@ class SceneContext:
     def take_delegated(self, participant_id: str) -> bool:
         if participant_id in self._any_delegations:
             self._any_delegations.discard(participant_id)
-            return True
-        return False
-
-    def take_mutating(self, participant_id: str) -> bool:
-        if participant_id in self._mutating_delegations:
-            self._mutating_delegations.discard(participant_id)
             return True
         return False
 
@@ -51,7 +41,7 @@ class SceneContext:
             return None
         try:
             return await self._tracking.get_user_frame.execute(EmptyRequest())
-        except Exception:
+        except RPCError:
             return None
 
     async def describe(self, participant_id: str, *, bearings: bool = False) -> str:

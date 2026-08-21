@@ -233,7 +233,7 @@ class _Leaves:
         try:
             source = await self.find(color_words)
             return (source.color.r, source.color.g, source.color.b)
-        except Exception:
+        except ValueError:
             if self.guard is not None:
                 self.guard.halted = halted
         for word in words:

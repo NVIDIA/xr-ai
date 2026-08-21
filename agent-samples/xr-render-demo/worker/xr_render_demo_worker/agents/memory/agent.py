@@ -7,11 +7,12 @@ from pathlib import Path
 
 from loguru import logger
 from xr_ai_models import ChatMessage, LLMService
-from xr_ai_tools import Tool, ToolSet
+from xr_ai_tools import Tool
 from xr_ai_tools.text_memory import TextMemoryTools
-from xr_ai_tools.tool_calling import tool_definitions
+from xr_ai_tools.tool_calling import ToolLoopError, run_tool_loop
 
-from ..._loop import tool_loop
+from ..._tolerant import tolerant_toolset
+from ..._trace import current_trace_id
 from ...models import SubagentResult, SubagentTask
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
@@ -24,8 +25,8 @@ def make_memory_agent(llm: LLMService, text_memory: TextMemoryTools) -> Tool:
     recall_tool = text_memory.recall_conversation
 
     async def handle(request: SubagentTask) -> SubagentResult:
-        logger.debug("memory agent instruction={!r}", request.instruction[:200])
-        toolset = ToolSet([recall_tool])
+        logger.debug("memory agent instruction={!r} trace={}", request.instruction[:200], current_trace_id.get())
+        toolset = tolerant_toolset([recall_tool])
         prompt = _prompt_text
         messages = [
             ChatMessage(role="system", content=prompt),
@@ -35,8 +36,13 @@ def make_memory_agent(llm: LLMService, text_memory: TextMemoryTools) -> Tool:
                 f"Focused instruction: {request.instruction}"
             )),
         ]
-        result = await tool_loop(llm, messages, tool_definitions(toolset), toolset)
-        return SubagentResult(result=result or "Done.")
+        async def _call_model(transcript, definitions):
+            return await llm.chat(transcript, tools=list(definitions) or None, max_tokens=2048, temperature=0.0)
+        try:
+            loop_result = await run_tool_loop(messages, toolset, _call_model)
+        except ToolLoopError:
+            return SubagentResult(result="I couldn't complete that. Please try again.")
+        return SubagentResult(result=loop_result.content or "Done.")
 
     return Tool(name="memory_agent", description=DESCRIPTION,
                 request_model=SubagentTask, result_model=SubagentResult, handler=handle)

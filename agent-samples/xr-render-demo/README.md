@@ -21,7 +21,7 @@ agent-samples/xr-render-demo/
       agent.py                   xr-ai-runtime Agent; routes voice turns
       supervisor.py              SceneSupervisor: top-level tool loop
       supervisor_prompt.txt      supervisor system prompt
-      _loop.py                   shared agentic tool-calling loop
+      spatial_ops.py             typed spatial tools shared by subagents
       models.py                  SceneRequest / SceneReply / SubagentTask
       scene.py                   SceneContext: snapshot, diff, move history
       agents/
@@ -49,7 +49,7 @@ agent-samples/xr-render-demo/
 voice query
   └─ RenderAgent (xr-ai-runtime Agent)
        └─ SceneSupervisor.handle()           one turn, per-participant lock
-            └─ tool_loop (LLM + subagent tools)
+            └─ run_tool_loop (LLM + subagent tools)
                  ├─ make_placement_agent()   SceneTools + TrackingTools
                  ├─ make_appearance_agent()  SceneTools
                  ├─ make_object_agent()      SceneTools + TrackingTools
@@ -108,8 +108,7 @@ changes). Offline cases in `harness.py` exercise the prompt without a live stack
 uv run --project agent-samples/model-servers model_servers
 
 # Start the demo stack:
-uv run --project agent-samples/xr-render-demo xr_render_demo \
-    --config agent-samples/xr-render-demo/yaml/openxr_service.yaml
+uv run --project agent-samples/xr-render-demo xr_render_demo
 
 # Stop: send SIGTERM to the orchestrator python process (not individual services).
 
@@ -134,7 +133,7 @@ Key log events (all at `DEBUG` level in `supervisor.py`):
 | Event | Message pattern |
 |-------|----------------|
 | Turn received | `supervisor turn participant=... trace=... transcript=...` |
-| Subagent delegated | emitted by the subagent's `tool_loop` |
+| Subagent delegated | emitted by the subagent's `run_tool_loop` |
 | Tool rejected (ValueError) | `tool <name> rejected input: ...` |
 | Tool failed (unexpected) | `tool <name> failed unexpectedly` (with traceback) |
 | Turn failed | `xr-render turn failed for <participant>: ...` |

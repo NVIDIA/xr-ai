@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections import defaultdict
 from pathlib import Path
 
@@ -14,14 +15,14 @@ from xr_ai_models import ChatMessage, LLMService, VLMService
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
-from xr_ai_tools.text_memory import RecallConversationRequest, TextMemoryTools
-from xr_ai_tools.tool_calling import tool_definitions
+from xr_ai_tools.text_memory import AddTranscriptRequest, RecallConversationRequest, TextMemoryTools
+from xr_ai_tools.tool_calling import ToolLoopError, run_tool_loop
 from xr_ai_tools.tracking import TrackingTools
 from xr_ai_tools.video_memory import VideoMemoryTools
 from xr_ai_tools.vision import ImageQueryTool
 from xr_render_scene import SceneTools
 
-from ._loop import tool_loop
+from ._trace import current_trace_id
 from .agents import (
     make_appearance_agent,
     make_memory_agent,
@@ -127,9 +128,9 @@ class SceneSupervisor:
         self._context = context
         self._text_memory = text_memory
         self._toolset = ToolSet(subagent_tools)
-        self._tool_defs = tool_definitions(self._toolset)
         self._prompt = _PROMPT.read_text(encoding="utf-8").strip()
         self._participant_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+        self._scene_lock: asyncio.Lock = asyncio.Lock()
 
     async def _recent_conversation(self, participant_id: str) -> tuple[str, str]:
         recalled = await self._text_memory.recall_conversation.execute(
@@ -153,9 +154,30 @@ class SceneSupervisor:
         )
         return block, pending
 
+    async def _persist_turn(self, request: SceneRequest, user_text: str, reply_text: str) -> None:
+        await self._text_memory.add_transcript.execute(
+            AddTranscriptRequest(
+                source_id=f"{request.participant_id}:user",
+                timestamp_us=request.timestamp_us,
+                text=user_text,
+            )
+        )
+        await self._text_memory.add_transcript.execute(
+            AddTranscriptRequest(
+                source_id=f"{request.participant_id}:agent",
+                timestamp_us=time.time_ns() // 1_000,
+                text=reply_text,
+            )
+        )
+
     async def handle(self, request: SceneRequest) -> SceneReply:
+        current_trace_id.set(request.trace_id)
         if _is_truncated(request.transcript):
-            return SceneReply(response=_truncated_reply(request.transcript))
+            # The ask must reach memory: the next turn's completion splice
+            # keys off the recalled truncated-ask reply.
+            reply = _truncated_reply(request.transcript)
+            await self._persist_turn(request, request.transcript, reply)
+            return SceneReply(response=reply)
 
         async with self._participant_locks[request.participant_id]:
             return await self._handle(request)
@@ -170,10 +192,17 @@ class SceneSupervisor:
         if pending_truncation:
             resolved = _resolve_truncation_reply(pending_truncation, transcript)
             if resolved is None:
-                return SceneReply(response="Okay, never mind that.")
+                reply = "Okay, never mind that."
+                await self._persist_turn(request, request.transcript, reply)
+                return SceneReply(response=reply)
             transcript = resolved
 
-        self._context.take_mutating(request.participant_id)
+        async with self._scene_lock:
+            return await self._handle_scene(request, transcript, conversation)
+
+    async def _handle_scene(
+        self, request: SceneRequest, transcript: str, conversation: str
+    ) -> SceneReply:
         self._context.take_delegated(request.participant_id)
         before = await self._context.snapshot()
 
@@ -189,33 +218,45 @@ class SceneSupervisor:
             ChatMessage(role="user", content=user_message),
         ]
 
-        output = await tool_loop(
-            self._llm, messages, self._tool_defs, self._toolset, max_tokens=2048
-        )
+        async def _call_model(model_transcript, definitions):
+            return await self._llm.chat(
+                model_transcript, tools=list(definitions) or None, max_tokens=2048, temperature=0.0
+            )
 
-        # Conversational turns (no delegation, reply is a question) skip
-        # the verification pass. An ask-back after delegation keeps the pass
-        # in case the subagent owed a mutation it didn't complete.
-        self._context.take_mutating(request.participant_id)
+        try:
+            result = await run_tool_loop(messages, self._toolset, _call_model, max_iterations=12)
+        except ToolLoopError as exc:
+            logger.warning("supervisor loop failed ({})", exc)
+            reply = "I'm sorry — something went wrong. Please try again."
+            await self._persist_turn(request, transcript, reply)
+            return SceneReply(response=reply)
+        output = result.content
+
         delegated_any = self._context.take_delegated(request.participant_id)
-        conversational = not delegated_any and str(output or "").rstrip().endswith("?")
+        conversational = not delegated_any and output.rstrip().endswith("?")
 
         await asyncio.sleep(0.15)  # let the scene RPC propagate before diffing
         if not conversational and not SceneContext.changes(before, await self._context.snapshot()):
-            verification_messages = messages + [
-                ChatMessage(role="assistant", content=output or ""),
+            verification_messages = list(result.messages) + [
                 ChatMessage(role="user", content=(
                     "Verified scene changes this turn: none. If the request needed a"
                     " scene change, delegate the remaining work now; if it needed"
                     " none, repeat your final answer."
                 )),
             ]
-            output = await tool_loop(
-                self._llm, verification_messages, self._tool_defs, self._toolset, max_tokens=2048
-            )
+            try:
+                result2 = await run_tool_loop(
+                    verification_messages, self._toolset, _call_model, max_iterations=12
+                )
+            except ToolLoopError as exc:
+                logger.warning("supervisor verification failed ({})", exc)
+            else:
+                output = result2.content
 
         await self._context.record_moves(request.participant_id, before)
-        return SceneReply(response=output or "Done.")
+        reply_text = output or "Done."
+        await self._persist_turn(request, transcript, reply_text)
+        return SceneReply(response=reply_text)
 
 
 __all__ = ["SceneSupervisor"]

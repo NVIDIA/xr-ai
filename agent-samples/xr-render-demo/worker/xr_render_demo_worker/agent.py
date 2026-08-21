@@ -109,6 +109,21 @@ class RenderAgent(Agent):
             raise
         except Exception as error:
             logger.exception("xr-render turn failed for {}: {!r}", participant_id, error)
+            try:
+                await ctx.publish(
+                    VOICE_OUTPUT_TOPIC,
+                    VoiceOutput(
+                        text="Something went wrong. Please try again.",
+                        response_id=response_id,
+                        final=False,
+                        timestamp_us=query.timestamp_us,
+                    ),
+                )
+                opened = True
+            except Exception:
+                # Best-effort failure notice; a publish failure here has no
+                # further fallback and must not mask the original error.
+                pass
         finally:
             if opened:
                 try:

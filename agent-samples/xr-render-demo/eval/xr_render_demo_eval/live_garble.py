@@ -15,9 +15,11 @@ import asyncio
 import sys
 import time
 
-from xr_ai_hub import DataMessage, ParticipantEvent, ProcessorEndpoint
+from xr_ai_hub import DataMessage
 from xr_ai_tools.rpc import RPCClient
 from xr_render_scene import AddPrimitiveRequest, EmptyRequest, SceneClient
+
+from ._live_endpoint import LiveEvalEndpoint, live_participant
 
 CANONICAL = {"position": {"x": 0, "y": 1.6, "z": 0}, "forward": {"x": 0, "y": 0, "z": -1},
              "right": {"x": 1, "y": 0, "z": 0}, "up": {"x": 0, "y": 1, "z": 0},
@@ -191,8 +193,7 @@ async def main() -> None:
     tracking = RPCClient("tcp://127.0.0.1:8330", timeout_s=10.0)
     scene = SceneClient("tcp://127.0.0.1:8320")
     await clear_scene(scene)
-    endpoint = ProcessorEndpoint(sub_addr="ipc:///tmp/xr_hub_pub", push_addr="ipc:///tmp/xr_hub_in")
-    run_task = asyncio.create_task(endpoint.run())
+    endpoint = LiveEvalEndpoint()
     await asyncio.sleep(0.5)
     try:
         await tracking.call("set_sim_pose", CANONICAL)
@@ -201,7 +202,7 @@ async def main() -> None:
               "agent-samples/xr-render-demo/yaml/openxr_service.yaml and restart the stack")
         await scene.close()
         await tracking.close()
-        run_task.cancel()
+        await endpoint.close()
         raise SystemExit(2) from None
 
     try:
@@ -211,22 +212,20 @@ async def main() -> None:
             if wanted and case["name"] not in wanted:
                 continue
             participant = f"live-garble-{int(time.time())}-{index}"
-            await endpoint.inject_participant_event(ParticipantEvent(
-                participant_id=participant, joined=True, pts_us=time.time_ns() // 1_000))
-            await asyncio.sleep(1.0)
-            await clear_scene(scene)
-            ids = []
-            for prim_type, x, y, z, r, g, b, size in case["fixtures"]:
-                result = await scene.add_primitive(AddPrimitiveRequest(
-                    prim_type=prim_type, x=x, y=y, z=z, r=r, g=g, b=b, size=size))
-                ids.append(result.id)
-            ok, detail = True, ""
-            for number, turn in enumerate(case["turns"], start=1):
-                turn_ok, turn_detail = await run_turn(scene, endpoint, participant, turn, ids)
-                detail = f"turn {number}: {turn_detail}"
-                if not turn_ok:
-                    ok = False
-                    break
+            async with live_participant(endpoint, participant):
+                await clear_scene(scene)
+                ids = []
+                for prim_type, x, y, z, r, g, b, size in case["fixtures"]:
+                    result = await scene.add_primitive(AddPrimitiveRequest(
+                        prim_type=prim_type, x=x, y=y, z=z, r=r, g=g, b=b, size=size))
+                    ids.append(result.id)
+                ok, detail = True, ""
+                for number, turn in enumerate(case["turns"], start=1):
+                    turn_ok, turn_detail = await run_turn(scene, endpoint, participant, turn, ids)
+                    detail = f"turn {number}: {turn_detail}"
+                    if not turn_ok:
+                        ok = False
+                        break
             verdict = "PASS" if ok else "FAIL"
             print(f"{verdict} {case['name']:28s} {detail}", flush=True)
             passed += ok
@@ -239,7 +238,7 @@ async def main() -> None:
             pass
         await scene.close()
         await tracking.close()
-        run_task.cancel()
+        await endpoint.close()
     sys.exit(1 if failed else 0)
 
 

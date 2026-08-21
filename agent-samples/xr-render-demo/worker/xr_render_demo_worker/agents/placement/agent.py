@@ -8,12 +8,13 @@ from pathlib import Path
 
 from loguru import logger
 from xr_ai_models import ChatMessage, LLMService
-from xr_ai_tools import Tool, ToolSet
-from xr_ai_tools.tool_calling import tool_definitions
+from xr_ai_tools import Tool
+from xr_ai_tools.tool_calling import ToolLoopError, run_tool_loop
 from xr_ai_tools.tracking import TrackingTools
 from xr_render_scene import EmptyRequest, SceneState, SceneTools
 
-from ..._loop import tool_loop
+from ..._tolerant import tolerant_toolset
+from ..._trace import current_trace_id
 from ...models import SubagentResult, SubagentTask
 from ...scene import SceneContext
 from ...spatial_ops import TurnGuard, make_placement_tools
@@ -36,7 +37,7 @@ def make_placement_agent(
     delegation_lock = asyncio.Lock()
 
     async def handle(request: SubagentTask) -> SubagentResult:
-        logger.debug("placement agent instruction={!r}", request.instruction[:200])
+        logger.debug("placement agent instruction={!r} trace={}", request.instruction[:200], current_trace_id.get())
         async with delegation_lock:
             guard = TurnGuard()
             tools = make_placement_tools(scene, tracking, guard=guard)
@@ -47,7 +48,7 @@ def make_placement_agent(
                 SceneState,
                 lambda _: scene.get_scene_state.execute(EmptyRequest()),
             ))
-            toolset = ToolSet(tools)
+            toolset = tolerant_toolset(tools)
             prompt = _prompt_text
             messages = [
                 ChatMessage(role="system", content=prompt),
@@ -58,9 +59,14 @@ def make_placement_agent(
                     f"Focused instruction: {request.instruction}"
                 )),
             ]
-            result = await tool_loop(llm, messages, tool_definitions(toolset), toolset)
-            context.mark_mutating(request.participant_id)
-            return SubagentResult(result=result or "Done.")
+            async def _call_model(transcript, definitions):
+                return await llm.chat(transcript, tools=list(definitions) or None, max_tokens=2048, temperature=0.0)
+            try:
+                loop_result = await run_tool_loop(messages, toolset, _call_model)
+            except ToolLoopError:
+                return SubagentResult(result="I couldn't complete that. Please try again.")
+            context.mark_delegated(request.participant_id)
+            return SubagentResult(result=loop_result.content or "Done.")
 
     return Tool(name="placement_agent", description=DESCRIPTION,
                 request_model=SubagentTask, result_model=SubagentResult, handler=handle)

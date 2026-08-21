@@ -12,6 +12,7 @@ from typing import Any
 from xr_ai_models import load_models_config, make_llm
 from xr_ai_tools import Tool
 from xr_ai_tools.text_memory import (
+    AddTranscriptRequest,
     ConversationEntry,
     RecallConversationRequest,
     RecallConversationResult,
@@ -85,9 +86,9 @@ class _FakeTextMemoryTools:
 
         self.recall_conversation = Tool(
             "recall_conversation", "Recall.", RecallConversationRequest, RecallConversationResult, recall)
-        async def _noop_transcript(req: Any) -> None:
+        async def _noop_transcript(req: AddTranscriptRequest) -> None:
             return None
-        self.add_transcript = Tool("add_transcript", "Add.", EmptyRequest, None, _noop_transcript)
+        self.add_transcript = Tool("add_transcript", "Add.", AddTranscriptRequest, None, _noop_transcript)
 
 
 class _FakeCurrentFrameTool:
@@ -549,7 +550,7 @@ def check_corpus(calls: list[tuple[str, dict[str, Any]]], case: dict[str, Any]) 
         wanted_desc = "; ".join(f"{expect['tool']}({expect.get('args', {})})" for expect in unmatched)
         actual = [f"{name}({args})" for name, args in mutations]
         return False, f"unmatched: {wanted_desc} | actual mutations: {actual} | calls: {names}"
-    if not case.get("ignore_extra", True) and remaining:
+    if not case.get("ignore_extra", False) and remaining:
         return False, f"extra mutating calls: {[name for name, _args in remaining]}"
     if (predicate := case.get("predicate")) is not None:
         ok, message = predicate(mutations)
@@ -605,9 +606,14 @@ async def run_corpus_case(case: dict[str, Any]) -> bool:
             response = reply.response
         except Exception as exc:
             response = f"<workflow error: {exc}>"
+            ok_override = False
+        else:
+            ok_override = None
     finally:
         await llm.close()
     ok, why = check_corpus(scene.calls, case)
+    if ok_override is not None:
+        ok, why = ok_override, response
     status = "PASS" if ok else f"FAIL {why}"
     print(f"{status:32} {case['name']}: {response}", flush=True)
     return ok
@@ -854,6 +860,7 @@ async def run_case(case: Case) -> bool:
         fake_scene, fake_tracking, fake_text_memory, fake_current_frame, fake_image_query = scene.make_tools()
         supervisor = _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
                                       fake_current_frame, fake_image_query)
+        errored = False
         try:
             reply = await supervisor.handle(
                 SceneRequest(
@@ -865,6 +872,7 @@ async def run_case(case: Case) -> bool:
             response = reply.response
         except Exception as exc:
             response = f"<workflow error: {exc}>"
+            errored = True
     finally:
         await llm.close()
     called = {name for name, _arguments in scene.calls}
@@ -904,7 +912,8 @@ async def run_case(case: Case) -> bool:
         or tuple(scene.objects[object_id].position.model_dump().values()) != expected
     }
     passed = (
-        not missing
+        not errored
+        and not missing
         and not forbidden
         and not out_of_order
         and not wrong_call_counts

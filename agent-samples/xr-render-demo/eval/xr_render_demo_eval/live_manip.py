@@ -8,9 +8,11 @@ import math
 import sys
 import time
 
-from xr_ai_hub import DataMessage, ParticipantEvent, ProcessorEndpoint
+from xr_ai_hub import DataMessage
 from xr_ai_tools.rpc import RPCClient
 from xr_render_scene import AddPrimitiveRequest, EmptyRequest, SceneClient
+
+from ._live_endpoint import LiveEvalEndpoint, live_participant
 
 CANONICAL = {"position": {"x": 0, "y": 1.6, "z": 0}, "forward": {"x": 0, "y": 0, "z": -1},
              "right": {"x": 1, "y": 0, "z": 0}, "up": {"x": 0, "y": 1, "z": 0},
@@ -144,8 +146,7 @@ async def main() -> None:
     tracking = RPCClient("tcp://127.0.0.1:8330", timeout_s=10.0)
     scene = SceneClient("tcp://127.0.0.1:8320")
     await clear_scene(scene)
-    endpoint = ProcessorEndpoint(sub_addr="ipc:///tmp/xr_hub_pub", push_addr="ipc:///tmp/xr_hub_in")
-    run_task = asyncio.create_task(endpoint.run())
+    endpoint = LiveEvalEndpoint()
     await asyncio.sleep(0.5)
     try:
         await tracking.call("set_sim_pose", CANONICAL)
@@ -154,7 +155,7 @@ async def main() -> None:
               "agent-samples/xr-render-demo/yaml/openxr_service.yaml and restart the stack")
         await scene.close()
         await tracking.close()
-        run_task.cancel()
+        await endpoint.close()
         raise SystemExit(2) from None
 
     try:
@@ -164,40 +165,38 @@ async def main() -> None:
             if wanted and case["name"] not in wanted:
                 continue
             participant = f"live-manip-{int(time.time())}-{index}"
-            await endpoint.inject_participant_event(ParticipantEvent(
-                participant_id=participant, joined=True, pts_us=time.time_ns() // 1_000))
-            await asyncio.sleep(1.0)
-            await clear_scene(scene)
-            ids = []
-            for prim_type, x, y, z, r, g, b, size in case["fixtures"]:
-                result = await scene.add_primitive(AddPrimitiveRequest(
-                    prim_type=prim_type, x=x, y=y, z=z, r=r, g=g, b=b, size=size))
-                ids.append(result.id)
-            snapshot = {i.id: i for i in (await scene.get_scene_state(EmptyRequest())).objects}
-            await endpoint.inject_data(DataMessage(
-                participant_id=participant, topic="",
-                pts_us=time.time_ns() // 1_000, data=case["prompt"].encode()))
-            verdict = "PASS" if case.get("no_change_ok") else "FAIL"
-            detail = "no change within 75s"
-            deadline = asyncio.get_running_loop().time() + 75
-            while asyncio.get_running_loop().time() < deadline:
-                await asyncio.sleep(2)
-                objects = {i.id: i for i in (await scene.get_scene_state(EmptyRequest())).objects}
-                if objects != snapshot:
-                    await asyncio.sleep(4)
+            async with live_participant(endpoint, participant):
+                await clear_scene(scene)
+                ids = []
+                for prim_type, x, y, z, r, g, b, size in case["fixtures"]:
+                    result = await scene.add_primitive(AddPrimitiveRequest(
+                        prim_type=prim_type, x=x, y=y, z=z, r=r, g=g, b=b, size=size))
+                    ids.append(result.id)
+                snapshot = {i.id: i for i in (await scene.get_scene_state(EmptyRequest())).objects}
+                await endpoint.inject_data(DataMessage(
+                    participant_id=participant, topic="",
+                    pts_us=time.time_ns() // 1_000, data=case["prompt"].encode()))
+                verdict = "PASS" if case.get("no_change_ok") else "FAIL"
+                detail = "no change within 75s"
+                deadline = asyncio.get_running_loop().time() + 75
+                while asyncio.get_running_loop().time() < deadline:
+                    await asyncio.sleep(2)
                     objects = {i.id: i for i in (await scene.get_scene_state(EmptyRequest())).objects}
-                    try:
-                        ok = case["check"](ids, objects)
-                    except Exception as error:
-                        ok, detail = False, f"check error: {error}"
-                    else:
-                        new_ids = [k for k in objects if k not in snapshot]
-                        detail = "; ".join(
-                            [f"{i}:{'GONE' if i not in objects else objects[i].model_dump()}" for i in ids]
-                            + [f"NEW {k}:{objects[k].model_dump()}" for k in new_ids]
-                        )[:400]
-                    verdict = "PASS" if ok else "FAIL"
-                    break
+                    if objects != snapshot:
+                        await asyncio.sleep(4)
+                        objects = {i.id: i for i in (await scene.get_scene_state(EmptyRequest())).objects}
+                        try:
+                            ok = case["check"](ids, objects)
+                        except Exception as error:
+                            ok, detail = False, f"check error: {error}"
+                        else:
+                            new_ids = [k for k in objects if k not in snapshot]
+                            detail = "; ".join(
+                                [f"{i}:{'GONE' if i not in objects else objects[i].model_dump()}" for i in ids]
+                                + [f"NEW {k}:{objects[k].model_dump()}" for k in new_ids]
+                            )[:400]
+                        verdict = "PASS" if ok else "FAIL"
+                        break
             print(f"{verdict} {case['name']:22s} {detail}", flush=True)
             passed += verdict == "PASS"
             failed += verdict == "FAIL"
@@ -209,7 +208,7 @@ async def main() -> None:
             pass
         await scene.close()
         await tracking.close()
-        run_task.cancel()
+        await endpoint.close()
     sys.exit(1 if failed else 0)
 
 

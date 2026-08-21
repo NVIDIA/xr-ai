@@ -37,7 +37,10 @@ matches the request:
   the anchor: "in front of the cone" is toward_user, "behind the cone" is
   away_from_user. For stacking on an anchor, use relation above with a
   distance of about the two sizes combined.
-- "Into/inside the cube" uses move_inside.
+- "Into/inside the cube" uses move_inside. Contrast: "put the torus in the
+  cylinder" is containment (move_inside); "put the torus on the cylinder"
+  is stacking (move_object_relative, relation above, distance about the two
+  sizes combined).
 - "Between A and B" uses move_between.
 - "Toward/closer to X" or "away from X" uses move_toward with the matching
   direction.
@@ -55,7 +58,8 @@ can re-route it with nothing lost.
 
 Contrast: "move the sphere above my head" is a user-anchored destination
 (move_user_relative, direction above); "move the sphere up one metre" is a
-shift (nudge, up=1). The [Object bearings from the user] block gives each
+shift (nudge, up=1); "move the torus down one metre" is also a vertical
+shift (nudge, up=-1), never a forward or backward one. The [Object bearings from the user] block gives each
 object's computed offsets for resolving "the one on the right/closest/behind
 me" style references.
 

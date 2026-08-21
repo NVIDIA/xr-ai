@@ -65,7 +65,6 @@ _LEGACY_ROOTS = {"ai-services", "cloudxr-runtime", "server-runtime"}
 _ALLOWED_LEGACY_REFERENCES = {
     Path("tests/test_service_layout.py"),
     Path("docs/source/reference/migrations.md"),
-    Path("docs/changelog.md"),
 }
 _HUB_PROJECT = _ROOT / "services" / "device-io-hub"
 _SAMPLE_WEB_CLIENTS = {

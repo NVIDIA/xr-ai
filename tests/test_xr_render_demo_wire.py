@@ -16,16 +16,12 @@ import sys
 from pathlib import Path
 
 import pytest
-from xr_ai_hub import DataMessage, FrameData, FrameSignal
 from xr_ai_models import (
     ChatMessage,
-    ChatResponse,
     OpenAICompatLLM,
     ToolDef,
     load_models_config,
 )
-from xr_ai_tools.tool_calling import tool_definitions
-from xr_ai_tools.tracking import TrackingTools
 from xr_render_demo_worker.config import load_config
 from xr_render_demo_worker.models import SceneReply, SceneRequest, SubagentResult, SubagentTask
 
@@ -37,8 +33,6 @@ _WORKER_DIR = (
 sys.path.insert(0, str(_WORKER_DIR))
 
 from _stub_openai import StubOpenAI  # noqa: E402
-from xr_render_demo_worker import spatial_tools as _spatial_tools  # noqa: E402
-from xr_render_demo_worker import tools as _tools  # noqa: E402
 
 _SAMPLE = Path(__file__).resolve().parent.parent / "agent-samples" / "xr-render-demo"
 _PACKAGE = _WORKER_DIR / "xr_render_demo_worker"
@@ -162,9 +156,9 @@ def test_models_profile_loads() -> None:
     assert agent_llm_spec.reasoning_field == "reasoning_content"
 
     # Both logical LLMs share the Omni server. The preset must pin thinking off
-    # at the wire level: Nemotron-3-Nano-Omni's template defaults
-    # thinking-on, which would burn the quick-ack's 40-token budget on hidden
-    # reasoning and return empty content with finish_reason="length".
+    # at the wire level: Nemotron-3-Nano-Omni's template defaults thinking-on,
+    # which burns short reply budgets on hidden reasoning and returns empty
+    # content with finish_reason="length".
     for spec in (llm_spec, agent_llm_spec):
         assert spec.model_name == "llm"
         assert spec.default_extras["chat_template_kwargs"] == {"enable_thinking": False}
@@ -195,17 +189,17 @@ def test_worker_config_idle_timeout_opt_in(tmp_path) -> None:
     assert cfg.idle_timeout_secs == 300.0
 
 
-# ── quick-ack wire golden ─────────────────────────────────────────────────────
+# ── untooled chat wire golden ─────────────────────────────────────────────────
 
 
-async def test_quick_ack_wire_golden() -> None:
-    """quick-ack: max_tokens=40, temperature=0.0, no tools, thinking pinned off."""
+async def test_untooled_chat_wire_golden() -> None:
+    """Untooled chat on the llm preset: params pass through, thinking pinned off."""
     stub = StubOpenAI()
-    stub.set_chat_message(content='{"ack": "On it!", "think": false}')
+    stub.set_chat_message(content="On it!")
     llm = _make_spec_llm(stub, "llm")
 
     messages = [
-        ChatMessage(role="system", content="You are a quick-ack classifier."),
+        ChatMessage(role="system", content="Reply in one short sentence."),
         ChatMessage(role="user",   content="Add a red sphere in front of me"),
     ]
     resp = await llm.chat(messages, max_tokens=40, temperature=0.0)
@@ -221,35 +215,9 @@ async def test_quick_ack_wire_golden() -> None:
     assert body["messages"][0]["role"] == "system"
     assert body["messages"][1]["role"] == "user"
 
-    assert resp.content == '{"ack": "On it!", "think": false}'
+    assert resp.content == "On it!"
     assert resp.reasoning is None
     assert resp.tool_calls is None
-
-
-# ── still-working wire golden ─────────────────────────────────────────────────
-
-
-async def test_still_working_wire_golden() -> None:
-    """still-working: max_tokens=24, temperature=0.9, no tools, thinking pinned off."""
-    stub = StubOpenAI()
-    stub.set_chat_message(content="Still calculating the position...")
-    llm = _make_spec_llm(stub, "llm")
-
-    messages = [
-        ChatMessage(role="system", content="Generate a short still-working message."),
-        ChatMessage(role="user",   content="User request: Add a sphere to my left"),
-    ]
-    resp = await llm.chat(messages, max_tokens=24, temperature=0.9)
-
-    body = stub.last_json()
-
-    assert body["model"]       == "llm"
-    assert body["max_tokens"]  == 24
-    assert body["temperature"] == 0.9
-    assert "tools" not in body
-    assert body["chat_template_kwargs"] == {"enable_thinking": False}
-
-    assert resp.content == "Still calculating the position..."
 
 
 # ── agentic-loop wire golden ──────────────────────────────────────────────────
@@ -444,172 +412,4 @@ def test_tool_def_to_openai_wire_shape() -> None:
             },
         },
     }
-
-
-async def test_render_spatial_native_toolbox_builds() -> None:
-    """The sample's prompt-compatible spatial surface uses native Tool schemas."""
-    tracking = TrackingTools("tcp://127.0.0.1:65530", timeout_s=0.1)
-    try:
-        spatial = _spatial_tools.RenderSpatialTools(tracking)
-        definitions = {tool.name: tool for tool in tool_definitions(spatial.tools)}
-        expected_parameters = {
-            "along_direction": {
-                "origin_x", "origin_y", "origin_z", "target_x", "target_y", "target_z", "distance",
-            },
-            "between_anchors": {"a_x", "a_y", "a_z", "b_x", "b_y", "b_z"},
-            "displace_object": {"current_x", "current_y", "current_z", "right", "up", "forward"},
-            "displace_objects": {
-                "object_ids", "current_xs", "current_ys", "current_zs", "right", "up", "forward",
-            },
-            "get_head_pose": set(),
-            "place_inside_by_id": {"movee_id", "container_x", "container_y", "container_z"},
-            "place_object_relative": {"origin_x", "origin_y", "origin_z", "direction", "distance"},
-            "place_user_relative": {"direction", "distance"},
-            "position_ahead": {"distance"},
-            "position_relative": {
-                "forward", "right", "up", "origin_x", "origin_y", "origin_z",
-            },
-            "scale_value": {"current", "factor"},
-            "world_offset": {"origin_x", "origin_y", "origin_z", "dx", "dy", "dz"},
-        }
-        assert set(definitions) == set(expected_parameters)
-        for name, parameters in expected_parameters.items():
-            properties = definitions[name].parameters["properties"]
-            assert set(properties) == parameters
-            assert all(prop.get("description") for prop in properties.values())
-    finally:
-        await tracking.close()
-
-
-async def test_render_spatial_vector_tools_execute_edge_cases() -> None:
-    tracking = TrackingTools("tcp://127.0.0.1:65530", timeout_s=0.1)
-    try:
-        spatial = _spatial_tools.RenderSpatialTools(tracking)
-        offset = await spatial.world_offset.execute(
-            _spatial_tools.WorldOffsetRequest(
-                origin_x=1.0, origin_y=2.0, origin_z=3.0,
-                dx=-0.5, dy=1.0, dz=2.0,
-            )
-        )
-        scaled = await spatial.scale_value.execute(
-            _spatial_tools.ScaleValueRequest(current=1.25, factor=2.0)
-        )
-        away = await spatial.along_direction.execute(
-            _spatial_tools.AlongDirectionRequest(
-                origin_x=0.0, origin_y=0.0, origin_z=0.0,
-                target_x=1.0, target_y=0.0, target_z=0.0, distance=-2.0,
-            )
-        )
-
-        assert offset.model_dump() == {"x": 0.5, "y": 3.0, "z": 5.0}
-        assert scaled.value == 2.5
-        assert away.model_dump() == {"x": -2.0, "y": 0.0, "z": 0.0}
-        with pytest.raises(RuntimeError, match="origin and target coincide"):
-            await spatial.along_direction.execute(
-                _spatial_tools.AlongDirectionRequest(
-                    origin_x=1.0, origin_y=1.0, origin_z=1.0,
-                    target_x=1.0, target_y=1.0, target_z=1.0,
-                    distance=0.5,
-                )
-            )
-    finally:
-        await tracking.close()
-
-
-async def test_live_worker_and_eval_share_native_toolbox_assembly() -> None:
-    """NativeCapabilities exposes the complete runtime tool surface without MCP."""
-    capabilities = _tools.NativeCapabilities(
-        scene_endpoint="tcp://127.0.0.1:65527",
-        openxr_endpoint="tcp://127.0.0.1:65528",
-        video_memory_endpoint="tcp://127.0.0.1:65529",
-        frame_endpoint=_FakeEndpoint(),
-        vlm=_FakeVLM(),
-        text_memory_dir="/tmp/xr-render-test-memory",
-    )
-    try:
-        names = {name for name, _tool in capabilities.all.items()}
-    finally:
-        await capabilities.close()
-
-    assert names == {
-        "add_primitive",
-        "along_direction",
-        "between_anchors",
-        "displace_object",
-        "displace_objects",
-        "get_current_frame",
-        "get_historical_frame",
-        "get_historical_frames",
-        "get_historical_video",
-        "get_head_pose",
-        "get_health",
-        "get_latest_video",
-        "get_scene_state",
-        "get_video_stats",
-        "list_recorded_participants",
-        "place_inside_by_id",
-        "place_object_relative",
-        "place_user_relative",
-        "position_ahead",
-        "position_relative",
-        "query_image",
-        "query_images",
-        "query_video",
-        "get_latest_frames",
-        "remove_primitive",
-        "scale_value",
-        "start_xr",
-        "update_primitive",
-        "world_offset",
-    }
-
-
-class _FakeEndpoint:
-    """Hub ProcessorEndpoint double — frame callback, pixel request, status, and
-    return-data send. Native vision functions acquire frames through this endpoint;
-    the transport delegates return-data sends to it, so camera-control messages are
-    recorded in the shared ``sent`` list."""
-
-    def __init__(self, sent: list[DataMessage] | None = None) -> None:
-        self.frame_cbs: list = []
-        self.frame: FrameData | None = None
-        self.frame_requests: list[FrameSignal] = []
-        self.statuses: list[tuple[str, str]] = []
-        self.sent: list[DataMessage] = sent if sent is not None else []
-
-    def on_frame(self, cb) -> None:
-        self.frame_cbs.append(cb)
-
-    def on_participant(self, _cb) -> None:
-        pass
-
-    async def request_frame(self, sig: FrameSignal, timeout: float = 0.0):
-        self.frame_requests.append(sig)
-        return self.frame
-
-    async def set_status(self, status: str, pid: str | None = None) -> None:
-        self.statuses.append((status, pid or ""))
-
-    async def send_return_data(self, msg: DataMessage) -> None:
-        self.sent.append(msg)
-
-
-class _FakeVLM:
-    """VLMService double — records image calls and returns a canned
-    ChatResponse so we can assert the perception path reached the VLM."""
-
-    def __init__(self, answer: str = "It's a red mug.") -> None:
-        self.answer = answer
-        self.calls: list[tuple[str, str]] = []
-
-    async def ask_images(self, images, question, *, system_prompt: str = "",
-                         **_kw) -> ChatResponse:
-        self.calls.append((images, question))
-        return ChatResponse(
-            content=self.answer, reasoning=None, tool_calls=None,
-            finish_reason="stop", raw={},
-        )
-
-    async def close(self) -> None:
-        pass
 
