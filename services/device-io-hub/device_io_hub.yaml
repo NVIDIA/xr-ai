@@ -3,7 +3,9 @@
 
 # DeviceIOHub — reference configuration
 #
-# All available options are listed here with their defaults.
+# All available options are listed here. LiveKit credentials are required;
+# replace the local-development values below or set LIVEKIT_API_KEY and
+# LIVEKIT_API_SECRET in the environment.
 # Copy this file (or a subset of it) to your agent sample directory and
 # edit as needed.  Relative paths are resolved from this file's directory.
 #
@@ -26,6 +28,12 @@ lk_use_external_ip: false
 # Enable only when the cloud NAT does not support LiveKit's public-IP self-ping
 # validation. Requires lk_use_external_ip: true.
 lk_skip_external_ip_validation: false
+
+# ── Return audio pacing ───────────────────────────────────────────────────────
+# Maximum queued TTS audio per participant. Built-in voice output is paced
+# before IPC; if a custom or faulty producer bursts past this hard duration
+# bound, the oldest queued frames are dropped.
+return_audio_max_buffer_s: 3.0
 
 # ── Web client server ─────────────────────────────────────────────────────────
 enable_web_server: true

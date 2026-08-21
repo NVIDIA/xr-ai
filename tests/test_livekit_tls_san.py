@@ -124,7 +124,9 @@ def test_loader_coerces_extra_sans(
     from device_io_hub._config_loader import load_config
 
     cfg_file = tmp_path / "device_io_hub.yaml"
-    cfg_file.write_text(yaml_value + "\n")
+    cfg_file.write_text(
+        "api_key: devkey\napi_secret: secret\n" + yaml_value + "\n"
+    )
     monkeypatch.setattr("sys.argv", ["prog", "--config", str(cfg_file)])
 
     assert load_config().web_server_extra_sans == expected

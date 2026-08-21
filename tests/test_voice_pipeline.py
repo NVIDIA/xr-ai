@@ -2875,6 +2875,109 @@ async def test_output_transport_writes_audio_to_target_participant():
 
 
 @pytest.mark.asyncio
+async def test_output_transport_paces_return_audio_before_ipc(monkeypatch):
+    """Normal TTS cannot flood DeviceIOHub's hard participant queue bound."""
+    from xr_ai_voice import _transport as transport_module
+    from xr_ai_voice._transport import DeviceIOHubOutputTransport
+    from pipecat.transports.base_transport import TransportParams
+
+    now_s = 100.0
+    sent_at: list[float] = []
+    sleeps: list[float] = []
+
+    async def fake_sleep(delay_s: float) -> None:
+        nonlocal now_s
+        sleeps.append(delay_s)
+        now_s += delay_s
+
+    class _StubEndpoint:
+        async def send_return_audio(self, _chunk) -> None:
+            sent_at.append(now_s)
+
+    monkeypatch.setattr(transport_module, "_monotonic_s", lambda: now_s)
+    monkeypatch.setattr(transport_module, "_sleep_s", fake_sleep)
+    transport = DeviceIOHubOutputTransport(_StubEndpoint(), TransportParams())
+    transport.set_target_participant("web-client")
+    frame = OutputAudioRawFrame(
+        audio=b"\x00\x00" * 320,
+        sample_rate=16_000,
+        num_channels=1,
+    )
+
+    for _ in range(60):
+        assert await transport.write_audio_frame(frame) is True
+
+    assert sent_at == pytest.approx([100.0 + i * 0.02 for i in range(60)])
+    assert sleeps == pytest.approx([0.02] * 59)
+
+
+@pytest.mark.asyncio
+async def test_output_transport_routes_scoped_interruption_by_source_pid():
+    """Interrupting Alice clears only Alice's sender and pacing state."""
+    from xr_ai_voice._transport import DeviceIOHubOutputTransport
+    from pipecat.transports.base_transport import TransportParams
+
+    class _StubEndpoint:
+        async def send_return_audio(self, *_a, **_kw) -> None:
+            return
+
+    class _StubSender:
+        def __init__(self) -> None:
+            self.interruptions = 0
+
+        async def handle_interruptions(self, _frame) -> None:
+            self.interruptions += 1
+
+    transport = DeviceIOHubOutputTransport(_StubEndpoint(), TransportParams())
+    default_sender = _StubSender()
+    alice_sender = _StubSender()
+    bob_sender = _StubSender()
+    transport._media_senders = {  # noqa: SLF001
+        None: default_sender,
+        "alice": alice_sender,
+        "bob": bob_sender,
+    }
+    transport._return_audio_deadline_s = {"alice": 101.0, "bob": 102.0}  # noqa: SLF001
+    interruption = InterruptionFrame()
+    interruption.transport_source = "alice"
+
+    await transport._handle_frame(interruption)  # noqa: SLF001
+
+    assert default_sender.interruptions == 0
+    assert alice_sender.interruptions == 1
+    assert bob_sender.interruptions == 0
+    assert transport._return_audio_deadline_s == {"bob": 102.0}  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_output_transport_routes_unscoped_interruption_to_all_senders():
+    """A legacy participant-less interruption clears every queued reply."""
+    from xr_ai_voice._transport import DeviceIOHubOutputTransport
+    from pipecat.transports.base_transport import TransportParams
+
+    class _StubEndpoint:
+        async def send_return_audio(self, *_a, **_kw) -> None:
+            return
+
+    class _StubSender:
+        def __init__(self) -> None:
+            self.interruptions = 0
+
+        async def handle_interruptions(self, _frame) -> None:
+            self.interruptions += 1
+
+    transport = DeviceIOHubOutputTransport(_StubEndpoint(), TransportParams())
+    senders = [_StubSender(), _StubSender(), _StubSender()]
+    transport._media_senders = dict(zip((None, "alice", "bob"), senders))  # noqa: SLF001
+    transport._return_audio_deadline_s = {"alice": 101.0, "bob": 102.0}  # noqa: SLF001
+
+    await transport._handle_frame(InterruptionFrame())  # noqa: SLF001
+
+    assert [sender.interruptions for sender in senders] == [1, 1, 1]
+    assert transport._return_audio_deadline_s == {}  # noqa: SLF001
+
+
+@pytest.mark.asyncio
 async def test_output_transport_releases_media_sender_on_participant_left():
     """A departing participant's per-pid ``MediaSender`` is torn down so a
     long-lived hub with join/leave churn does not retain idle senders until

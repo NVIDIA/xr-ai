@@ -143,10 +143,11 @@ class ConnectorEndpoint:
         key = (participant_id, track_id)
         self._seq[key] += 1
         seq  = self._seq[key]
+        data_size = data.nbytes if isinstance(data, memoryview) else len(data)
         slot = self._ring.write_frame(data, width, height, fmt, pts_us, seq)
         sig  = FrameSignal(
             slot=slot, seq=seq, pts_us=pts_us,
-            width=width, height=height, fmt=fmt, data_sz=len(data),
+            width=width, height=height, fmt=fmt, data_sz=data_size,
             participant_id=participant_id, track_id=track_id,
         )
         await self._push.send(encode(MsgType.FRAME_SIGNAL, sig))

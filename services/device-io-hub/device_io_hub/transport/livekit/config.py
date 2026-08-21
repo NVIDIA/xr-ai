@@ -4,15 +4,39 @@
 """Configuration for the LiveKit connector."""
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any
+
+_DEFAULT_RETURN_AUDIO_MAX_BUFFER_S = 3.0
+
+
+def _validate_return_audio_max_buffer_s(value: object) -> float:
+    if isinstance(value, bool):
+        raise ValueError(
+            "return_audio_max_buffer_s must be a finite number greater than 0, "
+            f"got {value!r}"
+        )
+    try:
+        max_buffer_s = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "return_audio_max_buffer_s must be a finite number greater than 0, "
+            f"got {value!r}"
+        ) from exc
+    if not math.isfinite(max_buffer_s) or max_buffer_s <= 0:
+        raise ValueError(
+            "return_audio_max_buffer_s must be a finite number greater than 0, "
+            f"got {value!r}"
+        )
+    return max_buffer_s
 
 
 @dataclass
 class LiveKitConnectorConfig:
     # ── LiveKit server credentials ────────────────────────────────────────────
-    api_key:    str = "devkey"
-    api_secret: str = "devsecret-xr-livekit-prototype-2026"
+    api_key:    str
+    api_secret: str
     room_name:  str = "xr-room"
 
     # ── LiveKit server ports (used by docker and room client) ─────────────────
@@ -78,8 +102,30 @@ class LiveKitConnectorConfig:
     shm_num_slots:       int = 10
     shm_max_frame_bytes: int = 12_441_600   # 4K NV12
 
+    # ── Return audio pacing ───────────────────────────────────────────────────
+    # Maximum queued TTS audio duration per participant. The oldest queued
+    # frames are dropped when a producer exceeds this hard bound.
+    return_audio_max_buffer_s: float = _DEFAULT_RETURN_AUDIO_MAX_BUFFER_S
+    """Maximum seconds of queued return audio retained per participant."""
+
     # ── Video recording (NVENC, optional) ─────────────────────────────────────
     # Set video_recording.enabled: true in device_io_hub.yaml to activate.
     # Frames are encoded via NVENC (pynvvideocodec) and written as H.264
     # Annex B chunks to video_recording.out_dir.
     video_recording: Any = field(default=None)
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.api_key, str)
+            or not self.api_key.strip()
+            or not isinstance(self.api_secret, str)
+            or not self.api_secret.strip()
+        ):
+            raise ValueError(
+                "LiveKit credentials are required; set non-empty api_key and "
+                "api_secret values in device_io_hub.yaml, or set "
+                "LIVEKIT_API_KEY and LIVEKIT_API_SECRET"
+            )
+        self.return_audio_max_buffer_s = _validate_return_audio_max_buffer_s(
+            self.return_audio_max_buffer_s
+        )

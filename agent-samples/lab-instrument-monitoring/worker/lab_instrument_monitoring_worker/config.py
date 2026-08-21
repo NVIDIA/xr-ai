@@ -59,6 +59,21 @@ def _read_config(path: Path | None) -> dict[str, Any]:
     return data
 
 
+def _parse_config_bool(value: object, key: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    raise ValueError(
+        f"{key} must be a boolean or a recognized boolean string "
+        f"(got {value!r})"
+    )
+
+
 def _prompt(
     data: dict[str, Any],
     config_path: Path | None,
@@ -103,7 +118,9 @@ def load_config(path: Path | None) -> WorkerConfig:
         voice_gate_yaml=_resolve(path, str(data.get("voice_gate_yaml", "voice_gate.yaml"))),
         device_map=load_device_map(_resolve(path, str(data.get("device_map_yaml", "device_map.yaml")))),
         artifacts_dir=_resolve(path, str(data.get("artifacts_dir", "../artifacts"))),
-        capture_marker_scans=bool(data.get("capture_marker_scans", False)),
+        capture_marker_scans=_parse_config_bool(
+            data.get("capture_marker_scans", False), "capture_marker_scans"
+        ),
         web_events_host=str(data.get("web_events_host", "127.0.0.1")).strip(),
         web_events_port=web_events_port,
         web_events_max_events=web_events_max_events,
