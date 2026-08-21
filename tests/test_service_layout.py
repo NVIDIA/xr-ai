@@ -4,6 +4,7 @@
 """Repository contracts for the final reusable-service layout."""
 import ast
 import importlib.util
+import os.path
 import subprocess
 import sys
 import tomllib
@@ -213,9 +214,13 @@ def test_model_service_projects_preserve_their_public_contracts() -> None:
         assert metadata["project"]["name"] == package
         assert command in metadata["project"]["scripts"]
         assert config["port"] == port
-        assert (project / config["model_cache"]).resolve() == _ROOT / "models"
+        assert Path(os.path.normpath(project / config["model_cache"])) == _ROOT / "models", (
+            f"{directory}: model_cache must target the repo models directory"
+        )
         default = _model_cache_default(project / command / "__main__.py")
-        assert (project / default).resolve() == _ROOT / "models"
+        assert Path(os.path.normpath(project / default)) == _ROOT / "models", (
+            f"{directory}: default model cache must target the repo models directory"
+        )
 
 
 def test_device_io_hub_preserves_its_package_and_command() -> None:
