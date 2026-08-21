@@ -47,7 +47,7 @@ on:
       - ".github/scripts/remove_docs_preview.sh"
       - ".github/actions/deploy-docs-site/action.yaml"
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
       - "docs/**"
       - "agent-sdk/*/README.md"
@@ -73,7 +73,7 @@ concurrency:
 jobs:
   build:
     name: Build (strict)
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && contains(github.event.pull_request.labels.*.name, 'ci:self-hosted') && '["self-hosted","Linux","X64"]' || '["ubuntu-latest"]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -131,7 +131,7 @@ jobs:
       && (github.event_name == 'push'
           || github.event.pull_request.head.repo.full_name == github.repository)
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && contains(github.event.pull_request.labels.*.name, 'ci:self-hosted') && '["self-hosted","Linux","X64"]' || '["ubuntu-latest"]') }}
     permissions:
       contents: write
       pages: write
