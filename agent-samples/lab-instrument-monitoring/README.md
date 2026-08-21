@@ -10,8 +10,9 @@ For an adaptation-oriented architecture guide, see
 
 This sample writes durable monitoring output to files and serves a bounded live
 event viewer while a separate foreground agent answers voice or typed queries.
-See the docs page above for architecture, agent responsibilities, and how to
-adapt the sample.
+There is no domain-specific monitoring UI, MCP adapter, NAT compatibility
+layer, or separate activity-viewer process. See the docs page above for
+architecture, agent responsibilities, and how to adapt the sample.
 
 ## Run
 

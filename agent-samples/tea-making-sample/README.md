@@ -10,8 +10,9 @@ For an adaptation-oriented architecture guide, see
 
 This sample combines a foreground tea guide with independent background
 observers (transcripts, visual-change watching, periodic video observations).
-See the docs page above for architecture, agent responsibilities, and how to
-adapt the sample.
+It uses native `xr_ai_runtime` agents and `xr_ai_tools`; it does not use NAT,
+PydanticAI, or MCP. See the docs page above for architecture, agent
+responsibilities, and how to adapt the sample.
 
 ## Run it
 

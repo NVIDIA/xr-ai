@@ -20,6 +20,21 @@ The worker is a package under `worker/simple_vlm_example_worker/`:
 - `app.py` composes the native runtime (`VoiceAgent` + `SimpleVlmAgent`).
 - `prompts/system.txt` owns the VLM system prompt.
 
+`VoiceAgent` privately owns STT/TTS/VLM readiness, the hub voice transport,
+voice-gate processing, streaming TTS, signals, and cleanup. It publishes every
+final pre-gate STT result on `voice.transcript`, including speech without the
+wake phrase, and publishes accepted speech and typed text as `UserQuery` on
+this sample's topic. `SimpleVlmAgent` subscribes to that topic, selects the participant's
+current image with `CurrentFrameTool`, passes its opaque reference to the
+transport-independent `StreamingImageQueryTool`, and publishes chunks to
+`voice.output`. The query tool has no voice dependency and sends its provider
+stream through Relay's managed LLM path. Camera bytes stay out of tool results
+and image locations are redacted from VLM telemetry. `VoiceAgent` publishes
+participant departure and interruption on sample-named topics;
+`SimpleVlmAgent` subscribes and releases its own cached frames and tasks. A
+newer turn cancels and interrupts a superseded response. `app.py` only composes
+the two agents and their dependencies.
+
 No MCP client or MCP tool invocation is part of this sample.
 
 ## Run
