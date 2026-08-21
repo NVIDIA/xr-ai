@@ -132,6 +132,11 @@ def test_truncated_transcripts_detected() -> None:
     assert _is_truncated("Add a red sphere in")
     assert not _is_truncated("Add a red sphere in front of me.")
     assert _truncated_reply("Add a red sphere in") is not None
+    # Complete preposition-final questions are not truncation.
+    assert not _is_truncated("What am I looking at?")
+    assert not _is_truncated("What are you looking at")
+    assert not _is_truncated("Where is it at?")
+    assert _is_truncated("Put the sphere on the")
 
 
 # ── models profile round-trip ─────────────────────────────────────────────────
