@@ -545,6 +545,8 @@ Package Contents
       RuntimeError
           If every slot is occupied. This is the producer's back-pressure
           signal; consumers release occupied slots with :meth:`release_slot`.
+      ValueError
+          If the frame is larger than the configured slot capacity.
 
 
 
@@ -558,7 +560,10 @@ Package Contents
       Raises
       ------
       RuntimeError
-          If the indicated slot is not ready for consumption.
+          If the indicated slot header is invalid or not ready for consumption.
+      ValueError
+          If the signal identifies an invalid slot or disagrees with the
+          canonical metadata stored in the slot header.
 
 
 

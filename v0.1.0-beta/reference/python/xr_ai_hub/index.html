@@ -1047,6 +1047,8 @@ one. The creator is responsible for eventually calling <a class="reference inter
 <dt>RuntimeError</dt><dd><p>If every slot is occupied. This is the producer’s back-pressure
 signal; consumers release occupied slots with <a class="reference internal" href="#xr_ai_hub.ShmRingBuffer.release_slot" title="xr_ai_hub.ShmRingBuffer.release_slot"><code class="xref py py-meth docutils literal notranslate"><span class="pre">release_slot()</span></code></a>.</p>
 </dd>
+<dt>ValueError</dt><dd><p>If the frame is larger than the configured slot capacity.</p>
+</dd>
 </dl>
 </section>
 </dd></dl>
@@ -1060,7 +1062,10 @@ slot and must not be retained afterward.</p>
 <section id="id10">
 <h4>Raises<a class="headerlink" href="#id10" title="Link to this heading">#</a></h4>
 <dl class="simple">
-<dt>RuntimeError</dt><dd><p>If the indicated slot is not ready for consumption.</p>
+<dt>RuntimeError</dt><dd><p>If the indicated slot header is invalid or not ready for consumption.</p>
+</dd>
+<dt>ValueError</dt><dd><p>If the signal identifies an invalid slot or disagrees with the
+canonical metadata stored in the slot header.</p>
 </dd>
 </dl>
 </section>
