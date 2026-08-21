@@ -600,17 +600,16 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># Self-hosted NIM: LLM (serves both the `llm` and `agent_llm` roles).</span>
-<span class="c1"># Nemotron-3-Nano's A3B MoE decode is fast enough to cover the reactive and</span>
-<span class="c1"># agent roles. Swap in</span>
-<span class="c1"># any LLM NIM from https://catalog.ngc.nvidia.com.</span>
+<span class="c1"># Self-hosted Nemotron-3-Nano-Omni NIM (serves both the `llm` and</span>
+<span class="c1"># `agent_llm` roles). This matches the model family used by the default local</span>
+<span class="c1"># deployment. Swap in any compatible NIM from https://catalog.ngc.nvidia.com.</span>
 <span class="c1"># To adapt a sample, copy the `llm` entry from</span>
 <span class="c1"># ../models.vlm_llm_nim.json into its active models JSON, change only</span>
 <span class="c1"># `deployment.ownership` from `managed` to `reused`, and keep service</span>
 <span class="c1"># `llm-nim` on port 8110. Duplicate it as `agent_llm` when the sample uses</span>
 <span class="c1"># that role.</span>
 <span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
-<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano:2.0.10</span>
+<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant</span>
 <span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8110</span>
 
 <span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
@@ -619,8 +618,7 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="nt">env</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"32768"</span>
 <span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.4"</span>
-<span class="w">  </span><span class="c1"># nemotron_v3 is the parser built into this NIM (nano_v3 is absent);</span>
-<span class="w">  </span><span class="c1"># without tool-calling flags the agentic loop gets no tool calls.</span>
+<span class="w">  </span><span class="c1"># Match the local Omni deployment's reasoning and tool-call parsers.</span>
 <span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
 </pre></div>
 </div>
@@ -817,16 +815,15 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># Self-hosted NIM: LLM (serves both the `llm` and `agent_llm` roles).</span>
-<span class="c1"># Nemotron-3-Nano's A3B MoE decode is fast enough to cover the reactive and</span>
-<span class="c1"># agent roles. Swap in</span>
-<span class="c1"># any LLM NIM from https://catalog.ngc.nvidia.com.</span>
+<span class="c1"># Self-hosted Nemotron-3-Nano-Omni NIM (serves both the `llm` and</span>
+<span class="c1"># `agent_llm` roles). This matches the model family used by the default local</span>
+<span class="c1"># deployment. Swap in any compatible NIM from https://catalog.ngc.nvidia.com.</span>
 <span class="c1"># To adapt a sample, copy the `llm` entry from</span>
 <span class="c1"># ../models.vlm_llm_nim.json into its active models JSON, change only</span>
 <span class="c1"># `deployment.ownership` from `managed` to `reused`, and keep service</span>
 <span class="c1"># `llm-nim` on port 8110. Duplicate it as `agent_llm` when the sample uses</span>
 <span class="c1"># that role.</span>
-<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano:2.0.10</span>
+<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant</span>
 <span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8110</span>
 
 <span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
@@ -835,8 +832,7 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="nt">env</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"32768"</span>
 <span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.8"</span>
-<span class="w">  </span><span class="c1"># nemotron_v3 is the parser built into this NIM (nano_v3 is absent);</span>
-<span class="w">  </span><span class="c1"># without tool-calling flags the agentic loop gets no tool calls.</span>
+<span class="w">  </span><span class="c1"># Match the local Omni deployment's reasoning and tool-call parsers.</span>
 <span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
 </pre></div>
 </div>
@@ -1118,18 +1114,10 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">},</span>
 <span class="w">    </span><span class="nt">"llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm"</span><span class="p">,</span>
 <span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvidia/nemotron-3-nano"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">          </span><span class="nt">"tool_calls"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
-<span class="w">        </span><span class="p">},</span>
-<span class="w">        </span><span class="nt">"default_extras"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">          </span><span class="nt">"chat_template_kwargs"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">            </span><span class="nt">"enable_thinking"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span>
-<span class="w">          </span><span class="p">}</span>
-<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"reasoning_field"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reasoning"</span>
 <span class="w">      </span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8110"</span><span class="p">,</span>
@@ -1240,17 +1228,16 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># Self-hosted NIM: LLM (serves both the `llm` and `agent_llm` roles).</span>
-<span class="c1"># Nemotron-3-Nano's A3B MoE decode is fast enough to cover the reactive and</span>
-<span class="c1"># agent roles. Swap in</span>
-<span class="c1"># any LLM NIM from https://catalog.ngc.nvidia.com.</span>
+<span class="c1"># Self-hosted Nemotron-3-Nano-Omni NIM (serves both the `llm` and</span>
+<span class="c1"># `agent_llm` roles). This matches the model family used by the default local</span>
+<span class="c1"># deployment. Swap in any compatible NIM from https://catalog.ngc.nvidia.com.</span>
 <span class="c1"># To adapt a sample, copy the `llm` entry from</span>
 <span class="c1"># ../models.vlm_llm_nim.json into its active models JSON, change only</span>
 <span class="c1"># `deployment.ownership` from `managed` to `reused`, and keep service</span>
 <span class="c1"># `llm-nim` on port 8110. Duplicate it as `agent_llm` when the sample uses</span>
 <span class="c1"># that role.</span>
 <span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
-<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano:2.0.10</span>
+<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant</span>
 <span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8110</span>
 
 <span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
@@ -1259,8 +1246,7 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="nt">env</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"32768"</span>
 <span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.35"</span>
-<span class="w">  </span><span class="c1"># nemotron_v3 is the parser built into this NIM (nano_v3 is absent);</span>
-<span class="w">  </span><span class="c1"># without tool-calling flags the agentic loop gets no tool calls.</span>
+<span class="w">  </span><span class="c1"># Match the local Omni deployment's reasoning and tool-call parsers.</span>
 <span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
 </pre></div>
 </div>

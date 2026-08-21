@@ -474,7 +474,7 @@ tens of minutes). On subsequent runs the containers restart in under a minute.</
 <code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">&lt;name|path&gt;</span></code>. The default starts Nemotron-3 Nano Omni (8108,
 serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), Piper TTS
 (8105), and embeddings (8109); <code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code> serves the LLM and VLM as self-hosted NIM
-containers (Nemotron-3-Nano and Cosmos3-Nano Reasoner; requires docker and
+containers (Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner; requires docker and
 <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code>). Starting a profile stops persisted servers outside it first
 and aborts if they cannot be stopped, avoiding GPU overcommit.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--models<span class="w"> </span>vlm_llm_nim

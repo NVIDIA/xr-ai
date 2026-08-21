@@ -264,7 +264,7 @@ image and ports) or as a local server:
 uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim
 ```
 
-- `vlm_llm_nim`: Nemotron-3-Nano and Cosmos3-Nano Reasoner as NIM
+- `vlm_llm_nim`: Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner as NIM
   containers, with STT, Piper TTS, and embedding served locally. Samples reuse these
   endpoints; they never launch or stop the containers.
 
