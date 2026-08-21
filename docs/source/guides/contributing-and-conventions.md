@@ -8,8 +8,9 @@
 The root [`CONTRIBUTING.md`](https://github.com/NVIDIA/xr-ai/blob/main/CONTRIBUTING.md)
 explains setup, testing, pull requests, and DCO sign-off.
 [`AGENTS.md`](https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md) contains the
-architecture, change constraints, and documentation house style used by both
-humans and coding agents.
+architecture and change constraints used by both humans and coding agents.
+{doc}`Documentation style <documentation-style>` contains the house style for
+customer-facing Markdown and reStructuredText.
 [`DEPENDENCIES.md`](https://github.com/NVIDIA/xr-ai/blob/main/DEPENDENCIES.md)
 is the package dependency map.
 
@@ -36,8 +37,8 @@ descriptions in `help=` and do not repeat flag tables in narrative pages.
 Sample configuration examples and field-level guidance live in checked-in
 YAML and JSON, with field-level guidance in adjacent YAML comments. The
 generated catalog enrolls files under a top-level sample's `yaml/` tree and
-files beside a direct capability
-subproject, then renders them verbatim. Narrative docs cover only
+files beside a direct capability subproject, then renders them verbatim.
+Narrative docs cover only
 workflows, operational decisions, credentials, and process relationships.
 
 After a `pyproject.toml` change, run
