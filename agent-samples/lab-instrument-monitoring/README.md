@@ -97,21 +97,14 @@ By default, the sample uses Nemotron Omni for foreground tool routing and Cosmos
 for image inference. It reuses those services, STT, and Piper TTS; the sample
 never starts or stops model services.
 
-Start the model server stack in one terminal:
+Start the shared model-server stack, which includes Piper TTS:
 
 ```bash
 uv sync --project agent-samples/model-servers
 uv run --project agent-samples/model-servers model_servers
 ```
 
-Start Piper TTS in a second terminal:
-
-```bash
-uv sync --project services/piper-tts
-uv run --project services/piper-tts piper_tts_server
-```
-
-Then start the sample in a third terminal:
+Then start the sample in another terminal:
 
 ```bash
 uv sync --project agent-samples/lab-instrument-monitoring

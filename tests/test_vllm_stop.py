@@ -64,3 +64,19 @@ def test_pip_ownership_marker_matches_service_port(tmp_path, monkeypatch) -> Non
 
     assert xr_ai_vllm._docker.is_xr_ai_server_process(1234, "omni", 8108)
     assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "omni", 8107)
+
+
+def test_in_process_service_command_identifies_shared_piper(tmp_path, monkeypatch) -> None:
+    proc_root = tmp_path / "proc" / "1234"
+    proc_root.mkdir(parents=True)
+    (proc_root / "cmdline").write_text(
+        "uv\0run\0--project\0services/piper-tts\0piper_tts_server"
+    )
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "Path",
+        lambda _path: proc_root / _path.rsplit("/", 1)[-1],
+    )
+
+    assert xr_ai_vllm._docker.is_xr_ai_server_process(1234, "tts", 8105)
+    assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "stt", 8105)

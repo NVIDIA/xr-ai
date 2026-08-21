@@ -265,7 +265,7 @@ uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim
 ```
 
 - `vlm_llm_nim`: Nemotron-3-Nano and Cosmos3-Nano Reasoner as NIM
-  containers, with STT and embedding served locally. Samples reuse these
+  containers, with STT, Piper TTS, and embedding served locally. Samples reuse these
   endpoints; they never launch or stop the containers.
 
 To adapt a sample, copy the relevant `llm` and `vlm` entries from
@@ -359,7 +359,8 @@ Either way vLLM keeps running after the orchestrator exits.
 The STT server follows the same pattern without Docker: `stt_server` spawns
 its persistent process with `start_new_session=True`, reuses a healthy server
 that survived a previous stack run, and is stopped by the same
-`model_servers --stop` cleanup.
+`model_servers --stop` cleanup. The CPU Piper server is also launched as a
+persistent shared service and is stopped by the same command.
 
 Docker containers carry a fingerprint of their image, GPU assignment, model
 cache, environment, bootstrap packages, complete vLLM command, and a versioned

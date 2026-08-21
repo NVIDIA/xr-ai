@@ -19,10 +19,9 @@ runs alongside as its own stream; neither stack passes through the other.
 Prerequisites
 -------------
 All model services must already be running before this demo starts. The sample
-never starts or stops them. Start the shared model stack and Piper TTS:
+never starts or stops them. The shared model stack includes Piper TTS:
 
     uv run --project agent-samples/model-servers model_servers
-    uv run --project services/piper-tts piper_tts_server
 
 How to run (from the repo root or any directory):
     uv run --project agent-samples/xr-render-demo xr_render_demo

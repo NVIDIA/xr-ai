@@ -28,11 +28,10 @@ durable operational records remain JSON Lines files under `artifacts/`.
 
 ## Run it
 
-Start the reusable model services, then start Piper TTS in a terminal:
+Start the reusable model services, including Piper TTS:
 
 ```bash
 uv run --project agent-samples/model-servers model_servers
-uv run --project services/piper-tts piper_tts_server
 ```
 
 Then start the tea stack from the repository root:
