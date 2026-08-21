@@ -206,9 +206,9 @@ tens of minutes. On subsequent runs the containers restart in under a minute.
 Which servers start is a deployment profile: `--models <name|path>` selects
 `default`, `vlm_llm_nim` (LLM and VLM as self-hosted NIM containers;
 requires docker + `NGC_API_KEY`), or any profile JSON of your own. The NIM
-profile serves Nemotron-3-Nano and Cosmos3-Nano Reasoner. Starting a profile
-stops persisted servers outside it first and aborts if they cannot be stopped,
-avoiding GPU overcommit.
+profile serves Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner. Starting a
+profile stops persisted servers outside it first and aborts if they cannot be
+stopped, avoiding GPU overcommit.
 
 The default profile starts Nemotron-3 Nano Omni (8108, serving both the
 reactive and agent LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103),
