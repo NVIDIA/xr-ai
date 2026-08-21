@@ -60,10 +60,9 @@ Which servers start is a deployment profile selected with
 `--models <name|path>`. The default starts Nemotron-3 Nano Omni (8108,
 serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), and
 embeddings (8109); `vlm_llm_nim` serves the LLM and VLM as self-hosted NIM
-containers (requires docker + `NGC_API_KEY`); `vlm_speech_nim` serves
-speech from Riva NIM containers. Starting a profile stops persisted servers
-outside it first and aborts if they cannot be stopped, avoiding GPU
-overcommit.
+containers (Nemotron-3-Nano and Cosmos3-Nano Reasoner; requires docker and
+`NGC_API_KEY`). Starting a profile stops persisted servers outside it first
+and aborts if they cannot be stopped, avoiding GPU overcommit.
 
 ```bash
 uv run model_servers --models vlm_llm_nim

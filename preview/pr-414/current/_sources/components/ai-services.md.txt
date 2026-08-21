@@ -249,11 +249,8 @@ VLM process is omitted and `NGC_API_KEY` is requested automatically. Select
 
 ### Self-hosted NIM containers (`models.vlm_llm_nim.json`)
 
-The same models can be pulled from NGC and served as **optimized NIM
-containers on your own GPUs**: same APIs as hosted NIM, no network hop, and
-speech included. Self-hosted Riva speech NIMs are reached through the
-`riva_grpc` model kind (requires the `xr-ai-models[riva]` extra, already a
-dependency of the sample workers).
+Compatible models can be pulled from NGC and served as **optimized NIM
+containers on your own GPUs**: same APIs as hosted NIM and no network hop.
 
 The NIM containers are owned by the shared model-servers stack, exactly
 like the local vLLM servers. Its deployment profiles pick the mix: every
@@ -265,11 +262,16 @@ image and ports) or as a local server:
 uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim
 ```
 
-- `vlm_llm_nim`: the LLM and VLM as NIM containers, STT and embedding local.
-  Samples that select this stack mark those services `reused`.
-- `vlm_speech_nim`: Riva speech NIM containers plus the Cosmos NIM. It is
-  mutually exclusive with `vlm_llm_nim` on 2x48 GB: Riva speech NIMs do not
-  fit next to CloudXR + LOVR + the LLM/VLM NIMs there.
+- `vlm_llm_nim`: Nemotron-3-Nano and Cosmos3-Nano Reasoner as NIM
+  containers, with STT and embedding served locally. Samples reuse these
+  endpoints; they never launch or stop the containers.
+
+To adapt a sample, copy the relevant `llm` and `vlm` entries from
+`models.vlm_llm_nim.json` into the sample's active models JSON and change only
+their deployment ownership from `managed` to `reused`. Samples with an
+`agent_llm` role duplicate the `llm` entry under that name. The adjacent
+`nim_llm_server.yaml` and `nim_vlm_server.yaml` comments repeat this mapping
+beside the container configuration.
 
 The container `image:` is the model, so swapping models is a
 `nim_<role>_server.yaml` edit plus the matching profile entry. Selection is
@@ -282,7 +284,8 @@ with the relevant entries changed, saved under any name and selected with
 port overlaps: give a NIM container a free port or drop the overlapping
 local server from the profile.
 
-A self-hosted speech entry uses the Riva gRPC kind:
+A custom model-server profile can still launch self-hosted Riva speech NIMs.
+Workers reach them through the optional `riva_grpc` model kind:
 
 ```yaml
 stt:
@@ -293,8 +296,8 @@ stt:
 ```
 
 TTS additionally takes `voice:` (a Riva voice name) and `sample_rate:`
-(default 44100). `health_check: true` (the default) runs a gRPC
-channel-ready probe.
+(default 44100). `health_check: true` (the default) runs a gRPC channel-ready
+probe. No shipped model-server profile or sample selects Riva speech.
 
 Requirements: docker + NVIDIA Container Toolkit, `NGC_API_KEY` (used for the
 `nvcr.io` image pull *and* by the container itself to download the
