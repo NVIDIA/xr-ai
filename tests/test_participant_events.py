@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import array
 import asyncio
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -327,6 +328,79 @@ async def test_duplicate_frame_signal_keeps_held_slot_occupied(
             seq=5,
         )
     assert bytes(held_before[1].data) == _FRAME
+
+
+async def test_duplicate_frame_signal_for_another_track_is_not_held(
+    hub,
+    make_connector,
+    settle,
+):
+    connector = make_connector()
+    await connector.register()
+    await settle()
+    await connector.notify_participant_joined("alice", pts_us=0)
+    await settle()
+
+    slot = connector._ring.write_frame(
+        b"AAAA",
+        width=1,
+        height=1,
+        fmt=PixelFormat.RGBA,
+        pts_us=1,
+        seq=1,
+    )
+    signal = FrameSignal(
+        slot=slot,
+        seq=1,
+        pts_us=1,
+        width=1,
+        height=1,
+        fmt=PixelFormat.RGBA,
+        data_sz=4,
+        participant_id="alice",
+        track_id="camA",
+    )
+    await hub._dispatch(MsgType.FRAME_SIGNAL, signal)
+
+    # A replay under another track key must not create a second view of the
+    # same slot. Otherwise advancing camA releases the slot while camB still
+    # aliases it, and a later producer write mutates camB's held frame.
+    await hub._dispatch(
+        MsgType.FRAME_SIGNAL,
+        replace(signal, track_id="camB"),
+    )
+
+    assert ("alice", "camB") not in hub._latest_slots
+    assert bytes(hub._latest_slots[("alice", "camA")][1].data) == b"AAAA"
+
+    next_slot = connector._ring.write_frame(
+        b"BBBB",
+        width=1,
+        height=1,
+        fmt=PixelFormat.RGBA,
+        pts_us=2,
+        seq=2,
+    )
+    await hub._dispatch(
+        MsgType.FRAME_SIGNAL,
+        replace(signal, slot=next_slot, seq=2, pts_us=2),
+    )
+
+    # Fill the remaining slots and prove the original slot can be reused
+    # without leaving any stale cross-track view behind.
+    reused_slot = -1
+    for seq, data in ((3, b"CCCC"), (4, b"DDDD"), (5, b"WXYZ")):
+        reused_slot = connector._ring.write_frame(
+            data,
+            width=1,
+            height=1,
+            fmt=PixelFormat.RGBA,
+            pts_us=seq,
+            seq=seq,
+        )
+    assert reused_slot == slot
+    assert ("alice", "camB") not in hub._latest_slots
+    assert bytes(hub._latest_slots[("alice", "camA")][1].data) == b"BBBB"
 
 
 async def test_participant_leave_continues_when_held_slot_release_fails():

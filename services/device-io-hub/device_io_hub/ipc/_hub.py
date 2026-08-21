@@ -357,21 +357,27 @@ class HubEndpoint:
                 )
                 return
 
-            prev = self._latest_slots.get(key)
-            if (
-                prev is not None
-                and prev[0] is ring
-                and prev[1].signal.slot == msg.slot
-            ):
+            held_key = next(
+                (
+                    held_key
+                    for held_key, (held_ring, held_view) in self._latest_slots.items()
+                    if held_ring is ring and held_view.signal.slot == msg.slot
+                ),
+                None,
+            )
+            if held_key is not None:
                 view.data.release()
                 logger.debug(
-                    "Duplicate frame signal for participant {} track {} slot {} — ignored",
+                    "Duplicate frame signal for participant {} track {} slot {} "
+                    "already held for {}/{} — ignored",
                     msg.participant_id,
                     msg.track_id,
                     msg.slot,
+                    *held_key,
                 )
                 return
 
+            prev = self._latest_slots.get(key)
             if prev:
                 self._latest_slots.pop(key)
                 self._release_held_slot(
