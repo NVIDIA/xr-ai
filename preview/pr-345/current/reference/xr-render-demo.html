@@ -558,23 +558,8 @@ and tool calling from that point on.</p>
 <code class="docutils literal notranslate"><span class="pre">--reasoning-parser</span> <span class="pre">nemotron_v3</span></code>. The launcher selects NVFP4 on Blackwell and
 FP8 on Ada, Hopper, or Ampere, with BF16 available as an explicit fallback.</p>
 <p>One server backs both LLM roles in <code class="docutils literal notranslate"><span class="pre">yaml/models.yaml</span></code>: <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> runs the
-multi-step tool-calling loop and <code class="docutils literal notranslate"><span class="pre">llm</span></code> serves two cheap, latency-sensitive
-calls. Thinking stays off unless a call explicitly enables it.</p>
-<ul class="simple">
-<li><p><strong>Quick-ack</strong> — awaited before the agentic loop starts, the moment an
-utterance lands. Returns <code class="docutils literal notranslate"><span class="pre">{&quot;ack&quot;:</span> <span class="pre">&quot;On</span> <span class="pre">it!&quot;,</span> <span class="pre">&quot;think&quot;:</span> <span class="pre">false}</span></code> — a 3–6 word
-spoken acknowledgment. Also classifies whether the request needs
-open-ended reasoning (<code class="docutils literal notranslate"><span class="pre">think:</span> <span class="pre">true/false</span></code>): positional operations always
-run without thinking because the math tools compute exact answers, so
-thinking is reserved for vague corrections and free-form compositions
-no tool pattern settles. Max 40 tokens, 8s timeout. The ack
-is sent on the data channel (<code class="docutils literal notranslate"><span class="pre">agent.progress</span></code> topic) and spoken on every
-turn so the user immediately knows they were heard.</p></li>
-<li><p><strong>Still-working messages</strong> — if the agentic loop exceeds 5s, this model
-generates a short contextual phrase like <em>“Still finding the right
-position”</em> on a 10s repeat. Sent to the data channel only — never spoken,
-to avoid stacking up in the TTS queue behind the real response.</p></li>
-</ul>
+supervisor and subagent tool-calling loops, and <code class="docutils literal notranslate"><span class="pre">llm</span></code> remains available for
+untooled chat calls. Thinking stays off unless a call explicitly enables it.</p>
 </section>
 </section>
 <section id="vlm-cosmos3-nano-reasoner">
@@ -695,39 +680,20 @@ not launch or call MCP adapters.</p>
 offloads vector arithmetic the LLM is bad at while keeping pose-dependent math
 in one place:</p>
 <ul class="simple">
-<li><p><strong>Pose-aware named-direction helpers</strong> take a <code class="docutils literal notranslate"><span class="pre">direction</span></code> enum (<code class="docutils literal notranslate"><span class="pre">front</span></code>,
-<code class="docutils literal notranslate"><span class="pre">back</span></code>, <code class="docutils literal notranslate"><span class="pre">left</span></code>, <code class="docutils literal notranslate"><span class="pre">right</span></code>, <code class="docutils literal notranslate"><span class="pre">above</span></code>, <code class="docutils literal notranslate"><span class="pre">below</span></code>, plus <code class="docutils literal notranslate"><span class="pre">next_to</span></code> on
-<code class="docutils literal notranslate"><span class="pre">place_object_relative</span></code>) and always-positive <code class="docutils literal notranslate"><span class="pre">distance</span></code>. The LLM never
-applies signs to user-frame axes.</p>
-<ul>
-<li><p><code class="docutils literal notranslate"><span class="pre">place_user_relative(direction,</span> <span class="pre">distance)</span></code>: user-anchored teleport
-(“above my head”, “to my left 1 m”).</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">place_object_relative(origin_x,</span> <span class="pre">origin_y,</span> <span class="pre">origin_z,</span> <span class="pre">direction,</span> <span class="pre">distance)</span></code>:
-object-anchored teleport. <code class="docutils literal notranslate"><span class="pre">direction=&quot;front&quot;</span></code> means <em>toward the user</em>;
-<code class="docutils literal notranslate"><span class="pre">&quot;back&quot;</span></code> means <em>away</em>. Left/right/above/below map literally.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">displace_object(current_x,</span> <span class="pre">current_y,</span> <span class="pre">current_z,</span> <span class="pre">right,</span> <span class="pre">up,</span> <span class="pre">forward)</span></code>:
-user-frame signed-delta on an existing object. Multi-axis (“up and
-to the left”) in one call.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">displace_objects(object_ids,</span> <span class="pre">current_xs,</span> <span class="pre">current_ys,</span> <span class="pre">current_zs,</span> <span class="pre">right,</span> <span class="pre">up,</span> <span class="pre">forward)</span></code>: batch user-frame delta over N objects. Returns
-<code class="docutils literal notranslate"><span class="pre">{&quot;items&quot;:</span> <span class="pre">[{obj_id,</span> <span class="pre">x,</span> <span class="pre">y,</span> <span class="pre">z},</span> <span class="pre">…]}</span></code> so the model fans out to N
-<code class="docutils literal notranslate"><span class="pre">update_primitive</span></code> calls with one math call total.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">place_inside_by_id(movee_id,</span> <span class="pre">container_x,</span> <span class="pre">container_y,</span> <span class="pre">container_z)</span></code>:
-containment for “put X in Y”. Argument names (<code class="docutils literal notranslate"><span class="pre">movee_id</span></code> paired
-with <code class="docutils literal notranslate"><span class="pre">container_*</span></code>) force the model to pick the right noun’s coords;
-the return shape feeds straight into <code class="docutils literal notranslate"><span class="pre">update_primitive</span></code>.</p></li>
-</ul>
-</li>
-<li><p><strong>Pure-math primitives</strong> are pose-independent:</p>
-<ul>
-<li><p><code class="docutils literal notranslate"><span class="pre">between_anchors(a_x,</span> <span class="pre">a_y,</span> <span class="pre">a_z,</span> <span class="pre">b_x,</span> <span class="pre">b_y,</span> <span class="pre">b_z)</span></code>: component-wise midpoint.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">world_offset(origin_x,</span> <span class="pre">origin_y,</span> <span class="pre">origin_z,</span> <span class="pre">dx,</span> <span class="pre">dy,</span> <span class="pre">dz)</span></code>:
-axis-aligned world-Y-up shift.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">along_direction(origin_x,</span> <span class="pre">origin_y,</span> <span class="pre">origin_z,</span> <span class="pre">target_x,</span> <span class="pre">target_y,</span> <span class="pre">target_z,</span> <span class="pre">distance)</span></code>: origin moved <code class="docutils literal notranslate"><span class="pre">distance</span></code> toward target. Used
-for “closer to or further from <named-obj>”, which the user-frame
-helpers can’t model.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">scale_value(current,</span> <span class="pre">factor)</span></code>: scalar multiplication for sizes.</p></li>
-</ul>
-</li>
+<li><p><strong>Placement tools</strong> move existing objects: <code class="docutils literal notranslate"><span class="pre">nudge</span></code> (signed user-frame
+offsets), <code class="docutils literal notranslate"><span class="pre">move_user_relative</span></code> (named direction from the user),
+<code class="docutils literal notranslate"><span class="pre">move_object_relative</span></code> (named relation to an anchor object),
+<code class="docutils literal notranslate"><span class="pre">move_inside</span></code>, <code class="docutils literal notranslate"><span class="pre">move_between</span></code>, <code class="docutils literal notranslate"><span class="pre">move_toward</span></code>, <code class="docutils literal notranslate"><span class="pre">move_toward_user</span></code>,
+<code class="docutils literal notranslate"><span class="pre">swap_positions</span></code>, and <code class="docutils literal notranslate"><span class="pre">move_to</span></code> (explicit coordinates). Every tool takes
+the instruction’s exact words for each object, resolves them against the
+scene, performs the move itself, and returns the final position; the LLM
+never applies signs to user-frame axes or copies coordinates.</p></li>
+<li><p><strong>Appearance tool</strong>: <code class="docutils literal notranslate"><span class="pre">recolor</span></code> resolves color words, RGB triples, and
+copy-the-color-of-an-object references deterministically.</p></li>
+<li><p><strong>Object tools</strong> create and retire objects: <code class="docutils literal notranslate"><span class="pre">create_user_relative</span></code>,
+<code class="docutils literal notranslate"><span class="pre">create_object_relative</span></code> (one anchor, or the midpoint of two),
+<code class="docutils literal notranslate"><span class="pre">create_at</span></code>, <code class="docutils literal notranslate"><span class="pre">change_shape</span></code> (the scene replaces the object and returns
+its new id), <code class="docutils literal notranslate"><span class="pre">resize_object</span></code>, and <code class="docutils literal notranslate"><span class="pre">remove_object</span></code>.</p></li>
 </ul>
 </section>
 </section>
@@ -737,20 +703,12 @@ helpers can’t model.</p></li>
 <code class="docutils literal notranslate"><span class="pre">worker/xr_render_demo_worker/</span></code> (supervisor plus five subagents, six files total).
 The supervisor prompt routes requests to subagents; each subagent prompt
 is worked-example heavy and opens with pronoun and reference resolution.</p>
-<p>The placement agent routes placement utterances through sequential checks:</p>
-<ol class="arabic simple">
-<li><p><strong>FIRST CHECK</strong>: <code class="docutils literal notranslate"><span class="pre">&quot;between&quot;</span></code>/<code class="docutils literal notranslate"><span class="pre">&quot;middle&quot;</span></code>/<code class="docutils literal notranslate"><span class="pre">&quot;halfway&quot;</span></code> → route to
-<code class="docutils literal notranslate"><span class="pre">between_anchors</span></code>; stop considering other placement tools.</p></li>
-<li><p><strong>SECOND CHECK</strong>: anchor is the user (<code class="docutils literal notranslate"><span class="pre">&quot;me&quot;</span></code>/<code class="docutils literal notranslate"><span class="pre">&quot;my&quot;</span></code>) → route to
-<code class="docutils literal notranslate"><span class="pre">place_user_relative</span></code>; <code class="docutils literal notranslate"><span class="pre">place_object_relative</span></code> with <code class="docutils literal notranslate"><span class="pre">origin=user_pos</span></code>
-returns the wrong side of the user.</p></li>
-<li><p><strong>THIRD CHECK</strong>: proximity to a named object (<code class="docutils literal notranslate"><span class="pre">&quot;closer</span> <span class="pre">to</span> <span class="pre">&lt;obj&gt;&quot;</span></code>,
-<code class="docutils literal notranslate"><span class="pre">&quot;toward</span> <span class="pre">&lt;obj&gt;&quot;</span></code>) → route to <code class="docutils literal notranslate"><span class="pre">along_direction</span></code>. The user’s facing
-direction is unrelated to where the target object sits, so
-<code class="docutils literal notranslate"><span class="pre">displace_object</span></code> is wrong here.</p></li>
-</ol>
-<p>Every rule has a paired WORKED EXAMPLE and, for the highest-leakage
-failure modes, a WORKED ANTI-EXAMPLE.</p>
+<p>The placement agent’s prompt maps utterance shapes to tools with contrast
+pairs: a stated distance is a shift (<code class="docutils literal notranslate"><span class="pre">nudge</span></code>); a user-anchored destination
+uses <code class="docutils literal notranslate"><span class="pre">move_user_relative</span></code>; a destination anchored on another object uses
+<code class="docutils literal notranslate"><span class="pre">move_object_relative</span></code> (stacking is relation <code class="docutils literal notranslate"><span class="pre">above</span></code>); “into/inside” is
+containment (<code class="docutils literal notranslate"><span class="pre">move_inside</span></code>). Every rule has a paired worked example, and
+the highest-leakage failure modes carry explicit contrast examples.</p>
 </section>
 <section id="xr-session-lifecycle">
 <h2>XR session lifecycle<a class="headerlink" href="#xr-session-lifecycle" title="Link to this heading">#</a></h2>
@@ -776,7 +734,7 @@ a streaming client connects. LOVR cannot start before then.</p>
 It derives schemas from the worker’s native tools and evaluates tool
 effects against deterministic fixtures, so the live LOVR scene is not mutated.
 Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/6d602fe8b3274f61d80ad43a886b0e1261424b90/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/d12fb477f989dd8e6f7822740e4285f2273022ef/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
 for the case format and the watch-mode loop. Run with:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo/eval<span class="w"> </span>xr_render_demo_eval
 </pre></div>
@@ -831,8 +789,9 @@ logs at DEBUG; all other exceptions log at ERROR with full traceback via
 <code class="docutils literal notranslate"><span class="pre">logger.exception</span></code>) propagate so the runtime remains fail-fast and the
 turn is recorded as failed in the runtime event log.</p>
 <p><strong>Concurrent participants.</strong> Each participant’s turns are serialized by
-the supervisor’s per-participant lock. Different participants can run
-concurrently; the underlying scene service serializes conflicting writes.</p>
+the supervisor’s per-participant lock, and a global scene lock serializes
+the snapshot/mutation/verification window across participants, so scene
+turns from different participants queue rather than interleave.</p>
 <section id="prompt-eval-overlap-audit">
 <h3>Prompt/eval overlap audit<a class="headerlink" href="#prompt-eval-overlap-audit" title="Link to this heading">#</a></h3>
 <p>Per <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code> “Prompt-driven samples”, the harness audits every worker
