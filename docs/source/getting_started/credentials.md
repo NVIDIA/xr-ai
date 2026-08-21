@@ -27,8 +27,8 @@ stack automatically — no per-sample wiring needed.
 
 ## HuggingFace token (`HF_TOKEN`)
 
-**Required by default** for the samples that download model checkpoints
-(`model_servers`, `simple_vlm_example`). The default models are public, but
+**Required by default** for the launchers that download model checkpoints
+(`model_servers`). The default models are public, but
 unauthenticated Hub downloads are rate-limited to the point of **stalling
 indefinitely** on multi-GB checkpoints (no error, no progress output), so the
 orchestrators refuse to start without a token rather than hang silently on

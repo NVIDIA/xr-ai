@@ -311,7 +311,7 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
     raw = yaml.safe_load(config_path.read_text())
     prompt = (_WORKER_DIR / "simple_vlm_example_worker" / "prompts" / "system.txt").read_text()
 
-    assert config.models_config == _SAMPLE_DIR / "yaml" / "models.local.json"
+    assert config.models_config == _SAMPLE_DIR / "yaml" / "models.json"
     assert config.voice_gate_yaml == _SAMPLE_DIR / "yaml" / "voice_gate.yaml"
     assert config.system_prompt == prompt
     assert "Speak directly to me in second person" in prompt
@@ -331,7 +331,7 @@ def test_config_without_a_file_uses_packaged_defaults(tmp_path) -> None:
         config = load_config(config_path)
         assert config.system_prompt == prompt
         expected_parent = Path() if config_path is None else tmp_path
-        assert config.models_config == expected_parent / "models.local.json"
+        assert config.models_config == expected_parent / "models.json"
 
 
 def test_blank_inline_prompt_uses_packaged_default(tmp_path) -> None:
@@ -342,12 +342,9 @@ def test_blank_inline_prompt_uses_packaged_default(tmp_path) -> None:
     assert load_config(config_path).system_prompt == prompt
 
 
-def test_config_keeps_deployment_profile_and_inline_prompt_compatibility(
-    tmp_path,
-) -> None:
+def test_config_keeps_inline_prompt_compatibility(tmp_path) -> None:
     config_path = tmp_path / "worker.yaml"
     config_path.write_text(
-        "models_config: models.hosted.json\n"
         "voice_gate_yaml: gate.yaml\n"
         "system_prompt: custom prompt\n"
         "idle_timeout_secs: 30\n"
@@ -355,7 +352,7 @@ def test_config_keeps_deployment_profile_and_inline_prompt_compatibility(
 
     config = load_config(config_path)
 
-    assert config.models_config == tmp_path / "models.hosted.json"
+    assert config.models_config == tmp_path / "models.json"
     assert config.voice_gate_yaml == tmp_path / "gate.yaml"
     assert config.system_prompt == "custom prompt"
     assert config.idle_timeout_secs == 30.0

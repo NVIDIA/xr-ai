@@ -14,7 +14,7 @@ from `xr-ai-tools` to read and mutate the live XR scene.
 ```
 agent-samples/xr-render-demo/
   main.py                        orchestrator entry point
-  yaml/                          per-service YAML configs + model profile
+  yaml/                          application YAML + reused model endpoints
   worker/
     xr_render_demo_worker/
       app.py                     wires xr-ai-tools groups + RenderAgent
@@ -104,10 +104,11 @@ changes). Offline cases in `harness.py` exercise the prompt without a live stack
 ## Running
 
 ```bash
-# Start model servers first (models marked `reused` in the YAML profile):
+# Start model services first:
 uv run --project agent-samples/model-servers model_servers
+uv run --project services/piper-tts piper_tts_server
 
-# Start the demo stack:
+# Start the demo stack in another terminal:
 uv run --project agent-samples/xr-render-demo xr_render_demo
 
 # Stop: send SIGTERM to the orchestrator python process (not individual services).

@@ -18,7 +18,6 @@ _SAMPLES = _REPO_ROOT / "agent-samples"
 _MODEL_PROFILES = _SAMPLES / "model-servers" / "yaml"
 _LOCAL_VLM_CONFIGS = (
     _SERVER_YAML,
-    _SAMPLES / "simple-vlm-example" / "yaml" / "vlm_server.yaml",
     _MODEL_PROFILES / "96G_blackwell" / "vlm_server.yaml",
     _MODEL_PROFILES / "dual_48G_ada" / "vlm_server.yaml",
     _MODEL_PROFILES / "spark" / "vlm_server.yaml",
@@ -115,23 +114,15 @@ def test_cosmos3_rejects_missing_reasoner_override(monkeypatch, tmp_path) -> Non
         server.run()
 
 
-def test_sample_model_profiles_select_cosmos3_reasoner() -> None:
+def test_sample_model_configs_select_cosmos3_reasoner() -> None:
     simple = _SAMPLES / "simple-vlm-example" / "yaml"
-    simple_local = json.loads((simple / "models.local.json").read_text())
-    simple_hosted = json.loads((simple / "models.hosted.json").read_text())
-    assert simple_local["models"]["vlm"]["adapter"]["preset"] == (
+    simple_models = json.loads((simple / "models.json").read_text())
+    assert simple_models["models"]["vlm"]["adapter"]["preset"] == (
         "cosmos3_nano_reasoner"
-    )
-    assert simple_hosted["models"]["vlm"]["adapter"]["model_name"] == (
-        "nvidia/cosmos3-nano-reasoner"
     )
 
     render = _SAMPLES / "xr-render-demo" / "yaml"
-    render_local = json.loads((render / "models.local.json").read_text())
-    render_hosted = json.loads((render / "models.hosted.json").read_text())
-    assert render_local["models"]["vlm"]["adapter"]["preset"] == (
+    render_models = json.loads((render / "models.json").read_text())
+    assert render_models["models"]["vlm"]["adapter"]["preset"] == (
         "cosmos3_nano_reasoner"
-    )
-    assert render_hosted["models"]["vlm"]["adapter"]["model_name"] == (
-        "nvidia/cosmos3-nano-reasoner"
     )

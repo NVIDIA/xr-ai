@@ -25,8 +25,7 @@ Samples that support interchangeable local and hosted models may set
 `models_config` in the worker YAML. `load_model_deployment()` reads the selected
 structured JSON profile using only the standard library and exposes its
 managed, reused, or external service ownership to the orchestrator. The same
-file is loaded by the worker through `xr-ai-models`; see the simple VLM
-sample's `yaml/models.local.json` and `yaml/models.hosted.json` profiles.
+file is loaded by the worker through `xr-ai-models`.
 
 The orchestrator declares the process sequence in code:
 

@@ -94,22 +94,32 @@ direct path.
 ## Run
 
 By default, the sample uses Nemotron Omni for foreground tool routing and Cosmos
-for image inference. It reuses those services and STT from `model-servers` and
-manages its own lightweight Piper TTS process. Pass `--vlm-mode omni` to route
-image inference to the same Nemotron Omni service instead of Cosmos.
+for image inference. It reuses those services, STT, and Piper TTS; the sample
+never starts or stops model services.
+
+Start the model server stack in one terminal:
 
 ```bash
 cd agent-samples/model-servers
 uv sync
 uv run model_servers
+```
 
-cd ../lab-instrument-monitoring
+Start Piper TTS in a second terminal:
+
+```bash
+cd ../../services/piper-tts
+uv sync
+uv run piper_tts_server
+```
+
+Then start the sample in a third terminal:
+
+```bash
+cd ../../agent-samples/lab-instrument-monitoring
 uv sync
 uv sync --project worker
 uv run lab_instrument_monitoring
-
-# Use Nemotron Omni for both language and visual inference.
-uv run lab_instrument_monitoring --vlm-mode omni
 
 # Allow direct event-viewer access from a trusted private network.
 uv run lab_instrument_monitoring --expose-web-events
@@ -176,18 +186,17 @@ settings, device-map path, output path, and event-viewer listener live in
 `yaml/lab_instrument_monitoring_worker.yaml`. Marker-to-device mappings live in
 `yaml/device_map.yaml`. Model
 adapters, endpoints, readiness, and deployment ownership live in
-`yaml/models.local.json`.
+`yaml/models.json`.
 
 ## Foreground routing eval
 
 The eval checks whether the LLM selects current vision, monitoring history,
 background controls, or no tool, and validates every tool call against its
 runtime request model. It requires the configured `llm` role to be running; the
-default profile provides it through `model-servers`.
+fixed model configuration provides it through `model-servers`.
 
 ```bash
 cd agent-samples/lab-instrument-monitoring
 uv run --project worker python eval/eval.py
 uv run --project worker python eval/visual_eval.py
-uv run --project worker python eval/visual_eval.py --vlm-mode omni
 ```

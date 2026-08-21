@@ -260,11 +260,11 @@ def test_sample_process_projects_resolve(monkeypatch) -> None:
         ),
         (
             _ROOT / "agent-samples/simple-vlm-example",
-            simple_vlm._MODEL_PROCESSES.values(),
+            simple_vlm.PROCESSES,
         ),
         (
             _ROOT / "agent-samples/xr-render-demo",
-            render_demo._build_processes()[0],
+            render_demo._build_processes(),
         ),
     ]
 
@@ -274,6 +274,32 @@ def test_sample_process_projects_resolve(monkeypatch) -> None:
             assert (project / "pyproject.toml").is_file(), (
                 f"{process.name}: process project does not resolve: {project}"
             )
+
+
+def test_simple_vlm_reuses_every_model_process() -> None:
+    sample = _load_module(
+        "service_layout_simple_vlm_reuse",
+        "agent-samples/simple-vlm-example/main.py",
+    )
+
+    assert {
+        process.name: process.launch_mode
+        for process in sample.PROCESSES
+        if process.name in {"stt", "vlm", "tts"}
+    } == {"stt": "reuse", "vlm": "reuse", "tts": "reuse"}
+
+
+def test_render_demo_reuses_every_model_process() -> None:
+    sample = _load_module(
+        "service_layout_render_reuse",
+        "agent-samples/xr-render-demo/main.py",
+    )
+
+    assert {
+        process.name: process.launch_mode
+        for process in sample._build_processes()
+        if process.name in {"stt", "omni", "vlm", "tts"}
+    } == {"stt": "reuse", "omni": "reuse", "vlm": "reuse", "tts": "reuse"}
 
 
 def test_sample_hub_projects_resolve() -> None:

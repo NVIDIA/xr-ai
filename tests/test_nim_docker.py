@@ -225,33 +225,3 @@ def test_model_servers_vlm_speech_nim_profile_parses() -> None:
         assert spec.function_id is None
         assert spec.health_check is True
     assert cfg.tts("tts").voice == "Magpie-Multilingual.EN-US.Sofia"
-
-
-@pytest.mark.parametrize("sample", ["xr-render-demo", "simple-vlm-example"])
-def test_sample_vlm_llm_nim_profiles_reuse_the_nim_stack(sample: str) -> None:
-    path = _REPO_ROOT / "agent-samples" / sample / "yaml" / "models.vlm_llm_nim.json"
-    cfg = load_models_config(path)
-    vlm = cfg.vlm("vlm")
-    assert vlm.kind == "openai_compat"
-    # A reused NIM is probed for real readiness: a dead model-servers stack
-    # must fail fast, not at first inference.
-    assert vlm.health_check is True
-    assert vlm.health_path == "/v1/health/ready"
-    assert vlm.deployment.ownership == "reused"
-    assert vlm.deployment.service == "vlm-nim"
-    # Speech stays on the shared local servers in the 2x48 GB nim stack.
-    assert cfg.stt("stt").deployment.ownership == "reused"
-    assert cfg.tts("tts").deployment.ownership == "managed"
-
-
-def test_simple_vlm_speech_nim_profile_reuses_riva_containers() -> None:
-    path = (
-        _REPO_ROOT / "agent-samples" / "simple-vlm-example"
-        / "yaml" / "models.vlm_speech_nim.json"
-    )
-    cfg = load_models_config(path)
-    for name, service in (("stt", "stt-nim"), ("tts", "tts-nim")):
-        spec = cfg.stt(name) if name == "stt" else cfg.tts(name)
-        assert spec.kind == "riva_grpc"
-        assert spec.deployment.ownership == "reused"
-        assert spec.deployment.service == service

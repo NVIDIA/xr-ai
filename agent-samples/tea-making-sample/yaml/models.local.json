@@ -34,7 +34,7 @@
     "tts": {
       "adapter": {"preset": "piper_tts"},
       "endpoint": {"base_url": "http://localhost:8105", "readiness": "health"},
-      "deployment": {"ownership": "managed", "service": "tts"}
+      "deployment": {"ownership": "reused", "service": "tts"}
     }
   }
 }

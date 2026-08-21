@@ -91,9 +91,22 @@ Replies arrive as streaming Piper TTS audio plus a `vlm.response` text message.
 Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. Refer to
 {doc}`AI services </components/ai-services>` for runtime-selection details.
 
-There are two ways to run it:
+The sample always reuses model services and never starts or stops them. Its
+fixed `yaml/models.json` expects Parakeet STT on port 8103, Cosmos3-Nano on
+port 8100, and Piper TTS on port 8105. Start the repository defaults first
+from the repository root (the Piper command stays in the foreground):
 
-**Standalone** (~23 GB VRAM) — starts its own VLM and STT:
+```bash
+uv run --project agent-samples/model-servers model_servers
+uv run --project services/piper-tts piper_tts_server
+```
+
+The first command may download model weights on its first run and requires the
+credentials described in the {doc}`credentials guide
+</getting_started/credentials>`. The model services remain running across
+sample restarts.
+
+### Step 1 — Start the server
 
 ```bash
 cd agent-samples/simple-vlm-example
@@ -101,27 +114,8 @@ uv sync
 uv run simple_vlm_example
 ```
 
-On the very first run weights download from HuggingFace (tens of GB; can take
-several minutes). `HF_TOKEN` is required by default; pass `--allow-anonymous`
-to run without one (refer to the
-{doc}`credentials guide </getting_started/credentials>`).
-
-**With model-servers pre-running** — start `model_servers` to pre-warm VLM
-(port 8100) and STT (port 8103). The demo detects and reuses them.
-
-In both modes the VLM and STT keep running after you exit so the next run skips
-the model reload (see the {doc}`AI services guide </components/ai-services>`);
-free the VRAM with `cd agent-samples/model-servers && uv run model_servers
---stop`.
-
-### Step 1 — Start the server
-
-```bash
-uv run simple_vlm_example
-```
-
-The DeviceIOHub, VLM, STT, and TTS start together (or reuse running services).
-Worker readiness includes a short 1280x720 streaming VLM warmup.
+Only the DeviceIOHub and worker start. Worker readiness probes all three reused
+services and includes a short 1280x720 streaming VLM warmup.
 The hub prints:
 
 ```
@@ -156,51 +150,18 @@ You are now live in the XR session. To test the agent:
 A successful round trip: your query appears in the log, the agent responds after
 a moment, and you hear the reply through your speakers.
 
-**Local model** — on a standalone system smaller than the shared model-server
-profiles, override the model weights or GPU settings in
-`agent-samples/simple-vlm-example/yaml/vlm_server.yaml`. When automatic GPU
-detection selects one of the supported model-server profiles, the sample uses
-`agent-samples/model-servers/yaml/<profile>/vlm_server.yaml` so a compatible
-server can be reused without reloading its weights.
-
-To use Cosmos-Reason1 instead, edit the VLM file selected for your hardware:
-set `model: nvidia/Cosmos-Reason1-7B`, remove the Cosmos3-only `hf_overrides`
-block, and select `cosmos_vlm` as the VLM adapter preset in
-`agent-samples/simple-vlm-example/yaml/models.local.json`.
-
-**Remote model** — copy `yaml/models.hosted.json`, point its VLM endpoint at
-your server, and select it in the worker config:
+To use compatible services at different locations, edit their endpoints in
+`agent-samples/simple-vlm-example/yaml/models.json`:
 
 ```json
 {
-  "endpoint": {"base_url": "https://your-remote-vlm.example.com"},
-  "deployment": {"ownership": "external"}
+  "endpoint": {"base_url": "https://your-vlm.example.com"},
+  "deployment": {"ownership": "reused", "service": "vlm"}
 }
 ```
 
-```yaml
-# yaml/simple_vlm_example_worker.yaml
-models_config: models.remote.json
-```
-
-The external deployment declaration makes the orchestrator skip the local VLM
-process automatically.
-
-**Hosted NVIDIA NIM** — run the VLM on hosted NIM
-([build.nvidia.com](https://build.nvidia.com)) instead of locally (STT/TTS stay
-local) by setting **one key** in `simple_vlm_example_worker.yaml`:
-
-```yaml
-models_config: models.hosted.json
-```
-
-The same profile configures the worker and makes the orchestrator skip the
-local VLM server. Pick the hosted model id in `models.hosted.json` and provide
-an `NGC_API_KEY` as an
-**environment variable** (or save it once via the launcher credential prompt) —
-it is not stored in YAML; the overlay only names the env var via
-`api_key_env: NGC_API_KEY`. Refer to the credentials and AI-services guides for
-full details (and self-hosted NIM containers).
+The sample does not offer deployment profiles; the referenced services remain
+operator-owned regardless of endpoint.
 
 Each sample has its own `device_io_hub.yaml` controlling the hub; refer to
 `services/device-io-hub/device_io_hub.yaml` for the full option list.
@@ -213,18 +174,26 @@ queries and controls that task. A separate QR and ArUco instrument monitor track
 speaks only discovered, changed, or long-missing device updates, and persists
 10-second full-state snapshots. The sample writes monitor, instrument,
 final pre-gate transcript, foreground-turn, and Relay JSONL files under `artifacts/`
-and intentionally serves no sample-specific monitoring web UI.
+and intentionally serves no sample-specific monitoring web UI. Its fixed model
+configuration uses Cosmos for visual inference.
 
-Start `model-servers`, then run:
+Start `model-servers` and Piper TTS in separate terminals:
+
+```bash
+uv run --project agent-samples/model-servers model_servers
+```
+
+```bash
+uv run --project services/piper-tts piper_tts_server
+```
+
+Then start the sample in another terminal:
 
 ```bash
 cd agent-samples/lab-instrument-monitoring
 uv sync
 uv sync --project worker
 uv run lab_instrument_monitoring
-
-# Optional: use Nemotron Omni instead of Cosmos for visual inference.
-uv run lab_instrument_monitoring --vlm-mode omni
 ```
 
 Connect an existing glasses or platform client using the authenticated URL,
@@ -242,22 +211,20 @@ and visual inference. Records are written as JSON Lines under the sample's
 `artifacts/` directory. A separate live event viewer presents selected runtime
 events without replacing those durable records.
 
-Start the shared model services first, then launch the sample with explicit
-voice and speech modes:
+Start the shared model services and Piper TTS first, then launch the sample:
 
 ```bash
 uv run --project agent-samples/model-servers model_servers
+uv run --project services/piper-tts piper_tts_server
 
-uv run --project agent-samples/tea-making-sample tea_making_sample \
-  --voice-mode wake-word \
-  --tts-mode piper
+uv run --project agent-samples/tea-making-sample tea_making_sample
 ```
 
 Open the XR-Media-Hub connection page at `https://localhost:8080`, accept the
 self-signed certificate on first use, allow camera and microphone access, and
-connect. In wake-word mode, begin with “Agent” or “Hey Agent.” Use
-`--voice-mode always-on` to dispatch every finalized utterance, or
-`--tts-mode magpie` for neural speech on a supported GPU.
+connect. The checked-in voice-gate YAML requires “Agent” or “Hey Agent.” Set
+`voice_gate_yaml: voice_gate.always-on.yaml` in `yaml/tea_making_worker.yaml`
+to dispatch every finalized utterance without a wake phrase.
 
 Open `http://127.0.0.1:8092` on the XR-AI host for the live event viewer. To
 view it directly from another trusted machine, add `--expose-web-events` and
@@ -309,6 +276,14 @@ This demo has two extra host prerequisites beyond the shared
 - **npm 18+** on PATH — the orchestrator builds the web vendor bundle on first
   run (skipped on subsequent runs).
 
+Start Piper TTS in a separate terminal:
+
+```bash
+uv run --project services/piper-tts piper_tts_server
+```
+
+Then start XR Render:
+
 ```bash
 cd agent-samples/xr-render-demo
 uv sync
@@ -345,19 +320,8 @@ cd agent-samples/model-servers
 uv run model_servers --stop
 ```
 
-**Hosted NVIDIA NIM** — run the LLMs and VLM on hosted NIM
-([build.nvidia.com](https://build.nvidia.com)) instead of local vLLM (STT/TTS
-stay local) by setting **one key** in `xr_render_demo_worker.yaml`:
-
-```yaml
-models_config: models.hosted.json     # default is models.local.json
-```
-
-The profile is consumed by both the worker and orchestrator, so there are
-no `main.py`
-edits, and the stack owns its own speech servers, so the model-servers stack
-isn't needed at all. Provide an `NGC_API_KEY` as an **environment variable** (or via the
-launcher credential prompt, not in YAML). Refer to the AI-services guide.
+XR Render uses the fixed reuse-only endpoints in `yaml/models.json`; it does
+not select or own model deployment profiles.
 
 ## Hub only (standalone)
 
