@@ -396,13 +396,7 @@ This demo has two extra host prerequisites beyond the shared
 - **npm 18+** on PATH — the orchestrator builds the web vendor bundle on first
   run (skipped on subsequent runs).
 
-Start the shared model stack, which includes Piper TTS:
-
-```bash
-uv run --project agent-samples/model-servers model_servers
-```
-
-Then start XR Render:
+Start XR Render:
 
 ```bash
 cd agent-samples/xr-render-demo
