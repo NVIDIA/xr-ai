@@ -24,6 +24,7 @@ from pipecat.frames.frames import (
     EndFrame,
     Frame,
     InputAudioRawFrame,
+    InterruptionFrame,
     OutputAudioRawFrame,
     StartFrame,
 )
@@ -318,6 +319,19 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
         the sender could be created) fall back to the default ``None``
         sender + ``_target_participant``.
         """
+        if isinstance(frame, InterruptionFrame):
+            pid = frame.transport_source
+            if pid:
+                sender = self._media_senders.get(pid)
+                if sender is not None:
+                    await sender.handle_interruptions(frame)
+                self._return_audio_deadline_s.pop(pid, None)
+            else:
+                for sender in list(self._media_senders.values()):
+                    await sender.handle_interruptions(frame)
+                self._return_audio_deadline_s.clear()
+            return
+
         pid = frame.transport_destination
         if pid and pid not in self._media_senders:
             await self._ensure_destination(pid)

@@ -273,6 +273,54 @@ async def test_rejected_frame_signal_releases_new_ring_slot(
     assert ("alice", "cam") in hub._latest_slots
 
 
+async def test_non_integer_frame_size_is_rejected_and_slot_reused(
+    hub,
+    make_connector,
+    settle,
+):
+    connector = make_connector()
+    await connector.register()
+    await settle()
+    await connector.notify_participant_joined("alice", pts_us=0)
+    await settle()
+
+    slot = connector._ring.write_frame(
+        _FRAME,
+        width=_W,
+        height=_H,
+        fmt=PixelFormat.I420,
+        pts_us=1,
+        seq=1,
+    )
+    malformed = FrameSignal(
+        slot=slot,
+        seq=1,
+        pts_us=1,
+        width=_W,
+        height=_H,
+        fmt=PixelFormat.I420,
+        data_sz=str(len(_FRAME)),
+        participant_id="alice",
+        track_id="cam",
+    )
+
+    await hub._dispatch(MsgType.FRAME_SIGNAL, malformed)
+
+    assert ("alice", "cam") not in hub._latest_slots
+    reused_slots = [
+        connector._ring.write_frame(
+            _FRAME,
+            width=_W,
+            height=_H,
+            fmt=PixelFormat.I420,
+            pts_us=seq,
+            seq=seq,
+        )
+        for seq in range(2, 6)
+    ]
+    assert slot in reused_slots
+
+
 async def test_duplicate_frame_signal_keeps_held_slot_occupied(
     hub,
     make_connector,

@@ -241,6 +241,14 @@ class ShmRingBuffer:
                     self._max_frame_bytes,
                 )
             )
+        if (
+            not isinstance(signal.data_sz, int)
+            or isinstance(signal.data_sz, bool)
+        ):
+            raise ValueError(
+                "invalid shared-memory frame data size "
+                f"{signal.data_sz!r}: expected an integer"
+            )
         if not 0 <= signal.data_sz <= self._max_frame_bytes:
             raise ValueError(
                 _frame_size_error(

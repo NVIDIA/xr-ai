@@ -147,6 +147,14 @@ def test_read_slot_rejects_signal_outside_slot_capacity(ring, data_size):
         ring.read_slot(signal)
 
 
+@pytest.mark.parametrize("data_size", ["4", 4.0, True])
+def test_read_slot_rejects_non_integer_signal_size(ring, data_size):
+    signal = replace(_write_test_signal(ring), data_sz=data_size)
+
+    with pytest.raises(ValueError, match="expected an integer"):
+        ring.read_slot(signal)
+
+
 def test_read_slot_rejects_in_capacity_size_mismatch(ring):
     signal = replace(_write_test_signal(ring), data_sz=8)
 
