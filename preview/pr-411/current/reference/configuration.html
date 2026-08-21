@@ -621,8 +621,9 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
 <span class="c1"># Nemotron-3-Nano-Omni — single Blackwell 96 GB.</span>
-<span class="c1"># NVFP4 is selected automatically. This standalone Omni stack leaves the</span>
-<span class="c1"># remainder of the GPU for STT, rendering, and runtime overhead.</span>
+<span class="c1"># NVFP4 is selected automatically. Leave moe_backend unset so vLLM can select</span>
+<span class="c1"># a compatible kernel for the checkpoint and hardware. This standalone Omni</span>
+<span class="c1"># stack leaves the remainder of the GPU for STT, rendering, and runtime overhead.</span>
 
 <span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
 <span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8108</span>

@@ -31,11 +31,6 @@ trade-offs documented below.
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
 | `services/rag-service/` | `rag_service` | 8340 | — | Typed dense document retrieval capability |
 
-The Blackwell `model-servers` profile does not force a Nemotron Omni MoE
-kernel backend. vLLM selects one compatible with the NVFP4 checkpoint instead
-of receiving a backend override that may be valid only for other quantization
-formats.
-
 All model weights land in the service's `model_cache` directory, set per YAML
 and resolved relative to the YAML file (every `models/` tree is excluded from
 version control). The model-servers profiles share `models/` at the
