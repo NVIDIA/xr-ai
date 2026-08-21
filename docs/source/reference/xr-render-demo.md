@@ -102,22 +102,8 @@ and tool calling from that point on.
 FP8 on Ada, Hopper, or Ampere, with BF16 available as an explicit fallback.
 
 One server backs both LLM roles in `yaml/models.yaml`: `agent_llm` runs the
-multi-step tool-calling loop and `llm` serves two cheap, latency-sensitive
-calls. Thinking stays off unless a call explicitly enables it.
-
-- **Quick-ack** — awaited before the agentic loop starts, the moment an
-  utterance lands. Returns `{"ack": "On it!", "think": false}` — a 3–6 word
-  spoken acknowledgment. Also classifies whether the request needs
-  open-ended reasoning (`think: true/false`): positional operations always
-  run without thinking because the math tools compute exact answers, so
-  thinking is reserved for vague corrections and free-form compositions
-  no tool pattern settles. Max 40 tokens, 8s timeout. The ack
-  is sent on the data channel (`agent.progress` topic) and spoken on every
-  turn so the user immediately knows they were heard.
-- **Still-working messages** — if the agentic loop exceeds 5s, this model
-  generates a short contextual phrase like *"Still finding the right
-  position"* on a 10s repeat. Sent to the data channel only — never spoken,
-  to avoid stacking up in the TTS queue behind the real response.
+supervisor and subagent tool-calling loops, and `llm` remains available for
+untooled chat calls. Thinking stays off unless a call explicitly enables it.
 
 ## VLM — Cosmos3 Nano Reasoner
 
@@ -247,35 +233,20 @@ The worker composes XR tracking with shared spatial-math tools. This
 offloads vector arithmetic the LLM is bad at while keeping pose-dependent math
 in one place:
 
-- **Pose-aware named-direction helpers** take a `direction` enum (`front`,
-  `back`, `left`, `right`, `above`, `below`, plus `next_to` on
-  `place_object_relative`) and always-positive `distance`. The LLM never
-  applies signs to user-frame axes.
-  - `place_user_relative(direction, distance)`: user-anchored teleport
-    ("above my head", "to my left 1 m").
-  - `place_object_relative(origin_x, origin_y, origin_z, direction, distance)`:
-    object-anchored teleport. `direction="front"` means *toward the user*;
-    `"back"` means *away*. Left/right/above/below map literally.
-  - `displace_object(current_x, current_y, current_z, right, up, forward)`:
-    user-frame signed-delta on an existing object. Multi-axis ("up and
-    to the left") in one call.
-  - `displace_objects(object_ids, current_xs, current_ys, current_zs,
-    right, up, forward)`: batch user-frame delta over N objects. Returns
-    `{"items": [{obj_id, x, y, z}, …]}` so the model fans out to N
-    `update_primitive` calls with one math call total.
-  - `place_inside_by_id(movee_id, container_x, container_y, container_z)`:
-    containment for "put X in Y". Argument names (`movee_id` paired
-    with `container_*`) force the model to pick the right noun's coords;
-    the return shape feeds straight into `update_primitive`.
-- **Pure-math primitives** are pose-independent:
-  - `between_anchors(a_x, a_y, a_z, b_x, b_y, b_z)`: component-wise midpoint.
-  - `world_offset(origin_x, origin_y, origin_z, dx, dy, dz)`:
-    axis-aligned world-Y-up shift.
-  - `along_direction(origin_x, origin_y, origin_z, target_x, target_y,
-    target_z, distance)`: origin moved `distance` toward target. Used
-    for "closer to or further from <named-obj>", which the user-frame
-    helpers can't model.
-  - `scale_value(current, factor)`: scalar multiplication for sizes.
+- **Placement tools** move existing objects: `nudge` (signed user-frame
+  offsets), `move_user_relative` (named direction from the user),
+  `move_object_relative` (named relation to an anchor object),
+  `move_inside`, `move_between`, `move_toward`, `move_toward_user`,
+  `swap_positions`, and `move_to` (explicit coordinates). Every tool takes
+  the instruction's exact words for each object, resolves them against the
+  scene, performs the move itself, and returns the final position; the LLM
+  never applies signs to user-frame axes or copies coordinates.
+- **Appearance tool**: `recolor` resolves color words, RGB triples, and
+  copy-the-color-of-an-object references deterministically.
+- **Object tools** create and retire objects: `create_user_relative`,
+  `create_object_relative` (one anchor, or the midpoint of two),
+  `create_at`, `change_shape` (the scene replaces the object and returns
+  its new id), `resize_object`, and `remove_object`.
 
 ## Prompt structure
 
@@ -284,20 +255,12 @@ Each agent has its own prompt file under
 The supervisor prompt routes requests to subagents; each subagent prompt
 is worked-example heavy and opens with pronoun and reference resolution.
 
-The placement agent routes placement utterances through sequential checks:
-
-1. **FIRST CHECK**: `"between"`/`"middle"`/`"halfway"` → route to
-   `between_anchors`; stop considering other placement tools.
-2. **SECOND CHECK**: anchor is the user (`"me"`/`"my"`) → route to
-   `place_user_relative`; `place_object_relative` with `origin=user_pos`
-   returns the wrong side of the user.
-3. **THIRD CHECK**: proximity to a named object (`"closer to <obj>"`,
-   `"toward <obj>"`) → route to `along_direction`. The user's facing
-   direction is unrelated to where the target object sits, so
-   `displace_object` is wrong here.
-
-Every rule has a paired WORKED EXAMPLE and, for the highest-leakage
-failure modes, a WORKED ANTI-EXAMPLE.
+The placement agent's prompt maps utterance shapes to tools with contrast
+pairs: a stated distance is a shift (`nudge`); a user-anchored destination
+uses `move_user_relative`; a destination anchored on another object uses
+`move_object_relative` (stacking is relation `above`); "into/inside" is
+containment (`move_inside`). Every rule has a paired worked example, and
+the highest-leakage failure modes carry explicit contrast examples.
 
 ## XR session lifecycle
 
@@ -361,8 +324,9 @@ logs at DEBUG; all other exceptions log at ERROR with full traceback via
 turn is recorded as failed in the runtime event log.
 
 **Concurrent participants.** Each participant's turns are serialized by
-the supervisor's per-participant lock. Different participants can run
-concurrently; the underlying scene service serializes conflicting writes.
+the supervisor's per-participant lock, and a global scene lock serializes
+the snapshot/mutation/verification window across participants, so scene
+turns from different participants queue rather than interleave.
 
 ### Prompt/eval overlap audit
 

@@ -452,16 +452,30 @@ class FakeScene:
         for field_name in ("r", "g", "b"):
             if field_name in arguments:
                 current["color"][field_name] = arguments[field_name]
-        if request.prim_type is not None:
-            current["type"] = request.prim_type
         if request.size is not None:
             current["size"] = request.size
+        if request.prim_type is not None and request.prim_type != current["type"]:
+            # Mirror production: a shape change replaces the object under a new id.
+            del self.objects[request.obj_id]
+            for item in self.objects.values():
+                kind, _, index = item.id.rpartition("-")
+                if kind and index.isdigit():
+                    self.counters[kind] = max(self.counters.get(kind, 0), int(index) + 1)
+            number = self.counters.get(request.prim_type, 0)
+            self.counters[request.prim_type] = number + 1
+            new_id = f"{request.prim_type}-{number}"
+            current["id"] = new_id
+            current["type"] = request.prim_type
+            self.objects[new_id] = SceneObject.model_validate(current)
+            return MutationResult(ok=True, new_id=new_id)
         self.objects[request.obj_id] = SceneObject.model_validate(current)
         return MutationResult(ok=True)
 
     async def remove_primitive(self, request: RemovePrimitiveRequest) -> MutationResult:
         self.calls.append(("remove_primitive", request.model_dump()))
-        self.objects.pop(request.obj_id, None)
+        if request.obj_id not in self.objects:
+            return MutationResult(ok=False, reason="not_found")
+        del self.objects[request.obj_id]
         return MutationResult(ok=True)
 
     async def get_scene_state(self, request: EmptyRequest) -> SceneState:

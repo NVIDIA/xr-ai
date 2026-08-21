@@ -85,7 +85,6 @@ class RenderAgent(Agent):
     async def _run_turn(self, query: UserQuery, ctx: RuntimeContext) -> None:
         participant_id = ctx.metadata.participant_id
         response_id = ctx.metadata.message_id
-        opened = False
         try:
             reply = await self._supervisor.handle(
                 SceneRequest(
@@ -95,44 +94,26 @@ class RenderAgent(Agent):
                     trace_id=response_id or "",
                 )
             )
-            await ctx.publish(
-                VOICE_OUTPUT_TOPIC,
-                VoiceOutput(
-                    text=reply.response,
-                    response_id=response_id,
-                    final=False,
-                    timestamp_us=query.timestamp_us,
-                ),
-            )
-            opened = True
+            text = reply.response
         except asyncio.CancelledError:
             raise
         except Exception as error:
             logger.exception("xr-render turn failed for {}: {!r}", participant_id, error)
-            try:
-                await ctx.publish(
-                    VOICE_OUTPUT_TOPIC,
-                    VoiceOutput(
-                        text="Something went wrong. Please try again.",
-                        response_id=response_id,
-                        final=False,
-                        timestamp_us=query.timestamp_us,
-                    ),
-                )
-                opened = True
-            except Exception:
-                # Best-effort failure notice; a publish failure here has no
-                # further fallback and must not mask the original error.
-                pass
-        finally:
-            if opened:
-                try:
-                    await ctx.publish(
-                        VOICE_OUTPUT_TOPIC,
-                        VoiceOutput(response_id=response_id, timestamp_us=query.timestamp_us),
-                    )
-                except Exception:
-                    pass
+            text = "Something went wrong. Please try again."
+        try:
+            await ctx.publish(
+                VOICE_OUTPUT_TOPIC,
+                VoiceOutput(
+                    text=text,
+                    response_id=response_id,
+                    timestamp_us=query.timestamp_us,
+                ),
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Best-effort delivery; a publish failure has no further fallback.
+            logger.exception("xr-render reply publish failed for {}", participant_id)
 
     async def _cancel(self, participant_id: str) -> None:
         task = self._tasks.pop(participant_id, None)

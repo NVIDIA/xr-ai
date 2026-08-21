@@ -24,6 +24,7 @@ from xr_ai_tools.types import Vector3 as _Vector3
 from xr_render_scene import (
     AddPrimitiveRequest,
     EmptyRequest,
+    MutationResult,
     RemovePrimitiveRequest,
     SceneObject,
     SceneTools,
@@ -126,11 +127,19 @@ class _Leaves:
         self.guard = guard
         self._add_lock = asyncio.Lock()
 
-    async def update(self, arguments: dict) -> None:
-        await self._scene.update_primitive.execute(UpdatePrimitiveRequest.model_validate(arguments))
+    @staticmethod
+    def _confirm(result: MutationResult) -> MutationResult:
+        if not result.ok:
+            raise ValueError(f"the scene rejected the change: {result.reason or 'unknown reason'}")
+        return result
+
+    async def update(self, arguments: dict) -> MutationResult:
+        return self._confirm(
+            await self._scene.update_primitive.execute(UpdatePrimitiveRequest.model_validate(arguments))
+        )
 
     async def remove(self, object_id: str) -> None:
-        await self._scene.remove_primitive.execute(RemovePrimitiveRequest(obj_id=object_id))
+        self._confirm(await self._scene.remove_primitive.execute(RemovePrimitiveRequest(obj_id=object_id)))
 
     def check_writable(self) -> None:
         if self.guard is not None and self.guard.halted:
@@ -280,8 +289,10 @@ class _Leaves:
     async def write(self, object_id: str, position: tuple[float, float, float]) -> MovedObject:
         self.check_writable()
         x, y, z = position
-        await self._scene.update_primitive.execute(
-            UpdatePrimitiveRequest(obj_id=object_id, x=x, y=y, z=z)
+        self._confirm(
+            await self._scene.update_primitive.execute(
+                UpdatePrimitiveRequest(obj_id=object_id, x=x, y=y, z=z)
+            )
         )
         return MovedObject(obj_id=object_id, x=x, y=y, z=z)
 
@@ -301,6 +312,8 @@ class _Leaves:
             result = await self._scene.add_primitive.execute(
                 AddPrimitiveRequest(prim_type=prim_type, x=x, y=y, z=z, r=r, g=g, b=b, size=size)
             )
+            if not result.ok:
+                raise ValueError(f"the scene rejected the creation: {result.reason or 'unknown reason'}")
             created = CreatedObject(id=result.id, x=x, y=y, z=z)
             if self.ledger is not None:
                 self.ledger.count += 1
@@ -314,8 +327,10 @@ class _Leaves:
         async with self._add_lock:
             if self.ledger is not None and (done := self.ledger.mutations.get(key)) is not None:
                 return done
-            await self._scene.update_primitive.execute(
-                UpdatePrimitiveRequest(obj_id=obj.id, size=round(obj.size * factor, 4))
+            self._confirm(
+                await self._scene.update_primitive.execute(
+                    UpdatePrimitiveRequest(obj_id=obj.id, size=round(obj.size * factor, 4))
+                )
             )
             result = MovedObject(obj_id=obj.id, x=obj.position.x, y=obj.position.y, z=obj.position.z)
             if self.ledger is not None:
@@ -645,8 +660,10 @@ def make_object_tools(
         leaves.check_writable()
         prim = leaves.shape(req.prim_type)
         current = await leaves.find(req.object_words)
-        await leaves.update({"obj_id": current.id, "prim_type": prim})
-        return MovedObject(obj_id=current.id, x=current.position.x, y=current.position.y, z=current.position.z)
+        result = await leaves.update({"obj_id": current.id, "prim_type": prim})
+        # A shape change replaces the object; the scene returns its new id.
+        return MovedObject(obj_id=result.new_id or current.id,
+                           x=current.position.x, y=current.position.y, z=current.position.z)
 
     async def resize_object(req: _ResizeRequest) -> MovedObject:
         current = await leaves.find(req.object_words)

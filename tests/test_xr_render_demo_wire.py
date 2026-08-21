@@ -412,4 +412,3 @@ def test_tool_def_to_openai_wire_shape() -> None:
             },
         },
     }
-

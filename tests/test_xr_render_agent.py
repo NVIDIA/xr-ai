@@ -122,6 +122,7 @@ class _Transport:
 
 class _ToolResult(BaseModel):
     status: str = "ok"
+    error: str | None = None
     lovr_started: bool = False
     spawn_error: str | None = None
 
@@ -147,11 +148,11 @@ class _VoiceRecorder(Agent):
     @subscribe(VOICE_OUTPUT_TOPIC)
     async def record(self, output: VoiceOutput, ctx: RuntimeContext) -> None:
         if output.response_id:
-            if output.final:
+            if output.final and not output.text:
                 if output.response_id not in self.open_responses:
                     raise ValueError(f"orphan response terminator: {output.response_id}")
                 self.open_responses.discard(output.response_id)
-            else:
+            elif not output.final:
                 self.open_responses.add(output.response_id)
         self.events.append((output, ctx.metadata))
         self.changed.set()
@@ -184,10 +185,10 @@ async def test_render_agent_publishes_voice_output() -> None:
         await asyncio.wait_for(output.final.wait(), 1.0)
 
     chunks = [chunk for chunk, _metadata in output.events]
-    assert [chunk.text for chunk in chunks] == ["hello", ""]
-    assert [chunk.final for chunk in chunks] == [False, True]
-    assert [chunk.timestamp_us for chunk in chunks] == [1, 1]
-    assert len({chunk.response_id for chunk in chunks}) == 1
+    assert [chunk.text for chunk in chunks] == ["hello"]
+    assert [chunk.final for chunk in chunks] == [True]
+    assert [chunk.timestamp_us for chunk in chunks] == [1]
+    assert chunks[0].response_id is not None
 
 
 async def test_render_agent_supersedes_a_participant_turn() -> None:

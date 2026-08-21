@@ -25,9 +25,9 @@ agent-samples/xr-render-demo/
       models.py                  SceneRequest / SceneReply / SubagentTask
       scene.py                   SceneContext: snapshot, diff, move history
       agents/
-        placement/               subagent: move / add relative to objects
-        appearance/              subagent: color, size
-        object/                  subagent: create, remove, swap
+        placement/               subagent: move, swap, contain existing objects
+        appearance/              subagent: recolor
+        object/                  subagent: create, remove, resize, reshape
         vision/                  subagent: current frame + historical frame
         memory/                  subagent: recall conversation history
   eval/

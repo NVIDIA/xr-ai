@@ -75,7 +75,7 @@ async def test_scene_mutations_serialize_across_participants(monkeypatch) -> Non
         max_active = max(max_active, active)
         await asyncio.sleep(0.05)
         active -= 1
-        return SimpleNamespace(content="All set?", messages=list(messages))
+        return SimpleNamespace(content="All set?", messages=list(messages), tool_calls=())
 
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
 
@@ -96,7 +96,7 @@ async def test_two_turn_memory_without_preseeding(monkeypatch) -> None:
 
     async def fake_loop(messages, toolset, call_model, max_iterations=12):
         seen_user_messages.extend(m.content for m in messages if m.role == "user")
-        return SimpleNamespace(content="Placed it?", messages=list(messages))
+        return SimpleNamespace(content="Placed it?", messages=list(messages), tool_calls=())
 
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
 
@@ -117,9 +117,9 @@ async def test_two_turn_memory_without_preseeding(monkeypatch) -> None:
     ]
 
 
-async def test_failing_supervisor_publishes_failure_then_terminator() -> None:
-    """A supervisor crash still produces a spoken failure notice followed by
-    the response terminator, never silence."""
+async def test_failing_supervisor_publishes_failure_notice() -> None:
+    """A supervisor crash still produces one complete spoken failure notice,
+    never silence."""
     published = []
 
     class _Ctx:
@@ -135,9 +135,7 @@ async def test_failing_supervisor_publishes_failure_then_terminator() -> None:
     agent = RenderAgent(_ExplodingSupervisor())
     await agent._run_turn(UserQuery(text="Make a sphere.", timestamp_us=1), _Ctx())
 
-    assert len(published) == 2
+    assert len(published) == 1
     assert published[0].text == "Something went wrong. Please try again."
-    assert published[0].final is False
+    assert published[0].final is True
     assert published[0].response_id == "trace-1"
-    assert published[1].text == ""
-    assert published[1].response_id == "trace-1"

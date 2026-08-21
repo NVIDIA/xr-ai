@@ -54,6 +54,13 @@ _ACTION_VERBS = frozenset(
 )
 
 
+_MUTATING_AGENTS = frozenset({"placement_agent", "appearance_agent", "object_agent"})
+
+
+def _wants_mutation(transcript: str) -> bool:
+    return any(word.strip(".,!?;:") in _ACTION_VERBS for word in transcript.lower().split())
+
+
 def _is_truncated(transcript: str) -> bool:
     words = transcript.strip().rstrip(".?!,;").lower().split()
     return bool(words) and words[-1] in _DANGLING_WORDS
@@ -131,6 +138,11 @@ class SceneSupervisor:
         self._prompt = _PROMPT.read_text(encoding="utf-8").strip()
         self._participant_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._scene_lock: asyncio.Lock = asyncio.Lock()
+
+    def forget_participant(self, participant_id: str) -> None:
+        """Drop per-participant state after departure; a reconnecting id starts clean."""
+        self._participant_locks.pop(participant_id, None)
+        self._context.forget_participant(participant_id)
 
     async def _recent_conversation(self, participant_id: str) -> tuple[str, str]:
         recalled = await self._text_memory.recall_conversation.execute(
@@ -232,11 +244,16 @@ class SceneSupervisor:
             return SceneReply(response=reply)
         output = result.content
 
-        delegated_any = self._context.take_delegated(request.participant_id)
-        conversational = not delegated_any and output.rstrip().endswith("?")
+        # Verify only turns with actual mutation intent: a mutating subagent
+        # was delegated, or a change-requesting utterance delegated nowhere.
+        # Vision, memory, and conversational turns skip the second LLM pass.
+        delegated = {record.call.name for record in result.tool_calls}
+        needs_verification = bool(delegated & _MUTATING_AGENTS) or (
+            not delegated and _wants_mutation(transcript)
+        )
 
         await asyncio.sleep(0.15)  # let the scene RPC propagate before diffing
-        if not conversational and not SceneContext.changes(before, await self._context.snapshot()):
+        if needs_verification and not SceneContext.changes(before, await self._context.snapshot()):
             verification_messages = list(result.messages) + [
                 ChatMessage(role="user", content=(
                     "Verified scene changes this turn: none. If the request needed a"

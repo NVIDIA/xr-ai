@@ -67,9 +67,13 @@ async def run_app(
             video=video,
         )
 
+        def _participant_left(participant_id: str) -> None:
+            current_frame.release(participant_id)
+            supervisor.forget_participant(participant_id)
+
         render = RenderAgent(
             supervisor,
-            on_participant_left=current_frame.release,
+            on_participant_left=_participant_left,
         )
         voice = VoiceAgent(
             query_topic=USER_QUERY_TOPIC,

@@ -16,6 +16,7 @@ from xr_render_scene import EmptyRequest
 
 _START = "xr.session.started"
 _READY = "render.ready"
+_FAILED = "render.failed"
 
 
 def _now_us() -> int:
@@ -44,27 +45,46 @@ class XRSessionController:
     async def _on_data(self, message: DataMessage) -> None:
         if message.topic != _START:
             return
+        # The hub endpoint treats callback exceptions as fatal; a scene RPC
+        # or launch failure must degrade to a failed session, not kill the
+        # worker.
+        try:
+            await self._handle_start(message)
+        except Exception:
+            logger.exception("XR session start failed for {}", message.participant_id)
+
+    async def _handle_start(self, message: DataMessage) -> None:
         self.transport.set_target_participant(message.participant_id)
         async with self._start_lock:
             if not self.started:
-                await self.start_xr.execute(EmptyRequest())
-                self.started = await self._wait_until_ready()
-        if self.started:
-            await self.transport.send_return_data(
-                DataMessage(
-                    participant_id=message.participant_id,
-                    topic=_READY,
-                    pts_us=_now_us(),
-                    data=b"",
-                )
+                try:
+                    result = await self.start_xr.execute(EmptyRequest())
+                except Exception:
+                    logger.exception("start_xr RPC failed")
+                else:
+                    if result.error is not None:
+                        logger.warning("start_xr failed: {} ({})", result.status, result.error)
+                    else:
+                        self.started = await self._wait_until_ready()
+        if not self.started:
+            logger.warning("XR session start failed; renderer never became ready")
+        await self.transport.send_return_data(
+            DataMessage(
+                participant_id=message.participant_id,
+                topic=_READY if self.started else _FAILED,
+                pts_us=_now_us(),
+                data=b"",
             )
-            return
-        logger.warning("XR session start failed; renderer never became ready")
+        )
 
     async def _wait_until_ready(self, timeout_s: float = 120.0) -> bool:
         deadline = asyncio.get_running_loop().time() + timeout_s
         while asyncio.get_running_loop().time() < deadline:
-            health = await self.get_render_health.execute(EmptyRequest())
+            try:
+                health = await self.get_render_health.execute(EmptyRequest())
+            except Exception:
+                logger.exception("render health poll failed")
+                return False
             if health.lovr_started:
                 return True
             if health.spawn_error:

@@ -33,6 +33,11 @@ class SceneContext:
     def set_recent_moves(self, participant_id: str, moves: list[str]) -> None:
         self._recent_moves[participant_id] = moves
 
+    def forget_participant(self, participant_id: str) -> None:
+        self._recent_moves.pop(participant_id, None)
+        self._recent_moves_age.pop(participant_id, None)
+        self._any_delegations.discard(participant_id)
+
     async def snapshot(self) -> SceneState:
         return await self._scene.get_scene_state.execute(EmptyRequest())
 

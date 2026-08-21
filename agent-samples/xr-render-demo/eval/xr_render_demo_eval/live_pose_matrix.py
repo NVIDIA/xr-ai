@@ -125,6 +125,7 @@ async def main() -> None:
         try:
             await tracking.call("clear_sim_pose", {})
         except Exception:
+            # Best-effort cleanup; the stack may already be gone.
             pass
         await scene.close()
         await tracking.close()

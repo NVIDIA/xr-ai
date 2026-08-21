@@ -27,6 +27,14 @@ class Config:
     allow_sim_pose: bool
 
 
+def _strict_bool(value: object, field: str) -> bool:
+    # bool("false") is True; this flag arms a global tracking override on an
+    # open port, so only a real YAML boolean may enable it.
+    if not isinstance(value, bool):
+        raise SystemExit(f"{field} must be a YAML boolean (true/false), got {value!r}")
+    return value
+
+
 def _load_config(path: Path) -> Config:
     raw = yaml.safe_load(path.read_text()) or {}
     env_value = raw.get("cloudxr_env_file")
@@ -36,7 +44,7 @@ def _load_config(path: Path) -> Config:
     return Config(
         endpoint=str(raw.get("endpoint", "tcp://0.0.0.0:8330")),
         cloudxr_env_file=env_file,
-        allow_sim_pose=bool(raw.get("allow_sim_pose", False)),
+        allow_sim_pose=_strict_bool(raw.get("allow_sim_pose", False), "allow_sim_pose"),
     )
 
 
