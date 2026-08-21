@@ -37,7 +37,7 @@ The shipped profiles are:
 - `default`: local Parakeet STT, Piper TTS, Nemotron Omni, Cosmos3-Nano
   Reasoner, and Nemotron embedding services.
 - `vlm_llm_nim`: local STT, Piper TTS, and embedding plus self-hosted
-  Nemotron-3-Nano and Cosmos3-Nano Reasoner NIM containers.
+  Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner NIM containers.
 
 Copy the closest profile under a new name:
 

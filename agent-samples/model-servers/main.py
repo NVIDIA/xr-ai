@@ -21,8 +21,8 @@ containers. Shipped profiles (yaml/models.<name>.json):
 
   vlm_llm_nim
     stt + tts + embedding local; the LLM and VLM as self-hosted NIM containers
-    (Nemotron-3-Nano port 8110, Cosmos3-Nano Reasoner port 8100). Requires
-    docker + NGC_API_KEY. Samples may reuse these endpoints.
+    (Nemotron-3-Nano-Omni port 8110, Cosmos3-Nano Reasoner port 8100).
+    Requires docker + NGC_API_KEY. Samples may reuse these endpoints.
 
 Per-service placement (GPUs, ports, KV budgets) lives in the per-GPU-profile
 YAML directory; a service may ship a profile-specific config variant named

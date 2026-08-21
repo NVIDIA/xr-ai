@@ -146,6 +146,29 @@ def test_nim_profiles_serve_cosmos3_nano_reasoner(config_path: Path) -> None:
     assert config["env"]["NIM_MODEL_SIZE"] == "nano"
 
 
+@pytest.mark.parametrize(
+    "config_path",
+    sorted(
+        (_REPO_ROOT / "agent-samples/model-servers/yaml").glob(
+            "*/nim_llm_server.yaml"
+        )
+    ),
+)
+def test_nim_profiles_serve_nemotron_omni(config_path: Path) -> None:
+    config = yaml.safe_load(config_path.read_text())
+
+    assert config["image"] == (
+        "nvcr.io/nim/nvidia/"
+        "nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant"
+    )
+    assert "--reasoning-parser nemotron_v3" in (
+        config["env"]["NIM_PASSTHROUGH_ARGS"]
+    )
+    assert "--tool-call-parser qwen3_coder" in (
+        config["env"]["NIM_PASSTHROUGH_ARGS"]
+    )
+
+
 def test_custom_profiles_can_still_launch_riva_speech_nims(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

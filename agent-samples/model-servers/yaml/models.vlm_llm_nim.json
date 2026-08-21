@@ -27,18 +27,10 @@
       }
     },
     "llm": {
-      "category": "llm",
       "adapter": {
-        "kind": "openai_compat",
-        "model_name": "nvidia/nemotron-3-nano",
-        "capabilities": {
-          "tool_calls": true
-        },
-        "default_extras": {
-          "chat_template_kwargs": {
-            "enable_thinking": false
-          }
-        }
+        "preset": "nemotron_omni",
+        "model_name": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+        "reasoning_field": "reasoning"
       },
       "endpoint": {
         "base_url": "http://localhost:8110",
