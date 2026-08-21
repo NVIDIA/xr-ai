@@ -136,7 +136,7 @@ LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceAgent
       pre-roll buffer    last 10 chunks (~320 ms) kept at all times;
                          prepended to the utterance buffer on speech onset
                          so the first word's attack isn't clipped
-      VAD                Silero (ONNX, 512-sample (32 ms) windows,
+      VAD                Silero (ONNX, 512-sample / 32 ms windows,
                          probability threshold) via shared xr-ai-vad util
       accumulates        audio while speaking
       finalizes when     silence ≥ 0.8s AND speech ≥ 0.15s
@@ -260,7 +260,7 @@ is worked-example heavy and opens with pronoun and reference resolution.
 The placement agent's prompt maps utterance shapes to tools with contrast
 pairs: a stated distance is a shift (`nudge`); a user-anchored destination
 uses `move_user_relative`; a destination anchored on another object uses
-`move_object_relative` (stacking is relation `above`); `into` or `inside` is
+`move_object_relative` (stacking is relation `above`); "into/inside" is
 containment (`move_inside`). Every rule has a paired worked example, and
 the highest-leakage failure modes carry explicit contrast examples.
 
@@ -330,7 +330,7 @@ the supervisor's per-participant lock, and a global scene lock serializes
 the snapshot, mutation, and verification window across participants, so scene
 turns from different participants queue rather than interleave.
 
-### Prompt and evaluation overlap audit
+### Prompt/eval overlap audit
 
 Per `AGENTS.md` "Prompt-driven samples", the harness audits every worker
 prompt against every tier's case inputs at startup and warns on overlap:

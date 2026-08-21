@@ -166,7 +166,7 @@ Transcript publication uses one private bounded FIFO owned by `VoiceAgent`, so
 a slow runtime subscriber cannot delay STT, voice gating, or accepted queries.
 The queue preserves order and drops its oldest pending transcript when full;
 shutdown cancels the active delivery and discards pending transcripts. Runtime
-subscribers must enqueue long-running work internally and return promptly.
+subscribers should enqueue long-running work internally and return promptly.
 
 Accepted speech, typed text, participant lifecycle, and interruption remain on
 application-named topics. Pass `participant_joined_topic` and/or

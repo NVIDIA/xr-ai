@@ -151,7 +151,7 @@ profile remains the authority for credentials: callers cannot supply an
 `stream_images()`. Multi-image calls preserve caller order and place every
 image in one OpenAI-compatible user message before the question.
 
-## Remote and hosted NIM endpoints
+## Remote / hosted-NIM endpoints
 
 Cloud and remote endpoints, such as hosted [NVIDIA NIM](https://build.nvidia.com),
 are a profile change:
@@ -180,7 +180,7 @@ are a profile change:
 without that route use `readiness: none`, which makes
 `health()` return `True` without a request — otherwise a worker's readiness
 gate would block forever. Refer to
-[`AI services`](https://github.com/NVIDIA/xr-ai/blob/main/docs/source/components/ai-services.md)
+[AI services](../../docs/source/components/ai-services.md)
 for hosted endpoint operation.
 
 ## Riva gRPC speech (NIM STT/TTS)

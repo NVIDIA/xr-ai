@@ -88,7 +88,7 @@ work is responsible for controlling them, including creating, cancelling, and
 awaiting its own tasks. The runtime neither knows nor controls whether an
 agent's internal work is running. `publish()` waits for every fan-out delivery
 to settle before propagating any subscriber failures. Subscriber callbacks
-must hand off lengthy work to agent-owned bounded queues and return promptly.
+should hand off lengthy work to agent-owned bounded queues and return promptly.
 
 Topics default to `telemetry="full"`. High-cardinality transport topics use
 `"none"` when their consumer aggregates fragments and records one semantic

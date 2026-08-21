@@ -34,8 +34,8 @@ The user-facing command catalog is generated from top-level sample
 `[project.scripts]` entries and literal `argparse` declarations. Keep option
 descriptions in `help=` and do not repeat flag tables in narrative pages.
 
-Sample configuration examples and field-level guidance live in checked-in
-YAML and JSON, with field-level guidance in adjacent YAML comments. The
+Sample configuration examples live in checked-in YAML and JSON files, with
+field-level guidance in adjacent YAML comments. The
 generated catalog enrolls files under a top-level sample's `yaml/` tree and
 files beside a direct capability subproject, then renders them verbatim.
 Narrative docs cover only

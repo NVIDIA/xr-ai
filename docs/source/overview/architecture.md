@@ -30,7 +30,7 @@ contain configuration, protocol, and operational details.
 | (web/mobile/XR)|                   | + transport    |                | + agent SDK     |
 +---------------+                    +----------------+                +-------+--------+
                                                                             |
-                                               typed model and tool calls   |
+                                                   typed model/tool calls   |
                                                 +---------------------------+--------+
                                                 |                                    |
                                                 v                                    v

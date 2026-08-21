@@ -101,7 +101,7 @@ PROCESSES = [
     Process("hub",    "../../services/device-io-hub",                    "device_io_hub"),
     Process("vlm",    "../../services/vlm-server",               "vlm_server"),   # ← add as needed
     # Pick ONE LLM backend per sample — they bind different default ports
-    # (8106 or 8107) so running more than one at once is allowed but
+    # (8106 / 8107) so running more than one at once is allowed but
     # usually unnecessary.
     Process("llm",    "../../services/llama-nemotron-llm",       "llama_nemotron_llm_server"),
     # Process("llm",  "../../services/nemotron3-nano-llm",       "nemotron3_nano_llm_server"),

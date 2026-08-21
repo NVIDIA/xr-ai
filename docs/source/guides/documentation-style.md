@@ -12,8 +12,8 @@ this reference so the repository guidance remains accurate.
 
 ## Cross-references
 
-Introduce documentation links with **Refer to** or **refer to**, not “See” or
-“see.” Prefer MyST `{doc}` links in Markdown and `:doc:` or `:ref:` roles in
+Introduce documentation links with **Refer to** or **refer to**, not "See" or
+"see." Prefer MyST `{doc}` links in Markdown and `:doc:` or `:ref:` roles in
 reStructuredText. Use a descriptive Markdown link when the target is source
 code or an external resource, and link directly to the authoritative target
 rather than through a thin redirect page.
@@ -33,8 +33,8 @@ UI text, logs, filenames, paths, endpoints, or code.
 
 ## Clarity and consistency
 
-Use direct word order and specific self-reference nouns such as “This sample,”
-“This workflow,” or “This reference” instead of “This page” or “This guide.”
+Use direct word order and specific self-reference nouns such as "This sample,"
+"This workflow," or "This reference" instead of "This page" or "This guide."
 Keep article usage consistent within a procedure. Hyphenate compound adjectives
 when they precede a noun.
 

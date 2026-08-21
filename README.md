@@ -74,7 +74,7 @@ endpoint and no local GPU is required for the agent or hub.
 
 | Requirement | Version | Notes |
 |---|---|---|
-| OS | Linux | Ubuntu 22.04 or 24.04 recommended; WSL2 is not officially supported (refer to [Windows (WSL2)](#windows-wsl2) below) |
+| OS | Linux | Ubuntu 22.04 or 24.04 recommended; WSL2 is not officially supported (refer to [Windows (WSL2)](docs/source/getting_started/requirements.md#windows-wsl2)) |
 | Python | 3.11 or 3.12 | 3.10 and 3.13 are not supported |
 | [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
 | NVIDIA driver | 570+ | required for local model inference |
@@ -497,7 +497,7 @@ full setup. Quick steps:
 
 Permissions (`RECORD_AUDIO`, `CAMERA`) are requested at runtime on first use.
 
-### iOS and visionOS
+### iOS / visionOS
 
 Refer to [`client-samples/ios-visionos/README.md`](client-samples/ios-visionos/README.md)
 for full Xcode setup. Quick connection settings:
