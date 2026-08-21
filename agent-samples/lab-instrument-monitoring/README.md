@@ -11,7 +11,7 @@ For an adaptation-oriented architecture guide, see
 This sample writes durable monitoring output to files and serves a bounded live
 event viewer while a separate foreground agent answers voice or typed queries.
 There is no domain-specific monitoring UI, MCP adapter, NAT compatibility
-layer, or separate activity-viewer process. See the docs page above for
+layer, or separate activity-viewer process. See the linked guide above for
 architecture, agent responsibilities, and how to adapt the sample.
 
 ## Run
@@ -69,7 +69,7 @@ chime, and allows one follow-up utterance for five seconds.
 **Every finalized STT result, including speech rejected by the wake-word
 gate, is written to `transcript.jsonl`.** Wake-word rejection controls
 whether the foreground responds, not whether the utterance is stored. See the
-docs page above for the full persistence and redaction contract.
+linked guide above for the full persistence and redaction contract.
 
 Each connection writes to a new participant-scoped directory:
 
