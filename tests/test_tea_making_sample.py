@@ -1330,7 +1330,8 @@ def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:
 
 def test_foreground_prompt_has_route_eval_cases() -> None:
     cases = yaml.safe_load((_SAMPLE / "eval/cases.yaml").read_text())
-    assert {case["expected_tool"] for case in cases} == {
+    root_cases = [case for case in cases if case.get("route", "root") == "root"]
+    assert {case["expected_tool"] for case in root_cases} == {
         None,
         "application_context__query",
         "change_watch__start",
@@ -1340,3 +1341,14 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
         "video_log__start",
         "workflow__start",
     }
+    active_cases = [case for case in cases if case.get("route") == "active"]
+    assert {case["expected_tool"] for case in active_cases} == {
+        None,
+        "clock__timer",
+        "workflow__advance",
+        "workflow__reset",
+        "workflow__restart",
+    }
+    unrelated_cases = [case for case in active_cases if case["expected_tool"] is None]
+    assert len(unrelated_cases) >= 4
+    assert all("expected_response_pattern" in case for case in unrelated_cases)
