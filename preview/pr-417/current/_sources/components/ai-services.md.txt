@@ -377,10 +377,10 @@ uv run --project agent-samples/xr-render-demo xr_render_demo --stop
 
 Cleanup locates labelled Docker containers before inspecting ports, then
 stops them with `docker stop` (escalating to `docker kill` after 20 s).
-Pip-mode processes must carry the `XR_AI_VLLM_MANAGED` and
-`XR_AI_VLLM_PORT` ownership markers before cleanup sends `SIGTERM` or
-`SIGKILL`. Unknown listeners and failed inspection abort cleanup without
-sending a signal; absent servers are silently skipped.
+Locally persisted processes (pip-mode vLLM and Piper) must carry the
+`XR_AI_VLLM_MANAGED` and `XR_AI_VLLM_PORT` ownership markers before cleanup
+sends `SIGTERM` or `SIGKILL`. Unknown listeners and failed inspection abort
+cleanup without sending a signal; absent servers are silently skipped.
 
 The target ports and container names match the defaults in the per-profile YAML files.
 

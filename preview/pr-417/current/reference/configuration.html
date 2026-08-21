@@ -608,7 +608,8 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="c1"># `deployment.ownership` from `managed` to `reused`, and keep service</span>
 <span class="c1"># `llm-nim` on port 8110. Duplicate it as `agent_llm` when the sample uses</span>
 <span class="c1"># that role.</span>
-<span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
+<span class="c1"># Verify startup and memory use on the target 96 GB Blackwell GPU before</span>
+<span class="c1"># deployment.</span>
 <span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant</span>
 <span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8110</span>
 
@@ -617,9 +618,8 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
 <span class="nt">env</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"32768"</span>
-<span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.4"</span>
 <span class="w">  </span><span class="c1"># Match the local Omni deployment's reasoning and tool-call parsers.</span>
-<span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
+<span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--gpu-memory-utilization</span><span class="nv"> </span><span class="s">0.4</span><span class="nv"> </span><span class="s">--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
 </pre></div>
 </div>
 </section>
@@ -824,6 +824,8 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="c1"># `deployment.ownership` from `managed` to `reused`, and keep service</span>
 <span class="c1"># `llm-nim` on port 8110. Duplicate it as `agent_llm` when the sample uses</span>
 <span class="c1"># that role.</span>
+<span class="c1"># RTX Ada is not listed for this Omni NIM; verify startup and memory use on</span>
+<span class="c1"># target hardware before deployment.</span>
 <span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant</span>
 <span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8110</span>
 
@@ -832,9 +834,8 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"1"</span>
 <span class="nt">env</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"32768"</span>
-<span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.8"</span>
 <span class="w">  </span><span class="c1"># Match the local Omni deployment's reasoning and tool-call parsers.</span>
-<span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
+<span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--gpu-memory-utilization</span><span class="nv"> </span><span class="s">0.8</span><span class="nv"> </span><span class="s">--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
 </pre></div>
 </div>
 </section>
@@ -1238,7 +1239,8 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="c1"># `deployment.ownership` from `managed` to `reused`, and keep service</span>
 <span class="c1"># `llm-nim` on port 8110. Duplicate it as `agent_llm` when the sample uses</span>
 <span class="c1"># that role.</span>
-<span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
+<span class="c1"># GB10 is not listed for this Omni NIM; verify startup and memory use on target</span>
+<span class="c1"># hardware before deployment.</span>
 <span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant</span>
 <span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8110</span>
 
@@ -1247,9 +1249,8 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
 <span class="nt">env</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"32768"</span>
-<span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.35"</span>
 <span class="w">  </span><span class="c1"># Match the local Omni deployment's reasoning and tool-call parsers.</span>
-<span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
+<span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--gpu-memory-utilization</span><span class="nv"> </span><span class="s">0.35</span><span class="nv"> </span><span class="s">--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
 </pre></div>
 </div>
 </section>
