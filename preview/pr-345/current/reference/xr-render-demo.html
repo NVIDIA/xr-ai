@@ -606,7 +606,7 @@ one is in-flight.</p>
 <h2>TTS — Piper<a class="headerlink" href="#tts-piper" title="Link to this heading">#</a></h2>
 <p>Served on port 8105. The voice runtime streams the supervisor’s final
 reply to Piper and returns the audio to the participant.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>voice.output topic (agentic-loop quick-ack or final response)
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>voice.output topic (final response)
   → VoiceAgent → private media-session TTS
       sentence-batched synthesis
       POST text → tts-server :8105 → WAV bytes
@@ -616,10 +616,9 @@ reply to Piper and returns the audio to the participant.</p>
 <p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns interruption handling. A new utterance while TTS is playing
 triggers <code class="docutils literal notranslate"><span class="pre">ReturnAudioFlush</span></code>, so the hub clears the LiveKit audio queue for that
 participant. Its interruption callback also cancels the participant’s active
-render-agent task without waiting on its cleanup in the media processor. A
-consumer-aborted render stream closes its scene generator without publishing a
-terminator to the already-closed voice stream; producer supersession completes
-the old stream before the replacement starts.</p>
+render-agent task without waiting on its cleanup in the media processor. Each
+turn publishes one complete <code class="docutils literal notranslate"><span class="pre">voice.output</span></code> message; a superseded turn is
+cancelled before its reply is published, so no partial stream is left open.</p>
 </section>
 <section id="agent-runtime-and-voice-topology">
 <h2>Agent runtime and voice topology<a class="headerlink" href="#agent-runtime-and-voice-topology" title="Link to this heading">#</a></h2>
@@ -632,8 +631,8 @@ the old stream before the replacement starts.</p>
 </div>
 <p>Pipecat is an internal implementation detail of <code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code>; application
 input, participant-scoped agent execution, and voice output use public SDK contracts.
-Lifecycle failures publish notices to a sample-local runtime topic instead of
-manufacturing voice-pipeline frames.</p>
+An XR start failure sends <code class="docutils literal notranslate"><span class="pre">render.failed</span></code> (with the reason) on the data
+channel and speaks a short failure notice through <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>.</p>
 </section>
 <section id="agentic-loop">
 <h2>Agentic loop<a class="headerlink" href="#agentic-loop" title="Link to this heading">#</a></h2>
@@ -648,18 +647,20 @@ as context so the model understands references like “fix that” or “undo”
 :8108 routes the request to one or more subagent tools. Each subagent
 runs its own inner <code class="docutils literal notranslate"><span class="pre">run_tool_loop</span></code> (up to 4 iterations) against the
 scene, XR-tracking, and vision services.</p></li>
-<li><p><strong>Verification pass</strong> — if no scene change was observed within 150 ms of
-the loop completing, a second <code class="docutils literal notranslate"><span class="pre">run_tool_loop</span></code> call is made so the
+<li><p><strong>Verification pass</strong> — only for turns with mutation intent (a
+mutating subagent was delegated, or the utterance contains a
+change-requesting verb): if no scene change is observed within 150 ms
+of the loop completing, a second <code class="docutils literal notranslate"><span class="pre">run_tool_loop</span></code> call is made so the
 supervisor can delegate remaining work or confirm a no-op turn.</p></li>
 <li><p><strong>Conversation history persisted</strong> — the user utterance and agent reply
 are written to <code class="docutils literal notranslate"><span class="pre">TextMemoryTools</span></code> under <code class="docutils literal notranslate"><span class="pre">{participant_id}:user</span></code> and
 <code class="docutils literal notranslate"><span class="pre">{participant_id}:agent</span></code> source keys.</p></li>
-<li><p><strong>Final response</strong> published as <code class="docutils literal notranslate"><span class="pre">voice.output</span></code> chunks for the voice
-subscriber and TTS.</p></li>
+<li><p><strong>Final response</strong> published as one complete <code class="docutils literal notranslate"><span class="pre">voice.output</span></code> message for
+the voice subscriber and TTS.</p></li>
 </ol>
-<p>Subagents signal scene mutation via <code class="docutils literal notranslate"><span class="pre">SceneContext.mark_delegated</span></code>; the
-supervisor uses this to distinguish scene-mutating turns from conversational
-turns when deciding whether to run the verification pass.</p>
+<p>Mutation intent is read from the supervisor loop’s own tool-call record
+(which subagents were delegated) and the utterance’s action verbs; the
+scene diff decides whether the verification pass runs.</p>
 <p>At worker startup, <code class="docutils literal notranslate"><span class="pre">app.py</span></code> composes the five subagent tools from the scene,
 XR-tracking, spatial-math, vision, video-memory, and text-memory <code class="docutils literal notranslate"><span class="pre">Tool</span></code>
 instances provided by <code class="docutils literal notranslate"><span class="pre">xr_ai_tools</span></code>. Lifecycle tools (<code class="docutils literal notranslate"><span class="pre">start_xr</span></code>,
@@ -734,7 +735,7 @@ a streaming client connects. LOVR cannot start before then.</p>
 It derives schemas from the worker’s native tools and evaluates tool
 effects against deterministic fixtures, so the live LOVR scene is not mutated.
 Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/d12fb477f989dd8e6f7822740e4285f2273022ef/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/231d267a92cbbec53bf901d666e7db59bb3524ab/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
 for the case format and the watch-mode loop. Run with:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo/eval<span class="w"> </span>xr_render_demo_eval
 </pre></div>

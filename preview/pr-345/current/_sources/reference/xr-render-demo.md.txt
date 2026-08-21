@@ -155,7 +155,7 @@ Served on port 8105. The voice runtime streams the supervisor's final
 reply to Piper and returns the audio to the participant.
 
 ```
-voice.output topic (agentic-loop quick-ack or final response)
+voice.output topic (final response)
   → VoiceAgent → private media-session TTS
       sentence-batched synthesis
       POST text → tts-server :8105 → WAV bytes
@@ -165,10 +165,9 @@ voice.output topic (agentic-loop quick-ack or final response)
 `VoiceAgent` owns interruption handling. A new utterance while TTS is playing
 triggers `ReturnAudioFlush`, so the hub clears the LiveKit audio queue for that
 participant. Its interruption callback also cancels the participant's active
-render-agent task without waiting on its cleanup in the media processor. A
-consumer-aborted render stream closes its scene generator without publishing a
-terminator to the already-closed voice stream; producer supersession completes
-the old stream before the replacement starts.
+render-agent task without waiting on its cleanup in the media processor. Each
+turn publishes one complete `voice.output` message; a superseded turn is
+cancelled before its reply is published, so no partial stream is left open.
 
 ## Agent runtime and voice topology
 
@@ -182,8 +181,8 @@ VoiceAgent → private media session → VAD/STT ─→ voice.transcript topic
 
 Pipecat is an internal implementation detail of `xr-ai-voice`; application
 input, participant-scoped agent execution, and voice output use public SDK contracts.
-Lifecycle failures publish notices to a sample-local runtime topic instead of
-manufacturing voice-pipeline frames.
+An XR start failure sends `render.failed` (with the reason) on the data
+channel and speaks a short failure notice through `voice.output`.
 
 ## Agentic loop
 
@@ -198,18 +197,20 @@ services. On each accepted `xr-render.user-query` event:
    :8108 routes the request to one or more subagent tools. Each subagent
    runs its own inner `run_tool_loop` (up to 4 iterations) against the
    scene, XR-tracking, and vision services.
-3. **Verification pass** — if no scene change was observed within 150 ms of
-   the loop completing, a second `run_tool_loop` call is made so the
+3. **Verification pass** — only for turns with mutation intent (a
+   mutating subagent was delegated, or the utterance contains a
+   change-requesting verb): if no scene change is observed within 150 ms
+   of the loop completing, a second `run_tool_loop` call is made so the
    supervisor can delegate remaining work or confirm a no-op turn.
 4. **Conversation history persisted** — the user utterance and agent reply
    are written to `TextMemoryTools` under `{participant_id}:user` and
    `{participant_id}:agent` source keys.
-5. **Final response** published as `voice.output` chunks for the voice
-   subscriber and TTS.
+5. **Final response** published as one complete `voice.output` message for
+   the voice subscriber and TTS.
 
-Subagents signal scene mutation via `SceneContext.mark_delegated`; the
-supervisor uses this to distinguish scene-mutating turns from conversational
-turns when deciding whether to run the verification pass.
+Mutation intent is read from the supervisor loop's own tool-call record
+(which subagents were delegated) and the utterance's action verbs; the
+scene diff decides whether the verification pass runs.
 
 At worker startup, `app.py` composes the five subagent tools from the scene,
 XR-tracking, spatial-math, vision, video-memory, and text-memory `Tool`
