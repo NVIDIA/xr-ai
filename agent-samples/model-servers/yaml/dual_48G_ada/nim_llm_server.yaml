@@ -2,9 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Self-hosted NIM: LLM (serves both the `llm` and `agent_llm` roles).
-# Nemotron-3-Nano is the same agent model the local vlm_llm profile runs;
-# its A3B MoE decode is fast enough to cover the reactive role too. Swap in
+# Nemotron-3-Nano's A3B MoE decode is fast enough to cover the reactive and
+# agent roles. Swap in
 # any LLM NIM from https://catalog.ngc.nvidia.com.
+# To adapt a sample, copy the `llm` entry from
+# ../models.vlm_llm_nim.json into its active models JSON, change only
+# `deployment.ownership` from `managed` to `reused`, and keep service
+# `llm-nim` on port 8110. Duplicate it as `agent_llm` when the sample uses
+# that role.
 image:     nvcr.io/nim/nvidia/nemotron-3-nano:2.0.10
 http_port: 8110
 

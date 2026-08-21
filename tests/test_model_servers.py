@@ -123,16 +123,53 @@ def test_nim_profile_mixes_nim_containers_and_local_servers(
     assert credentials == ("NGC_API_KEY",)
 
 
-def test_vlm_speech_nim_profile_serves_speech_from_riva_containers(
+@pytest.mark.parametrize(
+    "config_path",
+    sorted(
+        (_REPO_ROOT / "agent-samples/model-servers/yaml").glob(
+            "*/nim_vlm_server.yaml"
+        )
+    ),
+)
+def test_nim_profiles_serve_cosmos3_nano_reasoner(config_path: Path) -> None:
+    config = yaml.safe_load(config_path.read_text())
+
+    assert config["image"] == "nvcr.io/nim/nvidia/cosmos3-reasoner:1.7.0"
+    assert config["env"]["NIM_MODEL_SIZE"] == "nano"
+
+
+def test_custom_profiles_can_still_launch_riva_speech_nims(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    profile = tmp_path / "models.custom_riva.json"
+    profile.write_text(
+        json.dumps(
+            {
+                "models": {
+                    role: {
+                        "adapter": {"kind": "riva_grpc"},
+                        "endpoint": {"base_url": endpoint},
+                        "deployment": {
+                            "ownership": "managed",
+                            "service": service,
+                            "credentials": ["NGC_API_KEY"],
+                        },
+                    }
+                    for role, endpoint, service in (
+                        ("stt", "localhost:50051", "stt-nim"),
+                        ("tts", "localhost:50052", "tts-nim"),
+                    )
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
 
-    processes, credentials = _model_servers._build_processes("vlm_speech_nim")
+    processes, credentials = _model_servers._build_processes(str(profile))
 
-    assert [process.name for process in processes] == [
-        "stt-nim", "tts-nim", "vlm-nim", "embedding",
-    ]
+    assert [process.name for process in processes] == ["stt-nim", "tts-nim"]
     assert credentials == ("NGC_API_KEY",)
 
 
@@ -143,7 +180,6 @@ def test_vlm_speech_nim_profile_serves_speech_from_riva_containers(
         ("vlm_llm_nim", "embedding", "embedding_server.yaml", "0"),
         ("vlm_llm_nim", "stt", "stt_server.yaml", "1"),
         ("vlm_llm_nim", "vlm-nim", "nim_vlm_server.yaml", "0"),
-        ("vlm_speech_nim", "vlm-nim", "nim_vlm_server_vlm_speech_nim.yaml", "1"),
     ],
 )
 def test_dual_ada_configs_follow_profile_gpu_layout(

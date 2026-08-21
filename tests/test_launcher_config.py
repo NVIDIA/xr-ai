@@ -276,7 +276,6 @@ _MODEL_SERVERS_YAML = _ROOT / "agent-samples" / "model-servers" / "yaml"
     [
         "models.default.json",
         "models.vlm_llm_nim.json",
-        "models.vlm_speech_nim.json",
     ],
 )
 def test_bundled_model_servers_profiles_have_launcher_sdk_parity(

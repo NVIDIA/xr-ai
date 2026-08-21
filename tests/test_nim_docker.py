@@ -208,20 +208,10 @@ def test_model_servers_nim_profile_parses() -> None:
     # the pin, non-thinking agent calls truncate mid-reasoning.
     assert llm.default_extras["chat_template_kwargs"] == {"enable_thinking": False}
     vlm = cfg.vlm("vlm")
-    assert vlm.model_name == "nvidia/cosmos-reason1-7b"
+    assert vlm.model_name == "nvidia/cosmos3-nano-reasoner"
+    assert vlm.capabilities.get("video") is True
     # NIM's health route is /v1/health/ready, not /health.
     assert vlm.health_check is True
     assert vlm.health_path == "/v1/health/ready"
     assert cfg.llm("llm").health_path == "/v1/health/ready"
     assert cfg.stt("stt").kind == "openai_compat"
-
-
-def test_model_servers_vlm_speech_nim_profile_parses() -> None:
-    cfg = load_models_config(_MS_YAML / "models.vlm_speech_nim.json")
-    # Speech rides the Riva gRPC kind: local container, no NVCF function id,
-    # and a real channel-ready health probe (the default).
-    for spec in (cfg.stt("stt"), cfg.tts("tts")):
-        assert spec.kind == "riva_grpc"
-        assert spec.function_id is None
-        assert spec.health_check is True
-    assert cfg.tts("tts").voice == "Magpie-Multilingual.EN-US.Sofia"
