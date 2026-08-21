@@ -126,21 +126,26 @@ int main(int argc, char** argv) {
     };
 
     session.on_network_metrics = [](const streamkit::NetworkMetrics& metrics) {
-        const auto quality = [&]() -> std::string_view {
+        const auto quality = [&metrics]() -> std::string_view {
+            using enum streamkit::NetworkQuality;
             switch (metrics.quality) {
-                case streamkit::NetworkQuality::kExcellent: return "excellent";
-                case streamkit::NetworkQuality::kGood: return "good";
-                case streamkit::NetworkQuality::kPoor: return "poor";
-                case streamkit::NetworkQuality::kLost: return "lost";
-                case streamkit::NetworkQuality::kUnknown: return "unknown";
+                case kExcellent: return "excellent";
+                case kGood: return "good";
+                case kPoor: return "poor";
+                case kLost: return "lost";
+                case kUnknown: return "unknown";
             }
             return "unknown";
         }();
         std::cout << "[network] quality=" << quality << " rtt=";
-        if (metrics.round_trip_time_ms) std::cout << *metrics.round_trip_time_ms << "ms";
+        if (metrics.round_trip_time_ms.has_value()) {
+            std::cout << *metrics.round_trip_time_ms << "ms";
+        }
         else std::cout << "—";
         std::cout << " jitter=";
-        if (metrics.receive_jitter_ms) std::cout << *metrics.receive_jitter_ms << "ms";
+        if (metrics.receive_jitter_ms.has_value()) {
+            std::cout << *metrics.receive_jitter_ms << "ms";
+        }
         else std::cout << "—";
         std::cout << "\n";
     };

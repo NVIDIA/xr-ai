@@ -173,7 +173,7 @@ private:
     void StartNetworkMetricsReporting();
     void StopNetworkMetricsReporting();
     void PublishNetworkMetrics(std::uint64_t connection_epoch);
-    void DeliverNetworkMetrics(NetworkMetrics metrics,
+    void DeliverNetworkMetrics(const NetworkMetrics& metrics,
                                std::uint64_t connection_epoch);
 
     LiveKitConfig config_;
@@ -202,23 +202,31 @@ private:
     std::atomic<bool> camera_armed_{false};
     std::atomic<bool> audio_armed_{false};
     std::atomic<ConnectionState> last_fired_state_{ConnectionState::kDisconnected};
-    std::atomic<NetworkQuality> network_quality_{NetworkQuality::kUnknown};
-    std::atomic<std::uint64_t> connection_epoch_{0};
     std::atomic<std::uint64_t> connect_generation_{0};
+
     // Serializes liveness checks, delivery, and state transitions. Shared
     // ownership lets a callback finish unlocking if it destroys the backend.
     struct NetworkMetricsDeliveryState {
         std::recursive_mutex mutex;
         bool blocked = true;
     };
-    std::shared_ptr<NetworkMetricsDeliveryState> network_metrics_delivery_ =
-        std::make_shared<NetworkMetricsDeliveryState>();
-    // Protects ownership changes to the stop flag and std::thread. Joining is
-    // deliberately performed after releasing this mutex so a worker callback
-    // can make an overlapping Disconnect() call without deadlocking.
-    std::mutex network_metrics_mutex_;
-    std::shared_ptr<std::atomic<bool>> network_metrics_stop_;
-    std::thread network_metrics_thread_;
+    struct NetworkMetricsState {
+        std::atomic<NetworkQuality> quality{NetworkQuality::kUnknown};
+        std::atomic<std::uint64_t> connection_epoch{0};
+        std::shared_ptr<NetworkMetricsDeliveryState> delivery =
+            std::make_shared<NetworkMetricsDeliveryState>();
+        // Protects ownership changes to the stop flag and thread. Joining is
+        // deliberately performed after releasing this mutex so a worker
+        // callback can make an overlapping Disconnect() call without
+        // deadlocking.
+        std::mutex mutex;
+        std::shared_ptr<std::atomic<bool>> stop;
+        // A callback may destroy the backend on this worker, which requires a
+        // self-detach path that std::jthread cannot support safely.
+        std::thread thread; // NOSONAR
+    };
+    NetworkMetricsState network_metrics_;
+
     // Owns the complete teardown, not just the telemetry thread fields.
     std::recursive_mutex teardown_mutex_;
     std::atomic<bool> teardown_in_progress_{false};

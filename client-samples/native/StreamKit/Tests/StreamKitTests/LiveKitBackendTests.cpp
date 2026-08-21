@@ -29,9 +29,14 @@
 
 namespace streamkit {
 
+class CallbackFailure : public std::runtime_error {
+public:
+    CallbackFailure() : std::runtime_error("callback failure") {}
+};
+
 struct LiveKitBackendTestAccess {
     static std::uint64_t ConnectionEpoch(const LiveKitBackend& backend) {
-        return backend.connection_epoch_.load();
+        return backend.network_metrics_.connection_epoch.load();
     }
 
     static void StopNetworkMetricsReporting(LiveKitBackend& backend) {
@@ -39,12 +44,12 @@ struct LiveKitBackendTestAccess {
     }
 
     static void DeliverNetworkMetrics(LiveKitBackend& backend,
-                                      NetworkMetrics metrics,
+                                      const NetworkMetrics& metrics,
                                       std::uint64_t connection_epoch) {
-        backend.DeliverNetworkMetrics(std::move(metrics), connection_epoch);
+        backend.DeliverNetworkMetrics(metrics, connection_epoch);
     }
 
-    static bool TearDownInProgress(LiveKitBackend& backend) {
+    static bool TearDownInProgress(const LiveKitBackend& backend) {
         return backend.teardown_in_progress_.load();
     }
 };
@@ -137,7 +142,8 @@ int main() {
     streamkit::LiveKitBackend cancelled_connect_backend{lk};
     std::vector<ConnectionState> cancelled_connect_states;
     cancelled_connect_backend.on_connection_state_changed =
-        [&](ConnectionState state) {
+        [&cancelled_connect_backend,
+         &cancelled_connect_states](ConnectionState state) {
             cancelled_connect_states.push_back(state);
             if (state == ConnectionState::kConnecting) {
                 cancelled_connect_backend.Disconnect();
@@ -158,7 +164,9 @@ int main() {
     auto release_callback_future = release_callback.get_future();
     std::promise<void> callback_finished;
     auto callback_future = callback_finished.get_future();
-    callback_backend.on_network_metrics = [&](const streamkit::NetworkMetrics&) {
+    callback_backend.on_network_metrics =
+        [&callback_backend, &callback_finished, &callback_started,
+         &release_callback_future](const streamkit::NetworkMetrics&) {
         callback_started.set_value();
         release_callback_future.wait();
         callback_backend.Disconnect();
@@ -168,7 +176,7 @@ int main() {
     Expect(callback_started_future.wait_for(std::chrono::seconds(2)) ==
            std::future_status::ready);
 
-    std::thread app_disconnect([&callback_backend]() {
+    std::jthread app_disconnect([&callback_backend]() {
         callback_backend.Disconnect();
     });
     const auto teardown_deadline = std::chrono::steady_clock::now() +
@@ -213,14 +221,16 @@ int main() {
     // User callback exceptions are contained at the delivery boundary and do
     // not terminate the telemetry worker.
     streamkit::LiveKitBackend throwing_backend{lk};
-    std::atomic<int> throwing_callback_count{0};
+    std::atomic throwing_callback_count{0};
     std::promise<void> throwing_callback_repeated;
     auto throwing_callback_future = throwing_callback_repeated.get_future();
-    throwing_backend.on_network_metrics = [&](const streamkit::NetworkMetrics&) {
+    throwing_backend.on_network_metrics =
+        [&throwing_callback_count,
+         &throwing_callback_repeated](const streamkit::NetworkMetrics&) {
         if (throwing_callback_count.fetch_add(1) == 1) {
             throwing_callback_repeated.set_value();
         }
-        throw std::runtime_error("callback failure");
+        throw streamkit::CallbackFailure{};
     };
     throwing_backend.Connect(streamkit::SessionConfig::Default());
     Expect(throwing_callback_future.wait_for(std::chrono::seconds(3)) ==
