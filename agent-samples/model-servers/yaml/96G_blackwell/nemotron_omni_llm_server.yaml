@@ -19,8 +19,6 @@ enforce_eager: false
 video_pruning_rate: 0.5
 video_fps: 2
 video_num_frames: 64
-# RTX Pro Blackwell requires Triton for this MoE architecture.
-moe_backend: triton
 
 vllm_backend: docker
 vllm_image: vllm/vllm-openai:v0.20.0

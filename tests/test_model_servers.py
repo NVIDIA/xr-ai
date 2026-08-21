@@ -386,7 +386,7 @@ def test_dual_ada_configs_follow_profile_gpu_layout(
 
 
 @pytest.mark.parametrize("profile", ["96G_blackwell", "dual_48G_ada", "spark"])
-def test_omni_profiles_select_supported_vllm_images(profile: str) -> None:
+def test_omni_profiles_select_supported_vllm_configuration(profile: str) -> None:
     profile_path = (
         _REPO_ROOT
         / "agent-samples/model-servers/yaml"
@@ -399,10 +399,7 @@ def test_omni_profiles_select_supported_vllm_images(profile: str) -> None:
     assert config["vllm_backend"] == "docker"
     assert config["vllm_image"] == "vllm/vllm-openai:v0.20.0"
     assert config["extra_pip"] == []
-    if profile == "96G_blackwell":
-        assert config["moe_backend"] == "triton"
-    else:
-        assert "moe_backend" not in config
+    assert "moe_backend" not in config
 
 
 def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
