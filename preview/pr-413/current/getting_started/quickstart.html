@@ -306,6 +306,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -443,7 +444,8 @@ on startup.</p>
 <h2>Model servers (shared AI services)<a class="headerlink" href="#model-servers-shared-ai-services" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">model-servers</span></code> starts the shared inference services used across demos and exits
 immediately — the services keep running in the background with weights hot.
-Start this once before running <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code> or <code class="docutils literal notranslate"><span class="pre">tea-making-sample</span></code>, or
+Start this once before running <code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code>,
+<code class="docutils literal notranslate"><span class="pre">lab-instrument-monitoring</span></code>, <code class="docutils literal notranslate"><span class="pre">tea-making-sample</span></code>, or <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>, or
 whenever you want to pre-warm models:</p>
 <div class="admonition important">
 <p class="admonition-title">Important</p>
@@ -473,10 +475,9 @@ tens of minutes). On subsequent runs the containers restart in under a minute.</
 <code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">&lt;name|path&gt;</span></code>. The default starts Nemotron-3 Nano Omni (8108,
 serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), and
 embeddings (8109); <code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code> serves the LLM and VLM as self-hosted NIM
-containers (requires docker + <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code>); <code class="docutils literal notranslate"><span class="pre">vlm_speech_nim</span></code> serves
-speech from Riva NIM containers. Starting a profile stops persisted servers
-outside it first and aborts if they cannot be stopped, avoiding GPU
-overcommit.</p>
+containers (Nemotron-3-Nano and Cosmos3-Nano Reasoner; requires docker and
+<code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code>). Starting a profile stops persisted servers outside it first
+and aborts if they cannot be stopped, avoiding GPU overcommit.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--models<span class="w"> </span>vlm_llm_nim
 </pre></div>
 </div>
@@ -497,30 +498,26 @@ channel; both routes use the same VLM pipeline against the latest video frame.
 Replies arrive as streaming Piper TTS audio plus a <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> text message.</p>
 <p>Uses the text-output Reasoner from <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos3-Nano</span></code> by default. Refer to
 <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI services</span></a> for runtime-selection details.</p>
-<p>There are two ways to run it:</p>
-<p><strong>Standalone</strong> (~23 GB VRAM) — starts its own VLM and STT:</p>
+<p>The sample always reuses model services and never starts or stops them. Its
+fixed <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> expects Parakeet STT on port 8103, Cosmos3-Nano on
+port 8100, and Piper TTS on port 8105. Start the repository defaults first
+from the repository root (the Piper command stays in the foreground):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/piper-tts<span class="w"> </span>piper_tts_server
+</pre></div>
+</div>
+<p>The first command may download model weights on its first run and requires the
+credentials described in the <a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a>. The model services remain running across
+sample restarts.</p>
+<section id="step-1-start-the-server">
+<h3>Step 1 — Start the server<a class="headerlink" href="#step-1-start-the-server" title="Link to this heading">#</a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/simple-vlm-example
 uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example
 </pre></div>
 </div>
-<p>On the very first run weights download from HuggingFace (tens of GB; can take
-several minutes). <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default; pass <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code>
-to run without one (refer to the
-<a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a>).</p>
-<p><strong>With model-servers pre-running</strong> — start <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> to pre-warm VLM
-(port 8100) and STT (port 8103). The demo detects and reuses them.</p>
-<p>In both modes the VLM and STT keep running after you exit so the next run skips
-the model reload. Refer to <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI services</span></a> for
-details. To release the VRAM, run
-<code class="docutils literal notranslate"><span class="pre">cd</span> <span class="pre">agent-samples/model-servers</span> <span class="pre">&amp;&amp;</span> <span class="pre">uv</span> <span class="pre">run</span> <span class="pre">model_servers</span> <span class="pre">--stop</span></code>.</p>
-<section id="step-1-start-the-server">
-<h3>Step 1 — Start the server<a class="headerlink" href="#step-1-start-the-server" title="Link to this heading">#</a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example
-</pre></div>
-</div>
-<p>The DeviceIOHub, VLM, STT, and TTS start together (or reuse running services).
-Worker readiness includes a short 1280x720 streaming VLM warmup.
+<p>Only the DeviceIOHub and worker start. Worker readiness probes all three reused
+services and includes a short 1280x720 streaming VLM warmup.
 The hub prints:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>[hub]   LiveKit URL : wss://localhost:8080
 [hub]   Room        : xr-room
@@ -550,43 +547,16 @@ automatically. Click <strong>Connect</strong>.</p>
 </ul>
 <p>A successful round trip: your query appears in the log, the agent responds after
 a moment, and you hear the reply through your speakers.</p>
-<p><strong>Local model</strong> — on a standalone system smaller than the shared model-server
-profiles, override the model weights or GPU settings in
-<code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/yaml/vlm_server.yaml</span></code>. When automatic GPU
-detection selects one of the supported model-server profiles, the sample uses
-<code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/&lt;profile&gt;/vlm_server.yaml</span></code> so a compatible
-server can be reused without reloading its weights.</p>
-<p>To use Cosmos-Reason1 instead, edit the VLM file selected for your hardware:
-set <code class="docutils literal notranslate"><span class="pre">model:</span> <span class="pre">nvidia/Cosmos-Reason1-7B</span></code>, remove the Cosmos3-only <code class="docutils literal notranslate"><span class="pre">hf_overrides</span></code>
-block, and select <code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code> as the VLM adapter preset in
-<code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/yaml/models.local.json</span></code>.</p>
-<p><strong>Remote model</strong> — copy <code class="docutils literal notranslate"><span class="pre">yaml/models.hosted.json</span></code>, point its VLM endpoint at
-your server, and select it in the worker config:</p>
+<p>To use compatible services at different locations, edit their endpoints in
+<code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/yaml/models.json</span></code>:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://your-remote-vlm.example.com"</span><span class="p">},</span>
-<span class="w">  </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"external"</span><span class="p">}</span>
+<span class="w">  </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://your-vlm.example.com"</span><span class="p">},</span>
+<span class="w">  </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span><span class="p">}</span>
 <span class="p">}</span>
 </pre></div>
 </div>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># yaml/simple_vlm_example_worker.yaml</span>
-<span class="nt">models_config</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">models.remote.json</span>
-</pre></div>
-</div>
-<p>The external deployment declaration makes the orchestrator skip the local VLM
-process automatically.</p>
-<p><strong>Hosted NVIDIA NIM</strong> — run the VLM on hosted NIM
-(<a class="reference external" href="https://build.nvidia.com">build.nvidia.com</a>) instead of locally (STT/TTS stay
-local) by setting <strong>one key</strong> in <code class="docutils literal notranslate"><span class="pre">simple_vlm_example_worker.yaml</span></code>:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">models_config</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">models.hosted.json</span>
-</pre></div>
-</div>
-<p>The same profile configures the worker and makes the orchestrator skip the
-local VLM server. Pick the hosted model id in <code class="docutils literal notranslate"><span class="pre">models.hosted.json</span></code> and provide
-an <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> as an
-<strong>environment variable</strong> (or save it once via the launcher credential prompt) —
-it is not stored in YAML; the overlay only names the env var via
-<code class="docutils literal notranslate"><span class="pre">api_key_env:</span> <span class="pre">NGC_API_KEY</span></code>. Refer to the credentials and AI-services guides for
-full details (and self-hosted NIM containers).</p>
+<p>The sample does not offer deployment profiles; the referenced services remain
+operator-owned regardless of endpoint.</p>
 <p>Each sample has its own <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> controlling the hub; refer to
 <code class="docutils literal notranslate"><span class="pre">services/device-io-hub/device_io_hub.yaml</span></code> for the full option list.</p>
 </section>
@@ -599,15 +569,20 @@ queries and controls that task. A separate QR and ArUco instrument monitor track
 speaks only discovered, changed, or long-missing device updates, and persists
 10-second full-state snapshots. The sample writes monitor, instrument,
 final pre-gate transcript, foreground-turn, and Relay JSONL files under <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code>
-and intentionally serves no sample-specific monitoring web UI.</p>
-<p>Start <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>, then run:</p>
+and intentionally serves no sample-specific monitoring web UI. Its fixed model
+configuration uses Cosmos for visual inference.</p>
+<p>Start <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> and Piper TTS in separate terminals:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
+</pre></div>
+</div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/piper-tts<span class="w"> </span>piper_tts_server
+</pre></div>
+</div>
+<p>Then start the sample in another terminal:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/lab-instrument-monitoring
 uv<span class="w"> </span>sync
 uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>worker
 uv<span class="w"> </span>run<span class="w"> </span>lab_instrument_monitoring
-
-<span class="c1"># Optional: use Nemotron Omni instead of Cosmos for visual inference.</span>
-uv<span class="w"> </span>run<span class="w"> </span>lab_instrument_monitoring<span class="w"> </span>--vlm-mode<span class="w"> </span>omni
 </pre></div>
 </div>
 <p>Connect an existing glasses or platform client using the authenticated URL,
@@ -624,20 +599,18 @@ transcript, and video observation. Nemotron-3 Nano Omni supplies both language
 and visual inference. Records are written as JSON Lines under the sample’s
 <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code> directory. A separate live event viewer presents selected runtime
 events without replacing those durable records.</p>
-<p>Start the shared model services first, then launch the sample with explicit
-voice and speech modes:</p>
+<p>Start the shared model services and Piper TTS first, then launch the sample:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/piper-tts<span class="w"> </span>piper_tts_server
 
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample<span class="w"> </span>tea_making_sample<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--voice-mode<span class="w"> </span>wake-word<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--tts-mode<span class="w"> </span>piper
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample<span class="w"> </span>tea_making_sample
 </pre></div>
 </div>
 <p>Open the XR-Media-Hub connection page at <code class="docutils literal notranslate"><span class="pre">https://localhost:8080</span></code>, accept the
 self-signed certificate on first use, allow camera and microphone access, and
-connect. In wake-word mode, begin with “Agent” or “Hey Agent.” Use
-<code class="docutils literal notranslate"><span class="pre">--voice-mode</span> <span class="pre">always-on</span></code> to dispatch every finalized utterance, or
-<code class="docutils literal notranslate"><span class="pre">--tts-mode</span> <span class="pre">magpie</span></code> for neural speech on a supported GPU.</p>
+connect. The checked-in voice-gate YAML requires “Agent” or “Hey Agent.” Set
+<code class="docutils literal notranslate"><span class="pre">voice_gate_yaml:</span> <span class="pre">voice_gate.always-on.yaml</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/tea_making_worker.yaml</span></code>
+to dispatch every finalized utterance without a wake phrase.</p>
 <p>Open <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code> on the XR-AI host for the live event viewer. To
 view it directly from another trusted machine, add <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code> and
 use <code class="docutils literal notranslate"><span class="pre">http://&lt;xr-host&gt;:8092</span></code>; restrict that unauthenticated port to the trusted
@@ -683,6 +656,11 @@ Vulkan, so install them before running the demo: <code class="docutils literal n
 <li><p><strong>npm 18+</strong> on PATH — the orchestrator builds the web vendor bundle on first
 run (skipped on subsequent runs).</p></li>
 </ul>
+<p>Start Piper TTS in a separate terminal:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/piper-tts<span class="w"> </span>piper_tts_server
+</pre></div>
+</div>
+<p>Then start XR Render:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/xr-render-demo
 uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo
@@ -712,17 +690,8 @@ for full details.</p>
 uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
-<p><strong>Hosted NVIDIA NIM</strong> — run the LLMs and VLM on hosted NIM
-(<a class="reference external" href="https://build.nvidia.com">build.nvidia.com</a>) instead of local vLLM (STT/TTS
-stay local) by setting <strong>one key</strong> in <code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.yaml</span></code>:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">models_config</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">models.hosted.json</span><span class="w">     </span><span class="c1"># default is models.local.json</span>
-</pre></div>
-</div>
-<p>The profile is consumed by both the worker and orchestrator, so there are
-no <code class="docutils literal notranslate"><span class="pre">main.py</span></code>
-edits, and the stack owns its own speech servers, so the model-servers stack
-isn’t needed at all. Provide an <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> as an <strong>environment variable</strong> (or via the
-launcher credential prompt, not in YAML). Refer to the AI-services guide.</p>
+<p>XR Render uses the fixed reuse-only endpoints in <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>; it does
+not select or own model deployment profiles.</p>
 </section>
 </section>
 <section id="hub-only-standalone">

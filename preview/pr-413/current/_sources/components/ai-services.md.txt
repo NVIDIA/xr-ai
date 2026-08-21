@@ -7,7 +7,9 @@
 
 Read this when calling or operating an inference server. For the
 orchestrator pattern that wires servers into a sample, refer to
-{doc}`/guides/adding-a-sample`.
+{doc}`/guides/adding-a-sample`. For an end-to-end procedure covering custom
+deployment profiles, hardware YAML, and reuse-only sample configuration, see
+{doc}`/guides/customizing-model-servers`.
 
 Multiple reusable HTTP servers are available as launchable peers of
 `services/device-io-hub/`. All expose an OpenAI-compatible REST API so agent workers
@@ -119,8 +121,7 @@ The agent samples in this repository (`simple-vlm-example`,
 `tea-making-sample`, and `xr-render-demo`) support Piper TTS — it runs on CPU
 with ~100 ms/sentence latency and avoids the NeMo dep tree. Magpie is still a
 supported NVIDIA TTS option with better voice quality and multilingual support
-when GPU is available; select the corresponding process and YAML. The tea
-sample exposes this choice through `--tts-mode`.
+when GPU is available; samples that own TTS can select its process and YAML.
 
 **2 — Copy the reference YAML to your sample's `yaml/` directory:**
 
@@ -145,12 +146,9 @@ into `agent-samples/<name>/yaml/`, change that value to `../../../models` so
 the cache still resolves to the repository-root `models/` directory. Capability
 and capability configurations without a `model_cache` key need no change.
 
-`simple-vlm-example` keeps these sample-local STT and VLM configs for smaller
-standalone hosts. On hardware with enough capacity for a shipped
-`model-servers` profile, its orchestrator selects that profile's VLM config
-instead. Matching the complete launch config lets the persistent Cosmos
-container be reused safely, while the standalone fallback retains the larger
-single-GPU memory budget.
+`simple-vlm-example` does not copy model-service YAML or launch model servers.
+Its fixed `yaml/models.json` points at operator-owned STT, VLM, and TTS
+endpoints; the sample orchestrator only launches its hub and worker.
 
 Edit the YAML as needed (model, port, device, etc.). The launcher auto-discovers
 `yaml/<command>.yaml` in the sample root and passes it as `--config`.
@@ -245,18 +243,16 @@ disables endpoint health probing, and declares external ownership:
   hosted service.
 - **`model_name`** is the hosted model id from [build.nvidia.com](https://build.nvidia.com).
 
-Set `models_config: models.hosted.json` in the worker YAML. This wrapped
+For a sample with profile selection, set `models_config: models.hosted.json`
+in the worker YAML. This wrapped
 JSON profile is consumed by both the worker and orchestrator, so the local
 VLM process is omitted and `NGC_API_KEY` is requested automatically. Select
 `models.local.json` to switch back.
 
 ### Self-hosted NIM containers (`models.vlm_llm_nim.json`)
 
-The same models can be pulled from NGC and served as **optimized NIM
-containers on your own GPUs**: same APIs as hosted NIM, no network hop, and
-speech included. Self-hosted Riva speech NIMs are reached through the
-`riva_grpc` model kind (requires the `xr-ai-models[riva]` extra, already a
-dependency of the sample workers).
+Compatible models can be pulled from NGC and served as **optimized NIM
+containers on your own GPUs**: same APIs as hosted NIM and no network hop.
 
 The NIM containers are owned by the shared model-servers stack, exactly
 like the local vLLM servers. Its deployment profiles pick the mix: every
@@ -268,13 +264,16 @@ image and ports) or as a local server:
 uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim
 ```
 
-- `vlm_llm_nim`: the LLM and VLM as NIM containers, STT and embedding local. Pairs
-  with each sample's `models.vlm_llm_nim.json` (the sample marks the NIM
-  services `reused` and owns only its piper TTS).
-- `vlm_speech_nim`: Riva speech NIM containers plus the Cosmos NIM. Pairs with
-  simple-vlm-example's `models.vlm_speech_nim.json`. Mutually exclusive with
-  `vlm_llm_nim` on 2x48 GB: Riva speech NIMs don't fit next to CloudXR + LOVR + the
-  LLM/VLM NIMs there.
+- `vlm_llm_nim`: Nemotron-3-Nano and Cosmos3-Nano Reasoner as NIM
+  containers, with STT and embedding served locally. Samples reuse these
+  endpoints; they never launch or stop the containers.
+
+To adapt a sample, copy the relevant `llm` and `vlm` entries from
+`models.vlm_llm_nim.json` into the sample's active models JSON and change only
+their deployment ownership from `managed` to `reused`. Samples with an
+`agent_llm` role duplicate the `llm` entry under that name. The adjacent
+`nim_llm_server.yaml` and `nim_vlm_server.yaml` comments repeat this mapping
+beside the container configuration.
 
 The container `image:` is the model, so swapping models is a
 `nim_<role>_server.yaml` edit plus the matching profile entry. Selection is
@@ -287,7 +286,8 @@ with the relevant entries changed, saved under any name and selected with
 port overlaps: give a NIM container a free port or drop the overlapping
 local server from the profile.
 
-A self-hosted speech entry uses the Riva gRPC kind:
+A custom model-server profile can still launch self-hosted Riva speech NIMs.
+Workers reach them through the optional `riva_grpc` model kind:
 
 ```yaml
 stt:
@@ -298,8 +298,8 @@ stt:
 ```
 
 TTS additionally takes `voice:` (a Riva voice name) and `sample_rate:`
-(default 44100). `health_check: true` (the default) runs a gRPC
-channel-ready probe.
+(default 44100). `health_check: true` (the default) runs a gRPC channel-ready
+probe. No shipped model-server profile or sample selects Riva speech.
 
 Requirements: docker + NVIDIA Container Toolkit, `NGC_API_KEY` (used for the
 `nvcr.io` image pull *and* by the container itself to download the
@@ -370,7 +370,7 @@ with stale memory limits, entrypoint, setup commands, or model arguments.
 **Stopping the persisted servers**, from the repo root:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers --stop    # also simple-vlm-example's VLM and STT
+uv run --project agent-samples/model-servers model_servers --stop
 uv run --project agent-samples/xr-render-demo xr_render_demo --stop
 ```
 

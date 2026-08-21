@@ -329,6 +329,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
@@ -471,14 +472,14 @@ ownership, and event composition are reusable.</p>
 </section>
 <section id="quick-start">
 <h2>Quick start<a class="headerlink" href="#quick-start" title="Link to this heading">#</a></h2>
-<p>Run commands from the repository root. The tea sample reuses the shared Omni,
-STT, and embedding services, so start them once in a separate terminal:</p>
+<p>Run commands from the repository root. The tea sample reuses all model
+services, so start the shared stack and Piper TTS first:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/piper-tts<span class="w"> </span>piper_tts_server
 </pre></div>
 </div>
-<p>Then launch the sample with Piper speech:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample<span class="w"> </span>tea_making_sample<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--tts-mode<span class="w"> </span>piper
+<p>Then launch the sample:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample<span class="w"> </span>tea_making_sample
 </pre></div>
 </div>
 <p>Open <code class="docutils literal notranslate"><span class="pre">https://localhost:8080</span></code>, accept the development certificate, allow camera
@@ -498,24 +499,14 @@ Agent, start recording the transcript.
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--tts-mode</span> <span class="pre">piper</span></code></p></td>
-<td><p>Required choice for lightweight CPU speech on port 8105</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--tts-mode</span> <span class="pre">magpie</span></code></p></td>
-<td><p>Required choice for neural speech on port 8104; uses CUDA when available</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--voice-mode</span> <span class="pre">wake-word</span></code></p></td>
-<td><p>Default; require “Agent” or “Hey Agent” and allow a short follow-up window</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--voice-mode</span> <span class="pre">always-on</span></code></p></td>
-<td><p>Dispatch every finalized utterance without a wake phrase</p></td>
-</tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code></p></td>
 <td><p>Bind the unauthenticated live event viewer to all IPv4 interfaces instead of loopback</p></td>
 </tr>
 </tbody>
 </table>
 </div>
+<p>Speech uses the reused TTS endpoint in <code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code>. Voice-gate
+behavior comes from <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/tea_making_worker.yaml</span></code>.</p>
 <p>The live event viewer is available at <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code> on the XR-AI
 host. With <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code>, use <code class="docutils literal notranslate"><span class="pre">http://&lt;xr-host&gt;:8092</span></code> from a trusted
 development network and restrict TCP port 8092 accordingly. Durable JSONL

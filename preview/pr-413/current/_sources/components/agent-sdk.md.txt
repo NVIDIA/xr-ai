@@ -11,7 +11,7 @@ installation.
 
 | Directory | Import | Responsibility |
 |---|---|---|
-| `xr-ai-hub` | `xr_ai_hub` | Minimal msgpack over ZMQ IPC with DeviceIOHub |
+| `xr-ai-hub` | `xr_ai_hub` | Minimal IPC with DeviceIOHub using msgpack over ZMQ |
 | `xr-ai-models` | `xr_ai_models` | Typed model protocols, profiles, and OpenAI-compatible clients |
 | `xr-ai-runtime` | `xr_ai_runtime` | Agent registration and typed participant-scoped fan-out |
 | `xr-ai-tools` | `xr_ai_tools` | Relay-managed tools and model tool-call helpers |

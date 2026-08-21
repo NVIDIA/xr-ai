@@ -11,21 +11,23 @@ shared with other samples, refer to {doc}`/components/ai-services`.
 
 ## Process stack
 
-The orchestrator (`xr_render_demo`, stdlib-only via `xr-ai-launcher`) starts its processes serially in declaration order; each touches its ready file before the next process starts. `run_stack` is fail-fast: any
-exit terminates the whole stack.
+The orchestrator (`xr_render_demo`, stdlib-only via `xr-ai-launcher`) reuses all
+model processes and starts its application processes serially; each owned
+process touches its ready file before the next starts. `run_stack` is fail-fast:
+any owned process exit terminates the application stack.
 
-| Role | Directory | Command | Port |
-|---|---|---|---|
-| hub | `services/device-io-hub/` | `device_io_hub` | 8080 (HTTPS and `/rtc` WSS proxy); LiveKit 7880 stays on 127.0.0.1 |
-| cloudxr | `services/cloudxr-runtime/` | `cloudxr_runtime` | 48322 (WSS proxy) |
-| stt | `services/stt-server/` | `stt_server` | 8103 |
-| tts | `services/piper-tts/` | `piper_tts_server` | 8105 |
-| omni | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 (LLM) |
-| vlm | `services/vlm-server/` | `vlm_server` | 8100 (Cosmos VLM) |
-| video-memory | `services/video-memory-service/` | `video_memory_service` | 8310 (recorded-video typed RPC) |
-| scene | `agent-samples/xr-render-demo/scene/` | `xr_render_scene` | 8320 (typed RPC) |
-| openxr-service | `services/openxr-service/` | `openxr_service` | 8330 (typed RPC) |
-| worker | `agent-samples/xr-render-demo/worker/` | `xr_render_demo_worker` | — |
+| Role | Ownership | Directory | Command | Port |
+|---|---|---|---|---|
+| hub | sample | `services/device-io-hub/` | `device_io_hub` | 8080 (HTTPS and `/rtc` WSS proxy); LiveKit 7880 stays on 127.0.0.1 |
+| cloudxr | sample | `services/cloudxr-runtime/` | `cloudxr_runtime` | 48322 (WSS proxy) |
+| stt | reused | `services/stt-server/` | `stt_server` | 8103 |
+| tts | reused | `services/piper-tts/` | `piper_tts_server` | 8105 |
+| omni | reused | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 (LLM) |
+| vlm | reused | `services/vlm-server/` | `vlm_server` | 8100 (Cosmos VLM) |
+| video-memory | sample | `services/video-memory-service/` | `video_memory_service` | 8310 (recorded-video typed RPC) |
+| scene | sample | `agent-samples/xr-render-demo/scene/` | `xr_render_scene` | 8320 (typed RPC) |
+| openxr-service | sample | `services/openxr-service/` | `openxr_service` | 8330 (typed RPC) |
+| worker | sample | `agent-samples/xr-render-demo/worker/` | `xr_render_demo_worker` | — |
 
 Before starting the stack, the orchestrator runs two setup steps:
 
@@ -72,8 +74,8 @@ If `nvidia-smi` is missing, fails, reports no GPUs, or does not list the
 requested index, the wrapper logs a warning and skips pinning rather than
 failing startup.
 
-The corresponding model-side fields live under
-`agent-samples/model-servers/yaml/<profile>/`. Set them to different GPUs so
+The model-side fields live under `agent-samples/model-servers/yaml/`. Set them
+to different GPUs so
 the XR compositor and the agentic LLM do not share a card.
 
 ## Worker configuration
@@ -81,11 +83,10 @@ the XR compositor and the agentic LLM do not share a card.
 The worker reads two config files:
 
 - `yaml/xr_render_demo_worker.yaml` — native capability endpoints, text-memory directory, and VAD tunables.
-- `yaml/models.local.json` (deployment profile set by `models_config:` in the
-  worker YAML): model endpoint and deployment declarations consumed by
-  `xr-ai-models` and the orchestrator.  Each entry maps a logical name
+- `yaml/models.json` — fixed reuse-only model endpoint declarations consumed by
+  `xr-ai-models`. Each entry maps a logical name
   (`llm`, `agent_llm`, `stt`, `tts`, `vlm`) to an adapter (preset or explicit
-  spec), an endpoint, and a deployment.  Edit this file to change which model
+  spec), an endpoint, and a deployment. Edit this file to change which model
   runs where without touching the worker code.
 
 ## The LLM server
@@ -101,7 +102,7 @@ and tool calling from that point on.
 `--reasoning-parser nemotron_v3`. The launcher selects NVFP4 on Blackwell and
 FP8 on Ada, Hopper, or Ampere, with BF16 available as an explicit fallback.
 
-One server backs both LLM roles in `yaml/models.yaml`: `agent_llm` runs the
+One server backs both LLM roles in `yaml/models.json`: `agent_llm` runs the
 supervisor and subagent tool-calling loops, and `llm` remains available for
 untooled chat calls. Thinking stays off unless a call explicitly enables it.
 

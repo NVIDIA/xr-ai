@@ -306,6 +306,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -425,11 +426,14 @@
 shared with other samples, refer to <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a>.</p>
 <section id="process-stack">
 <h2>Process stack<a class="headerlink" href="#process-stack" title="Link to this heading">#</a></h2>
-<p>The orchestrator (<code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code>, stdlib-only via <code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code>) starts its processes serially in declaration order; each touches its ready file before the next process starts. <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> is fail-fast: any
-exit terminates the whole stack.</p>
+<p>The orchestrator (<code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code>, stdlib-only via <code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code>) reuses all
+model processes and starts its application processes serially; each owned
+process touches its ready file before the next starts. <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> is fail-fast:
+any owned process exit terminates the application stack.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Role</p></th>
+<th class="head"><p>Ownership</p></th>
 <th class="head"><p>Directory</p></th>
 <th class="head"><p>Command</p></th>
 <th class="head"><p>Port</p></th>
@@ -437,51 +441,61 @@ exit terminates the whole stack.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p>hub</p></td>
+<td><p>sample</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">services/device-io-hub/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device_io_hub</span></code></p></td>
 <td><p>8080 (HTTPS and <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> WSS proxy); LiveKit 7880 stays on 127.0.0.1</p></td>
 </tr>
 <tr class="row-odd"><td><p>cloudxr</p></td>
+<td><p>sample</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">services/cloudxr-runtime/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">cloudxr_runtime</span></code></p></td>
 <td><p>48322 (WSS proxy)</p></td>
 </tr>
 <tr class="row-even"><td><p>stt</p></td>
+<td><p>reused</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">services/stt-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">stt_server</span></code></p></td>
 <td><p>8103</p></td>
 </tr>
 <tr class="row-odd"><td><p>tts</p></td>
+<td><p>reused</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">services/piper-tts/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">piper_tts_server</span></code></p></td>
 <td><p>8105</p></td>
 </tr>
 <tr class="row-even"><td><p>omni</p></td>
+<td><p>reused</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron-omni-llm/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code></p></td>
 <td><p>8108 (LLM)</p></td>
 </tr>
 <tr class="row-odd"><td><p>vlm</p></td>
+<td><p>reused</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">services/vlm-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">vlm_server</span></code></p></td>
 <td><p>8100 (Cosmos VLM)</p></td>
 </tr>
 <tr class="row-even"><td><p>video-memory</p></td>
+<td><p>sample</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">video_memory_service</span></code></p></td>
 <td><p>8310 (recorded-video typed RPC)</p></td>
 </tr>
 <tr class="row-odd"><td><p>scene</p></td>
+<td><p>sample</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/scene/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">xr_render_scene</span></code></p></td>
 <td><p>8320 (typed RPC)</p></td>
 </tr>
 <tr class="row-even"><td><p>openxr-service</p></td>
+<td><p>sample</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">services/openxr-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">openxr_service</span></code></p></td>
 <td><p>8330 (typed RPC)</p></td>
 </tr>
 <tr class="row-odd"><td><p>worker</p></td>
+<td><p>sample</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/worker/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker</span></code></p></td>
 <td><p>—</p></td>
@@ -530,8 +544,8 @@ LOVR inherits the pin; <code class="docutils literal notranslate"><span class="p
 <p>If <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code> is missing, fails, reports no GPUs, or does not list the
 requested index, the wrapper logs a warning and skips pinning rather than
 failing startup.</p>
-<p>The corresponding model-side fields live under
-<code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/&lt;profile&gt;/</span></code>. Set them to different GPUs so
+<p>The model-side fields live under <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/</span></code>. Set them
+to different GPUs so
 the XR compositor and the agentic LLM do not share a card.</p>
 </section>
 <section id="worker-configuration">
@@ -539,11 +553,10 @@ the XR compositor and the agentic LLM do not share a card.</p>
 <p>The worker reads two config files:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">yaml/xr_render_demo_worker.yaml</span></code> — native capability endpoints, text-memory directory, and VAD tunables.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code> (deployment profile set by <code class="docutils literal notranslate"><span class="pre">models_config:</span></code> in the
-worker YAML): model endpoint and deployment declarations consumed by
-<code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> and the orchestrator.  Each entry maps a logical name
+<li><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> — fixed reuse-only model endpoint declarations consumed by
+<code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code>. Each entry maps a logical name
 (<code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm</span></code>) to an adapter (preset or explicit
-spec), an endpoint, and a deployment.  Edit this file to change which model
+spec), an endpoint, and a deployment. Edit this file to change which model
 runs where without touching the worker code.</p></li>
 </ul>
 </section>
@@ -558,7 +571,7 @@ and tool calling from that point on.</p>
 <p><code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> uses <code class="docutils literal notranslate"><span class="pre">--tool-call-parser</span> <span class="pre">qwen3_coder</span></code> and
 <code class="docutils literal notranslate"><span class="pre">--reasoning-parser</span> <span class="pre">nemotron_v3</span></code>. The launcher selects NVFP4 on Blackwell and
 FP8 on Ada, Hopper, or Ampere, with BF16 available as an explicit fallback.</p>
-<p>One server backs both LLM roles in <code class="docutils literal notranslate"><span class="pre">yaml/models.yaml</span></code>: <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> runs the
+<p>One server backs both LLM roles in <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>: <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> runs the
 supervisor and subagent tool-calling loops, and <code class="docutils literal notranslate"><span class="pre">llm</span></code> remains available for
 untooled chat calls. Thinking stays off unless a call explicitly enables it.</p>
 </section>
@@ -736,7 +749,7 @@ a streaming client connects. LOVR cannot start before then.</p>
 It derives schemas from the worker’s native tools and evaluates tool
 effects against deterministic fixtures, so the live LOVR scene is not mutated.
 Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/6876f68ed8fab0e124edd538a936b54b68cc1bd8/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/bd0a5325066a450c901b4a3ceed90d5ca92e67bb/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
 for the case format and the watch-mode loop. Run with:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo/eval<span class="w"> </span>xr_render_demo_eval
 </pre></div>

@@ -306,6 +306,7 @@
 <li class="toctree-l2"><a class="reference internal" href="adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Troubleshooting</a></li>
@@ -742,13 +743,13 @@ to run while the stack is down.</p>
 </section>
 <section id="first-run-downloads-models-silently">
 <h3>First run downloads models silently<a class="headerlink" href="#first-run-downloads-models-silently" title="Link to this heading">#</a></h3>
-<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">simple_vlm_example</span></code> appears to hang at startup the first
-time.</p>
+<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--project</span> <span class="pre">agent-samples/model-servers</span> <span class="pre">model_servers</span></code>
+appears to hang at startup the first time.</p>
 <p><strong>Cause:</strong> model weights are downloading from HuggingFace into <code class="docutils literal notranslate"><span class="pre">models/</span></code> at
 the repository root (gitignored; the Cosmos3 checkpoint alone is tens of GB).</p>
 <p><strong>Fix:</strong> wait. Subsequent runs use the cached weights and start in
 ~30–60 s. If the download makes no progress, note that unauthenticated
-downloads (runs started with <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code>) are rate-limited and can
+downloads (model-server runs started with <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code>) are rate-limited and can
 stall indefinitely; set <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> and restart. Refer to
 <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>.</p>
 </section>

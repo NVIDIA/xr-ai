@@ -36,18 +36,18 @@ ownership, and event composition are reusable.
 
 ## Quick start
 
-Run commands from the repository root. The tea sample reuses the shared Omni,
-STT, and embedding services, so start them once in a separate terminal:
+Run commands from the repository root. The tea sample reuses all model
+services, so start the shared stack and Piper TTS first:
 
 ```bash
 uv run --project agent-samples/model-servers model_servers
+uv run --project services/piper-tts piper_tts_server
 ```
 
-Then launch the sample with Piper speech:
+Then launch the sample:
 
 ```bash
-uv run --project agent-samples/tea-making-sample tea_making_sample \
-  --tts-mode piper
+uv run --project agent-samples/tea-making-sample tea_making_sample
 ```
 
 Open `https://localhost:8080`, accept the development certificate, allow camera
@@ -65,11 +65,10 @@ The launcher options are:
 
 | Option | Behavior |
 |---|---|
-| `--tts-mode piper` | Required choice for lightweight CPU speech on port 8105 |
-| `--tts-mode magpie` | Required choice for neural speech on port 8104; uses CUDA when available |
-| `--voice-mode wake-word` | Default; require “Agent” or “Hey Agent” and allow a short follow-up window |
-| `--voice-mode always-on` | Dispatch every finalized utterance without a wake phrase |
 | `--expose-web-events` | Bind the unauthenticated live event viewer to all IPv4 interfaces instead of loopback |
+
+Speech uses the reused TTS endpoint in `yaml/models.local.json`. Voice-gate
+behavior comes from `voice_gate_yaml` in `yaml/tea_making_worker.yaml`.
 
 The live event viewer is available at `http://127.0.0.1:8092` on the XR-AI
 host. With `--expose-web-events`, use `http://<xr-host>:8092` from a trusted

@@ -22,16 +22,19 @@ explicit compatibility anchor.
 
 ## Slashes in prose
 
-Do not use `/` to mean “or” or “and.” Rewrite with the conjunction or a list.
+Do not use `/` to mean "or" or "and." Rewrite with the conjunction or a list.
 Keep established technical forms such as `I/O`, `iOS/visionOS`, `STUN/TURN`,
-`VR/AR`, `LLM/VLM`, `pub/sub`, and `and/or`. Keep literal UI text, URLs, paths,
-endpoints, and code unchanged.
+`VR/AR`, `LLM/VLM`, `pub/sub`, and `and/or`. Apply these prose rules to
+explanatory comments and diagram labels inside fenced examples. Keep executable
+code, literal commands and output, identifiers, UI text, URLs, paths, and
+endpoints unchanged.
 
 ## Terminology
 
 Prefer full words over informal shortenings in paraphrased prose: for example,
 use **certificate**, not **cert**. Preserve shortenings that are part of literal
-UI text, logs, filenames, paths, endpoints, or code.
+UI text, logs, filenames, paths, endpoints, identifiers, commands, or
+executable code.
 
 ## Clarity and consistency
 
