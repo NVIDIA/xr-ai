@@ -5,6 +5,9 @@
 
 # Simple VLM example
 
+For a walkthrough of running this sample, see
+[`docs/source/getting_started/quickstart.md`](../../docs/source/getting_started/quickstart.md).
+
 This sample answers voice and text questions against each participant's latest
 camera frame. Responses stream to both Piper TTS and the `vlm.response` data
 topic.
@@ -14,7 +17,7 @@ The worker is a package under `worker/simple_vlm_example_worker/`:
 - `__main__.py` parses launcher arguments.
 - `agent.py` owns participant-scoped vision turns and cancellation.
 - `config.py` resolves worker, model, voice-gate, and prompt settings.
-- `app.py` composes the native runtime.
+- `app.py` composes the native runtime (`VoiceAgent` + `SimpleVlmAgent`).
 - `prompts/system.txt` owns the VLM system prompt.
 
 `VoiceAgent` privately owns STT/TTS/VLM readiness, the hub voice transport,
