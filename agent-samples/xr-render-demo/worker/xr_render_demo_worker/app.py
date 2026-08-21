@@ -16,7 +16,7 @@ from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.text_memory import TextMemoryTools
 from xr_ai_tools.tracking import TrackingTools
 from xr_ai_tools.video_memory import VideoMemoryTools
-from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent
+from xr_ai_voice import VOICE_OUTPUT_TOPIC, HubVoiceTransport, VadConfig, VoiceAgent, VoiceOutput
 from xr_ai_voicegate import load_voice_gate_config
 from xr_render_scene import SceneTools
 
@@ -97,10 +97,19 @@ async def run_app(
         runtime.register("voice", voice)
         runtime.register("xr-render", render)
 
+        async def _render_failed(participant_id: str, detail: str) -> None:
+            logger.warning("notifying {} of XR start failure: {}", participant_id, detail)
+            await runtime.publish(
+                VOICE_OUTPUT_TOPIC,
+                VoiceOutput(text="The XR display failed to start. Please try again."),
+                participant_id=participant_id,
+            )
+
         XRSessionController(
             transport=transport,
             start_xr=scene.start_xr,
             get_render_health=scene.get_health,
+            on_failure=_render_failed,
         ).attach()
 
         logger.info("xr-render-demo worker starting")

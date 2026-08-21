@@ -42,8 +42,6 @@ def make_vision_agent(
 ) -> Tool:
     async def handle(request: SubagentTask) -> SubagentResult:
         logger.debug("vision agent instruction={!r} trace={}", request.instruction[:200], current_trace_id.get())
-        if context is not None:
-            context.mark_delegated(request.participant_id)
 
         participant_id = request.participant_id
         reference_time_us = request.reference_time_us

@@ -19,16 +19,6 @@ class SceneContext:
         self._tracking = tracking
         self._recent_moves: dict[str, list[str]] = {}
         self._recent_moves_age: dict[str, int] = {}
-        self._any_delegations: set[str] = set()
-
-    def mark_delegated(self, participant_id: str) -> None:
-        self._any_delegations.add(participant_id)
-
-    def take_delegated(self, participant_id: str) -> bool:
-        if participant_id in self._any_delegations:
-            self._any_delegations.discard(participant_id)
-            return True
-        return False
 
     def set_recent_moves(self, participant_id: str, moves: list[str]) -> None:
         self._recent_moves[participant_id] = moves
@@ -36,7 +26,6 @@ class SceneContext:
     def forget_participant(self, participant_id: str) -> None:
         self._recent_moves.pop(participant_id, None)
         self._recent_moves_age.pop(participant_id, None)
-        self._any_delegations.discard(participant_id)
 
     async def snapshot(self) -> SceneState:
         return await self._scene.get_scene_state.execute(EmptyRequest())

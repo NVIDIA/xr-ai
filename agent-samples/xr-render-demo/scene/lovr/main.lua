@@ -7,6 +7,7 @@
 --   { op="scene.add",    value={ id, type, position={x,y,z}, color={r,g,b}, scale } }
 --   { op="scene.update", value={ id, [position=…], [color=…], [scale=…] } }
 --   { op="scene.remove", value={ id } }
+--   { op="scene.sync",   value={ objects={ <scene.add values>… } } }  full-state replace
 
 -- ── lovr.log override ────────────────────────────────────────────────────────
 -- Emit a tab-separated marker so the scene process (the
@@ -138,6 +139,16 @@ local function handle_scene_remove(v)
     end
 end
 
+local function handle_scene_sync(v)
+    -- Full-state replace: heals ops dropped on the wire, removals included.
+    primitives = {}
+    for _, item in ipairs(v.objects or {}) do
+        handle_scene_add(item)
+    end
+    lovr.log(string.format("scene.sync  %d primitive(s)", count_primitives()),
+             "info", "xr-render-scene")
+end
+
 -- ── LOVR callbacks ────────────────────────────────────────────────────────────
 
 function lovr.load()
@@ -184,6 +195,7 @@ local function drain_commands()
         if     op == "scene.add"    then ok_h, herr = pcall(handle_scene_add,    v)
         elseif op == "scene.update" then ok_h, herr = pcall(handle_scene_update, v)
         elseif op == "scene.remove" then ok_h, herr = pcall(handle_scene_remove, v)
+        elseif op == "scene.sync"   then ok_h, herr = pcall(handle_scene_sync,   v)
         elseif op ~= nil then
             lovr.log("unknown op=" .. tostring(op), "info", "xr-render-scene")
         else

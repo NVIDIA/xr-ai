@@ -215,7 +215,6 @@ class SceneSupervisor:
     async def _handle_scene(
         self, request: SceneRequest, transcript: str, conversation: str
     ) -> SceneReply:
-        self._context.take_delegated(request.participant_id)
         before = await self._context.snapshot()
 
         user_message = (
@@ -245,12 +244,10 @@ class SceneSupervisor:
         output = result.content
 
         # Verify only turns with actual mutation intent: a mutating subagent
-        # was delegated, or a change-requesting utterance delegated nowhere.
-        # Vision, memory, and conversational turns skip the second LLM pass.
+        # was delegated, or the utterance itself requests a change (which
+        # also catches mixed requests where only vision or memory ran).
         delegated = {record.call.name for record in result.tool_calls}
-        needs_verification = bool(delegated & _MUTATING_AGENTS) or (
-            not delegated and _wants_mutation(transcript)
-        )
+        needs_verification = bool(delegated & _MUTATING_AGENTS) or _wants_mutation(transcript)
 
         await asyncio.sleep(0.15)  # let the scene RPC propagate before diffing
         if needs_verification and not SceneContext.changes(before, await self._context.snapshot()):

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Awaitable, Callable
 
 from loguru import logger
 from xr_ai_hub import DataMessage
@@ -32,10 +33,12 @@ class XRSessionController:
         transport: HubVoiceTransport,
         start_xr: Tool,
         get_render_health: Tool,
+        on_failure: Callable[[str, str], Awaitable[None]] | None = None,
     ) -> None:
         self.transport = transport
         self.start_xr = start_xr
         self.get_render_health = get_render_health
+        self.on_failure = on_failure
         self.started = False
         self._start_lock = asyncio.Lock()
 
@@ -55,27 +58,44 @@ class XRSessionController:
 
     async def _handle_start(self, message: DataMessage) -> None:
         self.transport.set_target_participant(message.participant_id)
+        failure = ""
         async with self._start_lock:
             if not self.started:
                 try:
                     result = await self.start_xr.execute(EmptyRequest())
                 except Exception:
                     logger.exception("start_xr RPC failed")
+                    failure = "scene service unreachable"
                 else:
                     if result.error is not None:
                         logger.warning("start_xr failed: {} ({})", result.status, result.error)
+                        failure = result.error
                     else:
                         self.started = await self._wait_until_ready()
-        if not self.started:
-            logger.warning("XR session start failed; renderer never became ready")
+                        if not self.started:
+                            failure = "renderer never became ready"
+        if self.started:
+            await self.transport.send_return_data(
+                DataMessage(
+                    participant_id=message.participant_id,
+                    topic=_READY,
+                    pts_us=_now_us(),
+                    data=b"",
+                )
+            )
+            return
+        failure = failure or "renderer never became ready"
+        logger.warning("XR session start failed: {}", failure)
         await self.transport.send_return_data(
             DataMessage(
                 participant_id=message.participant_id,
-                topic=_READY if self.started else _FAILED,
+                topic=_FAILED,
                 pts_us=_now_us(),
-                data=b"",
+                data=failure.encode(),
             )
         )
+        if self.on_failure is not None:
+            await self.on_failure(message.participant_id, failure)
 
     async def _wait_until_ready(self, timeout_s: float = 120.0) -> bool:
         deadline = asyncio.get_running_loop().time() + timeout_s

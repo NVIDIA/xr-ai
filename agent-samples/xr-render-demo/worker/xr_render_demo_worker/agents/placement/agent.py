@@ -65,7 +65,6 @@ def make_placement_agent(
                 loop_result = await run_tool_loop(messages, toolset, _call_model)
             except ToolLoopError:
                 return SubagentResult(result="I couldn't complete that. Please try again.")
-            context.mark_delegated(request.participant_id)
             return SubagentResult(result=loop_result.content or "Done.")
 
     return Tool(name="placement_agent", description=DESCRIPTION,

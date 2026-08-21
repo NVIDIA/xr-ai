@@ -168,6 +168,8 @@ class SceneDispatcher:
         self._lovr_started: bool = False
         self._spawn_lock: asyncio.Lock = asyncio.Lock()
         self._render_drops: int = 0
+        self._render_dirty: bool = False
+        self._reconcile_task: asyncio.Task | None = None
         self._spawn_error: str | None = None
         self._watch_task: asyncio.Task | None = None
         # Per-launch context for the current LOVR child. Each launch gets its
@@ -380,7 +382,52 @@ class SceneDispatcher:
             await self._push.send(payload, zmq.NOBLOCK)
             return {"ok": True}
         except zmq.Again:
+            # The op is lost to LOVR while the state store already holds it;
+            # schedule a full-state sync so the render catches back up.
+            self._schedule_reconcile()
             return {"ok": False, "reason": "backpressure"}
+
+    def _schedule_reconcile(self) -> None:
+        self._render_dirty = True
+        if self._reconcile_task is None or self._reconcile_task.done():
+            self._reconcile_task = asyncio.create_task(
+                self._reconcile(), name="lovr-reconcile"
+            )
+
+    async def _reconcile(self) -> None:
+        """Re-deliver the full scene after a dropped live op.
+
+        ``scene.sync`` replaces LOVR's primitive set wholesale, healing
+        dropped adds, updates, and removals alike."""
+        while self._render_dirty and self._lovr_started:
+            self._render_dirty = False
+            await asyncio.sleep(0.25)  # coalesce a burst of drops into one sync
+            payload = msgpack.packb(
+                {"op": "scene.sync", "value": {"objects": self._sync_objects()}},
+                use_bin_type=True,
+            )
+            try:
+                await asyncio.wait_for(self._push.send(payload), timeout=_RESYNC_TIMEOUT_S)
+            except (asyncio.TimeoutError, zmq.ZMQError):
+                self._render_dirty = True
+                logger.warning(
+                    "xr-render-scene: reconcile sync failed; render lags until "
+                    "the next mutation or LOVR restart"
+                )
+                return
+            logger.info("xr-render-scene: reconcile sync sent after dropped op(s)")
+
+    def _sync_objects(self) -> list[dict]:
+        return [
+            {
+                "id":       obj_id,
+                "type":     obj["type"],
+                "position": [obj["position"]["x"], obj["position"]["y"], obj["position"]["z"]],
+                "color":    [obj["color"]["r"], obj["color"]["g"], obj["color"]["b"]],
+                "size":     obj["size"],
+            }
+            for obj_id, obj in self._objects.items()
+        ]
 
     async def _aclose_live_launch(self) -> None:
         """Close the current launch context, if any.
@@ -397,5 +444,7 @@ class SceneDispatcher:
     def close(self) -> None:
         if self._watch_task is not None and not self._watch_task.done():
             self._watch_task.cancel()
+        if self._reconcile_task is not None and not self._reconcile_task.done():
+            self._reconcile_task.cancel()
         with contextlib.suppress(Exception):
             self._push.close(linger=0)

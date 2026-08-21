@@ -117,6 +117,29 @@ async def test_two_turn_memory_without_preseeding(monkeypatch) -> None:
     ]
 
 
+async def test_mixed_vision_and_mutation_request_still_verifies(monkeypatch) -> None:
+    """A change-requesting utterance that only delegated a non-mutating
+    subagent must still get the verification pass."""
+    supervisor, _fake = _make_supervisor()
+    loop_calls = 0
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        nonlocal loop_calls
+        loop_calls += 1
+        return SimpleNamespace(
+            content="The room looks tidy.",
+            messages=list(messages),
+            tool_calls=(SimpleNamespace(call=SimpleNamespace(name="vision_agent")),),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="Look at the room and create a sphere.", participant_id="alice"))
+    assert reply.response == "The room looks tidy."
+    assert loop_calls == 2
+
+
 async def test_failing_supervisor_publishes_failure_notice() -> None:
     """A supervisor crash still produces one complete spoken failure notice,
     never silence."""
