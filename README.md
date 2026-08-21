@@ -212,7 +212,7 @@ avoiding GPU overcommit.
 
 The default profile starts Nemotron-3 Nano Omni (8108, serving both the
 reactive and agent LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103),
-and embeddings (8109).
+Piper TTS (8105), and embeddings (8109).
 
 ```bash
 uv run model_servers --models vlm_llm_nim
@@ -249,14 +249,13 @@ Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. Refer to th
 runtime-selection details.
 
 The sample always reuses model services and never starts or stops them. Start
-the repository-default VLM and STT, then start Piper TTS in a terminal:
+the repository-default shared stack, which includes VLM, STT, and Piper TTS:
 
 ```bash
 uv run --project agent-samples/model-servers model_servers
-uv run --project services/piper-tts piper_tts_server
 ```
 
-The first command may download model weights on its first run and requires the
+The command may download model weights on its first run and requires the
 credentials described in the
 [credentials guide](docs/source/getting_started/credentials.md).
 
@@ -334,15 +333,11 @@ recent monitor history. Accepted STT and typed queries, monitoring records,
 foreground turns, and Relay telemetry are written as JSONL under `artifacts/`;
 the shared connection web client remains available on port 8080.
 
-The sample always uses Cosmos for visual inference. Start `model-servers` and
-Piper TTS in separate terminals, then run the sample in another terminal:
+The sample always uses Cosmos for visual inference. Start the shared
+`model-servers` stack, including Piper TTS, then run the sample:
 
 ```bash
 uv run --project agent-samples/model-servers model_servers
-```
-
-```bash
-uv run --project services/piper-tts piper_tts_server
 ```
 
 ```bash
@@ -401,10 +396,10 @@ This demo has two extra host prerequisites beyond the shared
 - **npm 18+** on PATH — the orchestrator builds the web vendor bundle on first
   run (skipped on subsequent runs).
 
-Start Piper TTS in a separate terminal:
+Start the shared model stack, which includes Piper TTS:
 
 ```bash
-uv run --project services/piper-tts piper_tts_server
+uv run --project agent-samples/model-servers model_servers
 ```
 
 Then start XR Render:
