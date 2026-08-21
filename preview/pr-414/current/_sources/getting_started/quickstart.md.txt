@@ -25,7 +25,8 @@ on startup.
 
 `model-servers` starts the shared inference services used across demos and exits
 immediately — the services keep running in the background with weights hot.
-Start this once before running `xr-render-demo` or `tea-making-sample`, or
+Start this once before running `simple-vlm-example`,
+`lab-instrument-monitoring`, `tea-making-sample`, or `xr-render-demo`, or
 whenever you want to pre-warm models:
 
 :::{important}
