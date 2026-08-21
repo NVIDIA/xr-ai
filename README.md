@@ -143,7 +143,8 @@ frames are dropped if it is closed.
 
 Samples split model loading from the application stack: start shared model
 services once, then run samples as many times as you like without reloading
-weights. `simple-vlm-example` additionally expects Piper TTS on port 8105.
+weights. Simple VLM, Lab Instrument Monitoring, Tea Making, and XR Render also
+reuse Piper TTS on port 8105.
 
 The [tea-making guidance sample](agent-samples/tea-making-sample/README.md)
 combines a deterministic foreground workflow with file-backed transcript and

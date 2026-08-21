@@ -100,29 +100,28 @@ never starts or stops model services.
 Start the model server stack in one terminal:
 
 ```bash
-cd agent-samples/model-servers
-uv sync
-uv run model_servers
+uv sync --project agent-samples/model-servers
+uv run --project agent-samples/model-servers model_servers
 ```
 
 Start Piper TTS in a second terminal:
 
 ```bash
-cd ../../services/piper-tts
-uv sync
-uv run piper_tts_server
+uv sync --project services/piper-tts
+uv run --project services/piper-tts piper_tts_server
 ```
 
 Then start the sample in a third terminal:
 
 ```bash
-cd ../../agent-samples/lab-instrument-monitoring
-uv sync
-uv sync --project worker
-uv run lab_instrument_monitoring
+uv sync --project agent-samples/lab-instrument-monitoring
+uv sync --project agent-samples/lab-instrument-monitoring/worker
+uv run --project agent-samples/lab-instrument-monitoring \
+  lab_instrument_monitoring
 
 # Allow direct event-viewer access from a trusted private network.
-uv run lab_instrument_monitoring --expose-web-events
+uv run --project agent-samples/lab-instrument-monitoring \
+  lab_instrument_monitoring --expose-web-events
 ```
 
 Connect a glasses or platform client using the authenticated LiveKit URL,

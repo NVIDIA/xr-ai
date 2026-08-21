@@ -69,32 +69,40 @@ inference endpoints — a `models.yaml` entry with `api_key_env: NGC_API_KEY`
 sends it as the `Authorization: Bearer` token (refer to
 {doc}`AI services — hosting models on NVIDIA NIM </components/ai-services>`).
 
-Samples that select the NIM backend call `ensure_credentials("NGC_API_KEY")`,
-which **prompts once** (password-style, no echo) if the key isn't already
-available and saves it for future runs — NIM cannot function without it, so the
-prompt is intentional. Get a key at <https://ngc.nvidia.com/setup/api-key>, or
-set it ahead of time:
+The `vlm_llm_nim` model-server profile calls
+`require_credentials("NGC_API_KEY")`. This check is non-interactive and exits
+when the key is unavailable, so provide the key before starting the profile.
+Get a key at <https://ngc.nvidia.com/setup/api-key>, then export it:
 
 ```bash
 export NGC_API_KEY=nvapi-xxx
 ```
 
+To save it in the launcher credential store instead, run the interactive helper
+explicitly:
+
+```bash
+python3 -c "from xr_ai_launcher import ensure_credentials; ensure_credentials('NGC_API_KEY')"
+```
+
 ## How a token is resolved
 
-`load_credentials()` (always) and `ensure_credentials()` (NGC only) resolve in
-this priority order, highest first:
+`load_credentials()`, `require_credentials()`, and `ensure_credentials()`
+resolve existing values in this priority order, highest first:
 
 1. Already set in `os.environ`
 2. Saved in `~/.config/xr-ai/credentials.json`
 3. Stored in `~/.cache/huggingface/token` (`HF_TOKEN` only)
-4. *(interactive paths only)* prompted, then saved to both locations
+
+`ensure_credentials(...)` adds an interactive fourth step: it prompts for any
+missing value and saves it for future runs. Samples and `model_servers` do not
+call this helper.
 
 `warn_if_missing(...)` runs steps 1–3 and, if the token is still absent, prints
 an actionable notice and continues **without prompting**.
 `require_credentials(...)` runs the same steps but exits non-zero when the
-token is absent (unless called with `allow_missing=True`, wired to the
-orchestrators' `--allow-anonymous` flag); this is how `HF_TOKEN` is handled
-in the checkpoint-downloading samples.
+token is absent. `model_servers --allow-anonymous` relaxes only the `HF_TOKEN`
+check; credentials required by the selected NIM profile remain strict.
 
 ## Managing saved tokens
 
