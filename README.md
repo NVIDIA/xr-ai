@@ -10,6 +10,8 @@
 Agentic AI for XR — an open-source foundation for multi-modal, real-time
 conversational AI within the CloudXR ecosystem.
 
+Docs: <https://nvidia.github.io/xr-ai/>
+
 **Using a coding agent?** Paste this to it:
 
 ```text
@@ -352,8 +354,10 @@ uv run lab_instrument_monitoring
 
 Connect an existing glasses or platform client with the authenticated URL and
 token printed by the hub. See the
-[sample README](agent-samples/lab-instrument-monitoring/README.md) for the
-agent topology, output records, transcription semantics, and routing eval.
+[reference guide](docs/source/reference/lab-instrument-monitoring.md) for the
+agent topology, output-record contract, and transcription semantics. The
+[sample README](agent-samples/lab-instrument-monitoring/README.md) covers
+operation and the routing eval.
 
 ---
 

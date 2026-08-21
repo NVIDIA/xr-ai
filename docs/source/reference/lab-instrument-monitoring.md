@@ -239,6 +239,41 @@ no participant authentication or TLS. Use the externally reachable sample mode
 only on a trusted development network, or put an authenticated TLS reverse
 proxy in front of it.
 
+## File outputs and persistence
+
+Every non-empty final STT result is written to `transcript.jsonl` before voice
+gating, including ambient speech rejected by a configured wake phrase. Wake-word
+gating controls dispatch to the foreground, not storage: rejected speech is
+still transcribed and persisted. The default gate accepts `agent` and
+`hey agent`, plays a listening chime, and allows one follow-up utterance for
+five seconds. Accepted speech reaches the foreground as a `UserQuery`. Typed
+text reaches the foreground but is not an STT transcript.
+
+Each connection writes to a new participant-scoped directory:
+
+```text
+artifacts/
+├── relay-events.jsonl
+└── <participant>-<utc-session-stamp>/
+    ├── monitor.jsonl
+    ├── instrument-monitoring.jsonl
+    ├── transcript.jsonl
+    └── foreground.jsonl
+```
+
+Every per-session file begins with a `session` record and receives a
+`session_end` record on participant departure once that output type has been
+written. Monitor records contain a baseline, observations, unavailable-frame
+notices, or errors. Foreground records include the query, response, and
+model-selected tool names. Relay events contain prompts, responses, participant
+metadata, and tool lifecycles; live camera bytes are redacted by the shared
+vision tool. When `capture_marker_scans` is enabled, every lab-instrument
+invocation saves the exact source JPEG under `marker-scans/`; the worker log
+records that path and marker-family counts for debugging. Unmapped marker
+payloads are represented by a bounded hash rather than logged verbatim.
+Instrument monitoring records contain discrete changes, one-time
+tracking-loss events, and complete state snapshots.
+
 ## Adapting the sample
 
 ### Track another measured object
