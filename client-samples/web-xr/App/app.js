@@ -110,8 +110,12 @@ function _onDataReceived(topic, _data) {
   if (topic === 'render.failed') {
     const detail = new TextDecoder().decode(_data);
     model.xrError = `Agent renderer failed to start${detail ? `: ${detail}` : ''}`;
-    model.xrState = 'error';
-    render();
+    // Tear down the still-active CloudXR session before offering retry;
+    // startXR() refuses while a session is running.
+    stopXR().finally(() => {
+      model.xrState = 'error';
+      render();
+    });
     return true;
   }
   return false;

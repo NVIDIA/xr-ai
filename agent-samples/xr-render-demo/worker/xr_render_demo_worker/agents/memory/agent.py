@@ -6,9 +6,14 @@
 from pathlib import Path
 
 from loguru import logger
+from pydantic import BaseModel, Field
 from xr_ai_models import ChatMessage, LLMService
 from xr_ai_tools import Tool
-from xr_ai_tools.text_memory import TextMemoryTools
+from xr_ai_tools.text_memory import (
+    RecallConversationRequest,
+    RecallConversationResult,
+    TextMemoryTools,
+)
 from xr_ai_tools.tool_calling import ToolLoopError, run_tool_loop
 
 from ..._tolerant import tolerant_toolset
@@ -18,11 +23,35 @@ from ...models import SubagentResult, SubagentTask
 _PROMPT = Path(__file__).with_name("prompt.txt")
 DESCRIPTION = "Recall earlier conversation turns; never mutates the XR scene."
 
+_MAX_END_US = RecallConversationRequest.model_fields["end_us"].default
+
+
+class _RecallWindow(BaseModel):
+    """Model-visible recall window; participant identity is runtime-bound."""
+
+    start_us: int = Field(default=0, description="Inclusive window start in Unix microseconds.")
+    end_us: int = Field(default=_MAX_END_US, description="Inclusive window end in Unix microseconds.")
+
 
 _prompt_text = _PROMPT.read_text(encoding="utf-8").strip()
 
 def make_memory_agent(llm: LLMService, text_memory: TextMemoryTools) -> Tool:
-    recall_tool = text_memory.recall_conversation
+    async def recall(req: _RecallWindow) -> RecallConversationResult:
+        return await text_memory.recall_conversation.execute(
+            RecallConversationRequest(
+                participant_id=current_participant_id.get(),
+                start_us=req.start_us,
+                end_us=req.end_us,
+            )
+        )
+
+    recall_tool = Tool(
+        "recall_conversation",
+        "Recall the active participant's timestamped user and agent turns for a time window.",
+        _RecallWindow,
+        RecallConversationResult,
+        recall,
+    )
 
     async def handle(request: SubagentTask) -> SubagentResult:
         logger.debug("memory agent instruction={!r} trace={}", request.instruction[:200], current_trace_id.get())
