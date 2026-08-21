@@ -9,22 +9,9 @@ For an adaptation-oriented architecture guide, see
 [`docs/source/reference/tea-making-sample.md`](../../docs/source/reference/tea-making-sample.md).
 
 This sample combines a foreground tea guide with independent background
-observers. The foreground guide identifies tea, retrieves brewing guidance,
-watches visible preparation steps, and maintains one deterministic workflow per
-participant. Background tasks can record transcripts, watch for requested visual
-changes, and write periodic video observations without replacing the active tea
-guide.
-
-Foreground replies and workflow notices publish candidate speech through
-`VoiceAggregationAgent`. It preserves one participant's active response,
-combines non-urgent updates that arrive while that response is being spoken,
-and forwards interrupting output immediately.
-
-The sample uses native `xr_ai_runtime` agents and `xr_ai_tools`; it does not use
-NAT, PydanticAI, or MCP. Nemotron-3-Nano-Omni on port 8108 supplies both language
-reasoning and visual inference. STT, embedding, and RAG remain separate typed
-services. Selected runtime events appear in a generic live browser viewer while
-durable operational records remain JSON Lines files under `artifacts/`.
+observers (transcripts, visual-change watching, periodic video observations).
+See the docs page above for architecture, agent responsibilities, and how to
+adapt the sample.
 
 ## Run it
 
@@ -75,22 +62,7 @@ finalized when its rewrite completes; playback pacing does not delay the Agent
 panel. An urgent interruption may stop audio after the complete intended text
 has already appeared.
 
-## Behavior
-
-The foreground agent sees only the current user query and compact workflow
-state. Its native tool loop can answer directly, inspect the current image,
-retrieve tea references, control the tea workflow, or start and stop background
-tasks. Participant identity is injected by the application and is never exposed
-as a model-selected argument.
-
-When that loop selects `current_view`, the sample uses the same direct streaming
-path as `simple-vlm-example`: one current frame goes to
-`StreamingImageQueryTool`, whose chunks go straight to participant voice. Omni's
-visual response is not passed back through the foreground LLM for rewriting.
-
-The tea workflow advances only after explicit user commands. Visual observations
-may update evidence-backed state, but they do not silently move to the next step.
-Participant joins create fresh state; leaving cancels participant-owned work.
+## File outputs
 
 Background task output is retained under the sample's `artifacts/` directory:
 

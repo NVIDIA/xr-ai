@@ -10,6 +10,8 @@
 Agentic AI for XR — an open-source foundation for multi-modal, real-time
 conversational AI within the CloudXR ecosystem.
 
+Docs: <https://nvidia.github.io/xr-ai/>
+
 **Using a coding agent?** Paste this to it:
 
 ```text

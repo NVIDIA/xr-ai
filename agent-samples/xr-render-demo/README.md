@@ -5,6 +5,9 @@
 
 # xr-render-demo
 
+For process-stack, agentic-loop, and tracing/debugging details, see
+[`docs/source/reference/xr-render-demo.md`](../../docs/source/reference/xr-render-demo.md).
+
 Voice-driven XR scene manipulation sample. A supervisor routes natural-language
 commands to five focused subagents; each subagent calls typed function groups
 from `xr-ai-tools` to read and mutate the live XR scene.
@@ -120,27 +123,5 @@ uv run --project agent-samples/xr-render-demo/eval xr_render_demo_eval
 uv run --project agent-samples/xr-render-demo/eval xr_render_demo_live_manip
 ```
 
-## Tracing and debugging
-
-Each voice turn carries a `trace_id` equal to `ctx.metadata.message_id` from
-the xr-ai-runtime `RuntimeContext`. Filter logs by it:
-
-```
-grep "trace=<id>" <log-file>
-```
-
-Key log events (all at `DEBUG` level in `supervisor.py`):
-
-| Event | Message pattern |
-|-------|----------------|
-| Turn received | `supervisor turn participant=... trace=... transcript=...` |
-| Subagent delegated | emitted by the subagent's `run_tool_loop` |
-| Tool rejected (ValueError) | `tool <name> rejected input: ...` |
-| Tool failed (unexpected) | `tool <name> failed unexpectedly` (with traceback) |
-| Turn failed | `xr-render turn failed for <participant>: ...` |
-
-Expected degradation (tool error converted to model scratch, turn continues):
-`ValueError` from a tool call (bad arguments, object not found).
-
-Unexpected failures (traceback logged, turn aborted): any other exception
-propagating out of `SceneSupervisor.handle()`.
+Tracing and debugging (trace IDs, key log events, error policy) are covered in
+the docs page linked above.
