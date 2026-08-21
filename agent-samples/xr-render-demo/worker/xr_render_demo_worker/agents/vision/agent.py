@@ -15,7 +15,7 @@ from xr_ai_tools.video_memory import HistoricalFrameRequest, VideoMemoryTools
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult, ImageQueryTool
 
 from ..._tolerant import tolerant_toolset
-from ..._trace import current_trace_id
+from ..._trace import current_participant_id, current_reference_time_us, current_trace_id
 from ...models import SubagentResult, SubagentTask
 from ...scene import SceneContext
 
@@ -43,8 +43,8 @@ def make_vision_agent(
     async def handle(request: SubagentTask) -> SubagentResult:
         logger.debug("vision agent instruction={!r} trace={}", request.instruction[:200], current_trace_id.get())
 
-        participant_id = request.participant_id
-        reference_time_us = request.reference_time_us
+        participant_id = current_participant_id.get()
+        reference_time_us = current_reference_time_us.get()
 
         async def look(req: _LiveQuestion) -> ImageQueryResult:
             from xr_ai_tools.current_frame import CurrentFrameRequest
@@ -79,7 +79,7 @@ def make_vision_agent(
         toolset = tolerant_toolset(tools)
         scene_block = ""
         if context is not None:
-            scene_block = f"{await context.describe(request.participant_id)}\n\n"
+            scene_block = f"{await context.describe(current_participant_id.get())}\n\n"
         messages = [
             ChatMessage(role="system", content=_prompt_text),
             ChatMessage(role="user", content=(

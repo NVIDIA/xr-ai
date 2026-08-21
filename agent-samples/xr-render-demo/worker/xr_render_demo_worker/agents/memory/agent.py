@@ -12,7 +12,7 @@ from xr_ai_tools.text_memory import TextMemoryTools
 from xr_ai_tools.tool_calling import ToolLoopError, run_tool_loop
 
 from ..._tolerant import tolerant_toolset
-from ..._trace import current_trace_id
+from ..._trace import current_participant_id, current_reference_time_us, current_trace_id
 from ...models import SubagentResult, SubagentTask
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
@@ -31,8 +31,8 @@ def make_memory_agent(llm: LLMService, text_memory: TextMemoryTools) -> Tool:
         messages = [
             ChatMessage(role="system", content=prompt),
             ChatMessage(role="user", content=(
-                f"Active participant: {request.participant_id}\n"
-                f"Utterance timestamp: {request.reference_time_us}\n\n"
+                f"Active participant: {current_participant_id.get()}\n"
+                f"Utterance timestamp: {current_reference_time_us.get()}\n\n"
                 f"Focused instruction: {request.instruction}"
             )),
         ]

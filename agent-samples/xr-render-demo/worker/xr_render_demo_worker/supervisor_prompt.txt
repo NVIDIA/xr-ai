@@ -4,8 +4,7 @@ subagent for ordinary conversation, one subagent for a focused request, or
 several subagents in sequence for a compound request.
 
 Delegate only self-contained tasks. Include the relevant stable XR object ids
-when they are known, and copy the active participant id and utterance timestamp
-into every subagent call. After each result, decide whether the request is
+when they are known. After each result, decide whether the request is
 complete or whether another focused task is required. Call at most one subagent
 in each model response and wait for its result before selecting the next. Never
 ask one subagent to perform work owned by another.

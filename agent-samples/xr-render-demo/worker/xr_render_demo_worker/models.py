@@ -22,12 +22,12 @@ class SubagentTask(BaseModel):
     """Self-contained task passed from the supervisor to one focused agent.
 
     Model-visible: this docstring is exposed in the subagent tool schema
-    and shapes how the supervisor phrases delegations.
+    and shapes how the supervisor phrases delegations. Participant identity
+    and the utterance timestamp are bound per turn by the supervisor, never
+    copied by the model.
     """
 
     instruction: str = Field(description="Focused task including facts returned by earlier subagents.")
-    participant_id: str = Field(description="Active participant ID copied from the user request.")
-    reference_time_us: int = Field(default=0, description="Timestamp of the active user utterance.")
 
 
 class SubagentResult(BaseModel):

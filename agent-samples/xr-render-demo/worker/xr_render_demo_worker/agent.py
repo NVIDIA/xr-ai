@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 
+import nemo_relay
 from loguru import logger
 from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
 from xr_ai_voice import (
@@ -50,9 +51,13 @@ class RenderAgent(Agent):
         if participant_id is None:
             raise ValueError("render turns require a participant")
         await self._cancel(participant_id)
+        # The detached turn must not inherit the subscriber's live Relay
+        # scope stack; mutating it after the subscriber returns corrupts
+        # concurrent trace lifecycles.
         task = asyncio.create_task(
             self._run_turn(query, ctx),
             name=f"xr-render:{participant_id}",
+            context=nemo_relay.fork_asyncio_context(),
         )
         self._tasks[participant_id] = task
         task.add_done_callback(lambda t, pid=participant_id: self._discard(pid, t))

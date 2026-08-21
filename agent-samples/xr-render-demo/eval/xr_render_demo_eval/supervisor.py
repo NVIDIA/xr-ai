@@ -269,6 +269,7 @@ async def run_case(case: RoutingCase) -> bool:
             text_memory=fake_text_memory,
             subagent_tools=fake_tools,
         )
+        errored = False
         try:
             reply = await supervisor.handle(
                 SceneRequest(
@@ -279,11 +280,14 @@ async def run_case(case: RoutingCase) -> bool:
             )
         except Exception as exc:
             reply = type("R", (), {"response": f"<workflow error: {exc}>"})()
+            errored = True
     finally:
         await llm.close()
 
     called = [name for name, _instruction in calls]
     ok, why = True, "ok"
+    if errored:
+        ok, why = False, f"workflow error: {reply.response[:160]}"
     if case.expect_agent and case.expect_agent not in called:
         ok, why = False, f"{case.expect_agent} never called; called={called}"
     for forbidden in case.forbid_agents:

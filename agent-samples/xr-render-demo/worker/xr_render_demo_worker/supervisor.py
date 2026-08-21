@@ -22,7 +22,7 @@ from xr_ai_tools.video_memory import VideoMemoryTools
 from xr_ai_tools.vision import ImageQueryTool
 from xr_render_scene import SceneTools
 
-from ._trace import current_trace_id
+from ._trace import current_participant_id, current_reference_time_us, current_trace_id
 from .agents import (
     make_appearance_agent,
     make_memory_agent,
@@ -184,6 +184,8 @@ class SceneSupervisor:
 
     async def handle(self, request: SceneRequest) -> SceneReply:
         current_trace_id.set(request.trace_id)
+        current_participant_id.set(request.participant_id)
+        current_reference_time_us.set(request.timestamp_us)
         if _is_truncated(request.transcript):
             # The ask must reach memory: the next turn's completion splice
             # keys off the recalled truncated-ask reply.

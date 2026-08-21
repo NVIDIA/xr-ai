@@ -140,6 +140,63 @@ async def test_mixed_vision_and_mutation_request_still_verifies(monkeypatch) -> 
     assert loop_calls == 2
 
 
+async def test_turn_tasks_run_in_forked_relay_context(monkeypatch) -> None:
+    """Detached turn tasks must not inherit the subscriber's live Relay scope
+    stack; each turn gets a forked context."""
+    import nemo_relay
+    from xr_render_demo_worker import agent as agent_module
+
+    forks = 0
+    real_fork = nemo_relay.fork_asyncio_context
+
+    def counting_fork():
+        nonlocal forks
+        forks += 1
+        return real_fork()
+
+    monkeypatch.setattr(agent_module.nemo_relay, "fork_asyncio_context", counting_fork)
+
+    class _QuickSupervisor:
+        async def handle(self, request):
+            return SimpleNamespace(response="ok")
+
+    published = []
+
+    class _Ctx:
+        def __init__(self, pid):
+            self.metadata = SimpleNamespace(participant_id=pid, message_id=f"t-{pid}")
+
+        async def publish(self, topic, value):
+            published.append(value)
+
+    agent = RenderAgent(_QuickSupervisor())
+    await agent.answer_user(UserQuery(text="hi", timestamp_us=1), _Ctx("alice"))
+    await agent.answer_user(UserQuery(text="hi", timestamp_us=1), _Ctx("bob"))
+    for _ in range(200):
+        if len(published) == 2:
+            break
+        await asyncio.sleep(0.01)
+    assert forks == 2
+    assert len(published) == 2
+
+
+async def test_supervisor_eval_fails_on_exception_after_delegation(monkeypatch) -> None:
+    """The routing tier must FAIL a case whose workflow raises even when the
+    expected agent was already delegated before the exception."""
+    from xr_render_demo_eval import supervisor as eval_supervisor
+    from xr_render_demo_worker.models import SubagentTask
+
+    case = next(c for c in eval_supervisor.CASES if c.expect_agent)
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        tool = toolset.get(case.expect_agent)
+        await tool.execute(SubagentTask(instruction="do the thing"))
+        raise RuntimeError("boom after delegation")
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+    assert await eval_supervisor.run_case(case) is False
+
+
 async def test_failing_supervisor_publishes_failure_notice() -> None:
     """A supervisor crash still produces one complete spoken failure notice,
     never silence."""

@@ -22,6 +22,7 @@ from typing import Any
 
 from xr_ai_models import load_models_config, make_llm
 from xr_ai_tools.types import SpatialFrame, Vector3
+from xr_render_demo_worker._trace import current_participant_id, current_reference_time_us
 from xr_render_demo_worker.agents import (
     make_appearance_agent,
     make_memory_agent,
@@ -596,15 +597,11 @@ async def run_case(case: SubagentCase) -> bool:
             case.agent, llm, fake_scene, fake_tracking, fake_text_memory,
             fake_current_frame, fake_image_query, context,
         )
+        current_participant_id.set(_PARTICIPANT)
+        current_reference_time_us.set(10_000_000)
         errored = False
         try:
-            reply = await agent.execute(
-                SubagentTask(
-                    instruction=case.instruction,
-                    participant_id=_PARTICIPANT,
-                    reference_time_us=10_000_000,
-                )
-            )
+            reply = await agent.execute(SubagentTask(instruction=case.instruction))
         except Exception as exc:
             reply = SubagentResult(result=f"<workflow error: {exc}>")
             errored = True
