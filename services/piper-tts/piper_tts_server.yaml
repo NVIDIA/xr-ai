@@ -11,4 +11,5 @@
 voice:       en_US-lessac-medium
 port:        8105
 use_cuda:    false    # CPU is fast enough (~100 ms/sentence)
+startup_timeout_s: 600
 model_cache: ../../models
