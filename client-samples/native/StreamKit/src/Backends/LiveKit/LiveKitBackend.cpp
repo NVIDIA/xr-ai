@@ -58,7 +58,10 @@ namespace streamkit {
 
 namespace {
 
-thread_local LiveKitBackend* metrics_callback_backend = nullptr;
+LiveKitBackend*& MetricsCallbackBackend() noexcept {
+    static thread_local LiveKitBackend* backend = nullptr;
+    return backend;
+}
 
 #if STREAMKIT_HAVE_LIVEKIT
 // Lazy one-shot initialise of the SDK's global state. livekit::initialize()
@@ -217,7 +220,7 @@ void LiveKitBackend::Connect(const SessionConfig& session_config) {
         throw MissingTokenError{};
     }
 
-    std::unique_lock<std::recursive_mutex> connect_lock(teardown_mutex_);
+    std::unique_lock connect_lock(teardown_mutex_);
     teardown_complete_.store(false);
     const auto connect_generation = connect_generation_.fetch_add(1) + 1;
     FireStateChanged(ConnectionState::kConnecting);
@@ -291,7 +294,7 @@ void LiveKitBackend::StartAudio(const AudioConfig& config) {
     // AEC / AGC / NS toggles on AudioSource — software DSP would go
     // through AudioProcessingModule, tracked as a follow-up.
     StopAudio();
-    std::lock_guard<std::mutex> lock(tracks_mutex_);
+    std::scoped_lock lock(tracks_mutex_);
     audio_source_ = std::make_shared<livekit::AudioSource>(48000, 1, 0);
     audio_track_ = room_->localParticipant()->publishAudioTrack(
         "mic", audio_source_, livekit::TrackSource::SOURCE_MICROPHONE);
@@ -304,7 +307,7 @@ void LiveKitBackend::StartAudio(const AudioConfig& config) {
 
 void LiveKitBackend::StopAudio() {
 #if STREAMKIT_HAVE_LIVEKIT
-    std::lock_guard<std::mutex> lock(tracks_mutex_);
+    std::scoped_lock lock(tracks_mutex_);
     if (audio_track_ && room_) {
         room_->localParticipant()->unpublishTrack(audio_track_->sid());
     }
@@ -336,7 +339,7 @@ void LiveKitBackend::StartCamera(const CameraConfig& config) {
 
 void LiveKitBackend::StopCamera() {
 #if STREAMKIT_HAVE_LIVEKIT
-    std::lock_guard<std::mutex> lock(tracks_mutex_);
+    std::scoped_lock lock(tracks_mutex_);
     if (video_track_ && room_) {
         room_->localParticipant()->unpublishTrack(video_track_->sid());
     }
@@ -406,7 +409,7 @@ void LiveKitBackend::InjectVideoFrame(std::vector<std::uint8_t>&& data,
 
     std::shared_ptr<livekit::VideoSource> source;
     {
-        std::lock_guard<std::mutex> lock(tracks_mutex_);
+        std::scoped_lock lock(tracks_mutex_);
         if (!video_source_) {
             video_source_ = std::make_shared<livekit::VideoSource>(width, height);
             video_track_ = livekit::LocalVideoTrack::createLocalVideoTrack(
@@ -475,7 +478,7 @@ void LiveKitBackend::InjectAudioFrame(std::span<const std::int16_t> pcm,
                               samples_per_channel);
     std::shared_ptr<livekit::AudioSource> source;
     {
-        std::lock_guard<std::mutex> lock(tracks_mutex_);
+        std::scoped_lock lock(tracks_mutex_);
         source = audio_source_;
     }
     if (source) {
@@ -536,35 +539,36 @@ void LiveKitBackend::ApplyConnectionState(ConnectionState state) {
     std::uint64_t connection_epoch;
     {
         if (teardown_in_progress_.load() || teardown_complete_.load()) return;
-        std::lock_guard<std::recursive_mutex> delivery_lock(
-            network_metrics_delivery_->mutex);
+        std::scoped_lock delivery_lock(network_metrics_.delivery->mutex);
         if (teardown_in_progress_.load() || teardown_complete_.load()) return;
-        connection_epoch = connection_epoch_.load();
+        connection_epoch = network_metrics_.connection_epoch.load();
         is_connected_.store(true);
-        network_metrics_delivery_->blocked = true;
+        network_metrics_.delivery->blocked = true;
     }
     try {
         FireStateChanged(state);
     } catch (...) {
-        std::lock_guard<std::recursive_mutex> lock(network_metrics_delivery_->mutex);
-        if (is_connected_.load() && connection_epoch_.load() == connection_epoch) {
-            network_metrics_delivery_->blocked = false;
+        std::scoped_lock lock(network_metrics_.delivery->mutex);
+        if (is_connected_.load() &&
+            network_metrics_.connection_epoch.load() == connection_epoch) {
+            network_metrics_.delivery->blocked = false;
         }
         throw;
     }
     {
-        std::lock_guard<std::recursive_mutex> lock(network_metrics_delivery_->mutex);
-        if (is_connected_.load() && connection_epoch_.load() == connection_epoch) {
-            network_metrics_delivery_->blocked = false;
+        std::scoped_lock lock(network_metrics_.delivery->mutex);
+        if (is_connected_.load() &&
+            network_metrics_.connection_epoch.load() == connection_epoch) {
+            network_metrics_.delivery->blocked = false;
         }
     }
 }
 
 void LiveKitBackend::BlockNetworkMetricsDelivery() {
-    const auto delivery = network_metrics_delivery_;
-    std::lock_guard<std::recursive_mutex> lock(delivery->mutex);
+    const auto delivery = network_metrics_.delivery;
+    std::scoped_lock lock(delivery->mutex);
     is_connected_.store(false);
-    connection_epoch_.fetch_add(1);
+    network_metrics_.connection_epoch.fetch_add(1);
     delivery->blocked = true;
 }
 
@@ -594,27 +598,28 @@ void LiveKitBackend::HandleDataReceived(std::string_view topic,
 }
 
 void LiveKitBackend::HandleNetworkQualityChange(int lk_quality) {
+    NetworkQuality quality = NetworkQuality::kUnknown;
 #if STREAMKIT_HAVE_LIVEKIT
     switch (static_cast<livekit::ConnectionQuality>(lk_quality)) {
         case livekit::ConnectionQuality::Excellent:
-            network_quality_.store(NetworkQuality::kExcellent);
+            quality = NetworkQuality::kExcellent;
             break;
         case livekit::ConnectionQuality::Good:
-            network_quality_.store(NetworkQuality::kGood);
+            quality = NetworkQuality::kGood;
             break;
         case livekit::ConnectionQuality::Poor:
-            network_quality_.store(NetworkQuality::kPoor);
+            quality = NetworkQuality::kPoor;
             break;
         case livekit::ConnectionQuality::Lost:
-            network_quality_.store(NetworkQuality::kLost);
+            quality = NetworkQuality::kLost;
             break;
         default:
-            network_quality_.store(NetworkQuality::kUnknown);
             break;
     }
 #else
     (void)lk_quality;
 #endif
+    network_metrics_.quality.store(quality);
 }
 
 void LiveKitBackend::StartNetworkMetricsReporting() {
@@ -622,13 +627,14 @@ void LiveKitBackend::StartNetworkMetricsReporting() {
     auto stop = std::make_shared<std::atomic<bool>>(false);
     std::promise<void> assigned;
     auto assigned_future = assigned.get_future();
-    std::thread worker([this, stop, assigned = std::move(assigned_future)]() mutable {
+    std::thread worker( // NOSONAR - this worker must support self-detach.
+        [this, stop, assigned = std::move(assigned_future)]() mutable {
         // The worker must not call Disconnect() before its std::thread has
-        // been moved into network_metrics_thread_.
+        // been moved into network_metrics_.thread.
         assigned.wait();
         while (!stop->load()) {
             if (is_connected_.load()) {
-                PublishNetworkMetrics(connection_epoch_.load());
+                PublishNetworkMetrics(network_metrics_.connection_epoch.load());
             }
             // PublishNetworkMetrics may invoke a callback that destroys this
             // backend. Only the separately-owned stop flag is safe to touch
@@ -640,10 +646,10 @@ void LiveKitBackend::StartNetworkMetricsReporting() {
     });
     bool installed = false;
     {
-        std::lock_guard<std::mutex> lock(network_metrics_mutex_);
+        std::scoped_lock lock(network_metrics_.thread_mutex);
         if (is_connected_.load()) {
-            network_metrics_stop_ = stop;
-            network_metrics_thread_ = std::move(worker);
+            network_metrics_.stop = stop;
+            network_metrics_.thread = std::move(worker);
             installed = true;
         } else {
             stop->store(true);
@@ -656,20 +662,20 @@ void LiveKitBackend::StartNetworkMetricsReporting() {
 }
 
 void LiveKitBackend::StopNetworkMetricsReporting() {
-    std::thread worker_to_join;
+    std::thread worker_to_join; // NOSONAR - paired with the self-detaching worker.
     {
-        std::lock_guard<std::mutex> lock(network_metrics_mutex_);
-        if (network_metrics_stop_) {
-            network_metrics_stop_->store(true);
+        std::scoped_lock lock(network_metrics_.thread_mutex);
+        if (network_metrics_.stop) {
+            network_metrics_.stop->store(true);
         }
-        if (network_metrics_thread_.joinable()) {
-            if (network_metrics_thread_.get_id() == std::this_thread::get_id()) {
-                network_metrics_thread_.detach();
+        if (network_metrics_.thread.joinable()) {
+            if (network_metrics_.thread.get_id() == std::this_thread::get_id()) {
+                network_metrics_.thread.detach(); // NOSONAR - joining self terminates.
             } else {
-                worker_to_join = std::move(network_metrics_thread_);
+                worker_to_join = std::move(network_metrics_.thread);
             }
         }
-        network_metrics_stop_.reset();
+        network_metrics_.stop.reset();
     }
     if (worker_to_join.joinable()) {
         worker_to_join.join();
@@ -678,7 +684,7 @@ void LiveKitBackend::StopNetworkMetricsReporting() {
 
 void LiveKitBackend::PublishNetworkMetrics(std::uint64_t connection_epoch) {
     NetworkMetrics metrics{
-        .quality = network_quality_.load(),
+        .quality = network_metrics_.quality.load(),
         .round_trip_time_ms = std::nullopt,
         .receive_jitter_ms = std::nullopt,
     };
@@ -689,7 +695,7 @@ void LiveKitBackend::PublishNetworkMetrics(std::uint64_t connection_epoch) {
     try {
         std::vector<std::shared_ptr<livekit::Track>> tracks;
         {
-            std::lock_guard<std::mutex> lock(tracks_mutex_);
+            std::scoped_lock lock(tracks_mutex_);
             if (audio_track_) tracks.push_back(audio_track_);
             if (video_track_) tracks.push_back(video_track_);
         }
@@ -764,32 +770,34 @@ void LiveKitBackend::PublishNetworkMetrics(std::uint64_t connection_epoch) {
                 }
             }
         }
-    } catch (...) {
+    } catch (...) { // NOSONAR - RTC stats are optional and SDK exceptions vary.
         // Quality remains useful while RTCStats is temporarily unavailable.
     }
 #endif
     DeliverNetworkMetrics(metrics, connection_epoch);
 }
 
-void LiveKitBackend::DeliverNetworkMetrics(NetworkMetrics metrics,
+void LiveKitBackend::DeliverNetworkMetrics(const NetworkMetrics& metrics,
                                            std::uint64_t connection_epoch) {
     std::function<void(const NetworkMetrics&)> callback;
-    const auto delivery = network_metrics_delivery_;
-    std::lock_guard<std::recursive_mutex> lock(delivery->mutex);
+    const auto delivery = network_metrics_.delivery;
+    std::scoped_lock lock(delivery->mutex);
     if (delivery->blocked || !is_connected_.load() ||
-        connection_epoch_.load() != connection_epoch || !on_network_metrics) {
+        network_metrics_.connection_epoch.load() != connection_epoch ||
+        !on_network_metrics) {
         return;
     }
     callback = on_network_metrics;
 
-    auto* previous_backend = metrics_callback_backend;
-    metrics_callback_backend = this;
+    auto*& callback_backend = MetricsCallbackBackend();
+    auto* previous_backend = callback_backend;
+    callback_backend = this;
     try {
         callback(metrics);
-    } catch (...) {
+    } catch (...) { // NOSONAR - user callbacks may throw any exception type.
         // User callback failures do not stop telemetry or escape the worker.
     }
-    metrics_callback_backend = previous_backend;
+    callback_backend = previous_backend;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -797,8 +805,8 @@ void LiveKitBackend::DeliverNetworkMetrics(NetworkMetrics metrics,
 // ─────────────────────────────────────────────────────────────────────────────
 
 void LiveKitBackend::TearDown() {
-    std::unique_lock<std::recursive_mutex> teardown_lock(teardown_mutex_, std::defer_lock);
-    if (metrics_callback_backend == this) {
+    std::unique_lock teardown_lock(teardown_mutex_, std::defer_lock);
+    if (MetricsCallbackBackend() == this) {
         // An application-thread teardown may be joining this worker. In that
         // case this call is redundant and must not wait for the owner.
         if (!teardown_lock.try_lock()) return;
@@ -812,13 +820,13 @@ void LiveKitBackend::TearDown() {
     try {
         BlockNetworkMetricsDelivery();
         StopNetworkMetricsReporting();
-        network_quality_.store(NetworkQuality::kUnknown);
+        network_metrics_.quality.store(NetworkQuality::kUnknown);
         camera_armed_.store(false);
         audio_armed_.store(false);
 
 #if STREAMKIT_HAVE_LIVEKIT
         {
-            std::lock_guard<std::mutex> lock(tracks_mutex_);
+            std::scoped_lock lock(tracks_mutex_);
             video_track_.reset();
             video_source_.reset();
             audio_track_.reset();
