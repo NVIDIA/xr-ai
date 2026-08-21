@@ -26,7 +26,7 @@ async def main() -> None:
     )
     cases = yaml.safe_load((_SAMPLE / "eval" / "cases.yaml").read_text(encoding="utf-8"))
     llm = make_llm(
-        load_models_config(_SAMPLE / "yaml" / "models.local.json"),
+        load_models_config(_SAMPLE / "yaml" / "models.json"),
         "llm",
     )
     failures: list[str] = []

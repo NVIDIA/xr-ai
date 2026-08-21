@@ -968,7 +968,7 @@ class TestRunContainer:
         self._common_stubs(monkeypatch, _docker)
         monkeypatch.setattr(
             _docker, "container_on_port_checked",
-            lambda port: ("xr-ai-nim-cosmos-reason1-7b", True),
+            lambda port: ("xr-ai-nim-cosmos3-reasoner", True),
         )
         evicted: list[tuple[str, str]] = []
         monkeypatch.setattr(
@@ -998,8 +998,8 @@ class TestRunContainer:
         kwargs = self._kwargs(tmp_path)
         _docker.run_container(**kwargs)
         assert evicted == [
-            ("stop", "xr-ai-nim-cosmos-reason1-7b"),
-            ("rm", "xr-ai-nim-cosmos-reason1-7b"),
+            ("stop", "xr-ai-nim-cosmos3-reasoner"),
+            ("rm", "xr-ai-nim-cosmos3-reasoner"),
         ]
         assert popen_argvs == [["docker", "run", "some-image"]]
 
@@ -1135,7 +1135,7 @@ class TestPipEviction:
         evicted: list[tuple[str, str]] = []
         monkeypatch.setattr(
             _pip._docker, "container_on_port_checked",
-            lambda port: ("xr-ai-nim-cosmos-reason1-7b", True),
+            lambda port: ("xr-ai-nim-cosmos3-reasoner", True),
         )
         monkeypatch.setattr(
             _pip._docker, "stop_container",
@@ -1163,6 +1163,6 @@ class TestPipEviction:
             ready_file=None,
         )
         assert evicted == [
-            ("stop", "xr-ai-nim-cosmos-reason1-7b"),
-            ("rm", "xr-ai-nim-cosmos-reason1-7b"),
+            ("stop", "xr-ai-nim-cosmos3-reasoner"),
+            ("rm", "xr-ai-nim-cosmos3-reasoner"),
         ]

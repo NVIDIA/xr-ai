@@ -62,9 +62,9 @@ endpoint and no local GPU is required for the agent or hub.
 | Sample | Local VRAM needed |
 |---|---|
 | model-servers (shared models) | ~58 GB |
-| simple-vlm-example (standalone) | ~23 GB |
+| simple-vlm-example (requires model services) | Uses the model-services allocation |
 | lab-instrument-monitoring (requires model-servers) | ~55 GB (models) + Piper TTS |
-| tea-making-sample (requires model-servers) | ~58 GB shared models + <1 GB sample services |
+| tea-making-sample (requires model services) | Uses the model-services allocation + <1 GB sample services |
 | xr-render-demo (requires model-servers) | ~55 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 
@@ -141,11 +141,10 @@ frames are dropped if it is closed.
 | Agent demos | `agent-samples/` | End-to-end agent pipelines |
 | Tests | `tests/` | Multi-client / multi-agent integration tests |
 
-Lightweight samples (`simple-vlm-example`) are self-contained — one command
-starts everything. Heavier samples (`lab-instrument-monitoring`,
-`tea-making-sample`, and `xr-render-demo`) split model loading from the sample
-itself: start `model-servers` once, then run any sample as many times as you
-like without reloading weights.
+Samples split model loading from the application stack: start shared model
+services once, then run samples as many times as you like without reloading
+weights. Simple VLM, Lab Instrument Monitoring, Tea Making, and XR Render also
+reuse Piper TTS on port 8105.
 
 The [tea-making guidance sample](agent-samples/tea-making-sample/README.md)
 combines a deterministic foreground workflow with file-backed transcript and
@@ -174,7 +173,8 @@ on startup.
 
 `model-servers` starts the shared inference services used across demos and exits
 immediately — the services keep running in the background with weights hot.
-Start this once before running `tea-making-sample` or `xr-render-demo`, or
+Start this once before running `simple-vlm-example`,
+`lab-instrument-monitoring`, `tea-making-sample`, or `xr-render-demo`, or
 whenever you want to pre-warm models:
 
 > [!IMPORTANT]
@@ -203,9 +203,9 @@ tens of minutes. On subsequent runs the containers restart in under a minute.
 
 Which servers start is a deployment profile: `--models <name|path>` selects
 `default`, `vlm_llm_nim` (LLM and VLM as self-hosted NIM containers;
-requires docker + `NGC_API_KEY`), `vlm_speech_nim` (Riva speech NIM
-containers), or any profile JSON of your own. Starting a profile stops
-persisted servers outside it first and aborts if they cannot be stopped,
+requires docker + `NGC_API_KEY`), or any profile JSON of your own. The NIM
+profile serves Nemotron-3-Nano and Cosmos3-Nano Reasoner. Starting a profile
+stops persisted servers outside it first and aborts if they cannot be stopped,
 avoiding GPU overcommit.
 
 The default profile starts Nemotron-3 Nano Omni (8108, serving both the
@@ -246,9 +246,19 @@ Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. See the
 [VLM server notes](docs/source/components/ai-services.md#per-server-notes) for
 runtime-selection details.
 
-There are two ways to run it:
+The sample always reuses model services and never starts or stops them. Start
+the repository-default VLM and STT, then start Piper TTS in a terminal:
 
-**Standalone** (~23 GB VRAM) — starts its own VLM and STT:
+```bash
+uv run --project agent-samples/model-servers model_servers
+uv run --project services/piper-tts piper_tts_server
+```
+
+The first command may download model weights on its first run and requires the
+credentials described in the
+[credentials guide](docs/source/getting_started/credentials.md).
+
+#### Step 1 — Start the server
 
 ```bash
 cd agent-samples/simple-vlm-example
@@ -256,26 +266,8 @@ uv sync
 uv run simple_vlm_example
 ```
 
-On the very first run weights download from HuggingFace (tens of GB; can take
-several minutes).  `HF_TOKEN` is required by default; pass
-`--allow-anonymous` to run without one (see
-[`docs/source/getting_started/credentials.md`](docs/source/getting_started/credentials.md)).
-
-**With model-servers pre-running** — start `model_servers` to pre-warm VLM
-(port 8100) and STT (port 8103). The demo detects and reuses them.
-
-In both modes the VLM and STT keep running after you exit so the next run
-skips the model reload (see
-[model-server persistence](docs/source/components/ai-services.md#model-server-persistence)); free
-the VRAM with `cd agent-samples/model-servers && uv run model_servers --stop`.
-
-#### Step 1 — Start the server
-
-```bash
-uv run simple_vlm_example
-```
-
-The hub, VLM, STT, and TTS start together (or reuse running services).
+Only the hub and worker start. The worker probes the reused VLM, STT, and TTS
+services before becoming ready.
 The hub prints:
 
 ```
@@ -311,53 +303,18 @@ You are now live in the XR session.  To test the agent:
 A successful round trip: your query appears in the log, the agent responds
 after a moment, and you hear the reply through your speakers.
 
-**Local model** — on a standalone system smaller than the shared model-server
-profiles, override the model weights or GPU settings in
-`agent-samples/simple-vlm-example/yaml/vlm_server.yaml`. When automatic GPU
-detection selects one of the supported model-server profiles, the sample uses
-`agent-samples/model-servers/yaml/<profile>/vlm_server.yaml` so a compatible
-server can be reused without reloading its weights.
-
-To use Cosmos-Reason1 instead, edit the VLM file selected for your hardware:
-set `model: nvidia/Cosmos-Reason1-7B`, remove the Cosmos3-only `hf_overrides`
-block, and select `cosmos_vlm` as the VLM adapter preset in
-`agent-samples/simple-vlm-example/yaml/models.local.json`.
-
-**Remote model** — copy `yaml/models.hosted.json`, point its VLM endpoint at
-your server, and select it in the worker config:
+To use compatible services at different locations, edit their endpoints in
+`agent-samples/simple-vlm-example/yaml/models.json`:
 
 ```json
 {
   "endpoint": {"base_url": "https://your-remote-vlm.example.com"},
-  "deployment": {"ownership": "external"}
+  "deployment": {"ownership": "reused", "service": "vlm"}
 }
 ```
 
-```yaml
-# yaml/simple_vlm_example_worker.yaml
-models_config: models.remote.json
-```
-
-The external deployment declaration makes the orchestrator skip the local VLM
-process automatically.
-
-**Hosted NVIDIA NIM** — run the VLM on hosted NIM
-([build.nvidia.com](https://build.nvidia.com)) instead of locally (STT/TTS
-stay local) by selecting the shipped profile:
-
-```yaml
-models_config: models.hosted.json
-```
-
-The same profile configures the worker and makes the orchestrator skip the
-local VLM server. Pick the hosted model id in `models.hosted.json` and provide
-an `NGC_API_KEY` as
-an **environment variable** (or save it once via the launcher credential
-prompt) — it is not stored in YAML; the overlay only names the env var via
-`api_key_env: NGC_API_KEY`. See
-[`docs/source/getting_started/credentials.md`](docs/source/getting_started/credentials.md). Full details (and self-hosted
-NIM containers):
-[`docs/source/components/ai-services.md`](docs/source/components/ai-services.md#hosting-models-on-nvidia-nim).
+The sample has no deployment-profile selector; every configured service stays
+operator-owned.
 
 Each sample has its own `device_io_hub.yaml` controlling the hub; see
 [`services/device-io-hub/device_io_hub.yaml`](services/device-io-hub/device_io_hub.yaml)
@@ -375,7 +332,16 @@ recent monitor history. Accepted STT and typed queries, monitoring records,
 foreground turns, and Relay telemetry are written as JSONL under `artifacts/`;
 the shared connection web client remains available on port 8080.
 
-Start `model-servers`, then run:
+The sample always uses Cosmos for visual inference. Start `model-servers` and
+Piper TTS in separate terminals, then run the sample in another terminal:
+
+```bash
+uv run --project agent-samples/model-servers model_servers
+```
+
+```bash
+uv run --project services/piper-tts piper_tts_server
+```
 
 ```bash
 cd agent-samples/lab-instrument-monitoring
@@ -399,9 +365,10 @@ voice — radius follows loudness, colour and position follow spoken commands
 Quest 3 / Vision Pro on the same LAN, or the IWER emulator built into the
 web client for desktop dev.
 
-Under the hood, the orchestrator launches the hub, CloudXR runtime, model
-endpoints, typed capability processes, and the worker. The worker calls those
-processes through Relay-managed native tools. The voice runtime runs
+Under the hood, the orchestrator launches the hub, CloudXR runtime, typed
+capability processes, and the worker, while reusing the prestarted model
+endpoints. The worker calls those processes through Relay-managed native tools.
+The voice runtime runs
 quick-acks and a Nemotron-30B agentic tool-calling loop over
 scene, XR tracking, spatial math, vision, and video-memory tools. Full process map,
 agentic-loop details, and the XR session lifecycle:
@@ -429,6 +396,14 @@ This demo has two extra host prerequisites beyond the shared
   Vulkan, so install them before running the demo: `sudo apt install libvulkan-dev`
 - **npm 18+** on PATH — the orchestrator builds the web vendor bundle on first
   run (skipped on subsequent runs).
+
+Start Piper TTS in a separate terminal:
+
+```bash
+uv run --project services/piper-tts piper_tts_server
+```
+
+Then start XR Render:
 
 ```bash
 cd agent-samples/xr-render-demo
@@ -470,20 +445,8 @@ cd agent-samples/model-servers
 uv run model_servers --stop
 ```
 
-**Hosted NVIDIA NIM** — run the LLMs and VLM on hosted NIM
-([build.nvidia.com](https://build.nvidia.com)) instead of local vLLM
-(STT/TTS stay local) by setting **one key** in `xr_render_demo_worker.yaml`:
-
-```yaml
-models_config: models.hosted.json     # default is models.local.json
-```
-
-The profile is consumed by both the worker and orchestrator, so there are
-no `main.py`
-edits, and the stack owns its own speech servers, so the model-servers stack
-isn't needed at all. Provide an `NGC_API_KEY` as an **environment variable** (or via the
-launcher credential prompt, not in YAML). See
-[`docs/source/components/ai-services.md`](docs/source/components/ai-services.md#hosting-models-on-nvidia-nim).
+XR Render uses the fixed reuse-only endpoints in `yaml/models.json`; it does
+not select or own model deployment profiles.
 
 ---
 

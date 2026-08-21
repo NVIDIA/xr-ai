@@ -253,7 +253,7 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     config = load_config(_SAMPLE / "yaml" / "lab_instrument_monitoring_worker.yaml")
     models = json.loads(config.models_config.read_text())
 
-    assert config.models_config == _SAMPLE / "yaml" / "models.local.json"
+    assert config.models_config == _SAMPLE / "yaml" / "models.json"
     assert models["models"]["llm"]["adapter"]["preset"] == "nemotron_omni"
     assert models["models"]["llm"]["endpoint"]["base_url"].endswith(":8108")
     assert models["models"]["vlm"]["adapter"]["preset"] == ("cosmos3_nano_reasoner")
@@ -339,39 +339,46 @@ def test_config_rejects_unknown_capture_marker_scans_string(
         load_config(config_path)
 
 
-def test_launcher_can_route_visual_inference_to_omni(tmp_path: Path) -> None:
+def test_launcher_reuses_cosmos_and_other_model_services(tmp_path: Path) -> None:
     runtime_dir = tmp_path / "runtime"
     runtime_dir.mkdir()
-    assert _parser().parse_args([]).vlm_mode == "cosmos"
     assert _parser().parse_args([]).expose_web_events is False
-    assert _parser().parse_args(["--vlm-mode", "omni"]).vlm_mode == "omni"
     assert _parser().parse_args(["--expose-web-events"]).expose_web_events is True
     worker_config = _materialize_worker_config(
         runtime_dir,
-        "omni",
         expose_web_events=True,
     )
     config = load_config(worker_config)
     models = json.loads(config.models_config.read_text())
-    processes, _credentials = _build_processes(worker_config)
+    processes = _build_processes(worker_config)
 
-    assert config.models_config == _SAMPLE / "yaml" / "models.omni.json"
+    assert config.models_config == runtime_dir / "models.json"
     assert config.voice_gate_yaml == _SAMPLE / "yaml" / "voice_gate.yaml"
     assert config.artifacts_dir == _SAMPLE / "artifacts"
     assert config.web_events_host == "0.0.0.0"
     assert models["models"]["llm"]["deployment"]["service"] == "omni"
-    assert models["models"]["vlm"]["category"] == "vlm"
-    assert models["models"]["vlm"]["adapter"]["capabilities"]["vision"] is True
-    assert models["models"]["vlm"]["adapter"]["default_extras"]["max_tokens"] >= 1024
-    assert models["models"]["vlm"]["endpoint"]["base_url"].endswith(":8108")
-    assert models["models"]["vlm"]["deployment"]["service"] == "omni"
+    assert models["models"]["vlm"]["adapter"]["preset"] == (
+        "cosmos3_nano_reasoner"
+    )
+    assert models["models"]["vlm"]["endpoint"]["base_url"].endswith(":8100")
+    assert models["models"]["vlm"]["deployment"]["service"] == "vlm"
+    assert all(
+        model["deployment"]["ownership"] == "reused"
+        for model in models["models"].values()
+    )
     assert [process.name for process in processes] == [
         "hub",
         "stt",
         "omni",
+        "vlm",
         "tts",
         "worker",
     ]
+    assert all(
+        process.launch_mode == "reuse"
+        for process in processes
+        if process.name in {"stt", "omni", "vlm", "tts"}
+    )
     assert processes[-1].config == worker_config
 
 

@@ -12,7 +12,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-from xr_ai_vllm import _docker as _vllm_docker
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _MAIN_PATH = _REPO_ROOT / "agent-samples/model-servers/main.py"
@@ -20,22 +19,6 @@ _SPEC = importlib.util.spec_from_file_location("model_servers_main", _MAIN_PATH)
 assert _SPEC and _SPEC.loader
 _model_servers = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_model_servers)
-
-_SIMPLE_MAIN_PATH = _REPO_ROOT / "agent-samples/simple-vlm-example/main.py"
-_SIMPLE_SPEC = importlib.util.spec_from_file_location(
-    "simple_vlm_example_main", _SIMPLE_MAIN_PATH
-)
-assert _SIMPLE_SPEC and _SIMPLE_SPEC.loader
-_simple_vlm = importlib.util.module_from_spec(_SIMPLE_SPEC)
-_SIMPLE_SPEC.loader.exec_module(_simple_vlm)
-
-_VLM_MAIN_PATH = _REPO_ROOT / "services/vlm-server/vlm_server/__main__.py"
-_VLM_SPEC = importlib.util.spec_from_file_location(
-    "model_server_fingerprint_vlm", _VLM_MAIN_PATH
-)
-assert _VLM_SPEC and _VLM_SPEC.loader
-_vlm_server = importlib.util.module_from_spec(_VLM_SPEC)
-_VLM_SPEC.loader.exec_module(_vlm_server)
 
 _OMNI_PATH = (
     _REPO_ROOT
@@ -57,66 +40,6 @@ _embedding = importlib.util.module_from_spec(_EMBEDDING_SPEC)
 _EMBEDDING_SPEC.loader.exec_module(_embedding)
 
 
-def _vlm_launch_fingerprint(
-    config_path: Path,
-    hf_token: str | None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> str | None:
-    config = yaml.safe_load(config_path.read_text())
-    raw_cache = Path(config["model_cache"])
-    model_cache = (
-        raw_cache
-        if raw_cache.is_absolute()
-        else (config_path.parent / raw_cache).resolve()
-    )
-    captured: dict = {}
-
-    monkeypatch.setattr(_vlm_server, "setup_logging", lambda _name: None)
-    monkeypatch.setattr(
-        _vlm_server,
-        "load_config",
-        lambda: (config, config_path.parent, None),
-    )
-    monkeypatch.setattr(
-        _vlm_server,
-        "resolve_model_cache",
-        lambda *_args, **_kwargs: model_cache,
-    )
-    monkeypatch.setattr(
-        _vlm_server,
-        "setup_hf_env",
-        lambda cfg, _cache: (
-            str(cfg["cuda_visible_devices"])
-            if "cuda_visible_devices" in cfg
-            else None
-        ),
-    )
-    if hf_token is None:
-        monkeypatch.delenv("HF_TOKEN", raising=False)
-    else:
-        monkeypatch.setenv("HF_TOKEN", hf_token)
-    monkeypatch.setattr(
-        _vllm_docker,
-        "run",
-        lambda **kwargs: captured.update(kwargs),
-    )
-
-    _vlm_server.run()
-
-    argv = _vllm_docker.build_run_argv(
-        image=captured["image"],
-        container_name=captured["container_name"],
-        port=captured["port"],
-        model_cache=captured["model_cache"],
-        hf_token=captured["hf_token"],
-        cuda_visible_devices=captured["cuda_visible_devices"],
-        extra_env=captured["extra_env"],
-        extra_pip=captured["extra_pip"],
-        vllm_argv=captured["vllm_argv"],
-    )
-    return _vllm_docker._requested_fingerprint(argv)
-
-
 def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "spark")
 
@@ -126,151 +49,6 @@ def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch) -
     assert [process.port for process in processes] == [8103, 8108, 8100, 8109]
     assert credentials == ()
 
-
-@pytest.mark.parametrize("gpu_profile", ["dual_48G_ada", "spark", "96G_blackwell"])
-def test_simple_vlm_shares_supported_model_server_vlm_config(
-    monkeypatch: pytest.MonkeyPatch,
-    gpu_profile: str,
-) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: gpu_profile)
-    monkeypatch.setattr(_simple_vlm, "detect_gpu_config", lambda: gpu_profile)
-
-    shared = {
-        process.name: process
-        for process in _model_servers._build_processes("default")[0]
-    }
-    sample = {
-        process.name: process
-        for process in _simple_vlm._build_processes()[0]
-    }
-
-    model_servers_config = (
-        _REPO_ROOT
-        / "agent-samples/model-servers"
-        / shared["vlm"].config
-    ).resolve()
-    simple_vlm_config = (
-        _REPO_ROOT
-        / "agent-samples/simple-vlm-example"
-        / sample["vlm"].config
-    ).resolve()
-    assert simple_vlm_config == model_servers_config
-    assert sample["vlm"].project == shared["vlm"].project
-    assert sample["vlm"].command == shared["vlm"].command
-    assert sample["vlm"].launch_mode == "own"
-
-    stt_config = (
-        _REPO_ROOT
-        / "agent-samples/simple-vlm-example"
-        / sample["stt"].config
-    ).resolve()
-    assert stt_config == (
-        _REPO_ROOT / "agent-samples/simple-vlm-example/yaml/stt_server.yaml"
-    )
-    assert "cuda_visible_devices" not in yaml.safe_load(stt_config.read_text())
-
-
-@pytest.mark.parametrize("gpu_profile", ["dual_48G_ada", "spark", "96G_blackwell"])
-@pytest.mark.parametrize("hf_token", [None, "hf_test_token"])
-def test_simple_vlm_matches_full_model_server_launch_fingerprint(
-    monkeypatch: pytest.MonkeyPatch,
-    gpu_profile: str,
-    hf_token: str | None,
-) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: gpu_profile)
-    monkeypatch.setattr(_simple_vlm, "detect_gpu_config", lambda: gpu_profile)
-
-    shared = {
-        process.name: process
-        for process in _model_servers._build_processes("default")[0]
-    }
-    sample = {
-        process.name: process
-        for process in _simple_vlm._build_processes()[0]
-    }
-
-    shared_fingerprint = _vlm_launch_fingerprint(
-        Path(shared["vlm"].config), hf_token, monkeypatch
-    )
-    sample_fingerprint = _vlm_launch_fingerprint(
-        Path(sample["vlm"].config), hf_token, monkeypatch
-    )
-
-    assert shared_fingerprint is not None
-    assert sample_fingerprint == shared_fingerprint
-
-
-def test_simple_vlm_uses_standalone_config_on_smaller_hardware(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def unsupported_hardware() -> str:
-        raise _simple_vlm.GPUInventoryError("unsupported GPU topology")
-
-    monkeypatch.setattr(_simple_vlm, "detect_gpu_config", unsupported_hardware)
-
-    sample = {
-        process.name: process
-        for process in _simple_vlm._build_processes()[0]
-    }
-    vlm_config = (
-        _REPO_ROOT
-        / "agent-samples/simple-vlm-example"
-        / sample["vlm"].config
-    ).resolve()
-    config = yaml.safe_load(vlm_config.read_text())
-
-    assert vlm_config == (
-        _REPO_ROOT / "agent-samples/simple-vlm-example/yaml/vlm_server.yaml"
-    )
-    assert config["gpu_memory_utilization"] == 0.85
-    assert "cuda_visible_devices" not in config
-
-
-@pytest.mark.parametrize(
-    "profile_name",
-    ["models.local.json", "models.hosted.json", "models.omni.json"],
-)
-def test_simple_vlm_profiles_keep_stt_standalone(
-    monkeypatch: pytest.MonkeyPatch,
-    profile_name: str,
-) -> None:
-    profile_path = (
-        _REPO_ROOT / "agent-samples/simple-vlm-example/yaml" / profile_name
-    )
-    monkeypatch.setattr(
-        _simple_vlm,
-        "load_model_deployment",
-        lambda _worker: _model_servers.load_deployment_profile(profile_path),
-    )
-    def unsupported_hardware() -> str:
-        raise _simple_vlm.GPUInventoryError("unsupported GPU topology")
-
-    monkeypatch.setattr(_simple_vlm, "detect_gpu_config", unsupported_hardware)
-
-    sample = {
-        process.name: process
-        for process in _simple_vlm._build_processes()[0]
-    }
-    stt_config = (
-        _REPO_ROOT
-        / "agent-samples/simple-vlm-example"
-        / sample["stt"].config
-    ).resolve()
-
-    assert stt_config == (
-        _REPO_ROOT / "agent-samples/simple-vlm-example/yaml/stt_server.yaml"
-    )
-
-
-def test_simple_vlm_rejects_missing_shared_vlm_config(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    monkeypatch.setattr(_simple_vlm, "detect_gpu_config", lambda: "spark")
-    monkeypatch.setattr(_simple_vlm, "_MODEL_SERVERS_YAML", tmp_path)
-
-    with pytest.raises(FileNotFoundError, match="shared VLM config does not exist"):
-        _simple_vlm._build_processes()
 
 def test_explicit_gpu_profile_bypasses_detection(monkeypatch: pytest.MonkeyPatch) -> None:
     def fail_detection() -> str:
@@ -345,16 +123,53 @@ def test_nim_profile_mixes_nim_containers_and_local_servers(
     assert credentials == ("NGC_API_KEY",)
 
 
-def test_vlm_speech_nim_profile_serves_speech_from_riva_containers(
+@pytest.mark.parametrize(
+    "config_path",
+    sorted(
+        (_REPO_ROOT / "agent-samples/model-servers/yaml").glob(
+            "*/nim_vlm_server.yaml"
+        )
+    ),
+)
+def test_nim_profiles_serve_cosmos3_nano_reasoner(config_path: Path) -> None:
+    config = yaml.safe_load(config_path.read_text())
+
+    assert config["image"] == "nvcr.io/nim/nvidia/cosmos3-reasoner:1.7.0"
+    assert config["env"]["NIM_MODEL_SIZE"] == "nano"
+
+
+def test_custom_profiles_can_still_launch_riva_speech_nims(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    profile = tmp_path / "models.custom_riva.json"
+    profile.write_text(
+        json.dumps(
+            {
+                "models": {
+                    role: {
+                        "adapter": {"kind": "riva_grpc"},
+                        "endpoint": {"base_url": endpoint},
+                        "deployment": {
+                            "ownership": "managed",
+                            "service": service,
+                            "credentials": ["NGC_API_KEY"],
+                        },
+                    }
+                    for role, endpoint, service in (
+                        ("stt", "localhost:50051", "stt-nim"),
+                        ("tts", "localhost:50052", "tts-nim"),
+                    )
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
 
-    processes, credentials = _model_servers._build_processes("vlm_speech_nim")
+    processes, credentials = _model_servers._build_processes(str(profile))
 
-    assert [process.name for process in processes] == [
-        "stt-nim", "tts-nim", "vlm-nim", "embedding",
-    ]
+    assert [process.name for process in processes] == ["stt-nim", "tts-nim"]
     assert credentials == ("NGC_API_KEY",)
 
 
@@ -365,7 +180,6 @@ def test_vlm_speech_nim_profile_serves_speech_from_riva_containers(
         ("vlm_llm_nim", "embedding", "embedding_server.yaml", "0"),
         ("vlm_llm_nim", "stt", "stt_server.yaml", "1"),
         ("vlm_llm_nim", "vlm-nim", "nim_vlm_server.yaml", "0"),
-        ("vlm_speech_nim", "vlm-nim", "nim_vlm_server_vlm_speech_nim.yaml", "1"),
     ],
 )
 def test_dual_ada_configs_follow_profile_gpu_layout(

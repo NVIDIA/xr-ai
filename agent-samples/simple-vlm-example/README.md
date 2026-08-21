@@ -13,7 +13,7 @@ The worker is a package under `worker/simple_vlm_example_worker/`:
 
 - `__main__.py` parses launcher arguments.
 - `agent.py` owns participant-scoped vision turns and cancellation.
-- `config.py` resolves worker, model-profile, voice-gate, and prompt settings.
+- `config.py` resolves worker, model, voice-gate, and prompt settings.
 - `app.py` composes the native runtime.
 - `prompts/system.txt` owns the VLM system prompt.
 
@@ -36,37 +36,33 @@ No MCP client or MCP tool invocation is part of this sample.
 
 ## Run
 
+The sample reuses model services and never starts or stops them. Its fixed
+`yaml/models.json` expects Parakeet STT on port 8103, Cosmos3-Nano on port
+8100, and Piper TTS on port 8105. Start compatible services before the sample.
+For the repository defaults, run these from the repository root (the Piper
+command stays in the foreground):
+
+```bash
+uv run --project agent-samples/model-servers model_servers
+uv run --project services/piper-tts piper_tts_server
+```
+
+Then, in another terminal:
+
 ```bash
 cd agent-samples/simple-vlm-example
 uv sync
 uv run simple_vlm_example
 ```
 
-`HF_TOKEN` is required by default; pass `--allow-anonymous` to run without one
-(see [`credentials.md`](../../docs/source/getting_started/credentials.md)).
-
-The VLM and STT keep running after you exit so the next run skips the model
-reload; free the VRAM with `cd ../model-servers && uv run model_servers --stop`.
-
 Open the web client shown in the hub banner, connect, and then speak or type a
 question.
 
-The worker and orchestrator consume the deployment profile selected by
-`models_config` in `yaml/simple_vlm_example_worker.yaml`:
-
-- `models.local.json` manages local STT, VLM, and TTS services. STT keeps the
-  sample-local placement and reuses an existing healthy server. On hardware
-  with enough capacity for a shared `model-servers` profile, VLM uses that
-  profile's launch config so a compatible container is reused; smaller hosts
-  use the sample-local standalone config.
-- `models.hosted.json` uses hosted NVIDIA NIM for VLM and omits the local VLM
-  process.
-- `models.omni.json` reuses the Nemotron-Omni VLM service on port 8108.
-
-The same profile owns model behavior, endpoints, credentials, readiness, and
-launcher process ownership. Before announcing readiness, the worker completes a
-small streaming request with a 1280x720 JPEG so the first user query does not
-pay the multimodal initialization cost.
+`yaml/models.json` owns model behavior, endpoints, and readiness. All model
+deployments are `reused`; the orchestrator launches only the DeviceIOHub and
+worker. Before announcing readiness, the worker completes a small streaming
+request with a 1280x720 JPEG so the first user query does not pay the
+multimodal initialization cost.
 
 ## Relay visibility
 
