@@ -57,7 +57,8 @@ uses the wrapped nested JSON shape. The worker passes either form to
 `load_models_config(...)` and constructs services via `make_llm` /
 `make_vlm` / `make_stt` / `make_tts` from `xr_ai_models`.  Schema, preset
 table, compatibility formats, and the profile contract are in
-{doc}`/reference/agent-sdk-models`.
+{doc}`/reference/agent-sdk-models`. To reuse a customized shared stack, follow
+{doc}`Customizing model servers <customizing-model-servers>`.
 
 When the worker is small, keep its implementation in the package's
 `__main__.py`. Split it once argument parsing, lifecycle, configuration, and

@@ -306,6 +306,7 @@
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
 </ul>
@@ -503,7 +504,8 @@ uses the wrapped nested JSON shape. The worker passes either form to
 <code class="docutils literal notranslate"><span class="pre">load_models_config(...)</span></code> and constructs services via <code class="docutils literal notranslate"><span class="pre">make_llm</span></code> /
 <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code> / <code class="docutils literal notranslate"><span class="pre">make_stt</span></code> / <code class="docutils literal notranslate"><span class="pre">make_tts</span></code> from <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code>.  Schema, preset
 table, compatibility formats, and the profile contract are in
-<a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>.</p>
+<a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>. To reuse a customized shared stack, follow
+<a class="reference internal" href="customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>.</p>
 <p>When the worker is small, keep its implementation in the package’s
 <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code>. Split it once argument parsing, lifecycle, configuration, and
 workflow composition become distinct responsibilities.</p>
@@ -617,7 +619,7 @@ packages = ["&lt;snake_name&gt;_worker"]
 <p>Use this template when the worker talks directly to <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code>. Native
 voice workers keep argument parsing in <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code> and delegate composition
 to sibling <code class="docutils literal notranslate"><span class="pre">app.py</span></code> and <code class="docutils literal notranslate"><span class="pre">config.py</span></code> modules; see
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/d1743f379796d659d68d9a1e830b57b40c2e6c00/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/f41fab380c281cfc4618eccbafc49a0404b53595/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
 for that shape. Fill in the sections marked <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">←</span> <span class="pre">FILL</span> <span class="pre">IN</span></code>.</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>"""
 &lt;Name&gt; agent worker — &lt;one-line description&gt;.

@@ -7,7 +7,9 @@
 
 Read this when calling or operating an inference server. For the
 orchestrator pattern that wires servers into a sample, refer to
-{doc}`/guides/adding-a-sample`.
+{doc}`/guides/adding-a-sample`. For an end-to-end procedure covering custom
+deployment profiles, hardware YAML, and reuse-only sample configuration, see
+{doc}`/guides/customizing-model-servers`.
 
 Multiple reusable HTTP servers are available as launchable peers of
 `services/device-io-hub/`. All expose an OpenAI-compatible REST API so agent workers
