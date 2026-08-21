@@ -59,7 +59,7 @@
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="SPDX license headers" href="spdx-headers.html" />
+    <link rel="next" title="Documentation style" href="documentation-style.html" />
     <link rel="prev" title="Adding CloudXR to a sample" href="adding-cloudxr.html" />
 
 
@@ -302,6 +302,7 @@
 <li class="toctree-l2"><a class="reference internal" href="adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
 </ul>
@@ -415,12 +416,13 @@
 -->
 <section id="contributing-and-conventions">
 <h1>Contributing and conventions<a class="headerlink" href="#contributing-and-conventions" title="Link to this heading">#</a></h1>
-<p>The root <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/50254ece21dd573290c0c026d20192cdc0211620/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
+<p>The root <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/57d0ce702a167e80dd260bddc27e557eac85284b/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
 explains setup, testing, pull requests, and DCO sign-off.
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/50254ece21dd573290c0c026d20192cdc0211620/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> contains the
-architecture, change constraints, and documentation house style used by both
-humans and coding agents.
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/50254ece21dd573290c0c026d20192cdc0211620/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/57d0ce702a167e80dd260bddc27e557eac85284b/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> contains the
+architecture and change constraints used by both humans and coding agents.
+<a class="reference internal" href="documentation-style.html"><span class="doc">Documentation style</span></a> contains the house style for
+customer-facing Markdown and reStructuredText.
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/57d0ce702a167e80dd260bddc27e557eac85284b/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
 is the package dependency map.</p>
 <p>For a Python change:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>&lt;affected-project&gt;
@@ -441,8 +443,8 @@ descriptions in <code class="docutils literal notranslate"><span class="pre">hel
 <p>Sample configuration examples and field-level guidance live in checked-in
 YAML and JSON, with field-level guidance in adjacent YAML comments. The
 generated catalog enrolls files under a top-level sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> tree and
-files beside a direct capability
-subproject, then renders them verbatim. Narrative docs cover only
+files beside a direct capability subproject, then renders them verbatim.
+Narrative docs cover only
 workflows, operational decisions, credentials, and process relationships.</p>
 <p>After a <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> change, run
 <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--script</span> <span class="pre">.github/scripts/generate_dependency_map.py</span></code>. The pre-commit hook
@@ -472,11 +474,11 @@ SPDX header; refer to <a class="reference internal" href="spdx-headers.html"><sp
       </div>
     </a>
     <a class="right-next"
-       href="spdx-headers.html"
+       href="documentation-style.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">SPDX license headers</p>
+        <p class="prev-next-title">Documentation style</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
