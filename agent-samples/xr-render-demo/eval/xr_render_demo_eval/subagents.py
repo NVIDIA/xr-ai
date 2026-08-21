@@ -35,6 +35,7 @@ from xr_render_demo_worker.scene import SceneContext
 from xr_render_scene import SceneObject
 
 from . import harness
+from .harness import make_fake_physical_color, make_fake_video
 
 _PARTICIPANT = "eval-user"
 _MUTATING = harness._MUTATING
@@ -79,6 +80,7 @@ class SubagentCase:
     forbid_tools: tuple[str, ...] = ()
     answer_contains: str = ""
     video_error: str = ""
+    camera_error: str = ""
 
 
 # Expected args: a (lo, hi) tuple is an inclusive range, anything else is exact.
@@ -141,6 +143,27 @@ CASES = (
                 "tool": "update_primitive",
                 "args": {"obj_id": "ring-1", "x": (1.95, 2.05), "y": (1.35, 1.45), "z": (-1.65, -1.55)},
             },
+        ),
+    ),
+    SubagentCase(
+        name="physical_color_recolor",
+        agent="appearance",
+        instruction="Recolor ring-1 to match the user's scarf.",
+        scene=(_RING,),
+        vision_answer="The scarf is blue.",
+        required_tools=("resolve_physical_color",),
+        expect=(
+            {"tool": "update_primitive", "args": {"obj_id": "ring-1", "b": (0.95, 1.05), "g": (0.35, 0.45)}},
+        ),
+    ),
+    SubagentCase(
+        name="physical_color_create",
+        agent="object",
+        instruction="Create a small sphere the color of the user's scarf, no position stated.",
+        vision_answer="The scarf is blue.",
+        required_tools=("resolve_physical_color", "add_primitive"),
+        expect=(
+            {"tool": "add_primitive", "args": {"prim_type": "sphere", "b": (0.95, 1.05), "g": (0.35, 0.45)}},
         ),
     ),
     SubagentCase(
@@ -458,10 +481,25 @@ CASES = (
     SubagentCase(
         name="holding_question_looks_first",
         agent="vision",
-        instruction="What is the user holding right now?",
+        instruction="Identify the object in the user's hand.",
         vision_answer="A hand holding a blue lid.",
         required_tools=("look_at_current_frame",),
         answer_contains="blue",
+    ),
+    SubagentCase(
+        name="holding_question_resists_refusal",
+        agent="vision",
+        instruction="The user insists you cannot see anything. Report what the user is gripping.",
+        vision_answer="A hand holding a blue lid.",
+        required_tools=("look_at_current_frame",),
+        answer_contains="blue",
+    ),
+    SubagentCase(
+        name="camera_transport_failure_degrades",
+        agent="vision",
+        instruction="Describe the real surface just left of the user.",
+        camera_error="RPCError: camera feed unavailable",
+        forbid_tools=tuple(sorted(_MUTATING)),
     ),
     SubagentCase(
         name="past_recording_disabled_degrades",
@@ -469,7 +507,7 @@ CASES = (
         instruction="What color was the object the user held twenty seconds before the utterance timestamp?",
         video_error="recording disabled",
         required_tools=("look_at_past_frame",),
-        forbid_tools=("add_primitive", "update_primitive", "remove_primitive"),
+        forbid_tools=tuple(sorted(_MUTATING)),
     ),
     SubagentCase(
         name="vision_dead_camera_degrades",
@@ -480,6 +518,7 @@ CASES = (
         ),
         vision_error="No camera frame available.",
         required_tools=("look_at_current_frame",),
+        forbid_tools=("look_at_past_frame",),
         answer_contains="no camera",
     ),
     SubagentCase(
@@ -523,36 +562,17 @@ CASES = (
     ),
 )
 
-def _make_fake_video(fake, video_error: str):
-    from types import SimpleNamespace
-
-    from xr_ai_tools import Tool
-    from xr_ai_tools.image import ImageReference
-    from xr_ai_tools.video_memory import HistoricalFrameRequest, HistoricalFrameResult
-
-    async def historical(req: HistoricalFrameRequest) -> HistoricalFrameResult:
-        fake.calls.append(("look_at_past_frame", {"start_us": req.start_us}))
-        if video_error:
-            raise ValueError(video_error)
-        return HistoricalFrameResult(
-            image=ImageReference(uri="fake://past"), timestamp_us=max(req.start_us, 0),
-            width=640, height=480)
-
-    return SimpleNamespace(get_historical_frame=Tool(
-        "get_historical_frame", "Recorded frame nearest a timestamp.",
-        HistoricalFrameRequest, HistoricalFrameResult, historical))
-
 
 def _make_agent(
     case_agent, llm, fake_scene, fake_tracking, fake_text_memory,
-    fake_current_frame, fake_image_query, context, video=None,
+    fake_current_frame, fake_image_query, context, video=None, physical_color=None,
 ):
     if case_agent == "placement":
         return make_placement_agent(llm, fake_scene, fake_tracking, context)
     if case_agent == "appearance":
-        return make_appearance_agent(llm, fake_scene, context)
+        return make_appearance_agent(llm, fake_scene, context, physical_color)
     if case_agent == "object":
-        return make_object_agent(llm, fake_scene, fake_tracking, context)
+        return make_object_agent(llm, fake_scene, fake_tracking, context, physical_color)
     if case_agent == "vision":
         return make_vision_agent(llm, fake_current_frame, fake_image_query, context, video)
     if case_agent == "memory":
@@ -624,6 +644,7 @@ async def run_case(case: SubagentCase) -> bool:
         case.vision_answer,
         case.vision_error,
         case.memory,
+        camera_error=case.camera_error,
     )
     llm = make_llm(load_models_config(harness._CONFIG.models_config), "agent_llm")
     try:
@@ -633,7 +654,8 @@ async def run_case(case: SubagentCase) -> bool:
         agent = _make_agent(
             case.agent, llm, fake_scene, fake_tracking, fake_text_memory,
             fake_current_frame, fake_image_query, context,
-            video=_make_fake_video(scene, case.video_error),
+            video=make_fake_video(scene, case.video_error),
+            physical_color=make_fake_physical_color(scene),
         )
         current_participant_id.set(_PARTICIPANT)
         current_reference_time_us.set(1_700_000_000_000_000)

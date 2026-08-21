@@ -4,7 +4,6 @@
 """Object subagent: create, remove, resize, and reshape XR objects."""
 
 import asyncio
-from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from loguru import logger
@@ -34,7 +33,7 @@ def make_object_agent(
     scene: SceneTools,
     tracking: TrackingTools,
     context: SceneContext,
-    physical_color: Callable[[str], Awaitable[str]] | None = None,
+    physical_color: Tool | None = None,
 ) -> Tool:
     delegation_lock = asyncio.Lock()
 

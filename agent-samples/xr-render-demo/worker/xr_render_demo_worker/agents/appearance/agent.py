@@ -4,7 +4,6 @@
 """Appearance subagent: change the color of existing XR objects."""
 
 import asyncio
-from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from loguru import logger
@@ -29,7 +28,7 @@ def make_appearance_agent(
     llm: LLMService,
     scene: SceneTools,
     context: SceneContext,
-    physical_color: Callable[[str], Awaitable[str]] | None = None,
+    physical_color: Tool | None = None,
 ) -> Tool:
     delegation_lock = asyncio.Lock()
 

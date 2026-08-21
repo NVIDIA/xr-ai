@@ -13,15 +13,16 @@ from pathlib import Path
 from loguru import logger
 from xr_ai_models import ChatMessage, LLMService, VLMService
 from xr_ai_tools import Tool, ToolSet
-from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
+from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.text_memory import AddTranscriptRequest, RecallConversationRequest, TextMemoryTools
 from xr_ai_tools.tool_calling import ToolLoopError, run_tool_loop
 from xr_ai_tools.tracking import TrackingTools
 from xr_ai_tools.video_memory import VideoMemoryTools
-from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
+from xr_ai_tools.vision import ImageQueryTool
 from xr_render_scene import SceneTools
 
+from ._physical_color import IMAGE_QUERY_SYSTEM_PROMPT, make_physical_color_tool
 from ._trace import current_participant_id, current_reference_time_us, current_trace_id
 from .agents import (
     make_appearance_agent,
@@ -32,11 +33,14 @@ from .agents import (
 )
 from .models import SceneReply, SceneRequest
 from .scene import SceneContext
+from .spatial_ops import _COLOR_WORDS
 
 _PROMPT = Path(__file__).with_name("supervisor_prompt.txt")
 
-_DANGLING_WORDS = frozenset(
-    "a an the my your its of to on in at by and or with near under over "
+_DANGLING_DETERMINERS = frozenset("a an the my your its".split())
+
+_DANGLING_PREPOSITIONS = frozenset(
+    "of to on in at by and or with near under over "
     "onto into between behind above below beside toward towards from".split()
 )
 
@@ -68,14 +72,21 @@ _INTERROGATIVES = frozenset(
 
 
 def _is_truncated(transcript: str) -> bool:
-    words = transcript.strip().rstrip(".?!,;").lower().split()
-    if not words or words[-1] not in _DANGLING_WORDS:
+    words = [w.strip(".,!?;:\"'") for w in transcript.strip().lower().split()]
+    words = [w for w in words if w]
+    if not words:
         return False
-    # Complete questions legitimately end in a preposition ("What am I
-    # looking at?"); only statements can dangle.
-    if transcript.strip().endswith("?") or words[0] in _INTERROGATIVES:
-        return False
-    return True
+    if words[-1] in _DANGLING_DETERMINERS:
+        return True
+    if words[-1] in _DANGLING_PREPOSITIONS:
+        # Complete sentences legitimately end in a preposition ("What am I
+        # looking at?", "the wall I'm looking at."); ASR cuts carry no
+        # terminal punctuation.
+        return not (
+            transcript.strip().endswith((".", "?", "!"))
+            or words[0] in _INTERROGATIVES
+        )
+    return False
 
 
 def _truncated_reply(transcript: str) -> str:
@@ -137,16 +148,11 @@ class SceneSupervisor:
                 system_prompt="Answer directly from the visible camera image in one short plain-English sentence.",
             )
 
-            async def physical_color(color_words: str) -> str:
-                frame = await current_frame.execute(
-                    CurrentFrameRequest(participant_id=current_participant_id.get())
-                )
-                result = await image_query.execute(ImageQueryRequest(
-                    image=frame.image,
-                    query=(f"What color is {color_words}? Answer with three numbers "
-                           "r, g, b, each between 0 and 1."),
-                ))
-                return result.text
+            physical_color = make_physical_color_tool(
+                current_frame,
+                ImageQueryTool(images=images, vlm=vlm, system_prompt=IMAGE_QUERY_SYSTEM_PROMPT),
+                _COLOR_WORDS,
+            )
 
             subagent_tools = [
                 make_placement_agent(llm, scene, tracking, context),

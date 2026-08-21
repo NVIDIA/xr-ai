@@ -12,7 +12,6 @@ agent LLM, which cannot relay them reliably.
 import asyncio
 import difflib
 import re
-from collections.abc import Awaitable, Callable
 from typing import Literal
 
 from loguru import logger
@@ -102,16 +101,6 @@ class CreationLedger:
         self._seen[key] = created
 
 
-def _parse_color_answer(answer: str) -> tuple[float, float, float] | None:
-    numbers = [float(v) for v in re.findall(r"-?\d*\.\d+|-?\d+", answer)]
-    if len(numbers) >= 3 and all(0.0 <= v <= 1.0 for v in numbers[:3]):
-        return (numbers[0], numbers[1], numbers[2])
-    for word in re.findall(r"[a-z]+", answer.lower()):
-        if word in _COLOR_WORDS:
-            return _COLOR_WORDS[word]
-    return None
-
-
 class TurnGuard:
     """Block mutations of existing objects after a failed reference lookup."""
 
@@ -131,7 +120,7 @@ class _Leaves:
         tracking: TrackingTools | None = None,
         ledger: CreationLedger | None = None,
         guard: TurnGuard | None = None,
-        physical_color: Callable[[str], Awaitable[str]] | None = None,
+        physical_color: Tool | None = None,
     ) -> None:
         self._scene = scene
         self._tracking = tracking
@@ -253,8 +242,8 @@ class _Leaves:
                 return _COLOR_WORDS[word]
         halted = self.guard.halted if self.guard is not None else False
         try:
-            source = await self.find(color_words)
-            return (source.color.r, source.color.g, source.color.b)
+            match = await self.find(color_words)
+            return (match.color.r, match.color.g, match.color.b)
         except ValueError:
             if self.guard is not None:
                 self.guard.halted = halted
@@ -263,25 +252,16 @@ class _Leaves:
             if close:
                 logger.debug("color words resolved {!r} -> {}", color_words, close[0])
                 return _COLOR_WORDS[close[0]]
-        # Physical references ("the color of the thing I'm holding") resolve
-        # through the camera; the model reliably copies the phrase but not
-        # the observation.
+        # Unresolved phrases fall through to the camera: the model copies
+        # the user's words ("the ceiling") far more reliably than it
+        # classifies them.
         if self.physical_color is not None:
-            try:
-                answer = await self.physical_color(color_words)
-            except Exception as error:
-                logger.debug("physical color lookup failed for {!r}: {}", color_words, error)
-                answer = ""
-            resolved = _parse_color_answer(answer)
-            if resolved is not None:
-                logger.debug("physical color {!r} -> {} via vision", color_words, resolved)
-                return resolved
+            resolved = await self.physical_color.execute(
+                self.physical_color.request_model(source_words=color_words)
+            )
+            return (resolved.r, resolved.g, resolved.b)
         known = ", ".join(sorted(_COLOR_WORDS))
-        raise ValueError(
-            f"Unknown color {color_words!r}; use one of {known}, or name a scene object. "
-            "If the color comes from something physical (clothing, a held object, a wall), "
-            "report back that the vision agent must first be asked for that color."
-        )
+        raise ValueError(f"Unknown color {color_words!r}; use one of {known}, or name a scene object")
 
     async def spot(self, operation: str, arguments: dict) -> tuple[float, float, float]:
         if operation == "compute_user_relative_position":
@@ -434,7 +414,8 @@ class _MoveToRequest(_ObjRequest):
 class _RecolorRequest(_ObjRequest):
     color_words: str = Field(
         description="The instruction's exact color word(s), copied verbatim (mangled spellings fine), "
-                    "or an object to copy the color from ('same as cone-7')."
+                    "an object to copy the color from ('same as cone-7'), or the user's physical "
+                    "phrase ('the color of my shirt')."
     )
 
 
@@ -618,7 +599,7 @@ def make_appearance_tools(
     scene: SceneTools,
     *,
     guard: TurnGuard | None = None,
-    physical_color: Callable[[str], Awaitable[str]] | None = None,
+    physical_color: Tool | None = None,
 ) -> list[Tool]:
     leaves = _Leaves(scene, guard=guard, physical_color=physical_color)
 
@@ -643,7 +624,7 @@ def make_object_tools(
     *,
     ledger: CreationLedger | None = None,
     guard: TurnGuard | None = None,
-    physical_color: Callable[[str], Awaitable[str]] | None = None,
+    physical_color: Tool | None = None,
 ) -> list[Tool]:
     leaves = _Leaves(scene, tracking, ledger=ledger, guard=guard, physical_color=physical_color)
 
