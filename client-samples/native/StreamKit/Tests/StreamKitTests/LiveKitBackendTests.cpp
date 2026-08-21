@@ -27,12 +27,18 @@
 #include <thread>
 #include <vector>
 
-namespace streamkit {
+namespace {
 
 class CallbackFailure : public std::runtime_error {
 public:
     CallbackFailure() : std::runtime_error("callback failure") {}
 };
+
+struct NonStandardCallbackFailure {};
+
+} // namespace
+
+namespace streamkit {
 
 struct LiveKitBackendTestAccess {
     static std::uint64_t ConnectionEpoch(const LiveKitBackend& backend) {
@@ -176,7 +182,9 @@ int main() {
     Expect(callback_started_future.wait_for(std::chrono::seconds(2)) ==
            std::future_status::ready);
 
-    std::jthread app_disconnect([&callback_backend]() {
+    // The test joins explicitly; jthread would add an unnecessary libc++
+    // requirement without exercising cooperative cancellation.
+    std::thread app_disconnect([&callback_backend]() { // NOSONAR
         callback_backend.Disconnect();
     });
     const auto teardown_deadline = std::chrono::steady_clock::now() +
@@ -227,10 +235,14 @@ int main() {
     throwing_backend.on_network_metrics =
         [&throwing_callback_count,
          &throwing_callback_repeated](const streamkit::NetworkMetrics&) {
-        if (throwing_callback_count.fetch_add(1) == 1) {
+        const int callback_index = throwing_callback_count.fetch_add(1);
+        if (callback_index == 1) {
             throwing_callback_repeated.set_value();
         }
-        throw streamkit::CallbackFailure{};
+        if (callback_index == 0) {
+            throw NonStandardCallbackFailure{}; // NOSONAR - pins catch-all behavior.
+        }
+        throw CallbackFailure{};
     };
     throwing_backend.Connect(streamkit::SessionConfig::Default());
     Expect(throwing_callback_future.wait_for(std::chrono::seconds(3)) ==

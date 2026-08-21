@@ -219,7 +219,8 @@ private:
         // deliberately performed after releasing this mutex so a worker
         // callback can make an overlapping Disconnect() call without
         // deadlocking.
-        std::mutex mutex;
+        // Lock order: delivery->mutex before thread_mutex; never the reverse.
+        std::mutex thread_mutex;
         std::shared_ptr<std::atomic<bool>> stop;
         // A callback may destroy the backend on this worker, which requires a
         // self-detach path that std::jthread cannot support safely.

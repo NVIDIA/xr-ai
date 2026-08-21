@@ -294,7 +294,7 @@ void LiveKitBackend::StartAudio(const AudioConfig& config) {
     // AEC / AGC / NS toggles on AudioSource — software DSP would go
     // through AudioProcessingModule, tracked as a follow-up.
     StopAudio();
-    std::lock_guard<std::mutex> lock(tracks_mutex_);
+    std::scoped_lock lock(tracks_mutex_);
     audio_source_ = std::make_shared<livekit::AudioSource>(48000, 1, 0);
     audio_track_ = room_->localParticipant()->publishAudioTrack(
         "mic", audio_source_, livekit::TrackSource::SOURCE_MICROPHONE);
@@ -307,7 +307,7 @@ void LiveKitBackend::StartAudio(const AudioConfig& config) {
 
 void LiveKitBackend::StopAudio() {
 #if STREAMKIT_HAVE_LIVEKIT
-    std::lock_guard<std::mutex> lock(tracks_mutex_);
+    std::scoped_lock lock(tracks_mutex_);
     if (audio_track_ && room_) {
         room_->localParticipant()->unpublishTrack(audio_track_->sid());
     }
@@ -339,7 +339,7 @@ void LiveKitBackend::StartCamera(const CameraConfig& config) {
 
 void LiveKitBackend::StopCamera() {
 #if STREAMKIT_HAVE_LIVEKIT
-    std::lock_guard<std::mutex> lock(tracks_mutex_);
+    std::scoped_lock lock(tracks_mutex_);
     if (video_track_ && room_) {
         room_->localParticipant()->unpublishTrack(video_track_->sid());
     }
@@ -409,7 +409,7 @@ void LiveKitBackend::InjectVideoFrame(std::vector<std::uint8_t>&& data,
 
     std::shared_ptr<livekit::VideoSource> source;
     {
-        std::lock_guard<std::mutex> lock(tracks_mutex_);
+        std::scoped_lock lock(tracks_mutex_);
         if (!video_source_) {
             video_source_ = std::make_shared<livekit::VideoSource>(width, height);
             video_track_ = livekit::LocalVideoTrack::createLocalVideoTrack(
@@ -478,7 +478,7 @@ void LiveKitBackend::InjectAudioFrame(std::span<const std::int16_t> pcm,
                               samples_per_channel);
     std::shared_ptr<livekit::AudioSource> source;
     {
-        std::lock_guard<std::mutex> lock(tracks_mutex_);
+        std::scoped_lock lock(tracks_mutex_);
         source = audio_source_;
     }
     if (source) {
@@ -646,7 +646,7 @@ void LiveKitBackend::StartNetworkMetricsReporting() {
     });
     bool installed = false;
     {
-        std::scoped_lock lock(network_metrics_.mutex);
+        std::scoped_lock lock(network_metrics_.thread_mutex);
         if (is_connected_.load()) {
             network_metrics_.stop = stop;
             network_metrics_.thread = std::move(worker);
@@ -664,7 +664,7 @@ void LiveKitBackend::StartNetworkMetricsReporting() {
 void LiveKitBackend::StopNetworkMetricsReporting() {
     std::thread worker_to_join; // NOSONAR - paired with the self-detaching worker.
     {
-        std::scoped_lock lock(network_metrics_.mutex);
+        std::scoped_lock lock(network_metrics_.thread_mutex);
         if (network_metrics_.stop) {
             network_metrics_.stop->store(true);
         }
@@ -826,7 +826,7 @@ void LiveKitBackend::TearDown() {
 
 #if STREAMKIT_HAVE_LIVEKIT
         {
-            std::lock_guard<std::mutex> lock(tracks_mutex_);
+            std::scoped_lock lock(tracks_mutex_);
             video_track_.reset();
             video_source_.reset();
             audio_track_.reset();

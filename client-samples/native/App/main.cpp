@@ -140,13 +140,15 @@ int main(int argc, char** argv) {
         std::cout << "[network] quality=" << quality << " rtt=";
         if (metrics.round_trip_time_ms.has_value()) {
             std::cout << *metrics.round_trip_time_ms << "ms";
+        } else {
+            std::cout << "—";
         }
-        else std::cout << "—";
         std::cout << " jitter=";
         if (metrics.receive_jitter_ms.has_value()) {
             std::cout << *metrics.receive_jitter_ms << "ms";
+        } else {
+            std::cout << "—";
         }
-        else std::cout << "—";
         std::cout << "\n";
     };
 
