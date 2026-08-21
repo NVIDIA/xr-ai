@@ -150,6 +150,24 @@ async def test_piper_wait_reports_child_exit_before_health(monkeypatch) -> None:
     process.wait.assert_not_called()
 
 
+async def test_piper_marks_persistent_child_for_cleanup(monkeypatch) -> None:
+    module = _load_piper_main_module()
+    process = Mock()
+    start = Mock(return_value=process)
+    monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
+    monkeypatch.setattr(module, "_health_url_ok", lambda _url: False)
+    monkeypatch.setattr(module, "_port_open", lambda _port: False)
+    monkeypatch.setattr(module, "_start_persistent_server", start)
+    monkeypatch.setattr(module, "_idle_until_stopped", lambda *_args: None)
+    monkeypatch.setattr(module.sys, "argv", ["piper_tts_server"])
+
+    module.run()
+
+    child_env = start.call_args.kwargs["env"]
+    assert child_env["XR_AI_VLLM_MANAGED"] == "1"
+    assert child_env["XR_AI_VLLM_PORT"] == "8105"
+
+
 class _ServerExited(Exception):
     """Raised when piper_tts_server exits before binding its port.
 

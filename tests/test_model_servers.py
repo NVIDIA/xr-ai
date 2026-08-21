@@ -7,6 +7,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os.path
+import shlex
 import sys
 from pathlib import Path
 
@@ -156,17 +157,25 @@ def test_nim_profiles_serve_cosmos3_nano_reasoner(config_path: Path) -> None:
 )
 def test_nim_profiles_serve_nemotron_omni(config_path: Path) -> None:
     config = yaml.safe_load(config_path.read_text())
+    env = config["env"]
+    args = shlex.split(env["NIM_PASSTHROUGH_ARGS"])
+    expected_budget = {
+        "spark": "0.35",
+        "96G_blackwell": "0.4",
+        "dual_48G_ada": "0.8",
+    }[config_path.parent.name]
 
     assert config["image"] == (
         "nvcr.io/nim/nvidia/"
         "nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant"
     )
-    assert "--reasoning-parser nemotron_v3" in (
-        config["env"]["NIM_PASSTHROUGH_ARGS"]
-    )
-    assert "--tool-call-parser qwen3_coder" in (
-        config["env"]["NIM_PASSTHROUGH_ARGS"]
-    )
+    assert "NIM_KVCACHE_PERCENT" not in env
+    memory_index = args.index("--gpu-memory-utilization")
+    assert args[memory_index + 1] == expected_budget
+    assert "--reasoning-parser" in args
+    assert args[args.index("--reasoning-parser") + 1] == "nemotron_v3"
+    assert "--tool-call-parser" in args
+    assert args[args.index("--tool-call-parser") + 1] == "qwen3_coder"
 
 
 def test_custom_profiles_can_still_launch_riva_speech_nims(
