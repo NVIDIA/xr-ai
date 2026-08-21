@@ -109,7 +109,6 @@ changes). Offline cases in `harness.py` exercise the prompt without a live stack
 ```bash
 # Start model services first:
 uv run --project agent-samples/model-servers model_servers
-uv run --project services/piper-tts piper_tts_server
 
 # Start the demo stack in another terminal:
 uv run --project agent-samples/xr-render-demo xr_render_demo

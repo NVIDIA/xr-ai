@@ -206,13 +206,13 @@ tens of minutes. On subsequent runs the containers restart in under a minute.
 Which servers start is a deployment profile: `--models <name|path>` selects
 `default`, `vlm_llm_nim` (LLM and VLM as self-hosted NIM containers;
 requires docker + `NGC_API_KEY`), or any profile JSON of your own. The NIM
-profile serves Nemotron-3-Nano and Cosmos3-Nano Reasoner. Starting a profile
-stops persisted servers outside it first and aborts if they cannot be stopped,
-avoiding GPU overcommit.
+profile serves Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner. Starting a
+profile stops persisted servers outside it first and aborts if they cannot be
+stopped, avoiding GPU overcommit.
 
 The default profile starts Nemotron-3 Nano Omni (8108, serving both the
 reactive and agent LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103),
-and embeddings (8109).
+Piper TTS (8105), and embeddings (8109).
 
 ```bash
 uv run model_servers --models vlm_llm_nim
@@ -249,14 +249,13 @@ Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. See the
 runtime-selection details.
 
 The sample always reuses model services and never starts or stops them. Start
-the repository-default VLM and STT, then start Piper TTS in a terminal:
+the repository-default shared stack, which includes VLM, STT, and Piper TTS:
 
 ```bash
 uv run --project agent-samples/model-servers model_servers
-uv run --project services/piper-tts piper_tts_server
 ```
 
-The first command may download model weights on its first run and requires the
+The command may download model weights on its first run and requires the
 credentials described in the
 [credentials guide](docs/source/getting_started/credentials.md).
 
@@ -334,15 +333,11 @@ recent monitor history. Accepted STT and typed queries, monitoring records,
 foreground turns, and Relay telemetry are written as JSONL under `artifacts/`;
 the shared connection web client remains available on port 8080.
 
-The sample always uses Cosmos for visual inference. Start `model-servers` and
-Piper TTS in separate terminals, then run the sample in another terminal:
+The sample always uses Cosmos for visual inference. Start the shared
+`model-servers` stack, including Piper TTS, then run the sample:
 
 ```bash
 uv run --project agent-samples/model-servers model_servers
-```
-
-```bash
-uv run --project services/piper-tts piper_tts_server
 ```
 
 ```bash
@@ -401,13 +396,7 @@ This demo has two extra host prerequisites beyond the shared
 - **npm 18+** on PATH — the orchestrator builds the web vendor bundle on first
   run (skipped on subsequent runs).
 
-Start Piper TTS in a separate terminal:
-
-```bash
-uv run --project services/piper-tts piper_tts_server
-```
-
-Then start XR Render:
+Start XR Render:
 
 ```bash
 cd agent-samples/xr-render-demo
