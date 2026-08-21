@@ -584,11 +584,13 @@ not restarted after install), so docker cannot honor <code class="docutils liter
 <p>Switch back to <code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">pip</span></code> in the service YAML if you only need the
 local install.</p>
 </section>
-<section id="hub-fails-immediately-with-runtimeerror-missing-libnvcuvid-so-libnvidia-encode-so">
-<h3>Hub fails immediately with <code class="docutils literal notranslate"><span class="pre">RuntimeError:</span> <span class="pre">missing</span> <span class="pre">libnvcuvid.so</span> <span class="pre">/</span> <span class="pre">libnvidia-encode.so</span></code><a class="headerlink" href="#hub-fails-immediately-with-runtimeerror-missing-libnvcuvid-so-libnvidia-encode-so" title="Link to this heading">#</a></h3>
-<p><strong>Cause:</strong> NVDEC (<code class="docutils literal notranslate"><span class="pre">libnvcuvid.so</span></code>) and NVENC (<code class="docutils literal notranslate"><span class="pre">libnvidia-encode.so</span></code>) are
-required — the DeviceIOHub refuses to start without them so it never silently falls
-back to OpenH264, which is royalty-bearing.</p>
+<section id="hub-fails-immediately-because-nvidia-codec-libraries-are-missing">
+<span id="hub-fails-immediately-with-runtimeerror-missing-libnvcuvid-so-libnvidia-encode-so"></span><h3>Hub fails immediately because NVIDIA codec libraries are missing<a class="headerlink" href="#hub-fails-immediately-because-nvidia-codec-libraries-are-missing" title="Link to this heading">#</a></h3>
+<p><strong>Cause:</strong> The hub raises
+<code class="docutils literal notranslate"><span class="pre">RuntimeError:</span> <span class="pre">missing</span> <span class="pre">libnvcuvid.so</span> <span class="pre">/</span> <span class="pre">libnvidia-encode.so</span></code> because NVDEC
+(<code class="docutils literal notranslate"><span class="pre">libnvcuvid.so</span></code>) and NVENC (<code class="docutils literal notranslate"><span class="pre">libnvidia-encode.so</span></code>) are required. The
+DeviceIOHub refuses to start without them so it never silently falls back to
+OpenH264, which is royalty-bearing.</p>
 <p><strong>Fix:</strong></p>
 <ul class="simple">
 <li><p><strong>Bare metal:</strong> install or repair the NVIDIA driver. The libraries ship with the
@@ -810,7 +812,7 @@ stall indefinitely; set <code class="docutils literal notranslate"><span class="
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vllm-backend-docker-image-pull-fails-with-unauthorized-or-denied"><code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">docker</span></code> — image pull fails with “unauthorized” or “denied”</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vllm-backend-docker-wrapper-exits-with-vllm-exited-before-health-became-reachable"><code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">docker</span></code> — wrapper exits with <code class="docutils literal notranslate"><span class="pre">vLLM</span> <span class="pre">exited</span> <span class="pre">before</span> <span class="pre">/health</span> <span class="pre">became</span> <span class="pre">reachable</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vllm-backend-docker-docker-run-fails-with-could-not-select-device-driver"><code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">docker</span></code> — <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span></code> fails with <code class="docutils literal notranslate"><span class="pre">could</span> <span class="pre">not</span> <span class="pre">select</span> <span class="pre">device</span> <span class="pre">driver</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#hub-fails-immediately-with-runtimeerror-missing-libnvcuvid-so-libnvidia-encode-so">Hub fails immediately with <code class="docutils literal notranslate"><span class="pre">RuntimeError:</span> <span class="pre">missing</span> <span class="pre">libnvcuvid.so</span> <span class="pre">/</span> <span class="pre">libnvidia-encode.so</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#hub-fails-immediately-because-nvidia-codec-libraries-are-missing">Hub fails immediately because NVIDIA codec libraries are missing</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#runtime-and-connection-issues">Runtime and connection issues</a><ul class="nav section-nav flex-column">
