@@ -32,6 +32,7 @@ import argparse
 import asyncio
 import io
 import math
+import os
 import signal
 import socket
 import subprocess
@@ -381,6 +382,7 @@ def _start_persistent_server(
     cmd: list[str],
     health_url: str,
     startup_timeout_s: float,
+    env: dict[str, str] | None = None,
 ) -> subprocess.Popen:
     """Start the detached server and return it once its health check passes."""
     process: subprocess.Popen | None = None
@@ -398,7 +400,7 @@ def _start_persistent_server(
     try:
         for sig in (signal.SIGINT, signal.SIGTERM):
             previous_handlers[sig] = signal.signal(sig, _abort_startup)
-        process = subprocess.Popen(cmd, start_new_session=True)
+        process = subprocess.Popen(cmd, env=env, start_new_session=True)
         if pending_signal is not None:
             raise SystemExit(128 + pending_signal)
         _wait_until_healthy(process, health_url, startup_timeout_s)
@@ -518,7 +520,15 @@ def run() -> None:
         flush=True,
     )
     try:
-        process = _start_persistent_server(cmd, health_url, startup_timeout_s)
+        process = _start_persistent_server(
+            cmd,
+            health_url,
+            startup_timeout_s,
+            env=os.environ | {
+                "XR_AI_VLLM_MANAGED": "1",
+                "XR_AI_VLLM_PORT": str(port),
+            },
+        )
     except (RuntimeError, TimeoutError) as exc:
         raise SystemExit(f"[piper_tts_server] {exc}") from exc
 

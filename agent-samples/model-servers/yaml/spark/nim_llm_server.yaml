@@ -9,7 +9,8 @@
 # `deployment.ownership` from `managed` to `reused`, and keep service
 # `llm-nim` on port 8110. Duplicate it as `agent_llm` when the sample uses
 # that role.
-# UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.
+# GB10 is not listed for this Omni NIM; verify startup and memory use on target
+# hardware before deployment.
 image:     nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant
 http_port: 8110
 
@@ -18,6 +19,5 @@ nim_cache: ../../../../models/nim
 cuda_visible_devices: "0"
 env:
   NIM_MAX_MODEL_LEN: "32768"
-  NIM_KVCACHE_PERCENT: "0.35"
   # Match the local Omni deployment's reasoning and tool-call parsers.
-  NIM_PASSTHROUGH_ARGS: "--enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser nemotron_v3"
+  NIM_PASSTHROUGH_ARGS: "--gpu-memory-utilization 0.35 --enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser nemotron_v3"
