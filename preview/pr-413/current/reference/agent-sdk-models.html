@@ -589,8 +589,8 @@ profile remains the authority for credentials: callers cannot supply an
 <code class="docutils literal notranslate"><span class="pre">stream_images()</span></code>. Multi-image calls preserve caller order and place every
 image in one OpenAI-compatible user message before the question.</p>
 </section>
-<section id="remote-and-hosted-nim-endpoints">
-<h2>Remote and hosted NIM endpoints<a class="headerlink" href="#remote-and-hosted-nim-endpoints" title="Link to this heading">#</a></h2>
+<section id="remote-hosted-nim-endpoints">
+<h2>Remote / hosted-NIM endpoints<a class="headerlink" href="#remote-hosted-nim-endpoints" title="Link to this heading">#</a></h2>
 <p>Cloud and remote endpoints, such as hosted <a class="reference external" href="https://build.nvidia.com">NVIDIA NIM</a>,
 are a profile change:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
@@ -616,7 +616,7 @@ are a profile change:</p>
 without that route use <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code>, which makes
 <code class="docutils literal notranslate"><span class="pre">health()</span></code> return <code class="docutils literal notranslate"><span class="pre">True</span></code> without a request — otherwise a worker’s readiness
 gate would block forever. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/docs/source/components/ai-services.md"><code class="docutils literal notranslate"><span class="pre">AI</span> <span class="pre">services</span></code></a>
+<a class="reference internal" href="../components/ai-services.html"><span class="std std-doc">AI services</span></a>
 for hosted endpoint operation.</p>
 </section>
 <section id="riva-grpc-speech-nim-stt-tts">
@@ -706,7 +706,7 @@ hosted NVCF endpoint, set <code class="docutils literal notranslate"><span class
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#profile-contract">Profile contract</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deployment-profiles">Deployment profiles</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocols">Protocols</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#remote-and-hosted-nim-endpoints">Remote and hosted NIM endpoints</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#remote-hosted-nim-endpoints">Remote / hosted-NIM endpoints</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#riva-grpc-speech-nim-stt-tts">Riva gRPC speech (NIM STT/TTS)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tests">Tests</a></li>
 </ul>

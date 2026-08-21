@@ -474,7 +474,7 @@ direct execution and model tool-call loops. Bounded turns use <code class="docut
 retries, participant context, cancellation, and task ownership. <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code>
 owns only typed publication and delivery tasks; it does not own model loops,
 planning, memory, media, or agent-created work. A publication waits for its
-subscribers, so a subscriber that performs lengthy work must hand the work to
+subscribers, so a subscriber that performs lengthy work should hand the work to
 its own bounded queue.</p>
 <p>Workers construct model clients with the factories in <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code> and depend
 on the corresponding typed service protocols. Adapter behavior, endpoint

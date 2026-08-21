@@ -204,7 +204,7 @@ https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install
 Switch back to `vllm_backend: pip` in the service YAML if you only need the
 local install.
 
-### Hub fails immediately because NVIDIA codec libraries are missing
+### Hub fails immediately with `RuntimeError: missing libnvcuvid.so / libnvidia-encode.so`
 
 **Cause:** NVDEC (`libnvcuvid.so`) and NVENC (`libnvidia-encode.so`) are
 required — the DeviceIOHub refuses to start without them so it never silently falls

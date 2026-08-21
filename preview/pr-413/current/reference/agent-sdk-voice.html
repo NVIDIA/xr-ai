@@ -567,7 +567,7 @@ matched wake phrase and preceding background speech removed by the gate.</p>
 a slow runtime subscriber cannot delay STT, voice gating, or accepted queries.
 The queue preserves order and drops its oldest pending transcript when full;
 shutdown cancels the active delivery and discards pending transcripts. Runtime
-subscribers must enqueue long-running work internally and return promptly.</p>
+subscribers should enqueue long-running work internally and return promptly.</p>
 <p>Accepted speech, typed text, participant lifecycle, and interruption remain on
 application-named topics. Pass <code class="docutils literal notranslate"><span class="pre">participant_joined_topic</span></code> and/or
 <code class="docutils literal notranslate"><span class="pre">participant_left_topic</span></code> to publish <code class="docutils literal notranslate"><span class="pre">VoiceParticipantJoined</span></code> and

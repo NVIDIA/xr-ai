@@ -35,7 +35,7 @@ direct execution and model tool-call loops. Bounded turns use `ToolSet` and
 retries, participant context, cancellation, and task ownership. `AgentRuntime`
 owns only typed publication and delivery tasks; it does not own model loops,
 planning, memory, media, or agent-created work. A publication waits for its
-subscribers, so a subscriber that performs lengthy work must hand the work to
+subscribers, so a subscriber that performs lengthy work should hand the work to
 its own bounded queue.
 
 Workers construct model clients with the factories in `xr_ai_models` and depend

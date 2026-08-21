@@ -794,8 +794,8 @@ problems from detector or VLM problems. Then inspect Relay events and the
 participant JSONL files to follow the tool call, reading, state update, and
 notification as distinct stages.</p>
 </section>
-<section id="what-belongs-in-shared-code">
-<h2>What belongs in shared code<a class="headerlink" href="#what-belongs-in-shared-code" title="Link to this heading">#</a></h2>
+<section id="what-should-become-shared">
+<h2>What should become shared<a class="headerlink" href="#what-should-become-shared" title="Link to this heading">#</a></h2>
 <p>Reuse public SDK blocks directly when they already express the contract:
 <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>, <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code>, <code class="docutils literal notranslate"><span class="pre">run_tool_loop</span></code>, <code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code>,
 <code class="docutils literal notranslate"><span class="pre">ImageQueryTool</span></code>, <code class="docutils literal notranslate"><span class="pre">MarkerTrackingTool</span></code>, and typed topics. Keep device identity,
@@ -871,7 +871,7 @@ another concrete application needs exactly the same behavior.</p>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lifecycle-invariants">Lifecycle invariants</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validation-strategy">Validation strategy</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-belongs-in-shared-code">What belongs in shared code</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-should-become-shared">What should become shared</a></li>
 </ul>
   </nav></div>
 

@@ -494,7 +494,7 @@ work is responsible for controlling them, including creating, cancelling, and
 awaiting its own tasks. The runtime neither knows nor controls whether an
 agent’s internal work is running. <code class="docutils literal notranslate"><span class="pre">publish()</span></code> waits for every fan-out delivery
 to settle before propagating any subscriber failures. Subscriber callbacks
-must hand off lengthy work to agent-owned bounded queues and return promptly.</p>
+should hand off lengthy work to agent-owned bounded queues and return promptly.</p>
 <p>Topics default to <code class="docutils literal notranslate"><span class="pre">telemetry=&quot;full&quot;</span></code>. High-cardinality transport topics use
 <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> when their consumer aggregates fragments and records one semantic
 operation scope. Delivery and failure behavior remains unchanged. Keeping the

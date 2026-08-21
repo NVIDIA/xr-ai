@@ -673,10 +673,10 @@ against the system + user CA store automatically.</p>
 <section id="android-xr">
 <h3>Android XR<a class="headerlink" href="#android-xr" title="Link to this heading">#</a></h3>
 <p>The Android client is a standard Android app (<code class="docutils literal notranslate"><span class="pre">targetSdk</span></code> 34, <code class="docutils literal notranslate"><span class="pre">minSdk</span></code> 24) with
-no XR-specific code. Android XR runs unmodified Android apps, so the sample is
-designed to install and launch on an Android XR device or emulator as a flat 2D
-windowed panel. The LiveKit audio and data paths, agent-status badge, and token
-flow use the same behavior as on a phone.</p>
+no XR-specific code. Because Android XR runs unmodified Android apps, the sample
+is expected to install and launch on an Android XR device or emulator as a flat
+2D windowed panel. The LiveKit audio and data paths, agent-status badge, and
+token flow are expected to work the same as on a phone.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Android XR support is <strong>not yet validated</strong>. The sample has not been tested on
@@ -710,7 +710,7 @@ out at <code class="docutils literal notranslate"><span class="pre">../livekit-c
 Product Name <code class="docutils literal notranslate"><span class="pre">StreamKitSample</span></code>, Interface SwiftUI, Language Swift.</p></li>
 <li><p><strong>Add destinations</strong> — select the project root, then <strong>Supported
 Destinations → +</strong>; add <strong>visionOS</strong>, remove <strong>macOS</strong> if auto-added. You
-must leave iOS and visionOS selected.</p></li>
+should be left with iOS and visionOS.</p></li>
 <li><p><strong>Add the StreamKit package</strong> — <strong>File → Add Package Dependencies… → Add
 Local…</strong>, navigate to <code class="docutils literal notranslate"><span class="pre">client-samples/ios-visionos/StreamKit/</span></code>, and add it,
 ticking <strong>StreamKit</strong> and your app target.</p></li>
