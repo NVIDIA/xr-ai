@@ -385,15 +385,15 @@ def test_dual_ada_configs_follow_profile_gpu_layout(
     assert yaml.safe_load(config_path.read_text())["cuda_visible_devices"] == gpu
 
 
-@pytest.mark.parametrize("profile", ["96G_blackwell", "dual_48G_ada", "spark"])
-def test_omni_profiles_select_supported_vllm_configuration(profile: str) -> None:
-    profile_path = (
-        _REPO_ROOT
-        / "agent-samples/model-servers/yaml"
-        / profile
-        / "nemotron_omni_llm_server.yaml"
-    )
-
+@pytest.mark.parametrize(
+    "profile_path",
+    sorted(
+        (_REPO_ROOT / "agent-samples/model-servers/yaml").glob(
+            "*/nemotron_omni_llm_server*.yaml"
+        )
+    ),
+)
+def test_omni_profiles_select_supported_vllm_configuration(profile_path: Path) -> None:
     config = yaml.safe_load(profile_path.read_text())
 
     assert config["vllm_backend"] == "docker"
@@ -637,13 +637,21 @@ def test_cli_aborts_when_unselected_services_cannot_stop(
     assert started == []
 
 
-def test_omni_forwards_configured_moe_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("moe_backend", ["cutlass", None])
+def test_omni_only_forwards_configured_moe_backend(
+    monkeypatch: pytest.MonkeyPatch,
+    moe_backend: str | None,
+) -> None:
     captured: dict[str, object] = {}
     monkeypatch.setattr(_omni, "setup_logging", lambda *_a, **_k: None)
     monkeypatch.setattr(
         _omni,
         "load_config",
-        lambda: ({"moe_backend": "triton"}, Path("."), None),
+        lambda: (
+            {"moe_backend": moe_backend} if moe_backend is not None else {},
+            Path("."),
+            None,
+        ),
     )
     monkeypatch.setattr(_omni, "resolve_model_cache", lambda *_a, **_k: Path("models"))
     monkeypatch.setattr(_omni, "setup_hf_env", lambda *_a, **_k: None)
@@ -653,7 +661,10 @@ def test_omni_forwards_configured_moe_backend(monkeypatch: pytest.MonkeyPatch) -
     _omni.run()
 
     args = captured["extra_serve_args"]
-    assert args[args.index("--moe-backend") + 1] == "triton"
+    if moe_backend is None:
+        assert "--moe-backend" not in args
+    else:
+        assert args[args.index("--moe-backend") + 1] == moe_backend
 
 
 def test_embedding_default_cache_tracks_service_depth(

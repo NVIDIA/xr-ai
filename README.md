@@ -211,8 +211,6 @@ avoiding GPU overcommit.
 The default profile starts Nemotron-3 Nano Omni (8108, serving both the
 reactive and agent LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103),
 and embeddings (8109).
-On Blackwell, the Omni profile leaves the MoE kernel backend unset so vLLM can
-select an implementation compatible with the model's NVFP4 quantization.
 
 ```bash
 uv run model_servers --models vlm_llm_nim
