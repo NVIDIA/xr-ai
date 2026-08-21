@@ -13,6 +13,25 @@ and command to `device_io_hub`. Rename `xr_media_hub.yaml` to
 `device_io_hub.yaml` and `XR_MEDIA_HUB_NO_WEB_CLIENT` to
 `DEVICE_IO_HUB_NO_WEB_CLIENT`. The rename has no compatibility aliases.
 
+## Operator-visible runtime changes
+
+- DeviceIOHub no longer falls back to embedded LiveKit development credentials.
+  Set `api_key` and `api_secret` in `device_io_hub.yaml`, or inject
+  `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` through the environment.
+- Boolean service settings now require YAML booleans or the strings `true`,
+  `false`, `yes`, `no`, `on`, `off`, `1`, or `0` (case-insensitive). Numeric
+  `1`/`0`, null values, and arbitrary strings now fail at startup instead of
+  being interpreted by Python truthiness. This applies to vLLM eager/tool/
+  scheduling flags, Nemotron-Omni BF16 selection, Piper CUDA, voice-gate
+  `listening_chime`, lab-monitoring `capture_marker_scans`, and tea-workflow
+  `complete_on_skip`.
+- Return audio is paced before IPC by the built-in voice transport and bounded
+  independently for each participant in DeviceIOHub.
+  `return_audio_max_buffer_s` defaults to 3 seconds; a custom or faulty producer
+  that exceeds the queued-audio duration limit loses its oldest queued frames.
+  Increase the value for intentionally bursty custom producers, or decrease it
+  for a tighter memory and latency bound.
+
 ## Removed SDK compatibility surfaces
 
 This release removes deprecated SDK aliases and the standalone Pipecat
@@ -41,6 +60,7 @@ compatibility package. Update out-of-tree code as follows:
 | `get_frame_from_time(reference_time_us, second_ago)` | Subtract the offset in the caller and use `get_historical_frame(start_us)`. |
 | `HistoricalFrameResult.path` and `SampledVideoFrame.path` | Read the canonical exported-frame location from `result.image.uri`. |
 | `xr_ai_tools.qr_code.QRCodeTool` | Initialize `xr_ai_tools.marker_tracking.MarkerTrackingTool`; select QR and/or ArUco with `marker_types`, then use the same `track_markers` request and result contract for either family. |
+| Implicit development credentials from `LiveKitConnectorConfig()` or `LiveKitConnector()` | Pass a `LiveKitConnectorConfig` with explicit `api_key` and `api_secret`. The YAML loader also accepts `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`. |
 
 Pipecat remains an internal implementation detail of `xr-ai-voice`; applications
 no longer assemble or subclass its frame processors.

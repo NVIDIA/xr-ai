@@ -1141,6 +1141,32 @@ def test_workflow_rejects_mistyped_declared_state_values(
         load_workflow(path)
 
 
+@pytest.mark.parametrize(("value", "expected"), [("false", False), ("true", True)])
+def test_workflow_parses_quoted_complete_on_skip_boolean(
+    tmp_path: Path,
+    value: str,
+    expected: bool,
+) -> None:
+    raw = yaml.safe_load((_SAMPLE / "yaml/workflow.yaml").read_text())
+    raw["steps"][0]["complete_on_skip"] = value
+    path = tmp_path / "workflow.yaml"
+    path.write_text(yaml.safe_dump(raw))
+
+    workflow = load_workflow(path)
+
+    assert workflow.steps[raw["steps"][0]["id"]].complete_on_skip is expected
+
+
+def test_workflow_rejects_invalid_complete_on_skip_boolean(tmp_path: Path) -> None:
+    raw = yaml.safe_load((_SAMPLE / "yaml/workflow.yaml").read_text())
+    raw["steps"][0]["complete_on_skip"] = "sometimes"
+    path = tmp_path / "workflow.yaml"
+    path.write_text(yaml.safe_dump(raw))
+
+    with pytest.raises(ValueError, match="complete_on_skip must be a boolean"):
+        load_workflow(path)
+
+
 @pytest.mark.asyncio
 async def test_file_output_writes_session_bounded_jsonl(tmp_path: Path) -> None:
     files = FileOutputAgent(tmp_path, history_size=4)

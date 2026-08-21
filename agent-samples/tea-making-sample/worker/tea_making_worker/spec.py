@@ -15,6 +15,23 @@ import yaml
 
 _ID = re.compile(r"^[a-z][a-z0-9_-]*$")
 _TYPES = {"boolean", "integer", "number", "string"}
+_TRUE_BOOL_STRINGS = {"1", "true", "yes", "on"}
+_FALSE_BOOL_STRINGS = {"0", "false", "no", "off"}
+
+
+def _parse_bool(value: object, label: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in _TRUE_BOOL_STRINGS:
+            return True
+        if normalized in _FALSE_BOOL_STRINGS:
+            return False
+    accepted = sorted(_TRUE_BOOL_STRINGS | _FALSE_BOOL_STRINGS)
+    raise ValueError(
+        f"{label} must be a boolean or one of {accepted} (got {value!r})"
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -268,7 +285,10 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
         evidence=_evidence(raw.get("evidence"), step_id),
         complete_when=dict(completion),
         next_step=(str(raw["next"]) if raw.get("next") is not None else None),
-        complete_on_skip=bool(raw.get("complete_on_skip", False)),
+        complete_on_skip=_parse_bool(
+            raw.get("complete_on_skip", False),
+            f"steps.{step_id}.complete_on_skip",
+        ),
         state_on_skip=dict(state_on_skip),
         enter_message=str(messages.get("enter", "")).strip(),
         complete_message=str(messages.get("complete", "")).strip(),

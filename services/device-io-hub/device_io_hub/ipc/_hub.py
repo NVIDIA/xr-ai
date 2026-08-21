@@ -138,6 +138,28 @@ class HubEndpoint:
     def on_participant(self, cb: ParticipantCallback) -> None: self._participant_cbs.append(cb)
     def on_control(self,     cb: ControlCallback)     -> None: self._control_cbs.append(cb)
 
+    @staticmethod
+    def _release_held_slot(
+        ring: ShmRingBuffer,
+        view: SlotView,
+        *,
+        context: str,
+    ) -> None:
+        """Release a latest-frame view without disrupting hub lifecycle."""
+        try:
+            view.data.release()
+        except ValueError as exc:
+            logger.debug("Frame view was already released during {}: {}", context, exc)
+        try:
+            ring.release_slot(view.signal.slot)
+        except (RuntimeError, ValueError) as exc:
+            logger.warning(
+                "Could not release shared-memory slot {} during {}: {}",
+                view.signal.slot,
+                context,
+                exc,
+            )
+
     # ── outbound (hub → connectors / consumers) ───────────────────────────────
 
     async def broadcast(self, topic: bytes | str, type_id: int, msg) -> None:
@@ -306,14 +328,62 @@ class HubEndpoint:
 
             key = (msg.participant_id, msg.track_id)
 
-            # Release the previously held slot for this track before taking the new one.
-            prev = self._latest_slots.pop(key, None)
-            if prev:
-                prev[0].release_slot(prev[1].signal.slot)
-
             # Read and hold the new slot — NOT released until the next frame
             # arrives or the hub shuts down, so pixels remain readable on demand.
-            view = ring.read_slot(msg)
+            try:
+                view = ring.read_slot(msg)
+            except (RuntimeError, ValueError) as exc:
+                # A rejected signal normally refers to a freshly written READY
+                # slot. Free it so malformed metadata cannot exhaust the ring,
+                # but never release a slot already held by another latest view.
+                held = any(
+                    held_ring is ring and held_view.signal.slot == msg.slot
+                    for held_ring, held_view in self._latest_slots.values()
+                )
+                if not held:
+                    try:
+                        ring.release_slot(msg.slot)
+                    except (RuntimeError, ValueError) as release_exc:
+                        logger.debug(
+                            "Could not release rejected frame slot {}: {}",
+                            msg.slot,
+                            release_exc,
+                        )
+                logger.warning(
+                    "Invalid frame signal for participant {} track {} — dropped: {}",
+                    msg.participant_id,
+                    msg.track_id,
+                    exc,
+                )
+                return
+
+            held_key = next(
+                (
+                    held_key
+                    for held_key, (held_ring, held_view) in self._latest_slots.items()
+                    if held_ring is ring and held_view.signal.slot == msg.slot
+                ),
+                None,
+            )
+            if held_key is not None:
+                view.data.release()
+                logger.debug(
+                    "Duplicate frame signal for participant {} track {} slot {} "
+                    "already held for {}/{} — ignored",
+                    msg.participant_id,
+                    msg.track_id,
+                    msg.slot,
+                    *held_key,
+                )
+                return
+
+            prev = self._latest_slots.get(key)
+            if prev:
+                self._latest_slots.pop(key)
+                self._release_held_slot(
+                    *prev,
+                    context=f"replacement of {msg.participant_id}/{msg.track_id}",
+                )
             self._latest_slots[key] = (ring, view)
 
             # Publish metadata so processors know a frame arrived.
@@ -380,7 +450,11 @@ class HubEndpoint:
                 stale = [k for k in self._latest_slots if k[0] == msg.participant_id]
                 for k in stale:
                     ring, view = self._latest_slots.pop(k)
-                    ring.release_slot(view.signal.slot)
+                    self._release_held_slot(
+                        ring,
+                        view,
+                        context=f"departure of {msg.participant_id}",
+                    )
             for cb in self._participant_cbs:
                 try:
                     await cb(msg)
@@ -461,18 +535,20 @@ class HubEndpoint:
     def _handle_registration(self, reg: ConnectorRegistration) -> None:
         if reg.connector_id in self._ring_registry:
             logger.warning("Connector {} re-registered — replacing ring buffer", reg.connector_id)
-            old_ring = self._ring_registry[reg.connector_id]
+            old_ring = self._ring_registry.pop(reg.connector_id)
             # Drop any frames still held in the old ring BEFORE closing it.
             # A live SlotView keeps a sliced memoryview exported into the ring's
             # mmap; closing with that outstanding makes ShmRingBuffer.close()'s
             # self._buf.release() raise BufferError, and leaves _latest_slots
             # referencing a half-closed ring whose slot the next FRAME_SIGNAL
-            # would write through (#197). Release the memoryview before the slot
-            # and close, matching the teardown order in close().
+            # would write through (#197).
             for key in [k for k, (ring, _) in self._latest_slots.items() if ring is old_ring]:
                 _, view = self._latest_slots.pop(key)
-                view.data.release()
-                old_ring.release_slot(view.signal.slot)
+                self._release_held_slot(
+                    old_ring,
+                    view,
+                    context=f"re-registration of {reg.connector_id}",
+                )
             old_ring.close()
         try:
             self._ring_registry[reg.connector_id] = ShmRingBuffer(
@@ -494,8 +570,7 @@ class HubEndpoint:
         self._pull.close(linger=0)
         self._pub.close(linger=0)
         for ring, view in self._latest_slots.values():
-            view.data.release()  # must release before ring.close() so mmap has no exported pointers
-            ring.release_slot(view.signal.slot)
+            self._release_held_slot(ring, view, context="hub shutdown")
         self._latest_slots.clear()
         for ring in self._ring_registry.values():
             ring.close()

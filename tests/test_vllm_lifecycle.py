@@ -8,7 +8,33 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from xr_ai_vllm._config import parse_config_bool
 from xr_ai_vllm._lifecycle import health_ok, health_url, wait_until_healthy
+
+
+class TestParseConfigBool:
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            (True, True),
+            (False, False),
+            ("true", True),
+            ("YES", True),
+            ("1", True),
+            ("on", True),
+            ("false", False),
+            ("No", False),
+            ("0", False),
+            (" off ", False),
+        ],
+    )
+    def test_accepts_booleans_and_known_strings(self, value, expected):
+        assert parse_config_bool(value, "enforce_eager") is expected
+
+    @pytest.mark.parametrize("value", ["sometimes", 0, None])
+    def test_rejects_other_values(self, value):
+        with pytest.raises(ValueError, match="enforce_eager"):
+            parse_config_bool(value, "enforce_eager")
 
 
 class TestHealthUrl:

@@ -50,6 +50,7 @@ from xr_ai_vllm import (
     serve,
     setup_hf_env,
 )
+from xr_ai_vllm._config import parse_config_bool
 
 _DEFAULT_PORT        = 8100
 _DEFAULT_HOST        = "0.0.0.0"
@@ -87,8 +88,12 @@ def run() -> None:
     tp_size       = int(cfg.get("tensor_parallel_size", _DEFAULT_TP))
     max_ctx       = int(cfg.get("max_model_len",    _DEFAULT_CTX))
     gpu_mem       = float(cfg.get("gpu_memory_utilization", _DEFAULT_GPU_MEM))
-    enforce_eager = bool(cfg.get("enforce_eager",   _DEFAULT_EAGER))
-    async_sched   = bool(cfg.get("async_scheduling", _DEFAULT_ASYNC))
+    enforce_eager = parse_config_bool(
+        cfg.get("enforce_eager", _DEFAULT_EAGER), "enforce_eager"
+    )
+    async_sched = parse_config_bool(
+        cfg.get("async_scheduling", _DEFAULT_ASYNC), "async_scheduling"
+    )
     hf_overrides  = cfg.get("hf_overrides")
     mm_encoder_tp_mode = cfg.get("mm_encoder_tp_mode")
     max_images    = int(cfg.get("max_images_per_prompt", _DEFAULT_MAX_IMAGES))

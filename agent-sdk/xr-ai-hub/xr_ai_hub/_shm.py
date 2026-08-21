@@ -57,6 +57,25 @@ _STATE_READY   = 2
 _STATE_OFFSET = 4
 
 
+def _frame_nbytes(data: bytes | memoryview) -> int:
+    return data.nbytes if isinstance(data, memoryview) else len(data)
+
+
+def _frame_size_error(
+    width: int,
+    height: int,
+    fmt: PixelFormat,
+    size: int,
+    capacity: int,
+) -> str:
+    fmt_name = getattr(fmt, "name", str(fmt))
+    return (
+        "invalid shared-memory frame size "
+        f"(width={width}, height={height}, format={fmt_name}, "
+        f"bytes={size}, max_frame_bytes={capacity})"
+    )
+
+
 class SlotView(NamedTuple):
     """Zero-copy view into one ring-buffer slot's pixel data."""
     data:   memoryview
@@ -136,17 +155,33 @@ class ShmRingBuffer:
         RuntimeError
             If every slot is occupied. This is the producer's back-pressure
             signal; consumers release occupied slots with :meth:`release_slot`.
+        ValueError
+            If the frame is larger than the configured slot capacity.
         """
+        size = _frame_nbytes(data)
+        if size > self._max_frame_bytes:
+            raise ValueError(
+                _frame_size_error(
+                    width, height, fmt, size, self._max_frame_bytes
+                )
+            )
+
+        if isinstance(data, memoryview):
+            try:
+                payload = data.cast("B")
+            except TypeError as exc:
+                raise ValueError("frame data must be C-contiguous") from exc
+        else:
+            payload = data
         slot    = self._claim_slot()
         hdr_off = _GH_SIZE + slot * self._slot_stride
         dat_off = hdr_off + _SH_SIZE
-        n       = len(data)
 
         # Mark WRITING so consumer won't touch this slot.
         _SH.pack_into(self._buf, hdr_off, _MAGIC_SLOT, _STATE_WRITING, int(fmt), 0, seq, pts_us, width, height, 0)
-        self._buf[dat_off : dat_off + n] = data
+        self._buf[dat_off : dat_off + size] = payload
         # Mark READY — consumer may read after receiving the ZMQ signal.
-        _SH.pack_into(self._buf, hdr_off, _MAGIC_SLOT, _STATE_READY,   int(fmt), 0, seq, pts_us, width, height, n)
+        _SH.pack_into(self._buf, hdr_off, _MAGIC_SLOT, _STATE_READY,   int(fmt), 0, seq, pts_us, width, height, size)
 
         return slot
 
@@ -161,22 +196,119 @@ class ShmRingBuffer:
         Raises
         ------
         RuntimeError
-            If the indicated slot is not ready for consumption.
+            If the indicated slot header is invalid or not ready for consumption.
+        ValueError
+            If the signal identifies an invalid slot or disagrees with the
+            canonical metadata stored in the slot header.
         """
-        hdr_off = _GH_SIZE + signal.slot * self._slot_stride
-        hdr     = _SH.unpack_from(self._buf, hdr_off)
-        if hdr[1] != _STATE_READY:
-            raise RuntimeError(f"slot {signal.slot} not READY (state={hdr[1]})")
+        slot = signal.slot
+        if (
+            not isinstance(slot, int)
+            or isinstance(slot, bool)
+            or not 0 <= slot < self._num_slots
+        ):
+            raise ValueError(
+                f"invalid shared-memory slot index {slot!r} "
+                f"(num_slots={self._num_slots})"
+            )
+
+        hdr_off = _GH_SIZE + slot * self._slot_stride
+        (
+            magic,
+            state,
+            header_fmt,
+            _pad,
+            header_seq,
+            header_pts_us,
+            header_width,
+            header_height,
+            header_data_sz,
+        ) = _SH.unpack_from(self._buf, hdr_off)
+        if magic != _MAGIC_SLOT:
+            raise RuntimeError(
+                f"slot {slot} has invalid shared-memory header magic "
+                f"0x{magic:08x}"
+            )
+        if state != _STATE_READY:
+            raise RuntimeError(f"slot {slot} not READY (state={state})")
+        if not 0 <= header_data_sz <= self._max_frame_bytes:
+            raise ValueError(
+                _frame_size_error(
+                    header_width,
+                    header_height,
+                    header_fmt,
+                    header_data_sz,
+                    self._max_frame_bytes,
+                )
+            )
+        if (
+            not isinstance(signal.data_sz, int)
+            or isinstance(signal.data_sz, bool)
+        ):
+            raise ValueError(
+                "invalid shared-memory frame data size "
+                f"{signal.data_sz!r}: expected an integer"
+            )
+        if not 0 <= signal.data_sz <= self._max_frame_bytes:
+            raise ValueError(
+                _frame_size_error(
+                    signal.width,
+                    signal.height,
+                    signal.fmt,
+                    signal.data_sz,
+                    self._max_frame_bytes,
+                )
+            )
+
+        signal_metadata = (
+            signal.seq,
+            signal.pts_us,
+            signal.width,
+            signal.height,
+            signal.fmt,
+            signal.data_sz,
+        )
+        header_metadata = (
+            header_seq,
+            header_pts_us,
+            header_width,
+            header_height,
+            header_fmt,
+            header_data_sz,
+        )
+        if signal_metadata != header_metadata:
+            raise ValueError(
+                "frame signal does not match shared-memory slot header "
+                f"(slot={slot}, signal={signal_metadata!r}, "
+                f"header={header_metadata!r})"
+            )
+
         dat_off = hdr_off + _SH_SIZE
         return SlotView(
-            data=self._buf[dat_off : dat_off + signal.data_sz],
+            data=self._buf[dat_off : dat_off + header_data_sz],
             signal=signal,
         )
 
     def release_slot(self, slot: int) -> None:
         """Mark a consumed slot as free so the producer can reuse it."""
+        if (
+            not isinstance(slot, int)
+            or isinstance(slot, bool)
+            or not 0 <= slot < self._num_slots
+        ):
+            raise ValueError(
+                f"invalid shared-memory slot index {slot!r} "
+                f"(num_slots={self._num_slots})"
+            )
         hdr_off = _GH_SIZE + slot * self._slot_stride
         hdr     = _SH.unpack_from(self._buf, hdr_off)
+        if hdr[0] != _MAGIC_SLOT:
+            raise RuntimeError(
+                f"slot {slot} has invalid shared-memory header magic "
+                f"0x{hdr[0]:08x}"
+            )
+        if hdr[1] != _STATE_READY:
+            raise RuntimeError(f"slot {slot} not READY (state={hdr[1]})")
         _SH.pack_into(self._buf, hdr_off, _MAGIC_SLOT, _STATE_FREE, hdr[2], 0, hdr[4], hdr[5], hdr[6], hdr[7], 0)
 
     # ── internal ──────────────────────────────────────────────────────────────

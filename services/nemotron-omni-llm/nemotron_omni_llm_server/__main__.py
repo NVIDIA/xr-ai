@@ -52,6 +52,7 @@ from xr_ai_vllm import (
     serve,
     setup_hf_env,
 )
+from xr_ai_vllm._config import parse_config_bool
 
 _MODEL_BLACKWELL = "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-NVFP4"
 _MODEL_ADA       = "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-FP8"
@@ -82,7 +83,8 @@ def run() -> None:
     # nvidia-smi queries the right device.
     cuda_devices = setup_hf_env(cfg, model_cache)
 
-    if cfg.get("use_bf16", False):
+    use_bf16 = parse_config_bool(cfg.get("use_bf16", False), "use_bf16")
+    if use_bf16:
         model = cfg.get("model_bf16", _MODEL_BF16)
         use_kv_fp8 = False
         logger.info("use_bf16=true → {}", model)
@@ -105,7 +107,9 @@ def run() -> None:
     tp_size       = int(cfg.get("tensor_parallel_size", _DEFAULT_TP))
     max_ctx       = int(cfg.get("max_model_len",    _DEFAULT_CTX))
     gpu_mem       = float(cfg.get("gpu_memory_utilization", _DEFAULT_GPU_MEM))
-    enforce_eager = bool(cfg.get("enforce_eager",   _DEFAULT_EAGER))
+    enforce_eager = parse_config_bool(
+        cfg.get("enforce_eager", _DEFAULT_EAGER), "enforce_eager"
+    )
     prune_rate    = float(cfg.get("video_pruning_rate", _DEFAULT_PRUNE))
     video_fps     = int(cfg.get("video_fps",        _DEFAULT_FPS))
     video_frames  = int(cfg.get("video_num_frames", _DEFAULT_FRAMES))

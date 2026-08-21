@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections import deque
+from typing import NamedTuple
 
 import numpy as np
 from livekit import rtc
@@ -31,11 +33,23 @@ from device_io_hub.ipc import (
 )
 
 from ._token import make_client_token
-from .config import LiveKitConnectorConfig
+from .config import (
+    _DEFAULT_RETURN_AUDIO_MAX_BUFFER_S,
+    LiveKitConnectorConfig,
+    _validate_return_audio_max_buffer_s,
+)
 
 
 def _now_us() -> int:
     return time.time_ns() // 1_000
+
+
+_RETURN_AUDIO_DROP_LOG_INTERVAL_S = 5.0
+
+
+class _QueuedReturnAudioFrame(NamedTuple):
+    frame: rtc.AudioFrame
+    duration_s: float
 
 
 class _ReturnAudioPipe:
@@ -48,44 +62,152 @@ class _ReturnAudioPipe:
     audio chunks in the ZMQ SUB buffer — by the time flush is delivered,
     the audio is already past us.
 
-    With it, ``push`` is a non-blocking ``put_nowait`` so the connector
-    loop stays responsive; a background task drains the queue into
-    ``capture_frame`` at audio rate; ``flush`` is O(1) and drops both
-    layers instantly.  Only the client's jitter buffer (~100 ms) remains
-    irreducibly outside our control.
+    With it, ``push`` appends without awaiting so the connector loop stays
+    responsive; a background task drains the queue into
+    ``capture_frame`` at audio rate; ``flush`` drops the local backlog and
+    LiveKit queue. The built-in voice output paces frames before IPC, while the
+    duration bound prevents custom or faulty producers from growing a
+    participant's queue indefinitely. Only the client's jitter buffer
+    (~100 ms) remains irreducibly outside our control.
     """
 
-    def __init__(self, src: rtc.AudioSource) -> None:
-        self._src   = src
-        self._queue: asyncio.Queue[rtc.AudioFrame | None] = asyncio.Queue()
-        self._task  = asyncio.create_task(self._drain(), name="return_audio_pipe")
+    def __init__(
+        self,
+        src: rtc.AudioSource,
+        *,
+        participant_id: str = "unknown",
+        max_buffer_s: float = _DEFAULT_RETURN_AUDIO_MAX_BUFFER_S,
+    ) -> None:
+        self._src = src
+        self._participant_id = participant_id
+        self._max_buffer_s = _validate_return_audio_max_buffer_s(max_buffer_s)
+        self._queued_s = 0.0
+        self._dropped_frames = 0
+        self._dropped_s = 0.0
+        self._last_drop_log_s = 0.0
+        self._queue: deque[_QueuedReturnAudioFrame] = deque()
+        self._has_frames = asyncio.Event()
+        self._task = asyncio.create_task(self._drain(), name="return_audio_pipe")
 
     def push(self, frame: rtc.AudioFrame) -> None:
-        self._queue.put_nowait(frame)
+        try:
+            duration_s = self._frame_duration_s(frame)
+        except (TypeError, ValueError, OverflowError) as exc:
+            self._record_drop(1, 0.0, reason=str(exc))
+            return
+
+        if duration_s > self._max_buffer_s:
+            self._record_drop(
+                1,
+                duration_s,
+                reason=f"frame exceeds {self._max_buffer_s:.3g}-second limit",
+            )
+            return
+
+        dropped_frames = 0
+        dropped_s = 0.0
+        while (
+            self._queue
+            and self._queued_s + duration_s > self._max_buffer_s + 1e-9
+        ):
+            dropped = self._queue.popleft()
+            self._queued_s = max(0.0, self._queued_s - dropped.duration_s)
+            dropped_frames += 1
+            dropped_s += dropped.duration_s
+
+        self._queue.append(_QueuedReturnAudioFrame(frame, duration_s))
+        self._queued_s += duration_s
+        self._has_frames.set()
+        if dropped_frames:
+            self._record_drop(
+                dropped_frames,
+                dropped_s,
+                reason=f"backlog exceeds {self._max_buffer_s:.3g}-second limit",
+            )
 
     def flush(self) -> None:
-        try:
-            while True:
-                self._queue.get_nowait()
-        except asyncio.QueueEmpty:
-            pass
+        self._queue.clear()
+        self._has_frames.clear()
+        self._queued_s = 0.0
         self._src.clear_queue()
+
+    @property
+    def queued_frames(self) -> int:
+        return len(self._queue)
+
+    @property
+    def queued_duration_s(self) -> float:
+        return self._queued_s
+
+    @property
+    def dropped_frames(self) -> int:
+        return self._dropped_frames
+
+    @property
+    def dropped_duration_s(self) -> float:
+        return self._dropped_s
+
+    @staticmethod
+    def _frame_duration_s(frame: rtc.AudioFrame) -> float:
+        samples_per_channel = int(frame.samples_per_channel)
+        sample_rate = int(frame.sample_rate)
+        if samples_per_channel <= 0 or sample_rate <= 0:
+            raise ValueError(
+                "return-audio frame must have positive samples_per_channel "
+                "and sample_rate"
+            )
+        return samples_per_channel / sample_rate
+
+    def _record_drop(
+        self,
+        dropped_frames: int,
+        dropped_s: float,
+        *,
+        reason: str,
+    ) -> None:
+        self._dropped_frames += dropped_frames
+        self._dropped_s += dropped_s
+        now_s = time.monotonic()
+        if (
+            self._last_drop_log_s
+            and now_s - self._last_drop_log_s < _RETURN_AUDIO_DROP_LOG_INTERVAL_S
+        ):
+            return
+        self._last_drop_log_s = now_s
+        logger.warning(
+            "Return audio for {!r} dropped {} frame(s) ({:.0f} ms): {}; "
+            "queued {} frame(s) ({:.0f} ms), "
+            "total dropped {} frame(s) ({:.0f} ms)",
+            self._participant_id,
+            dropped_frames,
+            dropped_s * 1000,
+            reason,
+            self.queued_frames,
+            self.queued_duration_s * 1000,
+            self._dropped_frames,
+            self._dropped_s * 1000,
+        )
 
     async def _drain(self) -> None:
         while True:
-            frame = await self._queue.get()
-            if frame is None:
-                return
+            await self._has_frames.wait()
+            if not self._queue:
+                self._has_frames.clear()
+                continue
+            queued = self._queue.popleft()
+            if not self._queue:
+                self._has_frames.clear()
+            self._queued_s = max(0.0, self._queued_s - queued.duration_s)
             try:
-                await self._src.capture_frame(frame)
+                await self._src.capture_frame(queued.frame)
             except asyncio.CancelledError:
                 raise
             except Exception:
                 logger.exception("capture_frame failed")
 
     async def close(self) -> None:
-        # Cancel rather than enqueue a sentinel — a bounded queue could drop
-        # the None and leak the drainer forever.
+        # Cancellation stops the drainer regardless of how much audio remains
+        # in the participant-local backlog.
         if not self._task.done():
             self._task.cancel()
         try:
@@ -301,7 +423,11 @@ class RoomClient:
         src   = rtc.AudioSource(sample_rate=sample_rate, num_channels=channels)
         track = rtc.LocalAudioTrack.create_audio_track(f"xr-hub-return-{pid}", src)
         pub   = await self._room.local_participant.publish_track(track)
-        pipe  = _ReturnAudioPipe(src)
+        pipe = _ReturnAudioPipe(
+            src,
+            participant_id=pid,
+            max_buffer_s=self._cfg.return_audio_max_buffer_s,
+        )
         logger.info("Return audio track published: pid={!r}  sid={!r}", pid, pub.sid)
         return src, pub, pipe
 
@@ -366,6 +492,13 @@ class RoomClient:
                     logger.warning(
                         "Ring buffer full — dropped frame from {!r}/{!r}",
                         identity, track_id,
+                    )
+                except ValueError as exc:
+                    logger.warning(
+                        "Invalid frame from {!r}/{!r} dropped: {}",
+                        identity,
+                        track_id,
+                        exc,
                     )
         except asyncio.CancelledError:
             pass
