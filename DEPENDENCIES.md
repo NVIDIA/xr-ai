@@ -545,6 +545,28 @@ change, even when an individual dependency publishes newer Python wheels.
 - Commands:
   - `xr_render_demo` → `main:run`
 
+#### `xr-render-demo-eval` — [`agent-samples/xr-render-demo/eval/`](agent-samples/xr-render-demo/eval/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-render-demo-worker` → [`xr-render-demo-worker`](agent-samples/xr-render-demo/worker/) (local, editable)
+  - `xr-render-scene` → [`xr-render-scene`](agent-samples/xr-render-demo/scene/) (local, editable)
+  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-tools[frames,vision,services]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
+  - `pyyaml>=6.0`
+- Optional dependency groups: none
+- Commands:
+  - `xr_render_demo_eval` → `xr_render_demo_eval.harness:run`
+  - `xr_render_demo_eval_subagents` → `xr_render_demo_eval.subagents:run`
+  - `xr_render_demo_eval_supervisor` → `xr_render_demo_eval.supervisor:run`
+  - `xr_render_demo_live_explore` → `xr_render_demo_eval.live_explore:run`
+  - `xr_render_demo_live_garble` → `xr_render_demo_eval.live_garble:run`
+  - `xr_render_demo_live_manip` → `xr_render_demo_eval.live_manip:run`
+  - `xr_render_demo_live_pose_matrix` → `xr_render_demo_eval.live_pose_matrix:run`
+  - `xr_render_demo_live_smoke` → `xr_render_demo_eval.live_smoke:run`
+
 #### `xr-render-scene` — [`agent-samples/xr-render-demo/scene/`](agent-samples/xr-render-demo/scene/)
 
 - Python: `>=3.11,<3.13`
@@ -601,6 +623,8 @@ change, even when an individual dependency publishes newer Python wheels.
   - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+  - `xr-render-demo-eval` → [`xr-render-demo-eval`](agent-samples/xr-render-demo/eval/) (local, editable)
+  - `xr-render-demo-worker` → [`xr-render-demo-worker`](agent-samples/xr-render-demo/worker/) (local, editable)
   - `xr-render-scene` → [`xr-render-scene`](agent-samples/xr-render-demo/scene/) (local, editable)
   - `xr-video-memory-service` → [`xr-video-memory-service`](services/video-memory-service/) (local, editable)
   - `xr-rag-service` → [`xr-rag-service`](services/rag-service/) (local, editable)

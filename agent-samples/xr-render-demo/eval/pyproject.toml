@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xr-render-demo-eval"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "xr-render-demo-worker",
+    "xr-render-scene",
+    "xr-ai-models",
+    "xr-ai-tools[frames,vision,services]",
+    "pyyaml>=6.0",
+]
+
+[tool.uv.sources]
+xr-render-demo-worker = { path = "../worker", editable = true }
+xr-render-scene = { path = "../scene", editable = true }
+xr-ai-models = { path = "../../../agent-sdk/xr-ai-models", editable = true }
+xr-ai-tools = { path = "../../../agent-sdk/xr-ai-tools", editable = true }
+
+[project.scripts]
+xr_render_demo_eval = "xr_render_demo_eval.harness:run"
+xr_render_demo_eval_subagents = "xr_render_demo_eval.subagents:run"
+xr_render_demo_eval_supervisor = "xr_render_demo_eval.supervisor:run"
+xr_render_demo_live_smoke = "xr_render_demo_eval.live_smoke:run"
+xr_render_demo_live_pose_matrix = "xr_render_demo_eval.live_pose_matrix:run"
+xr_render_demo_live_manip = "xr_render_demo_eval.live_manip:run"
+xr_render_demo_live_garble = "xr_render_demo_eval.live_garble:run"
+xr_render_demo_live_explore = "xr_render_demo_eval.live_explore:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["xr_render_demo_eval"]

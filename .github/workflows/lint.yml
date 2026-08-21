@@ -28,6 +28,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check for merge conflict markers
+        # "=======" alone is a legitimate RST/Markdown underline; only the
+        # arrow markers are unambiguous.
+        run: |
+          if git grep -nE '^(<{7}|>{7})( |$)' -- ':!*.lock'; then
+            echo "::error::Merge conflict markers found"
+            exit 1
+          fi
+
       - name: Run ruff check
         uses: astral-sh/ruff-action@v3
         with:

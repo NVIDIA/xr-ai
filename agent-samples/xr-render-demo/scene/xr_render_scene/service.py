@@ -66,6 +66,10 @@ class SceneService:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
 
+    # Mutation results report the authoritative state store. LOVR delivery
+    # is best-effort (drops are counted in health); a delivery failure must
+    # not fail a mutation that already applied, or callers retry and
+    # double-apply it.
     async def _add(self, request: AddPrimitiveRequest) -> dict:
         position = {"x": request.x, "y": request.y, "z": request.z}
         color = {"r": request.r, "g": request.g, "b": request.b}
@@ -75,7 +79,7 @@ class SceneService:
             color,
             request.size,
         )
-        result = await self._dispatcher.forward(
+        await self._dispatcher.forward(
             "scene.add",
             {
                 "id": obj_id,
@@ -90,7 +94,7 @@ class SceneService:
             obj_id,
             request.prim_type,
         )
-        return {"id": obj_id, **result}
+        return {"id": obj_id, "ok": True}
 
     async def _update(self, request: UpdatePrimitiveRequest) -> dict:
         obj = self._dispatcher.get_object(request.obj_id)
@@ -124,7 +128,7 @@ class SceneService:
                 color,
                 merged["size"],
             )
-            result = await self._dispatcher.forward(
+            await self._dispatcher.forward(
                 "scene.add",
                 {
                     "id": new_id,
@@ -134,11 +138,7 @@ class SceneService:
                     "size": merged["size"],
                 },
             )
-            return {
-                "ok": result.get("ok", True),
-                "reason": result.get("reason"),
-                "new_id": new_id,
-            }
+            return {"ok": True, "new_id": new_id}
 
         if not props:
             return {"ok": True}
@@ -153,15 +153,17 @@ class SceneService:
             wire["color"] = [value["r"], value["g"], value["b"]]
         if "size" in props:
             wire["size"] = current["size"]
-        return await self._dispatcher.forward("scene.update", wire)
+        await self._dispatcher.forward("scene.update", wire)
+        return {"ok": True}
 
     async def _remove(self, request: RemovePrimitiveRequest) -> dict:
         if not self._dispatcher.remove(request.obj_id):
             return {"ok": False, "reason": "not_found"}
-        return await self._dispatcher.forward(
+        await self._dispatcher.forward(
             "scene.remove",
             {"id": request.obj_id},
         )
+        return {"ok": True}
 
 
 __all__ = ["SceneService"]

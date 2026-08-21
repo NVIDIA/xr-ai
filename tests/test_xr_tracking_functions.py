@@ -185,3 +185,50 @@ def test_pose_conversion_preserves_openxr_axes(
     assert result["yaw_deg"] == yaw_deg
     assert result["pitch_deg"] == pitch_deg
     assert isinstance(result["ts"], int)
+
+_SIM_POSE = {
+    "position": {"x": 2.0, "y": 1.6, "z": 1.5},
+    "forward": {"x": 0.0, "y": 0.0, "z": -1.0},
+    "right": {"x": 1.0, "y": 0.0, "z": 0.0},
+    "up": {"x": 0.0, "y": 1.0, "z": 0.0},
+    "yaw_deg": 0.0,
+    "pitch_deg": 0.0,
+    "ts": 1,
+}
+
+
+@pytest.mark.asyncio
+async def test_openxr_sim_pose_rejected_when_disabled() -> None:
+    class Source:
+        def get_pose(self) -> dict:
+            return {"is_valid": True, "ts": 10}
+
+        def health(self) -> dict:
+            return {"status": "ok"}
+
+    service = OpenXRService(Source())
+    with pytest.raises(RPCError) as error:
+        await service.dispatch("set_sim_pose", _SIM_POSE)
+    assert error.value.code == "unknown_operation"
+
+
+@pytest.mark.asyncio
+async def test_openxr_sim_pose_overrides_and_clears() -> None:
+    hardware = {"is_valid": True, "ts": 10}
+
+    class Source:
+        def get_pose(self) -> dict:
+            return hardware
+
+        def health(self) -> dict:
+            return {"status": "ok"}
+
+    service = OpenXRService(Source(), allow_sim_pose=True)
+    assert await service.dispatch("set_sim_pose", _SIM_POSE) == {"ok": True}
+    overridden = await service.dispatch("get_head_pose", {})
+    assert overridden["position"] == _SIM_POSE["position"]
+    assert await service.dispatch("clear_sim_pose", {}) == {"ok": True}
+    assert await service.dispatch("get_head_pose", {}) is hardware
+    with pytest.raises(RPCError) as error:
+        await service.dispatch("set_sim_pose", {"position": "garbage"})
+    assert error.value.code == "invalid_request"

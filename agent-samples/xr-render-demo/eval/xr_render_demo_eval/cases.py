@@ -1,61 +1,8 @@
-#!/usr/bin/env python3
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""
-Agent-LLM eval harness for xr-render-demo. It uses the live model endpoint,
-derives schemas from the worker's native tools, and executes tool
-effects against deterministic fixtures so it never mutates the live scene.
-
-Usage:
-  uv run --project ../worker python eval.py                 # all cases
-  uv run --project ../worker python eval.py "Move it down"  # one query
-  uv run --project ../worker python eval.py --prompt PATH   # alternate prompt
-
-By default reads ../worker/xr_render_demo_worker/prompts/system.txt (the live xr-render-demo
-prompt). Edit it and re-run; no stack restart needed.
-"""
+"""End-to-end eval corpus for the render worker."""
 from __future__ import annotations
 
-import argparse
-import asyncio
-import json
-import math
-import os
-import re
-import sys
-import tempfile
-import time
-from pathlib import Path
-
-import httpx
-from xr_ai_tools.tool_calling import tool_definitions
-
-_HERE       = Path(__file__).resolve().parent
-SYS_PROMPT  = (_HERE / "../worker/xr_render_demo_worker/prompts/system.txt").resolve()
-
-# Borrow the worker's config and native-tool assembly so the eval advertises
-# the same model-facing function schemas as the live worker.
-sys.path.insert(0, str((_HERE / "../worker").resolve()))
-from xr_render_demo_worker.config import load_config, load_models  # noqa: E402
-from xr_render_demo_worker.scene_loop import (  # noqa: E402
-    LIVE_PERCEPTION_TOOL,
-    PAST_PERCEPTION_TOOL,
-    PERCEPTION_TOOL_DEFS,
-)
-from xr_render_demo_worker.tools import NativeCapabilities  # noqa: E402
-_WORKER_YAML = (_HERE / "../yaml/xr_render_demo_worker.yaml").resolve()
-_WORKER_CFG = load_config(_WORKER_YAML)
-
-def _agent_llm_base_url() -> str:
-    """agent_llm.base_url from the worker's selected deployment profile."""
-    return load_models(_WORKER_YAML).llm("agent_llm").base_url.rstrip("/")
-
-
-AGENT_LLM   = f"{_agent_llm_base_url()}/v1/chat/completions"  # overridable via --agent-llm
-AGENT_MODEL = "llm"                                                   # overridable via --agent-model
-AGENT_KEY   = ""                                                      # overridable via --agent-api-key / NGC_API_KEY
-# Mirror the worker's WorkerConfig defaults — same fixture pose for every
-# test, so prompt regressions are reproducible.
 DEFAULT_POSE = {
     "is_valid": True,
     "position": {"x": 0.0, "y": 1.6, "z": 0.0},
@@ -66,8 +13,6 @@ DEFAULT_POSE = {
     "pitch_deg": 0.0,
 }
 
-# Non-canonical pose (rolled head, off-origin) used by a couple of cases
-# that exercise gravity-aligned axis math.
 ROLLED_HEAD_POSE = {
     "is_valid": True,
     "position": {"x": 0.05, "y": 1.28, "z": 0.32},
@@ -78,69 +23,62 @@ ROLLED_HEAD_POSE = {
     "pitch_deg": 4.3,
 }
 
+
 def _became(prim_type: str | None = None,
             *,
             r_min: float | None = None,
             g_min: float | None = None,
             b_min: float | None = None):
-    """Predicate factory: returns a checker that asserts at least one
-    add_primitive / update_primitive call sets ``prim_type`` AND each
-    requested colour channel reaches the given lower bound.  Facets may
-    appear in one call or be split across calls (e.g. shape on one
-    update, colour on another).  All requested facets must be observed
-    for the predicate to pass."""
+    """Predicate factory: assert at least one add/update sets ``prim_type``
+    AND each requested colour channel reaches the given lower bound. Facets
+    may appear in one call or be split across calls."""
     requirements: dict[str, str | float] = {}
     if prim_type is not None:
         requirements["prim_type"] = prim_type
-    for ch, thresh in (("r", r_min), ("g", g_min), ("b", b_min)):
-        if thresh is not None:
-            requirements[ch] = thresh
+    for channel, threshold in (("r", r_min), ("g", g_min), ("b", b_min)):
+        if threshold is not None:
+            requirements[channel] = threshold
 
-    def _pred(muts: list[dict]) -> tuple[bool, str]:
+    def _pred(mutations: list[tuple[str, dict]]) -> tuple[bool, str]:
         seen = dict.fromkeys(requirements, False)
-        for tc in muts:
-            if tc["function"]["name"] not in ("add_primitive", "update_primitive"):
+        for name, args in mutations:
+            if name not in ("add_primitive", "update_primitive"):
                 continue
-            args = tc["function"]["arguments"]
-            args = json.loads(args) if isinstance(args, str) else args
             for key, expected in requirements.items():
                 if key == "prim_type":
                     if args.get("prim_type") == expected:
                         seen[key] = True
                 else:
-                    v = args.get(key)
-                    if v is not None and float(v) >= float(expected):
+                    value = args.get(key)
+                    if value is not None and float(value) >= float(expected):
                         seen[key] = True
         if all(seen.values()):
             return True, f"saw {requirements}"
-        missing = [k for k, v in seen.items() if not v]
+        missing = [key for key, hit in seen.items() if not hit]
         return False, f"missing facets: {missing} (wanted {requirements})"
 
     return _pred
 
 
-def _stacked_vertically(muts: list[dict]) -> tuple[bool, str]:
+def _stacked_vertically(mutations: list[tuple[str, dict]]) -> tuple[bool, str]:
     """Predicate for ``stack_*`` cases: every add_primitive must share the
-    same x/z column and have distinct y values, regardless of absolute
-    base height.  Floor stack and eye-level stack are both accepted."""
-    adds = [tc for tc in muts if tc["function"]["name"] == "add_primitive"]
+    same x/z column and have distinct y values, regardless of base height."""
+    adds = [args for name, args in mutations if name == "add_primitive"]
     if len(adds) < 2:
-        return False, f"need ≥2 add_primitive calls, got {len(adds)}"
-    rows = []
-    for tc in adds:
-        a = tc["function"]["arguments"]
-        a = json.loads(a) if isinstance(a, str) else a
-        rows.append((a.get("x", 0.0), a.get("y", 0.0), a.get("z", 0.0)))
-    xs = {round(r[0], 2) for r in rows}
-    zs = {round(r[2], 2) for r in rows}
+        return False, f"need >=2 add_primitive calls, got {len(adds)}"
+    rows = [(a.get("x", 0.0), a.get("y", 0.0), a.get("z", 0.0)) for a in adds]
+    xs = {round(row[0], 2) for row in rows}
+    zs = {round(row[2], 2) for row in rows}
     if len(xs) > 1 or len(zs) > 1:
         return False, f"x/z not aligned across stack: {rows}"
-    ys = sorted(round(r[1], 2) for r in rows)
-    for a, b in zip(ys, ys[1:]):
-        if b - a < 0.05:
-            return False, f"y values not separated (need ≥5 cm gap): {ys}"
+    ys = sorted(round(row[1], 2) for row in rows)
+    for low, high in zip(ys, ys[1:]):
+        if high - low < 0.05:
+            return False, f"y values not separated (need >=5 cm gap): {ys}"
     return True, f"stacked at y={ys}"
 
+
+PERCEPTION_TOOL = "look_at_current_frame"
 
 CASES = [
     # ── direct render ops ─────────────────────────────────────────────────────
@@ -288,7 +226,7 @@ CASES = [
         ],
         "user":  "Add a red sphere behind the green cube.",
         # Behind cube → z < cube.z (further from user). Anchor is the cube
-        # alone — y/x align with cube, not midpoint with the other sphere.
+        # alone: y/x align with cube, not midpoint with the other sphere.
         "result": [
             {"tool": "add_primitive",
              "args": {"prim_type": "sphere",
@@ -466,7 +404,7 @@ CASES = [
         "scene": [{"id": "sphere-0", "type": "sphere",
                    "pos": [0.5, 1.5, -1.5], "color": [1, 0, 0], "size": 0.2}],
         "user":  "Put a green cube on top of the sphere.",
-        # Scene `size` is radius for spheres / half-edge for boxes.
+        # render-mcp `size` is radius for spheres / half-edge for boxes.
         # Sphere top y = 1.5 + 0.2 = 1.7; a default cube (half-edge 0.1)
         # sits ON the sphere when its centre y ≈ 1.8.
         "result": [
@@ -582,7 +520,7 @@ CASES = [
             {"tool": "remove_primitive", "args": {"obj_id": "sphere-0"}},
             {"tool": "remove_primitive", "args": {"obj_id": "sphere-1"}},
         ],
-        "ignore_extra": False,  # the cube must NOT be removed
+        "ignore_extra": False,
     },
 
     # ── closer to me ──────────────────────────────────────────────────────────
@@ -701,7 +639,7 @@ CASES = [
         "scene": [{"id": "sphere-0", "type": "sphere",
                    "pos": [0.0, 1.6, -1.5], "color": [1, 0, 0], "size": 0.1}],
         "user":  "Turn the sphere into a cube.",
-        # Either path is fine — update_primitive(prim_type=box) OR
+        # Either path is fine: update_primitive(prim_type=box) OR
         # remove + add(prim_type=box).  Predicate enforces "a cube
         # exists at the end" without pinning which path the LLM picked.
         "result": [],
@@ -715,12 +653,12 @@ CASES = [
                    "pos": [0.5, 1.0, -1.5], "color": [0, 0.4, 1], "size": 0.1}],
         "user":  "Put a yellow sphere 1 meter above the cube.",
         # "1m above" can mean center+1m (=2.0) or top+1m (=2.15 with
-        # half-edge 0.1 + tolerance) — accept either.
+        # half-edge 0.1 + tolerance): accept either.
         "result": [
             {"tool": "add_primitive",
              "args": {"prim_type": "sphere",
                       "r": (0.7, 1.0), "g": (0.7, 1.0),
-                      # b not pinned — Nemotron occasionally leaks the cube's blue
+                      # b not pinned: Nemotron occasionally leaks the cube's blue
                       "x": (0.45, 0.55),
                       "y": (1.95, 2.20),
                       "z": (-1.55, -1.45)}},
@@ -836,7 +774,7 @@ CASES = [
             {"tool": "update_primitive",
              "args": {"obj_id": "sphere-1", "size": (0.11, 1.0)}},
         ],
-        # Plural-restricted target — the box must NOT also grow.
+        # Plural-restricted target: the box must NOT also grow.
         "ignore_extra": False,
     },
 
@@ -939,7 +877,7 @@ CASES = [
         ],
         "user":  "Move the red sphere to the left.",
         # Either sphere is a valid pick.  Empty result asserts
-        # "≥1 mutating call happened" — we don't pin which sphere.
+        # "≥1 mutating call happened": we don't pin which sphere.
         "result": [],
     },
 
@@ -1010,7 +948,7 @@ CASES = [
         ],
         # Bare "right 1 m" (no "my") isolates pronoun resolution from
         # anchor selection.  "It" should resolve to the blue sphere
-        # (subject of the last reply), which is at y=1.6 — guarding
+        # (subject of the last reply), which is at y=1.6: guarding
         # against the model picking the yellow one at y=0.6.
         "user":  "Move it right by 1 metre.",
         "result": [
@@ -1123,7 +1061,7 @@ CASES = [
              "pos": [ 0.14, 1.60, -0.92], "color": [0, 0, 1], "size": 0.1},
         ],
         "user":  "Move everything 1 meter further away.",
-        # All three should end up 1 m further from the user — z more
+        # All three should end up 1 m further from the user: z more
         # negative by ~1 at canonical pose.  y / x unchanged.
         "result": [
             {"tool": "update_primitive",
@@ -1219,7 +1157,7 @@ CASES = [
                       "y": ( 1.55, 1.65),
                       "z": (-1.55, -1.45)}},
         ],
-        # Cube must NOT move — that's what distinguishes this from swap.
+        # Cube must NOT move: that's what distinguishes this from swap.
         "ignore_extra": False,
     },
 
@@ -1245,9 +1183,7 @@ CASES = [
     # says "Put it above the blue sphere" expecting the existing
     # pyramid to be raised.  Model has historically picked add_primitive
     # ("clone the recently-named object") instead of update_primitive on
-    # the existing pyramid.  Pass-or-fail probe — captures the bug so
-    # we can iterate; the prompt-side rule lives in the
-    # "EXISTING ID → update_primitive" section.
+    # the existing pyramid.
     {
         "name":  "pronoun_after_swap_uses_update_not_add",
         "scene": [
@@ -1327,1010 +1263,47 @@ CASES = [
              "args": {"obj_id": "sphere-0", "y": (0.5, 1.61)}},
         ],
     },
+
+    # ── perception gating: real-world colour must come from the camera ───────
+    # The colour word is never in the utterance; the model must call
+    # look_at_current_frame FIRST and read the colour out of the answer.
+    # `vlm_answer` is what the mocked camera sees; `must_call_first` fails
+    # the case if the model mutates before (or without) looking.
+    {
+        "name":  "perception_color_of_held_object",
+        "scene": [],
+        "user":  "Make a sphere the same color as the thing I'm holding.",
+        "vlm_answer": "The user is holding a bright red apple.",
+        "must_call_first": PERCEPTION_TOOL,
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "sphere",
+                      "r": (0.7, 1.0), "g": (0.0, 0.4), "b": (0.0, 0.4)}},
+        ],
+    },
+    {
+        "name":  "perception_recolor_to_match_shirt",
+        "scene": [{"id": "sphere-0", "type": "sphere",
+                   "pos": [0.0, 1.6, -1.5], "color": [1, 1, 1], "size": 0.1}],
+        "user":  "Make the sphere the same color as my shirt.",
+        "vlm_answer": "The user's shirt is blue.",
+        "must_call_first": PERCEPTION_TOOL,
+        "result": [
+            {"tool": "update_primitive",
+             "args": {"obj_id": "sphere-0",
+                      "b": (0.5, 1.0), "r": (0.0, 0.3)}},
+        ],
+    },
+    {
+        "name":  "perception_wall_color_cube",
+        "scene": [],
+        "user":  "Add a cube that matches the color of the wall I'm looking at.",
+        "vlm_answer": "The wall is green.",
+        "must_call_first": PERCEPTION_TOOL,
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "box",
+                      "g": (0.5, 1.0), "r": (0.0, 0.4), "b": (0.0, 0.3)}},
+        ],
+    },
 ]
-
-
-def _format_scene(scene: list[dict]) -> str:
-    if not scene:
-        return "SCENE OBJECTS: (empty)"
-    lines = ["SCENE OBJECTS:"]
-    for o in scene:
-        x, y, z = o["pos"]
-        r, g, b = o["color"]
-        lines.append(
-            f"  {o['id']} ({o['type']})  "
-            f"pos=({x:.2f}, {y:.2f}, {z:.2f})  "
-            f"color=(r={r:.2f} g={g:.2f} b={b:.2f})  "
-            f"size={o['size']:.3f}m"
-        )
-    return "\n".join(lines)
-
-
-def _format_pose(pose: dict) -> str:
-    if not pose.get("is_valid"):
-        return "HEAD POSE: unavailable"
-    p, fv, rv, uv = pose["position"], pose["forward"], pose["right"], pose["up"]
-
-    def _off(vec, d):
-        return (f"({p['x']+vec['x']*d:.2f}, "
-                f"{p['y']+vec['y']*d:.2f}, "
-                f"{p['z']+vec['z']*d:.2f})")
-
-    return (
-        "HEAD POSE:\n"
-        f"  position : ({p['x']:.2f}, {p['y']:.2f}, {p['z']:.2f})\n"
-        f"  forward  : ({fv['x']:.3f}, {fv['y']:.3f}, {fv['z']:.3f})  ← 'ahead/forward'\n"
-        f"  right    : ({rv['x']:.3f}, {rv['y']:.3f}, {rv['z']:.3f})  ← 'right'\n"
-        f"  up       : ({uv['x']:.3f}, {uv['y']:.3f}, {uv['z']:.3f})  ← 'up'\n"
-        f"  yaw={pose.get('yaw_deg',0):.1f}°  pitch={pose.get('pitch_deg',0):.1f}°\n"
-        "SPATIAL SHORTCUTS (pre-computed — use directly, no tool call needed):\n"
-        f"  1.5m ahead of you     : {_off(fv,  1.5)}\n"
-        f"  1m to your right      : {_off(rv,  1.0)}\n"
-        f"  1m to your left       : {_off(rv, -1.0)}\n"
-        f"  0.5m above eye level  : {_off(uv,  0.5)}\n"
-        f"  1m behind you         : {_off(fv, -1.0)}\n"
-        "  For other distances: new_pos = obj.pos + direction_vec × distance (per component)"
-    )
-
-
-class _NullFrameEndpoint:
-    """Frame endpoint stub for offline tool-schema discovery.
-
-    The eval never pulls live pixels; it only needs the vision group to build so
-    ``look_at_current_frame`` / ``look_at_past_frame`` appear in the tool schema.
-    """
-
-    def on_frame(self, _cb) -> None:
-        pass
-
-    def on_participant(self, _cb) -> None:
-        pass
-
-
-async def _discover_tools() -> list[dict]:
-    with tempfile.TemporaryDirectory(prefix="xr-render-eval-") as text_memory_dir:
-        capabilities = NativeCapabilities(
-            scene_endpoint=_WORKER_CFG.scene_endpoint,
-            openxr_endpoint=_WORKER_CFG.openxr_endpoint,
-            video_memory_endpoint=_WORKER_CFG.video_memory_endpoint,
-            frame_endpoint=_NullFrameEndpoint(),
-            vlm=object(),
-            text_memory_dir=text_memory_dir,
-        )
-        try:
-            # Present the model trimmed perception schemas (the worker injects
-            # participant/reference context into the native request models).
-            definitions = [
-                definition
-                for definition in tool_definitions(capabilities.model)
-                if definition.name not in {LIVE_PERCEPTION_TOOL, PAST_PERCEPTION_TOOL}
-            ]
-            definitions.extend(PERCEPTION_TOOL_DEFS)
-            return [definition.to_openai() for definition in definitions]
-        finally:
-            await capabilities.close()
-
-
-def _format_recent_moves(moves: list[tuple] | None) -> str:
-    """Render the same `[Recent moves]` block the worker injects.  Each
-    `moves` entry is (obj_id, (px, py, pz), (nx, ny, nz)).
-    """
-    if not moves:
-        return ""
-    lines = ["[Recent moves] (most recent last — prev → new)"]
-    for obj_id, prev, new in moves:
-        lines.append(
-            f"  {obj_id}: ({prev[0]:.2f}, {prev[1]:.2f}, {prev[2]:.2f}) → "
-            f"({new[0]:.2f}, {new[1]:.2f}, {new[2]:.2f})"
-        )
-    return "\n".join(lines)
-
-
-def _format_recent_conversation(history: list[tuple[str, str]] | None) -> str:
-    """Render the same `[Recent conversation]` block the worker injects.
-    Each entry is (prior_user_text, prior_agent_reply).
-    """
-    if not history:
-        return ""
-    lines = ["[Recent conversation]"]
-    for u, a in history:
-        lines.append(f"  User: {u}")
-        lines.append(f"  Agent: {a}")
-    return "\n".join(lines)
-
-
-def _build_messages(system_prompt: str, scene: list[dict], pose: dict, user: str,
-                    history: list[tuple[str, str]] | None = None,
-                    recent_moves: list[tuple] | None = None) -> list[dict]:
-    """Build the worker-equivalent chat messages.  Prior turns go into
-    a ``[Recent conversation]`` block inside the single user-role
-    context message — injecting them as ``role=assistant`` biases
-    Nemotron toward text-only replies and away from tool calls."""
-    context_parts = [_format_scene(scene), _format_pose(pose)]
-    moves_block = _format_recent_moves(recent_moves)
-    if moves_block:
-        context_parts.append(moves_block)
-    conv_block = _format_recent_conversation(history)
-    if conv_block:
-        context_parts.append(conv_block)
-    context = "\n".join(context_parts)
-    return [
-        {"role": "system", "content": system_prompt},
-        {"role": "user",   "content": (
-            "[Pre-fetched context — do not call get_scene_state or "
-            "get_head_pose unless you need to refresh after changes]\n"
-            f"{context}\n\n[Request]\n{user}"
-        )},
-    ]
-
-
-def _local_position_relative(args: dict, pose: dict) -> dict:
-    """Mirror native position_relative — gravity-aligned (yaw is honoured;
-    pitch and roll are stripped). Up is world +Y."""
-    f, r = pose["forward"], pose["right"]
-    p = pose["position"]
-    fwd = float(args.get("forward", 0.0))
-    rgt = float(args.get("right",   0.0))
-    up_ = float(args.get("up",      0.0))
-    ox = float(args.get("origin_x", p["x"]))
-    oy = float(args.get("origin_y", p["y"]))
-    oz = float(args.get("origin_z", p["z"]))
-
-    fx, fz = f["x"], f["z"]
-    mag = math.sqrt(fx*fx + fz*fz)
-    if mag < 1e-6:
-        rx0, rz0 = r["x"], r["z"]
-        mag2 = math.sqrt(rx0*rx0 + rz0*rz0)
-        if mag2 < 1e-6:
-            fx, fz = 0.0, -1.0
-        else:
-            rx0, rz0 = rx0 / mag2, rz0 / mag2
-            fx, fz = rz0, -rx0
-    else:
-        fx, fz = fx / mag, fz / mag
-    rx, rz = -fz, fx
-
-    return {
-        "x": round(ox + fx*fwd + rx*rgt, 3),
-        "y": round(oy + up_,             3),
-        "z": round(oz + fz*fwd + rz*rgt, 3),
-    }
-
-
-def _local_position_ahead(args: dict, pose: dict) -> dict:
-    f, p = pose["forward"], pose["position"]
-    d = float(args.get("distance", 1.5))
-    return {
-        "x": round(p["x"] + f["x"]*d, 3),
-        "y": round(p["y"] + f["y"]*d, 3),
-        "z": round(p["z"] + f["z"]*d, 3),
-    }
-
-
-def _ground_basis(pose: dict) -> tuple[tuple[float, float], tuple[float, float]]:
-    """Return the gravity-aligned forward and right basis used by native spatial tools."""
-    f, r = pose["forward"], pose["right"]
-    fx, fz = f["x"], f["z"]
-    mag = math.sqrt(fx * fx + fz * fz)
-    if mag < 1e-6:
-        rx0, rz0 = r["x"], r["z"]
-        mag2 = math.sqrt(rx0 * rx0 + rz0 * rz0)
-        if mag2 < 1e-6:
-            fx, fz = 0.0, -1.0
-        else:
-            rx0, rz0 = rx0 / mag2, rz0 / mag2
-            fx, fz = rz0, -rx0
-    else:
-        fx, fz = fx / mag, fz / mag
-    return (fx, fz), (-fz, fx)
-
-
-def _local_place_user_relative(args: dict, pose: dict) -> dict:
-    direction = args.get("direction", "front")
-    distance = float(args.get("distance", 1.5))
-    if distance < 0:
-        return {"error": "distance must be non-negative"}
-    p = pose["position"]
-    (fx, fz), (rx, rz) = _ground_basis(pose)
-    dx = dy = dz = 0.0
-    if direction == "front":
-        dx, dz = fx * distance, fz * distance
-    elif direction == "back":
-        dx, dz = -fx * distance, -fz * distance
-    elif direction == "right":
-        dx, dz = rx * distance, rz * distance
-    elif direction == "left":
-        dx, dz = -rx * distance, -rz * distance
-    elif direction == "above":
-        dy = distance
-    elif direction == "below":
-        dy = -distance
-    return {
-        "x": round(p["x"] + dx, 3),
-        "y": round(p["y"] + dy, 3),
-        "z": round(p["z"] + dz, 3),
-    }
-
-
-def _local_world_offset(args: dict, _pose: dict) -> dict:
-    """Mirror native world_offset — origin + (dx, dy, dz)."""
-    ox = float(args.get("origin_x", 0.0))
-    oy = float(args.get("origin_y", 0.0))
-    oz = float(args.get("origin_z", 0.0))
-    dx = float(args.get("dx", 0.0))
-    dy = float(args.get("dy", 0.0))
-    dz = float(args.get("dz", 0.0))
-    return {"x": round(ox + dx, 3), "y": round(oy + dy, 3), "z": round(oz + dz, 3)}
-
-
-def _local_along_direction(args: dict, _pose: dict) -> dict:
-    """Mirror native along_direction — origin moved `distance` toward target."""
-    ox = float(args.get("origin_x", 0.0))
-    oy = float(args.get("origin_y", 0.0))
-    oz = float(args.get("origin_z", 0.0))
-    tx = float(args.get("target_x", 0.0))
-    ty = float(args.get("target_y", 0.0))
-    tz = float(args.get("target_z", 0.0))
-    d  = float(args.get("distance", 0.5))
-    vx, vy, vz = tx - ox, ty - oy, tz - oz
-    mag = math.sqrt(vx*vx + vy*vy + vz*vz)
-    if mag < 1e-9:
-        return {"error": "origin and target coincide"}
-    return {
-        "x": round(ox + vx * d / mag, 3),
-        "y": round(oy + vy * d / mag, 3),
-        "z": round(oz + vz * d / mag, 3),
-    }
-
-
-def _local_scale_value(args: dict, _pose: dict) -> dict:
-    """Mirror native scale_value — current * factor."""
-    cur = float(args.get("current", 0.0))
-    fac = float(args.get("factor",  1.0))
-    return {"value": round(cur * fac, 3)}
-
-
-def _local_place_inside_by_id(args: dict, _pose: dict) -> dict:
-    """Mirror native place_inside_by_id — container coords echoed back
-    alongside the movee's id so the result feeds straight into
-    update_primitive."""
-    for field in ("movee_id", "container_x", "container_y", "container_z"):
-        if args.get(field) is None:
-            return {"error": f"missing {field}"}
-    return {
-        "obj_id": args["movee_id"],
-        "x":      round(float(args["container_x"]), 3),
-        "y":      round(float(args["container_y"]), 3),
-        "z":      round(float(args["container_z"]), 3),
-    }
-
-
-def _local_between_anchors(args: dict, _pose: dict) -> dict:
-    """Mirror native between_anchors — component-wise midpoint of A and B."""
-    a_x, a_y, a_z = (float(args.get("a_x", 0.0)),
-                     float(args.get("a_y", 0.0)),
-                     float(args.get("a_z", 0.0)))
-    b_x, b_y, b_z = (float(args.get("b_x", 0.0)),
-                     float(args.get("b_y", 0.0)),
-                     float(args.get("b_z", 0.0)))
-    return {
-        "x": round((a_x + b_x) / 2.0, 3),
-        "y": round((a_y + b_y) / 2.0, 3),
-        "z": round((a_z + b_z) / 2.0, 3),
-    }
-
-
-def _local_displace_objects(args: dict, pose: dict) -> dict:
-    """Mirror native displace_objects — same user-frame delta applied
-    to every (id, x, y, z) entry; returns {items: [...]}."""
-    for field in ("object_ids", "current_xs", "current_ys", "current_zs"):
-        if args.get(field) is None:
-            return {"error": f"missing {field}"}
-    ids = list(args["object_ids"])
-    xs  = list(args["current_xs"])
-    ys  = list(args["current_ys"])
-    zs  = list(args["current_zs"])
-    n = len(ids)
-    if not (len(xs) == n and len(ys) == n and len(zs) == n):
-        return {"error": "object_ids / current_xs / current_ys / current_zs "
-                         "must all be the same length"}
-    if n == 0:
-        return {"items": []}
-    right   = float(args.get("right",   0.0))
-    up_     = float(args.get("up",      0.0))
-    forward = float(args.get("forward", 0.0))
-    (fx, fz), (rx, rz) = _ground_basis(pose)
-    items = []
-    for i in range(n):
-        cx, cy, cz = float(xs[i]), float(ys[i]), float(zs[i])
-        items.append({
-            "obj_id": ids[i],
-            "x": round(cx + fx * forward + rx * right, 3),
-            "y": round(cy + up_,                       3),
-            "z": round(cz + fz * forward + rz * right, 3),
-        })
-    return {"items": items}
-
-
-def _local_displace_object(args: dict, pose: dict) -> dict:
-    """Mirror native displace_object — current + user-frame delta."""
-    for field in ("current_x", "current_y", "current_z"):
-        if args.get(field) is None:
-            return {"error": f"missing {field}"}
-    cx = float(args["current_x"])
-    cy = float(args["current_y"])
-    cz = float(args["current_z"])
-    right   = float(args.get("right",   0.0))
-    up_     = float(args.get("up",      0.0))
-    forward = float(args.get("forward", 0.0))
-    (fx, fz), (rx, rz) = _ground_basis(pose)
-    return {
-        "x": round(cx + fx * forward + rx * right, 3),
-        "y": round(cy + up_,                       3),
-        "z": round(cz + fz * forward + rz * right, 3),
-    }
-
-
-def _local_place_object_relative(args: dict, pose: dict) -> dict:
-    direction = args.get("direction", "front")
-    distance = float(args.get("distance", 0.3))
-    if distance < 0:
-        return {"error": "distance must be non-negative"}
-    ox = float(args.get("origin_x", 0.0))
-    oy = float(args.get("origin_y", 0.0))
-    oz = float(args.get("origin_z", 0.0))
-    (fx, fz), (rx, rz) = _ground_basis(pose)
-    dx = dy = dz = 0.0
-    if direction == "front":
-        dx, dz = -fx * distance, -fz * distance
-    elif direction == "back":
-        dx, dz = fx * distance, fz * distance
-    elif direction == "right":
-        dx, dz = rx * distance, rz * distance
-    elif direction == "left":
-        dx, dz = -rx * distance, -rz * distance
-    elif direction == "next_to":
-        dx, dz = rx * distance, rz * distance
-    elif direction == "above":
-        dy = distance
-    elif direction == "below":
-        dy = -distance
-    return {
-        "x": round(ox + dx, 3),
-        "y": round(oy + dy, 3),
-        "z": round(oz + dz, 3),
-    }
-
-
-_ADD_COUNTER: dict[str, int] = {}
-
-
-def _reset_exec_state() -> None:
-    _ADD_COUNTER.clear()
-
-
-# Per-case scratch state read by the local tool mocks in _exec_tool.
-# Reset before every rollout via _reset_exec_state / _set_*.
-_FIXTURE_SCENE: list[dict] = []
-_CASE_HISTORY: list[tuple[str, str]] = []
-_CASE_MOVES: list[tuple] = []
-
-
-def _set_fixture_scene(scene: list[dict]) -> None:
-    _FIXTURE_SCENE.clear()
-    _FIXTURE_SCENE.extend(scene)
-
-
-def _set_case_history(history: list[tuple[str, str]] | None) -> None:
-    _CASE_HISTORY.clear()
-    if history:
-        _CASE_HISTORY.extend(history)
-
-
-def _set_case_moves(moves: list[tuple] | None) -> None:
-    _CASE_MOVES.clear()
-    if moves:
-        _CASE_MOVES.extend(moves)
-
-
-def _fixture_scene_as_render() -> dict:
-    """Echo the case's fixture scene in the native scene-state shape.
-    This prevents retry loops where the model refreshes the scene and receives
-    an empty result instead of the fixture it was given."""
-    return {"objects": [
-        {"id":       o["id"],
-         "type":     o["type"],
-         "position": {"x": o["pos"][0], "y": o["pos"][1], "z": o["pos"][2]},
-         "color":    {"r": o["color"][0], "g": o["color"][1], "b": o["color"][2]},
-         "size":     o.get("size", 0.1)}
-        for o in _FIXTURE_SCENE
-    ]}
-
-
-async def _exec_tool(name: str, args_json: str, pose: dict) -> dict:
-    """Execute a tool call. Spatial tools run locally against the
-    case's fixture pose so rollouts are deterministic.  add_primitive
-    returns a fresh per-rollout id (otherwise the model spawns the
-    same object N times waiting to "see" it); update / remove return
-    ok.  Unknown tools return a sentinel."""
-    args = json.loads(args_json) if isinstance(args_json, str) else (args_json or {})
-    if name == "position_relative":
-        return _local_position_relative(args, pose)
-    if name == "position_ahead":
-        return _local_position_ahead(args, pose)
-    if name == "place_user_relative":
-        return _local_place_user_relative(args, pose)
-    if name == "place_object_relative":
-        return _local_place_object_relative(args, pose)
-    if name == "place_inside_by_id":
-        return _local_place_inside_by_id(args, pose)
-    if name == "displace_object":
-        return _local_displace_object(args, pose)
-    if name == "displace_objects":
-        return _local_displace_objects(args, pose)
-    if name == "between_anchors":
-        return _local_between_anchors(args, pose)
-    if name == "world_offset":
-        return _local_world_offset(args, pose)
-    if name == "along_direction":
-        return _local_along_direction(args, pose)
-    if name == "scale_value":
-        return _local_scale_value(args, pose)
-    if name == "get_head_pose":
-        return pose
-    if name == "add_primitive":
-        prim = args.get("prim_type", "sphere")
-        n = _ADD_COUNTER.get(prim, -1) + 1
-        _ADD_COUNTER[prim] = n
-        return {"id": f"{prim}-{n}", "ok": True}
-    if name == "update_primitive":
-        return {"ok": True}
-    if name == "remove_primitive":
-        return {"ok": True}
-    if name == "get_scene_state":
-        return _fixture_scene_as_render()
-    return {"_eval_skipped": True, "reason": f"{name} not in safe-exec list"}
-
-
-async def _run_one(http: httpx.AsyncClient, system_prompt: str,
-                   tools: list[dict], scene: list[dict], pose: dict,
-                   user: str, *, thinking: bool = False,
-                   max_steps: int = 1) -> dict:
-    """Run up to ``max_steps`` LLM iterations against the agent LLM,
-    mocking tool execution between turns via ``_exec_tool``.  Returns
-    ``{latency_s, tool_calls, content, reasoning}``: ``tool_calls`` is
-    every tool call emitted across all turns (in order), ``content`` /
-    ``reasoning`` are from the final turn.
-    """
-    _reset_exec_state()
-    _set_fixture_scene(scene)
-    messages = _build_messages(system_prompt, scene, pose, user,
-                               _CASE_HISTORY, _CASE_MOVES)
-    all_calls: list[dict] = []
-    last_msg: dict = {}
-    t_total = 0.0
-
-    for _step in range(max_steps):
-        body = {
-            "model": AGENT_MODEL,
-            "messages": messages,
-            "tools": tools,
-            "max_tokens": 2048 if thinking else 1024,
-            "temperature": 0.0,
-            "chat_template_kwargs": {
-                "enable_thinking": thinking,
-                **({"thinking_budget": 1024} if thinking else {}),
-            },
-        }
-        t0 = time.time()
-        headers = {"Authorization": f"Bearer {AGENT_KEY}"} if AGENT_KEY else None
-        # Retry on transient 5xx / network errors; non-5xx still raise.
-        for attempt in range(3):
-            try:
-                r = await http.post(AGENT_LLM, json=body, timeout=180.0, headers=headers)
-                if r.status_code >= 500 and attempt < 2:
-                    await asyncio.sleep(2.0 * (attempt + 1))
-                    continue
-                r.raise_for_status()
-                break
-            except (httpx.TimeoutException, httpx.NetworkError):
-                if attempt >= 2:
-                    raise
-                await asyncio.sleep(2.0 * (attempt + 1))
-        t_total += time.time() - t0
-        msg = r.json()["choices"][0]["message"]
-        last_msg = msg
-        tcs = msg.get("tool_calls") or []
-        if not tcs:
-            break
-        # A turn can emit multiple parallel tool calls (e.g. compound
-        # utterances), so extend rather than append.
-        all_calls.extend(tcs)
-        if _step + 1 >= max_steps:
-            break
-        new_msgs: list[dict] = [{"role": "assistant", "content": "", "tool_calls": tcs}]
-        for tc in tcs:
-            fn = tc["function"]
-            result = await _exec_tool(fn["name"], fn["arguments"], pose)
-            new_msgs.append({"role": "tool", "tool_call_id": tc["id"],
-                             "content": json.dumps(result, default=str)})
-        messages = messages + new_msgs
-
-    return {"latency_s":  round(t_total, 2),
-            "tool_calls": all_calls,
-            "content":    (last_msg.get("content") or "").strip(),
-            "reasoning":  (last_msg.get("reasoning_content") or "").strip()}
-
-
-# update_primitive arg -> (scene-object-field, optional index).  Used to
-# resolve "absent arg means kept original value" so partial updates
-# (e.g. ``{x: -1.0}`` for "move left 1m") are checked against the
-# effective resulting position, not just the bytes the LLM emitted.
-_SCENE_ARG_LOOKUP = {
-    "x": ("pos", 0), "y": ("pos", 1), "z": ("pos", 2),
-    "r": ("color", 0), "g": ("color", 1), "b": ("color", 2),
-    "size": ("size", None), "prim_type": ("type", None),
-}
-
-
-def _resolve_arg(obj_id: str, key: str, scene: list[dict]):
-    field = _SCENE_ARG_LOOKUP.get(key)
-    if not field:
-        return None
-    obj = next((o for o in scene if o.get("id") == obj_id), None)
-    if obj is None:
-        return None
-    src, idx = field
-    val = obj.get(src)
-    if idx is None:
-        return val
-    return val[idx] if val is not None and idx < len(val) else None
-
-
-def _match_call(call: dict, expect: dict, scene: list[dict] | None = None) -> tuple[bool, str]:
-    fn = call["function"]
-    if fn["name"] != expect["tool"]:
-        return False, f"tool={fn['name']} want={expect['tool']}"
-    args = json.loads(fn["arguments"]) if isinstance(fn["arguments"], str) else fn["arguments"]
-    fails = []
-    for k, want in expect.get("args", {}).items():
-        got = args.get(k)
-        if got is None and fn["name"] == "update_primitive" and scene:
-            obj_id = args.get("obj_id")
-            if obj_id:
-                got = _resolve_arg(obj_id, k, scene)
-        if got is None:
-            fails.append(f"{k}=missing"); continue
-        if isinstance(want, tuple):
-            lo, hi = want
-            # Some models emit numeric args as strings; coerce before compare.
-            if isinstance(got, str):
-                try:
-                    got = float(got)
-                except ValueError:
-                    fails.append(f"{k}={got!r} not numeric, want [{lo},{hi}]")
-                    continue
-            if not (lo <= got <= hi):
-                fails.append(f"{k}={got} not in [{lo},{hi}]")
-        else:
-            if got != want:
-                fails.append(f"{k}={got!r} want={want!r}")
-    return (not fails), ("ok" if not fails else "; ".join(fails))
-
-
-_MUTATING_TOOLS = frozenset({"add_primitive", "update_primitive", "remove_primitive"})
-
-
-def _check(actual: dict, case: dict) -> tuple[bool, str]:
-    """Match ``case['result']`` against the mutating tool calls
-    (add/update/remove_primitive) emitted during the rollout.  Order-
-    independent; helper/math calls are ignored.  ``ignore_extra``
-    (default True) allows extra mutations beyond the expectation.
-
-    Empty ``result`` is the "any path is fine" mode: the case still
-    requires at least one mutating call to have happened (otherwise a
-    silent no-op would pass).
-    """
-    tcs = actual["tool_calls"]
-    wanted = list(case.get("result") or [])
-    muts = [tc for tc in tcs if tc["function"]["name"] in _MUTATING_TOOLS]
-    if not wanted and not muts:
-        names = [tc["function"]["name"] for tc in tcs]
-        return False, f"no mutating calls: {names}"
-    scene = case.get("scene") or []
-    unmatched_actuals = list(muts)
-    unmatched_expected: list[dict] = []
-    for exp in wanted:
-        for idx, ac in enumerate(unmatched_actuals):
-            ok, _ = _match_call(ac, exp, scene)
-            if ok:
-                unmatched_actuals.pop(idx); break
-        else:
-            unmatched_expected.append(exp)
-    if unmatched_expected:
-        missing = "; ".join(
-            f"{e['tool']}({e.get('args',{})})" for e in unmatched_expected
-        )
-        actual_summary = [
-            f"{tc['function']['name']}({tc['function']['arguments']})"
-            for tc in muts
-        ]
-        return False, f"unmatched result: {missing} | actual mutations: {actual_summary}"
-    if not case.get("ignore_extra", True) and unmatched_actuals:
-        extras = [tc["function"]["name"] for tc in unmatched_actuals]
-        return False, f"extra mutating calls: {extras}"
-    predicate = case.get("predicate")
-    if predicate is not None:
-        ok, msg = predicate(muts)
-        if not ok:
-            return False, f"predicate failed: {msg}"
-    return True, f"matched {len(wanted)} mutation(s)"
-
-
-# max LLM iterations per turn (mirrors scene_loop.py _MAX_LOOP).
-_MAX_STEPS = 10
-
-
-# Reserved-prompt-vocabulary sets used by check #4 in
-# _check_prompt_eval_overlap (see that docstring and eval/README.md).
-_EVAL_VOCAB_COLORS = frozenset({
-    "red", "green", "blue", "cyan", "brown", "yellow",
-})
-_EVAL_VOCAB_SHAPES = frozenset({
-    "sphere", "spheres", "cube", "cubes", "box", "boxes",
-    "pyramid", "pyramids",
-})
-
-# Worked-example section start markers (case-insensitive).  A section
-# runs from the marker line through the first blank line; triple-backtick
-# fences are also captured as blocks (everything between the fences).
-_EXAMPLE_START_RE = re.compile(
-    r"^\s*(?:"
-    r"WORKED\s+EXAMPLE\b|WORKED\s+ANTI-?EXAMPLE\b|"
-    r"Examples?:|"
-    r"iter\s+\d+\s*:|"
-    r"tool_call\s+\d+\s*:"
-    r")",
-    re.IGNORECASE,
-)
-
-
-def _extract_example_blocks(sp: str) -> list[tuple[int, str]]:
-    """Slice the system prompt into worked-example sections.
-
-    Returns ``[(start_line_1_indexed, block_text), …]``.  A section is
-    either everything between a pair of triple-backtick fences, or
-    everything from a marker line (``WORKED EXAMPLE``, ``Example:``,
-    ``iter N:``, ``tool_call N:``) through the first following blank
-    line.
-    """
-    blocks: list[tuple[int, str]] = []
-    lines = sp.splitlines()
-    in_fence = False
-    fence_start = 0
-    fence_buf: list[str] = []
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        if line.lstrip().startswith("```"):
-            if in_fence:
-                blocks.append((fence_start, "\n".join(fence_buf)))
-                in_fence = False
-                fence_buf = []
-            else:
-                in_fence = True
-                fence_start = i + 1
-            i += 1
-            continue
-        if in_fence:
-            fence_buf.append(line)
-            i += 1
-            continue
-        if _EXAMPLE_START_RE.match(line):
-            start = i + 1
-            buf = [line]
-            i += 1
-            while i < len(lines) and lines[i].strip():
-                buf.append(lines[i])
-                i += 1
-            blocks.append((start, "\n".join(buf)))
-            continue
-        i += 1
-    if in_fence and fence_buf:
-        blocks.append((fence_start, "\n".join(fence_buf)))
-    return blocks
-
-
-def _case_fixture_vocab(c: dict) -> tuple[set[str], set[str]]:
-    """Eval-vocab colour/shape words actually present in this case's
-    fixture (user utterance, history dialogue, scene type tags, ids).
-    Used to attribute reserved-vocab violations to specific cases."""
-    parts: list[str] = [c.get("user") or ""]
-    for pair in c.get("history") or []:
-        parts.extend(pair)
-    for o in c.get("scene") or []:
-        if t := o.get("type"):
-            parts.append(t)
-        if oid := o.get("id"):
-            parts.append(oid)
-    blob = " ".join(parts).lower()
-    colors = {w for w in _EVAL_VOCAB_COLORS if re.search(rf"\b{w}\b", blob)}
-    shapes = {w for w in _EVAL_VOCAB_SHAPES if re.search(rf"\b{w}\b", blob)}
-    return colors, shapes
-
-
-def _check_prompt_eval_overlap(
-    system_prompt: str, cases: list[dict]
-) -> tuple[set[str], list[str]]:
-    """Detect overlap between prompt worked-examples and eval case
-    fixtures.  An overlap turns a generalization probe into a
-    memorization check (see AGENTS.md "Change contract").
-
-    Four checks run, each across every case:
-      1. Verbatim user utterance (≥12 chars) appearing in the prompt.
-      2. Concrete scene coordinates rendered like ``(x.xx, y.yy, z.zz)``
-         appearing in the prompt.
-      3. ``recent_moves`` coords appearing in the prompt.
-      4. Reserved-prompt-vocabulary: worked-example sections of
-         system.txt must not use any colour/shape word from the
-         eval-case vocabulary (``_EVAL_VOCAB_COLORS`` /
-         ``_EVAL_VOCAB_SHAPES``).  Worked-example sections are
-         triple-backtick blocks and any block starting with
-         ``WORKED EXAMPLE`` / ``Example:`` / ``iter N:`` /
-         ``tool_call N:``.  Rule narration outside those blocks
-         is unrestricted — the colour table, anchor-routing rules,
-         etc. may still mention ``red sphere`` generically.
-
-    Returns ``(overlapping_case_names, issue_lines)``.  The set is the
-    distinct cases that overlap (caller uses the count for the score
-    caveat); the list is per-issue detail strings.  Both are empty
-    when no overlaps.
-    """
-    sp = system_prompt
-    issues: list[str] = []
-    overlapping: set[str] = set()
-    for c in cases:
-        name = c.get("name", "<unnamed>")
-        before = len(issues)
-        # 1. Verbatim user utterance (case-insensitive substring) appearing
-        #    in the prompt.  Short utterances <12 chars are skipped to
-        #    avoid noise like "Move it." matching every example.
-        u = (c.get("user") or "").strip().rstrip(".!?")
-        if u and len(u) >= 12 and u.lower() in sp.lower():
-            issues.append(f"  {name}: user utterance {u!r} appears verbatim in system.txt")
-        # 2. Concrete scene coordinates (rendered like "(0.50, 1.60, -1.50)")
-        #    appearing in the prompt.
-        for o in c.get("scene") or []:
-            x, y, z = o["pos"]
-            coord = f"({x:.2f}, {y:.2f}, {z:.2f})"
-            if coord in sp:
-                issues.append(
-                    f"  {name}: scene object {o['id']!r} coords {coord} "
-                    f"appear verbatim in system.txt"
-                )
-                break
-        # 3. recent_moves coords landing in the prompt.
-        for entry in c.get("recent_moves") or []:
-            _obj, prev, new = entry
-            for triple in (prev, new):
-                coord = f"({triple[0]:.2f}, {triple[1]:.2f}, {triple[2]:.2f})"
-                if coord in sp:
-                    issues.append(
-                        f"  {name}: recent_moves coords {coord} appear "
-                        f"verbatim in system.txt"
-                    )
-                    break
-        if len(issues) > before:
-            overlapping.add(name)
-
-    # 4. Reserved-prompt-vocabulary.  Built second so it's reported as a
-    #    block after the verbatim checks, but the case names it
-    #    attributes still feed the same ``overlapping`` set used by the
-    #    score-line suffix.
-    case_index_colors: dict[str, list[str]] = {w: [] for w in _EVAL_VOCAB_COLORS}
-    case_index_shapes: dict[str, list[str]] = {w: [] for w in _EVAL_VOCAB_SHAPES}
-    for c in cases:
-        cname = c.get("name", "<unnamed>")
-        cc, cs = _case_fixture_vocab(c)
-        for w in cc:
-            case_index_colors[w].append(cname)
-        for w in cs:
-            case_index_shapes[w].append(cname)
-
-    color_alt = "|".join(sorted(_EVAL_VOCAB_COLORS))
-    shape_alt = "|".join(sorted(_EVAL_VOCAB_SHAPES))
-    pair_re   = re.compile(rf"\b({color_alt})\s+({shape_alt})\b", re.IGNORECASE)
-    color_re  = re.compile(rf"\b({color_alt})\b", re.IGNORECASE)
-    shape_re  = re.compile(rf"\b({shape_alt})\b", re.IGNORECASE)
-
-    for start_line, block_text in _extract_example_blocks(sp):
-        seen_words: set[str] = set()
-        # Adjacent "<color> <shape>" — the canonical violation shape.
-        for m in pair_re.finditer(block_text):
-            color = m.group(1).lower()
-            shape = m.group(2).lower()
-            offenders = sorted(set(case_index_colors.get(color, []))
-                               | set(case_index_shapes.get(shape, [])))
-            for case_name in offenders:
-                issues.append(
-                    f"  {case_name}: example block at line {start_line} "
-                    f"uses '{color} {shape}' which also appears in case fixture"
-                )
-                overlapping.add(case_name)
-            seen_words.add(color)
-            seen_words.add(shape)
-        # Lone colour or shape words not already counted in a pair.
-        for m in color_re.finditer(block_text):
-            w = m.group(1).lower()
-            if w in seen_words:
-                continue
-            seen_words.add(w)
-            for case_name in case_index_colors.get(w, []):
-                issues.append(
-                    f"  {case_name}: example block at line {start_line} "
-                    f"uses '{w}' which also appears in case fixture"
-                )
-                overlapping.add(case_name)
-        for m in shape_re.finditer(block_text):
-            w = m.group(1).lower()
-            if w in seen_words:
-                continue
-            seen_words.add(w)
-            for case_name in case_index_shapes.get(w, []):
-                issues.append(
-                    f"  {case_name}: example block at line {start_line} "
-                    f"uses '{w}' which also appears in case fixture"
-                )
-                overlapping.add(case_name)
-
-    return overlapping, issues
-
-
-async def main() -> None:
-    global AGENT_LLM, AGENT_MODEL, AGENT_KEY
-
-    p = argparse.ArgumentParser()
-    p.add_argument("query", nargs="?", help="ad-hoc query (skips case suite)")
-    p.add_argument("--prompt", type=Path, default=SYS_PROMPT)
-    p.add_argument("--only",
-                   help="comma-separated list of case names to run; all other "
-                        "cases are skipped.  Useful for fast iteration on a "
-                        "single failing cluster.  Mutually exclusive with the "
-                        "positional `query` arg.")
-    p.add_argument("--thinking", action="store_true")
-    p.add_argument("--verbose",  action="store_true")
-    p.add_argument("--strict-overlap", action="store_true",
-                   help="fail (rc=2) if any case fixture overlaps with the "
-                        "system prompt's worked examples — turn on in CI to "
-                        "guard against silent train-on-test drift")
-    # agent-LLM endpoint overrides — default to whatever the worker yaml
-    # points at (local vLLM on 8108 in dev); set to point at
-    # build.nvidia.com etc. when scoring against a hosted model.
-    p.add_argument("--agent-llm", default=os.environ.get("AGENT_LLM_URL", AGENT_LLM),
-                   help="full /v1/chat/completions URL for the agent LLM")
-    p.add_argument("--agent-model", default=os.environ.get("AGENT_LLM_MODEL", "llm"),
-                   help="model name sent in the chat-completion request body")
-    p.add_argument("--agent-api-key",
-                   default=(os.environ.get("NVIDIA_API_KEY", "")
-                            or os.environ.get("NGC_API_KEY", "")),
-                   help="Bearer token for the agent LLM "
-                        "(env NVIDIA_API_KEY or NGC_API_KEY)")
-    args = p.parse_args()
-
-    AGENT_LLM   = args.agent_llm
-    AGENT_MODEL = args.agent_model
-    AGENT_KEY   = args.agent_api_key
-
-    if args.only and args.query:
-        p.error("--only and a positional query are mutually exclusive")
-
-    # Honour a sibling .only file as a shorthand for --only (see
-    # eval/README.md "Watcher" section for the file format).
-    only_file = _HERE / ".only"
-    if not args.only and not args.query and only_file.exists():
-        names: list[str] = []
-        for raw in only_file.read_text(encoding="utf-8").splitlines():
-            line = raw.split("#", 1)[0].strip()
-            if not line:
-                continue
-            for tok in line.split(","):
-                tok = tok.strip()
-                if tok:
-                    names.append(tok)
-        if names:
-            args.only = ",".join(names)
-            print(f"FILTER: {only_file.name} → {names}")
-
-    system_prompt = args.prompt.read_text(encoding="utf-8").strip()
-    print(f"PROMPT: {args.prompt}  ({len(system_prompt)} chars)")
-    is_remote = not AGENT_LLM.lower().startswith(("http://localhost", "http://127.", "http://0.0.0.0"))
-    print(f"AGENT-LLM: {AGENT_LLM}  model={AGENT_MODEL}"
-          + ("  [remote, auth=on]" if is_remote and AGENT_KEY else "")
-          + ("  [remote, auth=MISSING]" if is_remote and not AGENT_KEY else "")
-          + ("  [local]" if not is_remote else ""))
-
-    tools = await _discover_tools()
-    tool_names = [t["function"]["name"] for t in tools]
-    print(f"TOOLS:  {tool_names}")
-
-    pose = DEFAULT_POSE
-    if args.verbose:
-        print("POSE:", json.dumps(pose))
-
-    async with httpx.AsyncClient() as http:
-        if args.query:
-            r = await _run_one(http, system_prompt, tools, [], pose,
-                               args.query, thinking=args.thinking)
-            print(json.dumps(r, indent=2))
-            return
-
-        cases = list(CASES)
-        if args.only:
-            requested = [n.strip() for n in args.only.split(",") if n.strip()]
-            valid = {c["name"] for c in cases}
-            unknown = [n for n in requested if n not in valid]
-            if unknown:
-                p.error(f"--only: unknown case name(s) {unknown}. "
-                        f"Valid names: {sorted(valid)}")
-            cases = [c for c in cases if c["name"] in requested]
-
-        # Audit: prompt worked-examples must not duplicate case fixtures.
-        # Warns at startup so overlaps don't turn the score into a
-        # memorization check.  Run before any LLM calls.
-        overlap_names, overlap_issues = _check_prompt_eval_overlap(
-            system_prompt, cases
-        )
-        if overlap_issues:
-            print("\n⚠ PROMPT/EVAL OVERLAP DETECTED — these cases share specifics with "
-                  "system.txt and may be measuring memorization rather than "
-                  "generalization.  Fix by changing the prompt's worked example "
-                  "(see AGENTS.md \"Change contract\"):")
-            for line in overlap_issues:
-                print(line)
-            print()
-            if args.strict_overlap:
-                print(f"--strict-overlap set: aborting with rc=2 "
-                      f"({len(overlap_names)} overlapping case(s))",
-                      file=sys.stderr)
-                sys.exit(2)
-        else:
-            print("PROMPT/EVAL OVERLAP: clean (no verbatim utterances, coords, or "
-                  "reserved-vocab leaks)")
-
-        results = []
-        for c in cases:
-            scene_c = c["scene"]
-            pose_c  = c.get("pose", pose)
-            _set_case_history(c.get("history"))
-            _set_case_moves(c.get("recent_moves"))
-            try:
-                r = await _run_one(http, system_prompt, tools, scene_c, pose_c,
-                                   c["user"], thinking=args.thinking,
-                                   max_steps=_MAX_STEPS)
-            except Exception as exc:
-                r = {"latency_s": 0.0, "tool_calls": [], "content": "",
-                     "reasoning": ""}
-                ok, why = False, f"network error: {type(exc).__name__}: {exc}"
-            else:
-                ok, why = _check(r, c)
-            mark = "✓" if ok else "✗"
-            print(f"{mark} {c['name']:32s} {r['latency_s']:5.1f}s  {why}")
-            for i, tc in enumerate(r["tool_calls"]):
-                fn = tc["function"]
-                print(f"    [{i}] {fn['name']}({fn['arguments']})")
-            results.append((c["name"], ok))
-
-        passed = sum(1 for _, ok in results if ok)
-        total  = len(results)
-        score_line = f"\n{passed}/{total} passed"
-        if overlap_names:
-            score_line += (
-                f" ({len(overlap_names)}/{total} too close to prompts — "
-                f"may be memorization, not generalization)"
-            )
-        print(score_line)
-        sys.exit(0 if passed == total else 1)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

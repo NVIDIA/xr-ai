@@ -11,9 +11,7 @@ shared with other samples, see {doc}`/components/ai-services`.
 
 ## Process stack
 
-The orchestrator (`xr_render_demo`, stdlib-only via `xr-ai-launcher`) starts
-its processes concurrently. There is no startup ordering — every process
-must tolerate peers that are not yet ready. `run_stack` is fail-fast: any
+The orchestrator (`xr_render_demo`, stdlib-only via `xr-ai-launcher`) starts its processes serially in declaration order; each touches its ready file before the next process starts. `run_stack` is fail-fast: any
 exit terminates the whole stack.
 
 | Role | Directory | Command | Port |
@@ -94,7 +92,7 @@ The worker reads two config files:
 
 ### Nemotron-3-Nano-Omni-30B-A3B-Reasoning — port 8108
 
-A vLLM `execvp` shim — a small Python wrapper that reads YAML configuration,
+A vLLM `execvp` shim: a small Python wrapper that reads YAML configuration,
 sets `HF_HOME` and token environment variables, then `os.execvp`s into `vllm serve`. The
 Python process is replaced by vLLM; vLLM owns the HTTP API, weight loading,
 and tool calling from that point on.
@@ -104,22 +102,8 @@ and tool calling from that point on.
 FP8 on Ada, Hopper, or Ampere, with BF16 available as an explicit fallback.
 
 One server backs both LLM roles in `yaml/models.yaml`: `agent_llm` runs the
-multi-step tool-calling loop and `llm` serves two cheap, latency-sensitive
-calls. Thinking stays off unless a call explicitly enables it.
-
-- **Quick-ack** — awaited before the agentic loop starts, the moment an
-  utterance lands. Returns `{"ack": "On it!", "think": false}` — a 3–6 word
-  spoken acknowledgment. Also classifies whether the request needs
-  open-ended reasoning (`think: true/false`): positional operations always
-  run without thinking because the math tools compute exact answers, so
-  thinking is reserved for vague corrections and free-form compositions
-  no tool pattern settles. Max 40 tokens, 8s timeout. The ack
-  is sent on the data channel (`agent.progress` topic) and spoken on every
-  turn so the user immediately knows they were heard.
-- **Still-working messages** — if the agentic loop exceeds 5s, this model
-  generates a short contextual phrase like *"Still finding the right
-  position"* on a 10s repeat. Sent to the data channel only — never spoken,
-  to avoid stacking up in the TTS queue behind the real response.
+supervisor and subagent tool-calling loops, and `llm` remains available for
+untooled chat calls. Thinking stays off unless a call explicitly enables it.
 
 ## VLM — Cosmos3 Nano Reasoner
 
@@ -167,11 +151,11 @@ one is in-flight.
 
 ## TTS — Piper
 
-Port 8105. `rhasspy/piper-voices` ONNX. Runs on CPU, ~100 ms per sentence. All
-synthesis runs in a thread pool so the asyncio loop is never blocked.
+Served on port 8105. The voice runtime streams the supervisor's final
+reply to Piper and returns the audio to the participant.
 
 ```
-voice.output topic (agentic-loop quick-ack or final response)
+voice.output topic (final response)
   → VoiceAgent → private media-session TTS
       sentence-batched synthesis
       POST text → tts-server :8105 → WAV bytes
@@ -181,10 +165,9 @@ voice.output topic (agentic-loop quick-ack or final response)
 `VoiceAgent` owns interruption handling. A new utterance while TTS is playing
 triggers `ReturnAudioFlush`, so the hub clears the LiveKit audio queue for that
 participant. Its interruption callback also cancels the participant's active
-render-agent task without waiting on its cleanup in the media processor. A
-consumer-aborted render stream closes its scene generator without publishing a
-terminator to the already-closed voice stream; producer supersession completes
-the old stream before the replacement starts.
+render-agent task without waiting on its cleanup in the media processor. Each
+turn publishes one complete `voice.output` message; a superseded turn is
+cancelled before its reply is published, so no partial stream is left open.
 
 ## Agent runtime and voice topology
 
@@ -192,53 +175,49 @@ the old stream before the replacement starts.
 VoiceAgent → private media session → VAD/STT ─→ voice.transcript topic
                                   └→ VoiceGate ─┐
            → typed hub text ingress ────────────┴→ xr-render.user-query topic
-  → RenderAgent → SceneModelLoop → voice.output topic
+  → RenderAgent → SceneSupervisor → five focused subagents → voice.output topic
   → VoiceAgent → private media-session TTS → hub return audio
 ```
 
 Pipecat is an internal implementation detail of `xr-ai-voice`; application
 input, participant-scoped agent execution, and voice output use public SDK contracts.
-Lifecycle failures publish notices to a sample-local runtime topic instead of
-manufacturing voice-pipeline frames.
+An XR start failure sends `render.failed` (with the reason) on the data
+channel and speaks a short failure notice through `voice.output`.
 
 ## Agentic loop
 
-At worker startup, `NativeCapabilities` composes sample-local scene,
+`SceneSupervisor` coordinates five focused subagent tools (placement,
+appearance, object, vision, memory) over `xr_ai_tools.tool_calling.run_tool_loop`.
+Each subagent runs its own inner tool loop against the scene and tracking
+services. On each accepted `xr-render.user-query` event:
+
+1. **Recent conversation** is recalled from `TextMemoryTools` and injected
+   as context so the model understands references like "fix that" or "undo".
+2. **Supervisor loop** (`run_tool_loop`, up to 12 iterations) — Nemotron-Omni
+   :8108 routes the request to one or more subagent tools. Each subagent
+   runs its own inner `run_tool_loop` (up to 4 iterations) against the
+   scene, XR-tracking, and vision services.
+3. **Verification pass** — only for turns with mutation intent (a
+   mutating subagent was delegated, or the utterance contains a
+   change-requesting verb): if no scene change is observed within 150 ms
+   of the loop completing, a second `run_tool_loop` call is made so the
+   supervisor can delegate remaining work or confirm a no-op turn.
+4. **Conversation history persisted** — the user utterance and agent reply
+   are written to `TextMemoryTools` under `{participant_id}:user` and
+   `{participant_id}:agent` source keys.
+5. **Final response** published as one complete `voice.output` message for
+   the voice subscriber and TTS.
+
+Mutation intent is read from the supervisor loop's own tool-call record
+(which subagents were delegated) and the utterance's action verbs; the
+scene diff decides whether the verification pass runs.
+
+At worker startup, `app.py` composes the five subagent tools from the scene,
 XR-tracking, spatial-math, vision, video-memory, and text-memory `Tool`
-instances into a `ToolSet`. The LLM schemas come from
-`tool_definitions(...)`; `start_xr`, `get_health`, and raw frame extraction
-remain worker-managed lifecycle operations.
+instances provided by `xr_ai_tools`. Lifecycle tools (`start_xr`,
+`get_health`) remain worker-managed and are not exposed to the supervisor.
 
-On each accepted `xr-render.user-query` event or lifecycle notice:
-
-1. **Quick-ack** runs first (`llm` :8108, awaited before the loop).
-2. **Still-working timer** starts (fires at 5s, repeats every 10s, data
-   channel only).
-3. **Pre-fetch** (concurrent): `get_scene_state` + `get_head_pose` +
-   `position_ahead(1.5)` — results injected into the user message so the
-   model skips those tool calls and goes straight to the operation.
-4. **Nemotron-Omni :8108** runs with `tools=[…]`, up to 10 iterations:
-   - Model emits `tool_calls` → `handle_tool_call(...)` validates and invokes
-     the matching native tool → its tool-role message is appended → next iteration.
-   - Service-backed tools call scene, OpenXR, and video-memory typed services.
-     Spatial math and text memory execute in process, and vision calls the
-     configured `xr-ai-models` VLM service.
-   - Progress message sent on `agent.progress` topic before each tool
-     executes (data channel).
-   - If `think=true`: reasoning preamble injected into system prompt
-     (RESOLVE object → LOCATE coordinates → COMPUTE new position →
-     EXECUTE). The `<think>` block stays private; only one short sentence
-     goes to the user. Token budget: 6144 total, 4096 thinking budget.
-   - If thinking fills the token budget without a tool call
-     (`finish_reason=length`): retry the same iteration with
-     `needs_thinking=False`.
-   - If the model outputs a bare tool name as text instead of a proper tool
-     call: worker synthesizes a no-arg tool call and continues.
-5. **Final response** sent on `agent.response` and published as correlated
-   `voice.output` chunks for the voice subscriber and TTS.
-6. **Turn appended** to a rolling 4-turn history buffer — injected as
-   context in future turns so the model understands "fix that", "undo",
-   "the one I just added". Final messages are also persisted through native
+Final messages are also persisted through native
    text memory without model scratch output or tool traces.
 
 ## Native capability composition
@@ -255,58 +234,34 @@ The worker composes XR tracking with shared spatial-math tools. This
 offloads vector arithmetic the LLM is bad at while keeping pose-dependent math
 in one place:
 
-- **Pose-aware named-direction helpers** take a `direction` enum (`front`,
-  `back`, `left`, `right`, `above`, `below`, plus `next_to` on
-  `place_object_relative`) and always-positive `distance`. The LLM never
-  applies signs to user-frame axes.
-  - `place_user_relative(direction, distance)`: user-anchored teleport
-    ("above my head", "to my left 1 m").
-  - `place_object_relative(origin_x, origin_y, origin_z, direction, distance)`:
-    object-anchored teleport. `direction="front"` means *toward the user*;
-    `"back"` means *away*. Left/right/above/below map literally.
-  - `displace_object(current_x, current_y, current_z, right, up, forward)`:
-    user-frame signed-delta on an existing object. Multi-axis ("up and
-    to the left") in one call.
-  - `displace_objects(object_ids, current_xs, current_ys, current_zs,
-    right, up, forward)`: batch user-frame delta over N objects. Returns
-    `{"items": [{obj_id, x, y, z}, …]}` so the model fans out to N
-    `update_primitive` calls with one math call total.
-  - `place_inside_by_id(movee_id, container_x, container_y, container_z)`:
-    containment for "put X in Y". Argument names (`movee_id` paired
-    with `container_*`) force the model to pick the right noun's coords;
-    the return shape feeds straight into `update_primitive`.
-- **Pure-math primitives** are pose-independent:
-  - `between_anchors(a_x, a_y, a_z, b_x, b_y, b_z)`: component-wise midpoint.
-  - `world_offset(origin_x, origin_y, origin_z, dx, dy, dz)`:
-    axis-aligned world-Y-up shift.
-  - `along_direction(origin_x, origin_y, origin_z, target_x, target_y,
-    target_z, distance)`: origin moved `distance` toward target. Used
-    for "closer to or further from <named-obj>", which the user-frame
-    helpers can't model.
-  - `scale_value(current, factor)`: scalar multiplication for sizes.
+- **Placement tools** move existing objects: `nudge` (signed user-frame
+  offsets), `move_user_relative` (named direction from the user),
+  `move_object_relative` (named relation to an anchor object),
+  `move_inside`, `move_between`, `move_toward`, `move_toward_user`,
+  `swap_positions`, and `move_to` (explicit coordinates). Every tool takes
+  the instruction's exact words for each object, resolves them against the
+  scene, performs the move itself, and returns the final position; the LLM
+  never applies signs to user-frame axes or copies coordinates.
+- **Appearance tool**: `recolor` resolves color words, RGB triples, and
+  copy-the-color-of-an-object references deterministically.
+- **Object tools** create and retire objects: `create_user_relative`,
+  `create_object_relative` (one anchor, or the midpoint of two),
+  `create_at`, `change_shape` (the scene replaces the object and returns
+  its new id), `resize_object`, and `remove_object`.
 
 ## Prompt structure
 
-The system prompt at `worker/xr_render_demo_worker/prompts/system.txt` is worked-example heavy.
-It opens with pronoun and reference resolution, then routes placement
-utterances through sequential checks before the LLM picks a tool:
+Each agent has its own prompt file under
+`worker/xr_render_demo_worker/` (supervisor plus five subagents, six files total).
+The supervisor prompt routes requests to subagents; each subagent prompt
+is worked-example heavy and opens with pronoun and reference resolution.
 
-1. **FIRST CHECK**: `"between"`/`"middle"`/`"halfway"` → route to
-   `between_anchors`; stop considering other placement tools.
-2. **SECOND CHECK**: anchor is the user (`"me"`/`"my"`) → route to
-   `place_user_relative`; `place_object_relative` with `origin=user_pos`
-   returns the wrong side of the user.
-3. **THIRD CHECK**: proximity to a named object (`"closer to <obj>"`,
-   `"toward <obj>"`) → route to `along_direction`. The user's facing
-   direction is unrelated to where the target object sits, so
-   `displace_object` is wrong here.
-
-Every rule that's not obviously self-explanatory has a paired WORKED
-EXAMPLE (concrete coords + tool call) and, for the highest-leakage
-failure modes, a WORKED ANTI-EXAMPLE. The two-step contract is
-hammered: every move emits one math-tool call followed by exactly one
-`add_primitive`/`update_primitive` call carrying all three of `x`,
-`y`, `z` from the math result.
+The placement agent's prompt maps utterance shapes to tools with contrast
+pairs: a stated distance is a shift (`nudge`); a user-anchored destination
+uses `move_user_relative`; a destination anchored on another object uses
+`move_object_relative` (stacking is relation `above`); "into/inside" is
+containment (`move_inside`). Every rule has a paired worked example, and
+the highest-leakage failure modes carry explicit contrast examples.
 
 ## XR session lifecycle
 
@@ -337,15 +292,47 @@ Refer to
 for the case format and the watch-mode loop. Run with:
 
 ```bash
-uv run --project agent-samples/xr-render-demo/worker \
-  python agent-samples/xr-render-demo/eval/eval.py
+uv run --project agent-samples/xr-render-demo/eval xr_render_demo_eval
 ```
+
+## Tracing and debugging
+
+Every turn carries a `trace_id` derived from the runtime's `message_id`
+(set by `xr-ai-runtime` when it dispatches the `UserQuery`). The id is
+logged at supervisor entry:
+
+```
+[worker] DEBUG supervisor turn participant=alice trace=<uuid> transcript="make a red sphere"
+```
+
+To trace one complete turn, filter worker logs by `trace=<uuid>` or by
+`participant=<id>` and `timestamp_us=<value>` when the trace id is
+unavailable (e.g. in offline eval). Key log landmarks:
+
+| Event | Logger | Level |
+|---|---|---|
+| Turn received | `xr_render_demo_worker.supervisor` | DEBUG |
+| Subagent delegated | `xr_render_demo_worker.agents.*` | DEBUG |
+| Tool loop error | `xr_render_demo_worker.supervisor` | WARNING (ToolLoopError) |
+| Subagent tool loop error | `xr_render_demo_worker.agents.*` | WARNING (ToolLoopError) |
+| Turn failed | `xr_render_demo_worker.agent` | ERROR + traceback |
+
+**Error policy.** Expected degradation paths (camera unavailable, scene
+not started) surface as subagent result strings and reach the user as a
+clarifying reply. Unexpected exceptions (`ValueError` on bad tool input
+logs at DEBUG; all other exceptions log at ERROR with full traceback via
+`logger.exception`) propagate so the runtime remains fail-fast and the
+turn is recorded as failed in the runtime event log.
+
+**Concurrent participants.** Each participant's turns are serialized by
+the supervisor's per-participant lock, and a global scene lock serializes
+the snapshot/mutation/verification window across participants, so scene
+turns from different participants queue rather than interleave.
 
 ### Prompt/eval overlap audit
 
-The harness audits the system prompt's worked-example blocks against every
-case fixture at startup and warns if they share specifics: verbatim user
-utterances (≥12 chars), scene coordinates rendered as `(x.xx, y.yy, z.zz)`,
-`recent_moves` coords, or any reserved colour or shape word that appears in
-both a case fixture and a worked-example block. This guards against the eval
-cases overfitting to the prompt's worked examples.
+Per `AGENTS.md` "Prompt-driven samples", the harness audits every worker
+prompt against every tier's case inputs at startup and warns on overlap:
+verbatim case utterances, case fixture ids, and any quoted prompt example
+pairing an eval-vocabulary color with an eval-vocabulary shape. Clearing a
+warning means changing the prompt, not the case.

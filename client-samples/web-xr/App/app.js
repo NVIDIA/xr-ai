@@ -106,6 +106,18 @@ function _onDataReceived(topic, _data) {
   if (topic === 'render.ready') {
     return true;  // informational — don't clutter the message list
   }
+  // render.failed: the agent's renderer did not start; payload is the reason.
+  if (topic === 'render.failed') {
+    const detail = new TextDecoder().decode(_data);
+    model.xrError = `Agent renderer failed to start${detail ? `: ${detail}` : ''}`;
+    // Tear down the still-active CloudXR session before offering retry;
+    // startXR() refuses while a session is running.
+    stopXR().finally(() => {
+      model.xrState = 'error';
+      render();
+    });
+    return true;
+  }
   return false;
 }
 

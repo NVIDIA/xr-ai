@@ -6,17 +6,25 @@
 from .client import SceneClient
 from .schemas import (
     AddPrimitiveRequest,
+    AddPrimitiveResult,
     EmptyRequest,
+    MutationResult,
     RemovePrimitiveRequest,
+    SceneObject,
+    SceneState,
     UpdatePrimitiveRequest,
 )
 from .tools import SceneTools
 
 __all__ = [
     "AddPrimitiveRequest",
+    "AddPrimitiveResult",
     "EmptyRequest",
+    "MutationResult",
     "RemovePrimitiveRequest",
     "SceneClient",
+    "SceneObject",
+    "SceneState",
     "SceneTools",
     "UpdatePrimitiveRequest",
 ]
