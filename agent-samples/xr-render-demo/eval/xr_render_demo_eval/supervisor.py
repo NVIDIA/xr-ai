@@ -119,12 +119,13 @@ CASES = (
         expect_agent="vision_agent",
     ),
     RoutingCase(
-        name="physical_color_source_routes_to_vision",
+        name="physical_color_stays_with_mutating_agent",
         request="Turn the box the color of my carpet.",
         scene=(
             {"id": "box-0", "type": "box", "pos": [0.0, 1.5, -1.3], "color": [1, 1, 1], "size": 0.1},
         ),
-        expect_agent="vision_agent",
+        expect_agent="appearance_agent",
+        instruction_contains=("carpet",),
     ),
     RoutingCase(
         name="memory_question_routes_to_memory",
@@ -283,7 +284,7 @@ async def run_case(case: RoutingCase) -> bool:
                 SceneRequest(
                     transcript=case.request,
                     participant_id="eval-user",
-                    timestamp_us=10_000_000,
+                    timestamp_us=1_700_000_000_000_000,
                 )
             )
         except Exception as exc:

@@ -15,6 +15,27 @@ from loguru import logger
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.tools import ToolInvocationResult
 
+_TRANSPORT_MARKERS = ("RPCError", "Timeout", "Connection", "unavailable", "not started", "disabled")
+
+
+def as_unavailable(error: BaseException, what: str) -> ValueError | None:
+    """Classify transport/availability failures as expected degradation.
+
+    Returns a model-readable ValueError for outages of an external feed,
+    None for anything else so genuine bugs keep propagating.
+    """
+    seen: set[int] = set()
+    node: BaseException | None = error
+    while node is not None and id(node) not in seen:
+        seen.add(id(node))
+        if isinstance(node, (TimeoutError, ConnectionError, OSError)):
+            return ValueError(f"{what} is unavailable ({type(node).__name__}: {node})")
+        node = node.__cause__ or node.__context__
+    text = str(error)
+    if any(marker in text for marker in _TRANSPORT_MARKERS):
+        return ValueError(f"{what} is unavailable ({type(error).__name__}: {text})")
+    return None
+
 
 def _rejection(exc: BaseException) -> str | None:
     seen: set[int] = set()
@@ -58,4 +79,4 @@ def tolerant_toolset(tools: Iterable[Tool]) -> ToolSet:
     ])
 
 
-__all__ = ["tolerant_toolset"]
+__all__ = ["as_unavailable", "tolerant_toolset"]

@@ -52,6 +52,7 @@ _DEFAULT_POSE = {
 
 class _FakeSceneTools:
     def __init__(self, fake: "FakeScene") -> None:
+        self._fake = fake
         self.get_scene_state = Tool("get_scene_state", "Return scene.", EmptyRequest, SceneState, fake.get_scene_state)
         self.update_primitive = Tool(
             "update_primitive", "Update.", UpdatePrimitiveRequest, MutationResult, fake.update_primitive)
@@ -98,6 +99,8 @@ class _FakeCurrentFrameTool:
         self._fake = fake
 
     async def execute(self, request: Any) -> Any:
+        if self._fake.camera_error:
+            raise RuntimeError(self._fake.camera_error)
         from xr_ai_tools.current_frame import ImageFrame
         from xr_ai_tools.image import ImageReference
         return ImageFrame(
@@ -108,6 +111,48 @@ class _FakeCurrentFrameTool:
 
     def release(self, participant_id: str) -> None:
         pass
+
+
+class _FakePhysicalColorQuery:
+    """Records the resolver's VLM query distinctly from the vision agent's."""
+
+    def __init__(self, fake: "FakeScene") -> None:
+        self._fake = fake
+
+    async def execute(self, request: Any) -> Any:
+        from xr_ai_tools.vision import ImageQueryResult
+        self._fake.calls.append(("resolve_physical_color", {"question": request.query}))
+        if self._fake.vision_error:
+            return ImageQueryResult(text=self._fake.vision_error, available=False)
+        return ImageQueryResult(
+            text=self._fake.vision_answer or "Nothing notable is visible.", available=True
+        )
+
+
+def make_fake_video(fake: "FakeScene", video_error: str = ""):
+    from types import SimpleNamespace
+
+    from xr_ai_tools.image import ImageReference
+    from xr_ai_tools.video_memory import HistoricalFrameRequest, HistoricalFrameResult
+
+    async def historical(req: HistoricalFrameRequest) -> HistoricalFrameResult:
+        fake.calls.append(("look_at_past_frame", {"start_us": req.start_us}))
+        if video_error:
+            raise RuntimeError(video_error)
+        return HistoricalFrameResult(
+            image=ImageReference(uri="fake://past"), timestamp_us=req.start_us,
+            width=640, height=480)
+
+    return SimpleNamespace(get_historical_frame=Tool(
+        "get_historical_frame", "Recorded frame nearest a timestamp.",
+        HistoricalFrameRequest, HistoricalFrameResult, historical))
+
+
+def make_fake_physical_color(fake: "FakeScene"):
+    from xr_render_demo_worker._physical_color import make_physical_color_tool
+    from xr_render_demo_worker.spatial_ops import _COLOR_WORDS
+    return make_physical_color_tool(
+        _FakeCurrentFrameTool(fake), _FakePhysicalColorQuery(fake), _COLOR_WORDS)
 
 
 class _FakeImageQueryTool:
@@ -143,6 +188,7 @@ class Case:
     expected_positions: tuple[tuple[str, tuple[float, float, float]], ...] = ()
     memory: str = ""
     history: tuple[tuple[str, str], ...] = ()
+    reply_contains: str = ""
 
 
 CASES = (
@@ -194,7 +240,8 @@ CASES = (
             },
         ),
         vision="The wall is orange: normalized RGB (1.0, 0.5, 0.0).",
-        required_tools=frozenset({"look_at_current_frame", "update_primitive"}),
+        required_tools=frozenset({"update_primitive"}),
+        expected_colors=(("cone-0", (1.0, 0.5, 0.0)),),
     ),
     Case(
         name="compound_object_and_placement",
@@ -380,6 +427,7 @@ class FakeScene:
     vision_error: str
     memory_answer: str
     history: tuple[tuple[str, str], ...] = ()
+    camera_error: str = ""
     calls: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
     counters: dict[str, int] = field(default_factory=dict)
 
@@ -538,11 +586,13 @@ def check_corpus(calls: list[tuple[str, dict[str, Any]]], case: dict[str, Any]) 
     names = [name for name, _args in calls]
     mutations = [(name, args) for name, args in calls if name in _MUTATING]
     if first_tool := case.get("must_call_first"):
-        if first_tool not in names:
-            return False, f"{first_tool} was never called"
+        first_tools = (first_tool,) if isinstance(first_tool, str) else tuple(first_tool)
+        called = [name for name in first_tools if name in names]
+        if not called:
+            return False, f"none of {first_tools} was called"
         first_mutation = next((index for index, name in enumerate(names) if name in _MUTATING), None)
-        if first_mutation is not None and names.index(first_tool) > first_mutation:
-            return False, f"{first_tool} called after the first mutation"
+        if first_mutation is not None and min(names.index(name) for name in called) > first_mutation:
+            return False, f"{called} called after the first mutation"
     wanted = list(case.get("result") or ())
     if not wanted and not mutations:
         return False, f"no mutating calls: {names}"
@@ -584,18 +634,13 @@ def _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
     )
     from xr_render_demo_worker.scene import SceneContext
     context = SceneContext(fake_scene, fake_tracking)
-
-    async def physical_color(color_words: str) -> str:
-        from types import SimpleNamespace
-        result = await fake_image_query.execute(
-            SimpleNamespace(query=f"What color is {color_words}?"))
-        return result.text
-
+    physical_color = make_fake_physical_color(fake_scene._fake)
     subagent_tools = [
         make_placement_agent(llm, fake_scene, fake_tracking, context),
         make_appearance_agent(llm, fake_scene, context, physical_color),
         make_object_agent(llm, fake_scene, fake_tracking, context, physical_color),
-        make_vision_agent(llm, fake_current_frame, fake_image_query, context),
+        make_vision_agent(llm, fake_current_frame, fake_image_query, context,
+                          make_fake_video(fake_scene._fake)),
         make_memory_agent(llm, fake_text_memory),
     ]
     return SceneSupervisor(
@@ -621,7 +666,7 @@ async def run_corpus_case(case: dict[str, Any]) -> bool:
                 SceneRequest(
                     transcript=case["user"],
                     participant_id=_PARTICIPANT,
-                    timestamp_us=10_000_000,
+                    timestamp_us=1_700_000_000_000_000,
                 )
             )
             response = reply.response
@@ -667,20 +712,19 @@ UTTERANCES = (
              "color": {"r": 1, "g": 1, "b": 1}, "size": 0.1},
         ),
         vision="The ceiling is purple.",
-        required_tools=frozenset({"look_at_current_frame", "update_primitive"}),
-        required_order=("look_at_current_frame", "update_primitive"),
+        required_tools=frozenset({"update_primitive"}),
+        expected_colors=(("cylinder-0", (0.6, 0.0, 1.0)),),
     ),
     Case(
         name="basics_holding_color_creates",
         request="Make a sphere the color of what I'm holding.",
         vision="A hand holding a blue lid.",
-        required_tools=frozenset({"look_at_current_frame", "add_primitive"}),
-        required_order=("look_at_current_frame", "add_primitive"),
+        required_tools=frozenset({"add_primitive"}),
         expected_colors=(("sphere-0", (0.0, 0.4, 1.0)),),
     ),
     Case(
         name="basics_preposition_final_question",
-        request="What am I looking at right now?",
+        request="What is this thing I'm staring at?",
         vision="A hand holding a blue lid.",
         required_tools=frozenset({"look_at_current_frame"}),
         forbidden_tools=_FORBID_MUTATIONS,
@@ -703,7 +747,7 @@ UTTERANCES = (
             ("The camera doesn't look at the scene.",
              "The camera is not currently viewing any objects in the scene."),
             ("Okay.", "What would you like me to do?"),
-            ("What am I looking at?", "You are looking at the camera."),
+            ("Tell me what the camera sees.", "You are looking at the camera."),
             ("True.", "What would you like me to do?"),
             ("Make a spear the color of the thing I am holding.",
              "What are you holding?"),
@@ -720,23 +764,40 @@ UTTERANCES = (
         history=(
             ("The camera doesn't look at the scene.",
              "I'm sorry, but I can't help with that."),
-            ("What am I looking at?", "You are looking at a blue plastic lid."),
+            ("Tell me what the camera sees.", "You are looking at a blue plastic lid."),
         ),
-        required_tools=frozenset({"look_at_current_frame", "add_primitive"}),
-        required_order=("look_at_current_frame", "add_primitive"),
+        required_tools=frozenset({"add_primitive"}),
         expected_colors=(("sphere-0", (0.0, 0.4, 1.0)),),
+    ),
+    Case(
+        name="basics_create_despite_similar_existing",
+        request="Make a cube the color of what I'm holding.",
+        scene=(
+            {"id": "box-0", "type": "box",
+             "position": {"x": 0.4, "y": 1.5, "z": -1.2},
+             "color": {"r": 1, "g": 1, "b": 1}, "size": 0.1},
+        ),
+        vision="A hand holding a blue lid.",
+        history=(
+            ("Make a green ball.", "Created a green ball."),
+            ("Add a white cube.", "The white cube has been created."),
+            ("Put a red ring above the cube.", "The red ring has been placed above the cube."),
+            ("Make a cube.", "Created a white cube in front of you."),
+        ),
+        required_tools=frozenset({"add_primitive"}),
+        expected_colors=(("box-1", (0.0, 0.4, 1.0)),),
     ),
     Case(
         name="basics_recall_beyond_window",
         request="What color was the very first thing I created?",
         history=(
-            ("Add a green capsule.", "Created a green capsule."),
-            ("Move it to my left.", "Moved the capsule to your left."),
-            ("Add a white cylinder behind it.", "Created a white cylinder."),
-            ("Make the cylinder bigger.", "Enlarged the cylinder."),
-            ("Swap the capsule and the cylinder.", "Swapped them."),
+            ("Add a green ball.", "Created a green ball."),
+            ("Move it to my left.", "Moved the ball to your left."),
+            ("Add a white box behind it.", "Created a white box."),
+            ("Make the box bigger.", "Enlarged the box."),
+            ("Swap the ball and the box.", "Swapped them."),
         ),
-        expected_call_counts=(("recall_conversation", 2),),
+        reply_contains="green",
         forbidden_tools=_FORBID_MUTATIONS,
     ),
     Case(
@@ -968,7 +1029,7 @@ async def run_case(case: Case) -> bool:
                 SceneRequest(
                     transcript=case.request,
                     participant_id=_PARTICIPANT,
-                    timestamp_us=10_000_000,
+                    timestamp_us=1_700_000_000_000_000,
                 )
             )
             response = reply.response
@@ -1013,8 +1074,12 @@ async def run_case(case: Case) -> bool:
         if object_id not in scene.objects
         or tuple(scene.objects[object_id].position.model_dump().values()) != expected
     }
+    wrong_reply = bool(
+        case.reply_contains and case.reply_contains.lower() not in response.lower()
+    )
     passed = (
         not errored
+        and not wrong_reply
         and not missing
         and not forbidden
         and not out_of_order
@@ -1027,7 +1092,8 @@ async def run_case(case: Case) -> bool:
         "PASS"
         if passed
         else (
-            f"FAIL missing={sorted(missing)} forbidden={sorted(forbidden)} order={call_order} "
+            f"FAIL missing={sorted(missing)} forbidden={sorted(forbidden)} wrong_reply={wrong_reply} "
+            f"order={call_order} "
             f"counts={wrong_call_counts} sizes={wrong_sizes} colors={wrong_colors} "
             f"positions={wrong_positions}"
         )

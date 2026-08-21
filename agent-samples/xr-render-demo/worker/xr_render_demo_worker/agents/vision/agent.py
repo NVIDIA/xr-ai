@@ -14,7 +14,7 @@ from xr_ai_tools.tool_calling import ToolLoopError, run_tool_loop
 from xr_ai_tools.video_memory import HistoricalFrameRequest, VideoMemoryTools
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult, ImageQueryTool
 
-from ..._tolerant import tolerant_toolset
+from ..._tolerant import as_unavailable, tolerant_toolset
 from ..._trace import current_participant_id, current_reference_time_us, current_trace_id
 from ...models import SubagentResult, SubagentTask
 from ...scene import SceneContext
@@ -51,8 +51,10 @@ def make_vision_agent(
             try:
                 frame = await current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
             except Exception as error:
-                # Camera unavailability is expected degradation, not a crash.
-                raise ValueError(f"the current camera view is unavailable ({error})") from None
+                degraded = as_unavailable(error, "the current camera view")
+                if degraded is None:
+                    raise
+                raise degraded from error
             return await image_query.execute(ImageQueryRequest(image=frame.image, query=req.question))
 
         tools = [
@@ -75,9 +77,10 @@ def make_vision_agent(
                         HistoricalFrameRequest(participant_id=participant_id, start_us=start_us)
                     )
                 except Exception as error:
-                    # Recording may be disabled or hold no frame for this
-                    # window; expected degradation, not a crash.
-                    raise ValueError(f"recorded video is unavailable ({error})") from None
+                    degraded = as_unavailable(error, "recorded video")
+                    if degraded is None:
+                        raise
+                    raise degraded from error
                 return await image_query.execute(ImageQueryRequest(image=frame.image, query=req.question))
 
             tools.append(Tool(

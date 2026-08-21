@@ -244,9 +244,11 @@ in one place:
   scene, performs the move itself, and returns the final position; the LLM
   never applies signs to user-frame axes or copies coordinates.
 - **Appearance tool**: `recolor` resolves color words, RGB triples, and
-  copy-the-color-of-an-object references deterministically. A color phrase
-  naming something physical ("the color of the thing I'm holding") falls
-  back to one camera query; the model copies the phrase, the code observes.
+  copy-the-color-of-an-object references deterministically. Color-word
+  resolution is shared by the appearance and object tools: when the model
+  marks the source as physical ("the color of my shirt"), a typed
+  `resolve_physical_color` tool runs one strict camera query; the model
+  copies the phrase, the code observes.
 - **Object tools** create and retire objects: `create_user_relative`,
   `create_object_relative` (one anchor, or the midpoint of two),
   `create_at`, `change_shape` (the scene replaces the object and returns

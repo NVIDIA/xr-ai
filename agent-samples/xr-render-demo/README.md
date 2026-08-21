@@ -54,8 +54,9 @@ voice query
        └─ SceneSupervisor.handle()           one turn, per-participant lock
             └─ run_tool_loop (LLM + subagent tools)
                  ├─ make_placement_agent()   SceneTools + TrackingTools
-                 ├─ make_appearance_agent()  SceneTools
+                 ├─ make_appearance_agent()  SceneTools + physical-color camera tool
                  ├─ make_object_agent()      SceneTools + TrackingTools
+                 │                           + physical-color camera tool
                  ├─ make_vision_agent()      CurrentFrameTool + ImageQueryTool
                  │                           + VideoMemoryTools (optional)
                  └─ make_memory_agent()      TextMemoryTools

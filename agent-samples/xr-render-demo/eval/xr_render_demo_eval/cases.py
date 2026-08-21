@@ -78,7 +78,7 @@ def _stacked_vertically(mutations: list[tuple[str, dict]]) -> tuple[bool, str]:
     return True, f"stacked at y={ys}"
 
 
-PERCEPTION_TOOL = "look_at_current_frame"
+PERCEPTION_TOOL = ("look_at_current_frame", "resolve_physical_color")
 
 CASES = [
     # ── direct render ops ─────────────────────────────────────────────────────
