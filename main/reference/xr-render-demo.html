@@ -447,9 +447,7 @@
 shared with other samples, see <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a>.</p>
 <section id="process-stack">
 <h2>Process stack<a class="headerlink" href="#process-stack" title="Link to this heading">#</a></h2>
-<p>The orchestrator (<code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code>, stdlib-only via <code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code>) starts
-its processes concurrently. There is no startup ordering — every process
-must tolerate peers that are not yet ready. <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> is fail-fast: any
+<p>The orchestrator (<code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code>, stdlib-only via <code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code>) starts its processes serially in declaration order; each touches its ready file before the next process starts. <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> is fail-fast: any
 exit terminates the whole stack.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
@@ -575,7 +573,7 @@ runs where without touching the worker code.</p></li>
 <h2>The LLM server<a class="headerlink" href="#the-llm-server" title="Link to this heading">#</a></h2>
 <section id="nemotron-3-nano-omni-30b-a3b-reasoning-port-8108">
 <h3>Nemotron-3-Nano-Omni-30B-A3B-Reasoning — port 8108<a class="headerlink" href="#nemotron-3-nano-omni-30b-a3b-reasoning-port-8108" title="Link to this heading">#</a></h3>
-<p>A vLLM <code class="docutils literal notranslate"><span class="pre">execvp</span></code> shim — a small Python wrapper that reads YAML configuration,
+<p>A vLLM <code class="docutils literal notranslate"><span class="pre">execvp</span></code> shim: a small Python wrapper that reads YAML configuration,
 sets <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> and token environment variables, then <code class="docutils literal notranslate"><span class="pre">os.execvp</span></code>s into <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code>. The
 Python process is replaced by vLLM; vLLM owns the HTTP API, weight loading,
 and tool calling from that point on.</p>
@@ -583,23 +581,8 @@ and tool calling from that point on.</p>
 <code class="docutils literal notranslate"><span class="pre">--reasoning-parser</span> <span class="pre">nemotron_v3</span></code>. The launcher selects NVFP4 on Blackwell and
 FP8 on Ada, Hopper, or Ampere, with BF16 available as an explicit fallback.</p>
 <p>One server backs both LLM roles in <code class="docutils literal notranslate"><span class="pre">yaml/models.yaml</span></code>: <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> runs the
-multi-step tool-calling loop and <code class="docutils literal notranslate"><span class="pre">llm</span></code> serves two cheap, latency-sensitive
-calls. Thinking stays off unless a call explicitly enables it.</p>
-<ul class="simple">
-<li><p><strong>Quick-ack</strong> — awaited before the agentic loop starts, the moment an
-utterance lands. Returns <code class="docutils literal notranslate"><span class="pre">{&quot;ack&quot;:</span> <span class="pre">&quot;On</span> <span class="pre">it!&quot;,</span> <span class="pre">&quot;think&quot;:</span> <span class="pre">false}</span></code> — a 3–6 word
-spoken acknowledgment. Also classifies whether the request needs
-open-ended reasoning (<code class="docutils literal notranslate"><span class="pre">think:</span> <span class="pre">true/false</span></code>): positional operations always
-run without thinking because the math tools compute exact answers, so
-thinking is reserved for vague corrections and free-form compositions
-no tool pattern settles. Max 40 tokens, 8s timeout. The ack
-is sent on the data channel (<code class="docutils literal notranslate"><span class="pre">agent.progress</span></code> topic) and spoken on every
-turn so the user immediately knows they were heard.</p></li>
-<li><p><strong>Still-working messages</strong> — if the agentic loop exceeds 5s, this model
-generates a short contextual phrase like <em>“Still finding the right
-position”</em> on a 10s repeat. Sent to the data channel only — never spoken,
-to avoid stacking up in the TTS queue behind the real response.</p></li>
-</ul>
+supervisor and subagent tool-calling loops, and <code class="docutils literal notranslate"><span class="pre">llm</span></code> remains available for
+untooled chat calls. Thinking stays off unless a call explicitly enables it.</p>
 </section>
 </section>
 <section id="vlm-cosmos3-nano-reasoner">
@@ -644,9 +627,9 @@ one is in-flight.</p>
 </section>
 <section id="tts-piper">
 <h2>TTS — Piper<a class="headerlink" href="#tts-piper" title="Link to this heading">#</a></h2>
-<p>Port 8105. <code class="docutils literal notranslate"><span class="pre">rhasspy/piper-voices</span></code> ONNX. Runs on CPU, ~100 ms per sentence. All
-synthesis runs in a thread pool so the asyncio loop is never blocked.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>voice.output topic (agentic-loop quick-ack or final response)
+<p>Served on port 8105. The voice runtime streams the supervisor’s final
+reply to Piper and returns the audio to the participant.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>voice.output topic (final response)
   → VoiceAgent → private media-session TTS
       sentence-batched synthesis
       POST text → tts-server :8105 → WAV bytes
@@ -656,67 +639,57 @@ synthesis runs in a thread pool so the asyncio loop is never blocked.</p>
 <p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns interruption handling. A new utterance while TTS is playing
 triggers <code class="docutils literal notranslate"><span class="pre">ReturnAudioFlush</span></code>, so the hub clears the LiveKit audio queue for that
 participant. Its interruption callback also cancels the participant’s active
-render-agent task without waiting on its cleanup in the media processor. A
-consumer-aborted render stream closes its scene generator without publishing a
-terminator to the already-closed voice stream; producer supersession completes
-the old stream before the replacement starts.</p>
+render-agent task without waiting on its cleanup in the media processor. Each
+turn publishes one complete <code class="docutils literal notranslate"><span class="pre">voice.output</span></code> message; a superseded turn is
+cancelled before its reply is published, so no partial stream is left open.</p>
 </section>
 <section id="agent-runtime-and-voice-topology">
 <h2>Agent runtime and voice topology<a class="headerlink" href="#agent-runtime-and-voice-topology" title="Link to this heading">#</a></h2>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>VoiceAgent → private media session → VAD/STT ─→ voice.transcript topic
                                   └→ VoiceGate ─┐
            → typed hub text ingress ────────────┴→ xr-render.user-query topic
-  → RenderAgent → SceneModelLoop → voice.output topic
+  → RenderAgent → SceneSupervisor → five focused subagents → voice.output topic
   → VoiceAgent → private media-session TTS → hub return audio
 </pre></div>
 </div>
 <p>Pipecat is an internal implementation detail of <code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code>; application
 input, participant-scoped agent execution, and voice output use public SDK contracts.
-Lifecycle failures publish notices to a sample-local runtime topic instead of
-manufacturing voice-pipeline frames.</p>
+An XR start failure sends <code class="docutils literal notranslate"><span class="pre">render.failed</span></code> (with the reason) on the data
+channel and speaks a short failure notice through <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>.</p>
 </section>
 <section id="agentic-loop">
 <h2>Agentic loop<a class="headerlink" href="#agentic-loop" title="Link to this heading">#</a></h2>
-<p>At worker startup, <code class="docutils literal notranslate"><span class="pre">NativeCapabilities</span></code> composes sample-local scene,
-XR-tracking, spatial-math, vision, video-memory, and text-memory <code class="docutils literal notranslate"><span class="pre">Tool</span></code>
-instances into a <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code>. The LLM schemas come from
-<code class="docutils literal notranslate"><span class="pre">tool_definitions(...)</span></code>; <code class="docutils literal notranslate"><span class="pre">start_xr</span></code>, <code class="docutils literal notranslate"><span class="pre">get_health</span></code>, and raw frame extraction
-remain worker-managed lifecycle operations.</p>
-<p>On each accepted <code class="docutils literal notranslate"><span class="pre">xr-render.user-query</span></code> event or lifecycle notice:</p>
+<p><code class="docutils literal notranslate"><span class="pre">SceneSupervisor</span></code> coordinates five focused subagent tools (placement,
+appearance, object, vision, memory) over <code class="docutils literal notranslate"><span class="pre">xr_ai_tools.tool_calling.run_tool_loop</span></code>.
+Each subagent runs its own inner tool loop against the scene and tracking
+services. On each accepted <code class="docutils literal notranslate"><span class="pre">xr-render.user-query</span></code> event:</p>
 <ol class="arabic simple">
-<li><p><strong>Quick-ack</strong> runs first (<code class="docutils literal notranslate"><span class="pre">llm</span></code> :8108, awaited before the loop).</p></li>
-<li><p><strong>Still-working timer</strong> starts (fires at 5s, repeats every 10s, data
-channel only).</p></li>
-<li><p><strong>Pre-fetch</strong> (concurrent): <code class="docutils literal notranslate"><span class="pre">get_scene_state</span></code> + <code class="docutils literal notranslate"><span class="pre">get_head_pose</span></code> +
-<code class="docutils literal notranslate"><span class="pre">position_ahead(1.5)</span></code> — results injected into the user message so the
-model skips those tool calls and goes straight to the operation.</p></li>
-<li><p><strong>Nemotron-Omni :8108</strong> runs with <code class="docutils literal notranslate"><span class="pre">tools=[…]</span></code>, up to 10 iterations:</p>
-<ul class="simple">
-<li><p>Model emits <code class="docutils literal notranslate"><span class="pre">tool_calls</span></code> → <code class="docutils literal notranslate"><span class="pre">handle_tool_call(...)</span></code> validates and invokes
-the matching native tool → its tool-role message is appended → next iteration.</p></li>
-<li><p>Service-backed tools call scene, OpenXR, and video-memory typed services.
-Spatial math and text memory execute in process, and vision calls the
-configured <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> VLM service.</p></li>
-<li><p>Progress message sent on <code class="docutils literal notranslate"><span class="pre">agent.progress</span></code> topic before each tool
-executes (data channel).</p></li>
-<li><p>If <code class="docutils literal notranslate"><span class="pre">think=true</span></code>: reasoning preamble injected into system prompt
-(RESOLVE object → LOCATE coordinates → COMPUTE new position →
-EXECUTE). The <code class="docutils literal notranslate"><span class="pre">&lt;think&gt;</span></code> block stays private; only one short sentence
-goes to the user. Token budget: 6144 total, 4096 thinking budget.</p></li>
-<li><p>If thinking fills the token budget without a tool call
-(<code class="docutils literal notranslate"><span class="pre">finish_reason=length</span></code>): retry the same iteration with
-<code class="docutils literal notranslate"><span class="pre">needs_thinking=False</span></code>.</p></li>
-<li><p>If the model outputs a bare tool name as text instead of a proper tool
-call: worker synthesizes a no-arg tool call and continues.</p></li>
-</ul>
-</li>
-<li><p><strong>Final response</strong> sent on <code class="docutils literal notranslate"><span class="pre">agent.response</span></code> and published as correlated
-<code class="docutils literal notranslate"><span class="pre">voice.output</span></code> chunks for the voice subscriber and TTS.</p></li>
-<li><p><strong>Turn appended</strong> to a rolling 4-turn history buffer — injected as
-context in future turns so the model understands “fix that”, “undo”,
-“the one I just added”. Final messages are also persisted through native
-text memory without model scratch output or tool traces.</p></li>
+<li><p><strong>Recent conversation</strong> is recalled from <code class="docutils literal notranslate"><span class="pre">TextMemoryTools</span></code> and injected
+as context so the model understands references like “fix that” or “undo”.</p></li>
+<li><p><strong>Supervisor loop</strong> (<code class="docutils literal notranslate"><span class="pre">run_tool_loop</span></code>, up to 12 iterations) — Nemotron-Omni
+:8108 routes the request to one or more subagent tools. Each subagent
+runs its own inner <code class="docutils literal notranslate"><span class="pre">run_tool_loop</span></code> (up to 4 iterations) against the
+scene, XR-tracking, and vision services.</p></li>
+<li><p><strong>Verification pass</strong> — only for turns with mutation intent (a
+mutating subagent was delegated, or the utterance contains a
+change-requesting verb): if no scene change is observed within 150 ms
+of the loop completing, a second <code class="docutils literal notranslate"><span class="pre">run_tool_loop</span></code> call is made so the
+supervisor can delegate remaining work or confirm a no-op turn.</p></li>
+<li><p><strong>Conversation history persisted</strong> — the user utterance and agent reply
+are written to <code class="docutils literal notranslate"><span class="pre">TextMemoryTools</span></code> under <code class="docutils literal notranslate"><span class="pre">{participant_id}:user</span></code> and
+<code class="docutils literal notranslate"><span class="pre">{participant_id}:agent</span></code> source keys.</p></li>
+<li><p><strong>Final response</strong> published as one complete <code class="docutils literal notranslate"><span class="pre">voice.output</span></code> message for
+the voice subscriber and TTS.</p></li>
 </ol>
+<p>Mutation intent is read from the supervisor loop’s own tool-call record
+(which subagents were delegated) and the utterance’s action verbs; the
+scene diff decides whether the verification pass runs.</p>
+<p>At worker startup, <code class="docutils literal notranslate"><span class="pre">app.py</span></code> composes the five subagent tools from the scene,
+XR-tracking, spatial-math, vision, video-memory, and text-memory <code class="docutils literal notranslate"><span class="pre">Tool</span></code>
+instances provided by <code class="docutils literal notranslate"><span class="pre">xr_ai_tools</span></code>. Lifecycle tools (<code class="docutils literal notranslate"><span class="pre">start_xr</span></code>,
+<code class="docutils literal notranslate"><span class="pre">get_health</span></code>) remain worker-managed and are not exposed to the supervisor.</p>
+<p>Final messages are also persisted through native
+text memory without model scratch output or tool traces.</p>
 </section>
 <section id="native-capability-composition">
 <h2>Native capability composition<a class="headerlink" href="#native-capability-composition" title="Link to this heading">#</a></h2>
@@ -731,64 +704,35 @@ not launch or call MCP adapters.</p>
 offloads vector arithmetic the LLM is bad at while keeping pose-dependent math
 in one place:</p>
 <ul class="simple">
-<li><p><strong>Pose-aware named-direction helpers</strong> take a <code class="docutils literal notranslate"><span class="pre">direction</span></code> enum (<code class="docutils literal notranslate"><span class="pre">front</span></code>,
-<code class="docutils literal notranslate"><span class="pre">back</span></code>, <code class="docutils literal notranslate"><span class="pre">left</span></code>, <code class="docutils literal notranslate"><span class="pre">right</span></code>, <code class="docutils literal notranslate"><span class="pre">above</span></code>, <code class="docutils literal notranslate"><span class="pre">below</span></code>, plus <code class="docutils literal notranslate"><span class="pre">next_to</span></code> on
-<code class="docutils literal notranslate"><span class="pre">place_object_relative</span></code>) and always-positive <code class="docutils literal notranslate"><span class="pre">distance</span></code>. The LLM never
-applies signs to user-frame axes.</p>
-<ul>
-<li><p><code class="docutils literal notranslate"><span class="pre">place_user_relative(direction,</span> <span class="pre">distance)</span></code>: user-anchored teleport
-(“above my head”, “to my left 1 m”).</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">place_object_relative(origin_x,</span> <span class="pre">origin_y,</span> <span class="pre">origin_z,</span> <span class="pre">direction,</span> <span class="pre">distance)</span></code>:
-object-anchored teleport. <code class="docutils literal notranslate"><span class="pre">direction=&quot;front&quot;</span></code> means <em>toward the user</em>;
-<code class="docutils literal notranslate"><span class="pre">&quot;back&quot;</span></code> means <em>away</em>. Left/right/above/below map literally.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">displace_object(current_x,</span> <span class="pre">current_y,</span> <span class="pre">current_z,</span> <span class="pre">right,</span> <span class="pre">up,</span> <span class="pre">forward)</span></code>:
-user-frame signed-delta on an existing object. Multi-axis (“up and
-to the left”) in one call.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">displace_objects(object_ids,</span> <span class="pre">current_xs,</span> <span class="pre">current_ys,</span> <span class="pre">current_zs,</span> <span class="pre">right,</span> <span class="pre">up,</span> <span class="pre">forward)</span></code>: batch user-frame delta over N objects. Returns
-<code class="docutils literal notranslate"><span class="pre">{&quot;items&quot;:</span> <span class="pre">[{obj_id,</span> <span class="pre">x,</span> <span class="pre">y,</span> <span class="pre">z},</span> <span class="pre">…]}</span></code> so the model fans out to N
-<code class="docutils literal notranslate"><span class="pre">update_primitive</span></code> calls with one math call total.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">place_inside_by_id(movee_id,</span> <span class="pre">container_x,</span> <span class="pre">container_y,</span> <span class="pre">container_z)</span></code>:
-containment for “put X in Y”. Argument names (<code class="docutils literal notranslate"><span class="pre">movee_id</span></code> paired
-with <code class="docutils literal notranslate"><span class="pre">container_*</span></code>) force the model to pick the right noun’s coords;
-the return shape feeds straight into <code class="docutils literal notranslate"><span class="pre">update_primitive</span></code>.</p></li>
-</ul>
-</li>
-<li><p><strong>Pure-math primitives</strong> are pose-independent:</p>
-<ul>
-<li><p><code class="docutils literal notranslate"><span class="pre">between_anchors(a_x,</span> <span class="pre">a_y,</span> <span class="pre">a_z,</span> <span class="pre">b_x,</span> <span class="pre">b_y,</span> <span class="pre">b_z)</span></code>: component-wise midpoint.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">world_offset(origin_x,</span> <span class="pre">origin_y,</span> <span class="pre">origin_z,</span> <span class="pre">dx,</span> <span class="pre">dy,</span> <span class="pre">dz)</span></code>:
-axis-aligned world-Y-up shift.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">along_direction(origin_x,</span> <span class="pre">origin_y,</span> <span class="pre">origin_z,</span> <span class="pre">target_x,</span> <span class="pre">target_y,</span> <span class="pre">target_z,</span> <span class="pre">distance)</span></code>: origin moved <code class="docutils literal notranslate"><span class="pre">distance</span></code> toward target. Used
-for “closer to or further from <named-obj>”, which the user-frame
-helpers can’t model.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">scale_value(current,</span> <span class="pre">factor)</span></code>: scalar multiplication for sizes.</p></li>
-</ul>
-</li>
+<li><p><strong>Placement tools</strong> move existing objects: <code class="docutils literal notranslate"><span class="pre">nudge</span></code> (signed user-frame
+offsets), <code class="docutils literal notranslate"><span class="pre">move_user_relative</span></code> (named direction from the user),
+<code class="docutils literal notranslate"><span class="pre">move_object_relative</span></code> (named relation to an anchor object),
+<code class="docutils literal notranslate"><span class="pre">move_inside</span></code>, <code class="docutils literal notranslate"><span class="pre">move_between</span></code>, <code class="docutils literal notranslate"><span class="pre">move_toward</span></code>, <code class="docutils literal notranslate"><span class="pre">move_toward_user</span></code>,
+<code class="docutils literal notranslate"><span class="pre">swap_positions</span></code>, and <code class="docutils literal notranslate"><span class="pre">move_to</span></code> (explicit coordinates). Every tool takes
+the instruction’s exact words for each object, resolves them against the
+scene, performs the move itself, and returns the final position; the LLM
+never applies signs to user-frame axes or copies coordinates.</p></li>
+<li><p><strong>Appearance tool</strong>: <code class="docutils literal notranslate"><span class="pre">recolor</span></code> resolves color words, RGB triples, and
+copy-the-color-of-an-object references deterministically.</p></li>
+<li><p><strong>Object tools</strong> create and retire objects: <code class="docutils literal notranslate"><span class="pre">create_user_relative</span></code>,
+<code class="docutils literal notranslate"><span class="pre">create_object_relative</span></code> (one anchor, or the midpoint of two),
+<code class="docutils literal notranslate"><span class="pre">create_at</span></code>, <code class="docutils literal notranslate"><span class="pre">change_shape</span></code> (the scene replaces the object and returns
+its new id), <code class="docutils literal notranslate"><span class="pre">resize_object</span></code>, and <code class="docutils literal notranslate"><span class="pre">remove_object</span></code>.</p></li>
 </ul>
 </section>
 </section>
 <section id="prompt-structure">
 <h2>Prompt structure<a class="headerlink" href="#prompt-structure" title="Link to this heading">#</a></h2>
-<p>The system prompt at <code class="docutils literal notranslate"><span class="pre">worker/xr_render_demo_worker/prompts/system.txt</span></code> is worked-example heavy.
-It opens with pronoun and reference resolution, then routes placement
-utterances through sequential checks before the LLM picks a tool:</p>
-<ol class="arabic simple">
-<li><p><strong>FIRST CHECK</strong>: <code class="docutils literal notranslate"><span class="pre">&quot;between&quot;</span></code>/<code class="docutils literal notranslate"><span class="pre">&quot;middle&quot;</span></code>/<code class="docutils literal notranslate"><span class="pre">&quot;halfway&quot;</span></code> → route to
-<code class="docutils literal notranslate"><span class="pre">between_anchors</span></code>; stop considering other placement tools.</p></li>
-<li><p><strong>SECOND CHECK</strong>: anchor is the user (<code class="docutils literal notranslate"><span class="pre">&quot;me&quot;</span></code>/<code class="docutils literal notranslate"><span class="pre">&quot;my&quot;</span></code>) → route to
-<code class="docutils literal notranslate"><span class="pre">place_user_relative</span></code>; <code class="docutils literal notranslate"><span class="pre">place_object_relative</span></code> with <code class="docutils literal notranslate"><span class="pre">origin=user_pos</span></code>
-returns the wrong side of the user.</p></li>
-<li><p><strong>THIRD CHECK</strong>: proximity to a named object (<code class="docutils literal notranslate"><span class="pre">&quot;closer</span> <span class="pre">to</span> <span class="pre">&lt;obj&gt;&quot;</span></code>,
-<code class="docutils literal notranslate"><span class="pre">&quot;toward</span> <span class="pre">&lt;obj&gt;&quot;</span></code>) → route to <code class="docutils literal notranslate"><span class="pre">along_direction</span></code>. The user’s facing
-direction is unrelated to where the target object sits, so
-<code class="docutils literal notranslate"><span class="pre">displace_object</span></code> is wrong here.</p></li>
-</ol>
-<p>Every rule that’s not obviously self-explanatory has a paired WORKED
-EXAMPLE (concrete coords + tool call) and, for the highest-leakage
-failure modes, a WORKED ANTI-EXAMPLE. The two-step contract is
-hammered: every move emits one math-tool call followed by exactly one
-<code class="docutils literal notranslate"><span class="pre">add_primitive</span></code>/<code class="docutils literal notranslate"><span class="pre">update_primitive</span></code> call carrying all three of <code class="docutils literal notranslate"><span class="pre">x</span></code>,
-<code class="docutils literal notranslate"><span class="pre">y</span></code>, <code class="docutils literal notranslate"><span class="pre">z</span></code> from the math result.</p>
+<p>Each agent has its own prompt file under
+<code class="docutils literal notranslate"><span class="pre">worker/xr_render_demo_worker/</span></code> (supervisor plus five subagents, six files total).
+The supervisor prompt routes requests to subagents; each subagent prompt
+is worked-example heavy and opens with pronoun and reference resolution.</p>
+<p>The placement agent’s prompt maps utterance shapes to tools with contrast
+pairs: a stated distance is a shift (<code class="docutils literal notranslate"><span class="pre">nudge</span></code>); a user-anchored destination
+uses <code class="docutils literal notranslate"><span class="pre">move_user_relative</span></code>; a destination anchored on another object uses
+<code class="docutils literal notranslate"><span class="pre">move_object_relative</span></code> (stacking is relation <code class="docutils literal notranslate"><span class="pre">above</span></code>); “into/inside” is
+containment (<code class="docutils literal notranslate"><span class="pre">move_inside</span></code>). Every rule has a paired worked example, and
+the highest-leakage failure modes carry explicit contrast examples.</p>
 </section>
 <section id="xr-session-lifecycle">
 <h2>XR session lifecycle<a class="headerlink" href="#xr-session-lifecycle" title="Link to this heading">#</a></h2>
@@ -816,18 +760,69 @@ effects against deterministic fixtures, so the live LOVR scene is not mutated.
 Refer to
 <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
 for the case format and the watch-mode loop. Run with:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo/worker<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>python<span class="w"> </span>agent-samples/xr-render-demo/eval/eval.py
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo/eval<span class="w"> </span>xr_render_demo_eval
 </pre></div>
 </div>
+</section>
+<section id="tracing-and-debugging">
+<h2>Tracing and debugging<a class="headerlink" href="#tracing-and-debugging" title="Link to this heading">#</a></h2>
+<p>Every turn carries a <code class="docutils literal notranslate"><span class="pre">trace_id</span></code> derived from the runtime’s <code class="docutils literal notranslate"><span class="pre">message_id</span></code>
+(set by <code class="docutils literal notranslate"><span class="pre">xr-ai-runtime</span></code> when it dispatches the <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>). The id is
+logged at supervisor entry:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">worker</span><span class="p">]</span> <span class="n">DEBUG</span> <span class="n">supervisor</span> <span class="n">turn</span> <span class="n">participant</span><span class="o">=</span><span class="n">alice</span> <span class="n">trace</span><span class="o">=&lt;</span><span class="n">uuid</span><span class="o">&gt;</span> <span class="n">transcript</span><span class="o">=</span><span class="s2">"make a red sphere"</span>
+</pre></div>
+</div>
+<p>To trace one complete turn, filter worker logs by <code class="docutils literal notranslate"><span class="pre">trace=&lt;uuid&gt;</span></code> or by
+<code class="docutils literal notranslate"><span class="pre">participant=&lt;id&gt;</span></code> and <code class="docutils literal notranslate"><span class="pre">timestamp_us=&lt;value&gt;</span></code> when the trace id is
+unavailable (e.g. in offline eval). Key log landmarks:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Event</p></th>
+<th class="head"><p>Logger</p></th>
+<th class="head"><p>Level</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Turn received</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.supervisor</span></code></p></td>
+<td><p>DEBUG</p></td>
+</tr>
+<tr class="row-odd"><td><p>Subagent delegated</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.agents.*</span></code></p></td>
+<td><p>DEBUG</p></td>
+</tr>
+<tr class="row-even"><td><p>Tool loop error</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.supervisor</span></code></p></td>
+<td><p>WARNING (ToolLoopError)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Subagent tool loop error</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.agents.*</span></code></p></td>
+<td><p>WARNING (ToolLoopError)</p></td>
+</tr>
+<tr class="row-even"><td><p>Turn failed</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.agent</span></code></p></td>
+<td><p>ERROR + traceback</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>Error policy.</strong> Expected degradation paths (camera unavailable, scene
+not started) surface as subagent result strings and reach the user as a
+clarifying reply. Unexpected exceptions (<code class="docutils literal notranslate"><span class="pre">ValueError</span></code> on bad tool input
+logs at DEBUG; all other exceptions log at ERROR with full traceback via
+<code class="docutils literal notranslate"><span class="pre">logger.exception</span></code>) propagate so the runtime remains fail-fast and the
+turn is recorded as failed in the runtime event log.</p>
+<p><strong>Concurrent participants.</strong> Each participant’s turns are serialized by
+the supervisor’s per-participant lock, and a global scene lock serializes
+the snapshot/mutation/verification window across participants, so scene
+turns from different participants queue rather than interleave.</p>
 <section id="prompt-eval-overlap-audit">
 <h3>Prompt/eval overlap audit<a class="headerlink" href="#prompt-eval-overlap-audit" title="Link to this heading">#</a></h3>
-<p>The harness audits the system prompt’s worked-example blocks against every
-case fixture at startup and warns if they share specifics: verbatim user
-utterances (≥12 chars), scene coordinates rendered as <code class="docutils literal notranslate"><span class="pre">(x.xx,</span> <span class="pre">y.yy,</span> <span class="pre">z.zz)</span></code>,
-<code class="docutils literal notranslate"><span class="pre">recent_moves</span></code> coords, or any reserved colour or shape word that appears in
-both a case fixture and a worked-example block. This guards against the eval
-cases overfitting to the prompt’s worked examples.</p>
+<p>Per <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code> “Prompt-driven samples”, the harness audits every worker
+prompt against every tier’s case inputs at startup and warns on overlap:
+verbatim case utterances, case fixture ids, and any quoted prompt example
+pairing an eval-vocabulary color with an eval-vocabulary shape. Clearing a
+warning means changing the prompt, not the case.</p>
 </section>
 </section>
 </section>
@@ -900,7 +895,8 @@ cases overfitting to the prompt’s worked examples.</p>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prompt-structure">Prompt structure</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-session-lifecycle">XR session lifecycle</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#eval-harness">Eval harness</a><ul class="nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#eval-harness">Eval harness</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tracing-and-debugging">Tracing and debugging</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#prompt-eval-overlap-audit">Prompt/eval overlap audit</a></li>
 </ul>
 </li>

@@ -2658,6 +2658,11 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 
 <span class="nt">endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tcp://0.0.0.0:8330</span>
 <span class="nt">cloudxr_env_file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">~/.cloudxr/run/cloudxr.env</span>
+
+<span class="c1"># Test hook: the eval live drivers need a simulated head pose; flip to true</span>
+<span class="c1"># while running them. The injected pose overrides real tracking for every</span>
+<span class="c1"># client until cleared, so it must never ship enabled.</span>
+<span class="nt">allow_sim_pose</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 </pre></div>
 </div>
 </section>
