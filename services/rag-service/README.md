@@ -5,9 +5,9 @@
 
 # RAG service
 
-Indexes Markdown and text documents and exposes dense retrieval over private
-msgpack/ZMQ. Applications construct `xr_ai_tools.rag.RAGTools` with the
-private endpoint; the transport itself is not an agent-facing API.
+Indexes Markdown and text documents and exposes dense retrieval through private
+RPC using msgpack over ZMQ. Applications construct `xr_ai_tools.rag.RAGTools`
+with the private endpoint; the transport itself is not an agent-facing API.
 
 The checked-in `rag_service.yaml` is a reference configuration. Copy it into
 the consuming application's `yaml/` directory, set `documents_dir` and

@@ -560,6 +560,7 @@ For engineers and agents working in the repo:
 | Doc | Topic |
 |---|---|
 | [`AGENTS.md`](AGENTS.md) | Working contract — hard rules every change must satisfy |
+| [`docs/source/guides/documentation-style.md`](docs/source/guides/documentation-style.md) | House style for customer-facing Markdown and reStructuredText |
 | [`DEPENDENCIES.md`](DEPENDENCIES.md) | Authoritative dependency map (update with every `pyproject.toml` change) |
 | [Versioned documentation](https://nvidia.github.io/xr-ai/) | Latest release by default, plus `main` development and release-tag documentation |
 | [`skills/README.md`](skills/README.md) | Skill bank: setup skills for coding agents |
