@@ -341,22 +341,6 @@ Package Contents
 
 
 
-   .. py:method:: inject_participant_event(event: xr_ai_hub.ParticipantEvent) -> None
-      :async:
-
-
-      Publish a synthetic participant event; a supported seam for test drivers.
-
-
-
-   .. py:method:: inject_data(msg: xr_ai_hub.DataMessage) -> None
-      :async:
-
-
-      Publish a synthetic upstream data message; a supported seam for test drivers.
-
-
-
    .. py:method:: flush_return_audio(participant_id: str) -> None
       :async:
 
@@ -561,6 +545,8 @@ Package Contents
       RuntimeError
           If every slot is occupied. This is the producer's back-pressure
           signal; consumers release occupied slots with :meth:`release_slot`.
+      ValueError
+          If the frame is larger than the configured slot capacity.
 
 
 
@@ -574,7 +560,10 @@ Package Contents
       Raises
       ------
       RuntimeError
-          If the indicated slot is not ready for consumption.
+          If the indicated slot header is invalid or not ready for consumption.
+      ValueError
+          If the signal identifies an invalid slot or disagrees with the
+          canonical metadata stored in the slot header.
 
 
 

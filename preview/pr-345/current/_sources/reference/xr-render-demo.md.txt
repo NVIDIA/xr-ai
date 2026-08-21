@@ -190,7 +190,7 @@ the old stream before the replacement starts.
 VoiceAgent → private media session → VAD/STT ─→ voice.transcript topic
                                   └→ VoiceGate ─┐
            → typed hub text ingress ────────────┴→ xr-render.user-query topic
-  → RenderAgent → SceneModelLoop → voice.output topic
+  → RenderAgent → SceneSupervisor → five focused subagents → voice.output topic
   → VoiceAgent → private media-session TTS → hub return audio
 ```
 
@@ -201,42 +201,36 @@ manufacturing voice-pipeline frames.
 
 ## Agentic loop
 
-At worker startup, `NativeCapabilities` composes sample-local scene,
+`SceneSupervisor` coordinates five focused subagent tools (placement,
+appearance, object, vision, memory) over `xr_ai_tools.tool_calling.run_tool_loop`.
+Each subagent runs its own inner tool loop against the scene and tracking
+services. On each accepted `xr-render.user-query` event:
+
+1. **Recent conversation** is recalled from `TextMemoryTools` and injected
+   as context so the model understands references like "fix that" or "undo".
+2. **Supervisor loop** (`run_tool_loop`, up to 12 iterations) — Nemotron-Omni
+   :8108 routes the request to one or more subagent tools. Each subagent
+   runs its own inner `run_tool_loop` (up to 4 iterations) against the
+   scene, XR-tracking, and vision services.
+3. **Verification pass** — if no scene change was observed within 150 ms of
+   the loop completing, a second `run_tool_loop` call is made so the
+   supervisor can delegate remaining work or confirm a no-op turn.
+4. **Conversation history persisted** — the user utterance and agent reply
+   are written to `TextMemoryTools` under `{participant_id}:user` and
+   `{participant_id}:agent` source keys.
+5. **Final response** published as `voice.output` chunks for the voice
+   subscriber and TTS.
+
+Subagents signal scene mutation via `SceneContext.mark_delegated`; the
+supervisor uses this to distinguish scene-mutating turns from conversational
+turns when deciding whether to run the verification pass.
+
+At worker startup, `app.py` composes the five subagent tools from the scene,
 XR-tracking, spatial-math, vision, video-memory, and text-memory `Tool`
-instances into a `ToolSet`. The LLM schemas come from
-`tool_definitions(...)`; `start_xr`, `get_health`, and raw frame extraction
-remain worker-managed lifecycle operations.
+instances provided by `xr_ai_tools`. Lifecycle tools (`start_xr`,
+`get_health`) remain worker-managed and are not exposed to the supervisor.
 
-On each accepted `xr-render.user-query` event or lifecycle notice:
-
-1. **Quick-ack** runs first (`llm` :8108, awaited before the loop).
-2. **Still-working timer** starts (fires at 5s, repeats every 10s, data
-   channel only).
-3. **Pre-fetch** (concurrent): `get_scene_state` + `get_head_pose` +
-   `position_ahead(1.5)` — results injected into the user message so the
-   model skips those tool calls and goes straight to the operation.
-4. **Nemotron-Omni :8108** runs with `tools=[…]`, up to 10 iterations:
-   - Model emits `tool_calls` → `handle_tool_call(...)` validates and invokes
-     the matching native tool → its tool-role message is appended → next iteration.
-   - Service-backed tools call scene, OpenXR, and video-memory typed services.
-     Spatial math and text memory execute in process, and vision calls the
-     configured `xr-ai-models` VLM service.
-   - Progress message sent on `agent.progress` topic before each tool
-     executes (data channel).
-   - If `think=true`: reasoning preamble injected into system prompt
-     (RESOLVE object → LOCATE coordinates → COMPUTE new position →
-     EXECUTE). The `<think>` block stays private; only one short sentence
-     goes to the user. Token budget: 6144 total, 4096 thinking budget.
-   - If thinking fills the token budget without a tool call
-     (`finish_reason=length`): retry the same iteration with
-     `needs_thinking=False`.
-   - If the model outputs a bare tool name as text instead of a proper tool
-     call: worker synthesizes a no-arg tool call and continues.
-5. **Final response** sent on `agent.response` and published as correlated
-   `voice.output` chunks for the voice subscriber and TTS.
-6. **Turn appended** to a rolling 4-turn history buffer — injected as
-   context in future turns so the model understands "fix that", "undo",
-   "the one I just added". Final messages are also persisted through native
+Final messages are also persisted through native
    text memory without model scratch output or tool traces.
 
 ## Native capability composition
@@ -285,9 +279,12 @@ in one place:
 
 ## Prompt structure
 
-The system prompt at `worker/xr_render_demo_worker/prompts/system.txt` is worked-example heavy.
-It opens with pronoun and reference resolution, then routes placement
-utterances through sequential checks before the LLM picks a tool:
+Each agent has its own prompt file under
+`worker/xr_render_demo_worker/` (supervisor plus five subagents, six files total).
+The supervisor prompt routes requests to subagents; each subagent prompt
+is worked-example heavy and opens with pronoun and reference resolution.
+
+The placement agent routes placement utterances through sequential checks:
 
 1. **FIRST CHECK**: `"between"`/`"middle"`/`"halfway"` → route to
    `between_anchors`; stop considering other placement tools.
@@ -299,12 +296,8 @@ utterances through sequential checks before the LLM picks a tool:
    direction is unrelated to where the target object sits, so
    `displace_object` is wrong here.
 
-Every rule that's not obviously self-explanatory has a paired WORKED
-EXAMPLE (concrete coords + tool call) and, for the highest-leakage
-failure modes, a WORKED ANTI-EXAMPLE. The two-step contract is
-hammered: every move emits one math-tool call followed by exactly one
-`add_primitive`/`update_primitive` call carrying all three of `x`,
-`y`, `z` from the math result.
+Every rule has a paired WORKED EXAMPLE and, for the highest-leakage
+failure modes, a WORKED ANTI-EXAMPLE.
 
 ## XR session lifecycle
 
@@ -356,8 +349,8 @@ unavailable (e.g. in offline eval). Key log landmarks:
 |---|---|---|
 | Turn received | `xr_render_demo_worker.supervisor` | DEBUG |
 | Subagent delegated | `xr_render_demo_worker.agents.*` | DEBUG |
-| Tool call rejected (expected) | `xr_render_demo_worker._loop` | DEBUG |
-| Tool call failed (unexpected) | `xr_render_demo_worker._loop` | ERROR + traceback |
+| Tool loop error | `xr_render_demo_worker.supervisor` | WARNING (ToolLoopError) |
+| Subagent tool loop error | `xr_render_demo_worker.agents.*` | WARNING (ToolLoopError) |
 | Turn failed | `xr_render_demo_worker.agent` | ERROR + traceback |
 
 **Error policy.** Expected degradation paths (camera unavailable, scene
@@ -369,9 +362,7 @@ turn is recorded as failed in the runtime event log.
 
 **Concurrent participants.** Each participant's turns are serialized by
 the supervisor's per-participant lock. Different participants can run
-concurrently; their scene mutations are isolated by participant-scoped
-delegation flags (`mark_mutating`, `mark_delegated`) and the underlying
-scene service serializes conflicting writes.
+concurrently; the underlying scene service serializes conflicting writes.
 
 ### Prompt/eval overlap audit
 

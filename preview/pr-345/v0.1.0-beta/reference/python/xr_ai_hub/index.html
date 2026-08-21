@@ -841,18 +841,6 @@ an older build that does not answer probes.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="xr_ai_hub.ProcessorEndpoint.inject_participant_event">
-<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">inject_participant_event</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_hub.ParticipantEvent" title="xr_ai_hub.ParticipantEvent"><span class="pre">xr_ai_hub.ParticipantEvent</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_hub.ProcessorEndpoint.inject_participant_event" title="Link to this definition">#</a></dt>
-<dd><p>Publish a synthetic participant event; a supported seam for test drivers.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="xr_ai_hub.ProcessorEndpoint.inject_data">
-<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">inject_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_hub.DataMessage" title="xr_ai_hub.DataMessage"><span class="pre">xr_ai_hub.DataMessage</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_hub.ProcessorEndpoint.inject_data" title="Link to this definition">#</a></dt>
-<dd><p>Publish a synthetic upstream data message; a supported seam for test drivers.</p>
-</dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_hub.ProcessorEndpoint.flush_return_audio">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">flush_return_audio</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_hub.ProcessorEndpoint.flush_return_audio" title="Link to this definition">#</a></dt>
 <dd><p>Drop any return audio currently queued at the hub for <em>participant_id</em>.</p>
@@ -1059,6 +1047,8 @@ one. The creator is responsible for eventually calling <a class="reference inter
 <dt>RuntimeError</dt><dd><p>If every slot is occupied. This is the producer’s back-pressure
 signal; consumers release occupied slots with <a class="reference internal" href="#xr_ai_hub.ShmRingBuffer.release_slot" title="xr_ai_hub.ShmRingBuffer.release_slot"><code class="xref py py-meth docutils literal notranslate"><span class="pre">release_slot()</span></code></a>.</p>
 </dd>
+<dt>ValueError</dt><dd><p>If the frame is larger than the configured slot capacity.</p>
+</dd>
 </dl>
 </section>
 </dd></dl>
@@ -1072,7 +1062,10 @@ slot and must not be retained afterward.</p>
 <section id="id10">
 <h4>Raises<a class="headerlink" href="#id10" title="Link to this heading">#</a></h4>
 <dl class="simple">
-<dt>RuntimeError</dt><dd><p>If the indicated slot is not ready for consumption.</p>
+<dt>RuntimeError</dt><dd><p>If the indicated slot header is invalid or not ready for consumption.</p>
+</dd>
+<dt>ValueError</dt><dd><p>If the signal identifies an invalid slot or disagrees with the
+canonical metadata stored in the slot header.</p>
 </dd>
 </dl>
 </section>
@@ -1674,8 +1667,6 @@ proves every subscription issued before the probe is live on the hub.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.on_participant"><code class="docutils literal notranslate"><span class="pre">on_participant()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.send_return_data"><code class="docutils literal notranslate"><span class="pre">send_return_data()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.send_return_audio"><code class="docutils literal notranslate"><span class="pre">send_return_audio()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.inject_participant_event"><code class="docutils literal notranslate"><span class="pre">inject_participant_event()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.inject_data"><code class="docutils literal notranslate"><span class="pre">inject_data()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.flush_return_audio"><code class="docutils literal notranslate"><span class="pre">flush_return_audio()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.request_roster"><code class="docutils literal notranslate"><span class="pre">request_roster()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.set_status"><code class="docutils literal notranslate"><span class="pre">set_status()</span></code></a></li>

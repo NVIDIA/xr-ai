@@ -429,11 +429,13 @@ return path, and the same-origin <code class="docutils literal notranslate"><spa
 <span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">device_io_hub</span>                    <span class="c1"># equivalent module form</span>
 </pre></div>
 </div>
-<p>Configuration comes from a <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> file (defaults are used when
-none is found). <code class="docutils literal notranslate"><span class="pre">services/device-io-hub/device_io_hub.yaml</span></code> is the reference copy
-documenting every field; each sample ships its own copy under its <code class="docutils literal notranslate"><span class="pre">yaml/</span></code>
-directory. Relative paths inside the YAML (such as <code class="docutils literal notranslate"><span class="pre">web_client_dir</span></code>) resolve
-against the YAML file’s own directory, not the working directory.</p>
+<p>Configuration comes from a <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> file. When none is found,
+non-secret defaults are used, but LiveKit credentials must still come from
+<code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_SECRET</span></code>.
+<code class="docutils literal notranslate"><span class="pre">services/device-io-hub/device_io_hub.yaml</span></code> is the reference copy documenting
+every field; each sample ships its own copy under its <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory.
+Relative paths inside the YAML (such as <code class="docutils literal notranslate"><span class="pre">web_client_dir</span></code>) resolve against the
+YAML file’s own directory, not the working directory.</p>
 <p>For where the hub sits in the wider system, refer to
 <a class="reference internal" href="../overview/architecture.html"><span class="doc">Architecture</span></a>.</p>
 <section id="deviceiohub">
@@ -596,8 +598,12 @@ client lazily publishes one <code class="docutils literal notranslate"><span cla
 and refreshes subscribe permissions so each participant may subscribe only to
 their own return track. Return data is sent with <code class="docutils literal notranslate"><span class="pre">destination_identities</span></code> set
 to the target participant, so it is never broadcast to peers. Return audio is
-paced into LiveKit at audio rate by a per-participant pipe, which a flush can
-drain to interrupt playback.</p>
+paced before IPC by the built-in voice transport, then fed into LiveKit by a
+per-participant pipe that a flush can drain to interrupt playback.
+<code class="docutils literal notranslate"><span class="pre">return_audio_max_buffer_s</span></code> (3 seconds by default) is also a hard
+per-participant duration bound: if a custom or faulty producer runs ahead of
+playback, the oldest queued frames are dropped without affecting any other
+participant.</p>
 </section>
 <section id="agent-status-aggregation">
 <h2>Agent status aggregation<a class="headerlink" href="#agent-status-aggregation" title="Link to this heading">#</a></h2>

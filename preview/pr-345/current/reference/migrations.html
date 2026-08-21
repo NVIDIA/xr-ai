@@ -427,6 +427,27 @@ and command to <code class="docutils literal notranslate"><span class="pre">devi
 <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">XR_MEDIA_HUB_NO_WEB_CLIENT</span></code> to
 <code class="docutils literal notranslate"><span class="pre">DEVICE_IO_HUB_NO_WEB_CLIENT</span></code>. The rename has no compatibility aliases.</p>
 </section>
+<section id="operator-visible-runtime-changes">
+<h2>Operator-visible runtime changes<a class="headerlink" href="#operator-visible-runtime-changes" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>DeviceIOHub no longer falls back to embedded LiveKit development credentials.
+Set <code class="docutils literal notranslate"><span class="pre">api_key</span></code> and <code class="docutils literal notranslate"><span class="pre">api_secret</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>, or inject
+<code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_SECRET</span></code> through the environment.</p></li>
+<li><p>Boolean service settings now require YAML booleans or the strings <code class="docutils literal notranslate"><span class="pre">true</span></code>,
+<code class="docutils literal notranslate"><span class="pre">false</span></code>, <code class="docutils literal notranslate"><span class="pre">yes</span></code>, <code class="docutils literal notranslate"><span class="pre">no</span></code>, <code class="docutils literal notranslate"><span class="pre">on</span></code>, <code class="docutils literal notranslate"><span class="pre">off</span></code>, <code class="docutils literal notranslate"><span class="pre">1</span></code>, or <code class="docutils literal notranslate"><span class="pre">0</span></code> (case-insensitive). Numeric
+<code class="docutils literal notranslate"><span class="pre">1</span></code>/<code class="docutils literal notranslate"><span class="pre">0</span></code>, null values, and arbitrary strings now fail at startup instead of
+being interpreted by Python truthiness. This applies to vLLM eager/tool/
+scheduling flags, Nemotron-Omni BF16 selection, Piper CUDA, voice-gate
+<code class="docutils literal notranslate"><span class="pre">listening_chime</span></code>, lab-monitoring <code class="docutils literal notranslate"><span class="pre">capture_marker_scans</span></code>, and tea-workflow
+<code class="docutils literal notranslate"><span class="pre">complete_on_skip</span></code>.</p></li>
+<li><p>Return audio is paced before IPC by the built-in voice transport and bounded
+independently for each participant in DeviceIOHub.
+<code class="docutils literal notranslate"><span class="pre">return_audio_max_buffer_s</span></code> defaults to 3 seconds; a custom or faulty producer
+that exceeds the queued-audio duration limit loses its oldest queued frames.
+Increase the value for intentionally bursty custom producers, or decrease it
+for a tighter memory and latency bound.</p></li>
+</ul>
+</section>
 <section id="removed-sdk-compatibility-surfaces">
 <h2>Removed SDK compatibility surfaces<a class="headerlink" href="#removed-sdk-compatibility-surfaces" title="Link to this heading">#</a></h2>
 <p>This release removes deprecated SDK aliases and the standalone Pipecat
@@ -501,6 +522,9 @@ compatibility package. Update out-of-tree code as follows:</p>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_tools.qr_code.QRCodeTool</span></code></p></td>
 <td><p>Initialize <code class="docutils literal notranslate"><span class="pre">xr_ai_tools.marker_tracking.MarkerTrackingTool</span></code>; select QR and/or ArUco with <code class="docutils literal notranslate"><span class="pre">marker_types</span></code>, then use the same <code class="docutils literal notranslate"><span class="pre">track_markers</span></code> request and result contract for either family.</p></td>
 </tr>
+<tr class="row-odd"><td><p>Implicit development credentials from <code class="docutils literal notranslate"><span class="pre">LiveKitConnectorConfig()</span></code> or <code class="docutils literal notranslate"><span class="pre">LiveKitConnector()</span></code></p></td>
+<td><p>Pass a <code class="docutils literal notranslate"><span class="pre">LiveKitConnectorConfig</span></code> with explicit <code class="docutils literal notranslate"><span class="pre">api_key</span></code> and <code class="docutils literal notranslate"><span class="pre">api_secret</span></code>. The YAML loader also accepts <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_SECRET</span></code>.</p></td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -567,6 +591,7 @@ reuse the ignored caches rather than downloading them again.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deviceiohub-rename">DeviceIOHub rename</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#operator-visible-runtime-changes">Operator-visible runtime changes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#removed-sdk-compatibility-surfaces">Removed SDK compatibility surfaces</a></li>
 </ul>
   </nav></div>
