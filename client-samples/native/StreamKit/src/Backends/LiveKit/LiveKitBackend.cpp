@@ -597,7 +597,7 @@ void LiveKitBackend::HandleDataReceived(std::string_view topic,
     }
 }
 
-void LiveKitBackend::HandleNetworkQualityChange(int lk_quality) {
+void LiveKitBackend::HandleNetworkQualityChange(int lk_quality) { // NOSONAR - changes published state.
     NetworkQuality quality = NetworkQuality::kUnknown;
 #if STREAMKIT_HAVE_LIVEKIT
     switch (static_cast<livekit::ConnectionQuality>(lk_quality)) {
