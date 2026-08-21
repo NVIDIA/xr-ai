@@ -497,7 +497,9 @@ full setup. Quick steps:
 
 Permissions (`RECORD_AUDIO`, `CAMERA`) are requested at runtime on first use.
 
-### iOS / visionOS
+<a id="ios--visionos"></a>
+
+### iOS and visionOS
 
 Refer to [`client-samples/ios-visionos/README.md`](client-samples/ios-visionos/README.md)
 for full Xcode setup. Quick connection settings:

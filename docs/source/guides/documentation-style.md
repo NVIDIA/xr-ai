@@ -16,7 +16,9 @@ Introduce documentation links with **Refer to** or **refer to**, not "See" or
 "see." Prefer MyST `{doc}` links in Markdown and `:doc:` or `:ref:` roles in
 reStructuredText. Use a descriptive Markdown link when the target is source
 code or an external resource, and link directly to the authoritative target
-rather than through a thin redirect page.
+rather than through a thin redirect page. Treat published URL fragments as
+stable. When rewording a heading, preserve its previous fragment with an
+explicit compatibility anchor.
 
 ## Slashes in prose
 

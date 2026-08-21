@@ -336,7 +336,9 @@ problems from detector or VLM problems. Then inspect Relay events and the
 participant JSONL files to follow the tool call, reading, state update, and
 notification as distinct stages.
 
-## What should become shared
+<a id="what-should-become-shared"></a>
+
+## What belongs in shared code
 
 Reuse public SDK blocks directly when they already express the contract:
 `VoiceAgent`, `AgentRuntime`, `run_tool_loop`, `CurrentFrameTool`,

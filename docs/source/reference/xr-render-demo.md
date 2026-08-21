@@ -136,7 +136,7 @@ LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceAgent
       pre-roll buffer    last 10 chunks (~320 ms) kept at all times;
                          prepended to the utterance buffer on speech onset
                          so the first word's attack isn't clipped
-      VAD                Silero (ONNX, 512-sample / 32 ms windows,
+      VAD                Silero ONNX (512 samples per 32 ms window,
                          probability threshold) via shared xr-ai-vad util
       accumulates        audio while speaking
       finalizes when     silence ≥ 0.8s AND speech ≥ 0.15s
@@ -330,7 +330,9 @@ the supervisor's per-participant lock, and a global scene lock serializes
 the snapshot, mutation, and verification window across participants, so scene
 turns from different participants queue rather than interleave.
 
-### Prompt/eval overlap audit
+(prompt-eval-overlap-audit)=
+
+### Prompt and evaluation overlap audit
 
 Per `AGENTS.md` "Prompt-driven samples", the harness audits every worker
 prompt against every tier's case inputs at startup and warns on overlap:

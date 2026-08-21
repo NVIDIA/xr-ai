@@ -151,7 +151,9 @@ profile remains the authority for credentials: callers cannot supply an
 `stream_images()`. Multi-image calls preserve caller order and place every
 image in one OpenAI-compatible user message before the question.
 
-## Remote / hosted-NIM endpoints
+<a id="remote-hosted-nim-endpoints"></a>
+
+## Remote and hosted NIM endpoints
 
 Cloud and remote endpoints, such as hosted [NVIDIA NIM](https://build.nvidia.com),
 are a profile change:
