@@ -20,13 +20,8 @@ containers. Shipped profiles (yaml/models.<name>.json):
 
   vlm_llm_nim
     stt + embedding local; the LLM and VLM as self-hosted NIM containers
-    (Nemotron-3-Nano port 8110, Cosmos-Reason1-7B port 8100). Requires
-    docker + NGC_API_KEY. Pairs with the samples' models.vlm_llm_nim.json.
-
-  vlm_speech_nim
-    Riva speech NIM containers (gRPC 50051/50052) + Cosmos NIM + local
-    embedding. Pairs with simple-vlm-example's models.vlm_speech_nim.json.
-    Mutually exclusive with vlm_llm_nim on 2x48 GB.
+    (Nemotron-3-Nano port 8110, Cosmos3-Nano Reasoner port 8100). Requires
+    docker + NGC_API_KEY. Samples may reuse these endpoints.
 
 Per-service placement (GPUs, ports, KV budgets) lives in the per-GPU-profile
 YAML directory; a service may ship a profile-specific config variant named
@@ -208,7 +203,7 @@ def run() -> None:
     mode.add_argument(
         "--models", dest="models", metavar="NAME_OR_PATH",
         help="Deployment profile to start: a shipped name (default, "
-             "vlm_llm_nim, vlm_speech_nim) or a path to a profile JSON.",
+             "vlm_llm_nim) or a path to a profile JSON.",
     )
     p.set_defaults(models="default")
     p.add_argument("--allow-anonymous", action="store_true",

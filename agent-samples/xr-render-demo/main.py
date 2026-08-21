@@ -18,15 +18,11 @@ runs alongside as its own stream; neither stack passes through the other.
 
 Prerequisites
 -------------
-Model entries the selected profile marks `reused` must already be served
-before this demo starts; everything marked `managed` is launched by this
-orchestrator itself, and `external` entries need no local process. The
-shipped profiles reuse the matching model-servers stack:
+All model services must already be running before this demo starts. The sample
+never starts or stops them. Start the shared model stack and Piper TTS:
 
-    uv run --project agent-samples/model-servers model_servers               # models.local.json
-    uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim  # models.vlm_llm_nim.json
-
-models.hosted.json pre-starts nothing (hosted NIM; needs NGC_API_KEY).
+    uv run --project agent-samples/model-servers model_servers
+    uv run --project services/piper-tts piper_tts_server
 
 How to run (from the repo root or any directory):
     uv run --project agent-samples/xr-render-demo xr_render_demo
@@ -53,15 +49,12 @@ import shutil
 import subprocess
 import sys
 import urllib.request
-from dataclasses import replace
 from pathlib import Path
 
 from loguru import logger
 from xr_ai_launcher import (
     Process,
-    ensure_credentials,
     is_native_profile,
-    load_model_deployment,
     read_device_profile,
     run_stack,
 )
@@ -78,51 +71,30 @@ _NO_WEB_CLIENT_ENV = "DEVICE_IO_HUB_NO_WEB_CLIENT"
 
 # ── Process stack ─────────────────────────────────────────────────────────────
 #
-# The deployment profile selected by models_config in the worker YAML decides
-# which of these the launcher expects or starts. Model servers resolve to
-# launch_mode="reuse"; they are started and owned by model-servers, not this
-# demo; start the matching stack first:
-#   uv run --project agent-samples/model-servers model_servers            # local
-#   uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim
-# The one llm-nim container serves both llm and agent_llm.
-_MODEL_PROCESSES = {
-    "llm-nim": Process(
-        "llm-nim", "../../services/nim-server", "nim_server",
-    ),
-    "vlm-nim": Process(
-        "vlm-nim", "../../services/nim-server", "nim_server",
-    ),
-    "stt": Process(
+_MODEL_PROCESSES = [
+    Process(
         "stt", "../../services/stt-server", "stt_server",
-        config="yaml/stt_server.yaml",
+        launch_mode="reuse",
     ),
-    "omni": Process(
+    Process(
         "omni", "../../services/nemotron-omni-llm",
         "nemotron_omni_llm_server",
+        launch_mode="reuse",
     ),
-    "vlm": Process(
+    Process(
         "vlm", "../../services/vlm-server", "vlm_server",
+        launch_mode="reuse",
     ),
-    "tts": Process(
+    Process(
         "tts", "../../services/piper-tts", "piper_tts_server",
-        config="yaml/piper_tts_server.yaml",
+        launch_mode="reuse",
     ),
-}
+]
 
 
-def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
-    deployment = load_model_deployment(_BASE / _WORKER_CONFIG)
-    unknown_services = deployment.services.keys() - _MODEL_PROCESSES.keys()
-    if unknown_services:
-        raise ValueError(
-            f"model profile declares unknown services: {sorted(unknown_services)}"
-        )
-    procs = []
-    for service, process in _MODEL_PROCESSES.items():
-        launch_mode = deployment.launch_mode(service)
-        if launch_mode is not None:
-            procs.append(replace(process, launch_mode=launch_mode))
-    procs += [
+def _build_processes() -> list[Process]:
+    return [
+        *_MODEL_PROCESSES,
         Process("hub",        "../../services/device-io-hub",                "device_io_hub",
                 config="yaml/device_io_hub.yaml"),
         Process("cloudxr",    "../../services/cloudxr-runtime",               "cloudxr_runtime",
@@ -137,7 +109,6 @@ def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
         Process("worker",     "worker",                              "xr_render_demo_worker",
                 config=_WORKER_CONFIG),
     ]
-    return procs, deployment.required_credentials
 
 
 # Match an uncommented `lovr_bin:` line with a non-empty value.
@@ -271,10 +242,7 @@ def run() -> None:
     else:
         _ensure_web_vendor()
     _ensure_lovr_bin()
-    processes, credentials = _build_processes()
-    for credential in credentials:
-        ensure_credentials(credential)
-    run_stack(processes, _BASE)
+    run_stack(_build_processes(), _BASE)
 
 
 if __name__ == "__main__":

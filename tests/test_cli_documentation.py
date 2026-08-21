@@ -27,7 +27,6 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         "xr_render_demo",
     }
     assert [argument.flags for argument in commands["lab_instrument_monitoring"].arguments] == [
-        ("--vlm-mode",),
         ("--expose-web-events",),
     ]
     assert [argument.flags for argument in commands["model_servers"].arguments] == [
@@ -36,12 +35,8 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         ("--allow-anonymous",),
         ("--gpu-profile",),
     ]
-    assert [argument.flags for argument in commands["simple_vlm_example"].arguments] == [
-        ("--allow-anonymous",),
-    ]
+    assert commands["simple_vlm_example"].arguments == ()
     assert [argument.flags for argument in commands["tea_making_sample"].arguments] == [
-        ("--voice-mode",),
-        ("--tts-mode",),
         ("--expose-web-events",),
     ]
     assert commands["xr_render_demo"].arguments == ()

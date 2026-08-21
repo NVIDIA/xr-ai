@@ -97,6 +97,10 @@ def test_omni_supplies_both_language_and_vision() -> None:
     assert models["vlm"]["endpoint"]["base_url"] == "http://localhost:8108"
     assert models["vlm"]["adapter"]["capabilities"]["vision"] is True
     assert models["vlm"]["adapter"]["reasoning_field"] == "reasoning_content"
+    assert all(
+        model["deployment"]["ownership"] == "reused"
+        for model in models.values()
+    )
     assert "cosmos" not in json.dumps(models).lower()
 
 
@@ -104,13 +108,8 @@ def test_launcher_declares_one_omni_and_no_monitoring_ui(tmp_path: Path) -> None
     sample_main = _load_main()
     worker_config = sample_main._materialize_worker_config(
         tmp_path,
-        "always-on",
-        "piper",
     )
-    processes, _credentials = sample_main._build_processes(
-        worker_config,
-        "piper",
-    )
+    processes = sample_main._build_processes(worker_config)
     names = [process.name for process in processes]
 
     assert names[0] == "hub"
@@ -119,27 +118,28 @@ def test_launcher_declares_one_omni_and_no_monitoring_ui(tmp_path: Path) -> None
     assert "vlm" not in names
     assert "activity-viewer" not in names
     assert "rag" in names
+    assert all(
+        process.launch_mode == "reuse"
+        for process in processes
+        if process.name in {"stt", "omni", "embedding", "tts"}
+    )
 
 
-def test_launcher_defaults_to_wake_word_and_allows_always_on() -> None:
+def test_launcher_only_exposes_web_events_override() -> None:
     sample_main = _load_main()
 
-    default = sample_main._parse_args(["--tts-mode", "piper"])
-    explicit = sample_main._parse_args(
-        ["--voice-mode", "always-on", "--tts-mode", "piper"]
-    )
+    default = sample_main._parse_args([])
+    exposed = sample_main._parse_args(["--expose-web-events"])
 
-    assert default is not None and default.voice_mode == "wake-word"
-    assert default is not None and default.expose_web_events is False
-    assert explicit is not None and explicit.voice_mode == "always-on"
-    exposed = sample_main._parse_args(
-        ["--tts-mode", "piper", "--expose-web-events"]
-    )
-    assert exposed is not None and exposed.expose_web_events is True
+    assert default.expose_web_events is False
+    assert exposed.expose_web_events is True
     assert _CLIENT_TEXT_TOPIC == "agent.response"
 
 
-def test_web_event_config_defaults_and_validation(tmp_path: Path) -> None:
+def test_web_event_config_defaults_and_validation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     config = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
 
     assert config.web_events_host == "127.0.0.1"
@@ -160,11 +160,26 @@ def test_web_event_config_defaults_and_validation(tmp_path: Path) -> None:
     sample_main = _load_main()
     exposed_config = sample_main._materialize_worker_config(
         tmp_path,
-        "wake-word",
-        "piper",
         expose_web_events=True,
     )
     assert load_config(exposed_config).web_events_host == "0.0.0.0"
+    assert (
+        load_config(exposed_config).voice_gate_yaml
+        == _SAMPLE / "yaml/voice_gate.yaml"
+    )
+
+    always_on_source = tmp_path / "always-on-worker.yaml"
+    always_on_source.write_text(
+        (_SAMPLE / "yaml/tea_making_worker.yaml")
+        .read_text()
+        .replace("voice_gate.yaml", "voice_gate.always-on.yaml"),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sample_main, "_WORKER_CONFIG", always_on_source)
+    always_on_config = sample_main._materialize_worker_config(tmp_path)
+    assert load_config(always_on_config).voice_gate_yaml == (
+        tmp_path / "voice_gate.always-on.yaml"
+    )
 
 
 @pytest.mark.asyncio

@@ -114,7 +114,7 @@ def load_config(path: Path | None) -> WorkerConfig:
         raise ValueError("web_events_max_events must be positive")
     idle_timeout = float(data.get("idle_timeout_secs", 0.0))
     return WorkerConfig(
-        models_config=_resolve(path, str(data.get("models_config", "models.local.json"))),
+        models_config=_resolve(path, "models.json"),
         voice_gate_yaml=_resolve(path, str(data.get("voice_gate_yaml", "voice_gate.yaml"))),
         device_map=load_device_map(_resolve(path, str(data.get("device_map_yaml", "device_map.yaml")))),
         artifacts_dir=_resolve(path, str(data.get("artifacts_dir", "../artifacts"))),

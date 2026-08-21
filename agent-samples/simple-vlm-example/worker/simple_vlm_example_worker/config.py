@@ -59,14 +59,13 @@ def _load_system_prompt(data: dict[str, Any], config_path: Path | None) -> str:
 
 
 def load_config(path: Path | None) -> WorkerConfig:
-    """Load worker YAML and resolve its shared deployment profile."""
+    """Load worker YAML and resolve the sample's fixed model configuration."""
 
     data = _read_config(path)
-    models_name = str(data.get("models_config", "models.local.json"))
     idle_timeout = data.get("idle_timeout_secs")
 
     return WorkerConfig(
-        models_config=_resolve(path, models_name),
+        models_config=_resolve(path, "models.json"),
         voice_gate_yaml=_resolve(
             path,
             str(data.get("voice_gate_yaml", "voice_gate.yaml")),

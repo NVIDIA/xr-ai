@@ -44,10 +44,11 @@
       "category": "vlm",
       "adapter": {
         "kind": "openai_compat",
-        "model_name": "nvidia/cosmos-reason1-7b",
+        "model_name": "nvidia/cosmos3-nano-reasoner",
         "capabilities": {
           "streaming": true,
-          "vision": true
+          "vision": true,
+          "video": true
         }
       },
       "endpoint": {
