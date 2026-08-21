@@ -169,7 +169,7 @@ private:
 
     void ApplyConnectionState(ConnectionState state);
     void BlockNetworkMetricsDelivery();
-    void HandleNetworkQualityChange(int lk_quality) const;
+    void HandleNetworkQualityChange(int lk_quality);
     void StartNetworkMetricsReporting();
     void StopNetworkMetricsReporting();
     void PublishNetworkMetrics(std::uint64_t connection_epoch);
@@ -211,7 +211,7 @@ private:
         bool blocked = true;
     };
     struct NetworkMetricsState {
-        mutable std::atomic<NetworkQuality> quality{NetworkQuality::kUnknown};
+        std::atomic<NetworkQuality> quality{NetworkQuality::kUnknown};
         std::atomic<std::uint64_t> connection_epoch{0};
         std::shared_ptr<NetworkMetricsDeliveryState> delivery =
             std::make_shared<NetworkMetricsDeliveryState>();
