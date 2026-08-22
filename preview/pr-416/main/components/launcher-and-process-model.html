@@ -329,6 +329,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
@@ -473,8 +474,7 @@ processes that use their own internal defaults.</p>
 <code class="docutils literal notranslate"><span class="pre">models_config</span></code> in the worker YAML. <code class="docutils literal notranslate"><span class="pre">load_model_deployment()</span></code> reads the selected
 structured JSON profile using only the standard library and exposes its
 managed, reused, or external service ownership to the orchestrator. The same
-file is loaded by the worker through <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code>; see the simple VLM
-sample’s <code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code> and <code class="docutils literal notranslate"><span class="pre">yaml/models.hosted.json</span></code> profiles.</p>
+file is loaded by the worker through <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code>.</p>
 <p>The orchestrator declares the process sequence in code:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">_BASE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span>   <span class="c1"># sample root</span>
 

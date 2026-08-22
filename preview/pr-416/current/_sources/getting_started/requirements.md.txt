@@ -20,7 +20,7 @@ local GPU is required for the agent or DeviceIOHub.
 | Sample | Local VRAM needed |
 |---|---|
 | model-servers (all models) | ~55 GB |
-| simple-vlm-example (standalone) | ~23 GB |
+| simple-vlm-example (requires model services) | Uses the model-services allocation |
 | xr-render-demo (requires model-servers) | ~55 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 

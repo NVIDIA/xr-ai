@@ -306,6 +306,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
@@ -727,6 +728,38 @@ no participant authentication or TLS. Use the externally reachable sample mode
 only on a trusted development network, or put an authenticated TLS reverse
 proxy in front of it.</p>
 </section>
+<section id="file-outputs-and-persistence">
+<h2>File outputs and persistence<a class="headerlink" href="#file-outputs-and-persistence" title="Link to this heading">#</a></h2>
+<p>Every non-empty final STT result is written to <code class="docutils literal notranslate"><span class="pre">transcript.jsonl</span></code> before voice
+gating, including ambient speech rejected by a configured wake phrase. Wake-word
+gating controls dispatch to the foreground, not storage: rejected speech is
+still transcribed and persisted. The default gate accepts <code class="docutils literal notranslate"><span class="pre">agent</span></code> and
+<code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span></code>, plays a listening chime, and allows one follow-up utterance for
+five seconds. Accepted speech reaches the foreground as a <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>. Typed
+text reaches the foreground but is not an STT transcript.</p>
+<p>Each connection writes to a new participant-scoped directory:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>artifacts/
+├── relay-events.jsonl
+└── &lt;participant&gt;-&lt;utc-session-stamp&gt;/
+    ├── monitor.jsonl
+    ├── instrument-monitoring.jsonl
+    ├── transcript.jsonl
+    └── foreground.jsonl
+</pre></div>
+</div>
+<p>Every per-session file begins with a <code class="docutils literal notranslate"><span class="pre">session</span></code> record and receives a
+<code class="docutils literal notranslate"><span class="pre">session_end</span></code> record on participant departure once that output type has been
+written. Monitor records contain a baseline, observations, unavailable-frame
+notices, or errors. Foreground records include the query, response, and
+model-selected tool names. Relay events contain prompts, responses, participant
+metadata, and tool lifecycles; live camera bytes are redacted by the shared
+vision tool. When <code class="docutils literal notranslate"><span class="pre">capture_marker_scans</span></code> is enabled, every lab-instrument
+invocation saves the exact source JPEG under <code class="docutils literal notranslate"><span class="pre">marker-scans/</span></code>; the worker log
+records that path and marker-family counts for debugging. Unmapped marker
+payloads are represented by a bounded hash rather than logged verbatim.
+Instrument monitoring records contain discrete changes, one-time
+tracking-loss events, and complete state snapshots.</p>
+</section>
 <section id="adapting-the-sample">
 <h2>Adapting the sample<a class="headerlink" href="#adapting-the-sample" title="Link to this heading">#</a></h2>
 <section id="track-another-measured-object">
@@ -860,6 +893,7 @@ another concrete application needs exactly the same behavior.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stateful-monitoring">Stateful monitoring</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#connecting-a-backend">Connecting a backend</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#live-event-viewer">Live event viewer</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#file-outputs-and-persistence">File outputs and persistence</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adapting-the-sample">Adapting the sample</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#track-another-measured-object">Track another measured object</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#add-an-alert-rule">Add an alert rule</a></li>
