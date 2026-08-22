@@ -21,8 +21,8 @@ from ..._trace import current_participant_id, current_reference_time_us, current
 from ...models import SubagentResult, SubagentTask
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
-DESCRIPTION = ("Recall what was said in earlier conversation turns; knows nothing about "
-               "the physical world, the camera, or any object's color.")
+DESCRIPTION = ("Recall what was said in earlier conversation turns, including objects and "
+               "colors mentioned there; knows nothing about the physical world or the camera.")
 
 _MAX_END_US = RecallConversationRequest.model_fields["end_us"].default
 

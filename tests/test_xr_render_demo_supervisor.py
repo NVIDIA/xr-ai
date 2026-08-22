@@ -140,6 +140,51 @@ async def test_mixed_vision_and_mutation_request_still_verifies(monkeypatch) -> 
     assert loop_calls == 2
 
 
+async def test_verification_never_offers_repeat_when_mutation_undelegated(monkeypatch) -> None:
+    """A change-requesting utterance whose first pass delegated no mutating
+    subagent must get a verification nudge with no repeat-your-answer out."""
+    supervisor, _fake = _make_supervisor()
+    nudges: list[str] = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        nudges.extend(m.content for m in messages if m.role == "user" and "Verified scene" in m.content)
+        return SimpleNamespace(
+            content="Recolored it to match the wall.",
+            messages=list(messages),
+            tool_calls=(),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await supervisor.handle(SceneRequest(
+        transcript="Make the sphere the same color as the wall.", participant_id="alice"))
+    assert len(nudges) == 1
+    assert "repeat your final answer" not in nudges[0]
+    assert "never" in nudges[0]
+
+
+async def test_verification_offers_repeat_after_mutating_delegation(monkeypatch) -> None:
+    """When a mutating subagent did run and reported no change, the nudge
+    keeps the repeat-answer path for honest failure replies."""
+    supervisor, _fake = _make_supervisor()
+    nudges: list[str] = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        nudges.extend(m.content for m in messages if m.role == "user" and "Verified scene" in m.content)
+        return SimpleNamespace(
+            content="I couldn't find that object.",
+            messages=list(messages),
+            tool_calls=(SimpleNamespace(call=SimpleNamespace(name="appearance_agent")),),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await supervisor.handle(SceneRequest(
+        transcript="Paint the sphere crimson.", participant_id="alice"))
+    assert len(nudges) == 1
+    assert "repeat your final answer" in nudges[0]
+
+
 async def test_turn_tasks_run_in_forked_relay_context(monkeypatch) -> None:
     """Detached turn tasks must not inherit the subscriber's live Relay scope
     stack; each turn gets a forked context."""

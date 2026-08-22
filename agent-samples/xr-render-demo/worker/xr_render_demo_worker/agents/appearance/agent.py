@@ -13,7 +13,12 @@ from xr_ai_tools.tool_calling import ToolLoopError, run_tool_loop
 from xr_render_scene import EmptyRequest, SceneState, SceneTools
 
 from ..._tolerant import tolerant_toolset
-from ..._trace import current_participant_id, current_reference_time_us, current_trace_id
+from ..._trace import (
+    current_instruction,
+    current_participant_id,
+    current_reference_time_us,
+    current_trace_id,
+)
 from ...models import SubagentResult, SubagentTask
 from ...scene import SceneContext
 from ...spatial_ops import TurnGuard, make_appearance_tools
@@ -34,6 +39,7 @@ def make_appearance_agent(
 
     async def handle(request: SubagentTask) -> SubagentResult:
         logger.debug("appearance agent instruction={!r} trace={}", request.instruction[:200], current_trace_id.get())
+        current_instruction.set(request.instruction)
         async with delegation_lock:
             guard = TurnGuard()
             tools = make_appearance_tools(scene, guard=guard, physical_color=physical_color)

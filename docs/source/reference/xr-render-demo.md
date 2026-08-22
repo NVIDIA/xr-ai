@@ -245,10 +245,10 @@ in one place:
   never applies signs to user-frame axes or copies coordinates.
 - **Appearance tool**: `recolor` resolves color words, RGB triples, and
   copy-the-color-of-an-object references deterministically. Color-word
-  resolution is shared by the appearance and object tools: when the model
-  marks the source as physical ("the color of my shirt"), a typed
-  `resolve_physical_color` tool runs one strict camera query; the model
-  copies the phrase, the code observes.
+  resolution is shared by the appearance and object tools: a phrase that
+  describes the physical world ("the color of my shirt") is detected in
+  code and resolved by a typed `resolve_physical_color` helper that runs
+  one strict camera query; the model copies the phrase, the code observes.
 - **Object tools** create and retire objects: `create_user_relative`,
   `create_object_relative` (one anchor, or the midpoint of two),
   `create_at`, `change_shape` (the scene replaces the object and returns

@@ -1265,8 +1265,8 @@ CASES = [
     },
 
     # ── perception gating: real-world colour must come from the camera ───────
-    # The colour word is never in the utterance; the model must call
-    # look_at_current_frame FIRST and read the colour out of the answer.
+    # The colour word is never in the utterance; a perception tool (either of
+    # PERCEPTION_TOOL) must observe the camera before any mutation.
     # `vlm_answer` is what the mocked camera sees; `must_call_first` fails
     # the case if the model mutates before (or without) looking.
     {

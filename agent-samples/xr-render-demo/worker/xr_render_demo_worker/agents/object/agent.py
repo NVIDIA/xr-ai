@@ -14,7 +14,12 @@ from xr_ai_tools.tracking import TrackingTools
 from xr_render_scene import EmptyRequest, SceneState, SceneTools
 
 from ..._tolerant import tolerant_toolset
-from ..._trace import current_participant_id, current_reference_time_us, current_trace_id
+from ..._trace import (
+    current_instruction,
+    current_participant_id,
+    current_reference_time_us,
+    current_trace_id,
+)
 from ...models import SubagentResult, SubagentTask
 from ...scene import SceneContext
 from ...spatial_ops import CreationLedger, TurnGuard, make_object_tools
@@ -39,6 +44,7 @@ def make_object_agent(
 
     async def handle(request: SubagentTask) -> SubagentResult:
         logger.debug("object agent instruction={!r} trace={}", request.instruction[:200], current_trace_id.get())
+        current_instruction.set(request.instruction)
         async with delegation_lock:
             guard = TurnGuard()
             ledger = CreationLedger()

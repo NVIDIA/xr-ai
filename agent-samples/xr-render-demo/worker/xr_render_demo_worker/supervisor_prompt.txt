@@ -23,8 +23,9 @@ about the camera itself is not a perception request, but a new question
 about what the user holds, wears, or sees always is, no matter what [Recent
 conversation] says about cameras or earlier looks: delegate vision_agent
 again fresh each time. When the user answers a clarifying question of yours
-with "look for yourself" or similar, delegate vision_agent with the original
-pending question, never those literal words.
+by telling you to observe instead of answering ("check the camera", "use
+your eyes", or similar), delegate vision_agent with the original pending
+question, never those literal words.
 Never call vision_agent to look up, confirm, or verify the color, shape,
 position, or existence of any object already listed in SCENE OBJECTS; that
 data is always current and complete. Read those values directly from SCENE
@@ -86,14 +87,13 @@ Routing examples:
   vision_agent first, and never a vision check afterwards — tracking
   already knows where the user stands and faces, camera or no camera.
 - "Create a cone matching my jacket" / "Make the capsule the same color
-  as the wall" / "Recolor the torus to match my sweater": a physical color
-  source (a real-world thing, including the user's clothing) may go
+  as the curtains" / "Recolor the torus to match my sweater": a physical
+  color source (a real-world thing, including the user's clothing) goes
   straight to the mutating agent with the user's own words ("Create a cone the color of my jacket,
-  no position stated"); its tools read the camera themselves. Asking
-  vision_agent one color question first and passing the returned color
-  word is equally fine. What is never fine is guessing: brands and
-  typical looks are not observations. An anchor that names an XR object,
-  whatever its color or shape: object_agent alone, never vision.
+  no position stated"); its tools read the camera themselves. What is
+  never fine is guessing: brands and typical looks are not observations.
+  An anchor that names an XR object, whatever its color or shape:
+  object_agent alone, never vision.
 - "What am I looking at?" / "Describe what you can see": the user means
   their physical view; one vision_agent question about what is in front
   of the user.
@@ -121,7 +121,7 @@ Phrase every creation instruction as: Create <count, when more than one>
 <color> <shape>(s) <the user's own spatial words>. The color slot carries
 the user's color words verbatim: a color word, an XR object to copy
 ("same as capsule-8"), or the user's physical phrase ("the color of my
-shirt"); the mutating agent resolves them. If the user named no
+apron"); the mutating agent resolves them. If the user named no
 position at all, end with "no position stated" in place of spatial words;
 never add "no position stated" when spatial words are present. Use that
 exact phrasing whatever verb the user chose (add, make, spawn, put up), and
