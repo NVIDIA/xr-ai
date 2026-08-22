@@ -22,6 +22,7 @@ from xr_ai_tools.video_memory import VideoMemoryTools
 from xr_ai_tools.vision import ImageQueryTool
 from xr_render_scene import SceneTools
 
+from ._physical_color import IMAGE_QUERY_SYSTEM_PROMPT, make_physical_color_tool
 from ._trace import current_participant_id, current_reference_time_us, current_trace_id
 from .agents import (
     make_appearance_agent,
@@ -32,15 +33,29 @@ from .agents import (
 )
 from .models import SceneReply, SceneRequest
 from .scene import SceneContext
+from .spatial_ops import COLOR_WORDS
 
 _PROMPT = Path(__file__).with_name("supervisor_prompt.txt")
 
-_DANGLING_WORDS = frozenset(
-    "a an the my your its of to on in at by and or with near under over "
+_DANGLING_DETERMINERS = frozenset("a an the my your its".split())
+
+_DANGLING_PREPOSITIONS = frozenset(
+    "of to on in at by and or with near under over "
     "onto into between behind above below beside toward towards from".split()
 )
 
 _ARTICLES = frozenset({"a", "an", "the", "my", "your", "its"})
+
+# One strip set for every truncation check, unicode punctuation included;
+# split strip sets are how "…" and curly quotes defeated earlier versions.
+_EDGE_PUNCT = ".,!?;:\"'…“”‘’"
+
+_WH_WORDS = frozenset("what which where when why who whom whose how".split())
+
+# Nouns ending in -ing that must not read as a progressive verb before a
+# trailing preposition ("put it near the ring in" is still truncated).
+_ING_NOUNS = frozenset({"thing", "anything", "everything", "nothing", "something",
+                        "ring", "king", "spring", "string", "wing", "swing"})
 
 _TRUNCATED_ASK = "I think I missed the end of that."
 
@@ -62,12 +77,32 @@ def _wants_mutation(transcript: str) -> bool:
 
 
 def _is_truncated(transcript: str) -> bool:
-    words = transcript.strip().rstrip(".?!,;").lower().split()
-    return bool(words) and words[-1] in _DANGLING_WORDS
+    words = [w.strip(_EDGE_PUNCT) for w in transcript.strip().lower().split()]
+    words = [w for w in words if w]
+    if not words:
+        return False
+    if words[-1] in _DANGLING_DETERMINERS:
+        return True
+    if words[-1] in _DANGLING_PREPOSITIONS:
+        # Complete sentences legitimately end in a preposition, and typed or
+        # ASR input carries no reliable terminal punctuation: a wh-question
+        # ("What am I looking at"), a wh-subordinate clause ("match what I'm
+        # looking at"), or a progressive verb before the preposition ("the
+        # wall I'm staring at") all mark the sentence complete. Auxiliaries
+        # do not: "Can you put the sphere on" is a cut.
+        if transcript.strip().rstrip("\"'”’ ").endswith((".", "?", "!")):
+            return False
+        if words[0] in _WH_WORDS or any(word in _WH_WORDS for word in words[1:]):
+            return False
+        prev = words[-2] if len(words) >= 2 else ""
+        if prev.endswith("ing") and prev not in _ING_NOUNS:
+            return False
+        return True
+    return False
 
 
 def _truncated_reply(transcript: str) -> str:
-    words = transcript.strip().rstrip(".?!,;").split()
+    words = transcript.strip().rstrip(_EDGE_PUNCT).split()
     tail = words[-1]
     if tail.lower() in _ARTICLES and len(words) >= 2:
         tail = f"{words[-2]} {tail}"
@@ -124,10 +159,17 @@ class SceneSupervisor:
                 vlm=vlm,
                 system_prompt="Answer directly from the visible camera image in one short plain-English sentence.",
             )
+
+            physical_color = make_physical_color_tool(
+                current_frame,
+                ImageQueryTool(images=images, vlm=vlm, system_prompt=IMAGE_QUERY_SYSTEM_PROMPT),
+                COLOR_WORDS,
+            )
+
             subagent_tools = [
                 make_placement_agent(llm, scene, tracking, context),
-                make_appearance_agent(llm, scene, context),
-                make_object_agent(llm, scene, tracking, context),
+                make_appearance_agent(llm, scene, context, physical_color),
+                make_object_agent(llm, scene, tracking, context, physical_color),
                 make_vision_agent(llm, current_frame, image_query, context, video),
                 make_memory_agent(llm, text_memory),
             ]
@@ -253,12 +295,25 @@ class SceneSupervisor:
 
         await asyncio.sleep(0.15)  # let the scene RPC propagate before diffing
         if needs_verification and not SceneContext.changes(before, await self._context.snapshot()):
-            verification_messages = list(result.messages) + [
-                ChatMessage(role="user", content=(
+            if delegated & _MUTATING_AGENTS:
+                nudge = (
                     "Verified scene changes this turn: none. If the request needed a"
                     " scene change, delegate the remaining work now; if it needed"
                     " none, repeat your final answer."
-                )),
+                )
+            else:
+                # The utterance asks for a change and no scene-changing
+                # subagent ran; offering "repeat your final answer" here is
+                # how false "done" replies happen.
+                nudge = (
+                    "Verified scene changes this turn: none, and no scene-changing"
+                    " subagent was used. The request asks for a change: delegate the"
+                    " remaining work to the right subagent now. If the change cannot"
+                    " be done, say plainly that nothing was changed and why; never"
+                    " reply that a change was made."
+                )
+            verification_messages = list(result.messages) + [
+                ChatMessage(role="user", content=nudge),
             ]
             try:
                 result2 = await run_tool_loop(

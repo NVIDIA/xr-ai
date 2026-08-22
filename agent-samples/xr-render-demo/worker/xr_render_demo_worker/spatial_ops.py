@@ -31,12 +31,14 @@ from xr_render_scene import (
     UpdatePrimitiveRequest,
 )
 
+from ._trace import current_instruction
+
 _UserDirection = Literal["front", "back", "left", "right", "above", "below"]
 _AnchorRelation = Literal["toward_user", "away_from_user", "left_of", "right_of", "above", "below"]
 
 _DEFAULT_COLOR = (0.2, 0.9, 1.0)
 
-_COLOR_WORDS = {
+COLOR_WORDS = {
     "red": (1, 0, 0), "green": (0, 0.8, 0), "blue": (0, 0.4, 1), "yellow": (1, 1, 0),
     "cyan": (0, 1, 1), "magenta": (1, 0, 1), "orange": (1, 0.5, 0), "purple": (0.6, 0, 1),
     "white": (1, 1, 1), "black": (0, 0, 0), "teal": (0, 0.8, 0.8), "turquoise": (0.2, 0.9, 1),
@@ -48,6 +50,43 @@ _SHAPE_WORDS = {
     "cone": "cone", "cylinder": "cylinder", "capsule": "capsule",
     "ring": "ring", "pyramid": "pyramid", "torus": "torus", "donut": "torus",
 }
+
+# Words that place a color source in the physical world ("the cone I'm
+# holding", "my scarf"): the phrase must reach the camera even when it also
+# names a shape that exists in the XR scene.
+_PHYSICAL_CUE_WORDS = frozenset(
+    "i im me my mine you your yours we our ours his her hers their theirs "
+    "am holding held hold wearing wore carrying gripping "
+    "looking staring pointing facing seeing".split()
+)
+
+_OBSERVATION_VERBS = r"(?:holding|held|holds|wearing|wore|wears|carrying|carries|gripping|grips)"
+
+# Scene ids are always <shape>-<n>; participant and trace ids also look like
+# word-number and must never read as scene references.
+_SCENE_ID = re.compile(rf"\b(?:{'|'.join(sorted(_SHAPE_WORDS))})-\d+\b")
+
+
+def _physical_clause(instruction: str, words: list[str]) -> str | None:
+    """Return the instruction clause that puts a shape word in the user's
+    hands ("the cone the user is holding"), or None.
+
+    The model sometimes collapses such a phrase to a matching scene id
+    before the tool sees it; the instruction is the only place the physical
+    wording survives.
+    """
+    lowered = instruction.lower()
+    for word in words:
+        if word not in _SHAPE_WORDS:
+            continue
+        match = re.search(
+            rf"\b(?:(?:the|a|an|my|your|his|her|their)\s+)?{word}(?:-\d+)?\b"
+            rf"[^,.;]*?\b{_OBSERVATION_VERBS}\b",
+            lowered,
+        )
+        if match:
+            return match.group(0)
+    return None
 
 
 class MovedObject(BaseModel):
@@ -120,11 +159,13 @@ class _Leaves:
         tracking: TrackingTools | None = None,
         ledger: CreationLedger | None = None,
         guard: TurnGuard | None = None,
+        physical_color: Tool | None = None,
     ) -> None:
         self._scene = scene
         self._tracking = tracking
         self.ledger = ledger
         self.guard = guard
+        self.physical_color = physical_color
         self._add_lock = asyncio.Lock()
 
     @staticmethod
@@ -173,7 +214,7 @@ class _Leaves:
             raise ValueError(f"No scene object with id {object_ref!r}; the scene has {known}")
         words = re.findall(r"[a-z]+", wanted)
         exact_shape = next((_SHAPE_WORDS[word] for word in words if word in _SHAPE_WORDS), None)
-        color = next((_COLOR_WORDS[word] for word in words if word in _COLOR_WORDS), None)
+        color = next((COLOR_WORDS[word] for word in words if word in COLOR_WORDS), None)
 
         def select(shape: str | None) -> list[SceneObject]:
             pool = [item for item in state.objects if shape is None or item.type == shape]
@@ -190,7 +231,7 @@ class _Leaves:
         candidates = select(exact_shape) if (exact_shape or color) else []
         if len(candidates) != 1 and exact_shape is None:
             for word in words:
-                if word in _COLOR_WORDS:
+                if word in COLOR_WORDS:
                     continue
                 close = difflib.get_close_matches(word, _SHAPE_WORDS, n=1, cutoff=0.6)
                 if close:
@@ -228,29 +269,49 @@ class _Leaves:
         raise ValueError(f"Unknown shape {shape_words!r}; the renderer draws: {shapes}")
 
     async def color(self, color_words: str) -> tuple[float, float, float]:
-        if not re.search(r"[a-z]+-\d+", color_words.lower()):
+        lowered = color_words.lower()
+        if not _SCENE_ID.search(lowered):
             numbers = [float(v) for v in re.findall(r"-?\d*\.\d+|-?\d+", color_words)]
             if len(numbers) == 3 and all(0.0 <= v <= 1.0 for v in numbers):
                 return (numbers[0], numbers[1], numbers[2])
-        words = re.findall(r"[a-z]+", color_words.lower())
+        words = re.findall(r"[a-z]+", lowered)
         if not words:
             return _DEFAULT_COLOR
         for word in words:
-            if word in _COLOR_WORDS:
-                return _COLOR_WORDS[word]
-        halted = self.guard.halted if self.guard is not None else False
-        try:
-            source = await self.find(color_words)
-            return (source.color.r, source.color.g, source.color.b)
-        except ValueError:
-            if self.guard is not None:
-                self.guard.halted = halted
+            if word in COLOR_WORDS:
+                return COLOR_WORDS[word]
+        physical = bool(_PHYSICAL_CUE_WORDS.intersection(words))
+        names_scene_object = not physical and (
+            _SCENE_ID.search(lowered) is not None
+            or any(word in _SHAPE_WORDS for word in words)
+        )
+        if names_scene_object:
+            if self.physical_color is not None:
+                clause = _physical_clause(current_instruction.get(), words)
+                if clause is not None:
+                    logger.debug("color words {!r} rerouted to camera via {!r}", color_words, clause)
+                    resolved = await self.physical_color.execute(
+                        self.physical_color.request_model(source_words=clause)
+                    )
+                    return (resolved.r, resolved.g, resolved.b)
+            # A failed scene reference (ambiguous, removed id) must surface
+            # as its recoverable ask-back, never become a camera query about
+            # the physical room.
+            match = await self.find(color_words)
+            return (match.color.r, match.color.g, match.color.b)
         for word in words:
-            close = difflib.get_close_matches(word, _COLOR_WORDS, n=1, cutoff=0.75)
+            close = difflib.get_close_matches(word, COLOR_WORDS, n=1, cutoff=0.75)
             if close:
                 logger.debug("color words resolved {!r} -> {}", color_words, close[0])
-                return _COLOR_WORDS[close[0]]
-        known = ", ".join(sorted(_COLOR_WORDS))
+                return COLOR_WORDS[close[0]]
+        # A lone unknown word is a garble, not a physical description; asking
+        # the camera about it yields a confident answer about the room.
+        if self.physical_color is not None and (physical or len(words) >= 2):
+            resolved = await self.physical_color.execute(
+                self.physical_color.request_model(source_words=color_words)
+            )
+            return (resolved.r, resolved.g, resolved.b)
+        known = ", ".join(sorted(COLOR_WORDS))
         raise ValueError(f"Unknown color {color_words!r}; use one of {known}, or name a scene object")
 
     async def spot(self, operation: str, arguments: dict) -> tuple[float, float, float]:
@@ -404,7 +465,9 @@ class _MoveToRequest(_ObjRequest):
 class _RecolorRequest(_ObjRequest):
     color_words: str = Field(
         description="The instruction's exact color word(s), copied verbatim (mangled spellings fine), "
-                    "or an object to copy the color from ('same as cone-7')."
+                    "an object to copy the color from ('same as cone-7'), or the user's physical "
+                    "phrase ('the color of my apron') kept whole; a phrase about something held or "
+                    "worn is never replaced with a scene id, even when the shapes match."
     )
 
 
@@ -588,8 +651,9 @@ def make_appearance_tools(
     scene: SceneTools,
     *,
     guard: TurnGuard | None = None,
+    physical_color: Tool | None = None,
 ) -> list[Tool]:
-    leaves = _Leaves(scene, guard=guard)
+    leaves = _Leaves(scene, guard=guard, physical_color=physical_color)
 
     async def recolor(req: _RecolorRequest) -> RecoloredObject:
         leaves.check_writable()
@@ -612,8 +676,9 @@ def make_object_tools(
     *,
     ledger: CreationLedger | None = None,
     guard: TurnGuard | None = None,
+    physical_color: Tool | None = None,
 ) -> list[Tool]:
-    leaves = _Leaves(scene, tracking, ledger=ledger, guard=guard)
+    leaves = _Leaves(scene, tracking, ledger=ledger, guard=guard, physical_color=physical_color)
 
     async def create_user_relative(req: _CreateUserRelativeRequest) -> CreatedObject:
         prim = leaves.shape(req.prim_type)
@@ -695,6 +760,7 @@ def make_object_tools(
 
 
 __all__ = [
+    "COLOR_WORDS",
     "CreatedObject", "CreationLedger", "MovedObject", "RecoloredObject", "RemovedObject",
     "SwappedObjects", "TurnGuard",
     "make_appearance_tools", "make_object_tools", "make_placement_tools",

@@ -14,3 +14,4 @@ from contextvars import ContextVar
 current_trace_id: ContextVar[str] = ContextVar("current_trace_id", default="")
 current_participant_id: ContextVar[str] = ContextVar("current_participant_id", default="")
 current_reference_time_us: ContextVar[int] = ContextVar("current_reference_time_us", default=0)
+current_instruction: ContextVar[str] = ContextVar("current_instruction", default="")

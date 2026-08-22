@@ -132,6 +132,26 @@ def test_truncated_transcripts_detected() -> None:
     assert _is_truncated("Add a red sphere in")
     assert not _is_truncated("Add a red sphere in front of me.")
     assert _truncated_reply("Add a red sphere in") is not None
+    assert not _is_truncated("What am I looking at?")
+    assert not _is_truncated("What are you looking at")
+    assert not _is_truncated('"What are you looking at')
+    assert not _is_truncated("Where is it at?")
+    assert _is_truncated("Put the sphere on the")
+    assert _is_truncated("Put the sphere on the.")
+    assert _is_truncated("Put the sphere on the…")
+    assert _is_truncated("Can you put the sphere on the")
+    assert _is_truncated("What color is the")
+    assert _is_truncated("Is the sphere behind the")
+    assert not _is_truncated("Add a cube that matches the wall I'm looking at.")
+    assert not _is_truncated("Add a cube that matches the wall I'm looking at")
+    assert not _is_truncated("Make a sphere match what I'm looking at")
+    assert not _is_truncated('“What are you looking at”')
+    assert _is_truncated("Move the sphere in")
+    # Auxiliaries are not the wh-exemption: a polite request cut at a
+    # preposition is still a cut.
+    assert _is_truncated("Can you put the sphere on")
+    assert _is_truncated("Can you move the cube to")
+    assert _is_truncated("Put it near the ring in")
 
 
 # ── models profile round-trip ─────────────────────────────────────────────────
