@@ -99,6 +99,7 @@ class _FakeCurrentFrameTool:
         self._fake = fake
 
     async def execute(self, request: Any) -> Any:
+        self._fake.calls.append(("current_frame", {}))
         if self._fake.camera_error:
             raise RuntimeError(self._fake.camera_error)
         from xr_ai_tools.current_frame import ImageFrame
@@ -124,9 +125,15 @@ class _FakePhysicalColorQuery:
         self._fake.calls.append(("resolve_physical_color", {"question": request.query}))
         if self._fake.vision_error:
             return ImageQueryResult(text=self._fake.vision_error, available=False)
-        return ImageQueryResult(
-            text=self._fake.vision_answer or "Nothing notable is visible.", available=True
-        )
+        # A truncated or wrong source in the resolver's query must fail the
+        # case, not silently receive the configured color.
+        if (
+            self._fake.physical_expect_source
+            and self._fake.physical_expect_source.lower() not in request.query.lower()
+        ):
+            return ImageQueryResult(text="UNKNOWN", available=True)
+        answer = self._fake.physical_answer or self._fake.vision_answer
+        return ImageQueryResult(text=answer or "Nothing notable is visible.", available=True)
 
 
 def make_fake_video(fake: "FakeScene", video_error: str = ""):
@@ -150,9 +157,9 @@ def make_fake_video(fake: "FakeScene", video_error: str = ""):
 
 def make_fake_physical_color(fake: "FakeScene"):
     from xr_render_demo_worker._physical_color import make_physical_color_tool
-    from xr_render_demo_worker.spatial_ops import _COLOR_WORDS
+    from xr_render_demo_worker.spatial_ops import COLOR_WORDS
     return make_physical_color_tool(
-        _FakeCurrentFrameTool(fake), _FakePhysicalColorQuery(fake), _COLOR_WORDS)
+        _FakeCurrentFrameTool(fake), _FakePhysicalColorQuery(fake), COLOR_WORDS)
 
 
 class _FakeImageQueryTool:
@@ -189,6 +196,7 @@ class Case:
     memory: str = ""
     history: tuple[tuple[str, str], ...] = ()
     reply_contains: str = ""
+    camera_error: str = ""
 
 
 CASES = (
@@ -285,6 +293,9 @@ CASES = (
         request="What color was the object I held ten seconds ago?",
         vision="The previously held object was purple.",
         required_tools=frozenset({"look_at_past_frame"}),
+        # The supervisor's own conversation recall is the single expected
+        # call; the camera's past is video, never the transcript.
+        expected_call_counts=(("recall_conversation", 1),),
     ),
     Case(
         name="durable_memory",
@@ -428,6 +439,8 @@ class FakeScene:
     memory_answer: str
     history: tuple[tuple[str, str], ...] = ()
     camera_error: str = ""
+    physical_answer: str = ""
+    physical_expect_source: str = ""
     calls: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
     counters: dict[str, int] = field(default_factory=dict)
 
@@ -441,6 +454,7 @@ class FakeScene:
             case.vision_error,
             case.memory,
             case.history,
+            camera_error=case.camera_error,
         )
 
     @classmethod
@@ -758,6 +772,33 @@ UTTERANCES = (
         forbidden_tools=_FORBID_MUTATIONS,
     ),
     Case(
+        name="basics_look_for_yourself",
+        # Answering a clarifying question with "go observe" must re-enter
+        # the pending request through the camera, never echo those words.
+        request="Look for yourself.",
+        vision="A hand holding a blue lid.",
+        history=(
+            ("Make a spear the color of the thing I am holding.",
+             "What are you holding?"),
+        ),
+        required_tools=frozenset({"add_primitive"}),
+        expected_colors=(("sphere-0", (0.0, 0.4, 1.0)),),
+    ),
+    Case(
+        name="basics_physical_source_camera_down",
+        # The camera outage must degrade to an honest no-change reply: the
+        # resolver was attempted, nothing mutated, no invented color.
+        request="Make the box the color of my shirt.",
+        scene=(
+            {"id": "box-0", "type": "box",
+             "position": {"x": 0.3, "y": 1.4, "z": -1.2},
+             "color": {"r": 1, "g": 1, "b": 1}, "size": 0.1},
+        ),
+        camera_error="RPCError: camera feed unavailable",
+        required_tools=frozenset({"current_frame"}),
+        forbidden_tools=_FORBID_MUTATIONS,
+    ),
+    Case(
         name="basics_holding_color_with_history",
         request="Make a spear the color of the thing I am holding.",
         vision="A hand holding a blue lid.",
@@ -799,6 +840,10 @@ UTTERANCES = (
         ),
         reply_contains="green",
         forbidden_tools=_FORBID_MUTATIONS,
+        # One recall from the supervisor plus one from memory_agent: the
+        # answer must come from the transcript store, not a lucky guess off
+        # the recent-conversation block.
+        expected_call_counts=(("recall_conversation", 2),),
     ),
     Case(
         name="basics_create_cube",
@@ -928,10 +973,9 @@ UTTERANCES = (
     ),
     Case(
         name="basics_anchored_create_keeps_words",
-        # Live flail: the supervisor misroutes an anchored create to
-        # placement, gets it bounced, then re-delegates WITHOUT the user's
-        # spatial words and patches with a move. One add, no update, and the
-        # cube must land on the user's left of the anchor.
+        # An anchored create must keep the user's spatial words in a single
+        # object_agent delegation: exactly one add, no patch-up move, and
+        # the cube lands on the user's left of the anchor.
         request="Put a yellow cube to the left of the blue cube.",
         scene=(
             {"id": "box-0", "type": "box", "position": {"x": 0.5, "y": 1.4, "z": -1.2},
@@ -1103,9 +1147,8 @@ async def run_case(case: Case) -> bool:
 
 
 # Train/test separation audit. Prompt worked examples are what the model
-# memorizes as templates; any overlap with case inputs means the eval scores
-# recall, not behavior (proven live: a blue/green prompt example made the
-# anchored-create case pass while the same request failed on other colors).
+# memorizes as templates; any overlap with case inputs, history turns, or
+# fixture text means the eval scores recall, not behavior.
 _EVAL_VOCAB_COLORS = ("red", "green", "blue", "yellow", "cyan", "orange", "purple", "white", "black")
 _EVAL_VOCAB_SHAPES = ("sphere", "cube", "box", "ball")
 
@@ -1115,9 +1158,27 @@ def audit_prompts() -> None:
     from pathlib import Path
 
     worker = (Path(__file__).resolve().parent / "../../worker/xr_render_demo_worker").resolve()
-    prompts = sorted(worker.rglob("*prompt*.txt"))
+    # Model-visible text lives in the prompt files and in the tool field
+    # descriptions of spatial_ops.py; both shape the model's templates.
+    prompts = sorted(worker.rglob("*prompt*.txt")) + [worker / "spatial_ops.py"]
     utterances = [case["user"] for case in CORPUS_CASES if case.get("user")]
     utterances += [case.request for case in (*CASES, *UTTERANCES)]
+    # History turns and fixture answers reach the model verbatim too; a
+    # prompt example copied from them scores recall, not behavior.
+    eval_texts = [
+        text
+        for case in (*CASES, *UTTERANCES)
+        for turn in case.history
+        for text in turn
+    ]
+    eval_texts += [case.vision for case in (*CASES, *UTTERANCES) if case.vision]
+    eval_texts += [case["vlm_answer"] for case in CORPUS_CASES if case.get("vlm_answer")]
+    eval_texts += [
+        text
+        for case in CORPUS_CASES
+        for turn in case.get("history", ())
+        for text in turn
+    ]
     fixture_ids = {
         item["id"]
         for case in CORPUS_CASES
@@ -1131,6 +1192,7 @@ def audit_prompts() -> None:
         pass
     else:
         utterances += [case.instruction for case in eval_subagents.CASES]
+        eval_texts += [case.vision_answer for case in eval_subagents.CASES if case.vision_answer]
         fixture_ids |= {item["id"] for case in eval_subagents.CASES for item in case.scene}
     try:
         from . import supervisor as eval_supervisor
@@ -1138,12 +1200,18 @@ def audit_prompts() -> None:
         pass
     else:
         utterances += [case.request for case in eval_supervisor.CASES]
+        eval_texts += [
+            text
+            for case in eval_supervisor.CASES
+            for turn in getattr(case, "history", ())
+            for text in turn
+        ]
         fixture_ids |= {item["id"] for case in eval_supervisor.CASES for item in case.scene}
     for prompt_path in prompts:
         label = str(prompt_path.relative_to(worker))
         text = prompt_path.read_text(encoding="utf-8")
         lowered = text.lower()
-        for utterance in utterances:
+        for utterance in (*utterances, *eval_texts):
             needle = utterance.lower().strip(".?! ")
             # Short fragments ("the box") appear in ordinary prose; only
             # utterances long enough to be templates count as overlap.
