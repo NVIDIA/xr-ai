@@ -222,7 +222,8 @@ Before committing a custom profile:
 ```bash
 jq empty agent-samples/model-servers/yaml/models.my-stack.json
 
-uv run --project tests pytest -q \
+cd tests
+uv run pytest -q \
   test_model_servers.py \
   test_launcher_config.py \
   test_nim_docker.py

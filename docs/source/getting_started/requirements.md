@@ -21,6 +21,8 @@ local GPU is required for the agent or DeviceIOHub.
 |---|---|
 | model-servers (all models) | ~55 GB |
 | simple-vlm-example (requires model services) | Uses the model-services allocation |
+| lab-instrument-monitoring (requires model services) | Uses the model-services allocation + Piper TTS |
+| tea-making-sample (requires model services) | Uses the model-services allocation + Piper TTS |
 | xr-render-demo (requires model-servers) | ~55 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 
@@ -32,7 +34,7 @@ local GPU is required for the agent or DeviceIOHub.
 | Python | 3.11 or 3.12 | 3.10 and 3.13 are not supported |
 | [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
 | NVIDIA driver | 570+ | required for local model inference |
-| Docker | 24+ | required: all vLLM-backed services (LLM, VLM) run in `nvcr.io/nvidia/vllm` containers |
+| Docker | 24+ | required by the checked-in model-server profiles: their LLM, VLM, and embedding services run in `nvcr.io/nvidia/vllm` containers |
 | NVIDIA Container Toolkit | latest | required: gives Docker access to the GPU. Without it, `model_servers` fails with `failed to discover GPU vendor from CDI: no known GPU vendor found` |
 | npm | 18+ | required for xr-render-demo: the orchestrator builds the web vendor bundle on first run |
 

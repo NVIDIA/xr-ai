@@ -19,7 +19,7 @@ The rest of this page is the manual path.
 Every sample follows the same pattern: **start the server, then connect a
 client.** Once it is ready, any supported client — web browser, Android app,
 iOS/visionOS app, or AR glasses — can join the session using the token printed
-on startup.
+on startup. Run the commands below from the repository root.
 
 ## Model servers (shared AI services)
 
@@ -33,7 +33,7 @@ whenever you want to pre-warm models:
 After updating, stop any existing model servers before starting this stack:
 
 ```bash
-uv run model_servers --stop
+uv run --project agent-samples/model-servers model_servers --stop
 ```
 
 Persisted vLLM processes or containers may otherwise keep serving the previous
@@ -42,9 +42,8 @@ Nemotron-3 Nano Omni and Cosmos3 Nano Reasoner.
 :::
 
 ```bash
-cd agent-samples/model-servers
-uv sync
-uv run model_servers
+uv sync --project agent-samples/model-servers
+uv run --project agent-samples/model-servers model_servers
 ```
 
 GPU profiles are auto-detected (`dual_48G_ada`, `spark`, `96G_blackwell`). The
@@ -66,7 +65,8 @@ containers (Nemotron-3-Nano and Cosmos3-Nano Reasoner; requires docker and
 and aborts if they cannot be stopped, avoiding GPU overcommit.
 
 ```bash
-uv run model_servers --models vlm_llm_nim
+uv run --project agent-samples/model-servers \
+  model_servers --models vlm_llm_nim
 ```
 
 `HF_TOKEN` is required by default: without it the large first-run download
@@ -77,7 +77,7 @@ pass `--allow-anonymous` to run without one.
 To stop all model servers when done:
 
 ```bash
-uv run model_servers --stop
+uv run --project agent-samples/model-servers model_servers --stop
 ```
 
 `--stop` stops every model-server port, so it takes no profile selection.
@@ -98,7 +98,8 @@ from the repository root (the Piper command stays in the foreground):
 
 ```bash
 uv run --project agent-samples/model-servers model_servers
-uv run --project services/piper-tts piper_tts_server
+uv run --project services/piper-tts piper_tts_server \
+  --config services/piper-tts/piper_tts_server.yaml
 ```
 
 The first command may download model weights on its first run and requires the
@@ -109,9 +110,8 @@ sample restarts.
 ### Step 1 — Start the server
 
 ```bash
-cd agent-samples/simple-vlm-example
-uv sync
-uv run simple_vlm_example
+uv sync --project agent-samples/simple-vlm-example
+uv run --project agent-samples/simple-vlm-example simple_vlm_example
 ```
 
 Only the DeviceIOHub and worker start. Worker readiness probes all three reused
@@ -184,16 +184,17 @@ uv run --project agent-samples/model-servers model_servers
 ```
 
 ```bash
-uv run --project services/piper-tts piper_tts_server
+uv run --project services/piper-tts piper_tts_server \
+  --config services/piper-tts/piper_tts_server.yaml
 ```
 
 Then start the sample in another terminal:
 
 ```bash
-cd agent-samples/lab-instrument-monitoring
-uv sync
-uv sync --project worker
-uv run lab_instrument_monitoring
+uv sync --project agent-samples/lab-instrument-monitoring
+uv sync --project agent-samples/lab-instrument-monitoring/worker
+uv run --project agent-samples/lab-instrument-monitoring \
+  lab_instrument_monitoring
 ```
 
 Connect an existing glasses or platform client using the authenticated URL,
@@ -211,16 +212,25 @@ and visual inference. Records are written as JSON Lines under the sample's
 `artifacts/` directory. A separate live event viewer presents selected runtime
 events without replacing those durable records.
 
-Start the shared model services and Piper TTS first, then launch the sample:
+Start the shared model services, then keep Piper TTS running in a second
+terminal:
 
 ```bash
 uv run --project agent-samples/model-servers model_servers
-uv run --project services/piper-tts piper_tts_server
+```
 
+```bash
+uv run --project services/piper-tts piper_tts_server \
+  --config services/piper-tts/piper_tts_server.yaml
+```
+
+Launch the sample from a third terminal:
+
+```bash
 uv run --project agent-samples/tea-making-sample tea_making_sample
 ```
 
-Open the XR-Media-Hub connection page at `https://localhost:8080`, accept the
+Open the DeviceIOHub connection page at `https://localhost:8080`, accept the
 self-signed certificate on first use, allow camera and microphone access, and
 connect. The checked-in voice-gate YAML requires “Agent” or “Hey Agent.” Set
 `voice_gate_yaml: voice_gate.always-on.yaml` in `yaml/tea_making_worker.yaml`
@@ -259,8 +269,8 @@ own model services.
 ### Step 1 — Start model servers (once)
 
 ```bash
-cd agent-samples/model-servers
-uv sync && uv run model_servers
+uv sync --project agent-samples/model-servers
+uv run --project agent-samples/model-servers model_servers
 ```
 
 This exits immediately once all configured services are ready. Weights stay loaded in
@@ -279,15 +289,15 @@ This demo has two extra host prerequisites beyond the shared
 Start Piper TTS in a separate terminal:
 
 ```bash
-uv run --project services/piper-tts piper_tts_server
+uv run --project services/piper-tts piper_tts_server \
+  --config services/piper-tts/piper_tts_server.yaml
 ```
 
 Then start XR Render:
 
 ```bash
-cd agent-samples/xr-render-demo
-uv sync
-uv run xr_render_demo
+uv sync --project agent-samples/xr-render-demo
+uv run --project agent-samples/xr-render-demo xr_render_demo
 ```
 
 On first run the orchestrator automatically downloads the pinned LOVR version to
@@ -304,7 +314,7 @@ To use a custom LOVR build:
 
 ```bash
 export LOVR_BIN=/path/to/your/lovr   # or set lovr_bin: in scene/scene_service.yaml
-uv run xr_render_demo
+uv run --project agent-samples/xr-render-demo xr_render_demo
 ```
 
 **GPU pinning** for the XR side is controlled by `gpu_index` in
@@ -316,8 +326,7 @@ for full details.
 To stop the model servers when done:
 
 ```bash
-cd agent-samples/model-servers
-uv run model_servers --stop
+uv run --project agent-samples/model-servers model_servers --stop
 ```
 
 XR Render uses the fixed reuse-only endpoints in `yaml/models.json`; it does
@@ -326,10 +335,11 @@ not select or own model deployment profiles.
 ## Hub only (standalone)
 
 ```bash
-cd services/device-io-hub
-uv sync
-uv run device_io_hub
+uv sync --project services/device-io-hub
+uv run --project services/device-io-hub device_io_hub \
+  --config services/device-io-hub/device_io_hub.yaml
 ```
 
 Useful for development or when running an agent in a separate terminal. The
-DeviceIOHub auto-discovers `services/device-io-hub/device_io_hub.yaml`.
+explicit configuration is the repository reference copy with every field
+documented beside its value.

@@ -3,335 +3,233 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-# Connecting Clients
+# Connecting clients
 
-Every sample follows the same pattern: **start the server, then connect a
-client.** This page covers the clients that ship under `client-samples/`, how
-to set up, build, and run each one, and the shared token-on-startup connect
-flow they all use.
+Every sample starts DeviceIOHub and then accepts one or more platform clients.
+This page is the canonical build and connection guide for the clients under
+`client-samples/`. See {doc}`quickstart` for starting an agent sample and
+{doc}`networking` for firewall and TLS configuration.
 
-For the server side — starting the DeviceIOHub and the agent samples — refer to
-{doc}`quickstart`.
+## Client matrix
 
-## Which clients exist
-
-| Client | Location | Transport | Build step |
+| Client | Directory | Transport | Build |
 |---|---|---|---|
-| **Web** (basic sample) | `client-samples/web/` | LiveKit JS SDK from CDN | None — plain ES modules |
-| **Web-XR** (XR render demo) | `client-samples/web-xr/` | LiveKit + CloudXR, same-origin vendor bundles | `client-samples/web-xr-build/build.sh` |
-| **Android** | `client-samples/android/` | LiveKit Android SDK | Android Studio or Gradle |
-| **iOS/visionOS** | `client-samples/ios-visionos/` | LiveKit Swift SDK | Xcode |
-| **Native C++** | `client-samples/native/` | LiveKit C++ SDK | CMake |
+| Web | `client-samples/web/` | LiveKit from CDN | None |
+| Web-XR | `client-samples/web-xr/` | LiveKit + CloudXR local bundles | `web-xr-build/build.sh` |
+| Android | `client-samples/android/` | LiveKit Android | Android Studio or Gradle |
+| iOS/visionOS | `client-samples/ios-visionos/` | LiveKit Swift + CloudXRKit | Xcode |
+| Native C++ | `client-samples/native/` | LiveKit C++ | CMake |
 
-All five share the same **StreamKit** shape: a single transport-agnostic
-`StreamSession` entry-point delegating to a `StreamingBackend`, with
-`LiveKitBackend` as the only component that imports LiveKit directly. The web,
-Android, and iOS/visionOS clients are feature-equivalent (connection, audio,
-camera, agent-status badge, data channel).
+The clients share a StreamKit shape: one transport-neutral `StreamSession`
+delegates to a `StreamingBackend`, and `LiveKitBackend` is the only layer that
+imports a LiveKit SDK. Connection, microphone, camera, participant status, data,
+and network metrics remain separate operations.
 
-### Network telemetry
+Graphical clients display LiveKit connection quality, round-trip time, and
+receive jitter; the C++ sample reports them through its callback. Backends sample
+existing WebRTC statistics about once per second. No hub message or separate
+telemetry service is involved.
 
-Every graphical sample displays the same three network values; the native C++
-sample prints them to stdout. Each exposes the values through StreamKit's
-`onNetworkMetrics` callback (spelled `on_network_metrics` in C++):
+## Shared connection flow
 
-- **Quality** — LiveKit's connection-quality estimate for the local participant.
-- **Round-trip time** — the highest current RTT across the publisher and
-  subscriber transports' selected ICE candidate pairs.
-- **Receive jitter** — the highest inbound RTP jitter in the current sample.
+The hub prints a URL, room, development token, and web-client URL at startup.
+Clients connect to the hub's web-server port `8080`, which proxies LiveKit on
+the same origin. Do not expose or connect directly to LiveKit's internal port
+`7880`.
 
-`LiveKitBackend` samples LiveKit's existing WebRTC statistics about once per
-second and converts seconds to milliseconds. No hub messages or additional
-telemetry service are involved. RTT and jitter display as unavailable until the
-SDK has a matching stats record, such as before a media track is active.
+A client may paste the printed 24-hour development JWT or fetch a shorter-lived
+token from:
 
-## The connect flow
-
-When you start a server sample, the hub prints its connection details on
-startup:
-
-```
-[hub]   LiveKit URL : wss://localhost:8080
-[hub]   Room        : xr-room
-[hub]   Token       : eyJ…
-[hub]   Web client  : https://localhost:8080
-```
-
-Three values matter to every client:
-
-| Value | Notes |
-|---|---|
-| **Host or IP** | The machine running the server. `localhost` for the same machine; the LAN IP for a separate device. |
-| **Port** | `8080` — the hub's web-server port. Clients connect through the same-origin wss `/rtc` proxy on `8080`, **not** LiveKit's internal `7880`, which stays on loopback. |
-| **Token** | A signed LiveKit JWT. Paste the printed token directly, or leave the token-URL field blank to fetch one from the hub's built-in `/token` endpoint. |
-
-A client either pastes the printed JWT into its **Token** field, or points its
-**Token URL** field at the hub's `/token` endpoint and lets the SDK fetch one.
-The token endpoint accepts both response shapes — a plain JWT string or a
-`{"token": "eyJ…"}` JSON envelope:
-
-```
+```text
 GET https://<host>:8080/token?identity=<identity>
 ```
 
-Tokens are valid for 24 hours. To get a fresh one, restart the server or call
-the `/token` endpoint above.
+The response is a JSON object containing `token`, `room`, and `url`. StreamKit
+token fetchers also accept a plain JWT response. The room is encoded in the
+token; clients do not send a separate room query parameter.
 
-### Self-signed certificate trust
+The default HTTPS certificate is self-signed and stored under
+`~/.local/share/xr-ai/`. Browsers allow a development click-through; Android
+and Apple devices require the platform trust procedures below. Use a public or
+managed certificate for production.
 
-The samples ship with HTTPS on by default — a self-signed certificate is
-generated on first run at `~/.local/share/xr-ai/web-server.crt`. Each platform
-trusts it differently (browser click-through, Android KeyChain install, iOS
-profile install); the per-platform sections below describe each. Firewall ports
-and the option to run over plain HTTP instead are covered in {doc}`networking`.
+## Web
 
-## Web (basic sample)
+The basic page in `client-samples/web/` uses plain ES modules and loads LiveKit
+from jsDelivr. It has no build step. Open `https://<host>:8080`, accept the
+development certificate warning, leave Token URL blank to use `/token`, and
+connect. The camera preview follows the published track's aspect ratio.
 
-`client-samples/web/` is the plain-ES-module browser client. It loads the
-LiveKit JS SDK v2 directly from CDN via an import map, so there is **no build
-step** — the hub serves the page at `https://localhost:8080`.
+## Web-XR (xr-render-demo)
 
-To connect:
-
-1. Open `https://localhost:8080` in a browser.
-2. On the first connection you'll see a "Your connection is not private"
-   warning from the self-signed certificate. Click **Advanced → Proceed**
-   (Chrome or Edge) or **Accept the Risk and Continue** (Firefox). To trust the
-   certificate permanently or run over plain HTTP instead, refer to
-   {doc}`networking`.
-3. Leave **Token URL** blank — the web client fetches a token from the server's
-   `/token` endpoint automatically. Alternatively, paste the printed token
-   directly.
-4. Click **Connect**. You are now live in the XR session.
-
-The camera preview displays the same browser track published to the hub and
-adapts to its captured aspect ratio. The browser console logs the published
-track settings when the camera starts.
-
-## Web-XR (XR render demo)
-
-The XR render demo client lives in `client-samples/web-xr/`. Unlike the basic
-web sample, it loads `livekit-client` and `@nvidia/cloudxr` from same-origin
-**vendor bundles** under `client-samples/web-xr/vendor/`, so XR headsets and
-offline LANs work after the host has built the bundles once. The bundles are
-generated build output, not shipped in the repository.
-
-The `xr-render-demo` orchestrator builds the bundles automatically on first run
-(requires `npm` on PATH). For a manual rebuild — for example after bumping an
-SDK version — use the build script:
+The Web-XR page uses same-origin bundles under
+`client-samples/web-xr/vendor/`. The xr-render orchestrator builds missing
+bundles automatically when `npm` is available. To rebuild manually:
 
 ```bash
 cd client-samples/web-xr-build
 ./build.sh
 ```
 
-`build.sh` is idempotent. It reads the pinned CloudXR version from
-`.sdk-version`, fetches the CloudXR Web SDK tarball (reusing a local copy if
-present, otherwise downloading from public NGC), runs `npm install` (which also
-pulls `livekit-client`), and webpacks the two ESM bundles into
-`client-samples/web-xr/vendor/`.
-
-To bump a dependency, edit `.sdk-version` (CloudXR) or the `livekit-client`
-version in `package.json`, remove the cached artifacts (`rm -rf sdk.tgz
-node_modules` for CloudXR, `rm -rf node_modules` for livekit-client), and
-re-run `./build.sh`.
-
-Once the bundles exist, connect through the demo the same way as the basic web
-client — open the served page, click through the certificate warning, leave the token
-URL blank, and connect. The basic `web/` sample does **not** need this build
-step; only `web-xr/` does.
+The idempotent script reads the CloudXR version from `.sdk-version`, reuses a
+cached `sdk.tgz` when present, otherwise downloads the public NGC tarball,
+installs npm dependencies, and writes both ESM bundles to `../web-xr/vendor/`.
+To bump CloudXR, edit `.sdk-version` and remove `sdk.tgz` plus `node_modules`.
+To bump LiveKit, edit `package.json` and remove `node_modules`. Re-run the script
+after either change.
 
 ## Android
 
-The Android client (`client-samples/android/`) provides feature parity with the
-web and iOS/visionOS clients: connection, audio (Voice Processing, Software
-AEC, or Raw modes), camera (Camera2 selector), agent-status badge, and data
-channel. Remote audio plays automatically once a remote participant publishes a
-track.
+The Android app is a Jetpack Compose client with selectable Camera2 devices,
+three microphone modes, participant status, arbitrary data, and network
+metrics.
 
-### Requirements
+### Requirements and build
 
-| Tool | Minimum version |
+| Requirement | Version |
 |---|---|
-| Android Studio | Hedgehog (2023.1.1) or later |
+| Android Studio | Hedgehog or newer |
 | JDK | 17 |
-| Android Gradle Plugin | 8.5 |
-| Kotlin | 2.0 |
-| Min Android SDK | API 24 (Android 7.0) |
-| Target Android SDK | API 34 (Android 14) |
+| Minimum Android | API 24 |
+| Target Android | API 34 |
 
-### Build and run
+Open `client-samples/android/` in Android Studio, allow Gradle sync to finish,
+select a device, and run. The checked-in wrapper also supports:
 
-1. In Android Studio, choose **File → Open** and select
-   `client-samples/android/`.
-2. Let Gradle sync finish — it downloads the LiveKit Android SDK and other
-   dependencies (~300 MB on first run) automatically.
-3. Select a device or emulator running API 24+, then **Run**.
-
-Android Studio generates the Gradle wrapper on first sync. For command-line builds, run
-`gradle wrapper --gradle-version 8.9` then `./gradlew assembleDebug`.
-
-The app requests `RECORD_AUDIO` on the first tap of **Start Microphone** and
-`CAMERA` on the first tap of **Start Camera**; `INTERNET`,
-`MODIFY_AUDIO_SETTINGS`, and `BLUETOOTH_CONNECT` are granted at install.
-
-### Connect
-
-In the app's Connection section:
-
-| Field | Value |
-|---|---|
-| Host or IP | IP of the machine running the server |
-| Port | `8080` (the hub web-server port, not LiveKit's internal 7880) |
-| Token | Paste the printed JWT |
-| Identity | Any string unique to this device |
-
-Leave **Token URL** blank to use the server's default `/token` endpoint, or
-paste the printed JWT directly into **Token**.
-
-Before connecting for the first time, tap **Install hub certificate** in the
-Connection section. The app fetches the certificate from the hub and opens the
-system certificate-install dialog — confirm to install. After install, Android
-validates
-against the system + user CA store automatically.
-
-### Android XR
-
-The Android client is a standard Android app (`targetSdk` 34, `minSdk` 24) with
-no XR-specific code. Android XR runs unmodified Android apps, so the sample
-should install and launch on an Android XR device or emulator as a flat 2D
-windowed panel, and the LiveKit audio and data paths, agent-status badge, and
-token flow work the same as on a phone.
-
-```{warning}
-Android XR support is **not yet validated**. The sample has not been tested on
-Android XR hardware or the emulator, and two areas are expected to need work:
-
-- **Camera.** The `Camera2` selector targets phone front and back cameras.
-  World-facing and passthrough camera access on Android XR is governed by
-  different APIs and permissions, so live-camera perception may select the
-  wrong camera or none.
-- **Immersive rendering.** The app draws a 2D panel. It does not use Android XR's
-  immersive APIs (Jetpack XR, OpenXR, spatial panels, head tracking, hand input,
-  or passthrough), so it will not render head-tracked or spatialized content.
+```bash
+cd client-samples/android
+./gradlew assembleDebug
 ```
+
+### Connect and permissions
+
+Enter the server host, port `8080`, a unique identity, and either the printed
+token or the default token URL. Tap **Install hub certificate** before the
+first connection; Android opens the system certificate-install flow.
+
+The app requests microphone permission when starting the microphone and camera
+permission when opening a physical camera. `INTERNET` and
+`MODIFY_AUDIO_SETTINGS` are install-time permissions. `BLUETOOTH_CONNECT` is a
+runtime permission on Android 12 and newer; the current sample declares it but
+does not prompt for it, so grant Nearby devices in system settings before
+depending on Bluetooth audio routing.
+
+Voice Processing prefers the platform audio path, Software Processing enables
+WebRTC echo cancellation, gain control, and noise suppression, and Raw disables
+that DSP for applications that process audio elsewhere. LiveKit plays remote
+agent audio automatically. Camera choices come from Camera2 and include front,
+back, extra built-in lenses, and attached USB cameras when the device exposes
+them.
+
+The root Android build pins the Netty dependency pulled in by AGP's test tooling
+above known vulnerable 4.1 releases. After changing AGP or the version catalog,
+run `./gradlew verifyNettyPin` from `client-samples/android/`.
+
+The app can run as a flat Android panel on Android XR, but that path is not
+validated. It does not use Jetpack XR or immersive Android XR APIs, and its
+Camera2 selector is not a passthrough-camera integration.
 
 ## iOS/visionOS
 
-The iOS/visionOS client (`client-samples/ios-visionos/`) is a SwiftUI sample
-for both iOS and visionOS, built on StreamKit over LiveKit WebRTC. The sample
-ships as source files plus a local Swift Package; you assemble the Xcode
-project from them.
+The Apple client is a checked-in SwiftUI project and local Swift package. It
+targets iOS 18 and visionOS 26 and resolves LiveKit Swift and CloudXRKit through
+Swift Package Manager.
 
-The StreamKit library depends on an unmodified upstream
-[livekit-client-sdk-swift](https://github.com/livekit/client-sdk-swift) checked
-out at `../livekit-client-sdk-swift` (one level above the sample folder).
+### Build
 
-### Create the Xcode project
+Open `client-samples/ios-visionos/StreamKitSample.xcworkspace`, select the
+`StreamKitSample` scheme and destination, choose a signing team and a bundle ID
+owned by that team, then build and run. The workspace already includes the app
+project and local StreamKit package; do not create a replacement Xcode project.
 
-Following the sample's README, create a Multiplatform SwiftUI app, then:
+The simulators stream
+`StreamKit/Sources/StreamKit/Resources/SimulatorFeed.gif` instead of a physical
+camera. Replace that resource to customize the simulated feed.
 
-1. **New project** — Xcode → **File → New → Project → Multiplatform → App**;
-   Product Name `StreamKitSample`, Interface SwiftUI, Language Swift.
-2. **Add destinations** — select the project root, then **Supported
-   Destinations → +**; add **visionOS**, remove **macOS** if auto-added. You
-   should be left with iOS and visionOS.
-3. **Add the StreamKit package** — **File → Add Package Dependencies… → Add
-   Local…**, navigate to `client-samples/ios-visionos/StreamKit/`, and add it,
-   ticking **StreamKit** and your app target.
-4. **Replace the generated sources** — delete the auto-generated
-   `ContentView.swift` and app entry point, then drag in the four files from
-   the sample's `App/` directory (`StreamKitSampleApp.swift`, `AppModel.swift`,
-   `ContentView.swift`, `ImmersiveView.swift`) with both targets checked.
-5. **Add `Info.plist` keys** — `NSMicrophoneUsageDescription`,
-   `NSCameraUsageDescription`, and (for visionOS passthrough)
-   `NSMainCameraUsageDescription`.
+On an iOS device the preview follows the live camera aspect ratio. The Vision
+Pro main-camera track goes directly from ARKit to LiveKit and is not copied into
+the 2D preview; the `LIVE` badge, rather than the placeholder preview, indicates
+capture. Start the immersive space before camera capture on a Vision Pro device.
 
-```{note}
-On visionOS, main-passthrough-camera access is an Apple **enterprise** API: it
-requires both the `com.apple.developer.arkit.main-camera-access.allow`
-entitlement and your team's `Enterprise.license` bundled into the `.app`. The
-license is not bundled with the sample; place it at
-`client-samples/ios-visionos/App/Enterprise.license`. Without it the build
-still succeeds and every feature except main-camera passthrough works. The
-visionOS and iOS **simulators** require none of this: they stream a bundled
-`SimulatorFeed.gif` in place of a physical camera.
+### Vision Pro permissions
+
+Main passthrough camera access on a Vision Pro device requires both the
+`com.apple.developer.arkit.main-camera-access.allow` entitlement and the team's
+Apple-issued `Enterprise.license`. Put the non-redistributable license at
+`App/Enterprise.license`; the build phase copies it into the application. A
+missing license leaves audio, data, simulator camera, and the rest of the app
+usable, but disables device passthrough camera access.
+
+The native CloudXR path also declares
+`com.apple.developer.low-latency-streaming`, which requires an Apple Developer
+Program team. Simulators do not require the enterprise camera license.
+
+### Connect and trust the certificate
+
+Enter the host and port `8080`, then use a pasted token or the default `/token`
+endpoint. `SessionConfig` contains only the participant identity; the token
+encodes the room. Incoming data callbacks receive `(topic, data)`, and
+`_agent.status` is delivered separately through the status callback.
+
+The LiveKit WebSocket requires system trust for the hub certificate. In the
+app, tap **Install hub certificate**, allow Safari to download the profile,
+install it under **Settings → General → VPN & Device Management**, then enable
+full trust under **Settings → General → About → Certificate Trust Settings**.
+See {doc}`/guides/troubleshooting` for certificate regeneration, SAN mismatch,
+401, and media-interruption diagnostics.
+
+### Native CloudXR
+
+Native Apple clients require the CloudXR native device profile. Start the demo
+from the repository root with:
+
+```bash
+NV_DEVICE_PROFILE=auto-native \
+  uv run --project agent-samples/xr-render-demo xr_render_demo
 ```
 
-Refer to the sample's README for the authoritative build steps.
-
-### Connect
-
-In the app's Connection section:
-
-| Field | Value |
-|---|---|
-| Host | IP of the machine running the server |
-| Port | `8080` (the hub web-server port; not LiveKit's internal 7880) |
-| Token | Paste the token printed on server startup |
-
-The token is valid for 24 hours; restart the server or call
-`GET https://<host>:8080/token?identity=<name>` for a fresh one.
-
-**Trusting the self-signed certificate (one-time per device):** the LiveKit
-Swift SDK's `URLSession` does not expose a server-trust hook, so iOS rejects the
-hub's self-signed certificate until you install it as a trusted profile. In the app's
-Connection section, enter the host and port and tap **Install hub
-certificate** — this opens Safari at `https://<host>:<port>/cert`. Bypass the
-warning (**Show Details → visit this website**), allow the configuration
-profile download, then install it under **Settings → General → VPN & Device
-Management** and finally enable **Settings → General → About → Certificate
-Trust Settings → Enable Full Trust** for the new certificate. The connection then
-completes without warnings. The sample's README documents recovery for the
-common failure modes (the Full-Trust toggle not appearing, `errSSLBadCert` or
-`-1202`, and a 401 on the room after the certificate is trusted).
+The environment variable overrides the `auto-webrtc` YAML default without a
+checkout edit. LiveKit remains on port 8080 while CloudXRKit uses its native
+transport. Connecting or stopping XR does not disconnect the LiveKit agent
+session. Closing the immersive space or disconnecting from the hub stops the XR
+session so no render component is orphaned.
 
 ## Native C++
 
-The native client (`client-samples/native/`) is a C++ StreamKit
-implementation backed by the LiveKit C++ SDK (`livekit::Room`). It is aimed at
-developers embedding StreamKit in a native host — an embedded device, a game
-engine plugin, or a CloudXR client.
-
-### Build and run
-
-Point CMake at a LiveKit SDK install, build, and run with `--host` and
-`--token`. The backend is tested against the released LiveKit C++ SDK v0.4.1:
+The C++20 sample ships a working backend for the LiveKit C++ SDK v0.4.1.
 
 ```bash
+cd client-samples/native
 cmake -S . -B build -DLIVEKIT_SDK_ROOT=/path/to/livekit-cpp-sdk
 cmake --build build
 ./build/bin/streamkit_sample --host 192.168.1.100 --token <jwt>
 ```
 
-If `LIVEKIT_SDK_ROOT` is not set, the backend compiles in **stub mode**:
-`Connect()` reports connected immediately without opening a real session. This
-lets you build the rest of StreamKit without the LiveKit SDK present.
+Without `LIVEKIT_SDK_ROOT`, it builds in stub mode and reports a connected state
+without opening a network session. Build the standalone assertion-based tests
+with `-DSTREAMKIT_BUILD_TESTS=ON` and run:
 
-The native backend takes the JWT inline via `--token` or `LiveKitConfig::token`;
-the token-URL HTTP fetch is not implemented in this backend. A small unit-test
-suite is available with `-DSTREAMKIT_BUILD_TESTS=ON`, run via CTest. Refer to the
-sample's README for the test matrix and the current backend constraints.
+```bash
+ctest --test-dir build --output-on-failure
+```
 
-## Adding a client for a new platform
+The backend implements connection state, data, `_agent.status`, network
+metrics, host-injected audio, and host-injected video. `StartAudio()` and
+`StartCamera()` arm publication; the host opens its devices and pushes PCM or
+frames through `AudioSink` and `FrameSink`. Camera facing and device ID are
+therefore inert in this backend, while optional encoding settings apply before
+the first frame creates the video track.
 
-The DeviceIOHub speaks standard LiveKit, so you are not limited to the bundled clients.
-If [LiveKit publishes a client SDK](https://docs.livekit.io/reference/) for your
-platform — Unity, Flutter, React Native, Rust, Go, and others — you can build a
-client for it against the same contract the existing samples use:
+Token-URL HTTP fetching is not implemented; pass an inline token or subclass
+`LiveKitBackend::FetchToken`. `GetRoom()` is the LiveKit-specific escape hatch
+for remote audio rendering or AEC reference capture. Microphone processing
+presets are not mapped because the C++ SDK exposes no corresponding source
+controls.
 
-1. **Get a token.** Fetch a JWT from the hub at
-   `GET https://<host>:8080/token?identity=<name>`, or paste the token printed on
-   server startup.
-2. **Join the room.** Point the SDK at the hub's web-server port (`8080`, not
-   LiveKit's internal `7880`) and connect with the token.
-3. **Publish input.** Publish the microphone track, and the camera track if the
-   agent needs vision.
-4. **Handle agent output.** Play the remote audio track the agent publishes, and
-   read its data-channel messages (for example, the `agent.response` text topic).
+## Adding another platform
 
-That is the whole integration surface — no XR-AI-specific protocol. The brittle
-part is usually the hub's self-signed certificate: each platform trusts it
-differently, so reuse the per-platform guidance above, or run the hub over plain
-HTTP on a trusted network. Refer to {doc}`networking` for the certificate and
-plain-HTTP options.
+DeviceIOHub uses standard LiveKit. A new client fetches a token, joins through
+the hub's port 8080, publishes microphone and optional camera tracks, plays the
+remote audio track, and reads data topics such as `agent.response`. Keep the
+transport-specific SDK behind a StreamKit backend and reuse the same status,
+interruption, and participant-routing contracts.

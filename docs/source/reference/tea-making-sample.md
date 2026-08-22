@@ -41,7 +41,8 @@ services, so start the shared stack and Piper TTS first:
 
 ```bash
 uv run --project agent-samples/model-servers model_servers
-uv run --project services/piper-tts piper_tts_server
+uv run --project services/piper-tts piper_tts_server \
+  --config services/piper-tts/piper_tts_server.yaml
 ```
 
 Then launch the sample:
@@ -366,6 +367,13 @@ open-loop playback estimate remains private scheduling state.
 
 Preserve these rules when extracting or replacing agents. State ownership and
 cleanup are one design decision, not separate implementation details.
+
+## Safety
+
+This sample demonstrates agent composition; it is not a safety controller.
+Keep hot vessels stable, follow appliance and tea-package instructions, and do
+not use visual inference as the sole protection against burns, spills, or
+electrical hazards.
 
 ## Validation strategy
 

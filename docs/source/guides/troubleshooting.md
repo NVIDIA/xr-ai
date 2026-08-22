@@ -28,7 +28,8 @@ This applies to the `xr-render-demo/yaml/spark/` profile.
 
 ### DGX Spark — LOVR auto-download is not supported
 
-**Symptom:** `uv run xr_render_demo` exits at startup with:
+**Symptom:** `uv run --project agent-samples/xr-render-demo xr_render_demo`
+exits at startup with:
 
 ```
 xr-render-demo: LOVR auto-download is not supported on linux/aarch64.
@@ -322,6 +323,22 @@ forwards the `Authorization` header on `/rtc/validate` and the WebSocket.
 Repeat the install step per hub host, or replace the auto-generated certificate
 with a public-CA certificate via `cert_file` or `key_file` in `device_io_hub.yaml`
 for production.
+
+### iOS and visionOS — microphone or camera is interrupted
+
+An occasional LiveKit microphone timeout means its recording engine did not
+produce the first buffer before publication. The current client enables prepared
+recording mode before publishing to make that first buffer available. Stopping
+the microphone then disables prepared input while leaving output active, so the
+orange microphone indicator clears without silencing agent audio.
+
+Phone calls, Siri, route changes, media-service resets, another capture app, or
+closing an XR space can interrupt audio or camera while the control still shows
+the user's requested state. The client re-arms capture when the OS allows it.
+If it does not recover, filter Console.app for the `MediaSession` category to
+inspect the recorded interruption, route, and capture-session events. CoreAudio
+`-50` and `FigAudioSession -19224` messages alone are not evidence of failure;
+they can also appear on successful starts.
 
 ### Chrome — Immersive Web extension cannot be enabled
 

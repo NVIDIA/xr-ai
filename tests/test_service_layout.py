@@ -192,6 +192,13 @@ def test_reusable_services_are_direct_children() -> None:
     assert _LEGACY_ROOTS.isdisjoint(tracked_roots)
 
 
+def test_xr_render_checks_the_web_xr_vendor_bundle() -> None:
+    source = (_ROOT / "agent-samples/xr-render-demo/main.py").read_text()
+
+    assert "client-samples/web-xr/vendor" in source
+    assert "client-samples/web/vendor" not in source
+
+
 def test_every_service_editable_source_path_resolves() -> None:
     for directory in _REQUIRED_SERVICES:
         project = _ROOT / "services" / directory

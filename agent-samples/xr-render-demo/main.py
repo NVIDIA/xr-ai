@@ -203,7 +203,7 @@ def _ensure_web_vendor() -> None:
     from NGC and produces vendor/cloudxr-sdk.esm.mjs and livekit-client.esm.mjs.
     Requires npm on PATH. Skipped when the output files already exist.
     """
-    vendor_dir   = (_BASE / "../../client-samples/web/vendor").resolve()
+    vendor_dir   = (_BASE / "../../client-samples/web-xr/vendor").resolve()
     cloudxr_out  = vendor_dir / "cloudxr-sdk.esm.mjs"
     if cloudxr_out.exists():
         return

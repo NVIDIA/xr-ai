@@ -39,13 +39,33 @@ Before starting the stack, the orchestrator runs two setup steps:
   not present and sets `$LOVR_BIN`. Resolution order: `$LOVR_BIN` env var →
   `lovr_bin:` in `scene/scene_service.yaml` → cached AppImage → fresh download.
 
+## Source map and extension points
+
+`main.py` is the orchestrator. `worker/xr_render_demo_worker/app.py` composes
+the SDK tools and `RenderAgent`; `agent.py` receives participant turns;
+`supervisor.py` owns the top-level tool loop; and `scene.py` owns snapshots,
+diffs, and move history. The `agents/` packages contain placement, appearance,
+object, vision, and memory subagents. The separately packaged `scene/` process
+owns LOVR and scene state, while `eval/` owns offline and live regression tiers.
+
+To add a subagent, create a package under `agents/`, return its model-visible
+`Tool` from a `make_<name>_agent()` factory, export it, compose it into the
+supervisor, and add component eval cases. Add shared capability groups to
+`xr-ai-tools` once two applications need them; otherwise keep a sample-specific
+group with the worker and inject it into the relevant subagent.
+
+Prompt-only changes need no rebuild. Edit the supervisor or subagent prompt in
+place and add a corresponding eval case without copying the worked example's
+specific vocabulary into the fixture.
+
 ## Selecting the client type (WebRTC vs native)
 
 `NV_DEVICE_PROFILE` selects which XR clients can connect. For the native iOS
 and visionOS apps, set it to `auto-native`:
 
 ```bash
-NV_DEVICE_PROFILE=auto-native uv run xr_render_demo
+NV_DEVICE_PROFILE=auto-native \
+  uv run --project agent-samples/xr-render-demo xr_render_demo
 ```
 
 The environment value takes precedence over YAML. The `cloudxr_env` value in
@@ -288,13 +308,42 @@ a streaming client connects. LOVR cannot start before then.
 Offline regression suite for the agentic loop, run against the live agent LLM.
 It derives schemas from the worker's native tools and evaluates tool
 effects against deterministic fixtures, so the live LOVR scene is not mutated.
-Refer to
-[`agent-samples/xr-render-demo/eval/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/agent-samples/xr-render-demo/eval/README.md)
-for the case format and the watch-mode loop. Run with:
+Run the full offline corpus with:
 
 ```bash
 uv run --project agent-samples/xr-render-demo/eval xr_render_demo_eval
 ```
+
+The eval project provides four tiers:
+
+| Tier | Command | Scope |
+|---|---|---|
+| Supervisor routing | `xr_render_demo_eval_supervisor` | Fake subagents record delegations |
+| Subagent components | `xr_render_demo_eval_subagents` | One real subagent over fake leaf functions |
+| End-to-end offline | `xr_render_demo_eval` | Supervisor and subagents over deterministic services |
+| Live | `xr_render_demo_live_*` | Running demo stack and real scene state |
+
+The offline tiers require only the agent LLM. The `utterances` subset is the
+fast prompt-change gate:
+
+```bash
+uv run --project agent-samples/xr-render-demo/eval xr_render_demo_eval utterances
+```
+
+Live drivers create a fresh participant per case, clear the scene through typed
+RPC, vary phrasing, preserve the complete run log, and should be repeated before
+treating a near-tie model result as a regression. They require
+`allow_sim_pose: true` in `yaml/openxr_service.yaml`.
+
+Cases belong beside the tier that owns them: end-to-end cases in `cases.py`,
+precision and utterance cases in `harness.py`, routing cases in `supervisor.py`,
+component cases in `subagents.py`, and live cases in the relevant `live_*.py`.
+The harness intentionally does not cover real camera perception in offline
+tiers or voice-media behavior; those require a live tier.
+
+The model responds better to worked examples and contrast pairs than bare
+prohibitions. Every prompt change must retain the overlap audit described below
+and pass the utterances gate before the longer suites.
 
 ## Tracing and debugging
 

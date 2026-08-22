@@ -39,7 +39,7 @@ agent-samples/<name>/
 ├── yaml/                           ← all YAML configs for this sample
 │   ├── device_io_hub.yaml
 │   ├── <command>.yaml              ← one per launchable process
-│   ├── models.local.json           ← adapter, endpoint, and deployment specs
+│   ├── models.json                 ← adapter, endpoint, and deployment specs
 │   └── …
 └── worker/
     ├── pyproject.toml              ← worker project
@@ -49,7 +49,7 @@ agent-samples/<name>/
         └── …                       ← cohesive workflow, transport, and config modules
 ```
 
-`yaml/models.local.json` names the logical models the worker needs (`llm`,
+`yaml/models.json` names the logical models the worker needs (`llm`,
 `vlm`, `stt`, `tts`, or any sample-specific name). Each role composes an
 adapter, endpoint, and deployment spec. Worker-only profiles may remain in the
 legacy flat JSON/YAML shape; a profile shared with the stdlib-only orchestrator

@@ -5,28 +5,9 @@
 
 # nim-server
 
-Generic launcher for a self-hosted [NVIDIA NIM](https://build.nvidia.com)
-container. One `nim_server` command serves any NIM image; the YAML picks
-which. Orchestrators list one `Process` row per NIM with a distinct
-`config=`.
+Generic persistent launcher for self-hosted NVIDIA NIM containers. The selected
+YAML owns the image, ports, GPU placement, cache, health route, and optional
+Riva gRPC endpoint.
 
-```yaml
-# yaml/nim_llm_server.yaml
-image:     nvcr.io/nim/meta/llama-3.1-8b-instruct:latest
-http_port: 8110
-```
-
-On first start the container pulls from `nvcr.io` and downloads the
-GPU-matched optimized engine from NGC (multi-GB; expect a long cold start)
-into the `nim_cache` volume; later starts reuse it. Requires `NGC_API_KEY`.
-Readiness gates on `/v1/health/ready`.
-
-Riva speech NIMs (parakeet ASR, magpie TTS) additionally set `grpc_port:`,
-the gRPC endpoint workers reach via the `riva_grpc` model kind; `http_port`
-then only serves health.
-
-The shared model-server stack launches one of these per managed NIM service in
-the `models.vlm_llm_nim.json` deployment profile. Samples reuse those
-endpoints by copying the relevant model entries and changing their ownership
-to `reused`; the model-server YAML comments identify the exact mapping. See
-`docs/source/components/ai-services.md` "Hosting models on NVIDIA NIM".
+See [Hosting models on NVIDIA NIM](../../docs/source/components/ai-services.md#hosting-models-on-nvidia-nim)
+and the generated configuration reference.
