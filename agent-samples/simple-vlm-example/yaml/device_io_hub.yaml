@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# DeviceIOHub configuration for the vlm-agent sample.
+# DeviceIOHub configuration for the simple-vlm-example sample.
 # Paths are relative to this file's directory.
 # See services/device-io-hub/device_io_hub.yaml for all available options.
 

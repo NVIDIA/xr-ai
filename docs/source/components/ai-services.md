@@ -8,17 +8,15 @@
 Read this when calling or operating an inference server. For the
 orchestrator pattern that wires servers into a sample, refer to
 {doc}`/guides/adding-a-sample`. For an end-to-end procedure covering custom
-deployment profiles, hardware YAML, and reuse-only sample configuration, see
+deployment profiles, hardware YAML, and reuse-only sample configuration, refer to
 {doc}`/guides/customizing-model-servers`.
 
-Multiple reusable HTTP servers are available as launchable peers of
-`services/device-io-hub/`. All expose an OpenAI-compatible REST API so agent workers
-can call them with any OpenAI SDK client or plain `httpx` or `requests`.
-Reference services cover vision-language reasoning, speech recognition,
-text-to-speech, embeddings, and large language models. The projects are direct
-children of the repository's `services/README.md` source index;
-pick an LLM per sample based on the tool-calling, reasoning, and hardware
-trade-offs documented below.
+Multiple reusable inference and typed capability services are available as
+launchable peers of `services/device-io-hub/`. Model HTTP is encapsulated by
+the typed factories in `xr-ai-models`; workers must not add vendor SDKs or
+hand-written HTTP clients. Reference services cover vision-language reasoning,
+speech recognition, text-to-speech, embeddings, large language models,
+recorded video, and document retrieval.
 
 | Server | Command | Port | Model | Backend |
 |---|---|---|---|---|
@@ -30,6 +28,7 @@ trade-offs documented below.
 | `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
 | `services/embedding-server/` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
+| `services/nim-server/` | `nim_server` | configured per YAML | selected NVIDIA NIM | persistent Docker container |
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
 | `services/rag-service/` | `rag_service` | 8340 | — | Typed dense document retrieval capability |
 
@@ -168,7 +167,7 @@ never branch on backend.
 ```python
 from xr_ai_models import load_models_config, make_llm, ChatMessage
 
-config = load_models_config("yaml/models.local.json")
+config = load_models_config("yaml/models.json")
 async with make_llm(config, "agent_llm") as llm:
     resp = await llm.chat(
         [ChatMessage(role="user", content="hello")],
@@ -243,11 +242,11 @@ disables endpoint health probing, and declares external ownership:
   hosted service.
 - **`model_name`** is the hosted model id from [build.nvidia.com](https://build.nvidia.com).
 
-For a sample with profile selection, set `models_config: models.hosted.json`
-in the worker YAML. This wrapped
-JSON profile is consumed by both the worker and orchestrator, so the local
-VLM process is omitted and `NGC_API_KEY` is requested automatically. Select
-`models.local.json` to switch back.
+To adapt a sample, copy its active model profile, replace the local model entry
+with the hosted entry, and point `models_config` in the worker YAML at the new
+file. The same wrapped JSON profile is consumed by the worker and orchestrator,
+so the orchestrator omits externally owned services and requests the referenced
+credential automatically.
 
 ### Self-hosted NIM containers (`models.vlm_llm_nim.json`)
 
@@ -265,8 +264,8 @@ uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim
 ```
 
 - `vlm_llm_nim`: Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner as NIM
-  containers, with STT, Piper TTS, and embedding served locally. Samples reuse these
-  endpoints; they never launch or stop the containers.
+  containers, with STT, Piper TTS, and embedding served locally. Samples reuse
+  these endpoints; they never launch or stop the containers.
 
 To adapt a sample, copy the relevant `llm` and `vlm` entries from
 `models.vlm_llm_nim.json` into the sample's active models JSON and change only
@@ -372,7 +371,6 @@ with stale memory limits, entrypoint, setup commands, or model arguments.
 
 ```bash
 uv run --project agent-samples/model-servers model_servers --stop
-uv run --project agent-samples/xr-render-demo xr_render_demo --stop
 ```
 
 Cleanup locates labelled Docker containers before inspecting ports, then
@@ -390,10 +388,10 @@ All five vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
 `nemotron3_nano_llm_server`, `nemotron_omni_llm_server`, `embedding_server`) accept a
 `vllm_backend:` key in their YAML to pick how vLLM is hosted:
 
-| `vllm_backend` | Runtime | Default | Use when |
-|---|---|---|---|
-| `pip` | `vllm serve` from the wrapper's venv | yes | Standard development; fastest iteration; works offline once weights are cached. |
-| `docker` | `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …` | no | Trying NVIDIA's optimized vLLM container; pinning a specific NGC release; reproducing a deployment image. |
+| `vllm_backend` | Runtime | Code fallback | Shipped standalone YAMLs | Use when |
+|---|---|---|---|---|
+| `pip` | `vllm serve` from the wrapper's venv | yes | no | Developing the wrapper in its local environment or using a custom pip installation. |
+| `docker` | `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …` | no | yes | Running the pinned NVIDIA vLLM container used by the checked-in configurations. |
 
 Both modes honor identical configuration keys — same model, same port, same vLLM
 flags. The dispatcher lives in `utils/xr-ai-vllm/`. Switching is one YAML edit:
@@ -439,11 +437,11 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
 - Container name is deterministic per service: `xr-ai-vllm-vlm-server`,
   `xr-ai-vllm-llama-nemotron-llm-server`,
   `xr-ai-vllm-nemotron3-nano-llm-server`,
-  `xr-ai-vllm-nemotron-omni-llm-server`.
-- Persistence parity: `vlm_server`, `llama_nemotron_llm_server`,
-  `nemotron3_nano_llm_server`, and `nemotron_omni_llm_server` launch their
-  Docker processes in separate sessions, so they survive launcher shutdowns
-  like their pip-mode `start_new_session=True` counterparts.
+  `xr-ai-vllm-nemotron-omni-llm-server`, and
+  `xr-ai-vllm-embedding-server`.
+- Persistence parity: all five vLLM-backed wrappers launch their Docker
+  processes in separate sessions, so they survive launcher shutdowns like
+  their pip-mode `start_new_session=True` counterparts.
 
 ### Cleanup
 
@@ -479,20 +477,21 @@ cleanup.
   wire format (`finish_reason: "tool_calls"`). Per-turn reasoning toggle via
   `"detailed thinking on"` or `"detailed thinking off"` in a system or user
   message; reasoning preamble is **not** stripped server-side. Hosting backend
-  is selectable per YAML (refer to *Choosing the vLLM runtime*). Refer to
-  [`services/llama-nemotron-llm/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/services/llama-nemotron-llm/README.md)
-  for the full HTTP contract and tuning knobs.
+  is selectable per YAML (refer to *Choosing the vLLM runtime*). The YAML owns
+  the vLLM tuning knobs and the model profile owns the client-side served model
+  name and reasoning mapping.
 - **nemotron3-nano-llm** is a thin wrapper around `vllm serve` for
   `NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}` (auto-selected by GPU compute
   capability). vLLM handles tool calling (`qwen3_coder` parser), reasoning
   extraction (`nano_v3` parser — auto-fetched into `model_cache`), and
-  FlashInfer FP4 MoE kernels. Requires a Blackwell-class GPU (B200 or RTX PRO
-  6000) for native FP4; swap to the FP8 or BF16 variants for Hopper and Ampere.
+  FlashInfer FP4 MoE kernels. `model_blackwell` selects the NVFP4 checkpoint
+  on SM100+; `model_ada` selects FP8 on earlier supported GPUs. Parsed
+  reasoning is returned in the `reasoning` field. Native FP4 requires a
+  Blackwell-class GPU such as B200 or RTX PRO 6000; FP8 is used on Ada,
+  Hopper, and Ampere.
   `enforce_eager: true` by default to avoid the silent 3–8 min CUDA graph and
   FlashInfer autotune on cold start. Hosting backend is selectable per YAML
-  (refer to *Choosing the vLLM runtime*). Refer to
-  [`services/nemotron3-nano-llm/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/services/nemotron3-nano-llm/README.md)
-  for the vLLM flags it forwards and Blackwell prerequisites.
+  (refer to *Choosing the vLLM runtime*).
 - **nemotron-omni-llm** is a vLLM-backed multimodal LLM serving
   `Nemotron-3-Nano-Omni-30B-A3B-Reasoning` (text + video input) at port 8108.
   The YAML auto-selects between three model variants by detected GPU compute
@@ -508,6 +507,14 @@ cleanup.
 - **magpie-tts** loads magpie_tts_multilingual_357m via NeMo TTS in-process.
 - **piper-tts** serves any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
   All inference runs in a thread pool so the asyncio loop is never blocked.
+- **embedding-server** serves `nvidia/llama-nemotron-embed-1b-v2` through
+  `/v1/embeddings`. It emits 2048-dimensional Matryoshka embeddings and can
+  truncate them to 384, 512, 768, 1024, or 2048 dimensions. The checked-in
+  configuration reserves 20% of a GPU and uses Docker.
+- **rag-service** is a typed dense document-retrieval capability. Point
+  `documents_dir` at an application-owned tree and `models_config` at a profile
+  with an `embedding` role. It chunks and embeds supported documents at
+  startup, caches its index, and returns matches above `min_score`.
 - **video-memory-service** owns recorded chunk queries, NVDEC, and PNG output
   behind typed msgpack over ZMQ on port 8310. Set `recordings_dir` in its YAML to
   enable recorded-video operations; the path must match the hub's

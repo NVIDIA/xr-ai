@@ -27,8 +27,18 @@ Public Python references are generated from each enrolled module's literal
 `__all__`, declarations, annotations, defaults, and docstrings. An API-only
 change therefore updates the code, its co-located documentation, and tests; the
 strict documentation build rejects unresolved or undocumented exports. Update
-a README or narrative page when concepts, workflows, operations, or
-architecture change, and add a migration entry for a breaking change.
+a narrative page when concepts, workflows, operations, or architecture change,
+and add a migration entry for a breaking change.
+
+`docs/source/` owns user-facing narrative content. READMEs are concise entry
+points that identify their directory and link to the canonical page instead of
+repeating it. A top-level README under `agent-samples/` also keeps the exact
+commands needed to start that sample. Sample architecture, behavior,
+configuration guidance, artifacts, extension instructions, and eval methodology
+belong in the sample's reference guide. Preserve unique, still-valid guidance
+when consolidating an older README; move it before replacing the duplicate with
+a link. Nested READMEs are reserved for genuinely artifact-local instructions
+that do not belong on the published site.
 
 The user-facing command catalog is generated from top-level sample
 `[project.scripts]` entries and literal `argparse` declarations. Keep option

@@ -30,3 +30,19 @@ Prefer to do it by hand? Follow {doc}`/getting_started/quickstart`.
 The bank lives at
 [`skills/`](https://github.com/NVIDIA/xr-ai/tree/main/skills) in the
 repository; new skills land there with the features they cover.
+
+## Manual installation
+
+Set `REF` to the repository ref you will build against and download the skill
+into the directory used by your coding agent:
+
+```bash
+SKILLS_DIR=/path/to/your/agent/skills
+REF=main  # or a release tag such as v0.3.0
+curl -fsSL --create-dirs -o "$SKILLS_DIR/getting-started/SKILL.md" \
+  "https://raw.githubusercontent.com/NVIDIA/xr-ai/$REF/skills/getting-started/SKILL.md"
+```
+
+If the selected release predates the skill bank, use `main` for both the skill
+and your checkout. An agent without a skill installation mechanism can read the
+downloaded `SKILL.md` and follow it directly in the current session.

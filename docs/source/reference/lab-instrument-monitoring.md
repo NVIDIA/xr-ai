@@ -336,6 +336,36 @@ problems from detector or VLM problems. Then inspect Relay events and the
 participant JSONL files to follow the tool call, reading, state update, and
 notification as distinct stages.
 
+### Routing and visual evals
+
+Start the shared model servers, then run these commands from
+`agent-samples/lab-instrument-monitoring/`:
+
+```bash
+uv run --project worker python eval/eval.py
+uv run --project worker python eval/visual_eval.py
+```
+
+`eval/cases.yaml` checks the foreground model's complete first action, exact
+tool-call count, and every call's request model. It separates current-view,
+recent-history, background-control, ordinary conversation, and general
+knowledge requests. `eval/visual_cases.yaml` exercises generated images for
+monitor baselines and changes, adversarial visible instructions, multiple
+readable devices, competing markers, and exact joint label-to-reading output.
+
+### Printable sample markers
+
+The checked-in marker assets match `yaml/device_map.yaml`:
+
+| Files | Family | Encoded IDs | Device names |
+|---|---|---|---|
+| `sample-markers/qr/*.png` | QR | `device-1` through `device-5` | `Device1` through `Device5` |
+| `sample-markers/aruco/*.png` | ArUco `DICT_4X4_50` | `0` through `4` | `Device1` through `Device5` |
+
+Keep the white border, print without interpolation or cropping, and place a
+marker close enough to its instrument display for both to be clear in one
+camera frame.
+
 <a id="what-should-become-shared"></a>
 
 ## What belongs in shared code

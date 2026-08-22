@@ -5,7 +5,7 @@
 
 # Customizing model servers
 
-Use this guide to change which shared models run, where they run, or how a
+Use this workflow to change which shared models run, where they run, or how a
 sample connects to them. Model-server customization has two separate parts:
 
 1. A `model-servers` deployment profile declares which shared services the
@@ -222,7 +222,8 @@ Before committing a custom profile:
 ```bash
 jq empty agent-samples/model-servers/yaml/models.my-stack.json
 
-uv run --project tests pytest -q \
+cd tests
+uv run pytest -q \
   test_model_servers.py \
   test_launcher_config.py \
   test_nim_docker.py
@@ -239,6 +240,6 @@ uv run --project agent-samples/model-servers \
   model_servers --models my-stack
 ```
 
-For adapter fields and model capabilities, see
+For adapter fields and model capabilities, refer to
 {doc}`/reference/agent-sdk-models`. For server runtime behavior, persistence,
-and NIM credentials, see {doc}`/components/ai-services`.
+and NIM credentials, refer to {doc}`/components/ai-services`.

@@ -6,8 +6,8 @@
 # xr-ai working contract
 
 This file contains the repository-wide constraints for humans and agents. Read
-the nearest package or sample README for local details. User-facing docs live
-only under `docs/source/`.
+the nearest package or sample README for its entry point and canonical-doc
+links. User-facing docs live only under `docs/source/`.
 
 ## Repository map
 
@@ -91,7 +91,7 @@ agent-samples/<kebab-name>/
 - New worker code is a named package with relative internal imports and an
   explicit `__main__.py`.
 
-See [Adding a sample](docs/source/guides/adding-a-sample.md) and the
+Refer to [Adding a sample](docs/source/guides/adding-a-sample.md) and the
 [`simple-vlm-example`](agent-samples/simple-vlm-example/README.md) reference.
 
 ## Change contract
@@ -133,6 +133,26 @@ Follow the authoritative [documentation style](docs/source/guides/documentation-
 for customer-facing Markdown and reStructuredText. Match the surrounding
 document and keep edits scoped.
 
+`docs/source/` is the canonical home for user-facing concepts, architecture,
+workflows, operations, troubleshooting, and reference material. Do not duplicate
+that content in a README. A README is a concise repository entry point: state
+what the directory contains, link to the canonical documentation, and keep only
+the minimum local information needed before following that link. A top-level
+sample README under `agent-samples/` additionally keeps the exact commands needed
+to start that sample. State the sample directory as the working directory and
+write every command relative to that directory, including commands that invoke a
+sibling sample such as `../model-servers`. Put sample architecture, behavior,
+configuration guidance, artifact contracts, extension instructions, and eval
+methodology in its `docs/source/` guide. Nested READMEs may contain only
+artifact-local instructions that are not useful in the published documentation.
+
+When documentation exists in both locations, consolidate it into
+`docs/source/` and replace the README copy with a link. When moving README
+content, preserve any still-valid operational detail in the destination page;
+do not delete unique guidance merely to shorten the README. Package API details
+remain in declarations and co-located docstrings and are rendered into the
+generated Python reference rather than repeated in either narrative location.
+
 Use these canonical references when working in their area:
 
 | Topic | Document |
@@ -143,5 +163,7 @@ Use these canonical references when working in their area:
 | AI services | [`docs/source/components/ai-services.md`](docs/source/components/ai-services.md) |
 | Credentials | [`docs/source/getting_started/credentials.md`](docs/source/getting_started/credentials.md) |
 | Networking | [`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md) |
+| Testing | [`docs/source/guides/testing.md`](docs/source/guides/testing.md) |
+| Documentation style | [`docs/source/guides/documentation-style.md`](docs/source/guides/documentation-style.md) |
 | Troubleshooting | [`docs/source/guides/troubleshooting.md`](docs/source/guides/troubleshooting.md) |
 | xr-render-demo | [`docs/source/reference/xr-render-demo.md`](docs/source/reference/xr-render-demo.md) |

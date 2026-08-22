@@ -21,7 +21,9 @@ local GPU is required for the agent or DeviceIOHub.
 |---|---|
 | model-servers (all models) | ~55 GB |
 | simple-vlm-example (requires model services) | Uses the model-services allocation |
-| xr-render-demo (requires model-servers) | ~55 GB (models) + ~2 GB (hub/TTS) |
+| lab-instrument-monitoring (requires model services) | Uses the model-services allocation |
+| tea-making-sample (requires model services) | Uses the model-services allocation |
+| xr-render-demo (requires model-servers) | ~55 GB (models) + ~2 GB (CloudXR and hub) |
 | Hub only | none |
 
 ## Software
@@ -32,9 +34,9 @@ local GPU is required for the agent or DeviceIOHub.
 | Python | 3.11 or 3.12 | 3.10 and 3.13 are not supported |
 | [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
 | NVIDIA driver | 570+ | required for local model inference |
-| Docker | 24+ | required: all vLLM-backed services (LLM, VLM) run in `nvcr.io/nvidia/vllm` containers |
+| Docker | 24+ | required by the checked-in model-server profiles: their LLM, VLM, and embedding services run in `nvcr.io/nvidia/vllm` containers |
 | NVIDIA Container Toolkit | latest | required: gives Docker access to the GPU. Without it, `model_servers` fails with `failed to discover GPU vendor from CDI: no known GPU vendor found` |
-| npm | 18+ | required for xr-render-demo: the orchestrator builds the web vendor bundle on first run |
+| Node.js | 18+ with npm | required for xr-render-demo: the orchestrator builds the web vendor bundle on first run |
 
 `uv` handles all Python dependencies per-sample — no global `pip install` or
 virtual-environment setup needed. If you do not have it:
@@ -80,7 +82,7 @@ setups:
   but WebRTC media never flows (clients drop after ~18 s).
 - **xr-render-demo cannot run under WSL2.** The WSL2 GPU stack is compute-only
   (CUDA, NVENC, NVML) with no Vulkan ICD, so Vulkan falls back to the llvmpipe
-  software rasterizer and the `VK_KHR_external_semaphore_fd` /
+  software rasterizer and the `VK_KHR_external_semaphore_fd` and
   `VK_KHR_external_fence_fd` device extensions CloudXR Runtime requires are
   unavailable. This sample needs bare-metal Linux.
 - **NAT networking (the WSL default) limits the stack to a browser on the

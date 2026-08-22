@@ -28,7 +28,8 @@ This applies to the `xr-render-demo/yaml/spark/` profile.
 
 ### DGX Spark — LOVR auto-download is not supported
 
-**Symptom:** `uv run xr_render_demo` exits at startup with:
+**Symptom:** `uv run --project agent-samples/xr-render-demo xr_render_demo`
+exits at startup with:
 
 ```
 xr-render-demo: LOVR auto-download is not supported on linux/aarch64.
@@ -99,7 +100,7 @@ LD_LIBRARY_PATH contains incompatible version of cudnn.
 venv — the exact version that venv's PyTorch was compiled against — so torch
 loads the wrong runtime and aborts.
 
-**Fix:** the launcher handles this automatically — `model_servers` /
+**Fix:** the launcher handles this automatically — `model_servers` or
 `xr_render_demo` strip any `libcudnn`-bearing directory from each child's
 `LD_LIBRARY_PATH` before spawning (logged once as a WARNING), so the
 venv-bundled cuDNN is used. If you hit this running a service **directly**
@@ -209,7 +210,7 @@ local install.
 ### Hub fails immediately because NVIDIA codec libraries are missing
 
 **Cause:** The hub raises
-`RuntimeError: missing libnvcuvid.so / libnvidia-encode.so` because NVDEC
+`RuntimeError: missing libnvcuvid.so or libnvidia-encode.so` because NVDEC
 (`libnvcuvid.so`) and NVENC (`libnvidia-encode.so`) are required. The
 DeviceIOHub refuses to start without them so it never silently falls back to
 OpenH264, which is royalty-bearing.
@@ -231,7 +232,7 @@ with no user or bot speech.
 timeout disabled, so a quiet session stays connected indefinitely.
 
 **If you want it:** set `idle_timeout_secs: <seconds>` (e.g. `300` for 5 min)
-in the sample's worker YAML (`simple_vlm_example_worker.yaml` /
+in the sample's worker YAML (`simple_vlm_example_worker.yaml` or
 `xr_render_demo_worker.yaml`); `0` or unset keeps it disabled. The knob is
 owned by `xr_ai_voice.VoiceAgent`.
 
@@ -326,6 +327,22 @@ forwards the `Authorization` header on `/rtc/validate` and the WebSocket.
 Repeat the install step per hub host, or replace the auto-generated certificate
 with a public-CA certificate via `cert_file` or `key_file` in `device_io_hub.yaml`
 for production.
+
+### iOS and visionOS — microphone or camera is interrupted
+
+An occasional LiveKit microphone timeout means its recording engine did not
+produce the first buffer before publication. The current client enables prepared
+recording mode before publishing to make that first buffer available. Stopping
+the microphone then disables prepared input while leaving output active, so the
+orange microphone indicator clears without silencing agent audio.
+
+Phone calls, Siri, route changes, media-service resets, another capture app, or
+closing an XR space can interrupt audio or camera while the control still shows
+the user's requested state. The client re-arms capture when the OS allows it.
+If it does not recover, filter Console.app for the `MediaSession` category to
+inspect the recorded interruption, route, and capture-session events. CoreAudio
+`-50` and `FigAudioSession -19224` messages alone are not evidence of failure;
+they can also appear on successful starts.
 
 ### Chrome — Immersive Web extension cannot be enabled
 

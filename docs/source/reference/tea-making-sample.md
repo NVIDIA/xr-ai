@@ -339,9 +339,8 @@ public `execute()` boundary so validation and Relay tracing are preserved.
 Follow the same contract as the three existing applications: an agent-owned
 task per participant, idempotent start, stop, and status tools, cancellation on
 leave, a typed durable record topic, and optional compact `BackgroundFact`
-output.
-Decide explicitly whether to speak the result; do not make every background
-record a voice message.
+output. Decide explicitly whether to speak the result; do not make every
+background record a voice message.
 
 ### Replace files with production persistence
 
@@ -378,6 +377,13 @@ open-loop playback estimate remains private scheduling state.
 
 Preserve these rules when extracting or replacing agents. State ownership and
 cleanup are one design decision, not separate implementation details.
+
+## Safety
+
+This sample demonstrates agent composition; it is not a safety controller.
+Keep hot vessels stable, follow appliance and tea-package instructions, and do
+not use visual inference as the sole protection against burns, spills, or
+electrical hazards.
 
 ## Validation strategy
 

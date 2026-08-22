@@ -10,12 +10,11 @@ clients connect to and agents fan out from. It owns the internal LiveKit
 transport, the shared-memory + ZMQ IPC boundary to agents, the per-participant
 return path, and the same-origin `wss://` proxy that fronts LiveKit signaling.
 
-It runs as one process:
+From the repository root, run it as one process:
 
 ```
-uv run device_io_hub                       # auto-discovers ./device_io_hub.yaml
-uv run device_io_hub --config path.yaml    # explicit config
-python -m device_io_hub                    # equivalent module form
+uv run --project services/device-io-hub device_io_hub \
+  --config services/device-io-hub/device_io_hub.yaml
 ```
 
 Configuration comes from a `device_io_hub.yaml` file. When none is found,
@@ -38,7 +37,7 @@ traffic back to the originating client only.
 On startup, `__main__.py` constructs a `HubEndpoint` (the IPC server),
 registers hub-local callbacks (`on_frame`, `on_audio`, `on_data`,
 `on_participant`), loads the configuration, and brings up the `LiveKitConnector`.
-The hub task and the connector task then run concurrently until `SIGINT` /
+The hub task and the connector task then run concurrently until `SIGINT` or
 `SIGTERM`. A periodic stats loop logs per-participant video, audio, and data
 rates.
 
@@ -70,15 +69,16 @@ This isolation is a property of the hub's routing, not a limitation of the
 transport. LiveKit natively supports client-to-client communication, and an
 application is free to use those native features directly for peer-to-peer
 media or data. Doing so is **outside the scope of XR AI**: the hub neither
-routes nor guarantees that traffic. This traffic is outside the hub contract and is not portable across transports. Build on the hub's participant ↔ agent contract
-for behavior that ports across backends.
+routes nor guarantees that traffic, and it is not portable across transports.
+Build on the hub's participant ↔ agent contract for behavior that must port
+across backends.
 ```
 
 ## Internal LiveKit transport
 
 LiveKit is an internal transport implementation detail. It is not exposed to
-the agent or MCP layer — agents only ever speak the IPC protocol below, and
-never need to know which transport carries the media.
+agent APIs: agents speak only the IPC protocol below and never need to know
+which transport carries the media.
 
 `LiveKitConnector` (`transport/livekit/`) owns the transport lifecycle:
 
