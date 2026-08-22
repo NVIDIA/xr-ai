@@ -2,7 +2,7 @@
   "name": "xr-ai-web-vendor-bundle",
   "version": "0.1.0",
   "private": true,
-  "description": "Produces /client-samples/web/vendor/{cloudxr-sdk,livekit-client}.esm.mjs. Output is gitignored; run on the host before serving any web sample.",
+  "description": "Produces /client-samples/web-xr/vendor/{cloudxr-sdk,livekit-client}.esm.mjs. Output is gitignored; run on the host before serving the Web-XR sample.",
   "scripts": {
     "build": "webpack --mode production"
   },

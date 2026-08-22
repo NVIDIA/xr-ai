@@ -87,8 +87,8 @@ hub path rather than entering agent APIs.
 
 Public API membership comes from literal `__all__` declarations. Sphinx parses
 the source without importing SDK packages, then renders co-located docstrings,
-annotations, and defaults. Package READMEs retain installation, quickstarts,
-and cross-call behavioral guidance; this component page records only shared
-architecture and ownership. Guides, troubleshooting, and migrations remain
-handwritten because they describe workflows and decisions rather than API
-shape.
+annotations, and defaults. Package READMEs are concise entry points into these
+published package guides; cross-call behavior, architecture, and ownership live
+here and in the package reference pages. Guides, troubleshooting, and
+migrations remain handwritten because they describe workflows and decisions
+rather than API shape.

@@ -46,7 +46,7 @@ data class AudioConfig(
 
         /**
          * Raw PCM capture — all DSP disabled. Choose this when the server handles
-         * audio processing (e.g. the echo-agent / vlm-agent workers).
+         * audio processing (for example, an application voice worker).
          *
          * Mirrors Swift `.raw` and web `MicrophoneMode.RAW`.
          */

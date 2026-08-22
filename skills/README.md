@@ -5,29 +5,10 @@
 
 # xr-ai skill bank
 
-Skills that set a coding agent up to work with
-[xr-ai](https://github.com/NVIDIA/xr-ai). Each skill is a `SKILL.md` under the
-open [Agent Skills](https://agentskills.io) spec.
+Setup skills that teach coding agents the xr-ai working contract, documentation,
+and reference sample. Each directory follows the open
+[Agent Skills](https://agentskills.io) specification.
 
-## Available skills
-
-| Skill | What it does |
-|---|---|
-| [`getting-started`](getting-started/SKILL.md) | Sets an agent up to build on xr-ai: repo, working contract, docs, reference sample |
-
-## Setup
-
-Download the skill into your agent's skills directory. Set `REF` to the ref
-you will build against; releases that predate the bank have no copy, so use
-`REF=main` (and build against `main`):
-
-```bash
-: "${SKILLS_DIR:?Set SKILLS_DIR to your agent's skills directory}"
-REF=main  # or the release tag you will build against, e.g. v0.3.0
-curl -fsSL --create-dirs -o "$SKILLS_DIR/getting-started/SKILL.md" \
-  "https://raw.githubusercontent.com/NVIDIA/xr-ai/$REF/skills/getting-started/SKILL.md"
-```
-
-No skills mechanism? Read
-[`getting-started/SKILL.md`](getting-started/SKILL.md) and follow it directly
-in the current session.
+See [Set up with a coding agent](../docs/source/getting_started/skills.md) for
+the setup prompt, available skills, installation, and the fallback for agents
+without a skills mechanism.

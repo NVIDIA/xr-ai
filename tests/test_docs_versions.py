@@ -77,9 +77,15 @@ def test_source_links_use_the_current_documentation_ref(monkeypatch) -> None:
         ]
 
 
-def test_readme_agent_prompt_matches_docs_snippet() -> None:
-    snippet = (
-        _ROOT / "docs" / "source" / "_snippets" / "agent-setup-prompt.txt"
-    ).read_text()
+def test_agent_prompt_is_owned_by_docs_snippet() -> None:
+    snippet_path = _ROOT / "docs" / "source" / "_snippets" / "agent-setup-prompt.txt"
+    snippet = snippet_path.read_text()
     readme = (_ROOT / "README.md").read_text()
-    assert f"```text\n{snippet}```" in readme
+
+    assert snippet not in readme
+    assert "getting_started/skills" in readme
+    for page in (
+        _ROOT / "docs" / "source" / "index.md",
+        _ROOT / "docs" / "source" / "getting_started" / "skills.md",
+    ):
+        assert "```{literalinclude} /_snippets/agent-setup-prompt.txt" in page.read_text()
