@@ -5,9 +5,10 @@
 
 # xr-ai-voice
 
-Voice runtime for XR agents, including readiness, hub transport, VAD/STT,
+Voice runtime for XR agents, including readiness, hub transport, VAD and STT,
 voice gating, TTS, interruption, and optional multi-producer aggregation.
 Applications interact with typed XR events rather than Pipecat internals.
 
-Refer to the [xr-ai-voice guide](../../docs/source/reference/agent-sdk-voice.md) and
-the [generated Python API](../../docs/source/reference/python/index.md).
+Refer to the
+[xr-ai-voice guide](../../docs/source/reference/agent-sdk-voice.md) and the
+[generated Python API](../../docs/source/reference/python/index.md).

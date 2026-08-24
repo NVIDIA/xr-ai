@@ -5,14 +5,15 @@
 
 # Contributing and conventions
 
-The root [`CONTRIBUTING.md`](https://github.com/NVIDIA/xr-ai/blob/main/CONTRIBUTING.md)
-explains setup, testing, pull requests, and DCO sign-off.
-[`AGENTS.md`](https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md) contains the
-architecture and change constraints used by both humans and coding agents.
-{doc}`Documentation style <documentation-style>` contains the house style for
-customer-facing Markdown and reStructuredText.
+Refer to the root
+[`CONTRIBUTING.md`](https://github.com/NVIDIA/xr-ai/blob/main/CONTRIBUTING.md)
+for setup, testing, pull requests, and DCO sign-off. Refer to
+[`AGENTS.md`](https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md) for the
+architecture and change constraints used by humans and coding agents. Refer to
+{doc}`Documentation style <documentation-style>` for requirements governing
+customer-facing Markdown and reStructuredText. Refer to
 [`DEPENDENCIES.md`](https://github.com/NVIDIA/xr-ai/blob/main/DEPENDENCIES.md)
-is the package dependency map.
+for the package dependency map.
 
 For a Python change:
 

@@ -5,10 +5,10 @@
 
 # xr-render-demo eval harness
 
-Offline and live regression tiers for the xr-render agent. The
+Offline and live regression tiers for the xr-render agent. Refer to the
 [sample guide](../../../docs/source/reference/xr-render-demo.md#eval-harness)
-owns the tier definitions, case placement, prompt-tuning policy, isolation
-rules, and coverage boundaries. Run commands from the eval project:
+for tier definitions, case placement, prompt-tuning policy, isolation rules,
+and coverage boundaries. Run commands from the evaluation project:
 
 ```bash
 cd agent-samples/xr-render-demo/eval && uv sync   # once

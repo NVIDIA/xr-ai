@@ -22,5 +22,5 @@ Start with `xr_ai_hub` for raw media/data IPC, or compose `xr_ai_runtime`,
 Refer to the [Agent SDK guide](../docs/source/components/agent-sdk.md) for the package
 boundaries.
 
-Breaking-change replacements are maintained in the
-[migration guide](../docs/source/reference/migrations.md).
+Refer to the [migration guide](../docs/source/reference/migrations.md) for
+breaking-change replacements.

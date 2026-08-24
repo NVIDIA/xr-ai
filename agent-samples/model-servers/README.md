@@ -37,11 +37,11 @@ Use `--models NAME` to select a deployment JSON and
 `--gpu-profile NAME` only to select a reviewed hardware YAML directory.
 
 Because model processes persist, stop and restart the stack after changing a
-server YAML file. The
-[customization guide](../../docs/source/guides/customizing-model-servers.md)
-explains how to copy a profile, size GPU budgets, change endpoints, and validate
-the result. The generated
-[configuration reference](../../docs/source/reference/configuration.rst) lists
+server YAML file. Refer to the
+[customization guide](../../docs/source/guides/customizing-model-servers.md) for
+instructions to copy a profile, size GPU budgets, change endpoints, and
+validate the result. Refer to the generated
+[configuration reference](../../docs/source/reference/configuration.rst) for
 the checked-in fields and comments.
 
 ## Run
@@ -54,9 +54,9 @@ uv run model_servers
 ```
 
 The first cold start downloads model weights and can take tens of minutes.
-Configure the credentials described in the
-[credentials reference](../../docs/source/getting_started/credentials.md)
-before starting the stack.
+Refer to the
+[credentials reference](../../docs/source/getting_started/credentials.md) and
+configure the required credentials before starting the stack.
 
 To use the self-hosted NIM profile instead of the default profile:
 

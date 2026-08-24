@@ -22,7 +22,7 @@ automatically:
 
 | File | Common changes |
 |---|---|
-| `yaml/tea_making_worker.yaml` | Selected configs, observation cadence, VAD, timeouts, artifacts, and event viewer |
+| `yaml/tea_making_worker.yaml` | Selected configuration files, observation cadence, VAD, timeouts, artifacts, and event viewer |
 | `yaml/workflow.yaml` | Workflow state, steps, evidence rules, tools, and messages |
 | `yaml/voice_gate*.yaml` | Wake-word or always-on speech behavior |
 | `yaml/rag_service.yaml` | Documents, embedding role, cache, chunking, and retrieval threshold |

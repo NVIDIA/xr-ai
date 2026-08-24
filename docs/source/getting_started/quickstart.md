@@ -109,10 +109,9 @@ cd agent-samples/simple-vlm-example
 uv run --project ../model-servers model_servers
 ```
 
-The command may download model weights on its first run and requires the
-credentials described in the {doc}`credentials guide
-</getting_started/credentials>`. The model services remain running across
-sample restarts.
+The command may download model weights on its first run. Refer to the
+{doc}`credentials guide </getting_started/credentials>` for the required
+credentials. The model services remain running across sample restarts.
 
 ### Step 1 — Start the server
 
@@ -279,8 +278,8 @@ loaded in the background.
 
 ### Step 2 — Start the demo
 
-This demo has two extra host prerequisites beyond the shared
-{doc}`Requirements <requirements>`:
+Refer to the shared {doc}`Requirements <requirements>` first. This demo has two
+additional host prerequisites:
 
 - **Vulkan loader + headers** — the CloudXR compositor and LOVR render through
   Vulkan, so install them before running the demo: `sudo apt install libvulkan-dev`
@@ -301,7 +300,7 @@ and network access). Both steps are skipped on subsequent runs.
 ```{note}
 On **DGX Spark** (aarch64), LOVR does not publish a prebuilt aarch64 Linux
 binary, so the auto-download is not available: build LOVR from source and export
-`LOVR_BIN`. Refer to the troubleshooting guide.
+`LOVR_BIN`. Refer to {doc}`/guides/troubleshooting` for build instructions.
 ```
 
 To use a custom LOVR build:

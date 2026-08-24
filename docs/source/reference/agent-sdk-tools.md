@@ -7,8 +7,8 @@
 
 `xr-ai-tools` is the toolkit-independent native tool layer. Finite `Tool` and
 streaming `AsyncTool` objects share one typed Pydantic invocation contract, and
-every execution passes through NeMo Relay. Exact public APIs are in
-{doc}`python/index`.
+every execution passes through NeMo Relay. Refer to {doc}`python/index` for the
+exact public APIs.
 
 ## Bounded model tool loops
 

@@ -7,9 +7,10 @@
 
 The lab instrument sample is a reference for applications that combine
 foreground questions, opt-in background work, persistent participant state,
-visual identification, and event-driven notifications. Start with the
-{doc}`quickstart </getting_started/quickstart>` to run it. This architecture
-reference focuses on reusing the sample's structure for another application.
+visual identification, and event-driven notifications. Refer to the
+{doc}`quickstart </getting_started/quickstart>` to run the sample. This
+architecture reference focuses on reusing the sample's structure for another
+application.
 
 The central design choice is to separate perception, interpretation, state,
 policy, and presentation. A marker scan identifies an instrument, a VLM reads
@@ -103,16 +104,16 @@ client's `agent.response` topic so the same output can be rendered as captions.
 | `yaml/device_map.yaml` | Sample identity data | Map real marker IDs to domain objects |
 | `sample-markers/` | Five QR and five ArUco examples | Print or replace with deployment markers |
 
-Configuration and command syntax are also included automatically in the
-generated {doc}`configuration <configuration>` and
-{doc}`command-line <command-line>` references.
+Refer to the generated {doc}`configuration <configuration>` and
+{doc}`command-line <command-line>` references for configuration fields and
+command syntax.
 
 ## Configuration
 
 Run and edit the sample from `agent-samples/lab-instrument-monitoring/`. The
 orchestrator reads the files below on every start and materializes a temporary
-worker config with absolute paths; edit the checked-in files, not the temporary
-copy named in the logs.
+worker configuration with absolute paths. Edit the checked-in files, not the
+temporary copy named in the logs.
 
 | File | Owns |
 |---|---|
@@ -132,12 +133,12 @@ Restart `lab_instrument_monitoring` after an edit; configuration is not
 hot-reloaded. The `--expose-web-events` option intentionally overrides
 `web_events_host` in the runtime copy, so use that option rather than editing
 the host to expose the unauthenticated viewer. Changing `models.json` changes
-only the endpoints consumed by this sample. Use
-{doc}`/guides/customizing-model-servers` and restart the persistent shared stack
-for server-side model, GPU, port, or memory changes.
+only the endpoints consumed by this sample. Refer to
+{doc}`/guides/customizing-model-servers` for server-side model, GPU, port, or
+memory changes, then restart the persistent shared stack.
 
-Exact fields, checked-in values, and adjacent YAML comments are rendered in the
-generated {doc}`configuration <configuration>` reference.
+Refer to the generated {doc}`configuration <configuration>` reference for exact
+fields, checked-in values, and adjacent YAML comments.
 
 ## Foreground tool loop
 

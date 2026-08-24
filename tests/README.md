@@ -6,7 +6,7 @@
 # xr-ai tests
 
 Cross-package coverage for SDKs, services, samples, documentation invariants,
-and multi-client/multi-agent routing.
+and multi-client and multi-agent routing.
 
 ```bash
 cd tests

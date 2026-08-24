@@ -17,7 +17,7 @@ This project is a public beta. APIs and behavior may change as it evolves.
 
 ## Get started
 
-Use the [versioned documentation](https://nvidia.github.io/xr-ai/) for setup,
+Refer to the [versioned documentation](https://nvidia.github.io/xr-ai/) for setup,
 requirements, credentials, networking, architecture, and troubleshooting:
 
 - [Set up with a coding agent](https://nvidia.github.io/xr-ai/main/getting_started/skills.html)
@@ -55,14 +55,14 @@ evaluation, and adaptation guidance.
 | `docs/source/` | Canonical user and contributor documentation |
 | `skills/` | Setup skills for coding agents |
 
-For repository constraints and dependency boundaries, read
+For repository constraints and dependency boundaries, refer to
 [`AGENTS.md`](AGENTS.md) and [`DEPENDENCIES.md`](DEPENDENCIES.md).
 
 ## Contributing
 
 Refer to [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contribution process and
-[`tests/README.md`](tests/README.md) for the shortest test commands. Report
-security issues according to [`SECURITY.md`](SECURITY.md).
+[`tests/README.md`](tests/README.md) for the shortest test commands. Refer to
+[`SECURITY.md`](SECURITY.md) to report security issues.
 
 XR AI is licensed under [Apache-2.0](LICENSE). Third-party components are listed
 in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

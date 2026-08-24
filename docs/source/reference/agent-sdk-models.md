@@ -7,9 +7,9 @@
 
 `xr-ai-models` defines typed LLM, VLM, STT, TTS, and embedding protocols and
 constructs concrete clients from deployment profiles. Workers depend on those
-protocols instead of hand-written HTTP or vendor SDK calls. Exact classes,
-methods, fields, and defaults are in {doc}`python/index`; server operation is in
-{doc}`/components/ai-services`.
+protocols instead of hand-written HTTP or vendor SDK calls. Refer to
+{doc}`python/index` for exact classes, methods, fields, and defaults. Refer to
+{doc}`/components/ai-services` for server operation.
 
 ## Construct a model client
 
@@ -65,7 +65,7 @@ credentials needed by a managed service itself use `deployment.credentials`.
 | `cosmos_vlm` | Cosmos-Reason1 compatibility | Image and video; thinking disabled by default |
 | `llama_nemotron` | Llama Nemotron LLM | Server-side `llama3_json` tool calls |
 | `nemotron3_nano` | Nemotron 3 Nano LLM | Normalizes the `reasoning` field |
-| `nemotron_omni` | Nemotron Omni | Tool calls, image/video, `reasoning_content` normalization |
+| `nemotron_omni` | Nemotron Omni | Tool calls, image and video, `reasoning_content` normalization |
 | `nemotron_embedding` | Embedding server | OpenAI-compatible dense vectors |
 | `parakeet_stt` | STT server | OpenAI-compatible transcription |
 | `piper_tts` | Piper TTS | OpenAI-compatible speech synthesis |

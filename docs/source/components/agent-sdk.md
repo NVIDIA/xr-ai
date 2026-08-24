@@ -18,13 +18,12 @@ installation.
 | `xr-ai-voice` | `xr_ai_voice` | Voice agent, transport, and private media pipeline |
 | `xr-ai-web-events` | `xr_ai_web_events` | Bounded live browser views over selected application events |
 
-Package guides are versioned with this site:
+Refer to these versioned package guides:
 {doc}`/reference/agent-sdk-hub`, {doc}`/reference/agent-sdk-models`,
 {doc}`/reference/agent-sdk-runtime`, {doc}`/reference/agent-sdk-tools`,
 {doc}`/reference/agent-sdk-voice`, and {doc}`/reference/agent-sdk-web-events`.
-The generated {doc}`/reference/python/index`
-is the source of truth for public names, signatures, types, defaults, fields,
-and method-level behavior.
+Refer to the generated {doc}`/reference/python/index` for public names,
+signatures, types, defaults, fields, and method-level behavior.
 
 ## Ownership boundaries
 
