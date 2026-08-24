@@ -141,10 +141,13 @@ the minimum local information needed before following that link. A top-level
 sample README under `agent-samples/` additionally keeps the exact commands needed
 to start that sample. State the sample directory as the working directory and
 write every command relative to that directory, including commands that invoke a
-sibling sample such as `../model-servers`. Put sample architecture, behavior,
-configuration guidance, artifact contracts, extension instructions, and eval
-methodology in its `docs/source/` guide. Nested READMEs may contain only
-artifact-local instructions that are not useful in the published documentation.
+sibling sample such as `../model-servers`. It also includes a compact
+configuration entry point: name the sample-owned YAML or JSON files, describe
+the common settings they own, and show one representative edit. Put exhaustive
+field descriptions, precedence, path resolution, architecture, behavior,
+artifact contracts, extension instructions, and eval methodology in the
+sample's `docs/source/` guide. Nested READMEs may contain only artifact-local
+instructions that are not useful in the published documentation.
 
 When documentation exists in both locations, consolidate it into
 `docs/source/` and replace the README copy with a link. When moving README

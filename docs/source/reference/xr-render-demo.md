@@ -61,11 +61,11 @@ specific vocabulary into the fixture.
 ## Selecting the client type (WebRTC vs native)
 
 `NV_DEVICE_PROFILE` selects which XR clients can connect. For the native iOS
-and visionOS apps, set it to `auto-native`:
+and visionOS apps, set it to `auto-native`. Run from
+`agent-samples/xr-render-demo/`:
 
 ```bash
-NV_DEVICE_PROFILE=auto-native \
-  uv run --project agent-samples/xr-render-demo xr_render_demo
+NV_DEVICE_PROFILE=auto-native uv run xr_render_demo
 ```
 
 The environment value takes precedence over YAML. The `cloudxr_env` value in
@@ -98,16 +98,38 @@ The model-side fields live under `agent-samples/model-servers/yaml/`. Set them
 to different GPUs so
 the XR compositor and the agentic LLM do not share a card.
 
-## Worker configuration
+## Configuration
 
-The worker reads two config files:
+Run and edit the sample from `agent-samples/xr-render-demo/`. Each process
+receives its checked-in config directly, so edit the owning file and restart
+`xr_render_demo` to apply a change.
 
-- `yaml/xr_render_demo_worker.yaml` — native capability endpoints, text-memory directory, and VAD tunables.
-- `yaml/models.json` — fixed reuse-only model endpoint declarations consumed by
-  `xr-ai-models`. Each entry maps a logical name
-  (`llm`, `agent_llm`, `stt`, `tts`, `vlm`) to an adapter (preset or explicit
-  spec), an endpoint, and a deployment. Edit this file to change which model
-  runs where without touching the worker code.
+| File | Owns |
+|---|---|
+| `yaml/cloudxr_runtime.yaml` | CloudXR install state, EULA acceptance, client profile, compositor GPU, and environment overrides |
+| `yaml/xr_render_demo_worker.yaml` | Native capability endpoints, text-memory directory, VAD, idle timeout, and voice-gate selection |
+| `yaml/voice_gate.yaml` | Always-on speech or wake phrases, listening chime, and follow-up window |
+| `yaml/models.json` | Reused model adapters, endpoints, and readiness checks |
+| `yaml/device_io_hub.yaml` | LiveKit, web and token servers, networking, and video recording |
+| `yaml/video_memory_service.yaml` | Recorded-query endpoint, output directory, and GPU |
+| `yaml/openxr_service.yaml` | OpenXR endpoint, CloudXR environment, and eval-only simulated pose |
+| `scene/scene_service.yaml` | LOVR binary and app, scene endpoint, and CloudXR environment |
+
+`NV_DEVICE_PROFILE` in the environment overrides
+`cloudxr_env.NV_DEVICE_PROFILE` in `cloudxr_runtime.yaml`. `LOVR_BIN` similarly
+overrides `lovr_bin` in `scene/scene_service.yaml`. Use a GPU index reported by
+`nvidia-smi` for `gpu_index`; the CloudXR, video-memory, and model-server GPU
+settings are independent and must be planned together. Keep
+`allow_sim_pose: false` outside the live eval harness.
+
+Each `models.json` entry maps a logical role (`llm`, `agent_llm`, `stt`, `tts`,
+or `vlm`) to an adapter, endpoint, and deployment. Editing it changes which
+operator-owned endpoint the demo consumes; it does not reconfigure or restart
+the shared model. Use {doc}`/guides/customizing-model-servers` and restart the
+persistent model stack for server-side model, port, GPU, or memory changes.
+
+Exact fields, checked-in values, and adjacent YAML comments are rendered in the
+generated {doc}`configuration <configuration>` reference.
 
 ## The LLM server
 
@@ -322,7 +344,7 @@ effects against deterministic fixtures, so the live LOVR scene is not mutated.
 Run the full offline corpus with:
 
 ```bash
-uv run --project agent-samples/xr-render-demo/eval xr_render_demo_eval
+uv run --project eval xr_render_demo_eval
 ```
 
 The eval project provides four tiers:
@@ -338,7 +360,7 @@ The offline tiers require only the agent LLM. The `utterances` subset is the
 fast prompt-change gate:
 
 ```bash
-uv run --project agent-samples/xr-render-demo/eval xr_render_demo_eval utterances
+uv run --project eval xr_render_demo_eval utterances
 ```
 
 Live drivers create a fresh participant per case, clear the scene through typed

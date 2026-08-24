@@ -107,6 +107,10 @@ def test_sample_readmes_use_sample_directory_commands() -> None:
         assert f"--project agent-samples/{directory}" not in readme
         assert "another terminal" not in readme
         assert f"uv run {command}" in readme
+        assert "## Configure" in readme
+        assert "yaml/" in readme
+        assert "configuration reference" in readme
         if directory != "model-servers":
             assert "uv run --project ../model-servers model_servers" in readme
             assert "same terminal" in readme
+            assert "sample configuration guide" in readme

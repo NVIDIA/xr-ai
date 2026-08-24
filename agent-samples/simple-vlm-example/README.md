@@ -15,6 +15,32 @@ Cosmos3 Nano Reasoner, and Piper TTS from the shared model stack. Before the
 agent reports ready, the worker sends a representative image request through
 the VLM so the first user query does not pay the multimodal warmup cost.
 
+## Configure
+
+The launcher reads the checked-in configuration automatically. Edit these
+files before starting the sample:
+
+| File | Common changes |
+|---|---|
+| `yaml/simple_vlm_example_worker.yaml` | Frame freshness, VAD sensitivity, idle timeout, or prompt override |
+| `yaml/voice_gate.yaml` | Wake phrases, listening chime, and follow-up window |
+| `yaml/models.json` | Reused model adapters and endpoint addresses |
+| `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
+
+For example, change `followup_grace_s` in `yaml/voice_gate.yaml` to control how
+long a second utterance can omit “Hey Agent”:
+
+```yaml
+followup_grace_s: 10.0
+```
+
+Restart the sample after an edit. If you change a shared model server rather
+than only its sample endpoint, stop and restart that stack separately. Refer to
+the [sample configuration guide](../../docs/source/reference/simple-vlm-example.md#configuration)
+for the edit workflow and to the generated
+[configuration reference](../../docs/source/reference/configuration.rst) for
+every field and default.
+
 ## Run
 
 Run all commands from `agent-samples/simple-vlm-example/`. Start the shared

@@ -107,6 +107,38 @@ Configuration and command syntax are also included automatically in the
 generated {doc}`configuration <configuration>` and
 {doc}`command-line <command-line>` references.
 
+## Configuration
+
+Run and edit the sample from `agent-samples/lab-instrument-monitoring/`. The
+orchestrator reads the files below on every start and materializes a temporary
+worker config with absolute paths; edit the checked-in files, not the temporary
+copy named in the logs.
+
+| File | Owns |
+|---|---|
+| `yaml/lab_instrument_monitoring_worker.yaml` | Monitor and snapshot cadence, lost-device threshold, image freshness, VAD, output directory, and event-viewer port and history |
+| `yaml/device_map.yaml` | QR payloads and ArUco IDs mapped to instrument names |
+| `yaml/voice_gate.yaml` | Wake phrases, listening chime, and follow-up window |
+| `yaml/models.json` | Reused model adapters, endpoints, and readiness checks |
+| `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
+
+For example, shorten both visual polling periods by setting
+`monitor_interval_s` and `instrument_monitor_interval_s` in the worker YAML,
+or replace entries under `devices` in `device_map.yaml` with the identifiers
+attached to real instruments. Paths such as `device_map_yaml` and
+`artifacts_dir` are resolved relative to the worker YAML.
+
+Restart `lab_instrument_monitoring` after an edit; configuration is not
+hot-reloaded. The `--expose-web-events` option intentionally overrides
+`web_events_host` in the runtime copy, so use that option rather than editing
+the host to expose the unauthenticated viewer. Changing `models.json` changes
+only the endpoints consumed by this sample. Use
+{doc}`/guides/customizing-model-servers` and restart the persistent shared stack
+for server-side model, GPU, port, or memory changes.
+
+Exact fields, checked-in values, and adjacent YAML comments are rendered in the
+generated {doc}`configuration <configuration>` reference.
+
 ## Foreground tool loop
 
 Each accepted query gets only the system prompt and current utterance. The

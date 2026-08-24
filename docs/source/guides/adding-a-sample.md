@@ -73,6 +73,24 @@ Suggested split (used by `simple-vlm-example`):
 | `config.py` | Typed configuration loading and path resolution |
 | `prompts/` | Package-owned prompt resources |
 
+## Sample README and configuration guide
+
+Give the sample README enough information for a first successful local edit:
+
+- describe what the sample does and which processes or shared models it uses;
+- state `agent-samples/<name>/` as the working directory and write every run
+  command relative to it;
+- add a compact **Configure** section that maps the sample-owned YAML and JSON
+  files to their common settings and shows one representative YAML change;
+- link to the sample's canonical guide and generated configuration reference.
+
+Keep the corresponding `docs/source/` guide complete. It explains how the
+launcher selects the files, path and environment precedence, restart behavior,
+the responsibility of each config, and the boundary between a sample endpoint
+change and a persistent model-server change. Exact field values and field-level
+guidance stay beside the checked-in YAML or JSON and are rendered into
+{doc}`/reference/configuration`.
+
 ## Orchestrator `pyproject.toml`
 
 ```text

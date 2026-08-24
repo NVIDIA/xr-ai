@@ -15,6 +15,33 @@ the current step, but only an explicit user command advances the procedure. The
 sample launches its application services and reuses STT, Piper TTS, Nemotron-3
 Nano Omni, and embedding endpoints from the shared model stack.
 
+## Configure
+
+Edit the sample-owned files before starting the stack; the launcher reads them
+automatically:
+
+| File | Common changes |
+|---|---|
+| `yaml/tea_making_worker.yaml` | Selected configs, observation cadence, VAD, timeouts, artifacts, and event viewer |
+| `yaml/workflow.yaml` | Workflow state, steps, evidence rules, tools, and messages |
+| `yaml/voice_gate*.yaml` | Wake-word or always-on speech behavior |
+| `yaml/rag_service.yaml` | Documents, embedding role, cache, chunking, and retrieval threshold |
+| `yaml/models.local.json` | Reused model adapters and endpoint addresses |
+| `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
+
+For example, make speech always-on by changing this line in
+`yaml/tea_making_worker.yaml`:
+
+```yaml
+voice_gate_yaml: voice_gate.always-on.yaml
+```
+
+Restart the sample after an edit. Refer to the
+[sample configuration guide](../../docs/source/reference/tea-making-sample.md#configuration)
+for the workflow and path-resolution rules and to the generated
+[configuration reference](../../docs/source/reference/configuration.rst) for
+every field and default.
+
 ## Run
 
 Run all commands from `agent-samples/tea-making-sample/`. Start the shared

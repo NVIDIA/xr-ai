@@ -15,6 +15,33 @@ Reasoner handles image inference. The sample launches its hub, worker, and
 application-specific processes, but reuses STT, TTS, LLM, and VLM endpoints
 from the shared model stack.
 
+## Configure
+
+Edit the sample-owned files before starting the stack; the launcher reads them
+automatically:
+
+| File | Common changes |
+|---|---|
+| `yaml/lab_instrument_monitoring_worker.yaml` | Monitor cadence, lost-device timeout, frame freshness, VAD, artifacts, and event-viewer port and history |
+| `yaml/device_map.yaml` | QR or ArUco identifiers and their instrument names |
+| `yaml/voice_gate.yaml` | Wake phrases, listening chime, and follow-up window |
+| `yaml/models.json` | Reused model adapters and endpoint addresses |
+| `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
+
+For example, change the two monitoring intervals without changing worker code:
+
+```yaml
+monitor_interval_s: 2.0
+instrument_monitor_interval_s: 2.0
+```
+
+Restart the sample after an edit. Use `--expose-web-events` to change the
+event-viewer bind address; that option overrides the YAML host. Refer to the
+[sample configuration guide](../../docs/source/reference/lab-instrument-monitoring.md#configuration)
+for how the files fit together and to the generated
+[configuration reference](../../docs/source/reference/configuration.rst) for
+every field and default.
+
 ## Run
 
 Run all commands from `agent-samples/lab-instrument-monitoring/`. Start the

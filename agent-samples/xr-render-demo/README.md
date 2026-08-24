@@ -21,6 +21,38 @@ Install the Vulkan loader and headers and make Node.js 18 or newer with npm
 available on `PATH`. On its first run, the orchestrator downloads the pinned
 LOVR build and creates the Web-XR vendor bundle; later runs reuse those files.
 
+## Configure
+
+Edit the sample-owned configuration before starting the demo; the launcher
+passes each file to the process that owns it:
+
+| File | Common changes |
+|---|---|
+| `yaml/cloudxr_runtime.yaml` | Client profile, EULA acceptance, and compositor GPU |
+| `yaml/xr_render_demo_worker.yaml` | Capability endpoints, text memory, VAD, and idle timeout |
+| `yaml/voice_gate.yaml` | Always-on speech or wake phrases |
+| `yaml/models.json` | Reused model adapters and endpoint addresses |
+| `yaml/device_io_hub.yaml` | Room, ports, web client, networking, and video recording |
+| `yaml/video_memory_service.yaml` | Recorded-query output and GPU |
+| `yaml/openxr_service.yaml` | OpenXR endpoint and eval-only simulated pose |
+| `scene/scene_service.yaml` | LOVR binary, app directory, and scene endpoint |
+
+For example, select native iOS or visionOS clients and the compositor GPU in
+`yaml/cloudxr_runtime.yaml`:
+
+```yaml
+cloudxr_env:
+  NV_DEVICE_PROFILE: auto-native
+gpu_index: 1
+```
+
+Choose a `gpu_index` that exists in `nvidia-smi`. Restart the demo after an
+edit. Refer to the
+[sample configuration guide](../../docs/source/reference/xr-render-demo.md#configuration)
+for precedence and GPU-placement details and to the generated
+[configuration reference](../../docs/source/reference/configuration.rst) for
+every field and default.
+
 ## Run
 
 Run all commands from `agent-samples/xr-render-demo/`. Start the shared models
