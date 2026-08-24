@@ -712,6 +712,11 @@ current view, RAG, recent background facts, and background controls.</p></li>
 <li><p>With an active workflow, it receives the current step’s tools plus explicit
 workflow controls and compact sparse state.</p></li>
 </ul>
+<p>Active turns may address the current step, guide status and controls, or the
+independent background applications. For a request unrelated to all of those,
+the model must call no tool, leave guide state unchanged, and reply exactly “I
+can only help with the active tea guide right now.” The rule is scoped to the
+active route; the idle root assistant can answer ordinary questions.</p>
 <p>There is exactly one model loop. The foreground agent does not ask one model to
 route to another agent, and background agents never capture a foreground turn.
 <code class="docutils literal notranslate"><span class="pre">current_view</span></code> is a direct-return exception within that loop: after the route is
@@ -919,6 +924,15 @@ history.</p></li>
 <li><p>Add routing evals for prompt-controlled tool choices.</p></li>
 <li><p>Run the live pipeline to evaluate visual evidence and model prompts.</p></li>
 </ol>
+<p>The checked-in live-model routing eval shares the production foreground’s
+root-versus-active prompt and tool preparation. It validates the first model
+action, tool arguments, exact active-guide refusal, and positive active-guide
+routes. Start <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> so the configured Omni LLM endpoint on port 8108
+is healthy, then run from the repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample/worker<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>python<span class="w"> </span>agent-samples/tea-making-sample/eval/eval.py
+</pre></div>
+</div>
 <p>When debugging, inspect the workflow, background, foreground, and Relay JSONL
 files as separate stages. This shows whether the problem came from evidence,
 tool selection, state policy, event delivery, or presentation.</p>
