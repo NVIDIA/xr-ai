@@ -455,17 +455,49 @@ Endpoint health alone is not sufficient for that warmup.</p>
 </section>
 <section id="configuration">
 <h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h2>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> owns model adapters, endpoints, readiness, and reuse
-declarations.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">yaml/simple_vlm_example_worker.yaml</span></code> owns timing, frame freshness, and
-optional prompt overrides.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code> owns wake phrases and the follow-up window.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">worker/simple_vlm_example_worker/prompts/system.txt</span></code> is the default VLM
-instruction.</p></li>
-</ul>
-<p>Exact fields and defaults are rendered in the generated
-<a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference.</p>
+<p>Run and edit the sample from <code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/</span></code>. The
+orchestrator always passes <code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code> to DeviceIOHub and
+<code class="docutils literal notranslate"><span class="pre">yaml/simple_vlm_example_worker.yaml</span></code> to the worker. The worker resolves its
+models and voice-gate files relative to the worker YAML, so the checked-in
+layout works without command-line config arguments.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>File</p></th>
+<th class="head"><p>Owns</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/simple_vlm_example_worker.yaml</span></code></p></td>
+<td><p>Frame freshness and wait limits, VAD, idle timeout, and optional prompt overrides</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code></p></td>
+<td><p>Wake phrases, listening chime, and follow-up window</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
+<td><p>Model adapters, endpoints, readiness, and reuse declarations</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code></p></td>
+<td><p>LiveKit room and ports, web and token servers, and network behavior</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">worker/simple_vlm_example_worker/prompts/system.txt</span></code></p></td>
+<td><p>Default VLM instruction</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Edit the owning file, preserve the field’s YAML type, and restart
+<code class="docutils literal notranslate"><span class="pre">simple_vlm_example</span></code>; configuration is loaded only at process startup. For
+example, lower <code class="docutils literal notranslate"><span class="pre">silero_threshold</span></code> in the worker YAML if quieter speech is being
+missed, or change <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code> in the voice-gate YAML to choose the required
+wake phrases. Relative paths in the worker YAML are resolved from <code class="docutils literal notranslate"><span class="pre">yaml/</span></code>, not
+from the shell’s current directory.</p>
+<p>Changing an entry in <code class="docutils literal notranslate"><span class="pre">models.json</span></code> changes only the client adapter or endpoint
+that this sample uses. It does not reconfigure or restart the shared server.
+For a checkpoint, port, GPU, or model-runtime change, update the shared stack as
+described in <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>, stop that persistent
+stack, and start it again before restarting this sample.</p>
+<p>Exact fields, checked-in values, and adjacent YAML comments are rendered in the
+generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference.</p>
 <p>Wake phrases match at the start of a final transcript or after sentence-final
 <code class="docutils literal notranslate"><span class="pre">.</span></code>, <code class="docutils literal notranslate"><span class="pre">?</span></code>, or <code class="docutils literal notranslate"><span class="pre">!</span></code> punctuation followed by whitespace or a closing quote. Text
 before that boundary and the phrase itself are discarded before dispatch.</p>

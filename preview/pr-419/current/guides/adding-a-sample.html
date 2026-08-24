@@ -536,6 +536,24 @@ workflow composition become distinct responsibilities.</p>
 </table>
 </div>
 </section>
+<section id="sample-readme-and-configuration-guide">
+<h2>Sample README and configuration guide<a class="headerlink" href="#sample-readme-and-configuration-guide" title="Link to this heading">#</a></h2>
+<p>Give the sample README enough information for a first successful local edit:</p>
+<ul class="simple">
+<li><p>describe what the sample does and which processes or shared models it uses;</p></li>
+<li><p>state <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;name&gt;/</span></code> as the working directory and write every run
+command relative to it;</p></li>
+<li><p>add a compact <strong>Configure</strong> section that maps the sample-owned YAML and JSON
+files to their common settings and shows one representative YAML change;</p></li>
+<li><p>link to the sample’s canonical guide and generated configuration reference.</p></li>
+</ul>
+<p>Keep the corresponding <code class="docutils literal notranslate"><span class="pre">docs/source/</span></code> guide complete. It explains how the
+launcher selects the files, path and environment precedence, restart behavior,
+the responsibility of each config, and the boundary between a sample endpoint
+change and a persistent model-server change. Exact field values and field-level
+guidance stay beside the checked-in YAML or JSON and are rendered into
+<a class="reference internal" href="../reference/configuration.html"><span class="doc">Sample configuration reference</span></a>.</p>
+</section>
 <section id="orchestrator-pyproject-toml">
 <h2>Orchestrator <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code><a class="headerlink" href="#orchestrator-pyproject-toml" title="Link to this heading">#</a></h2>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[build-system]
@@ -622,7 +640,7 @@ packages = ["&lt;snake_name&gt;_worker"]
 <p>Use this template when the worker talks directly to <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code>. Native
 voice workers keep argument parsing in <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code> and delegate composition
 to sibling <code class="docutils literal notranslate"><span class="pre">app.py</span></code> and <code class="docutils literal notranslate"><span class="pre">config.py</span></code> modules. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/361b5e8de3817c2ea844f352749e035cdfd32c9f/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/edeb777e82f1bbcad966810cb170b6673ee1a728/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
 for that shape. Fill in the sections marked <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">←</span> <span class="pre">FILL</span> <span class="pre">IN</span></code>.</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>"""
 &lt;Name&gt; agent worker — &lt;one-line description&gt;.
@@ -775,6 +793,7 @@ if __name__ == "__main__":
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#naming-conventions">Naming conventions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#directory-layout">Directory layout</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sample-readme-and-configuration-guide">Sample README and configuration guide</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#orchestrator-pyproject-toml">Orchestrator <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#worker-pyproject-toml">Worker <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#orchestrator-main-py">Orchestrator <code class="docutils literal notranslate"><span class="pre">main.py</span></code></a></li>

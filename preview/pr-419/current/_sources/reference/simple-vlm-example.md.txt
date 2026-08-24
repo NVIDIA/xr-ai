@@ -41,16 +41,35 @@ Endpoint health alone is not sufficient for that warmup.
 
 ## Configuration
 
-- `yaml/models.json` owns model adapters, endpoints, readiness, and reuse
-  declarations.
-- `yaml/simple_vlm_example_worker.yaml` owns timing, frame freshness, and
-  optional prompt overrides.
-- `yaml/voice_gate.yaml` owns wake phrases and the follow-up window.
-- `worker/simple_vlm_example_worker/prompts/system.txt` is the default VLM
-  instruction.
+Run and edit the sample from `agent-samples/simple-vlm-example/`. The
+orchestrator always passes `yaml/device_io_hub.yaml` to DeviceIOHub and
+`yaml/simple_vlm_example_worker.yaml` to the worker. The worker resolves its
+models and voice-gate files relative to the worker YAML, so the checked-in
+layout works without command-line config arguments.
 
-Exact fields and defaults are rendered in the generated
-{doc}`configuration <configuration>` reference.
+| File | Owns |
+|---|---|
+| `yaml/simple_vlm_example_worker.yaml` | Frame freshness and wait limits, VAD, idle timeout, and optional prompt overrides |
+| `yaml/voice_gate.yaml` | Wake phrases, listening chime, and follow-up window |
+| `yaml/models.json` | Model adapters, endpoints, readiness, and reuse declarations |
+| `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
+| `worker/simple_vlm_example_worker/prompts/system.txt` | Default VLM instruction |
+
+Edit the owning file, preserve the field's YAML type, and restart
+`simple_vlm_example`; configuration is loaded only at process startup. For
+example, lower `silero_threshold` in the worker YAML if quieter speech is being
+missed, or change `magic_phrases` in the voice-gate YAML to choose the required
+wake phrases. Relative paths in the worker YAML are resolved from `yaml/`, not
+from the shell's current directory.
+
+Changing an entry in `models.json` changes only the client adapter or endpoint
+that this sample uses. It does not reconfigure or restart the shared server.
+For a checkpoint, port, GPU, or model-runtime change, update the shared stack as
+described in {doc}`/guides/customizing-model-servers`, stop that persistent
+stack, and start it again before restarting this sample.
+
+Exact fields, checked-in values, and adjacent YAML comments are rendered in the
+generated {doc}`configuration <configuration>` reference.
 
 Wake phrases match at the start of a final transcript or after sentence-final
 `.`, `?`, or `!` punctuation followed by whitespace or a closing quote. Text

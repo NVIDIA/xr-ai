@@ -437,10 +437,13 @@ walk me through the rest of the setup.
 </pre></div>
 </div>
 <p>The remainder of this quickstart is the manual path.</p>
-<p>Every sample follows the same pattern: <strong>start the server, then connect a
-client.</strong> Once it is ready, any supported client — web browser, Android app,
-iOS/visionOS app, or AR glasses — can join the session using the token printed
-on startup. Run the commands below from the repository root.</p>
+<p>Every sample follows the same pattern: <strong>start the shared model stack, wait for
+its launcher to report readiness and return, start the sample from the same
+terminal, then connect a client.</strong> Once the sample is ready, any supported
+client — web browser, Android app, iOS/visionOS app, or AR glasses — can join
+the session using the token printed on startup. Each procedure below starts
+with a <code class="docutils literal notranslate"><span class="pre">cd</span></code> from the repository root; keep running that procedure’s commands
+from the selected sample directory.</p>
 </section>
 <section id="model-servers-shared-ai-services">
 <h2>Model servers (shared AI services)<a class="headerlink" href="#model-servers-shared-ai-services" title="Link to this heading">#</a></h2>
@@ -449,18 +452,22 @@ immediately — the services keep running in the background with weights hot.
 Start this once before running <code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code>,
 <code class="docutils literal notranslate"><span class="pre">lab-instrument-monitoring</span></code>, <code class="docutils literal notranslate"><span class="pre">tea-making-sample</span></code>, or <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>, or
 whenever you want to pre-warm models:</p>
+<p>From the repository root, enter the model-server sample directory:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/model-servers
+</pre></div>
+</div>
 <div class="admonition important">
 <p class="admonition-title">Important</p>
 <p>After updating, stop any existing model servers before starting this stack:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
 <p>Persisted vLLM processes or containers may otherwise keep serving the previous
 models and images even though the checked-in configuration now selects
 Nemotron-3 Nano Omni and Cosmos3 Nano Reasoner.</p>
 </div>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync
+uv<span class="w"> </span>run<span class="w"> </span>model_servers
 </pre></div>
 </div>
 <p>GPU profiles are auto-detected (<code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, <code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>). The
@@ -479,8 +486,7 @@ serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), Piper TTS
 self-hosted NIM containers (Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner;
 requires Docker and <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code>). Starting a profile stops persisted servers
 outside it first and aborts if they cannot be stopped, avoiding GPU overcommit.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>model_servers<span class="w"> </span>--models<span class="w"> </span>vlm_llm_nim
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--models<span class="w"> </span>vlm_llm_nim
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default: without it the large first-run download
@@ -488,7 +494,7 @@ can stall indefinitely. Refer to the
 <a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a> for how to set it, or
 pass <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code> to run without one.</p>
 <p>To stop all model servers when done:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">--stop</span></code> stops every model-server port, so it takes no profile selection.</p>
@@ -502,9 +508,10 @@ Replies arrive as streaming Piper TTS audio plus a <code class="docutils literal
 <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI services</span></a> for runtime-selection details.</p>
 <p>The sample always reuses model services and never starts or stops them. Its
 fixed <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> expects Parakeet STT on port 8103, Cosmos3-Nano on
-port 8100, and Piper TTS on port 8105. Start the repository defaults first
-from the repository root:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
+port 8100, and Piper TTS on port 8105. From the sample directory, start the
+repository defaults first:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/simple-vlm-example
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers
 </pre></div>
 </div>
 <p>The command may download model weights on its first run and requires the
@@ -512,8 +519,8 @@ credentials described in the <a class="reference internal" href="credentials.htm
 sample restarts.</p>
 <section id="step-1-start-the-server">
 <h3>Step 1 — Start the server<a class="headerlink" href="#step-1-start-the-server" title="Link to this heading">#</a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>agent-samples/simple-vlm-example
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/simple-vlm-example<span class="w"> </span>simple_vlm_example
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync
+uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example
 </pre></div>
 </div>
 <p>Only the DeviceIOHub and worker start. Worker readiness probes all three reused
@@ -548,7 +555,7 @@ automatically. Click <strong>Connect</strong>.</p>
 <p>A successful round trip: your query appears in the log, the agent responds after
 a moment, and you hear the reply through your speakers.</p>
 <p>To use compatible services at different locations, edit their endpoints in
-<code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/yaml/models.json</span></code>:</p>
+<code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://your-vlm.example.com"</span><span class="p">},</span>
 <span class="w">  </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span><span class="p">}</span>
@@ -572,14 +579,15 @@ final pre-gate transcript, foreground-turn, and Relay JSONL files under <code cl
 and intentionally serves no sample-specific monitoring web UI. Its fixed model
 configuration uses Cosmos for visual inference.</p>
 <p>Start the shared <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> stack, which includes Piper TTS:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/lab-instrument-monitoring
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers
 </pre></div>
 </div>
-<p>Then start the sample in another terminal:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>agent-samples/lab-instrument-monitoring
-uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>agent-samples/lab-instrument-monitoring/worker
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/lab-instrument-monitoring<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>lab_instrument_monitoring
+<p>Wait for the model launcher to report readiness and return, then start the
+sample from the same terminal:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync
+uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>worker
+uv<span class="w"> </span>run<span class="w"> </span>lab_instrument_monitoring
 </pre></div>
 </div>
 <p>Connect an existing glasses or platform client using the authenticated URL,
@@ -597,11 +605,14 @@ and visual inference. Records are written as JSON Lines under the sample’s
 <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code> directory. A separate live event viewer presents selected runtime
 events without replacing those durable records.</p>
 <p>Start the shared model services, including Piper TTS:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/tea-making-sample
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers
 </pre></div>
 </div>
-<p>Launch the sample from another terminal:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample<span class="w"> </span>tea_making_sample
+<p>Wait for the model launcher to report readiness and return, then launch the
+sample from the same terminal:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync
+uv<span class="w"> </span>run<span class="w"> </span>tea_making_sample
 </pre></div>
 </div>
 <p>Open the DeviceIOHub connection page at <code class="docutils literal notranslate"><span class="pre">https://localhost:8080</span></code>, accept the
@@ -638,8 +649,8 @@ map, agentic-loop details, and XR session lifecycle.</p>
 own model services.</p>
 <section id="step-1-start-model-servers-once">
 <h3>Step 1 — Start model servers (once)<a class="headerlink" href="#step-1-start-model-servers-once" title="Link to this heading">#</a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/xr-render-demo
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers
 </pre></div>
 </div>
 <p>This exits immediately once all configured services are ready. Weights stay
@@ -656,8 +667,8 @@ Vulkan, so install them before running the demo: <code class="docutils literal n
 bundle on first run (skipped on subsequent runs).</p></li>
 </ul>
 <p>Start XR Render:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo<span class="w"> </span>xr_render_demo
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync
+uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo
 </pre></div>
 </div>
 <p>On first run the orchestrator automatically downloads the pinned LOVR version to
@@ -671,16 +682,16 @@ binary, so the auto-download is not available: build LOVR from source and export
 </div>
 <p>To use a custom LOVR build:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">LOVR_BIN</span><span class="o">=</span>/path/to/your/lovr<span class="w">   </span><span class="c1"># or set lovr_bin: in scene/scene_service.yaml</span>
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo<span class="w"> </span>xr_render_demo
+uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo
 </pre></div>
 </div>
 <p><strong>GPU pinning</strong> for the XR side is controlled by <code class="docutils literal notranslate"><span class="pre">gpu_index</span></code> in
-<code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml</span></code>. cloudxr-runtime applies
+<code class="docutils literal notranslate"><span class="pre">yaml/cloudxr_runtime.yaml</span></code>. cloudxr-runtime applies
 the pin to its own process and writes the selectors into <code class="docutils literal notranslate"><span class="pre">cloudxr.env</span></code>;
 the scene process and LOVR inherit from that file. Refer to the
 <a class="reference internal" href="../reference/xr-render-demo.html"><span class="doc">xr-render-demo reference</span></a> for full details.</p>
 <p>To stop the model servers when done:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
 <p>XR Render uses the fixed reuse-only endpoints in <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>; it does

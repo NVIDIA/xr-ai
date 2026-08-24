@@ -452,13 +452,15 @@ ownership, and event composition are reusable.</p>
 </section>
 <section id="quick-start">
 <h2>Quick start<a class="headerlink" href="#quick-start" title="Link to this heading">#</a></h2>
-<p>Run commands from the repository root. The tea sample reuses all model
-services, so start the shared stack, including Piper TTS, first:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
+<p>Run commands from <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/</span></code>. The tea sample reuses all
+model services, so start the shared stack, including Piper TTS, first:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers
 </pre></div>
 </div>
-<p>Then launch the sample:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample<span class="w"> </span>tea_making_sample
+<p>Wait for the model launcher to report readiness and return. Then launch the
+sample from the same terminal:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync
+uv<span class="w"> </span>run<span class="w"> </span>tea_making_sample
 </pre></div>
 </div>
 <p>Open <code class="docutils literal notranslate"><span class="pre">https://localhost:8080</span></code>, accept the development certificate, allow camera
@@ -680,6 +682,55 @@ locks, and participant cleanup.</p>
 <p>Configuration and command syntax are included automatically in the generated
 <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> and
 <a class="reference internal" href="command-line.html"><span class="doc">command-line</span></a> references.</p>
+</section>
+<section id="configuration">
+<h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h2>
+<p>Run and edit the sample from <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/</span></code>. The
+orchestrator reads the checked-in files on every start and materializes a
+temporary worker config with absolute paths; edit the files under <code class="docutils literal notranslate"><span class="pre">yaml/</span></code>, not
+the temporary copy named in the logs.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>File</p></th>
+<th class="head"><p>Owns</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/tea_making_worker.yaml</span></code></p></td>
+<td><p>Selected subordinate configs, frame and model timeouts, background cadence, VAD, output directory, and event-viewer port and history</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/workflow.yaml</span></code></p></td>
+<td><p>Typed state, steps, triggers, evidence, tool access, transitions, and user messages</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.always-on.yaml</span></code></p></td>
+<td><p>Wake-word and always-on speech presets</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/rag_service.yaml</span></code></p></td>
+<td><p>Document path, model config, cache, chunking, embedding dimensions, and score threshold</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code></p></td>
+<td><p>Reused model adapters, endpoints, and readiness checks</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code></p></td>
+<td><p>LiveKit room and ports, web and token servers, and network behavior</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Choose a voice preset through <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> in
+<code class="docutils literal notranslate"><span class="pre">tea_making_worker.yaml</span></code>. Change observation and summary frequency in that
+worker file, retrieval behavior in <code class="docutils literal notranslate"><span class="pre">rag_service.yaml</span></code>, and the procedure itself
+in <code class="docutils literal notranslate"><span class="pre">workflow.yaml</span></code>. Relative paths declared in each config resolve from that
+config’s directory. Workflow state and step references are validated at
+startup, so an invalid contract fails before a participant session begins.</p>
+<p>Restart <code class="docutils literal notranslate"><span class="pre">tea_making_sample</span></code> after an edit; configuration is not hot-reloaded.
+The <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code> option intentionally overrides <code class="docutils literal notranslate"><span class="pre">web_events_host</span></code> in
+the runtime copy. Changing <code class="docutils literal notranslate"><span class="pre">models.local.json</span></code> changes the endpoints used by
+the worker and RAG service but not the persistent servers. Use
+<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> and restart the shared stack for a
+server-side model, GPU, port, or memory change.</p>
+<p>Exact fields, checked-in values, and adjacent YAML comments are rendered in the
+generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference.</p>
 </section>
 <section id="deterministic-foreground-routing">
 <h2>Deterministic foreground routing<a class="headerlink" href="#deterministic-foreground-routing" title="Link to this heading">#</a></h2>
@@ -913,9 +964,8 @@ history.</p></li>
 root-versus-active prompt and tool preparation. It validates the first model
 action, tool arguments, exact active-guide refusal, and positive active-guide
 routes. Start <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> so the configured Omni LLM endpoint on port 8108
-is healthy, then run from the repository root:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample/worker<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>python<span class="w"> </span>agent-samples/tea-making-sample/eval/eval.py
+is healthy, then run from <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>worker<span class="w"> </span>python<span class="w"> </span>eval/eval.py
 </pre></div>
 </div>
 <p>When debugging, inspect the workflow, background, foreground, and Relay JSONL
@@ -987,6 +1037,7 @@ until another concrete application requires the same contract.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#architecture">Architecture</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-responsibilities">Agent responsibilities</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#source-map">Source map</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration">Configuration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deterministic-foreground-routing">Deterministic foreground routing</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#workflow-contract">Workflow contract</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#visual-observation-loop">Visual observation loop</a></li>

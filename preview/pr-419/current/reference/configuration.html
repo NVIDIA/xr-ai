@@ -428,6 +428,18 @@ the generated page preserves those comments verbatim.</p>
 <p>Public typed model configuration fields are also available in the generated
 <a class="reference internal" href="python/xr_ai_models/index.html"><span class="doc">Python API reference</span></a>. Operational choices,
 credentials, and deployment workflows remain in the handwritten guides.</p>
+<p>To change a sample parameter:</p>
+<ol class="arabic simple">
+<li><p>Start in <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;sample&gt;/</span></code> and find the owning file in that
+sample’s README or published guide.</p></li>
+<li><p>Edit the checked-in YAML or JSON value, preserving its documented type.
+Resolve relative paths from the file that declares them unless the sample
+guide documents different precedence.</p></li>
+<li><p>Restart the sample process that owns the file. Sample configuration is not
+hot-reloaded.</p></li>
+<li><p>If the edit changes a persistent model server, stop and restart the shared
+model stack as described in <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>.</p></li>
+</ol>
 <section id="config-lab-instrument-monitoring">
 <h2>lab-instrument-monitoring<a class="headerlink" href="#config-lab-instrument-monitoring" title="Link to this heading">#</a></h2>
 <section id="config-lab-instrument-monitoring-yaml-device-io-hub-yaml">

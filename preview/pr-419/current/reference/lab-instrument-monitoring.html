@@ -606,6 +606,52 @@ client’s <code class="docutils literal notranslate"><span class="pre">agent.re
 generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> and
 <a class="reference internal" href="command-line.html"><span class="doc">command-line</span></a> references.</p>
 </section>
+<section id="configuration">
+<h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h2>
+<p>Run and edit the sample from <code class="docutils literal notranslate"><span class="pre">agent-samples/lab-instrument-monitoring/</span></code>. The
+orchestrator reads the files below on every start and materializes a temporary
+worker config with absolute paths; edit the checked-in files, not the temporary
+copy named in the logs.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>File</p></th>
+<th class="head"><p>Owns</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/lab_instrument_monitoring_worker.yaml</span></code></p></td>
+<td><p>Monitor and snapshot cadence, lost-device threshold, image freshness, VAD, output directory, and event-viewer port and history</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_map.yaml</span></code></p></td>
+<td><p>QR payloads and ArUco IDs mapped to instrument names</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code></p></td>
+<td><p>Wake phrases, listening chime, and follow-up window</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
+<td><p>Reused model adapters, endpoints, and readiness checks</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code></p></td>
+<td><p>LiveKit room and ports, web and token servers, and network behavior</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>For example, shorten both visual polling periods by setting
+<code class="docutils literal notranslate"><span class="pre">monitor_interval_s</span></code> and <code class="docutils literal notranslate"><span class="pre">instrument_monitor_interval_s</span></code> in the worker YAML,
+or replace entries under <code class="docutils literal notranslate"><span class="pre">devices</span></code> in <code class="docutils literal notranslate"><span class="pre">device_map.yaml</span></code> with the identifiers
+attached to real instruments. Paths such as <code class="docutils literal notranslate"><span class="pre">device_map_yaml</span></code> and
+<code class="docutils literal notranslate"><span class="pre">artifacts_dir</span></code> are resolved relative to the worker YAML.</p>
+<p>Restart <code class="docutils literal notranslate"><span class="pre">lab_instrument_monitoring</span></code> after an edit; configuration is not
+hot-reloaded. The <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code> option intentionally overrides
+<code class="docutils literal notranslate"><span class="pre">web_events_host</span></code> in the runtime copy, so use that option rather than editing
+the host to expose the unauthenticated viewer. Changing <code class="docutils literal notranslate"><span class="pre">models.json</span></code> changes
+only the endpoints consumed by this sample. Use
+<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> and restart the persistent shared stack
+for server-side model, GPU, port, or memory changes.</p>
+<p>Exact fields, checked-in values, and adjacent YAML comments are rendered in the
+generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference.</p>
+</section>
 <section id="foreground-tool-loop">
 <h2>Foreground tool loop<a class="headerlink" href="#foreground-tool-loop" title="Link to this heading">#</a></h2>
 <p>Each accepted query gets only the system prompt and current utterance. The
@@ -937,6 +983,7 @@ another concrete application needs exactly the same behavior.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#architecture">Architecture</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-responsibilities">Agent responsibilities</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#source-map">Source map</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration">Configuration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#foreground-tool-loop">Foreground tool loop</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#visual-identification-and-reading">Visual identification and reading</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stateful-monitoring">Stateful monitoring</a></li>
