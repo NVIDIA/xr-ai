@@ -37,11 +37,10 @@ ownership, and event composition are reusable.
 ## Quick start
 
 Run commands from the repository root. The tea sample reuses all model
-services, so start the shared stack and Piper TTS first:
+services, so start the shared stack, including Piper TTS, first:
 
 ```bash
 uv run --project agent-samples/model-servers model_servers
-uv run --project services/piper-tts piper_tts_server
 ```
 
 Then launch the sample:

@@ -473,9 +473,9 @@ On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.</p>
 <p>Which servers start is a deployment profile selected with
 <code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">&lt;name|path&gt;</span></code>. The default starts Nemotron-3 Nano Omni (8108,
-serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), and
-embeddings (8109); <code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code> serves the LLM and VLM as self-hosted NIM
-containers (Nemotron-3-Nano and Cosmos3-Nano Reasoner; requires docker and
+serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), Piper TTS
+(8105), and embeddings (8109); <code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code> serves the LLM and VLM as self-hosted NIM
+containers (Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner; requires docker and
 <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code>). Starting a profile stops persisted servers outside it first
 and aborts if they cannot be stopped, avoiding GPU overcommit.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--models<span class="w"> </span>vlm_llm_nim
@@ -501,12 +501,11 @@ Replies arrive as streaming Piper TTS audio plus a <code class="docutils literal
 <p>The sample always reuses model services and never starts or stops them. Its
 fixed <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> expects Parakeet STT on port 8103, Cosmos3-Nano on
 port 8100, and Piper TTS on port 8105. Start the repository defaults first
-from the repository root (the Piper command stays in the foreground):</p>
+from the repository root:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/piper-tts<span class="w"> </span>piper_tts_server
 </pre></div>
 </div>
-<p>The first command may download model weights on its first run and requires the
+<p>The command may download model weights on its first run and requires the
 credentials described in the <a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a>. The model services remain running across
 sample restarts.</p>
 <section id="step-1-start-the-server">
@@ -571,11 +570,8 @@ speaks only discovered, changed, or long-missing device updates, and persists
 final pre-gate transcript, foreground-turn, and Relay JSONL files under <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code>
 and intentionally serves no sample-specific monitoring web UI. Its fixed model
 configuration uses Cosmos for visual inference.</p>
-<p>Start <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> and Piper TTS in separate terminals:</p>
+<p>Start the shared <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> stack, which includes Piper TTS:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
-</pre></div>
-</div>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/piper-tts<span class="w"> </span>piper_tts_server
 </pre></div>
 </div>
 <p>Then start the sample in another terminal:</p>
@@ -599,9 +595,8 @@ transcript, and video observation. Nemotron-3 Nano Omni supplies both language
 and visual inference. Records are written as JSON Lines under the sample’s
 <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code> directory. A separate live event viewer presents selected runtime
 events without replacing those durable records.</p>
-<p>Start the shared model services and Piper TTS first, then launch the sample:</p>
+<p>Start the shared model services, including Piper TTS, then launch the sample:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/piper-tts<span class="w"> </span>piper_tts_server
 
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample<span class="w"> </span>tea_making_sample
 </pre></div>
@@ -656,11 +651,7 @@ Vulkan, so install them before running the demo: <code class="docutils literal n
 <li><p><strong>npm 18+</strong> on PATH — the orchestrator builds the web vendor bundle on first
 run (skipped on subsequent runs).</p></li>
 </ul>
-<p>Start Piper TTS in a separate terminal:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/piper-tts<span class="w"> </span>piper_tts_server
-</pre></div>
-</div>
-<p>Then start XR Render:</p>
+<p>Start XR Render:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/xr-render-demo
 uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo

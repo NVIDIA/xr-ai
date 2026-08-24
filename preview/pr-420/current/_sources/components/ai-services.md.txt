@@ -264,8 +264,8 @@ image and ports) or as a local server:
 uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim
 ```
 
-- `vlm_llm_nim`: Nemotron-3-Nano and Cosmos3-Nano Reasoner as NIM
-  containers, with STT and embedding served locally. Samples reuse these
+- `vlm_llm_nim`: Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner as NIM
+  containers, with STT, Piper TTS, and embedding served locally. Samples reuse these
   endpoints; they never launch or stop the containers.
 
 To adapt a sample, copy the relevant `llm` and `vlm` entries from
@@ -359,7 +359,8 @@ Either way vLLM keeps running after the orchestrator exits.
 The STT server follows the same pattern without Docker: `stt_server` spawns
 its persistent process with `start_new_session=True`, reuses a healthy server
 that survived a previous stack run, and is stopped by the same
-`model_servers --stop` cleanup.
+`model_servers --stop` cleanup. The CPU Piper server is also launched as a
+persistent shared service and is stopped by the same command.
 
 Docker containers carry a fingerprint of their image, GPU assignment, model
 cache, environment, bootstrap packages, complete vLLM command, and a versioned
@@ -376,10 +377,10 @@ uv run --project agent-samples/xr-render-demo xr_render_demo --stop
 
 Cleanup locates labelled Docker containers before inspecting ports, then
 stops them with `docker stop` (escalating to `docker kill` after 20 s).
-Pip-mode processes must carry the `XR_AI_VLLM_MANAGED` and
-`XR_AI_VLLM_PORT` ownership markers before cleanup sends `SIGTERM` or
-`SIGKILL`. Unknown listeners and failed inspection abort cleanup without
-sending a signal; absent servers are silently skipped.
+Locally persisted processes (pip-mode vLLM and Piper) must carry the
+`XR_AI_VLLM_MANAGED` and `XR_AI_VLLM_PORT` ownership markers before cleanup
+sends `SIGTERM` or `SIGKILL`. Unknown listeners and failed inspection abort
+cleanup without sending a signal; absent servers are silently skipped.
 
 The target ports and container names match the defaults in the per-profile YAML files.
 
