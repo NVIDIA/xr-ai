@@ -330,6 +330,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
@@ -446,8 +447,8 @@
 <p>The lab instrument sample is a reference for applications that combine
 foreground questions, opt-in background work, persistent participant state,
 visual identification, and event-driven notifications. Start with the
-<a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a> to run it. This page focuses on
-how to reuse its structure for another application.</p>
+<a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a> to run it. This architecture
+reference focuses on reusing the sample’s structure for another application.</p>
 <p>The central design choice is to separate perception, interpretation, state,
 policy, and presentation. A marker scan identifies an instrument, a VLM reads
 its display, a stateful agent decides whether the reading changed, and a
@@ -472,7 +473,7 @@ tool-loop, image-selection, visual-query, and event patterns are reusable.</p>
 <h2>Architecture<a class="headerlink" href="#architecture" title="Link to this heading">#</a></h2>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>camera frames ────────────────&gt; ParticipantImageAgent
                                       │
-accepted speech / typed query          ├─&gt; current frame + generic VLM query
+accepted speech or typed query         ├─&gt; current frame + generic VLM query
               │                       └─&gt; marker scan
               v                                │
         ForegroundAgent                        v
@@ -734,7 +735,7 @@ perception or tracking agents.</p>
 </div>
 <p>Register this subscriber beside <code class="docutils literal notranslate"><span class="pre">FileOutputAgent</span></code>. Storage and voice can remain
 enabled during development and be removed independently for production. Use a
-typed msgpack/ZMQ service when the backend boundary is a separate process.</p>
+typed msgpack over ZMQ service when the backend boundary is a separate process.</p>
 </section>
 <section id="live-event-viewer">
 <h2>Live event viewer<a class="headerlink" href="#live-event-viewer" title="Link to this heading">#</a></h2>
@@ -806,15 +807,16 @@ tracking loop.</p>
 <h3>Replace files with production persistence<a class="headerlink" href="#replace-files-with-production-persistence" title="Link to this heading">#</a></h3>
 <p>Subscribe to the same record and instrument topics from a new agent. Maintain
 participant correlation from <code class="docutils literal notranslate"><span class="pre">RuntimeContext.metadata</span></code>; do not add participant
-IDs to model-visible schemas. Decide explicitly whether delivery failure should
-block, retry, buffer, or drop—the runtime does not impose that application
+IDs to model-visible schemas. Decide whether to block, retry, buffer, or drop
+the event after a delivery failure—the runtime does not impose that application
 policy.</p>
 </section>
 <section id="build-a-different-background-visual-flow">
 <h3>Build a different background visual flow<a class="headerlink" href="#build-a-different-background-visual-flow" title="Link to this heading">#</a></h3>
-<p>Use <code class="docutils literal notranslate"><span class="pre">MonitorAgent</span></code> as the minimal pattern: participant-bound start/stop/status
-tools, one owned task per participant, current-frame selection, a dedicated
-<code class="docutils literal notranslate"><span class="pre">ImageQueryTool</span></code>, typed output events, and cancellation on participant leave.</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">MonitorAgent</span></code> as the minimal pattern: participant-bound start, stop, and
+status tools, one owned task per participant, current-frame selection, a
+dedicated <code class="docutils literal notranslate"><span class="pre">ImageQueryTool</span></code>, typed output events, and cancellation on participant
+leave.</p>
 </section>
 </section>
 <section id="lifecycle-invariants">
@@ -843,13 +845,14 @@ prompt contracts in <code class="docutils literal notranslate"><span class="pre"
 </ol>
 <p>For manual pipeline testing, enable <code class="docutils literal notranslate"><span class="pre">capture_marker_scans</span></code> and inspect the saved
 marker-scan image first. It is
-the exact source frame used for the marker scan and separates camera/framing
+the exact source frame used for the marker scan and separates camera and framing
 problems from detector or VLM problems. Then inspect Relay events and the
 participant JSONL files to follow the tool call, reading, state update, and
 notification as distinct stages.</p>
+<p><a id="what-should-become-shared"></a></p>
 </section>
-<section id="what-should-become-shared">
-<h2>What should become shared<a class="headerlink" href="#what-should-become-shared" title="Link to this heading">#</a></h2>
+<section id="what-belongs-in-shared-code">
+<h2>What belongs in shared code<a class="headerlink" href="#what-belongs-in-shared-code" title="Link to this heading">#</a></h2>
 <p>Reuse public SDK blocks directly when they already express the contract:
 <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>, <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code>, <code class="docutils literal notranslate"><span class="pre">run_tool_loop</span></code>, <code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code>,
 <code class="docutils literal notranslate"><span class="pre">ImageQueryTool</span></code>, <code class="docutils literal notranslate"><span class="pre">MarkerTrackingTool</span></code>, and typed topics. Keep device identity,
@@ -926,7 +929,7 @@ another concrete application needs exactly the same behavior.</p>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lifecycle-invariants">Lifecycle invariants</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validation-strategy">Validation strategy</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-should-become-shared">What should become shared</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-belongs-in-shared-code">What belongs in shared code</a></li>
 </ul>
   </nav></div>
 

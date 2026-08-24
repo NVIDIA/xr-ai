@@ -12,7 +12,8 @@ is process-oriented: the device I/O hub, workers, model servers, and optional
 capability services run independently and communicate through small, explicit
 interfaces.
 
-This page describes the system shape, runtime paths, and ownership boundaries.
+This architecture overview describes the system shape, runtime paths, and
+ownership boundaries.
 The component pages linked under [Where details live](#where-details-live)
 contain configuration, protocol, and operational details.
 
@@ -29,7 +30,7 @@ contain configuration, protocol, and operational details.
 | (web/mobile/XR)|                   | + transport    |                | + agent SDK     |
 +---------------+                    +----------------+                +-------+--------+
                                                                             |
-                                                   typed model/tool calls   |
+                                               typed model and tool calls   |
                                                 +---------------------------+--------+
                                                 |                                    |
                                                 v                                    v
@@ -62,7 +63,7 @@ services or externally hosted APIs.
 | Transport connector | Transport-specific sessions and conversion to hub events | Agent-facing APIs or application policy |
 | DeviceIOHub | Media fan-out, participant identity, return routing, and shared-media access | Agent state, model calls, or tools |
 | Agent SDK | Lightweight hub IPC, typed runtime events, model protocols, voice composition, and tool primitives | Application lifecycle and decision policy |
-| Agent worker | Application state, tasks, prompts, model/tool loops, concurrency, and cleanup | Transport internals or model-server lifecycle |
+| Agent worker | Application state, tasks, prompts, model and tool loops, concurrency, and cleanup | Transport internals or model-server lifecycle |
 | AI model services | Inference and model-specific serving behavior | Participant routing or application policy |
 | Tools and capability services | Bounded application capabilities | General agent orchestration |
 | Sample orchestrator | Process declarations, startup ordering, readiness, and shutdown | Runtime business logic |
@@ -93,8 +94,8 @@ participant -> hub -> subscribed worker -> hub -> same participant
 ```
 
 LiveKit currently provides the client transport, but it remains behind the hub
-boundary. Workers communicate only through XR AI's msgpack/ZMQ IPC and do not
-import or address LiveKit directly. See {doc}`Server runtime
+boundary. Workers communicate only through XR AI's msgpack over ZMQ IPC and do
+not import or address LiveKit directly. Refer to {doc}`Server runtime
 </components/server-runtime>` for shared-memory behavior, topics, and transport
 implementation details.
 
@@ -125,7 +126,7 @@ Workers obtain LLM, VLM, STT, TTS, and embedding clients from
 
 Tools are ordinary in-process `Tool` or `AsyncTool` objects. A tool can perform
 local work or call a typed service, but application agents retain ownership of
-tool selection, task lifetime, retries, and participant context. See
+tool selection, task lifetime, retries, and participant context. Refer to
 {doc}`Agent SDK </components/agent-sdk>` and {doc}`AI services
 </components/ai-services>` for the concrete interfaces and profiles.
 
@@ -193,7 +194,7 @@ it.
 
 | To add or replace | Extend at this boundary |
 |---|---|
-| XR client | Join through the client transport and consume participant-scoped return media/data |
+| XR client | Join through the client transport and consume participant-scoped return media and data |
 | Transport | Implement the connector side of the hub IPC contract |
 | Agent application | Add a worker that uses `xr_ai_hub` and the relevant SDK packages |
 | Model or provider | Add model configuration and an adapter behind the typed model protocols |
@@ -202,12 +203,12 @@ it.
 | Managed process | Add a launcher `Process` entry and signal readiness from the process |
 
 For the repository conventions and concrete file layout used by new samples,
-see {doc}`Adding a sample </guides/adding-a-sample>`.
+refer to {doc}`Adding a sample </guides/adding-a-sample>`.
 
 ## Where details live
 
-This page intentionally stops at system structure and contracts. Use these
-pages for implementation and operational detail:
+This architecture overview intentionally stops at system structure and
+contracts. Use these references for implementation and operational detail:
 
 | Topic | Authoritative page |
 |---|---|

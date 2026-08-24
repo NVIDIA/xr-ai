@@ -56,7 +56,7 @@ cloud firewall and host firewall allow 7881/TCP and 7882/UDP. Keep both options
 disabled for local and private-network deployments.
 
 NAT also affects the TLS certificate: clients dial the VM's public IP, which
-must be listed in the certificate's SAN via `web_server_extra_sans`; see
+must be listed in the certificate's SAN via `web_server_extra_sans`. Refer to
 [TLS for the web client](#tls-for-the-web-client) below.
 
 ## RHEL, Fedora, or CentOS (`firewall-cmd`)
@@ -171,6 +171,6 @@ bypass certificate-chain validation regardless of `NSAllowsArbitraryLoads`.
 Until the certificate is trusted at the OS level, the wss handshake fails.
 ```
 
-Production deployments on any platform should replace the auto-generated
-certificate with one from a public CA via `cert_file` and `key_file` in
+For production deployments on any platform, replace the auto-generated
+certificate with one from a public CA by setting `cert_file` and `key_file` in
 `device_io_hub.yaml`.

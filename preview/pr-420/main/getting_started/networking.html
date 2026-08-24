@@ -330,6 +330,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
@@ -513,7 +514,7 @@ validation:</p>
 cloud firewall and host firewall allow 7881/TCP and 7882/UDP. Keep both options
 disabled for local and private-network deployments.</p>
 <p>NAT also affects the TLS certificate: clients dial the VM’s public IP, which
-must be listed in the certificate’s SAN via <code class="docutils literal notranslate"><span class="pre">web_server_extra_sans</span></code>; see
+must be listed in the certificate’s SAN via <code class="docutils literal notranslate"><span class="pre">web_server_extra_sans</span></code>. Refer to
 <a class="reference internal" href="#tls-for-the-web-client">TLS for the web client</a> below.</p>
 </section>
 <section id="rhel-fedora-or-centos-firewall-cmd">
@@ -615,8 +616,8 @@ does not expose a server-trust auth-challenge hook, and ATS does not
 bypass certificate-chain validation regardless of <code class="docutils literal notranslate"><span class="pre">NSAllowsArbitraryLoads</span></code>.
 Until the certificate is trusted at the OS level, the wss handshake fails.</p>
 </div>
-<p>Production deployments on any platform should replace the auto-generated
-certificate with one from a public CA via <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in
+<p>For production deployments on any platform, replace the auto-generated
+certificate with one from a public CA by setting <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in
 <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>.</p>
 </section>
 </section>

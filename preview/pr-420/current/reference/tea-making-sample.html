@@ -307,6 +307,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
@@ -423,9 +424,9 @@
 <p>The tea-making sample is a reference for applications that combine a guided
 procedure, visual evidence, foreground questions, independent background
 observers, and voice output. Start with the
-<a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a> to run it. This page explains
-how to adapt its architecture to another procedure rather than merely changing
-model settings.</p>
+<a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a> to run it. This architecture
+reference explains how to adapt the sample to another procedure rather than
+merely changing model settings.</p>
 <p>The defining pattern is a deterministic workflow around an agentic core. YAML
 declares the steps and state contract. Application code owns transitions and
 evidence. The model interprets observations and selects native tools, but it
@@ -494,7 +495,7 @@ is only a bounded view of the current worker process.</p>
 <h2>Architecture<a class="headerlink" href="#architecture" title="Link to this heading">#</a></h2>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>camera frames ────────────────&gt; ParticipantImageAgent
                                       │
-accepted speech / typed query          ├─&gt; GuidanceAgent observation loop
+accepted speech or typed query         ├─&gt; GuidanceAgent observation loop
               │                       ├─&gt; ChangeWatchAgent
               v                       └─&gt; VideoLogAgent
         ForegroundAgent
@@ -634,7 +635,7 @@ locks, and participant cleanup.</p>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">background_context.py</span></code></p></td>
 <td><p>Recent-fact store and query tool</p></td>
-<td><p>Change foreground/background context policy</p></td>
+<td><p>Change foreground and background context policy</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">change_watch.py</span></code></p></td>
 <td><p>Focused visual observer</p></td>
@@ -725,7 +726,8 @@ a notice but never moves to the next step. Only explicit next, skip, reset, or
 restart controls change the participant’s position.</p>
 <p>The model can propose state only through the commit tool. It cannot mutate the
 session object directly. Deterministic clock and temperature tools perform
-calculations that should not be left to language-model arithmetic.</p>
+calculations that require deterministic arithmetic rather than language-model
+arithmetic.</p>
 </section>
 <section id="visual-observation-loop">
 <h2>Visual observation loop<a class="headerlink" href="#visual-observation-loop" title="Link to this heading">#</a></h2>
@@ -809,8 +811,8 @@ agents.</p>
 </div>
 <p>Register the subscriber beside <code class="docutils literal notranslate"><span class="pre">FileOutputAgent</span></code>. A customer system can consume
 guidance records, background facts, transcripts, or video deltas independently.
-If it runs in another process, expose the boundary through a typed msgpack/ZMQ
-service rather than bypassing the repository’s service model.</p>
+If it runs in another process, expose the boundary through a typed msgpack over
+ZMQ service rather than bypassing the repository’s service model.</p>
 </section>
 <section id="adapting-the-sample">
 <h2>Adapting the sample<a class="headerlink" href="#adapting-the-sample" title="Link to this heading">#</a></h2>
@@ -838,10 +840,11 @@ public <code class="docutils literal notranslate"><span class="pre">execute()</s
 <section id="add-another-background-observer">
 <h3>Add another background observer<a class="headerlink" href="#add-another-background-observer" title="Link to this heading">#</a></h3>
 <p>Follow the same contract as the three existing applications: an agent-owned
-task per participant, idempotent start/stop/status tools, cancellation on leave,
-a typed durable record topic, and optional compact <code class="docutils literal notranslate"><span class="pre">BackgroundFact</span></code> output.
-Decide explicitly whether the result should be spoken; do not make every
-background record a voice message.</p>
+task per participant, idempotent start, stop, and status tools, cancellation on
+leave, a typed durable record topic, and optional compact <code class="docutils literal notranslate"><span class="pre">BackgroundFact</span></code>
+output.
+Decide explicitly whether to speak the result; do not make every background
+record a voice message.</p>
 </section>
 <section id="replace-files-with-production-persistence">
 <h3>Replace files with production persistence<a class="headerlink" href="#replace-files-with-production-persistence" title="Link to this heading">#</a></h3>
@@ -854,7 +857,7 @@ or voice by accident.</p>
 <h3>Change voice policy<a class="headerlink" href="#change-voice-policy" title="Link to this heading">#</a></h3>
 <p><code class="docutils literal notranslate"><span class="pre">GuidanceVoiceAgent</span></code> is intentionally separate from <code class="docutils literal notranslate"><span class="pre">GuidanceAgent</span></code>. Add,
 suppress, batch, or redirect notices there. Background applications remain
-text/event producers unless a dedicated voice subscriber chooses otherwise.
+text and event producers unless a dedicated voice subscriber chooses otherwise.
 Foreground responses and guidance notices publish to <code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code>,
 which combines non-urgent output produced during an active utterance before it
 reaches <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>. The response text reaches the connection client’s Agent
@@ -885,7 +888,7 @@ cleanup are one design decision, not separate implementation details.</p>
 <h2>Validation strategy<a class="headerlink" href="#validation-strategy" title="Link to this heading">#</a></h2>
 <p>Test deterministic behavior separately from model quality:</p>
 <ol class="arabic simple">
-<li><p>Validate workflow YAML, field types, readable/writable sets, and step links.</p></li>
+<li><p>Validate workflow YAML, field types, readable and writable sets, and step links.</p></li>
 <li><p>Unit-test atomic commits, evidence counts, explicit advancement, skips,
 resets, and no mutation after completion.</p></li>
 <li><p>Test root-versus-active tool visibility and the absence of conversation
@@ -897,9 +900,10 @@ history.</p></li>
 <p>When debugging, inspect the workflow, background, foreground, and Relay JSONL
 files as separate stages. This shows whether the problem came from evidence,
 tool selection, state policy, event delivery, or presentation.</p>
+<p><a id="what-should-become-shared"></a></p>
 </section>
-<section id="what-should-become-shared">
-<h2>What should become shared<a class="headerlink" href="#what-should-become-shared" title="Link to this heading">#</a></h2>
+<section id="what-belongs-in-shared-code">
+<h2>What belongs in shared code<a class="headerlink" href="#what-belongs-in-shared-code" title="Link to this heading">#</a></h2>
 <p>Reuse public SDK blocks directly when they already express the contract:
 <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>, <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code>, <code class="docutils literal notranslate"><span class="pre">run_tool_loop</span></code>, <code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code>,
 <code class="docutils literal notranslate"><span class="pre">ImageQueryTool</span></code>, <code class="docutils literal notranslate"><span class="pre">RAGTools</span></code>, and typed topics. Keep the workflow schema,
@@ -978,7 +982,7 @@ until another concrete application requires the same contract.</p>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lifecycle-invariants">Lifecycle invariants</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validation-strategy">Validation strategy</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-should-become-shared">What should become shared</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-belongs-in-shared-code">What belongs in shared code</a></li>
 </ul>
   </nav></div>
 
