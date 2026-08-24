@@ -307,6 +307,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
@@ -421,9 +422,9 @@
 <section id="connecting-clients">
 <h1>Connecting Clients<a class="headerlink" href="#connecting-clients" title="Link to this heading">#</a></h1>
 <p>Every sample follows the same pattern: <strong>start the server, then connect a
-client.</strong> This page covers the clients that ship under <code class="docutils literal notranslate"><span class="pre">client-samples/</span></code>, how
-to set up, build, and run each one, and the shared token-on-startup connect
-flow they all use.</p>
+client.</strong> This client reference covers the clients that ship under
+<code class="docutils literal notranslate"><span class="pre">client-samples/</span></code>, how to set up, build, and run each one, and the shared
+token-on-startup connection flow they all use.</p>
 <p>For the server side — starting the DeviceIOHub and the agent samples — refer to
 <a class="reference internal" href="quickstart.html"><span class="doc">Quickstart</span></a>.</p>
 <section id="which-clients-exist">
@@ -673,10 +674,10 @@ against the system + user CA store automatically.</p>
 <section id="android-xr">
 <h3>Android XR<a class="headerlink" href="#android-xr" title="Link to this heading">#</a></h3>
 <p>The Android client is a standard Android app (<code class="docutils literal notranslate"><span class="pre">targetSdk</span></code> 34, <code class="docutils literal notranslate"><span class="pre">minSdk</span></code> 24) with
-no XR-specific code. Android XR runs unmodified Android apps, so the sample
-should install and launch on an Android XR device or emulator as a flat 2D
-windowed panel, and the LiveKit audio and data paths, agent-status badge, and
-token flow work the same as on a phone.</p>
+no XR-specific code. Because Android XR runs unmodified Android apps, the sample
+is expected to install and launch on an Android XR device or emulator as a flat
+2D windowed panel. The LiveKit audio and data paths, agent-status badge, and
+token flow are expected to work the same as on a phone.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Android XR support is <strong>not yet validated</strong>. The sample has not been tested on

@@ -101,7 +101,7 @@ PROCESSES = [
     Process("hub",    "../../services/device-io-hub",                    "device_io_hub"),
     Process("vlm",    "../../services/vlm-server",               "vlm_server"),   # ← add as needed
     # Pick ONE LLM backend per sample — they bind different default ports
-    # (8106 / 8107) so running more than one at once is allowed but
+    # (8106 or 8107) so running more than one at once is allowed but
     # usually unnecessary.
     Process("llm",    "../../services/llama-nemotron-llm",       "llama_nemotron_llm_server"),
     # Process("llm",  "../../services/nemotron3-nano-llm",       "nemotron3_nano_llm_server"),
@@ -509,7 +509,7 @@ cleanup.
 - **piper-tts** serves any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
   All inference runs in a thread pool so the asyncio loop is never blocked.
 - **video-memory-service** owns recorded chunk queries, NVDEC, and PNG output
-  behind typed msgpack/ZMQ on port 8310. Set `recordings_dir` in its YAML to
+  behind typed msgpack over ZMQ on port 8310. Set `recordings_dir` in its YAML to
   enable recorded-video operations; the path must match the hub's
   `video_recording.out_dir`. Latest video and sampling windows end at the
   newest recorded timestamp and require only a duration. Historical frame,

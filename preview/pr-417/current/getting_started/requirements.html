@@ -307,6 +307,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
@@ -465,7 +466,7 @@ local GPU is required for the agent or DeviceIOHub.</p>
 <tbody>
 <tr class="row-even"><td><p>OS</p></td>
 <td><p>Linux</p></td>
-<td><p>Ubuntu 22.04 / 24.04 recommended; WSL2 is not officially supported (refer to <a class="reference internal" href="#windows-wsl2">Windows (WSL2)</a> below)</p></td>
+<td><p>Ubuntu 22.04 or 24.04 recommended; WSL2 is not officially supported (refer to <a class="reference internal" href="#windows-wsl2">Windows (WSL2)</a> below)</p></td>
 </tr>
 <tr class="row-odd"><td><p>Python</p></td>
 <td><p>3.11 or 3.12</p></td>
@@ -500,7 +501,7 @@ virtual-environment setup needed. If you do not have it:</p>
 </pre></div>
 </div>
 <p>The NVIDIA Container Toolkit install is one-time per host. Follow the official
-install guide and run the CDI / runtime-configure steps from there:</p>
+install guide and run the CDI and runtime-configuration steps from there:</p>
 <blockquote>
 <div><p><a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html">https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html</a></p>
 </div></blockquote>
@@ -549,10 +550,10 @@ only</strong>: signaling works via <code class="docutils literal notranslate"><s
 Open the web client at the WSL distribution’s <code class="docutils literal notranslate"><span class="pre">eth0</span></code> address instead (note
 it can change across reboots). Microphone capture needs a secure context.
 Prefer the hub’s default HTTPS web server (<code class="docutils literal notranslate"><span class="pre">https://&lt;eth0-ip&gt;:8080</span></code>): an HTTPS
-origin is a secure context once you trust the hub’s self-signed cert
+origin is a secure context once you trust the hub’s self-signed certificate
 (download it from <code class="docutils literal notranslate"><span class="pre">https://&lt;eth0-ip&gt;:8080/cert</span></code>, or copy
 <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code> out of the WSL filesystem via
-<code class="docutils literal notranslate"><span class="pre">\\wsl$\</span></code>, then install it into the Windows cert store) or click through
+<code class="docutils literal notranslate"><span class="pre">\\wsl$\</span></code>, then install it into the Windows certificate store) or click through
 the browser warning. On a plain-HTTP path (the legacy token server, or
 <code class="docutils literal notranslate"><span class="pre">web_server_tls:</span> <span class="pre">false</span></code>), the report’s verified workaround is
 whitelisting the exact origin in

@@ -307,6 +307,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
@@ -420,9 +421,9 @@
 -->
 <section id="xr-render-demo-architecture">
 <h1>xr-render-demo — architecture<a class="headerlink" href="#xr-render-demo-architecture" title="Link to this heading">#</a></h1>
-<p>This page describes the architecture of the xr-render-demo sample. Start with
+<p>This architecture reference describes the xr-render-demo sample. Start with
 <a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">Quickstart</span></a> to run it. For inference-server mechanics
-shared with other samples, see <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a>.</p>
+shared with other samples, refer to <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a>.</p>
 <section id="process-stack">
 <h2>Process stack<a class="headerlink" href="#process-stack" title="Link to this heading">#</a></h2>
 <p>The orchestrator (<code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code>, stdlib-only via <code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code>) reuses all
@@ -443,7 +444,7 @@ any owned process exit terminates the application stack.</p>
 <td><p>sample</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">services/device-io-hub/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device_io_hub</span></code></p></td>
-<td><p>8080 (https + wss /rtc proxy); LiveKit 7880 stays on 127.0.0.1</p></td>
+<td><p>8080 (HTTPS and <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> WSS proxy); LiveKit 7880 stays on 127.0.0.1</p></td>
 </tr>
 <tr class="row-odd"><td><p>cloudxr</p></td>
 <td><p>sample</p></td>
@@ -601,7 +602,7 @@ settled before LOVR starts its Vulkan device, preventing a transient OOM race.</
       pre-roll buffer    last 10 chunks (~320 ms) kept at all times;
                          prepended to the utterance buffer on speech onset
                          so the first word's attack isn't clipped
-      VAD                Silero (ONNX, 512-sample / 32 ms windows,
+      VAD                Silero ONNX (512 samples per 32 ms window,
                          probability threshold) via shared xr-ai-vad util
       accumulates        audio while speaking
       finalizes when     silence ≥ 0.8s AND speech ≥ 0.15s
@@ -736,7 +737,7 @@ a streaming client connects. LOVR cannot start before then.</p>
 5. Worker polls `get_health` every 500 ms (up to 120s)
    lovr_started: true  → send `render.ready` to client → XR session unlocked
    spawn_error: "..."  → log + abort
-6. On reconnect / refresh: `xr.session.started` arrives again
+6. On reconnect or refresh: `xr.session.started` arrives again
    → `_xr_started` is already True → skip spawn, send `render.ready`
    immediately
 </pre></div>
@@ -748,7 +749,7 @@ a streaming client connects. LOVR cannot start before then.</p>
 It derives schemas from the worker’s native tools and evaluates tool
 effects against deterministic fixtures, so the live LOVR scene is not mutated.
 Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/ccda83930c2b09320d2a77752272839228572e53/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/51a46867c67f5d293c473e44c7f5d57cec1db3d2/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
 for the case format and the watch-mode loop. Run with:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo/eval<span class="w"> </span>xr_render_demo_eval
 </pre></div>
@@ -804,10 +805,10 @@ logs at DEBUG; all other exceptions log at ERROR with full traceback via
 turn is recorded as failed in the runtime event log.</p>
 <p><strong>Concurrent participants.</strong> Each participant’s turns are serialized by
 the supervisor’s per-participant lock, and a global scene lock serializes
-the snapshot/mutation/verification window across participants, so scene
+the snapshot, mutation, and verification window across participants, so scene
 turns from different participants queue rather than interleave.</p>
-<section id="prompt-eval-overlap-audit">
-<h3>Prompt/eval overlap audit<a class="headerlink" href="#prompt-eval-overlap-audit" title="Link to this heading">#</a></h3>
+<section id="prompt-and-evaluation-overlap-audit">
+<span id="prompt-eval-overlap-audit"></span><h3>Prompt and evaluation overlap audit<a class="headerlink" href="#prompt-and-evaluation-overlap-audit" title="Link to this heading">#</a></h3>
 <p>Per <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code> “Prompt-driven samples”, the harness audits every worker
 prompt against every tier’s case inputs at startup and warns on overlap:
 verbatim case utterances, case fixture ids, and any quoted prompt example
@@ -887,7 +888,7 @@ warning means changing the prompt, not the case.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-session-lifecycle">XR session lifecycle</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#eval-harness">Eval harness</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tracing-and-debugging">Tracing and debugging</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#prompt-eval-overlap-audit">Prompt/eval overlap audit</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#prompt-and-evaluation-overlap-audit">Prompt and evaluation overlap audit</a></li>
 </ul>
 </li>
 </ul>

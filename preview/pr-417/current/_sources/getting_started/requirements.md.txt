@@ -28,7 +28,7 @@ local GPU is required for the agent or DeviceIOHub.
 
 | Requirement | Version | Notes |
 |---|---|---|
-| OS | Linux | Ubuntu 22.04 / 24.04 recommended; WSL2 is not officially supported (refer to [Windows (WSL2)](#windows-wsl2) below) |
+| OS | Linux | Ubuntu 22.04 or 24.04 recommended; WSL2 is not officially supported (refer to [Windows (WSL2)](#windows-wsl2) below) |
 | Python | 3.11 or 3.12 | 3.10 and 3.13 are not supported |
 | [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
 | NVIDIA driver | 570+ | required for local model inference |
@@ -44,7 +44,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 The NVIDIA Container Toolkit install is one-time per host. Follow the official
-install guide and run the CDI / runtime-configure steps from there:
+install guide and run the CDI and runtime-configuration steps from there:
 
 > https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
 
@@ -95,10 +95,10 @@ setups:
   Open the web client at the WSL distribution's `eth0` address instead (note
   it can change across reboots). Microphone capture needs a secure context.
   Prefer the hub's default HTTPS web server (`https://<eth0-ip>:8080`): an HTTPS
-  origin is a secure context once you trust the hub's self-signed cert
+  origin is a secure context once you trust the hub's self-signed certificate
   (download it from `https://<eth0-ip>:8080/cert`, or copy
   `~/.local/share/xr-ai/web-server.crt` out of the WSL filesystem via
-  `\\wsl$\`, then install it into the Windows cert store) or click through
+  `\\wsl$\`, then install it into the Windows certificate store) or click through
   the browser warning. On a plain-HTTP path (the legacy token server, or
   `web_server_tls: false`), the report's verified workaround is
   whitelisting the exact origin in

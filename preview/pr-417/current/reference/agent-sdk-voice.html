@@ -307,6 +307,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
@@ -495,7 +496,7 @@ publishes the final response to <code class="docutils literal notranslate"><span
         <span class="k">await</span> <span class="n">aggregation</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
 </pre></div>
 </div>
-<p>Applications should call <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">aggregation.release(participant_id)</span></code> from
+<p>Applications must call <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">aggregation.release(participant_id)</span></code> from
 their participant-left subscriber so buffered speech and stream state are
 discarded as soon as that participant departs. The application owns its
 lifecycle topic; the shared aggregator therefore exposes cleanup directly
