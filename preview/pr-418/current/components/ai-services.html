@@ -726,8 +726,8 @@ image and ports) or as a local server:</p>
 </pre></div>
 </div>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code>: Nemotron-3-Nano and Cosmos3-Nano Reasoner as NIM
-containers, with STT and embedding served locally. Samples reuse these
+<li><p><code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code>: Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner as NIM
+containers, with STT, Piper TTS, and embedding served locally. Samples reuse these
 endpoints; they never launch or stop the containers.</p></li>
 </ul>
 <p>To adapt a sample, copy the relevant <code class="docutils literal notranslate"><span class="pre">llm</span></code> and <code class="docutils literal notranslate"><span class="pre">vlm</span></code> entries from
@@ -815,7 +815,8 @@ Either way vLLM keeps running after the orchestrator exits.</p>
 <p>The STT server follows the same pattern without Docker: <code class="docutils literal notranslate"><span class="pre">stt_server</span></code> spawns
 its persistent process with <code class="docutils literal notranslate"><span class="pre">start_new_session=True</span></code>, reuses a healthy server
 that survived a previous stack run, and is stopped by the same
-<code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> cleanup.</p>
+<code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> cleanup. The CPU Piper server is also launched as a
+persistent shared service and is stopped by the same command.</p>
 <p>Docker containers carry a fingerprint of their image, GPU assignment, model
 cache, environment, bootstrap packages, complete vLLM command, and a versioned
 launcher-controlled Docker contract. This prevents a failed container created
@@ -828,10 +829,10 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 </div>
 <p>Cleanup locates labelled Docker containers before inspecting ports, then
 stops them with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span></code> (escalating to <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">kill</span></code> after 20 s).
-Pip-mode processes must carry the <code class="docutils literal notranslate"><span class="pre">XR_AI_VLLM_MANAGED</span></code> and
-<code class="docutils literal notranslate"><span class="pre">XR_AI_VLLM_PORT</span></code> ownership markers before cleanup sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> or
-<code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code>. Unknown listeners and failed inspection abort cleanup without
-sending a signal; absent servers are silently skipped.</p>
+Locally persisted processes (pip-mode vLLM and Piper) must carry the
+<code class="docutils literal notranslate"><span class="pre">XR_AI_VLLM_MANAGED</span></code> and <code class="docutils literal notranslate"><span class="pre">XR_AI_VLLM_PORT</span></code> ownership markers before cleanup
+sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code>. Unknown listeners and failed inspection abort
+cleanup without sending a signal; absent servers are silently skipped.</p>
 <p>The target ports and container names match the defaults in the per-profile YAML files.</p>
 </section>
 <section id="choosing-the-vllm-runtime-pip-vs-docker">
@@ -947,7 +948,7 @@ wire format (<code class="docutils literal notranslate"><span class="pre">finish
 <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">on&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">off&quot;</span></code> in a system or user
 message; reasoning preamble is <strong>not</strong> stripped server-side. Hosting backend
 is selectable per YAML (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/511d30fefe8a4a989d012a92f6ec8b3abf5869ae/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0712abdef19129891c74237c52df30d89fdf2c50/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
 for the full HTTP contract and tuning knobs.</p></li>
 <li><p><strong>nemotron3-nano-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</span></code> (auto-selected by GPU compute
@@ -958,7 +959,7 @@ FlashInfer FP4 MoE kernels. Requires a Blackwell-class GPU (B200 or RTX PRO
 <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> by default to avoid the silent 3–8 min CUDA graph and
 FlashInfer autotune on cold start. Hosting backend is selectable per YAML
 (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/511d30fefe8a4a989d012a92f6ec8b3abf5869ae/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0712abdef19129891c74237c52df30d89fdf2c50/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
 for the vLLM flags it forwards and Blackwell prerequisites.</p></li>
 <li><p><strong>nemotron-omni-llm</strong> is a vLLM-backed multimodal LLM serving
 <code class="docutils literal notranslate"><span class="pre">Nemotron-3-Nano-Omni-30B-A3B-Reasoning</span></code> (text + video input) at port 8108.
