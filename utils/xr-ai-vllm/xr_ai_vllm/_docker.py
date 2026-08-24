@@ -935,8 +935,11 @@ def is_xr_ai_server_process(pid: int, label: str, port: int) -> bool:
         command = Path(f"/proc/{pid}/cmdline").read_text(errors="replace")
     except OSError:
         return False
-    if label == "stt":
-        return "stt_server" in command
+    in_process_servers = {
+        "stt": "stt_server",
+    }
+    if expected_command := in_process_servers.get(label):
+        return expected_command in command
     try:
         environment = Path(f"/proc/{pid}/environ").read_bytes()
     except OSError:

@@ -1,16 +1,17 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Self-hosted NIM: LLM (serves both the `llm` and `agent_llm` roles).
-# Nemotron-3-Nano's A3B MoE decode is fast enough to cover the reactive and
-# agent roles. Swap in
-# any LLM NIM from https://catalog.ngc.nvidia.com.
+# Self-hosted Nemotron-3-Nano-Omni NIM (serves both the `llm` and
+# `agent_llm` roles). This matches the model family used by the default local
+# deployment. Swap in any compatible NIM from https://catalog.ngc.nvidia.com.
 # To adapt a sample, copy the `llm` entry from
 # ../models.vlm_llm_nim.json into its active models JSON, change only
 # `deployment.ownership` from `managed` to `reused`, and keep service
 # `llm-nim` on port 8110. Duplicate it as `agent_llm` when the sample uses
 # that role.
-image:     nvcr.io/nim/nvidia/nemotron-3-nano:2.0.10
+# RTX Ada is not listed for this Omni NIM; verify startup and memory use on
+# target hardware before deployment.
+image:     nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant
 http_port: 8110
 
 nim_cache: ../../../../models/nim
@@ -18,7 +19,5 @@ nim_cache: ../../../../models/nim
 cuda_visible_devices: "1"
 env:
   NIM_MAX_MODEL_LEN: "32768"
-  NIM_KVCACHE_PERCENT: "0.8"
-  # nemotron_v3 is the parser built into this NIM (nano_v3 is absent);
-  # without tool-calling flags the agentic loop gets no tool calls.
-  NIM_PASSTHROUGH_ARGS: "--enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser nemotron_v3"
+  # Match the local Omni deployment's reasoning and tool-call parsers.
+  NIM_PASSTHROUGH_ARGS: "--gpu-memory-utilization 0.8 --enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser nemotron_v3"
