@@ -1330,7 +1330,15 @@ def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:
 
 def test_foreground_prompt_has_route_eval_cases() -> None:
     cases = yaml.safe_load((_SAMPLE / "eval/cases.yaml").read_text())
-    assert {case["expected_tool"] for case in cases} == {
+    prompt = (
+        _WORKER / "tea_making_worker/prompts/foreground_prompt.txt"
+    ).read_text()
+    refusal = "I can only help with the active tea guide right now."
+    assert "While the tea guide is active, decline requests" in prompt
+    assert f"reply exactly:\n{refusal}" in prompt
+
+    root_cases = [case for case in cases if case.get("route", "root") == "root"]
+    assert {case["expected_tool"] for case in root_cases} == {
         None,
         "application_context__query",
         "change_watch__start",
@@ -1340,3 +1348,43 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
         "video_log__start",
         "workflow__start",
     }
+    active_cases = [case for case in cases if case.get("route") == "active"]
+    assert {case["expected_tool"] for case in active_cases} == {
+        None,
+        "change_watch__start",
+        "clock__timer",
+        "current_view",
+        "workflow__advance",
+        "workflow__reset",
+        "workflow__restart",
+        "workflow__status",
+    }
+    unrelated_cases = [case for case in active_cases if "expected_response" in case]
+    assert len(unrelated_cases) >= 4
+    assert all(case["expected_tool"] is None for case in unrelated_cases)
+    assert all(case["expected_response"] == refusal for case in unrelated_cases)
+    assert all("expected_response_pattern" not in case for case in cases)
+
+    positive_active_names = {
+        case["name"]
+        for case in active_cases
+        if case.get("forbidden_response") == refusal
+        or case["expected_tool"] in {
+            "change_watch__start",
+            "current_view",
+            "workflow__status",
+        }
+    }
+    assert {
+        "active-answers-current-step-question",
+        "active-routes-workflow-status",
+        "active-routes-step-visual-question",
+        "active-starts-background-watch",
+    } <= positive_active_names
+
+    idle_unrelated = next(
+        case
+        for case in root_cases
+        if case["name"] == "idle-answers-unrelated-general-knowledge"
+    )
+    assert idle_unrelated["forbidden_response"] == refusal
