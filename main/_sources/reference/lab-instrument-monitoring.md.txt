@@ -8,8 +8,8 @@
 The lab instrument sample is a reference for applications that combine
 foreground questions, opt-in background work, persistent participant state,
 visual identification, and event-driven notifications. Start with the
-{doc}`quickstart </getting_started/quickstart>` to run it. This page focuses on
-how to reuse its structure for another application.
+{doc}`quickstart </getting_started/quickstart>` to run it. This architecture
+reference focuses on reusing the sample's structure for another application.
 
 The central design choice is to separate perception, interpretation, state,
 policy, and presentation. A marker scan identifies an instrument, a VLM reads
@@ -37,7 +37,7 @@ tool-loop, image-selection, visual-query, and event patterns are reusable.
 ```text
 camera frames ────────────────> ParticipantImageAgent
                                       │
-accepted speech / typed query          ├─> current frame + generic VLM query
+accepted speech or typed query         ├─> current frame + generic VLM query
               │                       └─> marker scan
               v                                │
         ForegroundAgent                        v
@@ -221,7 +221,7 @@ class InstrumentBackendAgent(Agent):
 
 Register this subscriber beside `FileOutputAgent`. Storage and voice can remain
 enabled during development and be removed independently for production. Use a
-typed msgpack/ZMQ service when the backend boundary is a separate process.
+typed msgpack over ZMQ service when the backend boundary is a separate process.
 
 ## Live event viewer
 
@@ -295,15 +295,16 @@ tracking loop.
 
 Subscribe to the same record and instrument topics from a new agent. Maintain
 participant correlation from `RuntimeContext.metadata`; do not add participant
-IDs to model-visible schemas. Decide explicitly whether delivery failure should
-block, retry, buffer, or drop—the runtime does not impose that application
+IDs to model-visible schemas. Decide whether to block, retry, buffer, or drop
+the event after a delivery failure—the runtime does not impose that application
 policy.
 
 ### Build a different background visual flow
 
-Use `MonitorAgent` as the minimal pattern: participant-bound start/stop/status
-tools, one owned task per participant, current-frame selection, a dedicated
-`ImageQueryTool`, typed output events, and cancellation on participant leave.
+Use `MonitorAgent` as the minimal pattern: participant-bound start, stop, and
+status tools, one owned task per participant, current-frame selection, a
+dedicated `ImageQueryTool`, typed output events, and cancellation on participant
+leave.
 
 ## Lifecycle invariants
 
@@ -330,12 +331,14 @@ Use three layers:
 
 For manual pipeline testing, enable `capture_marker_scans` and inspect the saved
 marker-scan image first. It is
-the exact source frame used for the marker scan and separates camera/framing
+the exact source frame used for the marker scan and separates camera and framing
 problems from detector or VLM problems. Then inspect Relay events and the
 participant JSONL files to follow the tool call, reading, state update, and
 notification as distinct stages.
 
-## What should become shared
+<a id="what-should-become-shared"></a>
+
+## What belongs in shared code
 
 Reuse public SDK blocks directly when they already express the contract:
 `VoiceAgent`, `AgentRuntime`, `run_tool_loop`, `CurrentFrameTool`,
