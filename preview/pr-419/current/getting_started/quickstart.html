@@ -307,6 +307,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -425,7 +426,7 @@
 <section id="set-up-with-a-coding-agent">
 <h2>Set up with a coding agent<a class="headerlink" href="#set-up-with-a-coding-agent" title="Link to this heading">#</a></h2>
 <p>The fastest path: paste this to your agent and it does the rest, including
-walking you through the choices below. See <a class="reference internal" href="skills.html"><span class="doc">Skills</span></a> for how it works.</p>
+walking you through the choices below. Refer to <a class="reference internal" href="skills.html"><span class="doc">Skills</span></a> for how it works.</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set up xr-ai for me: ask me whether to build against the latest release
 (newest stable tag; a prerelease only if no stable exists) or main, then
 fetch skills/getting-started/SKILL.md at that ref from
@@ -435,7 +436,7 @@ both the skill and the checkout. Install the skill (or just follow it), and
 walk me through the rest of the setup.
 </pre></div>
 </div>
-<p>The rest of this page is the manual path.</p>
+<p>The remainder of this quickstart is the manual path.</p>
 <p>Every sample follows the same pattern: <strong>start the server, then connect a
 client.</strong> Once it is ready, any supported client — web browser, Android app,
 iOS/visionOS app, or AR glasses — can join the session using the token printed
@@ -463,21 +464,21 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 </pre></div>
 </div>
 <p>GPU profiles are auto-detected (<code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, <code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>). The
-profiles are presets for common configurations; to run on a different GPU, refer to
-<a class="reference internal" href="requirements.html"><span class="doc">Running on other GPUs</span></a>.
+profiles are presets for common configurations; to run on a different GPU,
+refer to <a class="reference internal" href="requirements.html"><span class="doc">Running on other GPUs</span></a>.
 Detection inventories every visible device. If <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code> fails, returns
 malformed data, or reports a topology without an existing model-server
 configuration, startup stops with the detected per-GPU capacity instead of
 assuming a fallback.
-On first run each model downloads from HuggingFace (tens of GB; can take
+On first run each model downloads from Hugging Face (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.</p>
 <p>Which servers start is a deployment profile selected with
 <code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">&lt;name|path&gt;</span></code>. The default starts Nemotron-3 Nano Omni (8108,
-serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), and
-embeddings (8109); <code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code> serves the LLM and VLM as self-hosted NIM
-containers (Nemotron-3-Nano and Cosmos3-Nano Reasoner; requires docker and
-<code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code>). Starting a profile stops persisted servers outside it first
-and aborts if they cannot be stopped, avoiding GPU overcommit.</p>
+serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), Piper TTS
+(8105), and embeddings (8109). <code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code> serves the LLM and VLM as
+self-hosted NIM containers (Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner;
+requires Docker and <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code>). Starting a profile stops persisted servers
+outside it first and aborts if they cannot be stopped, avoiding GPU overcommit.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>model_servers<span class="w"> </span>--models<span class="w"> </span>vlm_llm_nim
 </pre></div>
@@ -502,13 +503,11 @@ Replies arrive as streaming Piper TTS audio plus a <code class="docutils literal
 <p>The sample always reuses model services and never starts or stops them. Its
 fixed <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> expects Parakeet STT on port 8103, Cosmos3-Nano on
 port 8100, and Piper TTS on port 8105. Start the repository defaults first
-from the repository root (the Piper command stays in the foreground):</p>
+from the repository root:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/piper-tts<span class="w"> </span>piper_tts_server<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--config<span class="w"> </span>services/piper-tts/piper_tts_server.yaml
 </pre></div>
 </div>
-<p>The first command may download model weights on its first run and requires the
+<p>The command may download model weights on its first run and requires the
 credentials described in the <a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a>. The model services remain running across
 sample restarts.</p>
 <section id="step-1-start-the-server">
@@ -572,12 +571,8 @@ speaks only discovered, changed, or long-missing device updates, and persists
 final pre-gate transcript, foreground-turn, and Relay JSONL files under <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code>
 and intentionally serves no sample-specific monitoring web UI. Its fixed model
 configuration uses Cosmos for visual inference.</p>
-<p>Start <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> and Piper TTS in separate terminals:</p>
+<p>Start the shared <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> stack, which includes Piper TTS:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
-</pre></div>
-</div>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/piper-tts<span class="w"> </span>piper_tts_server<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--config<span class="w"> </span>services/piper-tts/piper_tts_server.yaml
 </pre></div>
 </div>
 <p>Then start the sample in another terminal:</p>
@@ -601,16 +596,11 @@ transcript, and video observation. Nemotron-3 Nano Omni supplies both language
 and visual inference. Records are written as JSON Lines under the sample’s
 <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code> directory. A separate live event viewer presents selected runtime
 events without replacing those durable records.</p>
-<p>Start the shared model services, then keep Piper TTS running in a second
-terminal:</p>
+<p>Start the shared model services, including Piper TTS:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
 </pre></div>
 </div>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/piper-tts<span class="w"> </span>piper_tts_server<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--config<span class="w"> </span>services/piper-tts/piper_tts_server.yaml
-</pre></div>
-</div>
-<p>Launch the sample from a third terminal:</p>
+<p>Launch the sample from another terminal:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample<span class="w"> </span>tea_making_sample
 </pre></div>
 </div>
@@ -637,12 +627,13 @@ radius follows loudness, colour and position follow spoken commands (“make it
 red”, “put it to my left”, “where I’m looking”). Runs against a Quest 3 or Vision
 Pro on the same LAN, or the IWER emulator built into the web client for desktop
 dev.</p>
-<p>Under the hood, the orchestrator launches the hub, CloudXR runtime, model
-endpoints, typed capability processes, and the worker. The worker calls those
-processes through Relay-managed native tools. The voice runtime runs quick-acks
-and a Nemotron-30B agentic tool-calling loop over scene, tracking,
-spatial math, vision, and video-memory tools. Refer to the xr-render-demo guide for the
-full process map, agentic-loop details, and the XR session lifecycle.</p>
+<p>Under the hood, the orchestrator launches the hub, CloudXR runtime, typed
+capability processes, and the worker alongside the reused model endpoints. The
+worker calls those processes through Relay-managed native tools. The voice
+runtime runs quick-acks and a Nemotron-30B agentic tool-calling loop over scene,
+tracking, spatial math, vision, and video-memory tools. Refer to the
+<a class="reference internal" href="../reference/xr-render-demo.html"><span class="doc">xr-render-demo reference</span></a> for the full process
+map, agentic-loop details, and XR session lifecycle.</p>
 <p><strong>Requires <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> to be running first</strong> — the demo does not start its
 own model services.</p>
 <section id="step-1-start-model-servers-once">
@@ -651,8 +642,8 @@ own model services.</p>
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers
 </pre></div>
 </div>
-<p>This exits immediately once all configured services are ready. Weights stay loaded in
-the background.</p>
+<p>This exits immediately once all configured services are ready. Weights stay
+loaded in the background.</p>
 </section>
 <section id="step-2-start-the-demo">
 <h3>Step 2 — Start the demo<a class="headerlink" href="#step-2-start-the-demo" title="Link to this heading">#</a></h3>
@@ -661,15 +652,10 @@ the background.</p>
 <ul class="simple">
 <li><p><strong>Vulkan loader + headers</strong> — the CloudXR compositor and LOVR render through
 Vulkan, so install them before running the demo: <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">apt</span> <span class="pre">install</span> <span class="pre">libvulkan-dev</span></code></p></li>
-<li><p><strong>npm 18+</strong> on PATH — the orchestrator builds the web vendor bundle on first
-run (skipped on subsequent runs).</p></li>
+<li><p><strong>Node.js 18+ with npm</strong> on PATH — the orchestrator builds the web vendor
+bundle on first run (skipped on subsequent runs).</p></li>
 </ul>
-<p>Start Piper TTS in a separate terminal:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/piper-tts<span class="w"> </span>piper_tts_server<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--config<span class="w"> </span>services/piper-tts/piper_tts_server.yaml
-</pre></div>
-</div>
-<p>Then start XR Render:</p>
+<p>Start XR Render:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo<span class="w"> </span>xr_render_demo
 </pre></div>
@@ -691,8 +677,8 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 <p><strong>GPU pinning</strong> for the XR side is controlled by <code class="docutils literal notranslate"><span class="pre">gpu_index</span></code> in
 <code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml</span></code>. cloudxr-runtime applies
 the pin to its own process and writes the selectors into <code class="docutils literal notranslate"><span class="pre">cloudxr.env</span></code>;
-the scene process and LOVR inherit from that file. Refer to the xr-render-demo guide
-for full details.</p>
+the scene process and LOVR inherit from that file. Refer to the
+<a class="reference internal" href="../reference/xr-render-demo.html"><span class="doc">xr-render-demo reference</span></a> for full details.</p>
 <p>To stop the model servers when done:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>

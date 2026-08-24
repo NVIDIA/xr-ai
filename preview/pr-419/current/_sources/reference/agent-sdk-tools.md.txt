@@ -59,7 +59,7 @@ catalog. Aliasing changes only catalog names. Only finite tools belong in a
 
 ## Capability services
 
-The `services` extra provides typed msgpack/ZMQ RPC primitives plus tracking,
+The `services` extra provides typed msgpack over ZMQ RPC primitives plus tracking,
 video-memory, text-memory, and spatial tool groups. Applications compose these
 tools directly; the private transport is not an agent API and does not require
 an HTTP or agent framework.

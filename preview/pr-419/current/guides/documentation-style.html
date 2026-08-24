@@ -9,7 +9,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Skills &#8212; XR AI</title>
+    <title>Documentation style &#8212; XR AI</title>
   
   
   
@@ -52,15 +52,15 @@
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'getting_started/skills';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'guides/documentation-style';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
 
     <link rel="icon" href="../_static/favicon.png"/>
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Requirements" href="requirements.html" />
-    <link rel="prev" title="Quickstart" href="quickstart.html" />
+    <link rel="next" title="SPDX license headers" href="spdx-headers.html" />
+    <link rel="prev" title="Customizing model servers" href="customizing-model-servers.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -276,29 +276,6 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-
-
-<div class="version-switcher">
-  <label for="version-select" class="version-switcher__label">Version</label>
-  <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.1.0-beta</option>
-    <option value="1" selected>main (development)</option>
-  </select>
-</div>
-<script>
-  (function () {
-    // Navigate by index into a build-time list, never by reading the URL back
-    // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.1.0-beta/index.html", "skills.html"];
-    var select = document.getElementById("version-select");
-    select.addEventListener("change", function () {
-      var url = urls[select.selectedIndex];
-      if (url) {
-        window.location.assign(url);
-      }
-    });
-  })();
-</script>
 </div>
         <div class="sidebar-primary-item">
 
@@ -309,13 +286,13 @@
   <p class="bd-links__title" role="heading" aria-level="1">Table of Contents</p>
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../overview/architecture.html">Architecture</a></li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Getting Started</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Skills</a></li>
-<li class="toctree-l2"><a class="reference internal" href="requirements.html">Requirements</a></li>
-<li class="toctree-l2"><a class="reference internal" href="clients.html">Connecting Clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="networking.html">Networking and firewall</a></li>
-<li class="toctree-l2"><a class="reference internal" href="credentials.html">Credentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../getting_started/index.html">Getting Started</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../components/index.html">Components</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -325,14 +302,15 @@
 <li class="toctree-l2"><a class="reference internal" href="../components/server-runtime.html">Server runtime</a></li>
 </ul>
 </details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Guides</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="adding-a-sample.html">Adding a new sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing.html">Testing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -346,6 +324,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -419,9 +398,9 @@
       </a>
     </li>
     
-    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Getting Started</a></li>
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Guides</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Skills</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Documentation style</span></li>
   </ul>
 </nav>
 </div>
@@ -442,44 +421,57 @@
   SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
   SPDX-License-Identifier: Apache-2.0
 -->
-<section id="skills">
-<h1>Skills<a class="headerlink" href="#skills" title="Link to this heading">#</a></h1>
-<p>Skills are how a coding agent sets itself up to work with xr-ai: small
-<code class="docutils literal notranslate"><span class="pre">SKILL.md</span></code> modules under the open <a class="reference external" href="https://agentskills.io">Agent Skills</a> spec
-that the agent installs and follows. This is the primary way to get started.
-Paste this to your agent:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set up xr-ai for me: ask me whether to build against the latest release
-(newest stable tag; a prerelease only if no stable exists) or main, then
-fetch skills/getting-started/SKILL.md at that ref from
-https://raw.githubusercontent.com/NVIDIA/xr-ai/. If the file does not exist
-at that ref, the release predates agent setup: get my OK to use main for
-both the skill and the checkout. Install the skill (or just follow it), and
-walk me through the rest of the setup.
-</pre></div>
-</div>
-<p>The skill has the agent ask two setup questions (latest release or <code class="docutils literal notranslate"><span class="pre">main</span></code>;
-models on the local GPU or a hosted endpoint), clone the repo, and route
-itself to the working contract, the docs, and the reference sample. An agent
-with no skills mechanism can follow the <code class="docutils literal notranslate"><span class="pre">SKILL.md</span></code> contents directly.</p>
-<p>Prefer to do it by hand? Follow <a class="reference internal" href="quickstart.html"><span class="doc">Quickstart</span></a>.</p>
-<section id="available-skills">
-<h2>Available skills<a class="headerlink" href="#available-skills" title="Link to this heading">#</a></h2>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Skill</p></th>
-<th class="head"><p>What it does</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/skills/getting-started/SKILL.md"><code class="docutils literal notranslate"><span class="pre">getting-started</span></code></a></p></td>
-<td><p>Sets an agent up to build on xr-ai: repo, working contract, docs, reference sample</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>The bank lives at
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/main/skills"><code class="docutils literal notranslate"><span class="pre">skills/</span></code></a> in the
-repository; new skills land there with the features they cover.</p>
+<section id="documentation-style">
+<h1>Documentation style<a class="headerlink" href="#documentation-style" title="Link to this heading">#</a></h1>
+<p>This reference is the authoritative house style for customer-facing Markdown
+and reStructuredText. Match the surrounding document and keep edits scoped.
+When maintainers adopt a repository-wide convention, update this reference in
+the same change. Document scoped exceptions in the affected content.</p>
+<section id="cross-references">
+<h2>Cross-references<a class="headerlink" href="#cross-references" title="Link to this heading">#</a></h2>
+<p>Introduce documentation links with <strong>Refer to</strong> or <strong>refer to</strong>, not “See” or
+“see.” Prefer MyST <code class="docutils literal notranslate"><span class="pre">{doc}</span></code> links in Markdown and <code class="docutils literal notranslate"><span class="pre">:doc:</span></code> or <code class="docutils literal notranslate"><span class="pre">:ref:</span></code> roles in
+reStructuredText. Use a descriptive Markdown link when the target is source
+code or an external resource, and link directly to the authoritative target
+rather than through a thin redirect page. Treat published URL fragments as
+stable. When rewording a heading, preserve its previous fragment with an
+explicit compatibility anchor.</p>
+</section>
+<section id="slashes-in-prose">
+<h2>Slashes in prose<a class="headerlink" href="#slashes-in-prose" title="Link to this heading">#</a></h2>
+<p>Do not use <code class="docutils literal notranslate"><span class="pre">/</span></code> to mean “or” or “and.” Rewrite with the conjunction or a list.
+Keep established technical forms such as <code class="docutils literal notranslate"><span class="pre">I/O</span></code>, <code class="docutils literal notranslate"><span class="pre">iOS/visionOS</span></code>, <code class="docutils literal notranslate"><span class="pre">STUN/TURN</span></code>,
+<code class="docutils literal notranslate"><span class="pre">VR/AR</span></code>, <code class="docutils literal notranslate"><span class="pre">LLM/VLM</span></code>, <code class="docutils literal notranslate"><span class="pre">pub/sub</span></code>, and <code class="docutils literal notranslate"><span class="pre">and/or</span></code>. Apply these prose rules to
+explanatory comments and diagram labels inside fenced examples. Keep executable
+code, literal commands and output, identifiers, UI text, URLs, paths, and
+endpoints unchanged.</p>
+</section>
+<section id="terminology">
+<h2>Terminology<a class="headerlink" href="#terminology" title="Link to this heading">#</a></h2>
+<p>Prefer full words over informal shortenings in paraphrased prose: for example,
+use <strong>certificate</strong>, not <strong>cert</strong>. Preserve shortenings that are part of literal
+UI text, logs, filenames, paths, endpoints, identifiers, commands, or
+executable code.</p>
+</section>
+<section id="clarity-and-consistency">
+<h2>Clarity and consistency<a class="headerlink" href="#clarity-and-consistency" title="Link to this heading">#</a></h2>
+<p>Use direct word order and specific self-reference nouns such as “This sample,”
+“This workflow,” or “This reference” instead of “This page” or “This guide.”
+Keep article usage consistent within a procedure. Hyphenate compound adjectives
+when they precede a noun.</p>
+</section>
+<section id="requirement-strength">
+<h2>Requirement strength<a class="headerlink" href="#requirement-strength" title="Link to this heading">#</a></h2>
+<p>Use <strong>must</strong> for requirements, an imperative for instructions, and explicit
+softer wording such as <strong>can</strong> or <strong>recommended</strong> for guidance. Avoid ambiguous
+<strong>should</strong> wording when the intended strength can be stated directly.</p>
+</section>
+<section id="punctuation-and-headings">
+<h2>Punctuation and headings<a class="headerlink" href="#punctuation-and-headings" title="Link to this heading">#</a></h2>
+<p>Use a colon to introduce an explanation or list. Use the document’s established
+em-dash style for an aside; do not use a narrative <code class="docutils literal notranslate"><span class="pre">--</span></code>. Keep code markup out
+of headings when it makes the table of contents or navigation harder to scan.
+In reStructuredText, make title underlines span the full title.</p>
 </section>
 </section>
 
@@ -494,20 +486,20 @@ repository; new skills land there with the features they cover.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="quickstart.html"
+       href="customizing-model-servers.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Quickstart</p>
+        <p class="prev-next-title">Customizing model servers</p>
       </div>
     </a>
     <a class="right-next"
-       href="requirements.html"
+       href="spdx-headers.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Requirements</p>
+        <p class="prev-next-title">SPDX license headers</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -532,7 +524,12 @@ repository; new skills land there with the features they cover.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#available-skills">Available skills</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cross-references">Cross-references</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#slashes-in-prose">Slashes in prose</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#terminology">Terminology</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#clarity-and-consistency">Clarity and consistency</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#requirement-strength">Requirement strength</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#punctuation-and-headings">Punctuation and headings</a></li>
 </ul>
   </nav></div>
 

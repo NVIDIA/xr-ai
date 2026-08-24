@@ -307,6 +307,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -463,7 +464,7 @@ tool input supplied at the application boundary.</p>
 <h2>Publication and ownership<a class="headerlink" href="#publication-and-ownership" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">publish(topic,</span> <span class="pre">event)</span></code> is asynchronous fan-out. It waits for all subscriber
 deliveries and then propagates failures. A subscriber that performs lengthy
-work should hand it to its own bounded queue and return promptly. The runtime
+work must hand it to its own bounded queue and return promptly. The runtime
 owns delivery tasks only; an agent owns creation, synchronization, cancellation,
 and cleanup for its resources and background work.</p>
 <p>Callbacks and tools may run concurrently. Agents protect shared mutable state

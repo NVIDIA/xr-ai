@@ -8,13 +8,13 @@
 ## Set up with a coding agent
 
 The fastest path: paste this to your agent and it does the rest, including
-walking you through the choices below. See {doc}`skills` for how it works.
+walking you through the choices below. Refer to {doc}`skills` for how it works.
 
 ```{literalinclude} /_snippets/agent-setup-prompt.txt
 :language: text
 ```
 
-The rest of this page is the manual path.
+The remainder of this quickstart is the manual path.
 
 Every sample follows the same pattern: **start the server, then connect a
 client.** Once it is ready, any supported client — web browser, Android app,
@@ -47,22 +47,22 @@ uv run --project agent-samples/model-servers model_servers
 ```
 
 GPU profiles are auto-detected (`dual_48G_ada`, `spark`, `96G_blackwell`). The
-profiles are presets for common configurations; to run on a different GPU, refer to
-{doc}`Running on other GPUs </getting_started/requirements>`.
+profiles are presets for common configurations; to run on a different GPU,
+refer to {doc}`Running on other GPUs </getting_started/requirements>`.
 Detection inventories every visible device. If `nvidia-smi` fails, returns
 malformed data, or reports a topology without an existing model-server
 configuration, startup stops with the detected per-GPU capacity instead of
 assuming a fallback.
-On first run each model downloads from HuggingFace (tens of GB; can take
+On first run each model downloads from Hugging Face (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.
 
 Which servers start is a deployment profile selected with
 `--models <name|path>`. The default starts Nemotron-3 Nano Omni (8108,
-serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), and
-embeddings (8109); `vlm_llm_nim` serves the LLM and VLM as self-hosted NIM
-containers (Nemotron-3-Nano and Cosmos3-Nano Reasoner; requires docker and
-`NGC_API_KEY`). Starting a profile stops persisted servers outside it first
-and aborts if they cannot be stopped, avoiding GPU overcommit.
+serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), Piper TTS
+(8105), and embeddings (8109). `vlm_llm_nim` serves the LLM and VLM as
+self-hosted NIM containers (Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner;
+requires Docker and `NGC_API_KEY`). Starting a profile stops persisted servers
+outside it first and aborts if they cannot be stopped, avoiding GPU overcommit.
 
 ```bash
 uv run --project agent-samples/model-servers \
@@ -94,15 +94,13 @@ Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. Refer to
 The sample always reuses model services and never starts or stops them. Its
 fixed `yaml/models.json` expects Parakeet STT on port 8103, Cosmos3-Nano on
 port 8100, and Piper TTS on port 8105. Start the repository defaults first
-from the repository root (the Piper command stays in the foreground):
+from the repository root:
 
 ```bash
 uv run --project agent-samples/model-servers model_servers
-uv run --project services/piper-tts piper_tts_server \
-  --config services/piper-tts/piper_tts_server.yaml
 ```
 
-The first command may download model weights on its first run and requires the
+The command may download model weights on its first run and requires the
 credentials described in the {doc}`credentials guide
 </getting_started/credentials>`. The model services remain running across
 sample restarts.
@@ -177,15 +175,10 @@ final pre-gate transcript, foreground-turn, and Relay JSONL files under `artifac
 and intentionally serves no sample-specific monitoring web UI. Its fixed model
 configuration uses Cosmos for visual inference.
 
-Start `model-servers` and Piper TTS in separate terminals:
+Start the shared `model-servers` stack, which includes Piper TTS:
 
 ```bash
 uv run --project agent-samples/model-servers model_servers
-```
-
-```bash
-uv run --project services/piper-tts piper_tts_server \
-  --config services/piper-tts/piper_tts_server.yaml
 ```
 
 Then start the sample in another terminal:
@@ -212,19 +205,13 @@ and visual inference. Records are written as JSON Lines under the sample's
 `artifacts/` directory. A separate live event viewer presents selected runtime
 events without replacing those durable records.
 
-Start the shared model services, then keep Piper TTS running in a second
-terminal:
+Start the shared model services, including Piper TTS:
 
 ```bash
 uv run --project agent-samples/model-servers model_servers
 ```
 
-```bash
-uv run --project services/piper-tts piper_tts_server \
-  --config services/piper-tts/piper_tts_server.yaml
-```
-
-Launch the sample from a third terminal:
+Launch the sample from another terminal:
 
 ```bash
 uv run --project agent-samples/tea-making-sample tea_making_sample
@@ -256,12 +243,13 @@ red", "put it to my left", "where I'm looking"). Runs against a Quest 3 or Visio
 Pro on the same LAN, or the IWER emulator built into the web client for desktop
 dev.
 
-Under the hood, the orchestrator launches the hub, CloudXR runtime, model
-endpoints, typed capability processes, and the worker. The worker calls those
-processes through Relay-managed native tools. The voice runtime runs quick-acks
-and a Nemotron-30B agentic tool-calling loop over scene, tracking,
-spatial math, vision, and video-memory tools. Refer to the xr-render-demo guide for the
-full process map, agentic-loop details, and the XR session lifecycle.
+Under the hood, the orchestrator launches the hub, CloudXR runtime, typed
+capability processes, and the worker alongside the reused model endpoints. The
+worker calls those processes through Relay-managed native tools. The voice
+runtime runs quick-acks and a Nemotron-30B agentic tool-calling loop over scene,
+tracking, spatial math, vision, and video-memory tools. Refer to the
+{doc}`xr-render-demo reference </reference/xr-render-demo>` for the full process
+map, agentic-loop details, and XR session lifecycle.
 
 **Requires `model-servers` to be running first** — the demo does not start its
 own model services.
@@ -273,8 +261,8 @@ uv sync --project agent-samples/model-servers
 uv run --project agent-samples/model-servers model_servers
 ```
 
-This exits immediately once all configured services are ready. Weights stay loaded in
-the background.
+This exits immediately once all configured services are ready. Weights stay
+loaded in the background.
 
 ### Step 2 — Start the demo
 
@@ -283,17 +271,10 @@ This demo has two extra host prerequisites beyond the shared
 
 - **Vulkan loader + headers** — the CloudXR compositor and LOVR render through
   Vulkan, so install them before running the demo: `sudo apt install libvulkan-dev`
-- **npm 18+** on PATH — the orchestrator builds the web vendor bundle on first
-  run (skipped on subsequent runs).
+- **Node.js 18+ with npm** on PATH — the orchestrator builds the web vendor
+  bundle on first run (skipped on subsequent runs).
 
-Start Piper TTS in a separate terminal:
-
-```bash
-uv run --project services/piper-tts piper_tts_server \
-  --config services/piper-tts/piper_tts_server.yaml
-```
-
-Then start XR Render:
+Start XR Render:
 
 ```bash
 uv sync --project agent-samples/xr-render-demo
@@ -320,8 +301,8 @@ uv run --project agent-samples/xr-render-demo xr_render_demo
 **GPU pinning** for the XR side is controlled by `gpu_index` in
 `agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml`. cloudxr-runtime applies
 the pin to its own process and writes the selectors into `cloudxr.env`;
-the scene process and LOVR inherit from that file. Refer to the xr-render-demo guide
-for full details.
+the scene process and LOVR inherit from that file. Refer to the
+{doc}`xr-render-demo reference </reference/xr-render-demo>` for full details.
 
 To stop the model servers when done:
 

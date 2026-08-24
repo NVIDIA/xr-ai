@@ -326,6 +326,7 @@
 <li class="toctree-l2"><a class="reference internal" href="adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
 </ul>
@@ -443,6 +444,8 @@
 explains setup, testing, pull requests, and DCO sign-off.
 <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> contains the
 architecture and change constraints used by both humans and coding agents.
+<a class="reference internal" href="documentation-style.html"><span class="doc">Documentation style</span></a> contains the house style for
+customer-facing Markdown and reStructuredText.
 <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
 is the package dependency map.</p>
 <p>For a Python change:</p>
@@ -461,17 +464,18 @@ architecture change, and add a migration entry for a breaking change.</p>
 <p>The user-facing command catalog is generated from top-level sample
 <code class="docutils literal notranslate"><span class="pre">[project.scripts]</span></code> entries and literal <code class="docutils literal notranslate"><span class="pre">argparse</span></code> declarations. Keep option
 descriptions in <code class="docutils literal notranslate"><span class="pre">help=</span></code> and do not repeat flag tables in narrative pages.</p>
-<p>Sample configuration examples and field-level guidance live in checked-in
-YAML/JSON and adjacent YAML comments. The generated catalog enrolls files under
-a top-level sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> tree and files beside a direct capability
-subproject, then renders them verbatim. Narrative docs should cover only
+<p>Sample configuration examples live in checked-in YAML and JSON files, with
+field-level guidance in adjacent YAML comments. The
+generated catalog enrolls files under a top-level sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> tree and
+files beside a direct capability subproject, then renders them verbatim.
+Narrative docs cover only
 workflows, operational decisions, credentials, and process relationships.</p>
 <p>After a <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> change, run
 <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--script</span> <span class="pre">.github/scripts/generate_dependency_map.py</span></code>. The pre-commit hook
 normally regenerates the Python inventory in <code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code> automatically,
 and CI rejects drift. Do not edit that generated section by hand. Regenerate the
 affected project’s gitignored <code class="docutils literal notranslate"><span class="pre">uv.lock</span></code> locally. New source files require an
-SPDX header; see <a class="reference internal" href="spdx-headers.html"><span class="std std-doc">SPDX headers</span></a>.</p>
+SPDX header; refer to <a class="reference internal" href="spdx-headers.html"><span class="doc">SPDX headers</span></a>.</p>
 </section>
 
 

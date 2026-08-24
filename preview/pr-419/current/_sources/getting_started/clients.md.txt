@@ -6,9 +6,9 @@
 # Connecting clients
 
 Every sample starts DeviceIOHub and then accepts one or more platform clients.
-This page is the canonical build and connection guide for the clients under
-`client-samples/`. See {doc}`quickstart` for starting an agent sample and
-{doc}`networking` for firewall and TLS configuration.
+This client reference is the canonical build and connection guide for the
+clients under `client-samples/`. Refer to {doc}`quickstart` for starting an
+agent sample and {doc}`networking` for firewall and TLS configuration.
 
 ## Client matrix
 
@@ -175,7 +175,7 @@ The LiveKit WebSocket requires system trust for the hub certificate. In the
 app, tap **Install hub certificate**, allow Safari to download the profile,
 install it under **Settings → General → VPN & Device Management**, then enable
 full trust under **Settings → General → About → Certificate Trust Settings**.
-See {doc}`/guides/troubleshooting` for certificate regeneration, SAN mismatch,
+Refer to {doc}`/guides/troubleshooting` for certificate regeneration, SAN mismatch,
 401, and media-interruption diagnostics.
 
 ### Native CloudXR

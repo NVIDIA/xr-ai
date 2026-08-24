@@ -307,6 +307,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -439,7 +440,7 @@ Set <code class="docutils literal notranslate"><span class="pre">api_key</span><
 <li><p>Boolean service settings now require YAML booleans or the strings <code class="docutils literal notranslate"><span class="pre">true</span></code>,
 <code class="docutils literal notranslate"><span class="pre">false</span></code>, <code class="docutils literal notranslate"><span class="pre">yes</span></code>, <code class="docutils literal notranslate"><span class="pre">no</span></code>, <code class="docutils literal notranslate"><span class="pre">on</span></code>, <code class="docutils literal notranslate"><span class="pre">off</span></code>, <code class="docutils literal notranslate"><span class="pre">1</span></code>, or <code class="docutils literal notranslate"><span class="pre">0</span></code> (case-insensitive). Numeric
 <code class="docutils literal notranslate"><span class="pre">1</span></code>/<code class="docutils literal notranslate"><span class="pre">0</span></code>, null values, and arbitrary strings now fail at startup instead of
-being interpreted by Python truthiness. This applies to vLLM eager/tool/
+being interpreted by Python truthiness. This applies to vLLM eager, tool, and
 scheduling flags, Nemotron-Omni BF16 selection, Piper CUDA, voice-gate
 <code class="docutils literal notranslate"><span class="pre">listening_chime</span></code>, lab-monitoring <code class="docutils literal notranslate"><span class="pre">capture_marker_scans</span></code>, and tea-workflow
 <code class="docutils literal notranslate"><span class="pre">complete_on_skip</span></code>.</p></li>
@@ -499,7 +500,7 @@ compatibility package. Update out-of-tree code as follows:</p>
 <td><p>Pass additional readiness callables through <code class="docutils literal notranslate"><span class="pre">VoiceAgent(probes=...)</span></code>; MCP readiness is no longer part of the voice SDK.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_pipecat.audio</span></code> conversion helpers</p></td>
-<td><p>Let <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> own media conversion. Applications that truly need raw hub media should use <code class="docutils literal notranslate"><span class="pre">xr_ai_hub</span></code> types and own their format conversion.</p></td>
+<td><p>Let <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> own media conversion. If an application truly needs raw hub media, use <code class="docutils literal notranslate"><span class="pre">xr_ai_hub</span></code> types and own the format conversion.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">VoiceAgent.text_transform</span></code> and <code class="docutils literal notranslate"><span class="pre">text_ignore_topics</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> treats only untopiced client data as direct text. Use <code class="docutils literal notranslate"><span class="pre">text_input=False</span></code> to disable it; transform application queries in their subscribing agent.</p></td>

@@ -7,5 +7,5 @@
 
 ```{include} ../../../agent-sdk/xr-ai-models/README.md
 :start-after: "# xr-ai-models"
-:relative-docs: ../../../agent-sdk/xr-ai-models/
+:relative-docs: ../../
 ```

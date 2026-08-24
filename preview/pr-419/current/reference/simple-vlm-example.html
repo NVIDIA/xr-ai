@@ -307,6 +307,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -425,13 +426,14 @@
 <p>The simple VLM example is the smallest complete voice-and-vision application in
 the repository. It answers spoken or typed questions about each participant’s
 latest camera frame and streams the answer to both Piper TTS and the
-<code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> data topic. Start with the <a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a>; this page owns the sample’s design and
+<code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> data topic. Start with the <a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a>; this reference owns the sample’s design and
 operational details.</p>
 <section id="composition">
 <h2>Composition<a class="headerlink" href="#composition" title="Link to this heading">#</a></h2>
 <p>The orchestrator starts only DeviceIOHub and the worker. The fixed
 <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> profile marks Parakeet STT, Cosmos3 Nano, and Piper TTS as
-reused services, so operators start those endpoints independently.</p>
+reused services. Start those endpoints together with the shared model-server
+stack.</p>
 <p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns service readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
 <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>. <code class="docutils literal notranslate"><span class="pre">SimpleVlmAgent</span></code> selects the participant’s current image with

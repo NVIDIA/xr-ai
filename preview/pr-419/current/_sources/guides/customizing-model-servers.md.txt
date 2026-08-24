@@ -5,7 +5,7 @@
 
 # Customizing model servers
 
-Use this guide to change which shared models run, where they run, or how a
+Use this workflow to change which shared models run, where they run, or how a
 sample connects to them. Model-server customization has two separate parts:
 
 1. A `model-servers` deployment profile declares which shared services the
@@ -34,10 +34,10 @@ selects the deployment profile independently.
 
 The shipped profiles are:
 
-- `default`: local Parakeet STT, Nemotron Omni, Cosmos3-Nano Reasoner, and
-  Nemotron embedding services.
-- `vlm_llm_nim`: local STT and embedding plus self-hosted Nemotron-3-Nano and
-  Cosmos3-Nano Reasoner NIM containers.
+- `default`: local Parakeet STT, Piper TTS, Nemotron Omni, Cosmos3-Nano
+  Reasoner, and Nemotron embedding services.
+- `vlm_llm_nim`: local STT, Piper TTS, and embedding plus self-hosted
+  Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner NIM containers.
 
 Copy the closest profile under a new name:
 
@@ -240,6 +240,6 @@ uv run --project agent-samples/model-servers \
   model_servers --models my-stack
 ```
 
-For adapter fields and model capabilities, see
+For adapter fields and model capabilities, refer to
 {doc}`/reference/agent-sdk-models`. For server runtime behavior, persistence,
-and NIM credentials, see {doc}`/components/ai-services`.
+and NIM credentials, refer to {doc}`/components/ai-services`.

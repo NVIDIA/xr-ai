@@ -330,6 +330,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
@@ -599,7 +600,7 @@ start successfully without network access. Recreate project environments with
     <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/device-io-hub"</span><span class="p">,</span>                    <span class="s2">"device_io_hub"</span><span class="p">),</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"vlm"</span><span class="p">,</span>    <span class="s2">"../../services/vlm-server"</span><span class="p">,</span>               <span class="s2">"vlm_server"</span><span class="p">),</span>   <span class="c1"># ← add as needed</span>
     <span class="c1"># Pick ONE LLM backend per sample — they bind different default ports</span>
-    <span class="c1"># (8106 / 8107) so running more than one at once is allowed but</span>
+    <span class="c1"># (8106 or 8107) so running more than one at once is allowed but</span>
     <span class="c1"># usually unnecessary.</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"llm"</span><span class="p">,</span>    <span class="s2">"../../services/llama-nemotron-llm"</span><span class="p">,</span>       <span class="s2">"llama_nemotron_llm_server"</span><span class="p">),</span>
     <span class="c1"># Process("llm",  "../../services/nemotron3-nano-llm",       "nemotron3_nano_llm_server"),</span>
@@ -748,8 +749,8 @@ image and ports) or as a local server:</p>
 </pre></div>
 </div>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code>: Nemotron-3-Nano and Cosmos3-Nano Reasoner as NIM
-containers, with STT and embedding served locally. Samples reuse these
+<li><p><code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code>: Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner as NIM
+containers, with STT, Piper TTS, and embedding served locally. Samples reuse these
 endpoints; they never launch or stop the containers.</p></li>
 </ul>
 <p>To adapt a sample, copy the relevant <code class="docutils literal notranslate"><span class="pre">llm</span></code> and <code class="docutils literal notranslate"><span class="pre">vlm</span></code> entries from
@@ -837,7 +838,8 @@ Either way vLLM keeps running after the orchestrator exits.</p>
 <p>The STT server follows the same pattern without Docker: <code class="docutils literal notranslate"><span class="pre">stt_server</span></code> spawns
 its persistent process with <code class="docutils literal notranslate"><span class="pre">start_new_session=True</span></code>, reuses a healthy server
 that survived a previous stack run, and is stopped by the same
-<code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> cleanup.</p>
+<code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> cleanup. The CPU Piper server is also launched as a
+persistent shared service and is stopped by the same command.</p>
 <p>Docker containers carry a fingerprint of their image, GPU assignment, model
 cache, environment, bootstrap packages, complete vLLM command, and a versioned
 launcher-controlled Docker contract. This prevents a failed container created
@@ -850,10 +852,10 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 </div>
 <p>Cleanup locates labelled Docker containers before inspecting ports, then
 stops them with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span></code> (escalating to <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">kill</span></code> after 20 s).
-Pip-mode processes must carry the <code class="docutils literal notranslate"><span class="pre">XR_AI_VLLM_MANAGED</span></code> and
-<code class="docutils literal notranslate"><span class="pre">XR_AI_VLLM_PORT</span></code> ownership markers before cleanup sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> or
-<code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code>. Unknown listeners and failed inspection abort cleanup without
-sending a signal; absent servers are silently skipped.</p>
+Locally persisted processes (pip-mode vLLM and Piper) must carry the
+<code class="docutils literal notranslate"><span class="pre">XR_AI_VLLM_MANAGED</span></code> and <code class="docutils literal notranslate"><span class="pre">XR_AI_VLLM_PORT</span></code> ownership markers before cleanup
+sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code>. Unknown listeners and failed inspection abort
+cleanup without sending a signal; absent servers are silently skipped.</p>
 <p>The target ports and container names match the defaults in the per-profile YAML files.</p>
 </section>
 <section id="choosing-the-vllm-runtime-pip-vs-docker">
@@ -998,7 +1000,7 @@ ignored. Set <code class="docutils literal notranslate"><span class="pre">startu
 <li><p><strong>piper-tts</strong> serves any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
 All inference runs in a thread pool so the asyncio loop is never blocked.</p></li>
 <li><p><strong>video-memory-service</strong> owns recorded chunk queries, NVDEC, and PNG output
-behind typed msgpack/ZMQ on port 8310. Set <code class="docutils literal notranslate"><span class="pre">recordings_dir</span></code> in its YAML to
+behind typed msgpack over ZMQ on port 8310. Set <code class="docutils literal notranslate"><span class="pre">recordings_dir</span></code> in its YAML to
 enable recorded-video operations; the path must match the hub’s
 <code class="docutils literal notranslate"><span class="pre">video_recording.out_dir</span></code>. Latest video and sampling windows end at the
 newest recorded timestamp and require only a duration. Historical frame,

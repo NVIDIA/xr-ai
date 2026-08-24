@@ -9,14 +9,15 @@ The simple VLM example is the smallest complete voice-and-vision application in
 the repository. It answers spoken or typed questions about each participant's
 latest camera frame and streams the answer to both Piper TTS and the
 `vlm.response` data topic. Start with the {doc}`quickstart
-</getting_started/quickstart>`; this page owns the sample's design and
+</getting_started/quickstart>`; this reference owns the sample's design and
 operational details.
 
 ## Composition
 
 The orchestrator starts only DeviceIOHub and the worker. The fixed
 `yaml/models.json` profile marks Parakeet STT, Cosmos3 Nano, and Piper TTS as
-reused services, so operators start those endpoints independently.
+reused services. Start those endpoints together with the shared model-server
+stack.
 
 `VoiceAgent` owns service readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped

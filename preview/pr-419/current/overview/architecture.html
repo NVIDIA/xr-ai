@@ -307,6 +307,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -425,7 +426,8 @@ media, or model implementation details part of application logic. The system
 is process-oriented: the device I/O hub, workers, model servers, and optional
 capability services run independently and communicate through small, explicit
 interfaces.</p>
-<p>This page describes the system shape, runtime paths, and ownership boundaries.
+<p>This architecture overview describes the system shape, runtime paths, and
+ownership boundaries.
 The component pages linked under <a class="reference internal" href="#where-details-live">Where details live</a>
 contain configuration, protocol, and operational details.</p>
 <section id="system-context">
@@ -440,7 +442,7 @@ contain configuration, protocol, and operational details.</p>
 | (web/mobile/XR)|                   | + transport    |                | + agent SDK     |
 +---------------+                    +----------------+                +-------+--------+
                                                                             |
-                                                   typed model/tool calls   |
+                                               typed model and tool calls   |
                                                 +---------------------------+--------+
                                                 |                                    |
                                                 v                                    v
@@ -492,7 +494,7 @@ services or externally hosted APIs.</p>
 <td><p>Application lifecycle and decision policy</p></td>
 </tr>
 <tr class="row-even"><td><p>Agent worker</p></td>
-<td><p>Application state, tasks, prompts, model/tool loops, concurrency, and cleanup</p></td>
+<td><p>Application state, tasks, prompts, model and tool loops, concurrency, and cleanup</p></td>
 <td><p>Transport internals or model-server lifecycle</p></td>
 </tr>
 <tr class="row-odd"><td><p>AI model services</p></td>
@@ -535,8 +537,8 @@ the target and the connector delivers the response only to that participant.</p>
 </pre></div>
 </div>
 <p>LiveKit currently provides the client transport, but it remains behind the hub
-boundary. Workers communicate only through XR AI’s msgpack/ZMQ IPC and do not
-import or address LiveKit directly. See <a class="reference internal" href="../components/server-runtime.html"><span class="doc">Server runtime</span></a> for shared-memory behavior, topics, and transport
+boundary. Workers communicate only through XR AI’s msgpack over ZMQ IPC and do
+not import or address LiveKit directly. Refer to <a class="reference internal" href="../components/server-runtime.html"><span class="doc">Server runtime</span></a> for shared-memory behavior, topics, and transport
 implementation details.</p>
 </section>
 <section id="agent-model-and-tool-execution">
@@ -563,7 +565,7 @@ provider.</p></li>
 </ul>
 <p>Tools are ordinary in-process <code class="docutils literal notranslate"><span class="pre">Tool</span></code> or <code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> objects. A tool can perform
 local work or call a typed service, but application agents retain ownership of
-tool selection, task lifetime, retries, and participant context. See
+tool selection, task lifetime, retries, and participant context. Refer to
 <a class="reference internal" href="../components/agent-sdk.html"><span class="doc">Agent SDK</span></a> and <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI services</span></a> for the concrete interfaces and profiles.</p>
 </section>
 </section>
@@ -634,7 +636,7 @@ it.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p>XR client</p></td>
-<td><p>Join through the client transport and consume participant-scoped return media/data</p></td>
+<td><p>Join through the client transport and consume participant-scoped return media and data</p></td>
 </tr>
 <tr class="row-odd"><td><p>Transport</p></td>
 <td><p>Implement the connector side of the hub IPC contract</p></td>
@@ -658,12 +660,12 @@ it.</p>
 </table>
 </div>
 <p>For the repository conventions and concrete file layout used by new samples,
-see <a class="reference internal" href="../guides/adding-a-sample.html"><span class="doc">Adding a sample</span></a>.</p>
+refer to <a class="reference internal" href="../guides/adding-a-sample.html"><span class="doc">Adding a sample</span></a>.</p>
 </section>
 <section id="where-details-live">
 <h2>Where details live<a class="headerlink" href="#where-details-live" title="Link to this heading">#</a></h2>
-<p>This page intentionally stops at system structure and contracts. Use these
-pages for implementation and operational detail:</p>
+<p>This architecture overview intentionally stops at system structure and
+contracts. Use these references for implementation and operational detail:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Topic</p></th>

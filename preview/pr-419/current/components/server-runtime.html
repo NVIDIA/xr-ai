@@ -307,6 +307,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -448,7 +449,7 @@ traffic back to the originating client only.</p>
 <p>On startup, <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code> constructs a <code class="docutils literal notranslate"><span class="pre">HubEndpoint</span></code> (the IPC server),
 registers hub-local callbacks (<code class="docutils literal notranslate"><span class="pre">on_frame</span></code>, <code class="docutils literal notranslate"><span class="pre">on_audio</span></code>, <code class="docutils literal notranslate"><span class="pre">on_data</span></code>,
 <code class="docutils literal notranslate"><span class="pre">on_participant</span></code>), loads the configuration, and brings up the <code class="docutils literal notranslate"><span class="pre">LiveKitConnector</span></code>.
-The hub task and the connector task then run concurrently until <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> /
+The hub task and the connector task then run concurrently until <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or
 <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code>. A periodic stats loop logs per-participant video, audio, and data
 rates.</p>
 <section id="isolation-contract">
@@ -546,7 +547,7 @@ stream.</p></li>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>connector_A ──PUSH──┐
 connector_B ──PUSH──┤─► PULL   HubEndpoint   PUB ──SUB──► consumers (agents)
 connector_N ──PUSH──┘    ↓ dispatch
-                      on_frame / on_audio / on_data / on_participant
+                      on_frame, on_audio, on_data, on_participant
 </pre></div>
 </div>
 <p>Each connector owns and creates its own shared-memory ring buffer and
@@ -564,14 +565,14 @@ subscription lets a consumer subscribe at any granularity:</p>
 audio.alice              — all of alice's audio tracks
 audio.alice.TR_mic_001   — alice's specific mic track
 data.alice.chat          — alice's "chat" data channel only
-participant              — join/leave events
+participant              — join and leave events
 </pre></div>
 </div>
 <p>The message types and codec are extensible: new <code class="docutils literal notranslate"><span class="pre">MsgType</span></code> IDs can be
 registered at import time via <code class="docutils literal notranslate"><span class="pre">register_encoder</span></code> and <code class="docutils literal notranslate"><span class="pre">register_decoder</span></code>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>Agent code should import the IPC types and <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> from
+<p>Import the IPC types and <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> in agent code from
 <code class="docutils literal notranslate"><span class="pre">xr_ai_hub</span></code> directly, <strong>not</strong> from <code class="docutils literal notranslate"><span class="pre">device_io_hub.ipc</span></code>. The agent SDK’s only
 runtime dependencies are <code class="docutils literal notranslate"><span class="pre">pyzmq</span></code> and <code class="docutils literal notranslate"><span class="pre">msgpack</span></code> — importing from the agent SDK
 avoids pulling in the full DeviceIOHub dependency tree (LiveKit, FastAPI,
@@ -648,11 +649,11 @@ The proxy forwards end-to-end headers so SDK authentication (such as the LiveKit
 Swift SDK’s <code class="docutils literal notranslate"><span class="pre">Authorization:</span> <span class="pre">Bearer</span></code>) reaches the server, and handles both the
 versioned (<code class="docutils literal notranslate"><span class="pre">/rtc/v1</span></code>) and legacy (<code class="docutils literal notranslate"><span class="pre">/rtc</span></code>) signaling paths.</p>
 <p>The web server’s <code class="docutils literal notranslate"><span class="pre">/token</span></code> endpoint returns a signed LiveKit JWT together with
-the URL the client should use. With TLS on, that URL is the same-origin
+the client connection URL. With TLS on, that URL is the same-origin
 <code class="docutils literal notranslate"><span class="pre">wss://&lt;host&gt;:&lt;web_server_port&gt;</span></code> — so the client SDK never needs a
 per-deployment toggle. A <code class="docutils literal notranslate"><span class="pre">/cert</span></code> endpoint serves the active certificate as an
 installable iOS profile.</p>
-<p>Set <code class="docutils literal notranslate"><span class="pre">web_server_tls:</span> <span class="pre">false</span></code> for the two cases where the hub should not
+<p>Set <code class="docutils literal notranslate"><span class="pre">web_server_tls:</span> <span class="pre">false</span></code> for the two cases where the hub does not
 terminate TLS itself: a TLS-terminating reverse proxy (nginx, Caddy,
 Cloudflare Tunnel) sits in front and speaks plain <code class="docutils literal notranslate"><span class="pre">http://</span></code> + <code class="docutils literal notranslate"><span class="pre">ws://</span></code> to the
 hub on the loopback, or localhost-only development where browsers already grant

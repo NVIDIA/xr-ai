@@ -307,6 +307,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -446,13 +447,13 @@ local GPU is required for the agent or DeviceIOHub.</p>
 <td><p>Uses the model-services allocation</p></td>
 </tr>
 <tr class="row-even"><td><p>lab-instrument-monitoring (requires model services)</p></td>
-<td><p>Uses the model-services allocation + Piper TTS</p></td>
+<td><p>Uses the model-services allocation</p></td>
 </tr>
 <tr class="row-odd"><td><p>tea-making-sample (requires model services)</p></td>
-<td><p>Uses the model-services allocation + Piper TTS</p></td>
+<td><p>Uses the model-services allocation</p></td>
 </tr>
 <tr class="row-even"><td><p>xr-render-demo (requires model-servers)</p></td>
-<td><p>~55 GB (models) + ~2 GB (hub/TTS)</p></td>
+<td><p>~55 GB (models) + ~2 GB (CloudXR and hub)</p></td>
 </tr>
 <tr class="row-odd"><td><p>Hub only</p></td>
 <td><p>none</p></td>
@@ -473,7 +474,7 @@ local GPU is required for the agent or DeviceIOHub.</p>
 <tbody>
 <tr class="row-even"><td><p>OS</p></td>
 <td><p>Linux</p></td>
-<td><p>Ubuntu 22.04 / 24.04 recommended; WSL2 is not officially supported (refer to <a class="reference internal" href="#windows-wsl2">Windows (WSL2)</a> below)</p></td>
+<td><p>Ubuntu 22.04 or 24.04 recommended; WSL2 is not officially supported (refer to <a class="reference internal" href="#windows-wsl2">Windows (WSL2)</a> below)</p></td>
 </tr>
 <tr class="row-odd"><td><p>Python</p></td>
 <td><p>3.11 or 3.12</p></td>
@@ -495,8 +496,8 @@ local GPU is required for the agent or DeviceIOHub.</p>
 <td><p>latest</p></td>
 <td><p>required: gives Docker access to the GPU. Without it, <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> fails with <code class="docutils literal notranslate"><span class="pre">failed</span> <span class="pre">to</span> <span class="pre">discover</span> <span class="pre">GPU</span> <span class="pre">vendor</span> <span class="pre">from</span> <span class="pre">CDI:</span> <span class="pre">no</span> <span class="pre">known</span> <span class="pre">GPU</span> <span class="pre">vendor</span> <span class="pre">found</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p>npm</p></td>
-<td><p>18+</p></td>
+<tr class="row-even"><td><p>Node.js</p></td>
+<td><p>18+ with npm</p></td>
 <td><p>required for xr-render-demo: the orchestrator builds the web vendor bundle on first run</p></td>
 </tr>
 </tbody>
@@ -508,7 +509,7 @@ virtual-environment setup needed. If you do not have it:</p>
 </pre></div>
 </div>
 <p>The NVIDIA Container Toolkit install is one-time per host. Follow the official
-install guide and run the CDI / runtime-configure steps from there:</p>
+install guide and run the CDI and runtime-configuration steps from there:</p>
 <blockquote>
 <div><p><a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html">https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html</a></p>
 </div></blockquote>
@@ -542,7 +543,7 @@ network namespace, not the distribution’s, so LiveKit signaling succeeds
 but WebRTC media never flows (clients drop after ~18 s).</p></li>
 <li><p><strong>xr-render-demo cannot run under WSL2.</strong> The WSL2 GPU stack is compute-only
 (CUDA, NVENC, NVML) with no Vulkan ICD, so Vulkan falls back to the llvmpipe
-software rasterizer and the <code class="docutils literal notranslate"><span class="pre">VK_KHR_external_semaphore_fd</span></code> /
+software rasterizer and the <code class="docutils literal notranslate"><span class="pre">VK_KHR_external_semaphore_fd</span></code> and
 <code class="docutils literal notranslate"><span class="pre">VK_KHR_external_fence_fd</span></code> device extensions CloudXR Runtime requires are
 unavailable. This sample needs bare-metal Linux.</p></li>
 <li><p><strong>NAT networking (the WSL default) limits the stack to a browser on the
@@ -557,10 +558,10 @@ only</strong>: signaling works via <code class="docutils literal notranslate"><s
 Open the web client at the WSL distribution’s <code class="docutils literal notranslate"><span class="pre">eth0</span></code> address instead (note
 it can change across reboots). Microphone capture needs a secure context.
 Prefer the hub’s default HTTPS web server (<code class="docutils literal notranslate"><span class="pre">https://&lt;eth0-ip&gt;:8080</span></code>): an HTTPS
-origin is a secure context once you trust the hub’s self-signed cert
+origin is a secure context once you trust the hub’s self-signed certificate
 (download it from <code class="docutils literal notranslate"><span class="pre">https://&lt;eth0-ip&gt;:8080/cert</span></code>, or copy
 <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code> out of the WSL filesystem via
-<code class="docutils literal notranslate"><span class="pre">\\wsl$\</span></code>, then install it into the Windows cert store) or click through
+<code class="docutils literal notranslate"><span class="pre">\\wsl$\</span></code>, then install it into the Windows certificate store) or click through
 the browser warning. On a plain-HTTP path (the legacy token server, or
 <code class="docutils literal notranslate"><span class="pre">web_server_tls:</span> <span class="pre">false</span></code>), the report’s verified workaround is
 whitelisting the exact origin in

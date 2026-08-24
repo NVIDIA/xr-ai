@@ -59,7 +59,7 @@
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="SPDX license headers" href="spdx-headers.html" />
+    <link rel="next" title="Documentation style" href="documentation-style.html" />
     <link rel="prev" title="Contributing and conventions" href="contributing-and-conventions.html" />
 
 
@@ -307,6 +307,7 @@
 <li class="toctree-l2"><a class="reference internal" href="adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
@@ -422,7 +423,7 @@
 -->
 <section id="customizing-model-servers">
 <h1>Customizing model servers<a class="headerlink" href="#customizing-model-servers" title="Link to this heading">#</a></h1>
-<p>Use this guide to change which shared models run, where they run, or how a
+<p>Use this workflow to change which shared models run, where they run, or how a
 sample connects to them. Model-server customization has two separate parts:</p>
 <ol class="arabic simple">
 <li><p>A <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> deployment profile declares which shared services the
@@ -470,10 +471,10 @@ selects the deployment profile independently.</p>
 <h2>Start from a shipped deployment profile<a class="headerlink" href="#start-from-a-shipped-deployment-profile" title="Link to this heading">#</a></h2>
 <p>The shipped profiles are:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">default</span></code>: local Parakeet STT, Nemotron Omni, Cosmos3-Nano Reasoner, and
-Nemotron embedding services.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code>: local STT and embedding plus self-hosted Nemotron-3-Nano and
-Cosmos3-Nano Reasoner NIM containers.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">default</span></code>: local Parakeet STT, Piper TTS, Nemotron Omni, Cosmos3-Nano
+Reasoner, and Nemotron embedding services.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code>: local STT, Piper TTS, and embedding plus self-hosted
+Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner NIM containers.</p></li>
 </ul>
 <p>Copy the closest profile under a new name:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cp<span class="w"> </span>agent-samples/model-servers/yaml/models.default.json<span class="w"> </span><span class="se">\</span>
@@ -672,9 +673,9 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 <span class="w">  </span>model_servers<span class="w"> </span>--models<span class="w"> </span>my-stack
 </pre></div>
 </div>
-<p>For adapter fields and model capabilities, see
+<p>For adapter fields and model capabilities, refer to
 <a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>. For server runtime behavior, persistence,
-and NIM credentials, see <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a>.</p>
+and NIM credentials, refer to <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a>.</p>
 </section>
 </section>
 
@@ -698,11 +699,11 @@ and NIM credentials, see <a class="reference internal" href="../components/ai-se
       </div>
     </a>
     <a class="right-next"
-       href="spdx-headers.html"
+       href="documentation-style.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">SPDX license headers</p>
+        <p class="prev-next-title">Documentation style</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

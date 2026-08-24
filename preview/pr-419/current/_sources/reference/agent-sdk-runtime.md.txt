@@ -49,7 +49,7 @@ tool input supplied at the application boundary.
 
 `publish(topic, event)` is asynchronous fan-out. It waits for all subscriber
 deliveries and then propagates failures. A subscriber that performs lengthy
-work should hand it to its own bounded queue and return promptly. The runtime
+work must hand it to its own bounded queue and return promptly. The runtime
 owns delivery tasks only; an agent owns creation, synchronization, cancellation,
 and cleanup for its resources and background work.
 
