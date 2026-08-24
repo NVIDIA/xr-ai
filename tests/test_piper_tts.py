@@ -111,6 +111,56 @@ async def test_piper_reuses_healthy_persistent_server(
     idle.assert_called_once_with("http://127.0.0.1:8105/health")
 
 
+async def test_piper_probes_configured_non_loopback_host(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_piper_main_module()
+    config_path = tmp_path / "piper.yaml"
+    config_path.write_text(yaml.safe_dump({"host": "192.0.2.10", "port": 8123}))
+    health = Mock(return_value=False)
+    port_open = Mock(return_value=False)
+    process = Mock()
+    start = Mock(return_value=process)
+    idle = Mock()
+    monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
+    monkeypatch.setattr(module, "_health_url_ok", health)
+    monkeypatch.setattr(module, "_port_open", port_open)
+    monkeypatch.setattr(module, "_start_persistent_server", start)
+    monkeypatch.setattr(module, "_idle_until_stopped", idle)
+    monkeypatch.setattr(
+        module.sys,
+        "argv",
+        ["piper_tts_server", "--config", str(config_path)],
+    )
+
+    module.run()
+
+    expected_health_url = "http://192.0.2.10:8123/health"
+    health.assert_called_once_with(expected_health_url)
+    port_open.assert_called_once_with("192.0.2.10", 8123)
+    assert start.call_args.args[1] == expected_health_url
+    idle.assert_called_once_with(expected_health_url, process)
+
+
+@pytest.mark.parametrize(
+    ("bind_host", "expected_probe_host", "expected_health_url"),
+    (
+        ("0.0.0.0", "127.0.0.1", "http://127.0.0.1:8105/health"),
+        ("::", "::1", "http://[::1]:8105/health"),
+    ),
+)
+async def test_piper_normalizes_wildcard_probe_hosts(
+    bind_host: str,
+    expected_probe_host: str,
+    expected_health_url: str,
+) -> None:
+    module = _load_piper_main_module()
+    probe_host = module._probe_host(bind_host)
+
+    assert probe_host == expected_probe_host
+    assert module._health_url(probe_host, 8105) == expected_health_url
+
+
 async def test_piper_rejects_unhealthy_listener_without_signaling_ready(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -119,7 +169,7 @@ async def test_piper_rejects_unhealthy_listener_without_signaling_ready(
     start = Mock(side_effect=AssertionError("must not launch into an occupied port"))
     monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
     monkeypatch.setattr(module, "_health_url_ok", lambda _url: False)
-    monkeypatch.setattr(module, "_port_open", lambda _port: True)
+    monkeypatch.setattr(module, "_port_open", lambda _host, _port: True)
     monkeypatch.setattr(module, "_start_persistent_server", start)
     monkeypatch.setattr(
         module.sys,
@@ -156,7 +206,7 @@ async def test_piper_marks_persistent_child_for_cleanup(monkeypatch) -> None:
     start = Mock(return_value=process)
     monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
     monkeypatch.setattr(module, "_health_url_ok", lambda _url: False)
-    monkeypatch.setattr(module, "_port_open", lambda _port: False)
+    monkeypatch.setattr(module, "_port_open", lambda _host, _port: False)
     monkeypatch.setattr(module, "_start_persistent_server", start)
     monkeypatch.setattr(module, "_idle_until_stopped", lambda *_args: None)
     monkeypatch.setattr(module.sys, "argv", ["piper_tts_server"])

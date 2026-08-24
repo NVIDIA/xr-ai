@@ -296,10 +296,25 @@ def _health_url_ok(health_url: str) -> bool:
         return False
 
 
-def _port_open(port: int) -> bool:
-    """Return True if a process is already listening on the local port."""
+def _probe_host(bind_host: str) -> str:
+    """Return a reachable local address for a configured bind host."""
+    return {
+        "": "127.0.0.1",
+        "0.0.0.0": "127.0.0.1",
+        "::": "::1",
+    }.get(bind_host, bind_host)
+
+
+def _health_url(host: str, port: int) -> str:
+    """Return the health URL for a concrete probe host and port."""
+    url_host = f"[{host}]" if ":" in host else host
+    return f"http://{url_host}:{port}/health"
+
+
+def _port_open(host: str, port: int) -> bool:
+    """Return True if a process is already listening on the probe address."""
     try:
-        with socket.create_connection(("127.0.0.1", port), timeout=1):
+        with socket.create_connection((host, port), timeout=1):
             return True
     except OSError:
         return False
@@ -509,13 +524,14 @@ def run() -> None:
         return
 
     port = int(cfg.get("port", _DEFAULT_PORT))
+    probe_host = _probe_host(str(cfg.get("host", "0.0.0.0")))
     try:
         startup_timeout_s = _parse_startup_timeout(
             cfg.get("startup_timeout_s", _DEFAULT_STARTUP_TIMEOUT_S)
         )
     except ValueError as exc:
         raise SystemExit(f"[piper_tts_server] {exc}") from exc
-    health_url = f"http://127.0.0.1:{port}/health"
+    health_url = _health_url(probe_host, port)
 
     if _health_url_ok(health_url):
         print(
@@ -527,7 +543,7 @@ def run() -> None:
         _idle_until_stopped(health_url)
         return
 
-    if _port_open(port):
+    if _port_open(probe_host, port):
         raise SystemExit(
             f"[piper_tts_server] port {port} is already in use, but its "
             "/health endpoint is not healthy"
