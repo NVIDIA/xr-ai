@@ -6,9 +6,9 @@
 # Connecting Clients
 
 Every sample follows the same pattern: **start the server, then connect a
-client.** This page covers the clients that ship under `client-samples/`, how
-to set up, build, and run each one, and the shared token-on-startup connect
-flow they all use.
+client.** This client reference covers the clients that ship under
+`client-samples/`, how to set up, build, and run each one, and the shared
+token-on-startup connection flow they all use.
 
 For the server side — starting the DeviceIOHub and the agent samples — refer to
 {doc}`quickstart`.
@@ -198,10 +198,10 @@ against the system + user CA store automatically.
 ### Android XR
 
 The Android client is a standard Android app (`targetSdk` 34, `minSdk` 24) with
-no XR-specific code. Android XR runs unmodified Android apps, so the sample
-should install and launch on an Android XR device or emulator as a flat 2D
-windowed panel, and the LiveKit audio and data paths, agent-status badge, and
-token flow work the same as on a phone.
+no XR-specific code. Because Android XR runs unmodified Android apps, the sample
+is expected to install and launch on an Android XR device or emulator as a flat
+2D windowed panel. The LiveKit audio and data paths, agent-status badge, and
+token flow are expected to work the same as on a phone.
 
 ```{warning}
 Android XR support is **not yet validated**. The sample has not been tested on

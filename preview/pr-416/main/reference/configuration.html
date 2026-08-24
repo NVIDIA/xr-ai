@@ -330,6 +330,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
@@ -623,17 +624,17 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># Self-hosted NIM: LLM (serves both the `llm` and `agent_llm` roles).</span>
-<span class="c1"># Nemotron-3-Nano's A3B MoE decode is fast enough to cover the reactive and</span>
-<span class="c1"># agent roles. Swap in</span>
-<span class="c1"># any LLM NIM from https://catalog.ngc.nvidia.com.</span>
+<span class="c1"># Self-hosted Nemotron-3-Nano-Omni NIM (serves both the `llm` and</span>
+<span class="c1"># `agent_llm` roles). This matches the model family used by the default local</span>
+<span class="c1"># deployment. Swap in any compatible NIM from https://catalog.ngc.nvidia.com.</span>
 <span class="c1"># To adapt a sample, copy the `llm` entry from</span>
 <span class="c1"># ../models.vlm_llm_nim.json into its active models JSON, change only</span>
 <span class="c1"># `deployment.ownership` from `managed` to `reused`, and keep service</span>
 <span class="c1"># `llm-nim` on port 8110. Duplicate it as `agent_llm` when the sample uses</span>
 <span class="c1"># that role.</span>
-<span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
-<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano:2.0.10</span>
+<span class="c1"># Verify startup and memory use on the target 96 GB Blackwell GPU before</span>
+<span class="c1"># deployment.</span>
+<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant</span>
 <span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8110</span>
 
 <span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
@@ -641,10 +642,8 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
 <span class="nt">env</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"32768"</span>
-<span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.4"</span>
-<span class="w">  </span><span class="c1"># nemotron_v3 is the parser built into this NIM (nano_v3 is absent);</span>
-<span class="w">  </span><span class="c1"># without tool-calling flags the agentic loop gets no tool calls.</span>
-<span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
+<span class="w">  </span><span class="c1"># Match the local Omni deployment's reasoning and tool-call parsers.</span>
+<span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--gpu-memory-utilization</span><span class="nv"> </span><span class="s">0.4</span><span class="nv"> </span><span class="s">--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
 </pre></div>
 </div>
 </section>
@@ -716,6 +715,20 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="w">  </span><span class="c1"># Fraction of total GPU memory despite the PERCENT name (0..1]; leaves</span>
 <span class="w">  </span><span class="c1"># headroom for whatever shares the GPU.</span>
 <span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.2"</span>
+</pre></div>
+</div>
+</section>
+<section id="config-model-servers-yaml-96g-blackwell-piper-tts-server-yaml">
+<h3>yaml/96G_blackwell/piper_tts_server.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-piper-tts-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Shared CPU Piper TTS service.</span>
+<span class="nt">voice</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">en_US-lessac-medium</span>
+<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8105</span>
+<span class="nt">use_cuda</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="nt">startup_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">600</span>
+<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
 </pre></div>
 </div>
 </section>
@@ -827,16 +840,17 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># Self-hosted NIM: LLM (serves both the `llm` and `agent_llm` roles).</span>
-<span class="c1"># Nemotron-3-Nano's A3B MoE decode is fast enough to cover the reactive and</span>
-<span class="c1"># agent roles. Swap in</span>
-<span class="c1"># any LLM NIM from https://catalog.ngc.nvidia.com.</span>
+<span class="c1"># Self-hosted Nemotron-3-Nano-Omni NIM (serves both the `llm` and</span>
+<span class="c1"># `agent_llm` roles). This matches the model family used by the default local</span>
+<span class="c1"># deployment. Swap in any compatible NIM from https://catalog.ngc.nvidia.com.</span>
 <span class="c1"># To adapt a sample, copy the `llm` entry from</span>
 <span class="c1"># ../models.vlm_llm_nim.json into its active models JSON, change only</span>
 <span class="c1"># `deployment.ownership` from `managed` to `reused`, and keep service</span>
 <span class="c1"># `llm-nim` on port 8110. Duplicate it as `agent_llm` when the sample uses</span>
 <span class="c1"># that role.</span>
-<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano:2.0.10</span>
+<span class="c1"># RTX Ada is not listed for this Omni NIM; verify startup and memory use on</span>
+<span class="c1"># target hardware before deployment.</span>
+<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant</span>
 <span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8110</span>
 
 <span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
@@ -844,10 +858,8 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"1"</span>
 <span class="nt">env</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"32768"</span>
-<span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.8"</span>
-<span class="w">  </span><span class="c1"># nemotron_v3 is the parser built into this NIM (nano_v3 is absent);</span>
-<span class="w">  </span><span class="c1"># without tool-calling flags the agentic loop gets no tool calls.</span>
-<span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
+<span class="w">  </span><span class="c1"># Match the local Omni deployment's reasoning and tool-call parsers.</span>
+<span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--gpu-memory-utilization</span><span class="nv"> </span><span class="s">0.8</span><span class="nv"> </span><span class="s">--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
 </pre></div>
 </div>
 </section>
@@ -918,6 +930,20 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="w">  </span><span class="c1"># Fraction of total GPU memory despite the PERCENT name (0..1]; leaves</span>
 <span class="w">  </span><span class="c1"># headroom for whatever shares the GPU.</span>
 <span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.7"</span>
+</pre></div>
+</div>
+</section>
+<section id="config-model-servers-yaml-dual-48g-ada-piper-tts-server-yaml">
+<h3>yaml/dual_48G_ada/piper_tts_server.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-piper-tts-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Shared CPU Piper TTS service.</span>
+<span class="nt">voice</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">en_US-lessac-medium</span>
+<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8105</span>
+<span class="nt">use_cuda</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="nt">startup_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">600</span>
+<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
 </pre></div>
 </div>
 </section>
@@ -1014,6 +1040,19 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stt"</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"tts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"piper_tts"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8105"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tts"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
 <span class="w">    </span><span class="nt">"llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span>
@@ -1088,19 +1127,24 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stt"</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">},</span>
-<span class="w">    </span><span class="nt">"llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"tts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvidia/nemotron-3-nano"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">          </span><span class="nt">"tool_calls"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
-<span class="w">        </span><span class="p">},</span>
-<span class="w">        </span><span class="nt">"default_extras"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">          </span><span class="nt">"chat_template_kwargs"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">            </span><span class="nt">"enable_thinking"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span>
-<span class="w">          </span><span class="p">}</span>
-<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"piper_tts"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8105"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tts"</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"reasoning_field"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reasoning"</span>
 <span class="w">      </span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8110"</span><span class="p">,</span>
@@ -1211,17 +1255,17 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># Self-hosted NIM: LLM (serves both the `llm` and `agent_llm` roles).</span>
-<span class="c1"># Nemotron-3-Nano's A3B MoE decode is fast enough to cover the reactive and</span>
-<span class="c1"># agent roles. Swap in</span>
-<span class="c1"># any LLM NIM from https://catalog.ngc.nvidia.com.</span>
+<span class="c1"># Self-hosted Nemotron-3-Nano-Omni NIM (serves both the `llm` and</span>
+<span class="c1"># `agent_llm` roles). This matches the model family used by the default local</span>
+<span class="c1"># deployment. Swap in any compatible NIM from https://catalog.ngc.nvidia.com.</span>
 <span class="c1"># To adapt a sample, copy the `llm` entry from</span>
 <span class="c1"># ../models.vlm_llm_nim.json into its active models JSON, change only</span>
 <span class="c1"># `deployment.ownership` from `managed` to `reused`, and keep service</span>
 <span class="c1"># `llm-nim` on port 8110. Duplicate it as `agent_llm` when the sample uses</span>
 <span class="c1"># that role.</span>
-<span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
-<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano:2.0.10</span>
+<span class="c1"># GB10 is not listed for this Omni NIM; verify startup and memory use on target</span>
+<span class="c1"># hardware before deployment.</span>
+<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant</span>
 <span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8110</span>
 
 <span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
@@ -1229,10 +1273,8 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
 <span class="nt">env</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"32768"</span>
-<span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.35"</span>
-<span class="w">  </span><span class="c1"># nemotron_v3 is the parser built into this NIM (nano_v3 is absent);</span>
-<span class="w">  </span><span class="c1"># without tool-calling flags the agentic loop gets no tool calls.</span>
-<span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
+<span class="w">  </span><span class="c1"># Match the local Omni deployment's reasoning and tool-call parsers.</span>
+<span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--gpu-memory-utilization</span><span class="nv"> </span><span class="s">0.35</span><span class="nv"> </span><span class="s">--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
 </pre></div>
 </div>
 </section>
@@ -1304,6 +1346,20 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="w">  </span><span class="c1"># Fraction of total GPU memory despite the PERCENT name (0..1]; leaves</span>
 <span class="w">  </span><span class="c1"># headroom for whatever shares the GPU.</span>
 <span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.15"</span>
+</pre></div>
+</div>
+</section>
+<section id="config-model-servers-yaml-spark-piper-tts-server-yaml">
+<h3>yaml/spark/piper_tts_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-piper-tts-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Shared CPU Piper TTS service.</span>
+<span class="nt">voice</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">en_US-lessac-medium</span>
+<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8105</span>
+<span class="nt">use_cuda</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="nt">startup_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">600</span>
+<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
 </pre></div>
 </div>
 </section>
@@ -2182,6 +2238,7 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-nim-stt-server-yaml">yaml/96G_blackwell/nim_stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-nim-tts-server-yaml">yaml/96G_blackwell/nim_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-nim-vlm-server-yaml">yaml/96G_blackwell/nim_vlm_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-piper-tts-server-yaml">yaml/96G_blackwell/piper_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-stt-server-yaml">yaml/96G_blackwell/stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-vlm-server-yaml">yaml/96G_blackwell/vlm_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-embedding-server-yaml">yaml/dual_48G_ada/embedding_server.yaml</a></li>
@@ -2190,6 +2247,7 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-nim-stt-server-yaml">yaml/dual_48G_ada/nim_stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-nim-tts-server-yaml">yaml/dual_48G_ada/nim_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-nim-vlm-server-yaml">yaml/dual_48G_ada/nim_vlm_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-piper-tts-server-yaml">yaml/dual_48G_ada/piper_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-stt-server-yaml">yaml/dual_48G_ada/stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-vlm-server-yaml">yaml/dual_48G_ada/vlm_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-models-default-json">yaml/models.default.json</a></li>
@@ -2200,6 +2258,7 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-nim-stt-server-yaml">yaml/spark/nim_stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-nim-tts-server-yaml">yaml/spark/nim_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-nim-vlm-server-yaml">yaml/spark/nim_vlm_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-piper-tts-server-yaml">yaml/spark/piper_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-stt-server-yaml">yaml/spark/stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-vlm-server-yaml">yaml/spark/vlm_server.yaml</a></li>
 </ul>
