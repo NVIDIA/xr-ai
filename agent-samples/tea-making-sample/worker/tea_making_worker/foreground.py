@@ -191,25 +191,11 @@ class ForegroundAgent(Agent):
         *,
         timestamp_us: int | None = None,
     ) -> tuple[str, list[str], bool]:
-        active_context = self._guidance.active_context(participant_id)
-        if active_context is None:
-            tools = self._root_tools(
-                participant_id,
-                ctx=ctx,
-                timestamp_us=timestamp_us,
-            )
-            system_prompt = self._prompt
-            route = "root"
-        else:
-            active_tools = self._guidance.active_tools(participant_id)
-            if active_tools is None:
-                raise RuntimeError("active tea context has no active tool set")
-            tools = _merge_tool_sets(
-                active_tools,
-                self._background_tools(participant_id),
-            )
-            system_prompt = f"{self._prompt}\n\nActive tea guide:\n{active_context}"
-            route = "tea"
+        system_prompt, tools, route = self._prepare_route(
+            participant_id,
+            ctx=ctx,
+            timestamp_us=timestamp_us,
+        )
 
         round_index = 0
 
@@ -260,6 +246,36 @@ class ForegroundAgent(Agent):
             and bool(result.tool_calls)
             and result.tool_calls[-1].call.name == "current_view",
         )
+
+    def _prepare_route(
+        self,
+        participant_id: str,
+        *,
+        ctx: RuntimeContext | None,
+        timestamp_us: int | None,
+    ) -> tuple[str, ToolSet, str]:
+        """Return the production prompt, tools, and route for one participant."""
+
+        active_context = self._guidance.active_context(participant_id)
+        if active_context is None:
+            tools = self._root_tools(
+                participant_id,
+                ctx=ctx,
+                timestamp_us=timestamp_us,
+            )
+            system_prompt = self._prompt
+            route = "root"
+        else:
+            active_tools = self._guidance.active_tools(participant_id)
+            if active_tools is None:
+                raise RuntimeError("active tea context has no active tool set")
+            tools = _merge_tool_sets(
+                active_tools,
+                self._background_tools(participant_id),
+            )
+            system_prompt = f"{self._prompt}\n\nActive tea guide:\n{active_context}"
+            route = "tea"
+        return system_prompt, tools, route
 
     def _root_tools(
         self,

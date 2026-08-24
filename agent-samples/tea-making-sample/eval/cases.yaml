@@ -1,19 +1,109 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-- query: Hello there.
+- name: idle-conversation
+  query: Hello there.
   expected_tool: null
-- query: Help me make a cup of tea.
+- name: idle-answers-unrelated-general-knowledge
+  query: What is the capital of France?
+  expected_tool: null
+  forbidden_response: I can only help with the active tea guide right now.
+- name: start-tea-guide
+  query: Help me make a cup of tea.
   expected_tool: workflow__start
-- query: What am I holding right now?
+- name: inspect-current-view
+  query: What am I holding right now?
   expected_tool: current_view
-- query: What temperature is generally recommended for white tea?
+- name: retrieve-tea-fact
+  query: What temperature is generally recommended for white tea?
   expected_tool: rag_lookup
-- query: Start watching for a spill near the kettle.
+- name: start-change-watch
+  query: Start watching for a spill near the kettle.
   expected_tool: change_watch__start
-- query: Start recording our conversation.
+- name: start-transcript
+  query: Start recording our conversation.
   expected_tool: transcript__start
-- query: Start a general visual activity log.
+- name: start-video-log
+  query: Start a general visual activity log.
   expected_tool: video_log__start
-- query: What did the background watchers report recently?
+- name: query-background-context
+  query: What did the background watchers report recently?
   expected_tool: application_context__query
+
+- name: active-answers-current-step-question
+  route: active
+  step: fill_water
+  query: What should I do at this step?
+  expected_tool: null
+  forbidden_response: I can only help with the active tea guide right now.
+
+- name: active-routes-workflow-status
+  route: active
+  step: heat_water
+  query: What is the status of my tea guide?
+  expected_tool: workflow__status
+
+- name: active-routes-step-visual-question
+  route: active
+  step: fill_water
+  query: Check whether there is visibly water inside my kettle.
+  expected_tool: current_view
+
+- name: active-starts-background-watch
+  route: active
+  step: start_steeping
+  query: Start watching in the background for spills near the kettle.
+  expected_tool: change_watch__start
+
+- name: active-rejects-general-knowledge-at-completed-timer
+  route: active
+  step: steep_timer
+  state_updates: {steeping_complete: true}
+  query: What is the capital of France?
+  expected_tool: null
+  expected_response: I can only help with the active tea guide right now.
+
+- name: active-rejects-unrelated-explanation
+  route: active
+  step: heat_water
+  query: Could you explain how eclipses happen?
+  expected_tool: null
+  expected_response: I can only help with the active tea guide right now.
+
+- name: active-rejects-unrelated-control-word
+  route: active
+  step: fill_water
+  query: My supervisor said I should advance my career. Any advice?
+  expected_tool: null
+  expected_response: I can only help with the active tea guide right now.
+
+- name: active-rejects-unrelated-translation
+  route: active
+  step: start_steeping
+  query: Please translate good morning into Japanese.
+  expected_tool: null
+  expected_response: I can only help with the active tea guide right now.
+
+- name: active-advances-on-direct-command
+  route: active
+  step: fill_water
+  query: Move on to the following tea step.
+  expected_tool: workflow__advance
+
+- name: active-resets-on-direct-command
+  route: active
+  step: heat_water
+  query: End this tea-making session.
+  expected_tool: workflow__reset
+
+- name: active-restarts-on-direct-command
+  route: active
+  step: start_steeping
+  query: Begin the tea instructions again from the first step.
+  expected_tool: workflow__restart
+
+- name: active-routes-timer-question
+  route: active
+  step: steep_timer
+  query: How many seconds are left before steeping is done?
+  expected_tool: clock__timer
