@@ -523,6 +523,10 @@ credentials. The model services remain running across sample restarts.</p>
 uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example
 </pre></div>
 </div>
+<p>Alternatively, run the source file directly after synchronization:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py
+</pre></div>
+</div>
 <p>Only the DeviceIOHub and worker start. Worker readiness probes all three reused
 services and includes a short 1280x720 streaming VLM warmup.
 The hub prints:</p>
@@ -586,8 +590,11 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 <p>Wait for the model launcher to report readiness and return, then start the
 sample from the same terminal:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync
-uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>worker
 uv<span class="w"> </span>run<span class="w"> </span>lab_instrument_monitoring
+</pre></div>
+</div>
+<p>Alternatively, run the source file directly after synchronization:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py
 </pre></div>
 </div>
 <p>Connect an existing glasses or platform client using the authenticated URL,
@@ -613,6 +620,10 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 sample from the same terminal:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>tea_making_sample
+</pre></div>
+</div>
+<p>Alternatively, run the source file directly after synchronization:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py
 </pre></div>
 </div>
 <p>Open the DeviceIOHub connection page at <code class="docutils literal notranslate"><span class="pre">https://localhost:8080</span></code>, accept the
@@ -669,6 +680,10 @@ bundle on first run (skipped on subsequent runs).</p></li>
 <p>Start XR Render:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo
+</pre></div>
+</div>
+<p>Alternatively, run the source file directly after synchronization:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py
 </pre></div>
 </div>
 <p>On first run the orchestrator automatically downloads the pinned LOVR version to
