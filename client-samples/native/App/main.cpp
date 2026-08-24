@@ -86,6 +86,18 @@ static std::string StateToString(streamkit::ConnectionState state) {
     return "unknown";
 }
 
+static std::string_view NetworkQualityToString(streamkit::NetworkQuality quality) {
+    using enum streamkit::NetworkQuality;
+    switch (quality) {
+        case kExcellent: return "excellent";
+        case kGood: return "good";
+        case kPoor: return "poor";
+        case kLost: return "lost";
+        case kUnknown: return "unknown";
+    }
+    return "unknown";
+}
+
 static std::string BytesToString(std::span<const std::byte> data) {
     std::string payload(data.size(), '\0');
     std::ranges::transform(data, payload.begin(), [](std::byte byte) {
@@ -126,18 +138,8 @@ int main(int argc, char** argv) {
     };
 
     session.on_network_metrics = [](const streamkit::NetworkMetrics& metrics) {
-        const auto quality = [&metrics]() -> std::string_view {
-            using enum streamkit::NetworkQuality;
-            switch (metrics.quality) {
-                case kExcellent: return "excellent";
-                case kGood: return "good";
-                case kPoor: return "poor";
-                case kLost: return "lost";
-                case kUnknown: return "unknown";
-            }
-            return "unknown";
-        }();
-        std::cout << "[network] quality=" << quality << " rtt=";
+        std::cout << "[network] quality=" << NetworkQualityToString(metrics.quality)
+                  << " rtt=";
         if (metrics.round_trip_time_ms.has_value()) {
             std::cout << *metrics.round_trip_time_ms << "ms";
         } else {

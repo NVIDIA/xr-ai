@@ -58,10 +58,7 @@ namespace streamkit {
 
 namespace {
 
-LiveKitBackend*& MetricsCallbackBackend() noexcept {
-    static thread_local LiveKitBackend* backend = nullptr;
-    return backend;
-}
+inline thread_local LiveKitBackend* metrics_callback_backend = nullptr;
 
 #if STREAMKIT_HAVE_LIVEKIT
 // Lazy one-shot initialise of the SDK's global state. livekit::initialize()
@@ -789,15 +786,14 @@ void LiveKitBackend::DeliverNetworkMetrics(const NetworkMetrics& metrics,
     }
     callback = on_network_metrics;
 
-    auto*& callback_backend = MetricsCallbackBackend();
-    auto* previous_backend = callback_backend;
-    callback_backend = this;
+    auto* previous_backend = metrics_callback_backend;
+    metrics_callback_backend = this;
     try {
         callback(metrics);
     } catch (...) { // NOSONAR - user callbacks may throw any exception type.
         // User callback failures do not stop telemetry or escape the worker.
     }
-    callback_backend = previous_backend;
+    metrics_callback_backend = previous_backend;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -806,7 +802,7 @@ void LiveKitBackend::DeliverNetworkMetrics(const NetworkMetrics& metrics,
 
 void LiveKitBackend::TearDown() {
     std::unique_lock teardown_lock(teardown_mutex_, std::defer_lock);
-    if (MetricsCallbackBackend() == this) {
+    if (metrics_callback_backend == this) {
         // An application-thread teardown may be joining this worker. In that
         // case this call is redundant and must not wait for the owner.
         if (!teardown_lock.try_lock()) return;
