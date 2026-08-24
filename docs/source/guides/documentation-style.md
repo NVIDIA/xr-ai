@@ -6,9 +6,9 @@
 # Documentation style
 
 This reference is the authoritative house style for customer-facing Markdown
-and reStructuredText. Match the surrounding document and keep edits scoped. If
-a task or maintainer establishes a different convention, follow it and update
-this reference so the repository guidance remains accurate.
+and reStructuredText. Match the surrounding document and keep edits scoped.
+When maintainers adopt a repository-wide convention, update this reference in
+the same change. Document scoped exceptions in the affected content.
 
 ## Cross-references
 
