@@ -40,7 +40,7 @@ def test_relay_wrapped_type_name_classifies_from_text() -> None:
     # Relay re-raises with the cause chain erased; only the message keeps
     # the original class name.
     wrapped = RuntimeError(
-        "internal error: FrameUnavailable: No camera frame available — please try again."
+        "internal error: FrameUnavailable: No camera frame available, please try again."
     )
     assert as_unavailable(wrapped, "the camera") is not None
     assert as_unavailable(RuntimeError("RPCError: no feed"), "the camera") is not None

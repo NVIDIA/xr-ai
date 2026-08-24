@@ -178,15 +178,6 @@ async def test_capitalized_id_still_hits_id_branch():
         await leaves.find("Box-9")
 
 
-async def test_numeric_rgb_ignores_id_bearing_strings():
-    leaves, _ = _leaves([_obj("capsule-0", "capsule", (0.25, 0.5, 0.75))])
-    assert await leaves.color("same as capsule-0") == (0.25, 0.5, 0.75)
-    assert await leaves.color("RGB (1.0, 0.5, 0.0)") == (1.0, 0.5, 0.0)
-    # A sign-invalid triple has no letters either; it falls through to the
-    # standard default rather than a wrong saturated color.
-    assert await leaves.color("-0.5 0.2 0.3") == (0.2, 0.9, 1.0)
-
-
 async def test_synonym_prefixed_id_resolves():
     leaves, _ = _leaves([_obj("box-39", "box", (1, 1, 0))])
     assert (await leaves.find("cube-39")).id == "box-39"
@@ -220,17 +211,6 @@ def test_shape_words_resolve_and_reject():
     assert leaves.shape("cone") == "cone"
     with pytest.raises(ValueError, match="Unknown shape"):
         leaves.shape("xylophone")
-
-
-async def test_color_words_resolve_fuzzy_default_and_copy():
-    leaves, _ = _leaves([_obj("cone-3", "cone", (0.25, 0.5, 0.75))])
-    assert await leaves.color("teal") == (0, 0.8, 0.8)
-    assert await leaves.color("blew") == (0, 0.4, 1)
-    assert await leaves.color("") == (0.2, 0.9, 1.0)
-    assert await leaves.color("same as cone-3") == (0.25, 0.5, 0.75)
-    assert await leaves.color("normalized RGB (1.0, 0.5, 0.0)") == (1.0, 0.5, 0.0)
-    with pytest.raises(ValueError, match="Unknown color"):
-        await leaves.color("wibble")
 
 
 async def test_ledger_dedupes_identical_creates():
@@ -269,93 +249,95 @@ def _leaves_with_camera(objects, color=(0.1, 0.2, 0.3), guard=None):
     return leaves, physical
 
 
-async def test_lone_garble_never_reaches_camera():
-    leaves, physical = _leaves_with_camera([])
-    with pytest.raises(ValueError, match="Unknown color"):
-        await leaves.color("blerg")
-    with pytest.raises(ValueError, match="Unknown color"):
-        await leaves.color("beige")
+# ── typed color-source dispatch: each variant touches only its dependency ────
+
+async def test_literal_variant_never_touches_scene_or_camera():
+    leaves, physical = _leaves_with_camera([_obj("cone-3", "cone", (0.25, 0.5, 0.75))])
+    assert await leaves.resolve_color("literal", "teal") == (0, 0.8, 0.8)
+    assert await leaves.resolve_color("literal", "blew") == (0, 0.4, 1)
+    assert await leaves.resolve_color("literal", "teel") == (0, 0.8, 0.8)
+    assert await leaves.resolve_color("literal", "1.0, 0.5, 0.0") == (1.0, 0.5, 0.0)
+    assert await leaves.resolve_color("literal", "") == (0.2, 0.9, 1.0)
+    assert await leaves.resolve_color("literal", " ") == (0.2, 0.9, 1.0)
     assert physical.calls == []
 
 
-async def test_unresolved_phrase_reaches_camera():
+async def test_literal_garble_fails_closed():
     leaves, physical = _leaves_with_camera([])
-    assert await leaves.color("the ceiling") == (0.1, 0.2, 0.3)
-    assert physical.calls == ["the ceiling"]
+    with pytest.raises(ValueError, match="Unknown color"):
+        await leaves.resolve_color("literal", "blerg")
+    with pytest.raises(ValueError, match="Unknown color"):
+        await leaves.resolve_color("literal", "burnt sienna")
+    assert physical.calls == []
 
 
-async def test_physical_cue_beats_scene_shape():
-    leaves, physical = _leaves_with_camera([_obj("cone-0", "cone", (1, 1, 1))])
-    assert await leaves.color("the cone I'm holding") == (0.1, 0.2, 0.3)
-    assert physical.calls == ["the cone I'm holding"]
-
-
-async def test_failed_scene_reference_stays_recoverable():
+async def test_scene_variant_copies_and_never_falls_to_camera():
     guard = TurnGuard()
     leaves, physical = _leaves_with_camera(
-        [_obj("cone-0", "cone", (1, 1, 1)), _obj("cone-1", "cone", (1, 1, 1))], guard=guard)
-    with pytest.raises(ValueError, match="ambiguous"):
-        await leaves.color("same as the cone")
+        [_obj("cone-0", "cone", (0.25, 0.5, 0.75)), _obj("ring-1", "ring", (1, 0, 0))],
+        guard=guard)
+    copied = await leaves.resolve_color("scene_object", "cone-0")
+    assert copied == (0.25, 0.5, 0.75)
+    with pytest.raises(ValueError, match="No scene object matches"):
+        await leaves.resolve_color("scene_object", "the wall")
     assert physical.calls == []
     assert guard.halted
 
 
-async def test_phrase_without_camera_still_errors():
-    leaves, _ = _leaves([])
-    with pytest.raises(ValueError, match="Unknown color"):
-        await leaves.color("the ceiling")
+async def test_scene_variant_ambiguity_surfaces_ask_back():
+    guard = TurnGuard()
+    leaves, physical = _leaves_with_camera(
+        [_obj("cone-0", "cone", (1, 1, 1)), _obj("cone-1", "cone", (1, 1, 1))], guard=guard)
+    with pytest.raises(ValueError, match="ambiguous"):
+        await leaves.resolve_color("scene_object", "the cone")
+    assert physical.calls == []
+    assert guard.halted
 
 
-async def test_wall_never_fuzzy_matches_ball():
-    # "the wall" must reach the camera; a fuzzy shape match ("wall"→"ball")
-    # would recolor the sphere to its own color, a silent no-op success.
-    leaves, physical = _leaves_with_camera([_obj("sphere-0", "sphere", (0, 0.8, 0))])
-    assert await leaves.color("the wall") == (0.1, 0.2, 0.3)
-    assert physical.calls == ["the wall"]
-
-
-async def test_collapsed_physical_phrase_rescued_from_instruction():
-    from xr_render_demo_worker._trace import current_instruction
-    # The model collapsed "the cone the user is holding" to the scene id;
-    # the instruction is where the physical wording survives.
+async def test_physical_variant_observes_exact_words():
     leaves, physical = _leaves_with_camera([_obj("cone-0", "cone", (1, 1, 1))])
-    token = current_instruction.set("Recolor ring-1 to match the cone the user is holding.")
-    try:
-        assert await leaves.color("cone-0") == (0.1, 0.2, 0.3)
-        assert physical.calls == ["the cone the user is holding"]
-    finally:
-        current_instruction.reset(token)
+    assert await leaves.resolve_color("physical", "the cone I'm holding") == (0.1, 0.2, 0.3)
+    assert await leaves.resolve_color("physical", "the ceiling") == (0.1, 0.2, 0.3)
+    assert physical.calls == ["the cone I'm holding", "the ceiling"]
 
 
-async def test_scene_copy_not_rerouted_by_unrelated_held_object():
-    from xr_render_demo_worker._trace import current_instruction
-    leaves, physical = _leaves_with_camera([_obj("ring-1", "ring", (0.25, 0.5, 0.75))])
-    token = current_instruction.set("Recolor the cone I'm holding to match ring-1.")
-    try:
-        assert await leaves.color("ring-1") == (0.25, 0.5, 0.75)
-        assert physical.calls == []
-    finally:
-        current_instruction.reset(token)
+async def test_physical_variant_without_camera_fails_closed():
+    leaves, _ = _leaves([])
+    with pytest.raises(ValueError, match="no camera"):
+        await leaves.resolve_color("physical", "my scarf")
 
 
-async def test_participant_id_in_color_words_is_not_a_scene_reference():
-    # A participant id ("wall-probe-1787356834-0") is word-number shaped and
-    # contains a fuzzy shape homophone; it must reach the camera path, never
-    # resolve to a scene object.
-    leaves, physical = _leaves_with_camera([_obj("sphere-0", "sphere", (0, 0.8, 0))])
-    assert await leaves.color("wall-probe-1787356834-0") == (0.1, 0.2, 0.3)
-    assert physical.calls == ["wall-probe-1787356834-0"]
-
-
-async def test_scene_history_phrase_stays_scene_copy():
-    # A first-person pronoun alone is not a physical cue: "the cube I
-    # created" names XR history and must copy from the scene.
-    leaves, physical = _leaves_with_camera([_obj("box-0", "box", (1, 0, 0))])
-    assert await leaves.color("the cube I created") == (1, 0, 0)
+async def test_out_of_range_numeric_literal_fails_closed():
+    leaves, physical = _leaves_with_camera([])
+    with pytest.raises(ValueError, match="out of range"):
+        await leaves.resolve_color("literal", "255 0 0")
     assert physical.calls == []
 
 
-async def test_real_qualifier_routes_to_camera():
-    leaves, physical = _leaves_with_camera([_obj("cone-0", "cone", (1, 1, 1))])
-    assert await leaves.color("the real cone") == (0.1, 0.2, 0.3)
-    assert physical.calls == ["the real cone"]
+async def test_empty_value_required_for_non_literal_kinds():
+    leaves, physical = _leaves_with_camera([])
+    with pytest.raises(ValueError, match="color_value is required"):
+        await leaves.resolve_color("scene_object", "")
+    with pytest.raises(ValueError, match="color_value is required"):
+        await leaves.resolve_color("physical", "  ")
+    assert physical.calls == []
+
+
+async def test_recolor_records_applied_and_satisfied_evidence():
+    from xr_render_demo_worker._trace import MutationEvidence, current_mutation_evidence
+    from xr_render_demo_worker.spatial_ops import _RecolorRequest, make_appearance_tools
+
+    fake = _FakeScene([_obj("cone-0", "cone", (0, 0.8, 0))])
+    tools = {tool.name: tool for tool in make_appearance_tools(_FakeSceneTools(fake))}
+    evidence = MutationEvidence()
+    token = current_mutation_evidence.set(evidence)
+    try:
+        await tools["recolor"].execute(_RecolorRequest(
+            object_words="cone-0", color_kind="literal", color_value="green"))
+        assert (evidence.applied, evidence.satisfied) == (0, 1)
+        assert not any(name == "update_primitive" for name, _ in fake.calls)
+        await tools["recolor"].execute(_RecolorRequest(
+            object_words="cone-0", color_kind="literal", color_value="red"))
+        assert (evidence.applied, evidence.satisfied) == (1, 1)
+    finally:
+        current_mutation_evidence.reset(token)

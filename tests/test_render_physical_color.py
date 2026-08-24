@@ -13,63 +13,38 @@ from xr_render_demo_worker._physical_color import (
     make_physical_color_tool,
     parse_color_answer,
 )
-from xr_render_demo_worker._trace import current_participant_id, current_reference_time_us
-from xr_render_demo_worker.spatial_ops import COLOR_WORDS
+from xr_render_demo_worker._trace import current_participant_id, current_trace_id
 
 
-def test_parse_bare_triples() -> None:
-    assert parse_color_answer("0.0 0.4 1.0", COLOR_WORDS) == (0.0, 0.4, 1.0)
-    assert parse_color_answer("0, 0.4, 1", COLOR_WORDS) == (0.0, 0.4, 1.0)
-    assert parse_color_answer("1 0 0", COLOR_WORDS) == (1.0, 0.0, 0.0)
-    assert parse_color_answer(".5 .5 .5", COLOR_WORDS) == (0.5, 0.5, 0.5)
+def test_parse_accepts_only_the_closed_grammar() -> None:
+    assert parse_color_answer("VISIBLE 0.0 0.4 1.0") == (0.0, 0.4, 1.0)
+    assert parse_color_answer("visible 1, 0, 0") == (1.0, 0.0, 0.0)
+    assert parse_color_answer("VISIBLE: .5 .5 .5") == (0.5, 0.5, 0.5)
+    assert parse_color_answer("**VISIBLE 0.1 0.2 0.3**") == (0.1, 0.2, 0.3)
+    assert parse_color_answer("UNKNOWN") is None
+    assert parse_color_answer("unknown.") is None
 
 
-def test_parse_decorated_triples() -> None:
-    assert parse_color_answer("The color is 0.1 0.2 0.3", COLOR_WORDS) == (0.1, 0.2, 0.3)
-    assert parse_color_answer("0.1 0.2 0.3.", COLOR_WORDS) == (0.1, 0.2, 0.3)
-    assert parse_color_answer("rgb(0.1, 0.2, 0.3)", COLOR_WORDS) == (0.1, 0.2, 0.3)
-    assert parse_color_answer("r=0.0 g=0.4 b=1.0", COLOR_WORDS) == (0.0, 0.4, 1.0)
-    assert parse_color_answer("**0.1 0.2 0.3**", COLOR_WORDS) == (0.1, 0.2, 0.3)
-    assert parse_color_answer("(0.0, 0.4, 1.0)", COLOR_WORDS) == (0.0, 0.4, 1.0)
-
-
-def test_parse_rejects_out_of_range_triples() -> None:
-    # "255, 0, 0" matches the triple shape and must die at the range guard.
-    assert parse_color_answer("255, 0, 0", COLOR_WORDS) is None
-    assert parse_color_answer("2 0 0", COLOR_WORDS) is None
-    assert parse_color_answer("1.5 0.2 0.9", COLOR_WORDS) is None
-    assert parse_color_answer("0.5 meters, 0 lights, 1 fan", COLOR_WORDS) is None
-    assert parse_color_answer("0.5 0.5", COLOR_WORDS) is None
-
-
-def test_parse_color_word_last_mention_wins() -> None:
-    assert parse_color_answer("The lid is blue.", COLOR_WORDS) == COLOR_WORDS["blue"]
-    assert (
-        parse_color_answer("The wall behind the red couch is white.", COLOR_WORDS)
-        == COLOR_WORDS["white"]
-    )
-
-
-def test_parse_refusals_never_become_colors() -> None:
-    assert parse_color_answer("UNKNOWN", COLOR_WORDS) is None
-    assert parse_color_answer("I cannot determine whether the wall is white.", COLOR_WORDS) is None
-    assert parse_color_answer("I am unable to see; the frame is black.", COLOR_WORDS) is None
-    assert parse_color_answer("Not visible: 0.1 0.2 0.3", COLOR_WORDS) is None
-
-
-def test_parse_garbage_is_none() -> None:
-    assert parse_color_answer("", COLOR_WORDS) is None
-    assert parse_color_answer("I cannot tell from this image.", COLOR_WORDS) is None
-    assert parse_color_answer("hard to say from here", COLOR_WORDS) is None
+def test_parse_rejects_everything_else() -> None:
+    # Out-of-range, prose, hedges, and bare triples all fail closed.
+    assert parse_color_answer("VISIBLE 255 0 0") is None
+    assert parse_color_answer("VISIBLE 2 0 0") is None
+    assert parse_color_answer("0.0 0.4 1.0") is None
+    assert parse_color_answer("The lid is blue.") is None
+    assert parse_color_answer("The wall behind the red couch is white.") is None
+    assert parse_color_answer("The object may be occluded; likely VISIBLE 1 0 0") is None
+    assert parse_color_answer("The requested item is outside the frame; the couch is blue") is None
+    assert parse_color_answer("I cannot tell from this image.") is None
+    assert parse_color_answer("") is None
 
 
 @pytest.fixture(autouse=True)
 def _bind_participant():
     token = current_participant_id.set("test-user")
-    time_token = current_reference_time_us.set(1_700_000_000_000_000)
+    trace_token = current_trace_id.set("trace-1")
     yield
     current_participant_id.reset(token)
-    current_reference_time_us.reset(time_token)
+    current_trace_id.reset(trace_token)
 
 
 def _frame_tool(error: Exception | None = None):
@@ -94,27 +69,6 @@ def _query_tool(text: str, available: bool = True, error: Exception | None = Non
     return SimpleNamespace(execute=execute, calls=calls)
 
 
-async def test_resolver_returns_typed_color() -> None:
-    tool = make_physical_color_tool(_frame_tool(), _query_tool("0.0 0.4 1.0"), COLOR_WORDS)
-    resolved = await tool.execute(ResolvePhysicalColorRequest(source_words="the lid"))
-    assert (resolved.r, resolved.g, resolved.b) == (0.0, 0.4, 1.0)
-
-
-async def test_resolver_caches_within_turn() -> None:
-    query = _query_tool("0.0 0.4 1.0")
-    tool = make_physical_color_tool(_frame_tool(), query, COLOR_WORDS)
-    first = await tool.execute(ResolvePhysicalColorRequest(source_words="the lid"))
-    second = await tool.execute(ResolvePhysicalColorRequest(source_words="The lid"))
-    assert (first.r, first.g, first.b) == (second.r, second.g, second.b)
-    assert len(query.calls) == 1
-    token = current_reference_time_us.set(1_700_000_001_000_000)
-    try:
-        await tool.execute(ResolvePhysicalColorRequest(source_words="the lid"))
-    finally:
-        current_reference_time_us.reset(token)
-    assert len(query.calls) == 2
-
-
 async def _expect_rejection(tool, source: str, needle: str) -> None:
     # The Relay Tool boundary re-raises handler errors as RuntimeError with
     # the original class name in the text; the tolerant toolset recovers the
@@ -125,38 +79,52 @@ async def _expect_rejection(tool, source: str, needle: str) -> None:
     assert needle in str(excinfo.value)
 
 
+async def test_resolver_returns_typed_color() -> None:
+    tool = make_physical_color_tool(_frame_tool(), _query_tool("VISIBLE 0.0 0.4 1.0"))
+    resolved = await tool.execute(ResolvePhysicalColorRequest(source_words="the lid"))
+    assert (resolved.r, resolved.g, resolved.b) == (0.0, 0.4, 1.0)
+
+
+async def test_resolver_caches_within_turn() -> None:
+    query = _query_tool("VISIBLE 0.0 0.4 1.0")
+    tool = make_physical_color_tool(_frame_tool(), query)
+    first = await tool.execute(ResolvePhysicalColorRequest(source_words="the lid"))
+    second = await tool.execute(ResolvePhysicalColorRequest(source_words="The lid"))
+    assert (first.r, first.g, first.b) == (second.r, second.g, second.b)
+    assert len(query.calls) == 1
+    token = current_trace_id.set("trace-2")
+    try:
+        await tool.execute(ResolvePhysicalColorRequest(source_words="the lid"))
+    finally:
+        current_trace_id.reset(token)
+    assert len(query.calls) == 2
+
+
 async def test_resolver_unavailable_view_is_value_error() -> None:
-    tool = make_physical_color_tool(
-        _frame_tool(), _query_tool("no signal", available=False), COLOR_WORDS)
+    tool = make_physical_color_tool(_frame_tool(), _query_tool("no signal", available=False))
     await _expect_rejection(tool, "the lid", "cannot currently see")
 
 
-async def test_resolver_unparseable_answer_is_value_error() -> None:
-    tool = make_physical_color_tool(
-        _frame_tool(), _query_tool("hard to say from here"), COLOR_WORDS)
-    await _expect_rejection(tool, "the lid", "did not yield a color")
-
-
-async def test_resolver_not_visible_is_value_error_without_mutation_value() -> None:
-    tool = make_physical_color_tool(_frame_tool(), _query_tool("UNKNOWN"), COLOR_WORDS)
-    await _expect_rejection(tool, "my shirt", "did not yield a color")
+async def test_resolver_unknown_and_malformed_cannot_mutate() -> None:
+    for answer in ("UNKNOWN", "The shirt is blue.", "VISIBLE 300 0 0", "likely VISIBLE 1 0 0"):
+        tool = make_physical_color_tool(_frame_tool(), _query_tool(answer))
+        await _expect_rejection(tool, "my shirt", "did not yield an observation")
 
 
 async def test_resolver_frame_transport_failure_degrades() -> None:
     tool = make_physical_color_tool(
-        _frame_tool(error=RuntimeError("RPCError: no feed")), _query_tool("x"), COLOR_WORDS)
+        _frame_tool(error=RuntimeError("RPCError: no feed")), _query_tool("x"))
     await _expect_rejection(tool, "the lid", "unavailable")
 
 
 async def test_resolver_query_transport_failure_degrades() -> None:
     tool = make_physical_color_tool(
-        _frame_tool(), _query_tool("x", error=TimeoutError("vlm timed out")), COLOR_WORDS)
+        _frame_tool(), _query_tool("x", error=TimeoutError("vlm timed out")))
     await _expect_rejection(tool, "the lid", "unavailable")
 
 
 async def test_resolver_genuine_bug_propagates() -> None:
-    tool = make_physical_color_tool(
-        _frame_tool(error=TypeError("wiring bug")), _query_tool("x"), COLOR_WORDS)
+    tool = make_physical_color_tool(_frame_tool(error=TypeError("wiring bug")), _query_tool("x"))
     with pytest.raises(RuntimeError) as excinfo:
         await tool.execute(ResolvePhysicalColorRequest(source_words="the lid"))
     assert "TypeError: wiring bug" in str(excinfo.value)
@@ -164,27 +132,29 @@ async def test_resolver_genuine_bug_propagates() -> None:
     assert "unavailable" not in str(excinfo.value)
 
 
-async def test_resolver_query_genuine_bug_propagates() -> None:
-    tool = make_physical_color_tool(
-        _frame_tool(), _query_tool("x", error=TypeError("bad request model")), COLOR_WORDS)
-    with pytest.raises(RuntimeError) as excinfo:
-        await tool.execute(ResolvePhysicalColorRequest(source_words="the lid"))
-    assert "TypeError: bad request model" in str(excinfo.value)
-    assert "ValueError" not in str(excinfo.value)
-    assert "unavailable" not in str(excinfo.value)
-
-
 async def test_resolver_truncates_long_source_at_word_boundary() -> None:
-    query = _query_tool("0.0 0.4 1.0")
-    tool = make_physical_color_tool(_frame_tool(), query, COLOR_WORDS)
+    query = _query_tool("VISIBLE 0.0 0.4 1.0")
+    tool = make_physical_color_tool(_frame_tool(), query)
     await tool.execute(ResolvePhysicalColorRequest(source_words="the thing " * 20))
     quoted = query.calls[0].query.split('"')[1]
     assert len(quoted) <= 80
     assert not quoted.endswith("thin")
 
 
-def test_parse_hedged_observations_fail_closed() -> None:
-    assert parse_color_answer("The object may be occluded; likely RGB 1 0 0", COLOR_WORDS) is None
-    assert parse_color_answer("The requested item is outside the frame; the couch is blue", COLOR_WORDS) is None
-    assert parse_color_answer("Probably red, hard to tell", COLOR_WORDS) is None
-    assert parse_color_answer("It is hidden behind the monitor but typically white", COLOR_WORDS) is None
+async def test_color_of_prefix_is_stripped_from_query() -> None:
+    query = _query_tool("VISIBLE 0.0 0.4 1.0")
+    tool = make_physical_color_tool(_frame_tool(), query)
+    await tool.execute(ResolvePhysicalColorRequest(source_words="the color of my apron"))
+    assert query.calls[0].query.split('"')[1] == "my apron"
+
+
+async def test_no_caching_without_a_trace_id() -> None:
+    query = _query_tool("VISIBLE 0.0 0.4 1.0")
+    tool = make_physical_color_tool(_frame_tool(), query)
+    token = current_trace_id.set("")
+    try:
+        await tool.execute(ResolvePhysicalColorRequest(source_words="the lid"))
+        await tool.execute(ResolvePhysicalColorRequest(source_words="the lid"))
+    finally:
+        current_trace_id.reset(token)
+    assert len(query.calls) == 2

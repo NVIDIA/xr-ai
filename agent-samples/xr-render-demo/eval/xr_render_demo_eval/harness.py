@@ -115,13 +115,17 @@ class _FakeCurrentFrameTool:
 
 
 class _FakePhysicalColorQuery:
-    """Records the resolver's VLM query distinctly from the vision agent's."""
+    """Records the resolver's VLM query distinctly from the vision agent's.
+
+    Simulates a grammar-obedient VLM: prose fixture answers are translated
+    to "VISIBLE r g b" from their last color word, or "UNKNOWN"."""
 
     def __init__(self, fake: "FakeScene") -> None:
         self._fake = fake
 
     async def execute(self, request: Any) -> Any:
         from xr_ai_tools.vision import ImageQueryResult
+        from xr_render_demo_worker.spatial_ops import COLOR_WORDS
         self._fake.calls.append(("resolve_physical_color", {"question": request.query}))
         if self._fake.vision_error:
             return ImageQueryResult(text=self._fake.vision_error, available=False)
@@ -132,8 +136,17 @@ class _FakePhysicalColorQuery:
             and self._fake.physical_expect_source.lower() not in request.query.lower()
         ):
             return ImageQueryResult(text="UNKNOWN", available=True)
-        answer = self._fake.physical_answer or self._fake.vision_answer
-        return ImageQueryResult(text=answer or "Nothing notable is visible.", available=True)
+        if self._fake.physical_answer:
+            return ImageQueryResult(text=self._fake.physical_answer, available=True)
+        import re as _re
+        observed = None
+        for word in _re.findall(r"[a-z]+", (self._fake.vision_answer or "").lower()):
+            if word in COLOR_WORDS:
+                observed = COLOR_WORDS[word]
+        if observed is None:
+            return ImageQueryResult(text="UNKNOWN", available=True)
+        r, g, b = observed
+        return ImageQueryResult(text=f"VISIBLE {r} {g} {b}", available=True)
 
 
 def make_fake_video(fake: "FakeScene", video_error: str = ""):
@@ -157,9 +170,7 @@ def make_fake_video(fake: "FakeScene", video_error: str = ""):
 
 def make_fake_physical_color(fake: "FakeScene"):
     from xr_render_demo_worker._physical_color import make_physical_color_tool
-    from xr_render_demo_worker.spatial_ops import COLOR_WORDS
-    return make_physical_color_tool(
-        _FakeCurrentFrameTool(fake), _FakePhysicalColorQuery(fake), COLOR_WORDS)
+    return make_physical_color_tool(_FakeCurrentFrameTool(fake), _FakePhysicalColorQuery(fake))
 
 
 class _FakeImageQueryTool:
@@ -197,6 +208,7 @@ class Case:
     history: tuple[tuple[str, str], ...] = ()
     reply_contains: str = ""
     camera_error: str = ""
+    physical_expect_source: str = ""
 
 
 CASES = (
@@ -248,7 +260,7 @@ CASES = (
             },
         ),
         vision="The wall is orange: normalized RGB (1.0, 0.5, 0.0).",
-        required_tools=frozenset({"update_primitive"}),
+        required_tools=frozenset({"resolve_physical_color", "update_primitive"}),
         expected_colors=(("cone-0", (1.0, 0.5, 0.0)),),
     ),
     Case(
@@ -455,6 +467,7 @@ class FakeScene:
             case.memory,
             case.history,
             camera_error=case.camera_error,
+            physical_expect_source=case.physical_expect_source,
         )
 
     @classmethod
@@ -726,14 +739,16 @@ UTTERANCES = (
              "color": {"r": 1, "g": 1, "b": 1}, "size": 0.1},
         ),
         vision="The ceiling is purple.",
-        required_tools=frozenset({"update_primitive"}),
+        physical_expect_source="ceiling",
+        required_tools=frozenset({"resolve_physical_color", "update_primitive"}),
         expected_colors=(("cylinder-0", (0.6, 0.0, 1.0)),),
     ),
     Case(
         name="basics_holding_color_creates",
         request="Make a sphere the color of what I'm holding.",
         vision="A hand holding a blue lid.",
-        required_tools=frozenset({"add_primitive"}),
+        physical_expect_source="holding",
+        required_tools=frozenset({"resolve_physical_color", "add_primitive"}),
         expected_colors=(("sphere-0", (0.0, 0.4, 1.0)),),
     ),
     Case(
@@ -1160,7 +1175,9 @@ def audit_prompts() -> None:
     worker = (Path(__file__).resolve().parent / "../../worker/xr_render_demo_worker").resolve()
     # Model-visible text lives in the prompt files and in the tool field
     # descriptions of spatial_ops.py; both shape the model's templates.
-    prompts = sorted(worker.rglob("*prompt*.txt")) + [worker / "spatial_ops.py"]
+    prompts = (sorted(worker.rglob("*prompt*.txt"))
+               + [worker / "spatial_ops.py", worker / "_physical_color.py"]
+               + sorted(worker.glob("agents/*/agent.py")))
     utterances = [case["user"] for case in CORPUS_CASES if case.get("user")]
     utterances += [case.request for case in (*CASES, *UTTERANCES)]
     # History turns and fixture answers reach the model verbatim too; a
@@ -1203,7 +1220,7 @@ def audit_prompts() -> None:
         eval_texts += [
             text
             for case in eval_supervisor.CASES
-            for turn in getattr(case, "history", ())
+            for turn in case.history
             for text in turn
         ]
         fixture_ids |= {item["id"] for case in eval_supervisor.CASES for item in case.scene}

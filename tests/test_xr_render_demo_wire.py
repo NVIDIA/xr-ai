@@ -157,6 +157,11 @@ def test_truncated_transcripts_detected() -> None:
     assert _is_truncated("Can you put the sphere on.")
     assert _is_truncated("Can you tell me what color to")
     assert _is_truncated("Move what I selected to")
+    # A bare -ing noun is not a progressive construction.
+    assert _is_truncated("Put the lamp on the ceiling in")
+    assert _is_truncated("Hang it on the railing above")
+    assert _is_truncated("Move the cube near the painting behind")
+    assert _is_truncated("Put it in the opening near")
 
 
 # ── models profile round-trip ─────────────────────────────────────────────────

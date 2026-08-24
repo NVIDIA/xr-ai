@@ -31,7 +31,14 @@ from xr_render_scene import (
     UpdatePrimitiveRequest,
 )
 
-from ._trace import current_instruction
+from ._trace import current_mutation_evidence
+
+
+def _record(field: str) -> None:
+    evidence = current_mutation_evidence.get()
+    if evidence is not None:
+        setattr(evidence, field, getattr(evidence, field) + 1)
+
 
 _UserDirection = Literal["front", "back", "left", "right", "above", "below"]
 _AnchorRelation = Literal["toward_user", "away_from_user", "left_of", "right_of", "above", "below"]
@@ -51,50 +58,22 @@ _SHAPE_WORDS = {
     "ring": "ring", "pyramid": "pyramid", "torus": "torus", "donut": "torus",
 }
 
-# Words that place a color source in the physical world ("the cone I'm
-# holding", "my scarf", "the real cone"): the phrase must reach the camera
-# even when it also names a shape that exists in the XR scene. Bare
-# pronouns are not cues ("the cube I created" is an XR reference).
-_PHYSICAL_CUE_WORDS = frozenset(
-    "my mine your yours our ours his her hers their theirs "
-    "holding held hold wearing wore carrying gripping "
-    "looking staring pointing facing seeing "
-    "real physical actual".split()
+# A discriminated color source: the subagent LLM picks the kind through the
+# tool schema; the code dispatches on it without reinterpreting the phrase.
+ColorKind = Literal["literal", "scene_object", "physical"]
+
+_COLOR_KIND_GUIDE = (
+    "Which kind of color source the instruction names: literal for stated "
+    "color words or numbers (mangled spellings fine), scene_object to copy "
+    "an existing XR object, physical for any real-world thing (clothing, a "
+    "held object, a room surface) observed through the camera."
 )
-
-# Words that anchor a phrase to XR-scene history; they override physical
-# cues ("the cube I created and am holding" still reads as scene).
-_SCENE_CUE_WORDS = frozenset(
-    "created made added built spawned placed moved resized recolored".split()
+_COLOR_VALUE_GUIDE = (
+    "The instruction's exact words for that source, copied verbatim: the "
+    "color word(s) for literal ('teel'), the XR object words or id for "
+    "scene_object ('capsule-8'), or the whole real-world phrase for "
+    "physical ('the crate I'm holding', 'the ceiling')."
 )
-
-_OBSERVATION_VERBS = r"(?:holding|held|holds|wearing|wore|wears|carrying|carries|gripping|grips)"
-
-# Scene ids are always <shape>-<n>; participant and trace ids also look like
-# word-number and must never read as scene references.
-_SCENE_ID = re.compile(rf"\b(?:{'|'.join(sorted(_SHAPE_WORDS))})-\d+\b")
-
-
-def _physical_clause(instruction: str, words: list[str]) -> str | None:
-    """Return the instruction clause that puts a shape word in the user's
-    hands ("the cone the user is holding"), or None.
-
-    The model sometimes collapses such a phrase to a matching scene id
-    before the tool sees it; the instruction is the only place the physical
-    wording survives.
-    """
-    lowered = instruction.lower()
-    for word in words:
-        if word not in _SHAPE_WORDS:
-            continue
-        match = re.search(
-            rf"\b(?:(?:the|a|an|my|your|his|her|their)\s+)?{word}(?:-\d+)?\b"
-            rf"[^,.;]*?\b{_OBSERVATION_VERBS}\b",
-            lowered,
-        )
-        if match:
-            return match.group(0)
-    return None
 
 
 class MovedObject(BaseModel):
@@ -180,6 +159,7 @@ class _Leaves:
     def _confirm(result: MutationResult) -> MutationResult:
         if not result.ok:
             raise ValueError(f"the scene rejected the change: {result.reason or 'unknown reason'}")
+        _record("applied")
         return result
 
     async def update(self, arguments: dict) -> MutationResult:
@@ -276,59 +256,46 @@ class _Leaves:
         shapes = ", ".join(sorted(set(_SHAPE_WORDS.values())))
         raise ValueError(f"Unknown shape {shape_words!r}; the renderer draws: {shapes}")
 
-    async def color(self, color_words: str) -> tuple[float, float, float]:
-        lowered = color_words.lower()
-        if not _SCENE_ID.search(lowered):
-            numbers = [float(v) for v in re.findall(r"-?\d*\.\d+|-?\d+", color_words)]
+    async def resolve_color(self, kind: str, value: str) -> tuple[float, float, float]:
+        if kind == "literal":
+            numbers = [float(v) for v in re.findall(r"-?\d*\.\d+|-?\d+", value)]
             if len(numbers) == 3 and all(0.0 <= v <= 1.0 for v in numbers):
                 return (numbers[0], numbers[1], numbers[2])
-        words = re.findall(r"[a-z]+", lowered)
-        if not words:
-            return _DEFAULT_COLOR
-        for word in words:
-            if word in COLOR_WORDS:
-                return COLOR_WORDS[word]
-        physical = bool(_PHYSICAL_CUE_WORDS.intersection(words)) and not _SCENE_CUE_WORDS.intersection(words)
-        names_scene_object = not physical and (
-            _SCENE_ID.search(lowered) is not None
-            or any(word in _SHAPE_WORDS for word in words)
-        )
-        if names_scene_object:
-            if self.physical_color is not None:
-                clause = _physical_clause(current_instruction.get(), words)
-                if clause is not None:
-                    logger.debug("color words {!r} rerouted to camera via {!r}", color_words, clause)
-                    resolved = await self.physical_color.execute(
-                        self.physical_color.request_model(source_words=clause)
-                    )
-                    return (resolved.r, resolved.g, resolved.b)
-            # A failed scene reference (ambiguous, removed id) must surface
-            # as its recoverable ask-back, never become a camera query about
-            # the physical room.
-            match = await self.find(color_words)
+            words = re.findall(r"[a-z]+", value.lower())
+            if len(numbers) == 3 and not words:
+                raise ValueError(
+                    f"numeric color {value!r} is out of range; r, g, b must each be between 0 and 1"
+                )
+            if not words:
+                return _DEFAULT_COLOR
+            for word in words:
+                if word in COLOR_WORDS:
+                    return COLOR_WORDS[word]
+            for word in words:
+                close = difflib.get_close_matches(word, COLOR_WORDS, n=1, cutoff=0.75)
+                if close:
+                    logger.debug("color words resolved {!r} -> {}", value, close[0])
+                    return COLOR_WORDS[close[0]]
+            known = ", ".join(sorted(COLOR_WORDS))
+            raise ValueError(
+                f"Unknown color {value!r}; use one of {known}, copy a scene object, "
+                "or observe a physical source"
+            )
+        if not value.strip():
+            raise ValueError(f"color_value is required for color_kind {kind!r}")
+        if kind == "scene_object":
+            # A failed scene reference surfaces as its recoverable ask-back;
+            # it never falls through to the camera.
+            match = await self.find(value)
             return (match.color.r, match.color.g, match.color.b)
-        # A physical phrase goes straight to the camera; the fuzzy palette
-        # scan must not fire on its qualifiers ("real" is one edit from
-        # "teal").
-        if physical and self.physical_color is not None:
-            resolved = await self.physical_color.execute(
-                self.physical_color.request_model(source_words=color_words)
-            )
-            return (resolved.r, resolved.g, resolved.b)
-        for word in words:
-            close = difflib.get_close_matches(word, COLOR_WORDS, n=1, cutoff=0.75)
-            if close:
-                logger.debug("color words resolved {!r} -> {}", color_words, close[0])
-                return COLOR_WORDS[close[0]]
-        # A lone unknown word is a garble, not a physical description; asking
-        # the camera about it yields a confident answer about the room.
-        if self.physical_color is not None and len(words) >= 2:
-            resolved = await self.physical_color.execute(
-                self.physical_color.request_model(source_words=color_words)
-            )
-            return (resolved.r, resolved.g, resolved.b)
-        known = ", ".join(sorted(COLOR_WORDS))
-        raise ValueError(f"Unknown color {color_words!r}; use one of {known}, or name a scene object")
+        if kind != "physical":
+            raise ValueError(f"unknown color kind {kind!r}")
+        if self.physical_color is None:
+            raise ValueError(f"no camera is available to observe {value!r}")
+        resolved = await self.physical_color.execute(
+            self.physical_color.request_model(source_words=value)
+        )
+        return (resolved.r, resolved.g, resolved.b)
 
     async def spot(self, operation: str, arguments: dict) -> tuple[float, float, float]:
         if operation == "compute_user_relative_position":
@@ -391,6 +358,7 @@ class _Leaves:
             )
             if not result.ok:
                 raise ValueError(f"the scene rejected the creation: {result.reason or 'unknown reason'}")
+            _record("applied")
             created = CreatedObject(id=result.id, x=x, y=y, z=z)
             if self.ledger is not None:
                 self.ledger.count += 1
@@ -479,20 +447,17 @@ class _MoveToRequest(_ObjRequest):
 
 
 class _RecolorRequest(_ObjRequest):
-    color_words: str = Field(
-        description="The instruction's exact color word(s), copied verbatim (mangled spellings fine), "
-                    "an object to copy the color from ('same as cone-7'), or the user's physical "
-                    "phrase ('the color of my apron') kept whole; a phrase about something held or "
-                    "worn is never replaced with a scene id, even when the shapes match."
-    )
+    color_kind: ColorKind = Field(description=_COLOR_KIND_GUIDE)
+    color_value: str = Field(description=_COLOR_VALUE_GUIDE)
 
 
 class _CreateUserRelativeRequest(BaseModel):
     prim_type: str = Field(description="The instruction's exact shape word, copied verbatim.")
     direction: _UserDirection
-    color_words: str = Field(
+    color_kind: ColorKind = Field(default="literal", description=_COLOR_KIND_GUIDE)
+    color_value: str = Field(
         default="",
-        description="The instruction's exact color word(s), copied verbatim, or empty when no color is stated."
+        description=_COLOR_VALUE_GUIDE + " Leave empty when the instruction states no color."
     )
     distance: float = Field(default=1.5, description="Distance from the user in metres.")
     size: float = Field(default=0.1, description="Sphere radius or box half-edge in metres.")
@@ -509,12 +474,11 @@ class _CreateObjectRelativeRequest(BaseModel):
             "'between X and Y'. Leave empty for all other relations."
         ),
     )
-    color_words: str = Field(
+    color_kind: ColorKind = Field(default="literal", description=_COLOR_KIND_GUIDE)
+    color_value: str = Field(
         default="",
-        description=(
-            "The instruction's exact color word(s), copied verbatim; include whenever the instruction "
-            "names a color (e.g. 'blue square' → color_words='blue'). Leave empty only when truly unstated."
-        ),
+        description=_COLOR_VALUE_GUIDE + " Include whenever the instruction names a "
+                    "color source; leave empty only when truly unstated."
     )
     distance: float = Field(default=0.3, description="Distance from the anchor in metres.")
     size: float = Field(default=0.1, description="Sphere radius or box half-edge in metres.")
@@ -525,12 +489,11 @@ class _CreateAtRequest(BaseModel):
     x: float
     y: float
     z: float
-    color_words: str = Field(
+    color_kind: ColorKind = Field(default="literal", description=_COLOR_KIND_GUIDE)
+    color_value: str = Field(
         default="",
-        description=(
-            "The instruction's exact color word(s), copied verbatim; include whenever the instruction "
-            "names a color. Leave empty only when truly unstated."
-        ),
+        description=_COLOR_VALUE_GUIDE + " Include whenever the instruction names a "
+                    "color source; leave empty only when truly unstated."
     )
     size: float = Field(default=0.1, description="Sphere radius or box half-edge in metres.")
 
@@ -674,7 +637,13 @@ def make_appearance_tools(
     async def recolor(req: _RecolorRequest) -> RecoloredObject:
         leaves.check_writable()
         target = await leaves.find(req.object_words)
-        r, g, b = await leaves.color(req.color_words)
+        r, g, b = await leaves.resolve_color(req.color_kind, req.color_value)
+        current = (target.color.r, target.color.g, target.color.b)
+        if all(abs(have - want) < 1e-6 for have, want in zip(current, (r, g, b))):
+            # Requested state already holds; record it so the supervisor's
+            # success gate accepts an "already that color" reply.
+            _record("satisfied")
+            return RecoloredObject(obj_id=target.id, r=r, g=g, b=b)
         await leaves.update({"obj_id": target.id, "r": r, "g": g, "b": b})
         return RecoloredObject(obj_id=target.id, r=r, g=g, b=b)
 
@@ -698,7 +667,7 @@ def make_object_tools(
 
     async def create_user_relative(req: _CreateUserRelativeRequest) -> CreatedObject:
         prim = leaves.shape(req.prim_type)
-        color = await leaves.color(req.color_words)
+        color = await leaves.resolve_color(req.color_kind, req.color_value)
         frame = await leaves.user_frame()
         spot = await leaves.spot("compute_user_relative_position",
             {"user_frame": frame.model_dump(), "direction_from_user": req.direction, "distance_meters": req.distance})
@@ -706,7 +675,7 @@ def make_object_tools(
 
     async def create_object_relative(req: _CreateObjectRelativeRequest) -> CreatedObject:
         prim = leaves.shape(req.prim_type)
-        color = await leaves.color(req.color_words)
+        color = await leaves.resolve_color(req.color_kind, req.color_value)
         try:
             anchor = await leaves.find(req.anchor_words)
         except ValueError as error:
@@ -734,7 +703,7 @@ def make_object_tools(
     async def create_at(req: _CreateAtRequest) -> CreatedObject:
         logger.debug("create_at ({}, {}, {})", req.x, req.y, req.z)
         prim = leaves.shape(req.prim_type)
-        color = await leaves.color(req.color_words)
+        color = await leaves.resolve_color(req.color_kind, req.color_value)
         return await leaves.add(prim, (req.x, req.y, req.z), color, req.size)
 
     async def change_shape(req: _ChangeShapeRequest) -> MovedObject:
@@ -776,7 +745,7 @@ def make_object_tools(
 
 
 __all__ = [
-    "COLOR_WORDS",
+    "COLOR_WORDS", "ColorKind",
     "CreatedObject", "CreationLedger", "MovedObject", "RecoloredObject", "RemovedObject",
     "SwappedObjects", "TurnGuard",
     "make_appearance_tools", "make_object_tools", "make_placement_tools",

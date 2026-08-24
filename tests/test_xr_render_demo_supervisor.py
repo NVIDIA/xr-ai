@@ -136,9 +136,10 @@ async def test_mixed_vision_and_mutation_request_still_verifies(monkeypatch) -> 
 
     reply = await supervisor.handle(SceneRequest(
         transcript="Look at the room and create a sphere.", participant_id="alice"))
-    # The creation half never happened, so the vision-only reply is an
-    # unsupported claim of completion; the guard replaces it.
-    assert "nothing in the scene was changed" in reply.response
+    # The creation half never happened: the claim-free vision answer keeps
+    # its content and gains the no-change fact.
+    assert reply.response.startswith("The room looks tidy.")
+    assert reply.response.endswith("Nothing in the scene was changed.")
     assert loop_calls == 2
 
 
@@ -168,6 +169,77 @@ async def test_verification_never_offers_repeat_when_mutation_undelegated(monkey
     assert "Recolored" not in reply.response
     assert "nothing in the scene was changed" in reply.response
     assert _fake.objects == {}
+
+
+async def test_gate_keeps_claim_free_explanations(monkeypatch) -> None:
+    """A claim-free failure explanation keeps its why; the no-change fact is
+    appended, never substituted."""
+    supervisor, _fake = _make_supervisor()
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        return SimpleNamespace(
+            content="The camera is unavailable, so I could not read your shirt color.",
+            messages=list(messages),
+            tool_calls=(),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="Make the box the color of my shirt.", participant_id="alice"))
+    assert reply.response.startswith("The camera is unavailable")
+    assert reply.response.endswith("Nothing in the scene was changed.")
+
+
+def test_status_questions_are_not_mutation_intent() -> None:
+    from xr_render_demo_worker.supervisor import _wants_mutation
+
+    assert not _wants_mutation("Did you move the cube?")
+    assert not _wants_mutation("Have you added the sphere yet?")
+    assert not _wants_mutation("Was the cube removed?")
+    assert _wants_mutation("Can you move the cube?")
+    assert _wants_mutation("Move the cube.")
+
+
+async def test_already_satisfied_reply_stands_on_evidence(monkeypatch) -> None:
+    """A recolor that found the requested state already holding records
+    satisfied evidence; the model's reply stands despite no scene diff."""
+    from xr_render_demo_worker._trace import current_mutation_evidence
+
+    supervisor, _fake = _make_supervisor()
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        current_mutation_evidence.get().satisfied += 1
+        return SimpleNamespace(
+            content="The sphere is already green.",
+            messages=list(messages),
+            tool_calls=(SimpleNamespace(call=SimpleNamespace(name="appearance_agent")),),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="Make the sphere green.", participant_id="alice"))
+    assert reply.response == "The sphere is already green."
+
+
+async def test_rejected_mutation_without_evidence_gets_honest_reply(monkeypatch) -> None:
+    """A delegated mutating agent whose tool call was rejected leaves no
+    evidence; a non-question reply is replaced with the honest text."""
+    supervisor, _fake = _make_supervisor()
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        return SimpleNamespace(
+            content="Recolored the box to match your shirt.",
+            messages=list(messages),
+            tool_calls=(SimpleNamespace(call=SimpleNamespace(name="appearance_agent")),),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="Make the box the color of my shirt.", participant_id="alice"))
+    assert "nothing in the scene was changed" in reply.response
 
 
 async def test_verification_preserves_clarifying_questions(monkeypatch) -> None:

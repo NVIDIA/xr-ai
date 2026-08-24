@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -23,7 +24,13 @@ from xr_ai_tools.vision import ImageQueryTool
 from xr_render_scene import SceneTools
 
 from ._physical_color import IMAGE_QUERY_SYSTEM_PROMPT, make_physical_color_tool
-from ._trace import current_participant_id, current_reference_time_us, current_trace_id
+from ._trace import (
+    MutationEvidence,
+    current_mutation_evidence,
+    current_participant_id,
+    current_reference_time_us,
+    current_trace_id,
+)
 from .agents import (
     make_appearance_agent,
     make_memory_agent,
@@ -33,7 +40,6 @@ from .agents import (
 )
 from .models import SceneReply, SceneRequest
 from .scene import SceneContext
-from .spatial_ops import COLOR_WORDS
 
 _PROMPT = Path(__file__).with_name("supervisor_prompt.txt")
 
@@ -46,16 +52,18 @@ _DANGLING_PREPOSITIONS = frozenset(
 
 _ARTICLES = frozenset({"a", "an", "the", "my", "your", "its"})
 
-# One strip set for every truncation check: detection and the ask-back must
-# agree on what counts as punctuation, unicode ellipsis and quotes included.
+# Shared punctuation strip set, unicode ellipsis and quotes included.
+# Detection strips per word; the ask-back strips the transcript tail.
 _EDGE_PUNCT = ".,!?;:\"'…“”‘’"
 
 _WH_WORDS = frozenset("what which where when why who whom whose how".split())
 
-# Nouns ending in -ing that must not read as a progressive verb before a
-# trailing preposition ("put it near the ring in" is still truncated).
-_ING_NOUNS = frozenset({"thing", "anything", "everything", "nothing", "something",
-                        "ring", "king", "spring", "string", "wing", "swing"})
+# Subjects that make a following -ing word a progressive verb ("the wall
+# I'm staring at" is complete; "the lamp on the ceiling in" is not).
+_PROGRESSIVE_SUBJECTS = frozenset(
+    "am is are was were be been being "
+    "i'm im he's she's it's you're we're they're user user's".split()
+)
 
 _TRUNCATED_ASK = "I think I missed the end of that."
 
@@ -66,21 +74,44 @@ _CANCEL_PHRASES = frozenset({
 _ACTION_VERBS = frozenset(
     "put place move make create add remove delete drop turn rotate resize double halve shrink "
     "grow recolor paint swap bring push pull raise lower undo change set scoot flip clear "
-    "match copy duplicate stack color colour tint".split()
+    "copy duplicate stack tint".split()
 )
 
 
 _MUTATING_AGENTS = frozenset({"placement_agent", "appearance_agent", "object_agent"})
 
+# Seconds to let a scene RPC propagate before diffing snapshots.
+_SCENE_SETTLE_S = 0.15
+
+
+# Leading words that mark a status question about past work ("Did you move
+# the cube?"); unlike can/could/will, they cannot open a polite command.
+_STATUS_OPENERS = frozenset("did have has had was were".split())
+
 
 def _wants_mutation(transcript: str) -> bool:
     words = [w.strip(_EDGE_PUNCT) for w in transcript.lower().split()]
     words = [w for w in words if w]
-    # A wh-question is a query even when it contains an action word
-    # ("What color was the first thing I created?").
-    if not words or words[0] in _WH_WORDS:
+    # A wh- or status question is a query even when it contains an action
+    # word ("What color was the first thing I created?", "Did you move it?").
+    if not words or words[0] in _WH_WORDS or words[0] in _STATUS_OPENERS:
         return False
     return any(word in _ACTION_VERBS for word in words)
+
+
+_COMPLETION_CLAIMS = re.compile(
+    r"\b(recolou?red|changed|updated|created|added|removed|resized|moved|swapped|"
+    r"done|has been|have been|is now|are now|successfully|matched)\b",
+    re.IGNORECASE,
+)
+
+
+def _claims_completion(text: str) -> bool:
+    return _COMPLETION_CLAIMS.search(text) is not None
+
+
+def _is_question(text: str) -> bool:
+    return text.rstrip().rstrip("\"'”’)").rstrip().endswith("?")
 
 
 def _is_truncated(transcript: str) -> bool:
@@ -93,13 +124,14 @@ def _is_truncated(transcript: str) -> bool:
     if words[-1] in _DANGLING_PREPOSITIONS:
         # Only a recognized complete tail construction exempts a trailing
         # preposition: a leading wh-question ("What am I looking at") or a
-        # progressive verb right before it ("the wall I'm staring at").
-        # Terminal punctuation and embedded wh-words appear on cut input
-        # too ("Can you put the sphere on.", "Move what I selected to").
+        # progressive construction right before it ("the wall I'm staring
+        # at"). Terminal punctuation, embedded wh-words, and bare -ing nouns
+        # ("the ceiling in") all appear on cut input.
         if words[0] in _WH_WORDS:
             return False
         prev = words[-2] if len(words) >= 2 else ""
-        if prev.endswith("ing") and prev not in _ING_NOUNS:
+        subject = words[-3] if len(words) >= 3 else ""
+        if prev.endswith("ing") and subject in _PROGRESSIVE_SUBJECTS:
             return False
         return True
     return False
@@ -167,7 +199,6 @@ class SceneSupervisor:
             physical_color = make_physical_color_tool(
                 current_frame,
                 ImageQueryTool(images=images, vlm=vlm, system_prompt=IMAGE_QUERY_SYSTEM_PROMPT),
-                COLOR_WORDS,
             )
 
             subagent_tools = [
@@ -263,6 +294,8 @@ class SceneSupervisor:
     async def _handle_scene(
         self, request: SceneRequest, transcript: str, conversation: str
     ) -> SceneReply:
+        evidence = MutationEvidence()
+        current_mutation_evidence.set(evidence)
         before = await self._context.snapshot()
 
         user_message = (
@@ -297,7 +330,7 @@ class SceneSupervisor:
         delegated = {record.call.name for record in result.tool_calls}
         needs_verification = bool(delegated & _MUTATING_AGENTS) or _wants_mutation(transcript)
 
-        await asyncio.sleep(0.15)  # let the scene RPC propagate before diffing
+        await asyncio.sleep(_SCENE_SETTLE_S)
         if needs_verification and not SceneContext.changes(before, await self._context.snapshot()):
             if delegated & _MUTATING_AGENTS:
                 nudge = (
@@ -306,9 +339,8 @@ class SceneSupervisor:
                     " none, repeat your final answer."
                 )
             else:
-                # The utterance asks for a change and no scene-changing
-                # subagent ran; offering "repeat your final answer" here is
-                # how false "done" replies happen.
+                # No scene-changing subagent ran, so a repeat-answer offer
+                # would invite an unsupported completion claim.
                 nudge = (
                     "Verified scene changes this turn: none, and no scene-changing"
                     " subagent was used. The request asks for a change: delegate the"
@@ -321,25 +353,27 @@ class SceneSupervisor:
             ]
             try:
                 result2 = await run_tool_loop(
-                    verification_messages, self._toolset, _call_model, max_iterations=12
+                    verification_messages, self._toolset, _call_model, max_iterations=6
                 )
             except ToolLoopError as exc:
                 logger.warning("supervisor verification failed ({})", exc)
             else:
                 output = result2.content
-                delegated |= {record.call.name for record in result2.tool_calls}
-            await asyncio.sleep(0.15)
-            if (
-                _wants_mutation(transcript)
-                and not (delegated & _MUTATING_AGENTS)
+            await asyncio.sleep(_SCENE_SETTLE_S)
+            # Success is evidence-backed: a completion claim may stand only
+            # when a scene write was applied (or the requested state already
+            # held), never on the model's wording alone. A claim-free
+            # explanation keeps its why; the no-change fact is appended.
+            no_evidence = (
+                evidence.applied == 0
+                and evidence.satisfied == 0
                 and not SceneContext.changes(before, await self._context.snapshot())
-                and not (output or "").rstrip().endswith("?")
-            ):
-                # No mutating delegation and no scene change: a non-question
-                # reply here is an unsupported claim, whatever it says.
-                # Clarifying questions pass through.
-                logger.warning("verification produced no change; replacing reply {!r}", (output or "")[:80])
+            )
+            if no_evidence and (not output or _claims_completion(output)):
+                logger.warning("no mutation evidence; replacing reply {!r}", (output or "")[:80])
                 output = "I couldn't make that change; nothing in the scene was changed."
+            elif no_evidence and not _is_question(output):
+                output = output.rstrip() + " Nothing in the scene was changed."
 
         await self._context.record_moves(request.participant_id, before)
         reply_text = output or "Done."

@@ -22,7 +22,8 @@ from ...models import SubagentResult, SubagentTask
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
 DESCRIPTION = ("Recall what was said in earlier conversation turns, including objects and "
-               "colors mentioned there; knows nothing about the physical world or the camera.")
+               "colors mentioned there; never a source for present-day or physical-world "
+               "facts like the color of a real surface.")
 
 _MAX_END_US = RecallConversationRequest.model_fields["end_us"].default
 

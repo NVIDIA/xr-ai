@@ -164,7 +164,7 @@ CASES = (
         agent="appearance",
         instruction="Recolor ring-1 to match the user's headband.",
         scene=(_RING,),
-        physical_answer="0.1 0.6 0.4",
+        physical_answer="VISIBLE 0.1 0.6 0.4",
         physical_expect_source="headband",
         required_tools=("resolve_physical_color",),
         expect=(
@@ -186,7 +186,7 @@ CASES = (
         # A physical phrase that names a shape which also exists in the XR
         # scene must be observed by the camera, never copied from the scene.
         agent="appearance",
-        instruction="Recolor ring-1 to match the cone the user is holding.",
+        instruction="Recolor ring-1 to match the cone the user is gripping.",
         scene=(_RING, _CONE),
         vision_answer="The cone in the user's hand is blue.",
         required_tools=("resolve_physical_color",),
@@ -203,6 +203,16 @@ CASES = (
         expect=(
             {"tool": "update_primitive",
              "args": {"obj_id": "cone-0", "r": (0.0, 0.1), "g": (0.75, 0.85), "b": (0.75, 0.85)}},
+        ),
+    ),
+    SubagentCase(
+        name="misspelled_color_create",
+        agent="object",
+        instruction="Create a teel capsule, no position stated.",
+        forbid_tools=("resolve_physical_color",),
+        expect=(
+            {"tool": "add_primitive",
+             "args": {"prim_type": "capsule", "r": (0.0, 0.1), "g": (0.75, 0.85), "b": (0.75, 0.85)}},
         ),
     ),
     SubagentCase(

@@ -5,12 +5,15 @@
 
 Rejected input (a ValueError anywhere in the failure chain, e.g. an
 unresolvable object description) becomes an error payload the model reads,
-and the turn continues. Any other failure propagates and aborts the turn.
+and the turn continues. Transport and availability failures are converted
+to such rejections by ``as_unavailable``; anything else propagates and
+aborts the turn.
 """
 
 import json
 import re
 from collections.abc import Iterable
+from typing import NoReturn
 
 from loguru import logger
 from xr_ai_tools import Tool, ToolSet
@@ -50,6 +53,16 @@ def as_unavailable(error: BaseException, what: str) -> ValueError | None:
     return None
 
 
+def reraise_unavailable(error: BaseException, what: str) -> NoReturn:
+    """Re-raise *error* as expected degradation when it is a transport
+    failure of *what*, unchanged otherwise."""
+    degraded = as_unavailable(error, what)
+    if degraded is None:
+        raise error
+    logger.debug("{} degraded: {}", what, degraded)
+    raise degraded from error
+
+
 def _rejection(exc: BaseException) -> str | None:
     seen: set[int] = set()
     node: BaseException | None = exc
@@ -58,8 +71,7 @@ def _rejection(exc: BaseException) -> str | None:
         if isinstance(node, ValueError):
             return str(node)
         node = node.__cause__ or node.__context__
-    # Relay layers re-raise with the original message embedded rather than
-    # chained; fall back to the message text.
+    # Same Relay rewrap as _TRANSPORT_TOKENS handles above.
     detail = str(exc)
     if "ValueError: " in detail:
         return detail.split("ValueError: ", 1)[1]
@@ -92,4 +104,4 @@ def tolerant_toolset(tools: Iterable[Tool]) -> ToolSet:
     ])
 
 
-__all__ = ["as_unavailable", "tolerant_toolset"]
+__all__ = ["as_unavailable", "reraise_unavailable", "tolerant_toolset"]
