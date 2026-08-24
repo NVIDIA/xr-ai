@@ -307,6 +307,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
@@ -516,9 +517,9 @@ instances are consumed explicitly with <code class="docutils literal notranslate
 </section>
 <section id="typed-capability-services">
 <h2>Typed capability services<a class="headerlink" href="#typed-capability-services" title="Link to this heading">#</a></h2>
-<p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[services]</span></code> for the msgpack/ZMQ RPC client/server and the
-shared tracking, video-memory, text-memory, and spatial
-building blocks. Applications compose these finite tools into their own
+<p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[services]</span></code> for the msgpack over ZMQ RPC client, server,
+and shared tracking, video-memory, text-memory, and spatial building blocks.
+Applications compose these finite tools into their own
 <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code>; service processes use the matching RPC primitives without pulling
 in an agent framework or HTTP server.</p>
 <p>Each capability has a focused import surface: <code class="docutils literal notranslate"><span class="pre">tracking</span></code>, <code class="docutils literal notranslate"><span class="pre">video_memory</span></code>,
@@ -654,9 +655,9 @@ uv<span class="w"> </span>run<span class="w"> </span>xr_ai_tools/utilities/gener
 </pre></div>
 </div>
 <p>Run these commands from <code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-tools/</span></code>. Both commands produce square
-512-pixel PNGs by default; use <code class="docutils literal notranslate"><span class="pre">--help</span></code> to see sizing and border options.</p>
+512-pixel PNGs by default; run them with <code class="docutils literal notranslate"><span class="pre">--help</span></code> for sizing and border options.</p>
 <p>Call <code class="docutils literal notranslate"><span class="pre">release(participant_id)</span></code> when a participant disconnects. Applications
-that expose the tool to a model should inject the active participant identity
+that expose the tool to a model must inject the active participant identity
 at their workflow boundary, as they do for other participant-scoped tools.</p>
 </section>
 <section id="magenta-polygon-image-editing">

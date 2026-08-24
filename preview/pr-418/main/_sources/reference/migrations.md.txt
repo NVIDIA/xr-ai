@@ -21,7 +21,7 @@ and command to `device_io_hub`. Rename `xr_media_hub.yaml` to
 - Boolean service settings now require YAML booleans or the strings `true`,
   `false`, `yes`, `no`, `on`, `off`, `1`, or `0` (case-insensitive). Numeric
   `1`/`0`, null values, and arbitrary strings now fail at startup instead of
-  being interpreted by Python truthiness. This applies to vLLM eager/tool/
+  being interpreted by Python truthiness. This applies to vLLM eager, tool, and
   scheduling flags, Nemotron-Omni BF16 selection, Piper CUDA, voice-gate
   `listening_chime`, lab-monitoring `capture_marker_scans`, and tea-workflow
   `complete_on_skip`.
@@ -51,7 +51,7 @@ compatibility package. Update out-of-tree code as follows:
 | `VadSttProcessor`, `VoiceGateProcessor`, and `StreamingTtsProcessor` | Configure `VoiceAgent` with `VadConfig`, `VoiceGateConfig`, and `text_topic`; pipeline processors are private implementation details. |
 | `SttClient` and `TtsClient` | Construct services through `xr_ai_models.make_stt` and `make_tts`, or use `OpenAICompatSTT` and `OpenAICompatTTS` directly. |
 | `http_probe`, `mcp_probe`, and `wait_for_services` | Pass additional readiness callables through `VoiceAgent(probes=...)`; MCP readiness is no longer part of the voice SDK. |
-| `xr_ai_pipecat.audio` conversion helpers | Let `VoiceAgent` own media conversion. Applications that truly need raw hub media should use `xr_ai_hub` types and own their format conversion. |
+| `xr_ai_pipecat.audio` conversion helpers | Let `VoiceAgent` own media conversion. If an application truly needs raw hub media, use `xr_ai_hub` types and own the format conversion. |
 | `VoiceAgent.text_transform` and `text_ignore_topics` | `VoiceAgent` treats only untopiced client data as direct text. Use `text_input=False` to disable it; transform application queries in their subscribing agent. |
 | `xr_ai_models.config`, `factory`, `openai_compat`, and `protocols` | Import public names directly from `xr_ai_models`. This includes `KIND_OPENAI_COMPAT`, `ModelKind`, `Category`, and `Spec`. |
 | `LiveVisionTool` and `StreamingVisionTool` | Select with `CurrentFrameTool`, then pass its `ImageReference` to `ImageQueryTool` or `StreamingImageQueryTool`. |

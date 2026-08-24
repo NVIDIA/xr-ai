@@ -44,7 +44,7 @@ the stall risk). Provide the token any one of these ways; all are picked up
 automatically:
 
 ```bash
-# 1. Environment variable (highest priority; good for CI / one-off overrides)
+# 1. Environment variable (highest priority; good for CI and one-off overrides)
 export HF_TOKEN=hf_xxx
 
 # 2. huggingface-cli login (writes ~/.cache/huggingface/token)
