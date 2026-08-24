@@ -136,7 +136,9 @@ async def test_mixed_vision_and_mutation_request_still_verifies(monkeypatch) -> 
 
     reply = await supervisor.handle(SceneRequest(
         transcript="Look at the room and create a sphere.", participant_id="alice"))
-    assert reply.response == "The room looks tidy."
+    # The creation half never happened, so the vision-only reply is an
+    # unsupported claim of completion; the guard replaces it.
+    assert "nothing in the scene was changed" in reply.response
     assert loop_calls == 2
 
 
@@ -156,11 +158,35 @@ async def test_verification_never_offers_repeat_when_mutation_undelegated(monkey
 
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
 
-    await supervisor.handle(SceneRequest(
+    reply = await supervisor.handle(SceneRequest(
         transcript="Make the sphere the same color as the wall.", participant_id="alice"))
     assert len(nudges) == 1
     assert "repeat your final answer" not in nudges[0]
     assert "never" in nudges[0]
+    # The model repeated its false success anyway; the deterministic guard
+    # must replace it, and the scene must be untouched.
+    assert "Recolored" not in reply.response
+    assert "nothing in the scene was changed" in reply.response
+    assert _fake.objects == {}
+
+
+async def test_verification_preserves_clarifying_questions(monkeypatch) -> None:
+    """A question reply after a no-change verification pass is a legitimate
+    ask-back, not an unsupported claim."""
+    supervisor, _fake = _make_supervisor()
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        return SimpleNamespace(
+            content="What color is the wall?",
+            messages=list(messages),
+            tool_calls=(),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="Make the sphere the same color as the wall.", participant_id="alice"))
+    assert reply.response == "What color is the wall?"
 
 
 async def test_verification_offers_repeat_after_mutating_delegation(monkeypatch) -> None:

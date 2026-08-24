@@ -52,12 +52,20 @@ _SHAPE_WORDS = {
 }
 
 # Words that place a color source in the physical world ("the cone I'm
-# holding", "my scarf"): the phrase must reach the camera even when it also
-# names a shape that exists in the XR scene.
+# holding", "my scarf", "the real cone"): the phrase must reach the camera
+# even when it also names a shape that exists in the XR scene. Bare
+# pronouns are not cues ("the cube I created" is an XR reference).
 _PHYSICAL_CUE_WORDS = frozenset(
-    "i im me my mine you your yours we our ours his her hers their theirs "
-    "am holding held hold wearing wore carrying gripping "
-    "looking staring pointing facing seeing".split()
+    "my mine your yours our ours his her hers their theirs "
+    "holding held hold wearing wore carrying gripping "
+    "looking staring pointing facing seeing "
+    "real physical actual".split()
+)
+
+# Words that anchor a phrase to XR-scene history; they override physical
+# cues ("the cube I created and am holding" still reads as scene).
+_SCENE_CUE_WORDS = frozenset(
+    "created made added built spawned placed moved resized recolored".split()
 )
 
 _OBSERVATION_VERBS = r"(?:holding|held|holds|wearing|wore|wears|carrying|carries|gripping|grips)"
@@ -280,7 +288,7 @@ class _Leaves:
         for word in words:
             if word in COLOR_WORDS:
                 return COLOR_WORDS[word]
-        physical = bool(_PHYSICAL_CUE_WORDS.intersection(words))
+        physical = bool(_PHYSICAL_CUE_WORDS.intersection(words)) and not _SCENE_CUE_WORDS.intersection(words)
         names_scene_object = not physical and (
             _SCENE_ID.search(lowered) is not None
             or any(word in _SHAPE_WORDS for word in words)
@@ -299,6 +307,14 @@ class _Leaves:
             # the physical room.
             match = await self.find(color_words)
             return (match.color.r, match.color.g, match.color.b)
+        # A physical phrase goes straight to the camera; the fuzzy palette
+        # scan must not fire on its qualifiers ("real" is one edit from
+        # "teal").
+        if physical and self.physical_color is not None:
+            resolved = await self.physical_color.execute(
+                self.physical_color.request_model(source_words=color_words)
+            )
+            return (resolved.r, resolved.g, resolved.b)
         for word in words:
             close = difflib.get_close_matches(word, COLOR_WORDS, n=1, cutoff=0.75)
             if close:
@@ -306,7 +322,7 @@ class _Leaves:
                 return COLOR_WORDS[close[0]]
         # A lone unknown word is a garble, not a physical description; asking
         # the camera about it yields a confident answer about the room.
-        if self.physical_color is not None and (physical or len(words) >= 2):
+        if self.physical_color is not None and len(words) >= 2:
             resolved = await self.physical_color.execute(
                 self.physical_color.request_model(source_words=color_words)
             )

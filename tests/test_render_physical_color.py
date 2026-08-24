@@ -181,3 +181,10 @@ async def test_resolver_truncates_long_source_at_word_boundary() -> None:
     quoted = query.calls[0].query.split('"')[1]
     assert len(quoted) <= 80
     assert not quoted.endswith("thin")
+
+
+def test_parse_hedged_observations_fail_closed() -> None:
+    assert parse_color_answer("The object may be occluded; likely RGB 1 0 0", COLOR_WORDS) is None
+    assert parse_color_answer("The requested item is outside the frame; the couch is blue", COLOR_WORDS) is None
+    assert parse_color_answer("Probably red, hard to tell", COLOR_WORDS) is None
+    assert parse_color_answer("It is hidden behind the monitor but typically white", COLOR_WORDS) is None

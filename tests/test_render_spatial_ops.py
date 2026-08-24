@@ -307,8 +307,8 @@ async def test_phrase_without_camera_still_errors():
 
 
 async def test_wall_never_fuzzy_matches_ball():
-    # The live false-success bug: "the wall" fuzzy-matched a scene ball and
-    # recolored the sphere to its own color, so nothing visibly changed.
+    # "the wall" must reach the camera; a fuzzy shape match ("wall"→"ball")
+    # would recolor the sphere to its own color, a silent no-op success.
     leaves, physical = _leaves_with_camera([_obj("sphere-0", "sphere", (0, 0.8, 0))])
     assert await leaves.color("the wall") == (0.1, 0.2, 0.3)
     assert physical.calls == ["the wall"]
@@ -345,3 +345,17 @@ async def test_participant_id_in_color_words_is_not_a_scene_reference():
     leaves, physical = _leaves_with_camera([_obj("sphere-0", "sphere", (0, 0.8, 0))])
     assert await leaves.color("wall-probe-1787356834-0") == (0.1, 0.2, 0.3)
     assert physical.calls == ["wall-probe-1787356834-0"]
+
+
+async def test_scene_history_phrase_stays_scene_copy():
+    # A first-person pronoun alone is not a physical cue: "the cube I
+    # created" names XR history and must copy from the scene.
+    leaves, physical = _leaves_with_camera([_obj("box-0", "box", (1, 0, 0))])
+    assert await leaves.color("the cube I created") == (1, 0, 0)
+    assert physical.calls == []
+
+
+async def test_real_qualifier_routes_to_camera():
+    leaves, physical = _leaves_with_camera([_obj("cone-0", "cone", (1, 1, 1))])
+    assert await leaves.color("the real cone") == (0.1, 0.2, 0.3)
+    assert physical.calls == ["the real cone"]

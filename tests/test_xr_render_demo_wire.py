@@ -152,6 +152,11 @@ def test_truncated_transcripts_detected() -> None:
     assert _is_truncated("Can you put the sphere on")
     assert _is_truncated("Can you move the cube to")
     assert _is_truncated("Put it near the ring in")
+    # Neither terminal punctuation nor an embedded wh-word makes a dangling
+    # preposition complete.
+    assert _is_truncated("Can you put the sphere on.")
+    assert _is_truncated("Can you tell me what color to")
+    assert _is_truncated("Move what I selected to")
 
 
 # ── models profile round-trip ─────────────────────────────────────────────────

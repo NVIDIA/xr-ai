@@ -46,8 +46,8 @@ _DANGLING_PREPOSITIONS = frozenset(
 
 _ARTICLES = frozenset({"a", "an", "the", "my", "your", "its"})
 
-# One strip set for every truncation check, unicode punctuation included;
-# split strip sets are how "…" and curly quotes defeated earlier versions.
+# One strip set for every truncation check: detection and the ask-back must
+# agree on what counts as punctuation, unicode ellipsis and quotes included.
 _EDGE_PUNCT = ".,!?;:\"'…“”‘’"
 
 _WH_WORDS = frozenset("what which where when why who whom whose how".split())
@@ -65,7 +65,8 @@ _CANCEL_PHRASES = frozenset({
 
 _ACTION_VERBS = frozenset(
     "put place move make create add remove delete drop turn rotate resize double halve shrink "
-    "grow recolor paint swap bring push pull raise lower undo change set scoot flip clear".split()
+    "grow recolor paint swap bring push pull raise lower undo change set scoot flip clear "
+    "match copy duplicate stack color colour tint".split()
 )
 
 
@@ -73,7 +74,13 @@ _MUTATING_AGENTS = frozenset({"placement_agent", "appearance_agent", "object_age
 
 
 def _wants_mutation(transcript: str) -> bool:
-    return any(word.strip(".,!?;:") in _ACTION_VERBS for word in transcript.lower().split())
+    words = [w.strip(_EDGE_PUNCT) for w in transcript.lower().split()]
+    words = [w for w in words if w]
+    # A wh-question is a query even when it contains an action word
+    # ("What color was the first thing I created?").
+    if not words or words[0] in _WH_WORDS:
+        return False
+    return any(word in _ACTION_VERBS for word in words)
 
 
 def _is_truncated(transcript: str) -> bool:
@@ -84,15 +91,12 @@ def _is_truncated(transcript: str) -> bool:
     if words[-1] in _DANGLING_DETERMINERS:
         return True
     if words[-1] in _DANGLING_PREPOSITIONS:
-        # Complete sentences legitimately end in a preposition, and typed or
-        # ASR input carries no reliable terminal punctuation: a wh-question
-        # ("What am I looking at"), a wh-subordinate clause ("match what I'm
-        # looking at"), or a progressive verb before the preposition ("the
-        # wall I'm staring at") all mark the sentence complete. Auxiliaries
-        # do not: "Can you put the sphere on" is a cut.
-        if transcript.strip().rstrip("\"'”’ ").endswith((".", "?", "!")):
-            return False
-        if words[0] in _WH_WORDS or any(word in _WH_WORDS for word in words[1:]):
+        # Only a recognized complete tail construction exempts a trailing
+        # preposition: a leading wh-question ("What am I looking at") or a
+        # progressive verb right before it ("the wall I'm staring at").
+        # Terminal punctuation and embedded wh-words appear on cut input
+        # too ("Can you put the sphere on.", "Move what I selected to").
+        if words[0] in _WH_WORDS:
             return False
         prev = words[-2] if len(words) >= 2 else ""
         if prev.endswith("ing") and prev not in _ING_NOUNS:
@@ -323,6 +327,19 @@ class SceneSupervisor:
                 logger.warning("supervisor verification failed ({})", exc)
             else:
                 output = result2.content
+                delegated |= {record.call.name for record in result2.tool_calls}
+            await asyncio.sleep(0.15)
+            if (
+                _wants_mutation(transcript)
+                and not (delegated & _MUTATING_AGENTS)
+                and not SceneContext.changes(before, await self._context.snapshot())
+                and not (output or "").rstrip().endswith("?")
+            ):
+                # No mutating delegation and no scene change: a non-question
+                # reply here is an unsupported claim, whatever it says.
+                # Clarifying questions pass through.
+                logger.warning("verification produced no change; replacing reply {!r}", (output or "")[:80])
+                output = "I couldn't make that change; nothing in the scene was changed."
 
         await self._context.record_moves(request.participant_id, before)
         reply_text = output or "Done."

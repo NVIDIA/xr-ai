@@ -35,9 +35,15 @@ _TRIPLE = re.compile(rf"(?<![\d.])({_NUMBER})[,;\s]+({_NUMBER})[,;\s]+({_NUMBER}
 _CHANNEL_TAGS = re.compile(r"\b(?:rgb|[rgb])\s*[=:]")
 _WRAPPERS = re.compile(r"[*()\[\]]")
 
+# Refusals AND hedges fail closed: an answer that qualifies its observation
+# ("may be occluded; likely RGB 1 0 0", "outside the frame; the couch is
+# blue") is not an observation of the requested thing.
 _REFUSAL = re.compile(
     r"\b(unknown|not[_\s]?visible|cannot|can't|unable|unclear|"
-    r"don'?t\s+(?:see|know)|not\s+(?:sure|certain|able))\b",
+    r"don'?t\s+(?:see|know)|not\s+(?:sure|certain|able)|"
+    r"occluded|obscured|hidden|blocked|likely|probably|possibly|might|"
+    r"may\s+be|guess\w*|assum\w*|typical\w*|usually|"
+    r"outside|out\s+of\s+(?:frame|view|sight))\b",
     re.IGNORECASE,
 )
 
