@@ -654,10 +654,10 @@ Python dependency metadata, so they remain curated here.
 | `services/nemotron3-nano-llm/` | `nemotron3-nano-llm-server` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B (GPU-selected quantization) | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron-omni-llm-server` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning | vLLM (pip or docker), multimodal |
 | `services/embedding-server/` | `embedding-server` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
-| `services/video-memory-service/` | `xr-video-memory-service` | `video_memory_service` | 8310 | — | Typed msgpack/ZMQ |
+| `services/video-memory-service/` | `xr-video-memory-service` | `video_memory_service` | 8310 | — | Typed RPC using msgpack over ZMQ |
 | `agent-samples/xr-render-demo/scene/` | `xr-render-scene` | `xr_render_scene` | 8320 | — | Sample-local typed scene service |
-| `services/openxr-service/` | `xr-openxr-service` | `openxr_service` | 8330 | — | Typed msgpack/ZMQ |
-| `services/rag-service/` | `xr-rag-service` | `rag_service` | 8340 | — | Typed msgpack/ZMQ |
+| `services/openxr-service/` | `xr-openxr-service` | `openxr_service` | 8330 | — | Typed RPC using msgpack over ZMQ |
+| `services/rag-service/` | `xr-rag-service` | `rag_service` | 8340 | — | Typed RPC using msgpack over ZMQ |
 
 Model weights are cached under the gitignored `models/` directory at the
 repository root. Each service YAML's `model_cache` value is resolved relative to

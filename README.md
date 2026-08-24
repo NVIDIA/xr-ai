@@ -67,14 +67,14 @@ endpoint and no local GPU is required for the agent or hub.
 | simple-vlm-example (requires model services) | Uses the model-services allocation |
 | lab-instrument-monitoring (requires model-servers) | ~55 GB (models) + Piper TTS |
 | tea-making-sample (requires model services) | Uses the model-services allocation + <1 GB sample services |
-| xr-render-demo (requires model-servers) | ~55 GB (models) + ~2 GB (hub/TTS) |
+| xr-render-demo (requires model-servers) | ~55 GB (models) + ~2 GB (hub and TTS) |
 | Hub only | none |
 
 **Software**
 
 | Requirement | Version | Notes |
 |---|---|---|
-| OS | Linux | Ubuntu 22.04 / 24.04 recommended; WSL2 is not officially supported (see **Windows (WSL2)** below) |
+| OS | Linux | Ubuntu 22.04 or 24.04 recommended; WSL2 is not officially supported (refer to [Windows (WSL2)](docs/source/getting_started/requirements.md#windows-wsl2)) |
 | Python | 3.11 or 3.12 | 3.10 and 3.13 are not supported |
 | [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
 | NVIDIA driver | 570+ | required for local model inference |
@@ -89,7 +89,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 The NVIDIA Container Toolkit install is one-time per host. Follow the
-official install guide and run the CDI / runtime-configure steps from
+official install guide and run the CDI and runtime-configuration steps from
 there:
 
 > https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
@@ -114,10 +114,10 @@ stack).  Networking caveats and workarounds:
 
 (All GPU profiles default to `vllm_backend: docker`, so the vLLM
 container ships nvcc + FlashInfer. If you switch a profile to
-`vllm_backend: pip`, see [`docs/source/guides/troubleshooting.md`](docs/source/guides/troubleshooting.md)
+`vllm_backend: pip`, refer to [`docs/source/guides/troubleshooting.md`](docs/source/guides/troubleshooting.md)
 for the host CUDA toolchain prereq.)
 
-If `uv sync` or the VLM fails on first run, see
+If `uv sync` or the VLM fails on first run, refer to
 [`docs/source/guides/troubleshooting.md`](docs/source/guides/troubleshooting.md).
 
 **Network** — open the firewall ports listed in
@@ -133,7 +133,7 @@ frames are dropped if it is closed.
 | Hub service | `services/device-io-hub/` | DeviceIOHub + LiveKit internal transport |
 | Launcher | `utils/xr-ai-launcher/` | stdlib-only process manager used by samples |
 | Logging | `utils/xr-ai-logging/` | shared loguru sink + stdlib bridge for every process |
-| Hub IPC | `agent-sdk/xr-ai-hub/` | Minimal agent-facing msgpack/ZMQ client |
+| Hub IPC | `agent-sdk/xr-ai-hub/` | Minimal agent-facing msgpack over ZMQ client |
 | Agent runtime | `agent-sdk/xr-ai-runtime/` | Agent registration and typed pub/sub routing |
 | Models | `agent-sdk/xr-ai-models/` | Typed model protocols and OpenAI-compatible clients |
 | Voice | `agent-sdk/xr-ai-voice/` | Voice agent, session, transport, and pipeline |
@@ -141,7 +141,7 @@ frames are dropped if it is closed.
 | Agent tools | `agent-sdk/xr-ai-tools/` | Toolkit-independent Relay-managed native tools, including QR and ArUco marker tracking |
 | Reusable services | `services/` | Model-serving and typed capability processes |
 | Agent demos | `agent-samples/` | End-to-end agent pipelines |
-| Tests | `tests/` | Multi-client / multi-agent integration tests |
+| Tests | `tests/` | Multi-client and multi-agent integration tests |
 
 Samples split model loading from the application stack: start shared model
 services once, then run samples as many times as you like without reloading
@@ -153,14 +153,14 @@ combines a deterministic foreground workflow with file-backed transcript and
 visual background tasks, using Nemotron-3-Nano-Omni for both language and vision.
 
 Every sample worker depends on `agent-sdk/xr-ai-models` — one SDK that
-abstracts the OpenAI-compatible HTTP wire format for LLM / VLM / STT / TTS /
+abstracts the OpenAI-compatible HTTP wire format for LLM, VLM, STT, TTS, and
 embeddings behind typed service protocols. Model profiles name the logical roles
 (`llm`, `vlm`, `stt`, …) and separate adapter behavior, endpoint connectivity,
 and deployment ownership. Presets pre-fill model-specific quirks
 (reasoning-field aliasing, `chat_template_kwargs`, served-model-name strings).
-Workers call
-`make_llm(config, "llm")` / `make_vlm(config, "vlm")` / `make_stt(config,
-"stt")` / `make_tts(config, "tts")` / `make_embedding(config, "embedding")` — no hand-rolled httpx clients, no model
+Workers call `make_llm(config, "llm")`, `make_vlm(config, "vlm")`,
+`make_stt(config, "stt")`, `make_tts(config, "tts")`, or
+`make_embedding(config, "embedding")` — no hand-rolled httpx clients, no model
 quirks leaking out of the SDK.  Full quickstart and the built-in preset
 table: [`agent-sdk/xr-ai-models/README.md`](agent-sdk/xr-ai-models/README.md).
 
@@ -196,7 +196,7 @@ uv sync
 uv run model_servers
 ```
 
-Known GPU profiles are auto-detected (`dual_48G_ada` / `spark` /
+Known GPU profiles are auto-detected (`dual_48G_ada`, `spark`, or
 `96G_blackwell`). Unsupported or ambiguous topologies stop with the complete
 inventory instead of assuming a profile; use `--gpu-profile NAME` only after
 copying and reviewing a custom YAML profile for that hardware.
@@ -219,7 +219,7 @@ uv run model_servers --models vlm_llm_nim
 ```
 
 `HF_TOKEN` is required by default: without it the roughly 60 GB first-run download
-can stall indefinitely.  See [`docs/source/getting_started/credentials.md`](docs/source/getting_started/credentials.md)
+can stall indefinitely. Refer to [`docs/source/getting_started/credentials.md`](docs/source/getting_started/credentials.md)
 for how to set it, or pass `--allow-anonymous` to run without one.
 
 To stop all model servers when done:
@@ -240,11 +240,11 @@ The packaged worker uses `CurrentFrameTool` to select an image, then passes its
 lightweight reference to `StreamingImageQueryTool` inside `SimpleVlmAgent` and
 publishes the result chunks to `VoiceAgent`. The same inference path supports
 one image, ordered image collections, and timestamped frame sequences. Pipecat
-remains private to the voice runtime and no MCP client is involved. See the
+remains private to the voice runtime and no MCP client is involved. Refer to the
 [sample README](agent-samples/simple-vlm-example/README.md) for the worker
 layout and configuration boundaries.
 
-Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. See the
+Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. Refer to the
 [VLM server notes](docs/source/components/ai-services.md#per-server-notes) for
 runtime-selection details.
 
@@ -287,11 +287,11 @@ appears, but the agent answers queries only after the launcher prints its
 #### Step 2 — Connect a client
 
 Open `https://localhost:8080` in a browser.  The samples ship with HTTPS
-on by default (a self-signed cert is generated on first run at
+on by default (a self-signed certificate is generated on first run at
 `~/.local/share/xr-ai/web-server.crt`), so you'll see a "Your connection
 is not private" warning the first time — click **Advanced → Proceed**
-(Chrome/Edge) or **Accept the Risk and Continue** (Firefox).  See
-[`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md) for trusting the cert
+(Chrome/Edge) or **Accept the Risk and Continue** (Firefox). Refer to
+[`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md) for trusting the certificate
 permanently or running over plain HTTP instead.
 
 Leave **Token URL** blank — the web client fetches a token from the server
@@ -318,7 +318,7 @@ To use compatible services at different locations, edit their endpoints in
 The sample has no deployment-profile selector; every configured service stays
 operator-owned.
 
-Each sample has its own `device_io_hub.yaml` controlling the hub; see
+Each sample has its own `device_io_hub.yaml` controlling the hub. Refer to
 [`services/device-io-hub/device_io_hub.yaml`](services/device-io-hub/device_io_hub.yaml)
 for the full option list.
 
@@ -366,7 +366,7 @@ operation and the routing eval.
 Speak to the web client and a sphere in the streamed scene tracks your
 voice — radius follows loudness, colour and position follow spoken commands
 ("make it red", "put it to my left", "where I'm looking"). Runs against a
-Quest 3 / Vision Pro on the same LAN, or the IWER emulator built into the
+Quest 3 or Vision Pro on the same LAN, or the IWER emulator built into the
 web client for desktop dev.
 
 Under the hood, the orchestrator launches the hub, CloudXR runtime, typed
@@ -415,9 +415,10 @@ uv sync
 uv run xr_render_demo
 ```
 
-By default this serves the web / WebRTC client (`NV_DEVICE_PROFILE=auto-webrtc`).
+By default this serves the web-based WebRTC client
+(`NV_DEVICE_PROFILE=auto-webrtc`).
 For a native Apple Vision Pro client, start it with `NV_DEVICE_PROFILE=auto-native`
-instead — see [`docs/source/reference/xr-render-demo.md`](docs/source/reference/xr-render-demo.md#selecting-the-client-type-webrtc-vs-native).
+instead. Refer to [`docs/source/reference/xr-render-demo.md`](docs/source/reference/xr-render-demo.md#selecting-the-client-type-webrtc-vs-native).
 
 On first run the orchestrator automatically downloads the pinned LOVR version to
 `deps/lovr/` inside the repo and builds the web vendor bundle (requires npm
@@ -425,7 +426,7 @@ and network access). Both steps are skipped on subsequent runs.
 
 **DGX Spark (aarch64):** LOVR does not publish a prebuilt aarch64 Linux
 binary, so the auto-download is not available — build LOVR from source and
-export `LOVR_BIN`. See
+export `LOVR_BIN`. Refer to
 [`docs/source/guides/troubleshooting.md`](docs/source/guides/troubleshooting.md#dgx-spark--lovr-auto-download-is-not-supported).
 
 To use a custom LOVR build:
@@ -438,7 +439,7 @@ uv run xr_render_demo
 **GPU pinning** for the XR side is controlled by `gpu_index` in
 `agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml`. cloudxr-runtime
 applies the pin to its own process and writes the selectors into
-`cloudxr.env`; the scene process and LOVR inherit from that file. See
+`cloudxr.env`; the scene process and LOVR inherit from that file. Refer to
 [`docs/source/reference/xr-render-demo.md`](docs/source/reference/xr-render-demo.md#gpu-pinning-for-the-xr-side)
 for full details.
 
@@ -470,9 +471,10 @@ The hub auto-discovers `services/device-io-hub/device_io_hub.yaml`.
 ### Web
 
 Open `https://localhost:8080` in a browser.  The samples ship with HTTPS
-on by default; the first connection shows a self-signed cert warning that
-you click through (or trust permanently — see
-[`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md)).  Leave **Token URL** blank to
+on by default; the first connection shows a self-signed certificate warning
+that you click through. To trust the certificate permanently, refer to
+[`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md).
+Leave **Token URL** blank to
 use the server's built-in `/token` endpoint, or paste the printed token
 directly.
 
@@ -480,12 +482,12 @@ The page's import map loads `livekit-client` and `@nvidia/cloudxr` from
 `client-samples/web/vendor/` (same-origin, so XR headsets and offline LANs
 work).  Both bundles are gitignored build output.  The xr-render-demo
 orchestrator builds them automatically on first run (requires npm on PATH).
-For a manual rebuild after an SDK bump, see
+For a manual rebuild after an SDK bump, refer to
 [`client-samples/web-xr-build/README.md`](client-samples/web-xr-build/README.md).
 
 ### Android
 
-See [`client-samples/android/README.md`](client-samples/android/README.md) for
+Refer to [`client-samples/android/README.md`](client-samples/android/README.md) for
 full setup. Quick steps:
 
 1. Open `client-samples/android/` in Android Studio (Hedgehog or later).
@@ -495,9 +497,11 @@ full setup. Quick steps:
 
 Permissions (`RECORD_AUDIO`, `CAMERA`) are requested at runtime on first use.
 
-### iOS / visionOS
+<a id="ios--visionos"></a>
 
-See [`client-samples/ios-visionos/README.md`](client-samples/ios-visionos/README.md)
+### iOS and visionOS
+
+Refer to [`client-samples/ios-visionos/README.md`](client-samples/ios-visionos/README.md)
 for full Xcode setup. Quick connection settings:
 
 | Field | Value |
@@ -510,30 +514,31 @@ The token is valid for 24 hours. To get a fresh one restart the server or call
 `GET https://<host>:8080/token?identity=<name>`.
 
 > **One-time per device:** the LiveKit Swift SDK does not expose a
-> server-trust hook, so iOS rejects the hub's self-signed cert until you
+> server-trust hook, so iOS rejects the hub's self-signed certificate until you
 > install it as a trusted profile. On the device, open
 > `https://<host>:8080/cert` in Safari → bypass the warning → install →
 > enable **Settings → General → About → Certificate Trust Settings →
 > Enable Full Trust**. Full walkthrough plus recovery for the common
 > failure modes is in
 > [`client-samples/ios-visionos/README.md`](client-samples/ios-visionos/README.md)
-> under "Trusting the hub's self-signed cert".
+> under its certificate-trust section.
 
 ## Networking
 
-The hub and CloudXR runtime use a small set of TCP/UDP ports (web client +
-wss /rtc proxy on 8080, WebRTC fallbacks on 7881/TCP + 7882/UDP, CloudXR
+The hub and CloudXR runtime use a small set of TCP/UDP ports (web client and
+`/rtc` WSS proxy on 8080, WebRTC fallbacks on 7881/TCP and 7882/UDP, CloudXR
 WSS proxy on 48322). LiveKit's native 7880 stays on loopback — clients
 connect through the same-origin wss proxy, not directly. Full table and
-distro-specific `ufw` / `firewall-cmd` recipes are in
-[`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md). The same doc covers HTTPS for
-the web client and self-signed certificate trust on each browser.
+distro-specific `ufw` and `firewall-cmd` recipes are in
+[`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md).
+The networking reference also covers HTTPS for the web client and self-signed
+certificate trust on each browser.
 
 ## Tests
 
-`tests/` contains the multi-client / multi-agent integration suite. The
+`tests/` contains the multi-client and multi-agent integration suite. The
 core IPC tests run without Docker or LiveKit — they spin up real
-`HubEndpoint` / `ConnectorEndpoint` / `ProcessorEndpoint` instances over
+`HubEndpoint`, `ConnectorEndpoint`, and `ProcessorEndpoint` instances over
 `ipc://` sockets and verify routing, isolation, and the
 `ReturnAudioFlush` control path.
 
@@ -543,7 +548,7 @@ uv sync
 uv run pytest -v
 ```
 
-See [`tests/README.md`](tests/README.md) for the full breakdown. CI runs
+Refer to [`tests/README.md`](tests/README.md) for the full breakdown. CI runs
 the suite on every push and pull request via
 [`.github/workflows/tests.yml`](.github/workflows/tests.yml) on Python 3.11
 and 3.12.
@@ -555,17 +560,18 @@ For engineers and agents working in the repo:
 | Doc | Topic |
 |---|---|
 | [`AGENTS.md`](AGENTS.md) | Working contract — hard rules every change must satisfy |
+| [`docs/source/guides/documentation-style.md`](docs/source/guides/documentation-style.md) | House style for customer-facing Markdown and reStructuredText |
 | [`DEPENDENCIES.md`](DEPENDENCIES.md) | Authoritative dependency map (update with every `pyproject.toml` change) |
 | [Versioned documentation](https://nvidia.github.io/xr-ai/) | Latest release by default, plus `main` development and release-tag documentation |
 | [`skills/README.md`](skills/README.md) | Skill bank: setup skills for coding agents |
 | [`docs/source/overview/architecture.md`](docs/source/overview/architecture.md) | System topology, runtime data paths, ownership, and extension boundaries |
-| [`docs/source/components/launcher-and-process-model.md`](docs/source/components/launcher-and-process-model.md) | `Process` / `run_stack` mechanics; ready-file protocol |
-| [`docs/source/components/ai-services.md`](docs/source/components/ai-services.md) | VLM / STT / TTS / LLM / embedding server reference + worker call examples |
-| [`docs/source/reference/xr-render-demo.md`](docs/source/reference/xr-render-demo.md) | xr-render-demo architecture: native functions, supervisor + subagents, XR lifecycle |
+| [`docs/source/components/launcher-and-process-model.md`](docs/source/components/launcher-and-process-model.md) | `Process` and `run_stack` mechanics; ready-file protocol |
+| [`docs/source/components/ai-services.md`](docs/source/components/ai-services.md) | VLM, STT, TTS, LLM, and embedding server reference with worker call examples |
+| [`docs/source/reference/xr-render-demo.md`](docs/source/reference/xr-render-demo.md) | xr-render-demo architecture: native functions, supervisor and subagents, XR lifecycle |
 | [`docs/source/guides/adding-a-sample.md`](docs/source/guides/adding-a-sample.md) | Boilerplate for scaffolding a new sample |
 | [`docs/source/guides/adding-cloudxr.md`](docs/source/guides/adding-cloudxr.md) | Wiring CloudXR into a sample |
-| [`docs/source/getting_started/credentials.md`](docs/source/getting_started/credentials.md) | HF / NGC token management |
-| [`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md) | Firewall ports + HTTPS for the web client |
+| [`docs/source/getting_started/credentials.md`](docs/source/getting_started/credentials.md) | HF and NGC token management |
+| [`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md) | Firewall ports and HTTPS for the web client |
 | [`docs/source/guides/troubleshooting.md`](docs/source/guides/troubleshooting.md) | Known frictions and runtime symptoms |
 | [`docs/source/guides/spdx-headers.md`](docs/source/guides/spdx-headers.md) | SPDX header style and enforcement |
 

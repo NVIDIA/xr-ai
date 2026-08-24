@@ -204,11 +204,15 @@ https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install
 Switch back to `vllm_backend: pip` in the service YAML if you only need the
 local install.
 
-### Hub fails immediately with `RuntimeError: missing libnvcuvid.so / libnvidia-encode.so`
+(hub-fails-immediately-with-runtimeerror-missing-libnvcuvid-so-libnvidia-encode-so)=
 
-**Cause:** NVDEC (`libnvcuvid.so`) and NVENC (`libnvidia-encode.so`) are
-required — the DeviceIOHub refuses to start without them so it never silently falls
-back to OpenH264, which is royalty-bearing.
+### Hub fails immediately because NVIDIA codec libraries are missing
+
+**Cause:** The hub raises
+`RuntimeError: missing libnvcuvid.so / libnvidia-encode.so` because NVDEC
+(`libnvcuvid.so`) and NVENC (`libnvidia-encode.so`) are required. The
+DeviceIOHub refuses to start without them so it never silently falls back to
+OpenH264, which is royalty-bearing.
 
 **Fix:**
 - **Bare metal:** install or repair the NVIDIA driver. The libraries ship with the
@@ -297,7 +301,7 @@ If step 4 shows no toggle, the cached certificate on the hub is from an older
 xr-ai build that wrote `BasicConstraints CA:FALSE` and iOS will not
 expose the trust toggle for it. Remove the installed profile via
 **VPN & Device Management** and restart the hub — it auto-detects the
-stale cert and regenerates as a self-signed CA (logged as `TLS: cached
+stale certificate and regenerates it as a self-signed CA (logged as `TLS: cached
 cert is not a CA cert — regenerating…`).
 
 If the toggle was enabled but the wss handshake still fails with
@@ -309,12 +313,12 @@ certificate whenever the SAN is missing one (logged as `TLS: cached cert
 SAN is missing …; regenerating…`); just restart the hub and re-install the
 profile on the device. If the dialed address is not on any of the hub's
 interfaces, add it to `web_server_extra_sans` in `device_io_hub.yaml` and
-restart (see [Networking](../getting_started/networking.md)). To force
-regen explicitly, delete `~/.local/share/xr-ai/web-server.crt` and
+restart. Refer to {doc}`Networking </getting_started/networking>` for details.
+To force regeneration, delete `~/.local/share/xr-ai/web-server.crt` and
 `web-server.key` before restarting.
 
 If the certificate is trusted (no `-1202`) but the room connection still fails
-with HTTP 401 / "no permissions to access the room", the hub's wss /rtc
+with HTTP 401 or "no permissions to access the room", the hub's `/rtc` WSS
 proxy is dropping the `Authorization: Bearer <token>` header the Swift
 SDK sends. Update to the latest DeviceIOHub and restart; the proxy
 forwards the `Authorization` header on `/rtc/validate` and the WebSocket.
@@ -363,7 +367,7 @@ GPU-visible memory. The complete original error remains in the reported log file
 **By design.** The vLLM-backed servers (`nemotron_omni_llm_server`,
 `vlm_server`, and `nemotron3_nano_llm_server`) survive stack
 restarts so model weights stay loaded across worker crashes and debug
-restarts. See {doc}`/components/ai-services` → *vLLM model
+restarts. Refer to {doc}`/components/ai-services` → *vLLM model
 persistence*.
 
 **Fix:** to fully release VRAM:
@@ -389,5 +393,5 @@ the repository root (gitignored; the Cosmos3 checkpoint alone is tens of GB).
 **Fix:** wait. Subsequent runs use the cached weights and start in
 ~30–60 s. If the download makes no progress, note that unauthenticated
 downloads (model-server runs started with `--allow-anonymous`) are rate-limited and can
-stall indefinitely; set `HF_TOKEN` and restart
-(see {doc}`/getting_started/credentials`).
+stall indefinitely; set `HF_TOKEN` and restart. Refer to
+{doc}`Credentials </getting_started/credentials>`.
