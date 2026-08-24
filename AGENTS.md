@@ -49,7 +49,7 @@ skills/          Skill bank that sets coding agents up
   tasks. Agents own their state, resources, lifecycle, background tasks, and
   concurrency policy.
 - Application-specific capabilities stay with their application. Shared
-  process boundaries use typed msgpack/ZMQ services, not MCP.
+  process boundaries use typed msgpack over ZMQ services, not MCP.
 - Image selection and visual inference are separate tools. Selection returns
   lightweight image references; single-image, multi-image, and timestamped
   video-frame query tools resolve them through `VLMService`. Raw media remains
@@ -128,6 +128,10 @@ Comments explain a non-obvious invariant or failure mode. Do not narrate the
 code, debugging history, rejected alternatives, or plans. Keep architectural
 docs about the current system; issue trackers and Git history hold proposals
 and past decisions.
+
+Follow the authoritative [documentation style](docs/source/guides/documentation-style.md)
+for customer-facing Markdown and reStructuredText. Match the surrounding
+document and keep edits scoped.
 
 Use these canonical references when working in their area:
 
