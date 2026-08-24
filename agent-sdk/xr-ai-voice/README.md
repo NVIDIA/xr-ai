@@ -87,7 +87,7 @@ async with runtime:
         await aggregation.stop()
 ```
 
-Applications should call `await aggregation.release(participant_id)` from
+Applications must call `await aggregation.release(participant_id)` from
 their participant-left subscriber so buffered speech and stream state are
 discarded as soon as that participant departs. The application owns its
 lifecycle topic; the shared aggregator therefore exposes cleanup directly

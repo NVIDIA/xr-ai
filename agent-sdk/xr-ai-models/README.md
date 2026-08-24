@@ -47,7 +47,7 @@ async with make_llm(config, "agent_llm") as llm:
 }
 ```
 
-Built-in presets — see `xr_ai_models/presets/`:
+Built-in presets are in `xr_ai_models/presets/`:
 
 | Preset | Service it targets | Notes |
 |---|---|---|
@@ -151,9 +151,12 @@ profile remains the authority for credentials: callers cannot supply an
 `stream_images()`. Multi-image calls preserve caller order and place every
 image in one OpenAI-compatible user message before the question.
 
-## Remote / hosted-NIM endpoints
+<a id="remote--hosted-nim-endpoints"></a>
+<a id="remote-hosted-nim-endpoints"></a>
 
-Cloud / remote endpoints (e.g. hosted [NVIDIA NIM](https://build.nvidia.com))
+## Remote and hosted NIM endpoints
+
+Cloud and remote endpoints, such as hosted [NVIDIA NIM](https://build.nvidia.com),
 are a profile change:
 
 ```json
@@ -179,8 +182,9 @@ are a profile change:
 `readiness: health` makes `health()` probe `base_url/health`. Remote endpoints
 without that route use `readiness: none`, which makes
 `health()` return `True` without a request — otherwise a worker's readiness
-gate would block forever. See
-`docs/source/components/ai-services.md` for hosted endpoint operation.
+gate would block forever. Refer to
+[AI services](../../docs/source/components/ai-services.md)
+for hosted endpoint operation.
 
 ## Riva gRPC speech (NIM STT/TTS)
 

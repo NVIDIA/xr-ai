@@ -111,9 +111,9 @@ instances are consumed explicitly with `stream()`.
 
 ## Typed capability services
 
-Install `xr-ai-tools[services]` for the msgpack/ZMQ RPC client/server and the
-shared tracking, video-memory, text-memory, and spatial
-building blocks. Applications compose these finite tools into their own
+Install `xr-ai-tools[services]` for the msgpack over ZMQ RPC client, server,
+and shared tracking, video-memory, text-memory, and spatial building blocks.
+Applications compose these finite tools into their own
 `ToolSet`; service processes use the matching RPC primitives without pulling
 in an agent framework or HTTP server.
 
@@ -261,10 +261,10 @@ uv run xr_ai_tools/utilities/generate_marker.py aruco 42 \
 ```
 
 Run these commands from `agent-sdk/xr-ai-tools/`. Both commands produce square
-512-pixel PNGs by default; use `--help` to see sizing and border options.
+512-pixel PNGs by default; run them with `--help` for sizing and border options.
 
 Call `release(participant_id)` when a participant disconnects. Applications
-that expose the tool to a model should inject the active participant identity
+that expose the tool to a model must inject the active participant identity
 at their workflow boundary, as they do for other participant-scoped tools.
 
 ## Magenta polygon image editing

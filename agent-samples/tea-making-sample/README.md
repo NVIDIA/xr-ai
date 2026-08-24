@@ -102,7 +102,8 @@ development network or put it behind an authenticated TLS proxy.
   `voice_gate_yaml: voice_gate.always-on.yaml` in the worker YAML to dispatch
   every finalized utterance without a wake phrase.
 - `yaml/rag_service.yaml` indexes Markdown and text files under
-  `rag-documents/` and exposes retrieval over typed msgpack/ZMQ RPC.
+  `rag-documents/` and exposes retrieval through typed RPC using msgpack over
+  ZMQ.
 
 The model configuration declares LLM, VLM, STT, embedding, and TTS as reusable.
 Their health checks must pass before voice input becomes ready. The sample owns
