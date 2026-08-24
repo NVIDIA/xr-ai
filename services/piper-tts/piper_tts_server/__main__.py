@@ -422,44 +422,66 @@ def _idle_until_stopped(
     poll_s: float = 5.0,
 ) -> None:
     """Keep the wrapper alive while the persisted server is still running."""
+    pending_signal: int | None = None
+
+    def _stop_owned_child(signum, _frame) -> None:
+        nonlocal pending_signal
+        if pending_signal is not None:
+            return
+        pending_signal = signum
+        raise SystemExit(128 + signum)
+
+    previous_handlers = {}
+    if process is not None:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            previous_handlers[sig] = signal.signal(sig, _stop_owned_child)
+
     health_failures = 0
-    while True:
-        if process is None:
-            time.sleep(poll_s)
-        else:
-            try:
-                returncode = process.wait(timeout=poll_s)
-            except subprocess.TimeoutExpired:
-                pass
+    try:
+        while True:
+            if process is None:
+                time.sleep(poll_s)
             else:
-                if returncode != 0:
-                    raise SystemExit(
-                        "[piper_tts_server] persistent server exited "
-                        f"with status {returncode}"
-                    )
+                try:
+                    returncode = process.wait(timeout=poll_s)
+                except subprocess.TimeoutExpired:
+                    pass
+                else:
+                    if returncode != 0:
+                        raise SystemExit(
+                            "[piper_tts_server] persistent server exited "
+                            f"with status {returncode}"
+                        )
+                    return
+
+            if _health_url_ok(health_url):
+                health_failures = 0
+                continue
+
+            if process is None:
                 return
 
-        if _health_url_ok(health_url):
-            health_failures = 0
-            continue
+            health_failures += 1
+            if health_failures < _IDLE_HEALTH_FAILURE_LIMIT:
+                print(
+                    f"[piper_tts_server] health endpoint unreachable "
+                    f"({health_failures}/{_IDLE_HEALTH_FAILURE_LIMIT}); retrying",
+                    flush=True,
+                )
+                continue
 
-        if process is None:
-            return
-
-        health_failures += 1
-        if health_failures < _IDLE_HEALTH_FAILURE_LIMIT:
-            print(
-                f"[piper_tts_server] health endpoint unreachable "
-                f"({health_failures}/{_IDLE_HEALTH_FAILURE_LIMIT}); retrying",
-                flush=True,
+            raise SystemExit(
+                f"[piper_tts_server] persistent server failed "
+                f"{_IDLE_HEALTH_FAILURE_LIMIT} consecutive health checks; terminated"
             )
-            continue
-
-        _terminate_process(process)
-        raise SystemExit(
-            f"[piper_tts_server] persistent server failed "
-            f"{_IDLE_HEALTH_FAILURE_LIMIT} consecutive health checks; terminated"
-        )
+    except (KeyboardInterrupt, SystemExit):
+        pending_signal = pending_signal or 0
+        if process is not None:
+            _terminate_process(process)
+        raise
+    finally:
+        for sig, handler in previous_handlers.items():
+            signal.signal(sig, handler)
 
 
 def run() -> None:

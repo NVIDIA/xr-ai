@@ -168,6 +168,38 @@ async def test_piper_marks_persistent_child_for_cleanup(monkeypatch) -> None:
     assert child_env["XR_AI_VLLM_PORT"] == "8105"
 
 
+async def test_piper_terminates_owned_child_when_wrapper_is_stopped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_piper_main_module()
+    process = Mock()
+    terminate = Mock()
+    handlers = {
+        module.signal.SIGINT: module.signal.SIG_DFL,
+        module.signal.SIGTERM: module.signal.SIG_DFL,
+    }
+
+    def install_handler(sig, handler):
+        previous = handlers[sig]
+        handlers[sig] = handler
+        return previous
+
+    def receive_sigterm(*, timeout):
+        handlers[module.signal.SIGTERM](module.signal.SIGTERM, None)
+
+    monkeypatch.setattr(module.signal, "signal", install_handler)
+    monkeypatch.setattr(module, "_terminate_process", terminate)
+    process.wait.side_effect = receive_sigterm
+
+    with pytest.raises(SystemExit) as exc_info:
+        module._idle_until_stopped("http://health", process, poll_s=0.01)
+
+    assert exc_info.value.code == 128 + module.signal.SIGTERM
+    terminate.assert_called_once_with(process)
+    assert handlers[module.signal.SIGINT] is module.signal.SIG_DFL
+    assert handlers[module.signal.SIGTERM] is module.signal.SIG_DFL
+
+
 class _ServerExited(Exception):
     """Raised when piper_tts_server exits before binding its port.
 
