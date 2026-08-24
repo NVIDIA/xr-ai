@@ -7,6 +7,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os.path
+import shlex
 import sys
 from pathlib import Path
 
@@ -45,8 +46,15 @@ def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch) -
 
     processes, credentials = _model_servers._build_processes("default")
 
-    assert [process.name for process in processes] == ["stt", "omni", "vlm", "embedding"]
-    assert [process.port for process in processes] == [8103, 8108, 8100, 8109]
+    assert [process.name for process in processes] == [
+        "stt", "tts", "omni", "vlm", "embedding",
+    ]
+    assert [process.port for process in processes] == [8103, 8105, 8108, 8100, 8109]
+    tts = next(process for process in processes if process.name == "tts")
+    assert tts.project == "../../services/piper-tts"
+    assert tts.command == "piper_tts_server"
+    assert Path(tts.config).name == "piper_tts_server.yaml"
+    assert tts.launch_mode == "persist"
     assert credentials == ()
 
 
@@ -102,6 +110,7 @@ def test_known_ports_are_discovered_from_service_yaml() -> None:
         ("llm-nim", 8110),
         ("vlm-nim", 8100),
         ("stt", 8103),
+        ("tts", 8105),
         ("agent-llm", 8107),
         ("omni", 8108),
         ("vlm", 8100),
@@ -117,9 +126,9 @@ def test_nim_profile_mixes_nim_containers_and_local_servers(
     processes, credentials = _model_servers._build_processes("vlm_llm_nim")
 
     assert [process.name for process in processes] == [
-        "llm-nim", "vlm-nim", "stt", "embedding",
+        "llm-nim", "vlm-nim", "stt", "tts", "embedding",
     ]
-    assert [process.port for process in processes] == [8110, 8100, 8103, 8109]
+    assert [process.port for process in processes] == [8110, 8100, 8103, 8105, 8109]
     assert credentials == ("NGC_API_KEY",)
 
 
@@ -136,6 +145,37 @@ def test_nim_profiles_serve_cosmos3_nano_reasoner(config_path: Path) -> None:
 
     assert config["image"] == "nvcr.io/nim/nvidia/cosmos3-reasoner:1.7.0"
     assert config["env"]["NIM_MODEL_SIZE"] == "nano"
+
+
+@pytest.mark.parametrize(
+    "config_path",
+    sorted(
+        (_REPO_ROOT / "agent-samples/model-servers/yaml").glob(
+            "*/nim_llm_server.yaml"
+        )
+    ),
+)
+def test_nim_profiles_serve_nemotron_omni(config_path: Path) -> None:
+    config = yaml.safe_load(config_path.read_text())
+    env = config["env"]
+    args = shlex.split(env["NIM_PASSTHROUGH_ARGS"])
+    expected_budget = {
+        "spark": "0.35",
+        "96G_blackwell": "0.4",
+        "dual_48G_ada": "0.8",
+    }[config_path.parent.name]
+
+    assert config["image"] == (
+        "nvcr.io/nim/nvidia/"
+        "nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant"
+    )
+    assert "NIM_KVCACHE_PERCENT" not in env
+    memory_index = args.index("--gpu-memory-utilization")
+    assert args[memory_index + 1] == expected_budget
+    assert "--reasoning-parser" in args
+    assert args[args.index("--reasoning-parser") + 1] == "nemotron_v3"
+    assert "--tool-call-parser" in args
+    assert args[args.index("--tool-call-parser") + 1] == "qwen3_coder"
 
 
 def test_custom_profiles_can_still_launch_riva_speech_nims(
@@ -232,6 +272,7 @@ def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
         ("llm-nim", 8110),
         ("vlm-nim", 8100),
         ("stt", 8103),
+        ("tts", 8105),
         ("agent-llm", 8107),
         ("omni", 8108),
         ("vlm", 8100),
