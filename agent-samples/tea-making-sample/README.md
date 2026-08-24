@@ -59,6 +59,12 @@ uv sync
 uv run tea_making_sample
 ```
 
+Alternatively, run the source file directly after synchronization:
+
+```bash
+uv run main.py
+```
+
 To make the unauthenticated event viewer reachable from a trusted private
 network, use this alternative sample command:
 

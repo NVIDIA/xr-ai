@@ -56,8 +56,13 @@ start the sample from the same terminal:
 
 ```bash
 uv sync
-uv sync --project worker
 uv run lab_instrument_monitoring
+```
+
+Alternatively, run the source file directly after synchronization:
+
+```bash
+uv run main.py
 ```
 
 To make the unauthenticated event viewer reachable from a trusted private

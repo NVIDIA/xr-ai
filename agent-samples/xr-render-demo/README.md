@@ -70,6 +70,12 @@ uv sync
 uv run xr_render_demo
 ```
 
+Alternatively, run the source file directly after synchronization:
+
+```bash
+uv run main.py
+```
+
 Open the authenticated client URL printed by DeviceIOHub and connect. Press
 Ctrl+C to stop the demo stack; do not stop its individual child processes.
 

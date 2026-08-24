@@ -120,6 +120,12 @@ uv sync
 uv run simple_vlm_example
 ```
 
+Alternatively, run the source file directly after synchronization:
+
+```bash
+uv run main.py
+```
+
 Only the DeviceIOHub and worker start. Worker readiness probes all three reused
 services and includes a short 1280x720 streaming VLM warmup.
 The hub prints:
@@ -195,8 +201,13 @@ sample from the same terminal:
 
 ```bash
 uv sync
-uv sync --project worker
 uv run lab_instrument_monitoring
+```
+
+Alternatively, run the source file directly after synchronization:
+
+```bash
+uv run main.py
 ```
 
 Connect an existing glasses or platform client using the authenticated URL,
@@ -227,6 +238,12 @@ sample from the same terminal:
 ```bash
 uv sync
 uv run tea_making_sample
+```
+
+Alternatively, run the source file directly after synchronization:
+
+```bash
+uv run main.py
 ```
 
 Open the DeviceIOHub connection page at `https://localhost:8080`, accept the
@@ -291,6 +308,12 @@ Start XR Render:
 ```bash
 uv sync
 uv run xr_render_demo
+```
+
+Alternatively, run the source file directly after synchronization:
+
+```bash
+uv run main.py
 ```
 
 On first run the orchestrator automatically downloads the pinned LOVR version to

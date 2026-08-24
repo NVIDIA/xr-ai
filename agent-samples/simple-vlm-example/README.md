@@ -58,6 +58,12 @@ uv sync
 uv run simple_vlm_example
 ```
 
+Alternatively, run the source file directly after synchronization:
+
+```bash
+uv run main.py
+```
+
 Open the authenticated web-client URL printed by DeviceIOHub, allow microphone
 and camera access, and connect. Speak or type a question after the agent reports
 ready.

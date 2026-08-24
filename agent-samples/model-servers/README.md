@@ -53,6 +53,12 @@ uv sync
 uv run model_servers
 ```
 
+Alternatively, run the source file directly after synchronization:
+
+```bash
+uv run main.py
+```
+
 The first cold start downloads model weights and can take tens of minutes.
 Refer to the
 [credentials reference](../../docs/source/getting_started/credentials.md) and
