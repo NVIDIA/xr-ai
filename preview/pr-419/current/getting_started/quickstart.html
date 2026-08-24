@@ -514,9 +514,9 @@ repository defaults first:</p>
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers
 </pre></div>
 </div>
-<p>The command may download model weights on its first run and requires the
-credentials described in the <a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a>. The model services remain running across
-sample restarts.</p>
+<p>The command may download model weights on its first run. Refer to the
+<a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a> for the required
+credentials. The model services remain running across sample restarts.</p>
 <section id="step-1-start-the-server">
 <h3>Step 1 — Start the server<a class="headerlink" href="#step-1-start-the-server" title="Link to this heading">#</a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync
@@ -658,8 +658,8 @@ loaded in the background.</p>
 </section>
 <section id="step-2-start-the-demo">
 <h3>Step 2 — Start the demo<a class="headerlink" href="#step-2-start-the-demo" title="Link to this heading">#</a></h3>
-<p>This demo has two extra host prerequisites beyond the shared
-<a class="reference internal" href="requirements.html"><span class="doc">Requirements</span></a>:</p>
+<p>Refer to the shared <a class="reference internal" href="requirements.html"><span class="doc">Requirements</span></a> first. This demo has two
+additional host prerequisites:</p>
 <ul class="simple">
 <li><p><strong>Vulkan loader + headers</strong> — the CloudXR compositor and LOVR render through
 Vulkan, so install them before running the demo: <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">apt</span> <span class="pre">install</span> <span class="pre">libvulkan-dev</span></code></p></li>
@@ -678,7 +678,7 @@ and network access). Both steps are skipped on subsequent runs.</p>
 <p class="admonition-title">Note</p>
 <p>On <strong>DGX Spark</strong> (aarch64), LOVR does not publish a prebuilt aarch64 Linux
 binary, so the auto-download is not available: build LOVR from source and export
-<code class="docutils literal notranslate"><span class="pre">LOVR_BIN</span></code>. Refer to the troubleshooting guide.</p>
+<code class="docutils literal notranslate"><span class="pre">LOVR_BIN</span></code>. Refer to <a class="reference internal" href="../guides/troubleshooting.html"><span class="doc">Troubleshooting</span></a> for build instructions.</p>
 </div>
 <p>To use a custom LOVR build:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">LOVR_BIN</span><span class="o">=</span>/path/to/your/lovr<span class="w">   </span><span class="c1"># or set lovr_bin: in scene/scene_service.yaml</span>

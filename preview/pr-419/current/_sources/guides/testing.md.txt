@@ -48,8 +48,9 @@ The suite includes:
 
 The routing tests model connectors as distinct clients and processor endpoints
 as distinct agents. `test_cross_talk.py` is the canonical no-cross-talk suite:
-it covers multi-client and multi-agent fan-out, interleaving, join/leave, filter
-isolation, attribution, ordering, and participant-targeted return traffic.
+it covers multi-client and multi-agent fan-out, interleaving, join and leave
+events, filter isolation, attribution, ordering, and participant-targeted return
+traffic.
 
 ## Adding tests
 

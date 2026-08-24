@@ -426,8 +426,8 @@
 <p>The simple VLM example is the smallest complete voice-and-vision application in
 the repository. It answers spoken or typed questions about each participant’s
 latest camera frame and streams the answer to both Piper TTS and the
-<code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> data topic. Start with the <a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a>; this reference owns the sample’s design and
-operational details.</p>
+<code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> data topic. Refer to the <a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a> to run the sample. This reference owns the
+sample’s design and operational details.</p>
 <section id="composition">
 <h2>Composition<a class="headerlink" href="#composition" title="Link to this heading">#</a></h2>
 <p>The orchestrator starts only DeviceIOHub and the worker. The fixed
@@ -459,7 +459,7 @@ Endpoint health alone is not sufficient for that warmup.</p>
 orchestrator always passes <code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code> to DeviceIOHub and
 <code class="docutils literal notranslate"><span class="pre">yaml/simple_vlm_example_worker.yaml</span></code> to the worker. The worker resolves its
 models and voice-gate files relative to the worker YAML, so the checked-in
-layout works without command-line config arguments.</p>
+layout works without command-line configuration arguments.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>File</p></th>
@@ -493,11 +493,11 @@ wake phrases. Relative paths in the worker YAML are resolved from <code class="d
 from the shell’s current directory.</p>
 <p>Changing an entry in <code class="docutils literal notranslate"><span class="pre">models.json</span></code> changes only the client adapter or endpoint
 that this sample uses. It does not reconfigure or restart the shared server.
-For a checkpoint, port, GPU, or model-runtime change, update the shared stack as
-described in <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>, stop that persistent
-stack, and start it again before restarting this sample.</p>
-<p>Exact fields, checked-in values, and adjacent YAML comments are rendered in the
-generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference.</p>
+For a checkpoint, port, GPU, or model-runtime change, refer to
+<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>, update the shared stack, stop that
+persistent stack, and start it again before restarting this sample.</p>
+<p>Refer to the generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference for exact
+fields, checked-in values, and adjacent YAML comments.</p>
 <p>Wake phrases match at the start of a final transcript or after sentence-final
 <code class="docutils literal notranslate"><span class="pre">.</span></code>, <code class="docutils literal notranslate"><span class="pre">?</span></code>, or <code class="docutils literal notranslate"><span class="pre">!</span></code> punctuation followed by whitespace or a closing quote. Text
 before that boundary and the phrase itself are discarded before dispatch.</p>

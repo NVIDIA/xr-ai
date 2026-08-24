@@ -15,9 +15,9 @@ agent sample and {doc}`networking` for firewall and TLS configuration.
 | Client | Directory | Transport | Build |
 |---|---|---|---|
 | Web | `client-samples/web/` | LiveKit from CDN | None |
-| Web-XR | `client-samples/web-xr/` | LiveKit + CloudXR local bundles | `web-xr-build/build.sh` |
+| Web-XR | `client-samples/web-xr/` | Local LiveKit and CloudXR bundles | `web-xr-build/build.sh` |
 | Android | `client-samples/android/` | LiveKit Android | Android Studio or Gradle |
-| iOS/visionOS | `client-samples/ios-visionos/` | LiveKit Swift + CloudXRKit | Xcode |
+| iOS/visionOS | `client-samples/ios-visionos/` | LiveKit Swift and CloudXRKit | Xcode |
 | Native C++ | `client-samples/native/` | LiveKit C++ | CMake |
 
 The clients share a StreamKit shape: one transport-neutral `StreamSession`

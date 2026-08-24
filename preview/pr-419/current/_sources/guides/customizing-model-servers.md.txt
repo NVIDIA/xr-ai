@@ -203,8 +203,8 @@ launcher process:
 }
 ```
 
-Do not put the credential value in JSON. Export it or use the credential store
-described in {doc}`/getting_started/credentials`.
+Do not put the credential value in JSON. Export it or use the credential store.
+Refer to {doc}`/getting_started/credentials` for credential options.
 
 ## Riva speech boundary
 

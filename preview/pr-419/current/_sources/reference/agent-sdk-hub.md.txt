@@ -7,8 +7,8 @@
 
 `xr-ai-hub-client` is the minimal agent-side DeviceIOHub boundary. It depends
 only on pyzmq and msgpack and contains no LiveKit, web-server, model, tool, or
-voice-pipeline code. Public types and signatures are in the generated
-{doc}`python/index` reference.
+voice-pipeline code. Refer to the generated {doc}`python/index` for public types
+and signatures.
 
 ## Processor endpoints
 

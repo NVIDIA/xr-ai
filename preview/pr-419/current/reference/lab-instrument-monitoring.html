@@ -425,9 +425,10 @@
 <h1>Lab instrument monitoring — building marker-associated visual agents<a class="headerlink" href="#lab-instrument-monitoring-building-marker-associated-visual-agents" title="Link to this heading">#</a></h1>
 <p>The lab instrument sample is a reference for applications that combine
 foreground questions, opt-in background work, persistent participant state,
-visual identification, and event-driven notifications. Start with the
-<a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a> to run it. This architecture
-reference focuses on reusing the sample’s structure for another application.</p>
+visual identification, and event-driven notifications. Refer to the
+<a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a> to run the sample. This
+architecture reference focuses on reusing the sample’s structure for another
+application.</p>
 <p>The central design choice is to separate perception, interpretation, state,
 policy, and presentation. A marker scan identifies an instrument, a VLM reads
 its display, a stateful agent decides whether the reading changed, and a
@@ -602,16 +603,16 @@ client’s <code class="docutils literal notranslate"><span class="pre">agent.re
 </tbody>
 </table>
 </div>
-<p>Configuration and command syntax are also included automatically in the
-generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> and
-<a class="reference internal" href="command-line.html"><span class="doc">command-line</span></a> references.</p>
+<p>Refer to the generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> and
+<a class="reference internal" href="command-line.html"><span class="doc">command-line</span></a> references for configuration fields and
+command syntax.</p>
 </section>
 <section id="configuration">
 <h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h2>
 <p>Run and edit the sample from <code class="docutils literal notranslate"><span class="pre">agent-samples/lab-instrument-monitoring/</span></code>. The
 orchestrator reads the files below on every start and materializes a temporary
-worker config with absolute paths; edit the checked-in files, not the temporary
-copy named in the logs.</p>
+worker configuration with absolute paths. Edit the checked-in files, not the
+temporary copy named in the logs.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>File</p></th>
@@ -646,11 +647,11 @@ attached to real instruments. Paths such as <code class="docutils literal notran
 hot-reloaded. The <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code> option intentionally overrides
 <code class="docutils literal notranslate"><span class="pre">web_events_host</span></code> in the runtime copy, so use that option rather than editing
 the host to expose the unauthenticated viewer. Changing <code class="docutils literal notranslate"><span class="pre">models.json</span></code> changes
-only the endpoints consumed by this sample. Use
-<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> and restart the persistent shared stack
-for server-side model, GPU, port, or memory changes.</p>
-<p>Exact fields, checked-in values, and adjacent YAML comments are rendered in the
-generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference.</p>
+only the endpoints consumed by this sample. Refer to
+<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for server-side model, GPU, port, or
+memory changes, then restart the persistent shared stack.</p>
+<p>Refer to the generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference for exact
+fields, checked-in values, and adjacent YAML comments.</p>
 </section>
 <section id="foreground-tool-loop">
 <h2>Foreground tool loop<a class="headerlink" href="#foreground-tool-loop" title="Link to this heading">#</a></h2>

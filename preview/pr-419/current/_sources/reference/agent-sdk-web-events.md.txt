@@ -7,8 +7,8 @@
 
 `xr-ai-web-events` presents application-selected runtime events in a bounded,
 read-only browser view. It does not tail files, persist data, or enter model,
-voice, media, or DeviceIOHub authentication paths. Public APIs are in
-{doc}`python/index`.
+voice, media, or DeviceIOHub authentication paths. Refer to {doc}`python/index`
+for the public APIs.
 
 ## Publishing selected events
 

@@ -547,12 +547,12 @@ command relative to it;</p></li>
 files to their common settings and shows one representative YAML change;</p></li>
 <li><p>link to the sample’s canonical guide and generated configuration reference.</p></li>
 </ul>
-<p>Keep the corresponding <code class="docutils literal notranslate"><span class="pre">docs/source/</span></code> guide complete. It explains how the
-launcher selects the files, path and environment precedence, restart behavior,
-the responsibility of each config, and the boundary between a sample endpoint
-change and a persistent model-server change. Exact field values and field-level
-guidance stay beside the checked-in YAML or JSON and are rendered into
-<a class="reference internal" href="../reference/configuration.html"><span class="doc">Sample configuration reference</span></a>.</p>
+<p>Keep the corresponding <code class="docutils literal notranslate"><span class="pre">docs/source/</span></code> guide complete. The guide explains how
+the launcher selects the files, path and environment precedence, restart
+behavior, the responsibility of each configuration file, and the boundary
+between a sample endpoint change and a persistent model-server change. Exact
+field values and field-level guidance stay beside the checked-in YAML or JSON.
+Refer to <a class="reference internal" href="../reference/configuration.html"><span class="doc">Sample configuration reference</span></a> for the rendered reference.</p>
 </section>
 <section id="orchestrator-pyproject-toml">
 <h2>Orchestrator <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code><a class="headerlink" href="#orchestrator-pyproject-toml" title="Link to this heading">#</a></h2>
@@ -640,7 +640,7 @@ packages = ["&lt;snake_name&gt;_worker"]
 <p>Use this template when the worker talks directly to <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code>. Native
 voice workers keep argument parsing in <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code> and delegate composition
 to sibling <code class="docutils literal notranslate"><span class="pre">app.py</span></code> and <code class="docutils literal notranslate"><span class="pre">config.py</span></code> modules. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/edeb777e82f1bbcad966810cb170b6673ee1a728/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/027aa777f00ec68e8e415d59792459c5e40832d0/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
 for that shape. Fill in the sections marked <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">←</span> <span class="pre">FILL</span> <span class="pre">IN</span></code>.</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>"""
 &lt;Name&gt; agent worker — &lt;one-line description&gt;.

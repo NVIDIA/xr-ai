@@ -8,9 +8,9 @@
 The simple VLM example is the smallest complete voice-and-vision application in
 the repository. It answers spoken or typed questions about each participant's
 latest camera frame and streams the answer to both Piper TTS and the
-`vlm.response` data topic. Start with the {doc}`quickstart
-</getting_started/quickstart>`; this reference owns the sample's design and
-operational details.
+`vlm.response` data topic. Refer to the {doc}`quickstart
+</getting_started/quickstart>` to run the sample. This reference owns the
+sample's design and operational details.
 
 ## Composition
 
@@ -45,7 +45,7 @@ Run and edit the sample from `agent-samples/simple-vlm-example/`. The
 orchestrator always passes `yaml/device_io_hub.yaml` to DeviceIOHub and
 `yaml/simple_vlm_example_worker.yaml` to the worker. The worker resolves its
 models and voice-gate files relative to the worker YAML, so the checked-in
-layout works without command-line config arguments.
+layout works without command-line configuration arguments.
 
 | File | Owns |
 |---|---|
@@ -64,12 +64,12 @@ from the shell's current directory.
 
 Changing an entry in `models.json` changes only the client adapter or endpoint
 that this sample uses. It does not reconfigure or restart the shared server.
-For a checkpoint, port, GPU, or model-runtime change, update the shared stack as
-described in {doc}`/guides/customizing-model-servers`, stop that persistent
-stack, and start it again before restarting this sample.
+For a checkpoint, port, GPU, or model-runtime change, refer to
+{doc}`/guides/customizing-model-servers`, update the shared stack, stop that
+persistent stack, and start it again before restarting this sample.
 
-Exact fields, checked-in values, and adjacent YAML comments are rendered in the
-generated {doc}`configuration <configuration>` reference.
+Refer to the generated {doc}`configuration <configuration>` reference for exact
+fields, checked-in values, and adjacent YAML comments.
 
 Wake phrases match at the start of a final transcript or after sentence-final
 `.`, `?`, or `!` punctuation followed by whitespace or a closing quote. Text

@@ -425,8 +425,8 @@
 <h1>xr-ai-voice<a class="headerlink" href="#xr-ai-voice" title="Link to this heading">#</a></h1>
 <p><code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code> owns the voice-facing boundary for an XR agent. Pipecat implements
 the private media pipeline; applications use typed runtime events and model
-service protocols. Exact constructors, fields, and defaults are in
-<a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a>.</p>
+service protocols. Refer to <a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a> for exact constructors, fields,
+and defaults.</p>
 <section id="voice-agent">
 <h2>Voice agent<a class="headerlink" href="#voice-agent" title="Link to this heading">#</a></h2>
 <p>Applications register one <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> with their runtime:</p>
@@ -450,7 +450,7 @@ service protocols. Exact constructors, fields, and defaults are in
     <span class="k">await</span> <span class="n">voice</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runtime</span><span class="p">)</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns model readiness, hub transport, VAD/STT, voice gating, typed
+<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns model readiness, hub transport, VAD and STT, voice gating, typed
 text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
 session remains private. Applications that need a shared public
 <code class="docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code> construct and inject one explicitly.</p>
@@ -512,7 +512,7 @@ release or shutdown.</p>
 </section>
 <section id="voice-gating-and-early-probes">
 <h2>Voice gating and early probes<a class="headerlink" href="#voice-gating-and-early-probes" title="Link to this heading">#</a></h2>
-<p>When wake phrases and a listening chime are enabled, VAD/STT probes the opening
+<p>When wake phrases and a listening chime are enabled, VAD and STT probe the opening
 audio while the user is still speaking. Probe audio includes a silent tail so
 offline STT can finalize a phrase. Only the final transcript is dispatched as a
 query; a slow probe receives a short grace period and is then cancelled.</p>

@@ -7,8 +7,8 @@
 
 `xr-ai-agent-runtime` provides typed, participant-scoped publication and fan-out
 for composable agents. It does not own models, planning, memory, tools, media,
-application state, or agent-created tasks. Exact public APIs are in
-{doc}`python/index`.
+application state, or agent-created tasks. Refer to {doc}`python/index` for the
+exact public APIs.
 
 ## Agents and tools
 

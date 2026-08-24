@@ -425,9 +425,9 @@
 <h1>xr-ai-models<a class="headerlink" href="#xr-ai-models" title="Link to this heading">#</a></h1>
 <p><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> defines typed LLM, VLM, STT, TTS, and embedding protocols and
 constructs concrete clients from deployment profiles. Workers depend on those
-protocols instead of hand-written HTTP or vendor SDK calls. Exact classes,
-methods, fields, and defaults are in <a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a>; server operation is in
-<a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a>.</p>
+protocols instead of hand-written HTTP or vendor SDK calls. Refer to
+<a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a> for exact classes, methods, fields, and defaults. Refer to
+<a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> for server operation.</p>
 <section id="construct-a-model-client">
 <h2>Construct a model client<a class="headerlink" href="#construct-a-model-client" title="Link to this heading">#</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatMessage</span><span class="p">,</span> <span class="n">load_models_config</span><span class="p">,</span> <span class="n">make_llm</span>
@@ -500,7 +500,7 @@ credentials needed by a managed service itself use <code class="docutils literal
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nemotron_omni</span></code></p></td>
 <td><p>Nemotron Omni</p></td>
-<td><p>Tool calls, image/video, <code class="docutils literal notranslate"><span class="pre">reasoning_content</span></code> normalization</p></td>
+<td><p>Tool calls, image and video, <code class="docutils literal notranslate"><span class="pre">reasoning_content</span></code> normalization</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nemotron_embedding</span></code></p></td>
 <td><p>Embedding server</p></td>

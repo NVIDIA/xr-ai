@@ -84,12 +84,12 @@ Give the sample README enough information for a first successful local edit:
   files to their common settings and shows one representative YAML change;
 - link to the sample's canonical guide and generated configuration reference.
 
-Keep the corresponding `docs/source/` guide complete. It explains how the
-launcher selects the files, path and environment precedence, restart behavior,
-the responsibility of each config, and the boundary between a sample endpoint
-change and a persistent model-server change. Exact field values and field-level
-guidance stay beside the checked-in YAML or JSON and are rendered into
-{doc}`/reference/configuration`.
+Keep the corresponding `docs/source/` guide complete. The guide explains how
+the launcher selects the files, path and environment precedence, restart
+behavior, the responsibility of each configuration file, and the boundary
+between a sample endpoint change and a persistent model-server change. Exact
+field values and field-level guidance stay beside the checked-in YAML or JSON.
+Refer to {doc}`/reference/configuration` for the rendered reference.
 
 ## Orchestrator `pyproject.toml`
 

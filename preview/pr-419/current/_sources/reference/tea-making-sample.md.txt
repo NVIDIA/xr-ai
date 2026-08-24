@@ -7,10 +7,10 @@
 
 The tea-making sample is a reference for applications that combine a guided
 procedure, visual evidence, foreground questions, independent background
-observers, and voice output. Start with the
-{doc}`quickstart </getting_started/quickstart>` to run it. This architecture
-reference explains how to adapt the sample to another procedure rather than
-merely changing model settings.
+observers, and voice output. Refer to the
+{doc}`quickstart </getting_started/quickstart>` to run the sample. This
+architecture reference explains how to adapt the sample to another procedure
+rather than merely changing model settings.
 
 The defining pattern is a deterministic workflow around an agentic core. YAML
 declares the steps and state contract. Application code owns transitions and
@@ -157,42 +157,42 @@ locks, and participant cleanup.
 | `yaml/workflow.yaml` | Five-step procedure and evidence contract | Define a different guided task |
 | `rag-documents/` | Sample retrieval corpus | Replace with domain documents or a backend |
 
-Configuration and command syntax are included automatically in the generated
-{doc}`configuration <configuration>` and
-{doc}`command-line <command-line>` references.
+Refer to the generated {doc}`configuration <configuration>` and
+{doc}`command-line <command-line>` references for configuration fields and
+command syntax.
 
 ## Configuration
 
 Run and edit the sample from `agent-samples/tea-making-sample/`. The
 orchestrator reads the checked-in files on every start and materializes a
-temporary worker config with absolute paths; edit the files under `yaml/`, not
-the temporary copy named in the logs.
+temporary worker configuration with absolute paths. Edit the files under
+`yaml/`, not the temporary copy named in the logs.
 
 | File | Owns |
 |---|---|
-| `yaml/tea_making_worker.yaml` | Selected subordinate configs, frame and model timeouts, background cadence, VAD, output directory, and event-viewer port and history |
+| `yaml/tea_making_worker.yaml` | Selected subordinate configuration files, frame and model timeouts, background cadence, VAD, output directory, and event-viewer port and history |
 | `yaml/workflow.yaml` | Typed state, steps, triggers, evidence, tool access, transitions, and user messages |
 | `yaml/voice_gate.yaml` and `yaml/voice_gate.always-on.yaml` | Wake-word and always-on speech presets |
-| `yaml/rag_service.yaml` | Document path, model config, cache, chunking, embedding dimensions, and score threshold |
+| `yaml/rag_service.yaml` | Document path, model configuration, cache, chunking, embedding dimensions, and score threshold |
 | `yaml/models.local.json` | Reused model adapters, endpoints, and readiness checks |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
 
 Choose a voice preset through `voice_gate_yaml` in
 `tea_making_worker.yaml`. Change observation and summary frequency in that
 worker file, retrieval behavior in `rag_service.yaml`, and the procedure itself
-in `workflow.yaml`. Relative paths declared in each config resolve from that
-config's directory. Workflow state and step references are validated at
+in `workflow.yaml`. Relative paths declared in each configuration file resolve
+from that file's directory. Workflow state and step references are validated at
 startup, so an invalid contract fails before a participant session begins.
 
 Restart `tea_making_sample` after an edit; configuration is not hot-reloaded.
 The `--expose-web-events` option intentionally overrides `web_events_host` in
 the runtime copy. Changing `models.local.json` changes the endpoints used by
-the worker and RAG service but not the persistent servers. Use
-{doc}`/guides/customizing-model-servers` and restart the shared stack for a
-server-side model, GPU, port, or memory change.
+the worker and RAG service but not the persistent servers. Refer to
+{doc}`/guides/customizing-model-servers` for a server-side model, GPU, port, or
+memory change, then restart the shared stack.
 
-Exact fields, checked-in values, and adjacent YAML comments are rendered in the
-generated {doc}`configuration <configuration>` reference.
+Refer to the generated {doc}`configuration <configuration>` reference for exact
+fields, checked-in values, and adjacent YAML comments.
 
 ## Deterministic foreground routing
 

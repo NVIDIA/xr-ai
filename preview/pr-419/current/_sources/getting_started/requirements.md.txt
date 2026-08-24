@@ -23,7 +23,7 @@ local GPU is required for the agent or DeviceIOHub.
 | simple-vlm-example (requires model services) | Uses the model-services allocation |
 | lab-instrument-monitoring (requires model services) | Uses the model-services allocation |
 | tea-making-sample (requires model services) | Uses the model-services allocation |
-| xr-render-demo (requires model-servers) | ~55 GB (models) + ~2 GB (CloudXR and hub) |
+| xr-render-demo (requires model-servers) | ~55 GB for models and ~2 GB for CloudXR and the hub |
 | Hub only | none |
 
 ## Software

@@ -5,9 +5,10 @@
 
 # xr-render-demo — architecture
 
-This architecture reference describes the xr-render-demo sample. Start with
-{doc}`/getting_started/quickstart` to run it. For inference-server mechanics
-shared with other samples, refer to {doc}`/components/ai-services`.
+This architecture reference describes the xr-render-demo sample. Refer to
+{doc}`/getting_started/quickstart` to run the sample. For inference-server
+mechanics shared with other samples, refer to
+{doc}`/components/ai-services`.
 
 ## Process stack
 
@@ -101,8 +102,8 @@ the XR compositor and the agentic LLM do not share a card.
 ## Configuration
 
 Run and edit the sample from `agent-samples/xr-render-demo/`. Each process
-receives its checked-in config directly, so edit the owning file and restart
-`xr_render_demo` to apply a change.
+receives its checked-in configuration directly. Edit the owning file and
+restart `xr_render_demo` to apply a change.
 
 | File | Owns |
 |---|---|
@@ -125,11 +126,12 @@ settings are independent and must be planned together. Keep
 Each `models.json` entry maps a logical role (`llm`, `agent_llm`, `stt`, `tts`,
 or `vlm`) to an adapter, endpoint, and deployment. Editing it changes which
 operator-owned endpoint the demo consumes; it does not reconfigure or restart
-the shared model. Use {doc}`/guides/customizing-model-servers` and restart the
-persistent model stack for server-side model, port, GPU, or memory changes.
+the shared model. Refer to {doc}`/guides/customizing-model-servers` for
+server-side model, port, GPU, or memory changes, then restart the persistent
+model stack.
 
-Exact fields, checked-in values, and adjacent YAML comments are rendered in the
-generated {doc}`configuration <configuration>` reference.
+Refer to the generated {doc}`configuration <configuration>` reference for exact
+fields, checked-in values, and adjacent YAML comments.
 
 ## The LLM server
 
@@ -174,7 +176,7 @@ Port 8103. NeMo ASR in-process. English-only, ~1.5 GB VRAM.
 
 ```
 LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceAgent
-  → VAD/STT
+  → VAD and STT
       pre-roll buffer    last 10 chunks (~320 ms) kept at all times;
                          prepended to the utterance buffer on speech onset
                          so the first word's attack isn't clipped
@@ -215,7 +217,7 @@ cancelled before its reply is published, so no partial stream is left open.
 ## Agent runtime and voice topology
 
 ```
-VoiceAgent → private media session → VAD/STT ─→ voice.transcript topic
+VoiceAgent → private media session → VAD and STT ─→ voice.transcript topic
                                   └→ VoiceGate ─┐
            → typed hub text ingress ────────────┴→ xr-render.user-query topic
   → RenderAgent → SceneSupervisor → five focused subagents → voice.output topic

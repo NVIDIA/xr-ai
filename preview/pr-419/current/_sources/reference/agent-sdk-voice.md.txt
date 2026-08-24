@@ -7,8 +7,8 @@
 
 `xr-ai-voice` owns the voice-facing boundary for an XR agent. Pipecat implements
 the private media pipeline; applications use typed runtime events and model
-service protocols. Exact constructors, fields, and defaults are in
-{doc}`python/index`.
+service protocols. Refer to {doc}`python/index` for exact constructors, fields,
+and defaults.
 
 ## Voice agent
 
@@ -35,7 +35,7 @@ async with runtime:
     await voice.run(runtime)
 ```
 
-`VoiceAgent` owns model readiness, hub transport, VAD/STT, voice gating, typed
+`VoiceAgent` owns model readiness, hub transport, VAD and STT, voice gating, typed
 text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
 session remains private. Applications that need a shared public
 `HubVoiceTransport` construct and inject one explicitly.
@@ -104,7 +104,7 @@ release or shutdown.
 
 ## Voice gating and early probes
 
-When wake phrases and a listening chime are enabled, VAD/STT probes the opening
+When wake phrases and a listening chime are enabled, VAD and STT probe the opening
 audio while the user is still speaking. Probe audio includes a silent tail so
 offline STT can finalize a phrase. Only the final transcript is dispatched as a
 query; a slow probe receives a short grace period and is then cancelled.
