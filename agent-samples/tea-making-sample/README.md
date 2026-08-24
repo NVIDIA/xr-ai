@@ -63,6 +63,29 @@ finalized when its rewrite completes; playback pacing does not delay the Agent
 panel. An urgent interruption may stop audio after the complete intended text
 has already appeared.
 
+## Foreground behavior
+
+While tea guidance is active, foreground requests remain limited to the current
+step, tea-guide status and controls, and the independent background
+applications. An unrelated request receives exactly “I can only help with the
+active tea guide right now.” without calling a tool or changing guide state.
+When guidance is idle, ordinary questions are not subject to that refusal.
+
+## Foreground routing eval
+
+The live-model eval checks idle and active first actions, exact unrelated-query
+refusal, valid guide controls, current-step questions, visual routing, and
+background-application controls. Start `model-servers` so the configured Omni
+LLM endpoint on port 8108 is healthy, then run from the repository root:
+
+```bash
+uv run --project agent-samples/tea-making-sample/worker \
+  python agent-samples/tea-making-sample/eval/eval.py
+```
+
+The command prints one `PASS` or `FAIL` line per case and exits nonzero when a
+tool choice, argument schema, or response contract does not match.
+
 ## File outputs
 
 Background task output is retained under the sample's `artifacts/` directory:

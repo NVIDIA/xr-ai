@@ -4,6 +4,10 @@
 - name: idle-conversation
   query: Hello there.
   expected_tool: null
+- name: idle-answers-unrelated-general-knowledge
+  query: What is the capital of France?
+  expected_tool: null
+  forbidden_response: I can only help with the active tea guide right now.
 - name: start-tea-guide
   query: Help me make a cup of tea.
   expected_tool: workflow__start
@@ -26,35 +30,59 @@
   query: What did the background watchers report recently?
   expected_tool: application_context__query
 
+- name: active-answers-current-step-question
+  route: active
+  step: fill_water
+  query: What should I do at this step?
+  expected_tool: null
+  forbidden_response: I can only help with the active tea guide right now.
+
+- name: active-routes-workflow-status
+  route: active
+  step: heat_water
+  query: What is the status of my tea guide?
+  expected_tool: workflow__status
+
+- name: active-routes-step-visual-question
+  route: active
+  step: fill_water
+  query: Check whether there is visibly water inside my kettle.
+  expected_tool: current_view
+
+- name: active-starts-background-watch
+  route: active
+  step: start_steeping
+  query: Start watching in the background for spills near the kettle.
+  expected_tool: change_watch__start
+
 - name: active-rejects-general-knowledge-at-completed-timer
   route: active
   step: steep_timer
   state_updates: {steeping_complete: true}
   query: What is the capital of France?
   expected_tool: null
-  expected_response_pattern: "(?i)I can only help with the active tea guide"
-  forbidden_response_pattern: "(?i)\\bParis\\b"
+  expected_response: I can only help with the active tea guide right now.
 
 - name: active-rejects-unrelated-explanation
   route: active
   step: heat_water
   query: Could you explain how eclipses happen?
   expected_tool: null
-  expected_response_pattern: "(?i)I can only help with the active tea guide"
+  expected_response: I can only help with the active tea guide right now.
 
 - name: active-rejects-unrelated-control-word
   route: active
   step: fill_water
   query: My supervisor said I should advance my career. Any advice?
   expected_tool: null
-  expected_response_pattern: "(?i)I can only help with the active tea guide"
+  expected_response: I can only help with the active tea guide right now.
 
 - name: active-rejects-unrelated-translation
   route: active
   step: start_steeping
   query: Please translate good morning into Japanese.
   expected_tool: null
-  expected_response_pattern: "(?i)I can only help with the active tea guide"
+  expected_response: I can only help with the active tea guide right now.
 
 - name: active-advances-on-direct-command
   route: active

@@ -170,6 +170,12 @@ participant has an active step.
 - With an active workflow, it receives the current step's tools plus explicit
   workflow controls and compact sparse state.
 
+Active turns may address the current step, guide status and controls, or the
+independent background applications. For a request unrelated to all of those,
+the model must call no tool, leave guide state unchanged, and reply exactly “I
+can only help with the active tea guide right now.” The rule is scoped to the
+active route; the idle root assistant can answer ordinary questions.
+
 There is exactly one model loop. The foreground agent does not ask one model to
 route to another agent, and background agents never capture a foreground turn.
 `current_view` is a direct-return exception within that loop: after the route is
@@ -381,6 +387,17 @@ Test deterministic behavior separately from model quality:
 4. Test background lifecycle, deduplication, summary windows, and cancellation.
 5. Add routing evals for prompt-controlled tool choices.
 6. Run the live pipeline to evaluate visual evidence and model prompts.
+
+The checked-in live-model routing eval shares the production foreground's
+root-versus-active prompt and tool preparation. It validates the first model
+action, tool arguments, exact active-guide refusal, and positive active-guide
+routes. Start `model-servers` so the configured Omni LLM endpoint on port 8108
+is healthy, then run from the repository root:
+
+```bash
+uv run --project agent-samples/tea-making-sample/worker \
+  python agent-samples/tea-making-sample/eval/eval.py
+```
 
 When debugging, inspect the workflow, background, foreground, and Relay JSONL
 files as separate stages. This shows whether the problem came from evidence,

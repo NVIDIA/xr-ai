@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import asyncio
-import re
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -14,7 +13,7 @@ from typing import Any
 import yaml
 from tea_making_worker.background_context import BackgroundContextAgent
 from tea_making_worker.change_watch import ChangeWatchAgent
-from tea_making_worker.foreground import ForegroundAgent, _merge_tool_sets
+from tea_making_worker.foreground import ForegroundAgent
 from tea_making_worker.spec import load_workflow
 from tea_making_worker.transcript import TranscriptAgent
 from tea_making_worker.video_log import VideoLogAgent
@@ -77,11 +76,10 @@ def _build_agents(llm: LLMService) -> tuple[ForegroundAgent, GuidanceAgent]:
 
 
 def _active_route(
-    foreground: ForegroundAgent,
     guidance: GuidanceAgent,
     case: dict[str, Any],
     participant_id: str,
-) -> tuple[str, Any]:
+) -> None:
     target_step = str(case["step"])
     session = guidance.store.get(participant_id)
     guidance.store.start(session)
@@ -107,15 +105,12 @@ def _active_route(
         result = guidance.store.commit(session, state_updates, "")
         if not result.accepted:
             raise ValueError(f"state updates for {case['name']!r} were rejected: {state_updates!r}")
-    context = guidance.active_context(participant_id)
-    active_tools = guidance.active_tools(participant_id)
-    if context is None or active_tools is None:
+    if guidance.active_context(participant_id) is None:
         raise ValueError(f"case {case['name']!r} did not produce an active route")
-    tools = _merge_tool_sets(
-        active_tools,
-        foreground._background_tools(participant_id),
-    )
-    return f"{foreground._prompt}\n\nActive tea guide:\n{context}", tools
+
+
+def _normalize_response(text: str) -> str:
+    return " ".join(text.split())
 
 
 async def main() -> None:
@@ -127,18 +122,20 @@ async def main() -> None:
         for index, case in enumerate(cases):
             participant_id = f"tea-eval-{index}"
             if case.get("route", "root") == "active":
-                system_prompt, tools = _active_route(
-                    foreground,
+                _active_route(
                     guidance,
                     case,
                     participant_id,
                 )
-            else:
-                system_prompt = foreground._prompt
-                tools = foreground._root_tools(
-                    participant_id,
-                    ctx=None,
-                    timestamp_us=None,
+            system_prompt, tools, route = foreground._prepare_route(
+                participant_id,
+                ctx=None,
+                timestamp_us=None,
+            )
+            expected_route = "tea" if case.get("route", "root") == "active" else "root"
+            if route != expected_route:
+                raise ValueError(
+                    f"case {case['name']!r} prepared route {route!r}, expected {expected_route!r}"
                 )
             response = await llm.chat(
                 (
@@ -146,7 +143,7 @@ async def main() -> None:
                     ChatMessage(role="user", content=case["query"]),
                 ),
                 tools=tool_definitions(tools),
-                max_tokens=256,
+                max_tokens=512,
                 temperature=0.0,
                 enable_thinking=False,
             )
@@ -165,12 +162,17 @@ async def main() -> None:
                 except ValueError as exc:
                     errors.append(f"invalid {call.name!r} arguments: {exc}")
             content = response.content or ""
-            expected_pattern = case.get("expected_response_pattern")
-            if expected_pattern and re.search(expected_pattern, content) is None:
-                errors.append(f"response did not match {expected_pattern!r}")
-            forbidden_pattern = case.get("forbidden_response_pattern")
-            if forbidden_pattern and re.search(forbidden_pattern, content):
-                errors.append(f"response matched forbidden {forbidden_pattern!r}")
+            normalized_content = _normalize_response(content)
+            expected_response = case.get("expected_response")
+            if expected_response is not None and normalized_content != _normalize_response(
+                str(expected_response)
+            ):
+                errors.append(f"response did not equal {expected_response!r}")
+            forbidden_response = case.get("forbidden_response")
+            if forbidden_response is not None and _normalize_response(
+                str(forbidden_response)
+            ) in normalized_content:
+                errors.append(f"response contained forbidden {forbidden_response!r}")
             passed = actual_tools == expected_tools and not errors
             label = "PASS" if passed else "FAIL"
             print(f"{label} {case['name']}: tools={actual_tools!r} content={content!r}")
