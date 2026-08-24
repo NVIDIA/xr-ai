@@ -29,6 +29,7 @@ import socket  # used by local _port_open below; _pick_port moved to _helpers_su
 import subprocess
 import urllib.request
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 import yaml
@@ -43,6 +44,12 @@ _PIPER_PROJECT = _REPO_ROOT / "services" / "piper-tts"
 _PIPER_BIN     = _PIPER_PROJECT / ".venv" / "bin" / "piper_tts_server"
 _PIPER_YAML    = _PIPER_PROJECT / "piper_tts_server.yaml"
 _DEFAULT_PORT  = 8105
+_PIPER_CONFIGS = (
+    _PIPER_YAML,
+    _REPO_ROOT / "agent-samples/model-servers/yaml/spark/piper_tts_server.yaml",
+    _REPO_ROOT / "agent-samples/model-servers/yaml/96G_blackwell/piper_tts_server.yaml",
+    _REPO_ROOT / "agent-samples/model-servers/yaml/dual_48G_ada/piper_tts_server.yaml",
+)
 
 # Must match _EXIT_VOICE_UNAVAILABLE in piper_tts_server/__main__.py: the
 # server uses this exit code when the voice can't be obtained for
@@ -71,6 +78,176 @@ async def test_piper_config_rejects_unknown_use_cuda_string() -> None:
     module = _load_piper_main_module()
     with pytest.raises(ValueError, match="use_cuda"):
         module._parse_config_bool("sometimes", "use_cuda")
+
+
+@pytest.mark.parametrize("config_path", _PIPER_CONFIGS)
+async def test_piper_configs_allow_cold_start(config_path: Path) -> None:
+    module = _load_piper_main_module()
+    config = yaml.safe_load(config_path.read_text())
+    assert config["startup_timeout_s"] == module._DEFAULT_STARTUP_TIMEOUT_S
+
+
+async def test_piper_reuses_healthy_persistent_server(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_piper_main_module()
+    ready_file = tmp_path / "ready"
+    idle = Mock()
+    start = Mock(side_effect=AssertionError("must not launch a second server"))
+    monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
+    monkeypatch.setattr(module, "_health_url_ok", lambda _url: True)
+    monkeypatch.setattr(module, "_idle_until_stopped", idle)
+    monkeypatch.setattr(module, "_start_persistent_server", start)
+    monkeypatch.setattr(
+        module.sys,
+        "argv",
+        ["piper_tts_server", "--ready-file", str(ready_file)],
+    )
+
+    module.run()
+
+    assert ready_file.exists()
+    start.assert_not_called()
+    idle.assert_called_once_with("http://127.0.0.1:8105/health")
+
+
+async def test_piper_probes_configured_non_loopback_host(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_piper_main_module()
+    config_path = tmp_path / "piper.yaml"
+    config_path.write_text(yaml.safe_dump({"host": "192.0.2.10", "port": 8123}))
+    health = Mock(return_value=False)
+    port_open = Mock(return_value=False)
+    process = Mock()
+    start = Mock(return_value=process)
+    idle = Mock()
+    monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
+    monkeypatch.setattr(module, "_health_url_ok", health)
+    monkeypatch.setattr(module, "_port_open", port_open)
+    monkeypatch.setattr(module, "_start_persistent_server", start)
+    monkeypatch.setattr(module, "_idle_until_stopped", idle)
+    monkeypatch.setattr(
+        module.sys,
+        "argv",
+        ["piper_tts_server", "--config", str(config_path)],
+    )
+
+    module.run()
+
+    expected_health_url = "http://192.0.2.10:8123/health"
+    health.assert_called_once_with(expected_health_url)
+    port_open.assert_called_once_with("192.0.2.10", 8123)
+    assert start.call_args.args[1] == expected_health_url
+    idle.assert_called_once_with(expected_health_url, process)
+
+
+@pytest.mark.parametrize(
+    ("bind_host", "expected_probe_host", "expected_health_url"),
+    (
+        ("0.0.0.0", "127.0.0.1", "http://127.0.0.1:8105/health"),
+        ("::", "::1", "http://[::1]:8105/health"),
+    ),
+)
+async def test_piper_normalizes_wildcard_probe_hosts(
+    bind_host: str,
+    expected_probe_host: str,
+    expected_health_url: str,
+) -> None:
+    module = _load_piper_main_module()
+    probe_host = module._probe_host(bind_host)
+
+    assert probe_host == expected_probe_host
+    assert module._health_url(probe_host, 8105) == expected_health_url
+
+
+async def test_piper_rejects_unhealthy_listener_without_signaling_ready(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_piper_main_module()
+    ready_file = tmp_path / "ready"
+    start = Mock(side_effect=AssertionError("must not launch into an occupied port"))
+    monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
+    monkeypatch.setattr(module, "_health_url_ok", lambda _url: False)
+    monkeypatch.setattr(module, "_port_open", lambda _host, _port: True)
+    monkeypatch.setattr(module, "_start_persistent_server", start)
+    monkeypatch.setattr(
+        module.sys,
+        "argv",
+        ["piper_tts_server", "--ready-file", str(ready_file)],
+    )
+
+    with pytest.raises(SystemExit, match="port 8105 is already in use"):
+        module.run()
+
+    assert not ready_file.exists()
+    start.assert_not_called()
+
+
+async def test_piper_wait_reports_child_exit_before_health(monkeypatch) -> None:
+    module = _load_piper_main_module()
+    process = Mock()
+    process.poll.return_value = 98
+    monkeypatch.setattr(
+        module,
+        "_health_url_ok",
+        lambda _url: pytest.fail("health must not mask a failed bind"),
+    )
+
+    with pytest.raises(RuntimeError, match="exited with status 98"):
+        module._wait_until_healthy(process, "http://health", timeout_s=600)
+
+    process.wait.assert_not_called()
+
+
+async def test_piper_marks_persistent_child_for_cleanup(monkeypatch) -> None:
+    module = _load_piper_main_module()
+    process = Mock()
+    start = Mock(return_value=process)
+    monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
+    monkeypatch.setattr(module, "_health_url_ok", lambda _url: False)
+    monkeypatch.setattr(module, "_port_open", lambda _host, _port: False)
+    monkeypatch.setattr(module, "_start_persistent_server", start)
+    monkeypatch.setattr(module, "_idle_until_stopped", lambda *_args: None)
+    monkeypatch.setattr(module.sys, "argv", ["piper_tts_server"])
+
+    module.run()
+
+    child_env = start.call_args.kwargs["env"]
+    assert child_env["XR_AI_VLLM_MANAGED"] == "1"
+    assert child_env["XR_AI_VLLM_PORT"] == "8105"
+
+
+async def test_piper_terminates_owned_child_when_wrapper_is_stopped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_piper_main_module()
+    process = Mock()
+    terminate = Mock()
+    handlers = {
+        module.signal.SIGINT: module.signal.SIG_DFL,
+        module.signal.SIGTERM: module.signal.SIG_DFL,
+    }
+
+    def install_handler(sig, handler):
+        previous = handlers[sig]
+        handlers[sig] = handler
+        return previous
+
+    def receive_sigterm(*, timeout):
+        handlers[module.signal.SIGTERM](module.signal.SIGTERM, None)
+
+    monkeypatch.setattr(module.signal, "signal", install_handler)
+    monkeypatch.setattr(module, "_terminate_process", terminate)
+    process.wait.side_effect = receive_sigterm
+
+    with pytest.raises(SystemExit) as exc_info:
+        module._idle_until_stopped("http://health", process, poll_s=0.01)
+
+    assert exc_info.value.code == 128 + module.signal.SIGTERM
+    terminate.assert_called_once_with(process)
+    assert handlers[module.signal.SIGINT] is module.signal.SIG_DFL
+    assert handlers[module.signal.SIGTERM] is module.signal.SIG_DFL
 
 
 class _ServerExited(Exception):
@@ -187,7 +364,7 @@ async def test_piper_tts_smoke(tmp_path: Path) -> None:
     env = {**os.environ, "XR_AI_LOG_ROOT": str(tmp_path / "logs")}
 
     proc = subprocess.Popen(
-        [str(_PIPER_BIN), "--config", str(cfg_path)],
+        [str(_PIPER_BIN), "--_serve", "--config", str(cfg_path)],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         env=env,
