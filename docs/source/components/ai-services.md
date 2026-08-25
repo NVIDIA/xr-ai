@@ -104,7 +104,8 @@ its hardware-specific server YAML, and copy compatible endpoint entries into
 the sample's models JSON with `deployment.ownership` set to `reused`.
 
 Declare each model dependency in the sample orchestrator as reuse-only so the
-process list records startup ordering without starting or stopping the server:
+process list records the external dependency without transferring lifecycle
+ownership to the sample:
 
 ```python
 Process(
@@ -115,9 +116,10 @@ Process(
 )
 ```
 
-Start `model_servers` before the application sample. Application capability
-services such as RAG remain sample-owned and keep their configuration with the
-sample that launches them.
+The launcher skips reuse-only entries completely: it does not start, order, or
+readiness-check them. Start `model_servers` separately before the application
+sample. Application capability services such as RAG remain sample-owned and
+keep their configuration with the sample that launches them.
 
 ## Calling these from a worker
 
