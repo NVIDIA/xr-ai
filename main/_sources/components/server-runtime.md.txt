@@ -187,7 +187,10 @@ per-participant pipe that a flush can drain to interrupt playback.
 `return_audio_max_buffer_s` (3 seconds by default) is also a hard
 per-participant duration bound: if a custom or faulty producer runs ahead of
 playback, the oldest queued frames are dropped without affecting any other
-participant.
+participant. Set this value to at least `0.12` when using the built-in voice
+transport, which maintains a 120 ms reserve. Smaller values remain available
+for custom producers whose chunk size and pacing fit within the configured
+bound.
 
 ## Agent status aggregation
 

@@ -505,6 +505,15 @@ independent agents cannot merge accidentally.</p>
 <code class="docutils literal notranslate"><span class="pre">agent.response</span></code>. Set it to an empty string when the application owns its own
 caption channel. The echo describes intended completed text, not client playback
 acknowledgement.</p>
+<p>When a participant joins, the voice transport sends 320 ms of paced silence.
+The first chunk causes the hub to publish the return track, and the remaining
+interval gives the participant time to subscribe before an immediate greeting
+or response. If no output follows immediately, the pre-roll drains and does not
+delay a later response. During speech, the sender maintains up to 120 ms of
+downstream reserve to absorb ordinary event-loop and IPC jitter. It sends
+initial chunks immediately rather than waiting to fill the reserve, and
+interruption flushes participant-scoped queued audio. The hub setting
+<code class="docutils literal notranslate"><span class="pre">return_audio_max_buffer_s</span></code> must be at least <code class="docutils literal notranslate"><span class="pre">0.12</span></code> for built-in voice output.</p>
 </section>
 <section id="multiple-speech-producers">
 <span id="multiple-voice-producers"></span><h2>Multiple speech producers<a class="headerlink" href="#multiple-speech-producers" title="Link to this heading">#</a></h2>

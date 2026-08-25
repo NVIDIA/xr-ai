@@ -29,8 +29,10 @@ and command to `device_io_hub`. Rename `xr_media_hub.yaml` to
   independently for each participant in DeviceIOHub.
   `return_audio_max_buffer_s` defaults to 3 seconds; a custom or faulty producer
   that exceeds the queued-audio duration limit loses its oldest queued frames.
-  Increase the value for intentionally bursty custom producers, or decrease it
-  for a tighter memory and latency bound.
+  The built-in voice transport requires at least `0.12` to maintain its 120 ms
+  reserve. Increase the value for intentionally bursty custom producers, or
+  decrease it for a tighter memory and latency bound when using a compatible
+  custom producer.
 
 ## Removed SDK compatibility surfaces
 

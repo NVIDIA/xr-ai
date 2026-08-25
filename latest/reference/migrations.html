@@ -471,8 +471,10 @@ scheduling flags, Nemotron-Omni BF16 selection, Piper CUDA, voice-gate
 independently for each participant in DeviceIOHub.
 <code class="docutils literal notranslate"><span class="pre">return_audio_max_buffer_s</span></code> defaults to 3 seconds; a custom or faulty producer
 that exceeds the queued-audio duration limit loses its oldest queued frames.
-Increase the value for intentionally bursty custom producers, or decrease it
-for a tighter memory and latency bound.</p></li>
+The built-in voice transport requires at least <code class="docutils literal notranslate"><span class="pre">0.12</span></code> to maintain its 120 ms
+reserve. Increase the value for intentionally bursty custom producers, or
+decrease it for a tighter memory and latency bound when using a compatible
+custom producer.</p></li>
 </ul>
 </section>
 <section id="removed-sdk-compatibility-surfaces">
