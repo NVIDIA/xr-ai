@@ -476,6 +476,12 @@ with no skills mechanism can follow the <code class="docutils literal notranslat
 <tr class="row-even"><td><p><a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/skills/getting-started/SKILL.md"><code class="docutils literal notranslate"><span class="pre">getting-started</span></code></a></p></td>
 <td><p>Sets an agent up to build on xr-ai: repo, working contract, docs, reference sample</p></td>
 </tr>
+<tr class="row-odd"><td><p><a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/skills/gh-review-xr-ai/SKILL.md"><code class="docutils literal notranslate"><span class="pre">gh-review-xr-ai</span></code></a></p></td>
+<td><p>Reviews xr-ai PRs with strict scope discipline and comment-only feedback</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/skills/gh-manage-xr-ai-reviews/SKILL.md"><code class="docutils literal notranslate"><span class="pre">gh-manage-xr-ai-reviews</span></code></a></p></td>
+<td><p>Tracks an XR-AI review inbox with overall status, next actions, and safe batching</p></td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -485,12 +491,21 @@ repository; new skills land there with the features they cover.</p>
 </section>
 <section id="manual-installation">
 <h2>Manual installation<a class="headerlink" href="#manual-installation" title="Link to this heading">#</a></h2>
-<p>Set <code class="docutils literal notranslate"><span class="pre">REF</span></code> to the repository ref you will build against and download the skill
-into the directory used by your coding agent:</p>
+<p>Set <code class="docutils literal notranslate"><span class="pre">REF</span></code> to the repository ref you will build against, choose a <code class="docutils literal notranslate"><span class="pre">SKILL</span></code> from
+the table, and download it into the directory used by your coding agent:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">SKILLS_DIR</span><span class="o">=</span>/path/to/your/agent/skills
 <span class="nv">REF</span><span class="o">=</span>main<span class="w">  </span><span class="c1"># or a release tag such as v0.3.0</span>
-curl<span class="w"> </span>-fsSL<span class="w"> </span>--create-dirs<span class="w"> </span>-o<span class="w"> </span><span class="s2">"</span><span class="nv">$SKILLS_DIR</span><span class="s2">/getting-started/SKILL.md"</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="s2">"https://raw.githubusercontent.com/NVIDIA/xr-ai/</span><span class="nv">$REF</span><span class="s2">/skills/getting-started/SKILL.md"</span>
+<span class="nv">SKILL</span><span class="o">=</span>getting-started
+curl<span class="w"> </span>-fsSL<span class="w"> </span>--create-dirs<span class="w"> </span>-o<span class="w"> </span><span class="s2">"</span><span class="nv">$SKILLS_DIR</span><span class="s2">/</span><span class="nv">$SKILL</span><span class="s2">/SKILL.md"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s2">"https://raw.githubusercontent.com/NVIDIA/xr-ai/</span><span class="nv">$REF</span><span class="s2">/skills/</span><span class="nv">$SKILL</span><span class="s2">/SKILL.md"</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">gh-manage-xr-ai-reviews</span></code> composes <code class="docutils literal notranslate"><span class="pre">gh-review-xr-ai</span></code>; install both review
+skills together. The review skills also ship <code class="docutils literal notranslate"><span class="pre">agents/openai.yaml</span></code>, optional
+Codex interface metadata for their display name, short description, and default
+prompt. After setting <code class="docutils literal notranslate"><span class="pre">SKILL</span></code> to either review skill, install that metadata with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-fsSL<span class="w"> </span>--create-dirs<span class="w"> </span>-o<span class="w"> </span><span class="s2">"</span><span class="nv">$SKILLS_DIR</span><span class="s2">/</span><span class="nv">$SKILL</span><span class="s2">/agents/openai.yaml"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s2">"https://raw.githubusercontent.com/NVIDIA/xr-ai/</span><span class="nv">$REF</span><span class="s2">/skills/</span><span class="nv">$SKILL</span><span class="s2">/agents/openai.yaml"</span>
 </pre></div>
 </div>
 <p>If the selected release predates the skill bank, use <code class="docutils literal notranslate"><span class="pre">main</span></code> for both the skill
