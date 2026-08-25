@@ -1,0 +1,910 @@
+
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Connecting clients &#8212; XR AI</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=a95f357e85573c9b56d5"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5" />
+
+
+
+    <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'getting_started/clients';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+
+    <link rel="icon" href="../_static/favicon.png"/>
+
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Networking and firewall" href="networking.html" />
+    <link rel="prev" title="Requirements" href="requirements.html" />
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+
+
+  </head>
+
+  <body data-default-mode="">
+
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="XR AI - Home"/>
+    <img src="../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="XR AI - Home"/>
+  
+  
+    <p class="title logo__title">XR AI</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="XR AI - Home"/>
+    <img src="../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="XR AI - Home"/>
+  
+  
+    <p class="title logo__title">XR AI</p>
+  
+</a>
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item"><!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+</div>
+        <div class="sidebar-primary-item">
+
+
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Table of Contents">
+  <p class="bd-links__title" role="heading" aria-level="1">Table of Contents</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../overview/architecture.html">Architecture</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Getting Started</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="skills.html">Skills</a></li>
+<li class="toctree-l2"><a class="reference internal" href="requirements.html">Requirements</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Connecting clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="networking.html">Networking and firewall</a></li>
+<li class="toctree-l2"><a class="reference internal" href="credentials.html">Credentials</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../components/index.html">Components</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../components/agent-sdk.html">Agent SDK</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../components/ai-services.html">AI inference servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../components/launcher-and-process-model.html">Launcher and process model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../components/server-runtime.html">Server runtime</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+</ul>
+</details></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Getting Started</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Connecting clients</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+<section id="connecting-clients">
+<h1>Connecting clients<a class="headerlink" href="#connecting-clients" title="Link to this heading">#</a></h1>
+<p>Every sample starts DeviceIOHub and then accepts one or more platform clients.
+This client reference is the canonical build and connection guide for the
+clients under <code class="docutils literal notranslate"><span class="pre">client-samples/</span></code>. Refer to <a class="reference internal" href="quickstart.html"><span class="doc">Quickstart</span></a> for starting an
+agent sample and <a class="reference internal" href="networking.html"><span class="doc">Networking and firewall</span></a> for firewall and TLS configuration.</p>
+<section id="client-matrix">
+<span id="which-clients-exist"></span><h2>Client matrix<a class="headerlink" href="#client-matrix" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Client</p></th>
+<th class="head"><p>Directory</p></th>
+<th class="head"><p>Transport</p></th>
+<th class="head"><p>Build</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Web</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">client-samples/web/</span></code></p></td>
+<td><p>LiveKit from CDN</p></td>
+<td><p>None</p></td>
+</tr>
+<tr class="row-odd"><td><p>Web-XR</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">client-samples/web-xr/</span></code></p></td>
+<td><p>Local LiveKit and CloudXR bundles</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">web-xr-build/build.sh</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Android</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">client-samples/android/</span></code></p></td>
+<td><p>LiveKit Android</p></td>
+<td><p>Android Studio or Gradle</p></td>
+</tr>
+<tr class="row-odd"><td><p>iOS/visionOS</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">client-samples/ios-visionos/</span></code></p></td>
+<td><p>LiveKit Swift and CloudXRKit</p></td>
+<td><p>Xcode</p></td>
+</tr>
+<tr class="row-even"><td><p>Native C++</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">client-samples/native/</span></code></p></td>
+<td><p>LiveKit C++</p></td>
+<td><p>CMake</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The clients share a StreamKit shape: one transport-neutral <code class="docutils literal notranslate"><span class="pre">StreamSession</span></code>
+delegates to a <code class="docutils literal notranslate"><span class="pre">StreamingBackend</span></code>, and <code class="docutils literal notranslate"><span class="pre">LiveKitBackend</span></code> is the only layer that
+imports a LiveKit SDK. Connection, microphone, camera, participant status, data,
+and network metrics remain separate operations.</p>
+<p id="network-telemetry">Graphical clients display LiveKit connection quality, round-trip time, and
+receive jitter; the C++ sample reports them through its callback. Backends sample
+existing WebRTC statistics about once per second. No hub message or separate
+telemetry service is involved.</p>
+</section>
+<section id="shared-connection-flow">
+<span id="the-connect-flow"></span><h2>Shared connection flow<a class="headerlink" href="#shared-connection-flow" title="Link to this heading">#</a></h2>
+<p>The hub prints a URL, room, development token, and web-client URL at startup.
+Browser, Android, and Apple clients connect to the hub’s web-server port <code class="docutils literal notranslate"><span class="pre">8080</span></code>,
+which proxies LiveKit on the same origin. The native C++ client also supports
+this TLS path with <code class="docutils literal notranslate"><span class="pre">--secure</span> <span class="pre">--port</span> <span class="pre">8080</span></code>. Its port 7880 default is a plaintext
+direct-debugging exception; restrict it to the XR AI host or a trusted source
+subnet as described in <a class="reference internal" href="networking.html"><span class="doc">Networking and firewall</span></a>.</p>
+<p>A client may paste the printed 24-hour development JWT or fetch a shorter-lived
+token from:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>GET https://&lt;host&gt;:8080/token?identity=&lt;identity&gt;
+</pre></div>
+</div>
+<p>The response is a JSON object containing <code class="docutils literal notranslate"><span class="pre">token</span></code>, <code class="docutils literal notranslate"><span class="pre">room</span></code>, and <code class="docutils literal notranslate"><span class="pre">url</span></code>. StreamKit
+token fetchers also accept a plain JWT response. The room is encoded in the
+token; clients do not send a separate room query parameter.</p>
+<p id="self-signed-certificate-trust">The default HTTPS certificate is self-signed and stored under
+<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/</span></code>. Browsers allow a development click-through; Android
+and Apple devices require the platform trust procedures below. Use a public or
+managed certificate for production.</p>
+</section>
+<section id="web">
+<span id="web-basic-sample"></span><h2>Web<a class="headerlink" href="#web" title="Link to this heading">#</a></h2>
+<p>The basic page in <code class="docutils literal notranslate"><span class="pre">client-samples/web/</span></code> uses plain ES modules and loads LiveKit
+from jsDelivr. It has no build step. Open <code class="docutils literal notranslate"><span class="pre">https://&lt;host&gt;:8080</span></code>, accept the
+development certificate warning, leave Token URL blank to use <code class="docutils literal notranslate"><span class="pre">/token</span></code>, and
+connect. The camera preview follows the published track’s aspect ratio.</p>
+</section>
+<section id="web-xr-xr-render-demo">
+<h2>Web-XR (xr-render-demo)<a class="headerlink" href="#web-xr-xr-render-demo" title="Link to this heading">#</a></h2>
+<p>The Web-XR page uses same-origin bundles under
+<code class="docutils literal notranslate"><span class="pre">client-samples/web-xr/vendor/</span></code>. The xr-render orchestrator builds missing
+bundles automatically when <code class="docutils literal notranslate"><span class="pre">npm</span></code> is available. To rebuild manually:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>client-samples/web-xr-build
+./build.sh
+</pre></div>
+</div>
+<p>The idempotent script reads the CloudXR version from <code class="docutils literal notranslate"><span class="pre">.sdk-version</span></code>, reuses a
+matching versioned tarball when present, otherwise reuses the matching
+IsaacTeleop tarball at <code class="docutils literal notranslate"><span class="pre">~/hub/IsaacTeleop/deps/cloudxr/</span></code> when available, and
+finally downloads the public NGC tarball. It installs npm dependencies, writes
+both ESM bundles to <code class="docutils literal notranslate"><span class="pre">../web-xr/vendor/</span></code>, and records the SDK version beside
+them. The orchestrator automatically rebuilds missing or stale bundles.
+To bump CloudXR, edit <code class="docutils literal notranslate"><span class="pre">.sdk-version</span></code> and re-run the script. To bump LiveKit,
+edit <code class="docutils literal notranslate"><span class="pre">package.json</span></code>, remove <code class="docutils literal notranslate"><span class="pre">node_modules</span></code>, and re-run the script.</p>
+</section>
+<section id="android">
+<h2>Android<a class="headerlink" href="#android" title="Link to this heading">#</a></h2>
+<p>The Android app is a Jetpack Compose client with selectable Camera2 devices,
+microphone capture, participant status, arbitrary data, and network metrics.</p>
+<p><a id="requirements"></a><a id="build-and-run"></a></p>
+<section id="requirements-and-build">
+<span id="clients-build-and-run"></span><span id="clients-requirements"></span><h3>Requirements and build<a class="headerlink" href="#requirements-and-build" title="Link to this heading">#</a></h3>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Requirement</p></th>
+<th class="head"><p>Version</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Android Studio</p></td>
+<td><p>Koala 2024.1.1 or newer</p></td>
+</tr>
+<tr class="row-odd"><td><p>JDK</p></td>
+<td><p>17</p></td>
+</tr>
+<tr class="row-even"><td><p>Minimum Android</p></td>
+<td><p>API 24</p></td>
+</tr>
+<tr class="row-odd"><td><p>Target Android</p></td>
+<td><p>API 34</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Open <code class="docutils literal notranslate"><span class="pre">client-samples/android/</span></code> in Android Studio, allow Gradle sync to finish,
+select a device, and run. The checked-in wrapper also supports:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>client-samples/android
+./gradlew<span class="w"> </span>assembleDebug
+</pre></div>
+</div>
+<p><a id="connect"></a></p>
+</section>
+<section id="connect-and-permissions">
+<span id="clients-connect"></span><h3>Connect and permissions<a class="headerlink" href="#connect-and-permissions" title="Link to this heading">#</a></h3>
+<p>Enter the server host, port <code class="docutils literal notranslate"><span class="pre">8080</span></code>, a unique identity, and either the printed
+token or the default token URL. Tap <strong>Install hub certificate</strong> before the
+first connection; Android opens the system certificate-install flow.</p>
+<p>The app requests microphone permission when starting the microphone and camera
+permission when opening a physical camera. <code class="docutils literal notranslate"><span class="pre">INTERNET</span></code> and
+<code class="docutils literal notranslate"><span class="pre">MODIFY_AUDIO_SETTINGS</span></code> are install-time permissions. <code class="docutils literal notranslate"><span class="pre">BLUETOOTH_CONNECT</span></code> is a
+runtime permission on Android 12 and newer; the current sample declares it but
+does not prompt for it, so grant Nearby devices in system settings before
+depending on Bluetooth audio routing.</p>
+<p>The current Android backend maps every enabled <code class="docutils literal notranslate"><span class="pre">AudioConfig</span></code> mode to LiveKit’s
+default microphone capture. It does not yet select distinct voice-processing,
+software-processing, or raw DSP settings, so the sample UI does not expose a
+DSP-mode picker. LiveKit plays remote agent audio automatically. Camera choices
+come from Camera2 and include front, back, extra built-in lenses, and attached
+USB cameras when the device exposes them.</p>
+<p>The root Android build pins the Netty dependency pulled in by AGP’s test tooling
+above known vulnerable 4.1 releases. After changing AGP or the version catalog,
+run <code class="docutils literal notranslate"><span class="pre">./gradlew</span> <span class="pre">verifyNettyPin</span></code> from <code class="docutils literal notranslate"><span class="pre">client-samples/android/</span></code>.</p>
+<p id="android-xr">The app can run as a flat Android panel on Android XR, but that path is not
+validated. It does not use Jetpack XR or immersive Android XR APIs, and its
+Camera2 selector is not a passthrough-camera integration.</p>
+</section>
+</section>
+<section id="ios-visionos">
+<h2>iOS/visionOS<a class="headerlink" href="#ios-visionos" title="Link to this heading">#</a></h2>
+<p>The Apple client is a checked-in SwiftUI project and local Swift package. It
+targets iOS 18 and visionOS 26, requires Xcode 26 with Swift 6.2, and resolves
+LiveKit Swift and CloudXRKit through Swift Package Manager.</p>
+<section id="build">
+<span id="create-the-xcode-project"></span><h3>Build<a class="headerlink" href="#build" title="Link to this heading">#</a></h3>
+<p>Open <code class="docutils literal notranslate"><span class="pre">client-samples/ios-visionos/StreamKitSample.xcworkspace</span></code>, select the
+<code class="docutils literal notranslate"><span class="pre">StreamKitSample</span></code> scheme and destination, choose a signing team and a bundle ID
+owned by that team, then build and run. The workspace already includes the app
+project and local StreamKit package; do not create a replacement Xcode project.</p>
+<p>The checked-in bundle ID is <code class="docutils literal notranslate"><span class="pre">com.nvidia.xr-ai-example</span></code>. Changing it does not
+change the <code class="docutils literal notranslate"><span class="pre">StreamKitSample</span></code> display name, but it does select a new
+<code class="docutils literal notranslate"><span class="pre">UserDefaults</span></code> domain, so saved settings reset on the first launch after a
+rename.</p>
+<p>The simulators stream
+<code class="docutils literal notranslate"><span class="pre">StreamKit/Sources/StreamKit/Resources/SimulatorFeed.gif</span></code> instead of a physical
+camera. Replace that resource to customize the simulated feed.</p>
+<p>On an iOS device the preview follows the live camera aspect ratio. The Vision
+Pro main-camera track goes directly from ARKit to LiveKit and is not copied into
+the 2D preview; the <code class="docutils literal notranslate"><span class="pre">LIVE</span></code> badge, rather than the placeholder preview, indicates
+capture. Start the immersive space before camera capture on a Vision Pro device.</p>
+</section>
+<section id="vision-pro-permissions">
+<h3>Vision Pro permissions<a class="headerlink" href="#vision-pro-permissions" title="Link to this heading">#</a></h3>
+<p>Main passthrough camera access on a Vision Pro device requires both the
+<code class="docutils literal notranslate"><span class="pre">com.apple.developer.arkit.main-camera-access.allow</span></code> entitlement and the team’s
+Apple-issued <code class="docutils literal notranslate"><span class="pre">Enterprise.license</span></code>. Put the non-redistributable license at
+<code class="docutils literal notranslate"><span class="pre">client-samples/ios-visionos/App/Enterprise.license</span></code>; the build phase copies it
+into the application. A missing license leaves audio, data, simulator camera,
+and the rest of the app usable, but disables device passthrough camera access.</p>
+<p>Xcode automatic signing supports development builds. App Store and TestFlight
+distribution require a manually issued provisioning profile that grants the
+main-camera entitlement.</p>
+<p>The native CloudXR path also declares
+<code class="docutils literal notranslate"><span class="pre">com.apple.developer.low-latency-streaming</span></code>, which requires an Apple Developer
+Program team. A team that cannot provision this entitlement can remove it from
+<code class="docutils literal notranslate"><span class="pre">client-samples/ios-visionos/App/StreamKitSample.entitlements</span></code>; native CloudXR
+remains available with higher latency. Simulators do not require the enterprise
+camera license.</p>
+</section>
+<section id="connect-and-trust-the-certificate">
+<h3>Connect and trust the certificate<a class="headerlink" href="#connect-and-trust-the-certificate" title="Link to this heading">#</a></h3>
+<p>Enter the host and port <code class="docutils literal notranslate"><span class="pre">8080</span></code>, then use a pasted token or the default <code class="docutils literal notranslate"><span class="pre">/token</span></code>
+endpoint. <code class="docutils literal notranslate"><span class="pre">SessionConfig</span></code> contains only the participant identity; the token
+encodes the room. Incoming data callbacks receive <code class="docutils literal notranslate"><span class="pre">(topic,</span> <span class="pre">data)</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">_agent.status</span></code> is delivered separately through the status callback.</p>
+<p>The LiveKit WebSocket requires system trust for the hub certificate. In the
+app, tap <strong>Install hub certificate</strong>, allow Safari to download the profile,
+install it under <strong>Settings → General → VPN &amp; Device Management</strong>, then enable
+full trust under <strong>Settings → General → About → Certificate Trust Settings</strong>.
+Refer to <a class="reference internal" href="../guides/troubleshooting.html"><span class="doc">Troubleshooting</span></a> for certificate regeneration, SAN mismatch,
+401, and media-interruption diagnostics.</p>
+<p>When microphone or camera state appears stuck, filter Console.app by
+<code class="docutils literal notranslate"><span class="pre">category:MediaSession</span></code> to inspect interruption and recovery events. CoreAudio
+<code class="docutils literal notranslate"><span class="pre">-50</span></code> and <code class="docutils literal notranslate"><span class="pre">FigAudioSession</span></code> <code class="docutils literal notranslate"><span class="pre">-19224</span></code> messages also appear during successful
+microphone starts and are not failure indicators by themselves.</p>
+<p>If microphone startup fails with
+<code class="docutils literal notranslate"><span class="pre">io.livekit.swift-sdk</span> <span class="pre">Code=101</span> <span class="pre">&quot;Timed</span> <span class="pre">out&quot;</span></code> after about five seconds, the
+LiveKit recording engine did not produce the first buffer. Current builds
+pre-warm that engine before publishing. After leaving XR, an iOS microphone
+activation sound can play while capture restarts; this is expected.</p>
+</section>
+<section id="native-cloudxr">
+<h3>Native CloudXR<a class="headerlink" href="#native-cloudxr" title="Link to this heading">#</a></h3>
+<p>Native Apple clients require the CloudXR native device profile. Start the demo
+from the repository root with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">NV_DEVICE_PROFILE</span><span class="o">=</span>auto-native<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo<span class="w"> </span>xr_render_demo
+</pre></div>
+</div>
+<p>The environment variable overrides the <code class="docutils literal notranslate"><span class="pre">auto-webrtc</span></code> YAML default without a
+checkout edit. LiveKit remains on port 8080 while CloudXRKit uses its native
+transport. Connecting or stopping XR does not disconnect the LiveKit agent
+session. Closing the immersive space or disconnecting from the hub stops the XR
+session so no render component is orphaned.</p>
+<p>In <code class="docutils literal notranslate"><span class="pre">auto-native</span></code> mode, CloudXR does not use the web client’s port 48322 WSS
+proxy and needs no additional certificate installation. CloudXRKit’s native
+transport provides its own encryption without a user-facing trust prompt. The
+hub certificate on port 8080 remains required for the LiveKit channel.</p>
+</section>
+</section>
+<section id="native-c">
+<h2>Native C++<a class="headerlink" href="#native-c" title="Link to this heading">#</a></h2>
+<p>The C++20 sample ships a working backend for the LiveKit C++ SDK v0.4.1.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>client-samples/native
+cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DLIVEKIT_SDK_ROOT<span class="o">=</span>/path/to/livekit-cpp-sdk
+cmake<span class="w"> </span>--build<span class="w"> </span>build
+./build/bin/streamkit_sample<span class="w"> </span>--host<span class="w"> </span><span class="m">192</span>.168.1.100<span class="w"> </span>--port<span class="w"> </span><span class="m">8080</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--secure<span class="w"> </span>--token<span class="w"> </span>&lt;jwt&gt;
+</pre></div>
+</div>
+<p>Install the hub certificate in the native host’s trust store before connecting.
+Refer to <a class="reference internal" href="networking.html#linux-native-certificate-trust"><span class="std std-ref">Linux native certificate trust</span></a> for the Ubuntu and Debian
+procedure. The command uses the supported TLS proxy on port 8080. Insecure port
+7880 is a direct LiveKit debugging path; do not expose it outside the XR AI host
+or a trusted development network.</p>
+<p>Without <code class="docutils literal notranslate"><span class="pre">LIVEKIT_SDK_ROOT</span></code>, it builds in stub mode and reports a connected state
+without opening a network session. Build the standalone assertion-based tests
+with <code class="docutils literal notranslate"><span class="pre">-DSTREAMKIT_BUILD_TESTS=ON</span></code> and run:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ctest<span class="w"> </span>--test-dir<span class="w"> </span>build<span class="w"> </span>--output-on-failure
+</pre></div>
+</div>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Test</p></th>
+<th class="head"><p>Coverage</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_mapping_tests</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ConnectionState</span></code> operations</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_agent_status_tests</span></code></p></td>
+<td><p>Canonical, missing, truncated, and empty <code class="docutils literal notranslate"><span class="pre">_agent.status</span></code> values</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_frame_sink_tests</span></code></p></td>
+<td><p>Move and span frame-injection overloads</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_audio_sink_tests</span></code></p></td>
+<td><p>Audio parameter forwarding and virtual dispatch</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_session_tests</span></code></p></td>
+<td><p>Mock-backed connection, media, data, status, and disconnection lifecycle</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_livekit_backend_tests</span></code></p></td>
+<td><p>State deduplication, disconnect races, stale metrics, and callback exceptions</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Run one test with CTest, invoke its binary directly, or rerun failures:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ctest<span class="w"> </span>--test-dir<span class="w"> </span>build<span class="w"> </span>-R<span class="w"> </span>streamkit_frame_sink_tests<span class="w"> </span>--output-on-failure
+./build/StreamKit/Tests/StreamKitTests/streamkit_frame_sink_tests
+ctest<span class="w"> </span>--test-dir<span class="w"> </span>build<span class="w"> </span>--rerun-failed<span class="w"> </span>--output-on-failure
+</pre></div>
+</div>
+<p>The backend implements connection state, data, <code class="docutils literal notranslate"><span class="pre">_agent.status</span></code>, network
+metrics, host-injected audio, and host-injected video. <code class="docutils literal notranslate"><span class="pre">StartAudio()</span></code> and
+<code class="docutils literal notranslate"><span class="pre">StartCamera()</span></code> arm publication; the host opens its devices and pushes PCM or
+frames through <code class="docutils literal notranslate"><span class="pre">AudioSink</span></code> and <code class="docutils literal notranslate"><span class="pre">FrameSink</span></code>. Camera facing and device ID are
+therefore inert in this backend, while optional encoding settings apply before
+the first frame creates the video track. Real-time producers must prefer the
+<code class="docutils literal notranslate"><span class="pre">std::vector&lt;uint8_t&gt;&amp;&amp;</span></code> frame-injection overload; the span overload copies each
+frame and can add about 1.4 MB of copying for a typical frame.</p>
+<p>Token-URL HTTP fetching is not implemented; pass an inline token or subclass
+<code class="docutils literal notranslate"><span class="pre">LiveKitBackend::FetchToken</span></code>. <code class="docutils literal notranslate"><span class="pre">GetRoom()</span></code> is the LiveKit-specific escape hatch
+for remote audio rendering or AEC reference capture. Microphone processing
+presets are not mapped because the C++ SDK exposes no corresponding source
+controls.</p>
+</section>
+<section id="adding-another-platform">
+<span id="adding-a-client-for-a-new-platform"></span><h2>Adding another platform<a class="headerlink" href="#adding-another-platform" title="Link to this heading">#</a></h2>
+<p>DeviceIOHub uses standard LiveKit. A new client fetches a token, joins through
+the hub’s port 8080, publishes microphone and optional camera tracks, plays the
+remote audio track, and reads data topics such as <code class="docutils literal notranslate"><span class="pre">agent.response</span></code>. Keep the
+transport-specific SDK behind a StreamKit backend and reuse the same status,
+interruption, and participant-routing contracts.</p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="requirements.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Requirements</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="networking.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Networking and firewall</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+
+
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#client-matrix">Client matrix</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-connection-flow">Shared connection flow</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#web">Web</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#web-xr-xr-render-demo">Web-XR (xr-render-demo)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#android">Android</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#requirements-and-build">Requirements and build</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#connect-and-permissions">Connect and permissions</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ios-visionos">iOS/visionOS</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#build">Build</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vision-pro-permissions">Vision Pro permissions</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#connect-and-trust-the-certificate">Connect and trust the certificate</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#native-cloudxr">Native CloudXR</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-c">Native C++</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-another-platform">Adding another platform</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5"></script>
+
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+<a class="footer-brand logo" href="https://www.nvidia.com">
+  <img src="../_static/nvidia-logo-horiz-rgb-1c-blk-for-screen.svg" class="logo__image only-light" alt="NVIDIA"/>
+  <img src="../_static/nvidia-logo-horiz-rgb-1c-wht-for-screen.svg" class="logo__image only-dark" alt="NVIDIA"/>
+</a></div>
+      
+        <div class="footer-item">
+
+<div class="footer-links">
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/privacy-policy/">Privacy Policy</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/privacy-center/">Your Privacy Choices</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/terms-of-service/">Terms of Service</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/accessibility/">Accessibility</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/company-policies/">Corporate Policies</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/product-security/">Product Security</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/contact/">Contact</a>
+  
+  
+  
+</div>
+</div>
+      
+        <div class="footer-item">
+
+
+
+
+  <p class="copyright">
+    
+      Copyright © 2026, NVIDIA CORPORATION &amp; AFFILIATES.
+      <br/>
+    
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+  </body>
+</html>
