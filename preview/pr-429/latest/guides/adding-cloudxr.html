@@ -449,13 +449,13 @@ orchestrator pattern, refer to <a class="reference internal" href="adding-a-samp
 <span class="nt">accept_eula</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 
 <span class="c1"># Device profile — controls transport and XR device defaults.</span>
-<span class="c1"># Valid: auto-native | auto-webrtc | apple-vision-pro | ipad-pro</span>
+<span class="c1"># Valid: auto-native | auto-webrtc | apple-vision-pro | ipad-pro | quest3</span>
 <span class="nt">cloudxr_env</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">NV_DEVICE_PROFILE</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-webrtc</span>
 
 <span class="c1"># ── Ports (do not conflict with LiveKit) ──────────────────────────────────────</span>
 <span class="c1"># CloudXR native service:  localhost:49100  (internal)</span>
-<span class="c1"># WSS proxy (TLS):         0.0.0.0:48322   (XR clients connect here; auto-webrtc only)</span>
+<span class="c1"># WSS proxy (TLS):         0.0.0.0:48322   (XR clients connect here; WebRTC profiles only)</span>
 </pre></div>
 </div>
 </section>
@@ -487,9 +487,11 @@ clients, not both. Change the profile and restart the stack when switching.</p>
 </tbody>
 </table>
 </div>
-<p>The runtime also accepts the device-specific native profiles
-<code class="docutils literal notranslate"><span class="pre">apple-vision-pro</span></code> and <code class="docutils literal notranslate"><span class="pre">ipad-pro</span></code>. Quest clients run CloudXR.js in the headset
-browser and therefore use the WebRTC profile rather than a native profile.</p>
+<p>The runtime also accepts the device-specific profiles <code class="docutils literal notranslate"><span class="pre">apple-vision-pro</span></code>,
+<code class="docutils literal notranslate"><span class="pre">ipad-pro</span></code>, and <code class="docutils literal notranslate"><span class="pre">quest3</span></code>. The static <code class="docutils literal notranslate"><span class="pre">quest3</span></code> profile is a valid alternative
+when fixed Quest 3 defaults are preferred. Use <code class="docutils literal notranslate"><span class="pre">auto-webrtc</span></code> for the general
+Quest 2/3/3S path so the runtime waits for the CloudXR.js client and discovers
+its device settings dynamically.</p>
 </section>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading">#</a></h2>
@@ -497,9 +499,9 @@ browser and therefore use the WebRTC profile rather than a native profile.</p>
 <li><p>CloudXR and the DeviceIOHub are <strong>independent stacks</strong>. CloudXR streams
 simulation and render content through the transport selected by the device
 profile; the hub handles agent media via LiveKit. They share no ports.</p></li>
-<li><p>The <code class="docutils literal notranslate"><span class="pre">auto-webrtc</span></code> profile starts a WSS proxy on port 48322 for WebRTC
-signaling. The <code class="docutils literal notranslate"><span class="pre">auto-native</span></code> profile uses a direct native transport and does
-not need the proxy.</p></li>
+<li><p>WebRTC profiles (<code class="docutils literal notranslate"><span class="pre">auto-webrtc</span></code> and <code class="docutils literal notranslate"><span class="pre">quest3</span></code>) start a WSS proxy on port 48322
+for signaling. Native profiles use a direct native transport and do not need
+the proxy.</p></li>
 <li><p>After CloudXR is ready, activate its environment to run an OpenXR app against
 it. Run this in a separate terminal each time you start a new shell against a
 running stack:</p>

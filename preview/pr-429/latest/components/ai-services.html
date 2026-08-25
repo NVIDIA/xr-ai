@@ -999,10 +999,11 @@ per inference request. Current frames stay with the caller’s hub client.
 When <code class="docutils literal notranslate"><span class="pre">recordings_dir</span></code> is empty, participant discovery returns an empty list
 and recorded-media operations return <code class="docutils literal notranslate"><span class="pre">recording_disabled</span></code>.</p></li>
 <li><p>Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).</p></li>
-<li><p>Standalone service YAMLs live beside the services that support direct local
-launch. When copying one into <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;name&gt;/yaml/</span></code>, set
-<code class="docutils literal notranslate"><span class="pre">model_cache</span></code> to <code class="docutils literal notranslate"><span class="pre">../../../models</span></code> so it still resolves to the repository’s
-<code class="docutils literal notranslate"><span class="pre">models/</span></code> directory.</p></li>
+<li><p>Standalone service YAMLs live beside services for direct single-service
+launches; they are not sample configuration. Shared deployments use the
+hardware-specific YAML under
+<code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code>, while samples reuse the
+resulting endpoints through their models JSON.</p></li>
 <li><p>The generic NIM wrapper has no service-local YAML. Use a hardware profile
 under <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code>; its
 <code class="docutils literal notranslate"><span class="pre">nim_&lt;role&gt;_server.yaml</span></code> files use <code class="docutils literal notranslate"><span class="pre">nim_cache</span></code>, normally
