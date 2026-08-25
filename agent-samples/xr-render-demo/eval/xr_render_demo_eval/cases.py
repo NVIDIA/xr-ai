@@ -78,7 +78,7 @@ def _stacked_vertically(mutations: list[tuple[str, dict]]) -> tuple[bool, str]:
     return True, f"stacked at y={ys}"
 
 
-PERCEPTION_TOOL = "look_at_current_frame"
+PERCEPTION_TOOLS = ("look_at_current_frame", "resolve_physical_color")
 
 CASES = [
     # ── direct render ops ─────────────────────────────────────────────────────
@@ -1265,8 +1265,8 @@ CASES = [
     },
 
     # ── perception gating: real-world colour must come from the camera ───────
-    # The colour word is never in the utterance; the model must call
-    # look_at_current_frame FIRST and read the colour out of the answer.
+    # The colour word is never in the utterance; a perception tool (either of
+    # PERCEPTION_TOOLS) must observe the camera before any mutation.
     # `vlm_answer` is what the mocked camera sees; `must_call_first` fails
     # the case if the model mutates before (or without) looking.
     {
@@ -1274,7 +1274,7 @@ CASES = [
         "scene": [],
         "user":  "Make a sphere the same color as the thing I'm holding.",
         "vlm_answer": "The user is holding a bright red apple.",
-        "must_call_first": PERCEPTION_TOOL,
+        "must_call_first": PERCEPTION_TOOLS,
         "result": [
             {"tool": "add_primitive",
              "args": {"prim_type": "sphere",
@@ -1287,7 +1287,7 @@ CASES = [
                    "pos": [0.0, 1.6, -1.5], "color": [1, 1, 1], "size": 0.1}],
         "user":  "Make the sphere the same color as my shirt.",
         "vlm_answer": "The user's shirt is blue.",
-        "must_call_first": PERCEPTION_TOOL,
+        "must_call_first": PERCEPTION_TOOLS,
         "result": [
             {"tool": "update_primitive",
              "args": {"obj_id": "sphere-0",
@@ -1299,7 +1299,7 @@ CASES = [
         "scene": [],
         "user":  "Add a cube that matches the color of the wall I'm looking at.",
         "vlm_answer": "The wall is green.",
-        "must_call_first": PERCEPTION_TOOL,
+        "must_call_first": PERCEPTION_TOOLS,
         "result": [
             {"tool": "add_primitive",
              "args": {"prim_type": "box",

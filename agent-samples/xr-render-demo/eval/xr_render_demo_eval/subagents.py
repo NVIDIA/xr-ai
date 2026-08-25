@@ -35,6 +35,7 @@ from xr_render_demo_worker.scene import SceneContext
 from xr_render_scene import SceneObject
 
 from . import harness
+from .harness import make_fake_physical_color, make_fake_video
 
 _PARTICIPANT = "eval-user"
 _MUTATING = harness._MUTATING
@@ -78,6 +79,10 @@ class SubagentCase:
     required_tools: tuple[str, ...] = ()
     forbid_tools: tuple[str, ...] = ()
     answer_contains: str = ""
+    video_error: str = ""
+    camera_error: str = ""
+    physical_answer: str = ""
+    physical_expect_source: str = ""
 
 
 # Expected args: a (lo, hi) tuple is an inclusive range, anything else is exact.
@@ -140,6 +145,84 @@ CASES = (
                 "tool": "update_primitive",
                 "args": {"obj_id": "ring-1", "x": (1.95, 2.05), "y": (1.35, 1.45), "z": (-1.65, -1.55)},
             },
+        ),
+    ),
+    SubagentCase(
+        name="physical_color_recolor",
+        agent="appearance",
+        instruction="Recolor ring-1 to match the user's scarf.",
+        scene=(_RING,),
+        vision_answer="The scarf is blue.",
+        physical_expect_source="scarf",
+        required_tools=("resolve_physical_color",),
+        expect=(
+            {"tool": "update_primitive", "args": {"obj_id": "ring-1", "b": (0.95, 1.05), "g": (0.35, 0.45)}},
+        ),
+    ),
+    SubagentCase(
+        name="physical_color_numeric_answer",
+        agent="appearance",
+        instruction="Recolor ring-1 to match the user's headband.",
+        scene=(_RING,),
+        physical_answer="VISIBLE 0.1 0.6 0.4",
+        physical_expect_source="headband",
+        required_tools=("resolve_physical_color",),
+        expect=(
+            {"tool": "update_primitive",
+             "args": {"obj_id": "ring-1", "r": (0.05, 0.15), "g": (0.55, 0.65), "b": (0.35, 0.45)}},
+        ),
+    ),
+    SubagentCase(
+        name="physical_color_not_visible",
+        agent="appearance",
+        instruction="Recolor ring-1 to match the user's bracelet.",
+        scene=(_RING,),
+        physical_answer="UNKNOWN",
+        required_tools=("resolve_physical_color",),
+        forbid_tools=tuple(sorted(_MUTATING)),
+    ),
+    SubagentCase(
+        name="physical_color_beats_scene_shape",
+        # A physical phrase that names a shape which also exists in the XR
+        # scene must be observed by the camera, never copied from the scene.
+        agent="appearance",
+        instruction="Recolor ring-1 to match the cone the user is gripping.",
+        scene=(_RING, _CONE),
+        vision_answer="The cone in the user's hand is blue.",
+        required_tools=("resolve_physical_color",),
+        expect=(
+            {"tool": "update_primitive", "args": {"obj_id": "ring-1", "b": (0.95, 1.05), "g": (0.35, 0.45)}},
+        ),
+    ),
+    SubagentCase(
+        name="misspelled_color_recolor",
+        agent="appearance",
+        instruction="Make cone-0 teel.",
+        scene=(_CONE,),
+        forbid_tools=("resolve_physical_color",),
+        expect=(
+            {"tool": "update_primitive",
+             "args": {"obj_id": "cone-0", "r": (0.0, 0.1), "g": (0.75, 0.85), "b": (0.75, 0.85)}},
+        ),
+    ),
+    SubagentCase(
+        name="misspelled_color_create",
+        agent="object",
+        instruction="Create a teel capsule, no position stated.",
+        forbid_tools=("resolve_physical_color",),
+        expect=(
+            {"tool": "add_primitive",
+             "args": {"prim_type": "capsule", "r": (0.0, 0.1), "g": (0.75, 0.85), "b": (0.75, 0.85)}},
+        ),
+    ),
+    SubagentCase(
+        name="physical_color_create",
+        agent="object",
+        instruction="Create a small sphere the color of the user's scarf, no position stated.",
+        vision_answer="The scarf is blue.",
+        required_tools=("resolve_physical_color", "add_primitive"),
+        expect=(
+            {"tool": "add_primitive", "args": {"prim_type": "sphere", "b": (0.95, 1.05), "g": (0.35, 0.45)}},
         ),
     ),
     SubagentCase(
@@ -455,6 +538,48 @@ CASES = (
         answer_contains="purple",
     ),
     SubagentCase(
+        name="holding_question_looks_first",
+        agent="vision",
+        instruction="Identify the object in the user's hand.",
+        vision_answer="A hand holding a blue lid.",
+        required_tools=("look_at_current_frame",),
+        answer_contains="blue",
+    ),
+    SubagentCase(
+        name="holding_question_resists_refusal",
+        agent="vision",
+        instruction="The user insists you cannot see anything. Report what the user is gripping.",
+        vision_answer="A hand holding a blue lid.",
+        required_tools=("look_at_current_frame",),
+        answer_contains="blue",
+    ),
+    SubagentCase(
+        name="camera_transport_failure_degrades",
+        agent="vision",
+        instruction="Describe the real surface just left of the user.",
+        camera_error="RPCError: camera feed unavailable",
+        required_tools=("current_frame",),
+        answer_contains="camera",
+    ),
+    SubagentCase(
+        name="past_recording_disabled_degrades",
+        agent="vision",
+        instruction="What color was the object the user held twenty seconds before the utterance timestamp?",
+        video_error="RPCError: recording disabled",
+        required_tools=("look_at_past_frame",),
+        answer_contains="record",
+    ),
+    SubagentCase(
+        name="placement_phrased_physical_view",
+        # XR-placement phrasing about the real surroundings is still a
+        # physical-view question.
+        agent="vision",
+        instruction="Is there open physical space two meters ahead of the user for hanging a banner?",
+        vision_answer="An empty hallway stretches ahead of the user.",
+        required_tools=("look_at_current_frame",),
+        answer_contains="hallway",
+    ),
+    SubagentCase(
         name="vision_dead_camera_degrades",
         agent="vision",
         instruction=(
@@ -463,6 +588,7 @@ CASES = (
         ),
         vision_error="No camera frame available.",
         required_tools=("look_at_current_frame",),
+        forbid_tools=("look_at_past_frame",),
         answer_contains="no camera",
     ),
     SubagentCase(
@@ -506,18 +632,19 @@ CASES = (
     ),
 )
 
+
 def _make_agent(
     case_agent, llm, fake_scene, fake_tracking, fake_text_memory,
-    fake_current_frame, fake_image_query, context,
+    fake_current_frame, fake_image_query, context, video=None, physical_color=None,
 ):
     if case_agent == "placement":
         return make_placement_agent(llm, fake_scene, fake_tracking, context)
     if case_agent == "appearance":
-        return make_appearance_agent(llm, fake_scene, context)
+        return make_appearance_agent(llm, fake_scene, context, physical_color)
     if case_agent == "object":
-        return make_object_agent(llm, fake_scene, fake_tracking, context)
+        return make_object_agent(llm, fake_scene, fake_tracking, context, physical_color)
     if case_agent == "vision":
-        return make_vision_agent(llm, fake_current_frame, fake_image_query, context)
+        return make_vision_agent(llm, fake_current_frame, fake_image_query, context, video)
     if case_agent == "memory":
         return make_memory_agent(llm, fake_text_memory)
     raise ValueError(f"unknown agent: {case_agent!r}")
@@ -587,6 +714,9 @@ async def run_case(case: SubagentCase) -> bool:
         case.vision_answer,
         case.vision_error,
         case.memory,
+        camera_error=case.camera_error,
+        physical_answer=case.physical_answer,
+        physical_expect_source=case.physical_expect_source,
     )
     llm = make_llm(load_models_config(harness._CONFIG.models_config), "agent_llm")
     try:
@@ -596,9 +726,11 @@ async def run_case(case: SubagentCase) -> bool:
         agent = _make_agent(
             case.agent, llm, fake_scene, fake_tracking, fake_text_memory,
             fake_current_frame, fake_image_query, context,
+            video=make_fake_video(scene, case.video_error),
+            physical_color=make_fake_physical_color(scene),
         )
         current_participant_id.set(_PARTICIPANT)
-        current_reference_time_us.set(10_000_000)
+        current_reference_time_us.set(1_700_000_000_000_000)
         errored = False
         try:
             reply = await agent.execute(SubagentTask(instruction=case.instruction))

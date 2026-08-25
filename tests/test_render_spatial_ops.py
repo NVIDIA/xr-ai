@@ -178,15 +178,6 @@ async def test_capitalized_id_still_hits_id_branch():
         await leaves.find("Box-9")
 
 
-async def test_numeric_rgb_ignores_id_bearing_strings():
-    leaves, _ = _leaves([_obj("capsule-0", "capsule", (0.25, 0.5, 0.75))])
-    assert await leaves.color("same as capsule-0") == (0.25, 0.5, 0.75)
-    assert await leaves.color("RGB (1.0, 0.5, 0.0)") == (1.0, 0.5, 0.0)
-    # A sign-invalid triple has no letters either; it falls through to the
-    # standard default rather than a wrong saturated color.
-    assert await leaves.color("-0.5 0.2 0.3") == (0.2, 0.9, 1.0)
-
-
 async def test_synonym_prefixed_id_resolves():
     leaves, _ = _leaves([_obj("box-39", "box", (1, 1, 0))])
     assert (await leaves.find("cube-39")).id == "box-39"
@@ -222,17 +213,6 @@ def test_shape_words_resolve_and_reject():
         leaves.shape("xylophone")
 
 
-async def test_color_words_resolve_fuzzy_default_and_copy():
-    leaves, _ = _leaves([_obj("cone-3", "cone", (0.25, 0.5, 0.75))])
-    assert await leaves.color("teal") == (0, 0.8, 0.8)
-    assert await leaves.color("blew") == (0, 0.4, 1)
-    assert await leaves.color("") == (0.2, 0.9, 1.0)
-    assert await leaves.color("same as cone-3") == (0.25, 0.5, 0.75)
-    assert await leaves.color("normalized RGB (1.0, 0.5, 0.0)") == (1.0, 0.5, 0.0)
-    with pytest.raises(ValueError, match="Unknown color"):
-        await leaves.color("wibble")
-
-
 async def test_ledger_dedupes_identical_creates():
     ledger = CreationLedger()
     leaves, fake = _leaves([], ledger=ledger)
@@ -245,3 +225,119 @@ async def test_ledger_dedupes_identical_creates():
     ledger.reset()
     third = await leaves.add("box", (0.001, 1.0, 0.0), (1, 0, 0), 0.1)
     assert third.id == "box-1"
+
+
+class _FakePhysicalColor:
+    def __init__(self, color=(0.1, 0.2, 0.3)):
+        from xr_render_demo_worker._physical_color import ResolvePhysicalColorRequest
+        self.request_model = ResolvePhysicalColorRequest
+        self.calls = []
+        self._color = color
+
+    async def execute(self, req):
+        from xr_render_demo_worker._physical_color import ResolvedColor
+        self.calls.append(req.source_words)
+        r, g, b = self._color
+        return ResolvedColor(r=r, g=g, b=b)
+
+
+def _leaves_with_camera(objects, color=(0.1, 0.2, 0.3), guard=None):
+    fake = _FakeScene(objects)
+    physical = _FakePhysicalColor(color)
+    leaves = _Leaves(_FakeSceneTools(fake), _FakeTrackingTools(), guard=guard,
+                     physical_color=physical)
+    return leaves, physical
+
+
+# ── typed color-source dispatch: each variant touches only its dependency ────
+
+async def test_literal_variant_never_touches_scene_or_camera():
+    leaves, physical = _leaves_with_camera([_obj("cone-3", "cone", (0.25, 0.5, 0.75))])
+    assert await leaves.resolve_color("literal", "teal") == (0, 0.8, 0.8)
+    assert await leaves.resolve_color("literal", "blew") == (0, 0.4, 1)
+    assert await leaves.resolve_color("literal", "teel") == (0, 0.8, 0.8)
+    assert await leaves.resolve_color("literal", "1.0, 0.5, 0.0") == (1.0, 0.5, 0.0)
+    assert await leaves.resolve_color("literal", "") == (0.2, 0.9, 1.0)
+    assert await leaves.resolve_color("literal", " ") == (0.2, 0.9, 1.0)
+    assert physical.calls == []
+
+
+async def test_literal_garble_fails_closed():
+    leaves, physical = _leaves_with_camera([])
+    with pytest.raises(ValueError, match="Unknown color"):
+        await leaves.resolve_color("literal", "blerg")
+    with pytest.raises(ValueError, match="Unknown color"):
+        await leaves.resolve_color("literal", "burnt sienna")
+    assert physical.calls == []
+
+
+async def test_scene_variant_copies_and_never_falls_to_camera():
+    guard = TurnGuard()
+    leaves, physical = _leaves_with_camera(
+        [_obj("cone-0", "cone", (0.25, 0.5, 0.75)), _obj("ring-1", "ring", (1, 0, 0))],
+        guard=guard)
+    copied = await leaves.resolve_color("scene_object", "cone-0")
+    assert copied == (0.25, 0.5, 0.75)
+    with pytest.raises(ValueError, match="No scene object matches"):
+        await leaves.resolve_color("scene_object", "the wall")
+    assert physical.calls == []
+    assert guard.halted
+
+
+async def test_scene_variant_ambiguity_surfaces_ask_back():
+    guard = TurnGuard()
+    leaves, physical = _leaves_with_camera(
+        [_obj("cone-0", "cone", (1, 1, 1)), _obj("cone-1", "cone", (1, 1, 1))], guard=guard)
+    with pytest.raises(ValueError, match="ambiguous"):
+        await leaves.resolve_color("scene_object", "the cone")
+    assert physical.calls == []
+    assert guard.halted
+
+
+async def test_physical_variant_observes_exact_words():
+    leaves, physical = _leaves_with_camera([_obj("cone-0", "cone", (1, 1, 1))])
+    assert await leaves.resolve_color("physical", "the cone I'm holding") == (0.1, 0.2, 0.3)
+    assert await leaves.resolve_color("physical", "the ceiling") == (0.1, 0.2, 0.3)
+    assert physical.calls == ["the cone I'm holding", "the ceiling"]
+
+
+async def test_physical_variant_without_camera_fails_closed():
+    leaves, _ = _leaves([])
+    with pytest.raises(ValueError, match="no camera"):
+        await leaves.resolve_color("physical", "my scarf")
+
+
+async def test_out_of_range_numeric_literal_fails_closed():
+    leaves, physical = _leaves_with_camera([])
+    with pytest.raises(ValueError, match="out of range"):
+        await leaves.resolve_color("literal", "255 0 0")
+    assert physical.calls == []
+
+
+async def test_empty_value_required_for_non_literal_kinds():
+    leaves, physical = _leaves_with_camera([])
+    with pytest.raises(ValueError, match="color_value is required"):
+        await leaves.resolve_color("scene_object", "")
+    with pytest.raises(ValueError, match="color_value is required"):
+        await leaves.resolve_color("physical", "  ")
+    assert physical.calls == []
+
+
+async def test_recolor_records_applied_and_satisfied_evidence():
+    from xr_render_demo_worker._trace import MutationEvidence, current_mutation_evidence
+    from xr_render_demo_worker.spatial_ops import _RecolorRequest, make_appearance_tools
+
+    fake = _FakeScene([_obj("cone-0", "cone", (0, 0.8, 0))])
+    tools = {tool.name: tool for tool in make_appearance_tools(_FakeSceneTools(fake))}
+    evidence = MutationEvidence()
+    token = current_mutation_evidence.set(evidence)
+    try:
+        await tools["recolor"].execute(_RecolorRequest(
+            object_words="cone-0", color_kind="literal", color_value="green"))
+        assert (evidence.applied, evidence.satisfied) == (0, 1)
+        assert not any(name == "update_primitive" for name, _ in fake.calls)
+        await tools["recolor"].execute(_RecolorRequest(
+            object_words="cone-0", color_kind="literal", color_value="red"))
+        assert (evidence.applied, evidence.satisfied) == (1, 1)
+    finally:
+        current_mutation_evidence.reset(token)
