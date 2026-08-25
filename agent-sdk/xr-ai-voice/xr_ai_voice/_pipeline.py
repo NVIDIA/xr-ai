@@ -70,6 +70,9 @@ def _build_voice_pipeline(
         transport  = transport,
         text_topic = text_topic,
     )
+    voice_gate_proc.set_tts_response_active_probe(
+        streaming_tts.has_active_response,
+    )
     vad_stt = VadSttProcessor(
         stt=stt,
         vad_cfg=vad_cfg,

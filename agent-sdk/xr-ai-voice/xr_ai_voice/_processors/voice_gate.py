@@ -7,9 +7,9 @@ pipecat ``FrameProcessor``.
 Maps gate events to frames:
 
 - ``on_query(pid, text, fresh_match)``    → ``GatedQueryFrame``
-- ``on_stop(pid)``                        → ``InterruptionFrame`` + ``TextFrame("Okay, I will stop.")``
+- ``on_stop(pid)``                        → ``InterruptionFrame`` + bounded stop-ack text
 - ``on_phrase_only(pid)``                 → no frame (internal state only)
-- ``on_participant_joined(pid)``          → ``TextFrame`` with the greeting (only when ``format_phrase_help`` returns text)
+- ``on_participant_joined(pid)``          → bounded greeting text (only when ``format_phrase_help`` returns text)
 
 The processor also acts as the gate's ``AudioSink`` so the chime and
 stop-ack play out via the same audio path as TTS. Partial transcripts can
@@ -18,12 +18,14 @@ acknowledge a wake phrase before the complete command is available.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 
 from loguru import logger
 from pipecat.frames.frames import (
     Frame,
     InterruptionFrame,
     TextFrame,
+    TTSStoppedFrame,
     TranscriptionFrame,
     UserStartedSpeakingFrame,
 )
@@ -33,7 +35,12 @@ from xr_ai_models import TTSService
 from xr_ai_voicegate import VoiceGate, VoiceGateConfig
 
 from .._audio import wav_to_output_frames
-from .._frames import GatedQueryFrame, ParticipantJoinedFrame, ParticipantLeftFrame
+from .._frames import (
+    GatedQueryFrame,
+    ParticipantJoinedFrame,
+    ParticipantLeftFrame,
+    TextResponseEndFrame,
+)
 
 
 _STOP_ACK_TEXT = "Okay, I will stop."
@@ -75,6 +82,7 @@ class VoiceGateProcessor(FrameProcessor):
             on_participant_joined = self._on_gate_participant_joined,
         )
         self._early_wake_ack: set[str] = set()
+        self._tts_response_active: Callable[[str], bool] = lambda _pid: False
         self._feeding_speech_transcript = False
         # Speech-onset timestamp (µs) of the transcript currently being fed to
         # the gate. ``VoiceGate.feed`` invokes ``_on_gate_query`` synchronously,
@@ -91,6 +99,13 @@ class VoiceGateProcessor(FrameProcessor):
     def early_wake_ack_enabled(self) -> bool:
         """Whether partial STT should probe for an early wake acknowledgement."""
         return self._gate.wake_ack_enabled
+
+    def set_tts_response_active_probe(
+        self,
+        probe: Callable[[str], bool],
+    ) -> None:
+        """Bind the downstream ordered-TTS activity check used by chimes."""
+        self._tts_response_active = probe
 
     async def handle_partial_transcript(self, pid: str, text: str) -> bool:
         """Handle a partial transcript and acknowledge a complete wake phrase.
@@ -121,6 +136,15 @@ class VoiceGateProcessor(FrameProcessor):
             return
         for out in frames:
             await self.push_frame(out)
+        # A chime may arrive from the early wake probe while response audio is
+        # still flowing through StreamingTtsProcessor. Its raw frames can join
+        # that stream, but a stop marker here would pad-flush the response in
+        # the middle of a word. The response's own ordered marker will flush
+        # both. An idle chime still needs its marker so a short tail is audible.
+        if frames and not self._tts_response_active(pid):
+            stopped = TTSStoppedFrame()
+            stopped.transport_destination = pid
+            await self.push_frame(stopped)
 
     # ── pipecat frame entrypoint ──────────────────────────────────────────────
 
@@ -188,9 +212,7 @@ class VoiceGateProcessor(FrameProcessor):
         f = InterruptionFrame()
         f.transport_source = pid
         await self.push_frame(f)
-        ack = TextFrame(text=_STOP_ACK_TEXT)
-        ack.transport_destination = pid
-        await self.push_frame(ack)
+        await self._emit_text_response(pid, _STOP_ACK_TEXT)
 
     async def _on_gate_phrase_only(self, pid: str) -> None:
         await self._emit_chime(pid, early=False)
@@ -216,6 +238,11 @@ class VoiceGateProcessor(FrameProcessor):
             # into a wake word, so stay silent.
             return
         logger.info("greeting emit pid={!r}", pid)
-        frame = TextFrame(text=greeting)
+        await self._emit_text_response(pid, greeting)
+
+    async def _emit_text_response(self, pid: str, text: str) -> None:
+        """Emit one addressed utterance and its synthesis-order boundary."""
+        frame = TextFrame(text=text)
         frame.transport_destination = pid
         await self.push_frame(frame)
+        await self.push_frame(TextResponseEndFrame(pid=pid))
