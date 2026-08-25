@@ -10,7 +10,7 @@ name = "cloudxr-runtime"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "isaacteleop[cloudxr]",
+    "isaacteleop[cloudxr]>=1.3.131",
     "pyyaml",
     "xr-ai-launcher",
     "xr-ai-logging",

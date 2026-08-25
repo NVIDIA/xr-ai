@@ -401,7 +401,7 @@
 			repositoryURL = "https://github.com/NVIDIA/cloudxr-framework";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 6.1.0;
+				minimumVersion = 6.2.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
