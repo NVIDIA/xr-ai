@@ -13,6 +13,7 @@ from typing import Any
 import yaml
 from tea_making_worker.background_context import BackgroundContextAgent
 from tea_making_worker.change_watch import ChangeWatchAgent
+from tea_making_worker.config import load_config
 from tea_making_worker.foreground import ForegroundAgent
 from tea_making_worker.spec import load_workflow
 from tea_making_worker.transcript import TranscriptAgent
@@ -23,10 +24,10 @@ from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.tool_calling import tool_definitions
 
 _SAMPLE = Path(__file__).resolve().parents[1]
-_PROMPTS = _SAMPLE / "worker" / "tea_making_worker" / "prompts"
 
 
 def _build_agents(llm: LLMService) -> tuple[ForegroundAgent, GuidanceAgent]:
+    config = load_config(_SAMPLE / "yaml" / "tea_making_worker.yaml")
     images = SimpleNamespace(
         images=ImageRegistry(),
         get_current_frame=SimpleNamespace(),
@@ -70,7 +71,7 @@ def _build_agents(llm: LLMService) -> tuple[ForegroundAgent, GuidanceAgent]:
         change_watch=change_watch,
         transcript=transcript,
         video_log=video_log,
-        prompt=(_PROMPTS / "foreground_prompt.txt").read_text(encoding="utf-8"),
+        prompt=config.foreground_prompt,
     )
     return foreground, guidance
 

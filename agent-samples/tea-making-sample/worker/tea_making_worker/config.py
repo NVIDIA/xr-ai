@@ -14,6 +14,10 @@ import yaml
 _PACKAGE = Path(__file__).resolve().parent
 
 
+class _PackagedPrompt(str):
+    """Mark prompt text loaded from a package default rather than an override."""
+
+
 @dataclass(frozen=True, slots=True)
 class WorkerConfig:
     models_config: Path
@@ -71,7 +75,8 @@ def _prompt(data: dict[str, Any], config_path: Path | None, name: str) -> str:
         if configured is not None
         else _PACKAGE / "prompts" / f"{name}.txt"
     )
-    return path.read_text(encoding="utf-8").strip()
+    text = path.read_text(encoding="utf-8").strip()
+    return _PackagedPrompt(text) if configured is None else text
 
 
 def _positive(data: dict[str, Any], name: str, default: float) -> float:

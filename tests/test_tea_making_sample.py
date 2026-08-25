@@ -36,6 +36,7 @@ _SAMPLE = _ROOT / "agent-samples" / "tea-making-sample"
 _WORKER = _SAMPLE / "worker"
 sys.path.insert(0, str(_WORKER))
 
+import tea_making_worker.config as config_module  # noqa: E402  # pyright: ignore[reportMissingImports]
 import tea_making_worker.foreground as foreground_module  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     _CLIENT_TEXT_TOPIC,
@@ -1318,6 +1319,7 @@ def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:
         config.foreground_prompt
         == (prompt_dir / "foreground_prompt.txt").read_text().strip()
     )
+    assert isinstance(config.foreground_prompt, config_module._PackagedPrompt)
     assert (
         config.video_delta_prompt
         == (prompt_dir / "video_delta_prompt.txt").read_text().strip()
@@ -1326,6 +1328,15 @@ def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:
     override = tmp_path / "worker.yaml"
     override.write_text("foreground_prompt: Explicit override\n")
     assert load_config(override).foreground_prompt == "Explicit override"
+
+    matching_prompt = tmp_path / "matching-prompt.txt"
+    matching_prompt.write_text((prompt_dir / "foreground_prompt.txt").read_text())
+    override.write_text("foreground_prompt_file: matching-prompt.txt\n")
+    matching_config = load_config(override)
+    assert matching_config.foreground_prompt == config.foreground_prompt
+    assert not isinstance(
+        matching_config.foreground_prompt, config_module._PackagedPrompt
+    )
 
 
 def test_foreground_prompt_has_route_eval_cases() -> None:
@@ -1414,7 +1425,10 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
 
 def test_foreground_route_injects_only_its_policy() -> None:
     foreground = object.__new__(ForegroundAgent)
-    foreground._prompt = foreground_module._DEFAULT_PROMPT
+    foreground._prompt = (
+        _WORKER / "tea_making_worker/prompts/foreground_prompt.txt"
+    ).read_text().strip()
+    foreground._uses_default_route_policy = True
     foreground._guidance = SimpleNamespace(
         active_context=lambda participant_id: (
             None if participant_id == "idle" else '{"step":"fill_water"}'
@@ -1442,7 +1456,10 @@ def test_foreground_route_injects_only_its_policy() -> None:
 
 def test_foreground_route_preserves_explicit_prompt_override() -> None:
     foreground = object.__new__(ForegroundAgent)
-    foreground._prompt = "Explicit override."
+    foreground._prompt = (
+        _WORKER / "tea_making_worker/prompts/foreground_prompt.txt"
+    ).read_text().strip()
+    foreground._uses_default_route_policy = False
     foreground._guidance = SimpleNamespace(
         active_context=lambda participant_id: (
             None if participant_id == "idle" else '{"step":"fill_water"}'
@@ -1460,8 +1477,8 @@ def test_foreground_route_preserves_explicit_prompt_override() -> None:
     )
     refusal = "I can only help with the active tea guide right now."
 
-    assert idle_prompt == "Explicit override."
+    assert idle_prompt == foreground._prompt
     assert active_prompt == (
-        'Explicit override.\n\nActive tea guide:\n{"step":"fill_water"}'
+        f'{foreground._prompt}\n\nActive tea guide:\n{{"step":"fill_water"}}'
     )
     assert refusal not in active_prompt

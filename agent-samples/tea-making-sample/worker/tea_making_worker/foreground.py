@@ -33,6 +33,7 @@ from xr_ai_voice import (
 
 from .background_context import BackgroundContextAgent
 from .change_watch import ChangeWatchAgent
+from .config import _PackagedPrompt
 from .events import (
     FOREGROUND_RECORD_TOPIC,
     INTERRUPTED_TOPIC,
@@ -50,7 +51,6 @@ from .workflow_tools import CurrentViewRequest, rag_lookup_tool
 
 _MAX_TOOL_ROUNDS = 4
 _PROMPTS = Path(__file__).resolve().parent / "prompts"
-_DEFAULT_PROMPT = (_PROMPTS / "foreground_prompt.txt").read_text(encoding="utf-8").strip()
 _IDLE_PROMPT = (_PROMPTS / "foreground_idle.txt").read_text(encoding="utf-8").strip()
 _ACTIVE_PROMPT = (_PROMPTS / "foreground_active.txt").read_text(encoding="utf-8").strip()
 
@@ -85,6 +85,7 @@ class ForegroundAgent(Agent):
         self._change_watch = change_watch
         self._transcript = transcript
         self._video_log = video_log
+        self._uses_default_route_policy = isinstance(prompt, _PackagedPrompt)
         self._prompt = prompt.strip()
         self._vlm_timeout_s = vlm_timeout_s
         self._tasks: dict[str, asyncio.Task[None]] = {}
@@ -286,7 +287,7 @@ class ForegroundAgent(Agent):
         return system_prompt, tools, route
 
     def _with_default_route_policy(self, route_prompt: str) -> str:
-        if self._prompt != _DEFAULT_PROMPT:
+        if not getattr(self, "_uses_default_route_policy", False):
             return self._prompt
         return f"{self._prompt}\n\n{route_prompt}"
 
