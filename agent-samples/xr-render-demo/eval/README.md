@@ -91,7 +91,7 @@ fast gate manually after each edit:
 uv run xr_render_demo_eval utterances
 ```
 
-25 cases, ~3 minutes. The `scenarios` and `precision` tiers catch
+34 cases, a few minutes. The `scenarios` and `precision` tiers catch
 regressions but take longer; run them before calling a tuning round done.
 
 ## Writing a case
@@ -105,8 +105,9 @@ exemplified). Precision and utterances cases are `Case` dataclasses in
 ## Don't train on the test set
 
 Prompt worked examples and case fixtures share the same model, so the
-harness audits every worker prompt at startup (all three offline tiers run
-it) and warns on:
+harness audits every worker prompt plus the model-visible tool text in
+`spatial_ops.py`, `_physical_color.py`, and the agent modules at startup
+(all three offline tiers run it) and warns on:
 
 1. A case utterance from any tier appearing verbatim in a prompt.
 2. A case fixture id appearing in a prompt.
@@ -124,4 +125,5 @@ while the prompt contains its vocabulary is scoring recall, not skill.
 - The live worker pipeline (VAD, STT, TTS, history bookkeeping); the live
   tier covers it.
 - Real scene-service / LOVR effects (fixture-succeeded).
-- Real visual queries (`look_at_current_frame`, `look_at_past_frame`): stubbed.
+- Real visual queries (`look_at_current_frame`, `look_at_past_frame`,
+  `resolve_physical_color`): stubbed.

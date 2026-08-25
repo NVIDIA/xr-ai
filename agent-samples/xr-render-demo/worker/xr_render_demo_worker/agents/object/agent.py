@@ -33,6 +33,7 @@ def make_object_agent(
     scene: SceneTools,
     tracking: TrackingTools,
     context: SceneContext,
+    physical_color: Tool | None = None,
 ) -> Tool:
     delegation_lock = asyncio.Lock()
 
@@ -41,7 +42,8 @@ def make_object_agent(
         async with delegation_lock:
             guard = TurnGuard()
             ledger = CreationLedger()
-            tools = make_object_tools(scene, tracking, ledger=ledger, guard=guard)
+            tools = make_object_tools(scene, tracking, ledger=ledger, guard=guard,
+                                      physical_color=physical_color)
             tools.append(Tool(
                 "get_scene_state",
                 "Return every current XR object with its ID, type, world position, color, and size.",
