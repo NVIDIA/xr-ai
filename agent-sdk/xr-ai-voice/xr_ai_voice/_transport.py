@@ -105,7 +105,7 @@ class DeviceIOHubInputTransport(BaseInputTransport):
         ep: ProcessorEndpoint,
         params: TransportParams,
         *,
-        return_audio_primer: Callable[[str], Awaitable[None]] | None = None,
+        return_audio_primer: Callable[[str], None] | None = None,
         started_event: asyncio.Event | None = None,
         **kwargs,
     ):
@@ -116,8 +116,8 @@ class DeviceIOHubInputTransport(BaseInputTransport):
         self._started_event = started_event
         self._return_audio_primer = return_audio_primer
         # ProcessorEndpoint detaches lifecycle callbacks. Capture their order
-        # synchronously, before detachment, so a slow join pre-roll cannot let a
-        # later leave overtake the participant's join frame.
+        # synchronously, before detachment, so later lifecycle work cannot
+        # overtake a participant's join frame.
         self._participant_event_tails: dict[str, asyncio.Future[None]] = {}
         self._ep.on_audio(self._on_hub_audio)
         self._ep.on_participant(self._on_hub_participant)
@@ -222,12 +222,12 @@ class DeviceIOHubInputTransport(BaseInputTransport):
         if event.joined:
             if self._return_audio_primer is not None:
                 try:
-                    await self._return_audio_primer(event.participant_id)
+                    self._return_audio_primer(event.participant_id)
                 except Exception:
                     # Track preparation improves first-response quality but
                     # must never suppress participant lifecycle delivery.
                     logger.opt(exception=True).warning(
-                        "return-audio pre-roll failed pid={!r}",
+                        "return-audio pre-roll start failed pid={!r}",
                         event.participant_id,
                     )
             await self.push_frame(
@@ -259,6 +259,7 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
         # rate instead of looking like an unbounded producer burst.
         self._return_audio_deadline_s: dict[str, float] = {}
         self._return_audio_locks: dict[str, asyncio.Lock] = {}
+        self._return_audio_preroll_tasks: dict[str, asyncio.Task[None]] = {}
 
     @property
     def target_participant(self) -> str:
@@ -274,39 +275,112 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
         self._target_participant = pid
         self._missing_target_warned = False
 
-    async def prime_return_audio(self, pid: str) -> None:
-        """Queue and account for silence before a participant's first speech."""
+    def start_return_audio_preroll(self, pid: str) -> None:
+        """Start one ordered 320 ms return-track pre-roll for ``pid``."""
+        current = self._return_audio_preroll_tasks.get(pid)
+        if current is not None and not current.done():
+            return
+        task = asyncio.create_task(
+            self._run_return_audio_preroll(pid),
+            name=f"return-audio-preroll-{pid}",
+        )
+        self._return_audio_preroll_tasks[pid] = task
+
+    async def _run_return_audio_preroll(self, pid: str) -> None:
+        """Pace silence at audio rate so a small hub queue cannot drop it."""
         samples = round(TTS_NATIVE_SAMPLE_RATE * _RETURN_AUDIO_CHUNK_S)
         data = bytes(samples * NUM_CHANNELS * np.dtype(np.float32).itemsize)
         chunks = round(_RETURN_AUDIO_PREROLL_S / _RETURN_AUDIO_CHUNK_S)
         pts_us = time.time_ns() // 1_000
         lock = self._return_audio_locks.setdefault(pid, asyncio.Lock())
-        async with lock:
-            now_s = _monotonic_s()
-            buffered_until_s = max(
-                self._return_audio_deadline_s.get(pid, now_s),
-                now_s,
+        task = asyncio.current_task()
+        try:
+            async with lock:
+                for index in range(chunks):
+                    await self._send_paced_return_audio(
+                        AudioChunk(
+                            pts_us=(
+                                pts_us
+                                + round(
+                                    index * _RETURN_AUDIO_CHUNK_S * 1_000_000,
+                                )
+                            ),
+                            sample_rate=TTS_NATIVE_SAMPLE_RATE,
+                            channels=NUM_CHANNELS,
+                            samples=samples,
+                            data=data,
+                            participant_id=pid,
+                            track_id="tts",
+                        ),
+                        target_buffer_s=_RETURN_AUDIO_CHUNK_S,
+                    )
+            logger.info(
+                "return-audio pre-roll queued pid={!r} duration_ms={:.0f}",
+                pid,
+                _RETURN_AUDIO_PREROLL_S * 1_000,
             )
-            for index in range(chunks):
-                await self._ep.send_return_audio(AudioChunk(
-                    pts_us=pts_us + round(index * _RETURN_AUDIO_CHUNK_S * 1_000_000),
-                    sample_rate=TTS_NATIVE_SAMPLE_RATE,
-                    channels=NUM_CHANNELS,
-                    samples=samples,
-                    data=data,
-                    participant_id=pid,
-                    track_id="tts",
-                ))
-                buffered_until_s = (
-                    max(buffered_until_s, _monotonic_s())
-                    + _RETURN_AUDIO_CHUNK_S
-                )
-                # Preserve partial accounting if a later IPC send fails.
-                self._return_audio_deadline_s[pid] = buffered_until_s
-        logger.info(
-            "return-audio pre-roll queued pid={!r} duration_ms={:.0f}",
-            pid,
-            _RETURN_AUDIO_PREROLL_S * 1_000,
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Track preparation improves first-response quality but failure
+            # cannot take down the detached participant callback or TTS sender.
+            logger.opt(exception=True).warning(
+                "return-audio pre-roll failed pid={!r}", pid,
+            )
+        finally:
+            if self._return_audio_preroll_tasks.get(pid) is task:
+                self._return_audio_preroll_tasks.pop(pid, None)
+
+    async def _wait_return_audio_preroll(self, pid: str) -> None:
+        """Keep real speech ordered behind an active pre-roll."""
+        task = self._return_audio_preroll_tasks.get(pid)
+        if task is None:
+            return
+        await asyncio.shield(task)
+
+    async def _cancel_return_audio_preroll(self, pid: str) -> None:
+        task = self._return_audio_preroll_tasks.pop(pid, None)
+        if task is None:
+            return
+        if not task.done():
+            task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    async def _cancel_all_return_audio_prerolls(self) -> None:
+        tasks = list(self._return_audio_preroll_tasks.values())
+        self._return_audio_preroll_tasks.clear()
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _send_paced_return_audio(
+        self,
+        chunk: AudioChunk,
+        *,
+        target_buffer_s: float,
+    ) -> None:
+        """Send one lock-protected chunk with a bounded downstream reserve."""
+        duration_s = chunk.samples / chunk.sample_rate
+        now_s = _monotonic_s()
+        buffered_until_s = max(
+            self._return_audio_deadline_s.get(chunk.participant_id, now_s),
+            now_s,
+        )
+        delay_s = max(
+            0.0,
+            buffered_until_s + duration_s - now_s - target_buffer_s,
+        )
+        if delay_s > 1e-9:
+            await _sleep_s(delay_s)
+        await self._ep.send_return_audio(chunk)
+        sent_s = _monotonic_s()
+        self._return_audio_deadline_s[chunk.participant_id] = (
+            max(buffered_until_s, sent_s) + duration_s
         )
 
     async def start(self, frame: StartFrame):
@@ -360,6 +434,7 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
 
     async def _release_destination(self, pid: str) -> None:
         """Tear down a departed participant's ``MediaSender``."""
+        await self._cancel_return_audio_preroll(pid)
         lock = self._return_audio_locks.setdefault(pid, asyncio.Lock())
         async with lock:
             sender = self._media_senders.pop(pid, None)
@@ -377,11 +452,13 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
             self._target_participant = ""
 
     async def stop(self, frame: EndFrame):
+        await self._cancel_all_return_audio_prerolls()
         self._return_audio_deadline_s.clear()
         self._return_audio_locks.clear()
         await super().stop(frame)
 
     async def cancel(self, frame: CancelFrame):
+        await self._cancel_all_return_audio_prerolls()
         self._return_audio_deadline_s.clear()
         self._return_audio_locks.clear()
         await super().cancel(frame)
@@ -467,27 +544,13 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
                 self._missing_target_warned = True
             return False
         num_samples = len(frame.audio) // (2 * frame.num_channels)
-        duration_s = num_samples / frame.sample_rate
+        await self._wait_return_audio_preroll(pid)
         lock = self._return_audio_locks.setdefault(pid, asyncio.Lock())
         async with lock:
-            now_s = _monotonic_s()
-            buffered_until_s = max(
-                self._return_audio_deadline_s.get(pid, now_s),
-                now_s,
-            )
             # Send immediately while the estimated downstream reserve is below
             # the target. Once full, wait only long enough to make room for this
             # frame. A scheduler/IPC stall drains the estimate and therefore
             # causes subsequent frames to catch up instead of preserving a gap.
-            delay_s = max(
-                0.0,
-                buffered_until_s + duration_s
-                - now_s
-                - _RETURN_AUDIO_TARGET_BUFFER_S,
-            )
-            if delay_s:
-                await _sleep_s(delay_s)
-
             chunk = AudioChunk(
                 pts_us=time.time_ns() // 1_000,
                 sample_rate=frame.sample_rate,
@@ -497,10 +560,9 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
                 participant_id=pid,
                 track_id="tts",
             )
-            await self._ep.send_return_audio(chunk)
-            sent_s = _monotonic_s()
-            self._return_audio_deadline_s[pid] = (
-                max(buffered_until_s, sent_s) + duration_s
+            await self._send_paced_return_audio(
+                chunk,
+                target_buffer_s=_RETURN_AUDIO_TARGET_BUFFER_S,
             )
         return True
 
@@ -539,7 +601,7 @@ class HubVoiceTransport(BaseTransport):
             self._ep,
             params,
             name=self._input_name,
-            return_audio_primer=self._output.prime_return_audio,
+            return_audio_primer=self._output.start_return_audio_preroll,
             started_event=self._input_started,
         )
 

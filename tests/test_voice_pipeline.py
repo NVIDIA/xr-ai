@@ -1944,6 +1944,75 @@ async def test_response_boundary_flushes_each_partial_output_chunk():
 
 
 @pytest.mark.asyncio
+async def test_incremental_voice_output_flushes_one_final_partial_chunk():
+    """Incremental assistant output closes once through TTS and Pipecat."""
+    from pipecat.transports.base_transport import TransportParams
+    from xr_ai_voice._transport import (
+        TTS_NATIVE_SAMPLE_RATE,
+        DeviceIOHubOutputTransport,
+    )
+
+    class _ShortTts(_FakeTts):
+        async def synthesize(self, text: str, **_kwargs) -> bytes:
+            self.calls.append(text)
+            return _silence_wav(self.sample_rate, ms=27)
+
+    class _StubEndpoint:
+        def __init__(self) -> None:
+            self.chunks = []
+
+        async def send_return_audio(self, chunk) -> None:
+            self.chunks.append(chunk)
+
+    async def ignore_query(_query: VoiceQuery) -> None:
+        return None
+
+    async def response_chunks() -> AsyncIterator[str]:
+        yield "incremental "
+        await asyncio.sleep(0)
+        yield "response."
+
+    endpoint = _StubEndpoint()
+    tts = _ShortTts(sample_rate=TTS_NATIVE_SAMPLE_RATE)
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    io_processor = _VoiceIOProcessor(ignore_query)
+    streaming = StreamingTtsProcessor(tts=tts, voice_gate=gate)
+    output = DeviceIOHubOutputTransport(
+        endpoint,
+        TransportParams(
+            audio_out_enabled=True,
+            audio_out_sample_rate=TTS_NATIVE_SAMPLE_RATE,
+            audio_out_channels=1,
+        ),
+    )
+    sink = _CaptureSink()
+    worker = PipelineWorker(
+        Pipeline([io_processor, streaming, output, sink]),
+        cancel_on_idle_timeout=False,
+        enable_rtvi=False,
+    )
+    runner = WorkerRunner()
+    await runner.add_workers(worker)
+
+    async def drive() -> None:
+        await asyncio.sleep(0.05)
+        await io_processor.enqueue_response("alice", response_chunks(), pts_us=7)
+        await io_processor._inflight["alice"]  # noqa: SLF001
+        await asyncio.sleep(0.1)
+        await worker.queue_frame(EndFrame())
+
+    await asyncio.gather(runner.run(), drive())
+
+    assert tts.calls == ["incremental response."]
+    assert len(endpoint.chunks) == 1
+    assert endpoint.chunks[0].participant_id == "alice"
+    assert endpoint.chunks[0].samples / TTS_NATIVE_SAMPLE_RATE == pytest.approx(
+        0.04,
+        abs=0.001,
+    )
+
+
+@pytest.mark.asyncio
 async def test_interrupt_drains_boundary_parked_behind_slow_tts():
     """Teardown must skip an ordered boundary while cancelling synthesis."""
     class _SlowTts(_FakeTts):
@@ -2412,13 +2481,14 @@ async def test_input_transport_populates_transport_source_from_chunk_pid():
 
 
 @pytest.mark.asyncio
-async def test_input_transport_emits_participant_joined_frame():
+async def test_input_transport_emits_participant_joined_frame(monkeypatch):
     """``ParticipantEvent(joined=True)`` from the hub must surface as a
     ``ParticipantJoinedFrame`` on the pipecat pipeline — otherwise the
     voice gate never greets and the assistant never steers the output
     transport at a participant, so every TTS chunk gets dropped by
     ``DeviceIOHubOutputTransport.write_audio_frame``."""
     from xr_ai_hub import ParticipantEvent
+    from xr_ai_voice import _transport as transport_module
     from xr_ai_voice._transport import (
         SAMPLE_RATE,
         DeviceIOHubInputTransport,
@@ -2427,6 +2497,14 @@ async def test_input_transport_emits_participant_joined_frame():
     from pipecat.transports.base_transport import TransportParams
 
     ep = _CallbackStubEndpoint()
+    now_s = 100.0
+
+    async def fake_sleep(delay_s: float) -> None:
+        nonlocal now_s
+        now_s += delay_s
+
+    monkeypatch.setattr(transport_module, "_monotonic_s", lambda: now_s)
+    monkeypatch.setattr(transport_module, "_sleep_s", fake_sleep)
     params = TransportParams(
         audio_in_enabled=True,
         audio_in_sample_rate=SAMPLE_RATE,
@@ -2436,7 +2514,7 @@ async def test_input_transport_emits_participant_joined_frame():
     transport = DeviceIOHubInputTransport(
         ep,
         params,
-        return_audio_primer=output.prime_return_audio,
+        return_audio_primer=output.start_return_audio_preroll,
     )
     transport._started = True
 
@@ -2459,6 +2537,7 @@ async def test_input_transport_emits_participant_joined_frame():
     frame = pushed[0]
     assert isinstance(frame, ParticipantJoinedFrame)
     assert frame.participant_id == "web-client"
+    await output._wait_return_audio_preroll("web-client")  # noqa: SLF001
     assert len(ep.return_audio) == 8
     assert sum(chunk.samples for chunk in ep.return_audio) / 22_050 == pytest.approx(0.32)
     assert all(chunk.participant_id == "web-client" for chunk in ep.return_audio)
@@ -2494,7 +2573,7 @@ async def test_input_transport_emits_join_when_return_audio_preroll_fails():
             audio_in_sample_rate=SAMPLE_RATE,
             audio_in_channels=1,
         ),
-        return_audio_primer=output.prime_return_audio,
+        return_audio_primer=output.start_return_audio_preroll,
     )
     transport._started = True
     pushed: list[Frame] = []
@@ -2507,6 +2586,7 @@ async def test_input_transport_emits_join_when_return_audio_preroll_fails():
     await ep.participant_cb(
         ParticipantEvent(participant_id="web-client", joined=True, pts_us=0),
     )
+    await output._wait_return_audio_preroll("web-client")  # noqa: SLF001
 
     assert ep.return_audio_attempts == 1
     assert len(pushed) == 1
@@ -2515,28 +2595,34 @@ async def test_input_transport_emits_join_when_return_audio_preroll_fails():
 
 
 @pytest.mark.asyncio
-async def test_input_transport_preserves_join_leave_order_during_preroll():
-    """Detached leave delivery cannot overtake a join blocked on priming."""
+async def test_input_transport_does_not_delay_join_for_paced_preroll(monkeypatch):
+    """Greeting and application join work can overlap track preparation."""
     from pipecat.transports.base_transport import TransportParams
     from xr_ai_hub import ParticipantEvent
-    from xr_ai_voice._transport import SAMPLE_RATE, DeviceIOHubInputTransport
+    from xr_ai_voice import _transport as transport_module
+    from xr_ai_voice._transport import (
+        DeviceIOHubInputTransport,
+        DeviceIOHubOutputTransport,
+    )
 
-    primer_started = asyncio.Event()
-    release_primer = asyncio.Event()
+    now_s = 100.0
+    pacing_started = asyncio.Event()
+    release_pacing = asyncio.Event()
 
-    async def slow_primer(_pid: str) -> None:
-        primer_started.set()
-        await release_primer.wait()
+    async def blocking_sleep(delay_s: float) -> None:
+        nonlocal now_s
+        pacing_started.set()
+        await release_pacing.wait()
+        now_s += delay_s
 
+    monkeypatch.setattr(transport_module, "_monotonic_s", lambda: now_s)
+    monkeypatch.setattr(transport_module, "_sleep_s", blocking_sleep)
     ep = _CallbackStubEndpoint()
+    output = DeviceIOHubOutputTransport(ep, TransportParams())
     transport = DeviceIOHubInputTransport(
         ep,
-        TransportParams(
-            audio_in_enabled=True,
-            audio_in_sample_rate=SAMPLE_RATE,
-            audio_in_channels=1,
-        ),
-        return_audio_primer=slow_primer,
+        TransportParams(),
+        return_audio_primer=output.start_return_audio_preroll,
     )
     transport._started = True
     pushed: list[Frame] = []
@@ -2546,19 +2632,84 @@ async def test_input_transport_preserves_join_leave_order_during_preroll():
 
     transport.push_frame = capture  # type: ignore[method-assign]
 
+    await ep.participant_cb(
+        ParticipantEvent(participant_id="web-client", joined=True, pts_us=0),
+    )
+    await pacing_started.wait()
+
+    assert [type(frame) for frame in pushed] == [ParticipantJoinedFrame]
+    assert len(ep.return_audio) == 1
+    assert not output._return_audio_preroll_tasks["web-client"].done()  # noqa: SLF001
+
+    speech = OutputAudioRawFrame(
+        audio=b"\x01\x00" * 640,
+        sample_rate=16_000,
+        num_channels=1,
+    )
+    speech.transport_destination = "web-client"
+    speech_task = asyncio.create_task(output.write_audio_frame(speech))
+    await asyncio.sleep(0)
+    assert len(ep.return_audio) == 1
+
+    release_pacing.set()
+    await asyncio.gather(
+        output._wait_return_audio_preroll("web-client"),  # noqa: SLF001
+        speech_task,
+    )
+    assert len(ep.return_audio) == 9
+    assert all(not any(chunk.data) for chunk in ep.return_audio[:8])
+    assert any(ep.return_audio[-1].data)
+
+
+@pytest.mark.asyncio
+async def test_input_transport_preserves_join_leave_order_during_join_delivery():
+    """Detached leave delivery cannot overtake a join still in the pipeline."""
+    from pipecat.transports.base_transport import TransportParams
+    from xr_ai_hub import ParticipantEvent
+    from xr_ai_voice._transport import SAMPLE_RATE, DeviceIOHubInputTransport
+
+    primer_started: list[str] = []
+    join_delivery_started = asyncio.Event()
+    release_join_delivery = asyncio.Event()
+
+    def start_primer(pid: str) -> None:
+        primer_started.append(pid)
+
+    ep = _CallbackStubEndpoint()
+    transport = DeviceIOHubInputTransport(
+        ep,
+        TransportParams(
+            audio_in_enabled=True,
+            audio_in_sample_rate=SAMPLE_RATE,
+            audio_in_channels=1,
+        ),
+        return_audio_primer=start_primer,
+    )
+    transport._started = True
+    pushed: list[Frame] = []
+
+    async def capture(frame, direction=FrameDirection.DOWNSTREAM):
+        if isinstance(frame, ParticipantJoinedFrame):
+            join_delivery_started.set()
+            await release_join_delivery.wait()
+        pushed.append(frame)
+
+    transport.push_frame = capture  # type: ignore[method-assign]
+
     join = ep.participant_cb(
         ParticipantEvent(participant_id="web-client", joined=True, pts_us=1),
     )
     join_task = asyncio.create_task(join)
-    await primer_started.wait()
+    await join_delivery_started.wait()
     leave = ep.participant_cb(
         ParticipantEvent(participant_id="web-client", joined=False, pts_us=2),
     )
     leave_task = asyncio.create_task(leave)
     await asyncio.sleep(0)
 
+    assert primer_started == ["web-client"]
     assert pushed == []
-    release_primer.set()
+    release_join_delivery.set()
     await asyncio.gather(join_task, leave_task)
 
     assert [type(frame) for frame in pushed] == [
@@ -3316,8 +3467,10 @@ async def test_output_transport_writes_audio_to_target_participant():
 
 
 @pytest.mark.asyncio
-async def test_output_transport_accounts_preroll_before_pacing(monkeypatch):
-    """Real pre-roll backlog must reduce the pacer's initial burst."""
+async def test_output_transport_paces_preroll_within_small_hub_buffer(monkeypatch):
+    """The full pre-roll and following speech fit a 120 ms hub queue."""
+    from collections import deque
+
     from pipecat.transports.base_transport import TransportParams
     from xr_ai_voice import _transport as transport_module
     from xr_ai_voice._transport import DeviceIOHubOutputTransport
@@ -3331,30 +3484,64 @@ async def test_output_transport_accounts_preroll_before_pacing(monkeypatch):
         sleeps.append(delay_s)
         now_s += delay_s
 
-    class _StubEndpoint:
-        async def send_return_audio(self, _chunk) -> None:
+    class _BoundedEndpoint:
+        def __init__(self) -> None:
+            self.queued: deque[float] = deque()
+            self.last_update_s = now_s
+            self.dropped_s = 0.0
+
+        def _drain(self) -> None:
+            elapsed_s = now_s - self.last_update_s
+            self.last_update_s = now_s
+            while self.queued and elapsed_s > 0:
+                if elapsed_s + 1e-9 >= self.queued[0]:
+                    elapsed_s -= self.queued.popleft()
+                else:
+                    self.queued[0] -= elapsed_s
+                    elapsed_s = 0.0
+
+        async def send_return_audio(self, chunk) -> None:
+            self._drain()
+            duration_s = chunk.samples / chunk.sample_rate
+            while self.queued and sum(self.queued) + duration_s > 0.12 + 1e-9:
+                self.dropped_s += self.queued.popleft()
+            self.queued.append(duration_s)
             sent_at.append(now_s)
+
+        @property
+        def playout_until_s(self) -> float:
+            self._drain()
+            return now_s + sum(self.queued)
 
     monkeypatch.setattr(transport_module, "_monotonic_s", lambda: now_s)
     monkeypatch.setattr(transport_module, "_sleep_s", fake_sleep)
-    transport = DeviceIOHubOutputTransport(_StubEndpoint(), TransportParams())
+    endpoint = _BoundedEndpoint()
+    transport = DeviceIOHubOutputTransport(endpoint, TransportParams())
 
-    await transport.prime_return_audio("alice")
+    transport.start_return_audio_preroll("alice")
+    await transport._wait_return_audio_preroll("alice")  # noqa: SLF001
 
-    assert sent_at == [100.0] * 8
+    assert sent_at == pytest.approx([100.0 + index * 0.04 for index in range(8)])
+    assert sleeps == pytest.approx([0.04] * 7)
+    assert endpoint.dropped_s == pytest.approx(0.0)
+    assert transport._return_audio_preroll_tasks == {}  # noqa: SLF001
     assert transport._return_audio_deadline_s["alice"] == pytest.approx(100.32)  # noqa: SLF001
+    assert endpoint.playout_until_s == pytest.approx(100.32)
 
     frame = OutputAudioRawFrame(
-        audio=b"\x00\x00" * 320,
+        audio=b"\x00\x00" * 640,
         sample_rate=16_000,
         num_channels=1,
     )
     frame.transport_destination = "alice"
-    assert await transport.write_audio_frame(frame) is True
+    for _ in range(3):
+        assert await transport.write_audio_frame(frame) is True
 
-    assert sleeps == pytest.approx([0.22])
-    assert sent_at[-1] == pytest.approx(100.22)
-    assert transport._return_audio_deadline_s["alice"] == pytest.approx(100.34)  # noqa: SLF001
+    assert sent_at[-3:] == pytest.approx([100.28, 100.28, 100.32])
+    assert sleeps == pytest.approx([0.04] * 8)
+    assert endpoint.dropped_s == pytest.approx(0.0)
+    assert transport._return_audio_deadline_s["alice"] == pytest.approx(100.44)  # noqa: SLF001
+    assert endpoint.playout_until_s == pytest.approx(100.44)
 
 
 @pytest.mark.asyncio
@@ -3599,6 +3786,52 @@ async def test_output_transport_releases_media_sender_on_participant_left():
     assert "alice" not in transport._media_senders   # noqa: SLF001
     # The fallback target is cleared when the bound target participant leaves.
     assert transport.target_participant == ""
+
+
+@pytest.mark.asyncio
+async def test_output_transport_release_cancels_active_preroll(monkeypatch):
+    """A quick leave cannot retain a paced primer or its output state."""
+    from pipecat.transports.base_transport import TransportParams
+    from xr_ai_voice import _transport as transport_module
+    from xr_ai_voice._transport import DeviceIOHubOutputTransport
+
+    now_s = 100.0
+    pacing_started = asyncio.Event()
+
+    async def blocking_sleep(_delay_s: float) -> None:
+        pacing_started.set()
+        await asyncio.Event().wait()
+
+    class _StubEndpoint:
+        def __init__(self) -> None:
+            self.chunks = []
+
+        async def send_return_audio(self, chunk) -> None:
+            self.chunks.append(chunk)
+
+    monkeypatch.setattr(transport_module, "_monotonic_s", lambda: now_s)
+    monkeypatch.setattr(transport_module, "_sleep_s", blocking_sleep)
+    endpoint = _StubEndpoint()
+    transport = DeviceIOHubOutputTransport(endpoint, TransportParams())
+
+    transport.start_return_audio_preroll("alice")
+    await pacing_started.wait()
+    speech = OutputAudioRawFrame(
+        audio=b"\x00\x00" * 640,
+        sample_rate=16_000,
+        num_channels=1,
+    )
+    speech.transport_destination = "alice"
+    speech_task = asyncio.create_task(transport.write_audio_frame(speech))
+    await asyncio.sleep(0)
+    await transport._release_destination("alice")  # noqa: SLF001
+
+    with pytest.raises(asyncio.CancelledError):
+        await speech_task
+    assert len(endpoint.chunks) == 1
+    assert "alice" not in transport._return_audio_preroll_tasks  # noqa: SLF001
+    assert "alice" not in transport._return_audio_deadline_s  # noqa: SLF001
+    assert "alice" not in transport._return_audio_locks  # noqa: SLF001
 
 
 @pytest.mark.asyncio
