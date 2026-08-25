@@ -53,7 +53,7 @@ default distance.
   object's description. The tool computes the midpoint. Never use create_at
   for this. Example: "Create a teal cone between the ivory capsule and the
   lavender cylinder" → create_object_relative(prim_type="cone",
-  color_words="teal", anchor_words="ivory capsule",
+  color_kind="literal", color_value="teal", anchor_words="ivory capsule",
   second_anchor_words="lavender cylinder").
 - create_at is only for coordinates stated numerically in the instruction;
   with no numbers present, never call it. With no
@@ -61,12 +61,22 @@ default distance.
   direction front and the default distance, so the object appears in front
   of the user; never direction above unless the request says above.
 
-The creation tools take color_words: quote the instruction's color word
-exactly as written, mangled spellings included, and the tool resolves the
-RGB itself. "Create a teal capsule" passes color_words "teal"; an identical
-copy of capsule-8 passes color_words "same as capsule-8"; when the
-instruction states no color, leave color_words empty and the standard
-default applies. Never translate a color to numbers yourself.
+The creation tools take color_kind and color_value; color_value carries
+the instruction's exact words for the source:
+- literal: a stated color word, copied verbatim, mangled spellings
+  included: "a teal capsule" is literal "teal", and "a graye sphere" is
+  literal "graye" (the tool repairs mangled spellings; never drop an
+  unrecognized color word).
+- scene_object: copy an existing XR object's color; an identical copy of
+  capsule-8 is scene_object "capsule-8".
+- physical: any real-world thing observed through the camera, with the
+  phrase kept whole: "Create a cone the color of my apron, no
+  position stated" is create_user_relative(prim_type="cone",
+  direction="front") with color_kind physical and color_value "the color
+  of my apron"; the tool reads the camera and picks the color itself,
+  never a guess, a default, or a report-back.
+When the instruction states no color, leave color_value empty and the
+standard default applies. Never translate a color to numbers yourself.
 
 Never create first and move the new object afterward, and never substitute
 renderer defaults for requested placement.

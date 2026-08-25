@@ -136,8 +136,151 @@ async def test_mixed_vision_and_mutation_request_still_verifies(monkeypatch) -> 
 
     reply = await supervisor.handle(SceneRequest(
         transcript="Look at the room and create a sphere.", participant_id="alice"))
-    assert reply.response == "The room looks tidy."
+    # The creation half never happened: the claim-free vision answer keeps
+    # its content and gains the no-change fact.
+    assert reply.response.startswith("The room looks tidy.")
+    assert reply.response.endswith("Nothing in the scene was changed.")
     assert loop_calls == 2
+
+
+async def test_verification_never_offers_repeat_when_mutation_undelegated(monkeypatch) -> None:
+    """A change-requesting utterance whose first pass delegated no mutating
+    subagent must get a verification nudge with no repeat-your-answer out."""
+    supervisor, _fake = _make_supervisor()
+    nudges: list[str] = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        nudges.extend(m.content for m in messages if m.role == "user" and "Verified scene" in m.content)
+        return SimpleNamespace(
+            content="Recolored it to match the wall.",
+            messages=list(messages),
+            tool_calls=(),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="Make the sphere the same color as the wall.", participant_id="alice"))
+    assert len(nudges) == 1
+    assert "repeat your final answer" not in nudges[0]
+    assert "never" in nudges[0]
+    # The model repeated its false success anyway; the deterministic guard
+    # must replace it, and the scene must be untouched.
+    assert "Recolored" not in reply.response
+    assert "nothing in the scene was changed" in reply.response
+    assert _fake.objects == {}
+
+
+async def test_gate_keeps_claim_free_explanations(monkeypatch) -> None:
+    """A claim-free failure explanation keeps its why; the no-change fact is
+    appended, never substituted."""
+    supervisor, _fake = _make_supervisor()
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        return SimpleNamespace(
+            content="The camera is unavailable, so I could not read your shirt color.",
+            messages=list(messages),
+            tool_calls=(),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="Make the box the color of my shirt.", participant_id="alice"))
+    assert reply.response.startswith("The camera is unavailable")
+    assert reply.response.endswith("Nothing in the scene was changed.")
+
+
+def test_status_questions_are_not_mutation_intent() -> None:
+    from xr_render_demo_worker.supervisor import _wants_mutation
+
+    assert not _wants_mutation("Did you move the cube?")
+    assert not _wants_mutation("Have you added the sphere yet?")
+    assert not _wants_mutation("Was the cube removed?")
+    assert _wants_mutation("Can you move the cube?")
+    assert _wants_mutation("Move the cube.")
+
+
+async def test_already_satisfied_reply_stands_on_evidence(monkeypatch) -> None:
+    """A recolor that found the requested state already holding records
+    satisfied evidence; the model's reply stands despite no scene diff."""
+    from xr_render_demo_worker._trace import current_mutation_evidence
+
+    supervisor, _fake = _make_supervisor()
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        current_mutation_evidence.get().satisfied += 1
+        return SimpleNamespace(
+            content="The sphere is already green.",
+            messages=list(messages),
+            tool_calls=(SimpleNamespace(call=SimpleNamespace(name="appearance_agent")),),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="Make the sphere green.", participant_id="alice"))
+    assert reply.response == "The sphere is already green."
+
+
+async def test_rejected_mutation_without_evidence_gets_honest_reply(monkeypatch) -> None:
+    """A delegated mutating agent whose tool call was rejected leaves no
+    evidence; a non-question reply is replaced with the honest text."""
+    supervisor, _fake = _make_supervisor()
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        return SimpleNamespace(
+            content="Recolored the box to match your shirt.",
+            messages=list(messages),
+            tool_calls=(SimpleNamespace(call=SimpleNamespace(name="appearance_agent")),),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="Make the box the color of my shirt.", participant_id="alice"))
+    assert "nothing in the scene was changed" in reply.response
+
+
+async def test_verification_preserves_clarifying_questions(monkeypatch) -> None:
+    """A question reply after a no-change verification pass is a legitimate
+    ask-back, not an unsupported claim."""
+    supervisor, _fake = _make_supervisor()
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        return SimpleNamespace(
+            content="What color is the wall?",
+            messages=list(messages),
+            tool_calls=(),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="Make the sphere the same color as the wall.", participant_id="alice"))
+    assert reply.response == "What color is the wall?"
+
+
+async def test_verification_offers_repeat_after_mutating_delegation(monkeypatch) -> None:
+    """When a mutating subagent did run and reported no change, the nudge
+    keeps the repeat-answer path for honest failure replies."""
+    supervisor, _fake = _make_supervisor()
+    nudges: list[str] = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        nudges.extend(m.content for m in messages if m.role == "user" and "Verified scene" in m.content)
+        return SimpleNamespace(
+            content="I couldn't find that object.",
+            messages=list(messages),
+            tool_calls=(SimpleNamespace(call=SimpleNamespace(name="appearance_agent")),),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await supervisor.handle(SceneRequest(
+        transcript="Paint the sphere crimson.", participant_id="alice"))
+    assert len(nudges) == 1
+    assert "repeat your final answer" in nudges[0]
 
 
 async def test_turn_tasks_run_in_forked_relay_context(monkeypatch) -> None:

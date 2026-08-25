@@ -28,6 +28,7 @@ def make_appearance_agent(
     llm: LLMService,
     scene: SceneTools,
     context: SceneContext,
+    physical_color: Tool | None = None,
 ) -> Tool:
     delegation_lock = asyncio.Lock()
 
@@ -35,7 +36,7 @@ def make_appearance_agent(
         logger.debug("appearance agent instruction={!r} trace={}", request.instruction[:200], current_trace_id.get())
         async with delegation_lock:
             guard = TurnGuard()
-            tools = make_appearance_tools(scene, guard=guard)
+            tools = make_appearance_tools(scene, guard=guard, physical_color=physical_color)
             tools.append(Tool(
                 "get_scene_state",
                 "Return every current XR object with its ID, type, world position, color, and size.",
