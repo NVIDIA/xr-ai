@@ -39,7 +39,7 @@ cloudxr_install_dir: ~/.cloudxr
 accept_eula: true
 
 # Device profile — controls transport and XR device defaults.
-# Valid: auto-native | auto-webrtc | apple-vision-pro | ipad-pro | quest3
+# Valid: auto-native | auto-webrtc | apple-vision-pro | ipad-pro
 cloudxr_env:
   NV_DEVICE_PROFILE: auto-webrtc
 
@@ -61,8 +61,9 @@ clients, not both. Change the profile and restart the stack when switching.
 | Other native CloudXR clients | `auto-native` | unused |
 | Meta Quest 3 with CloudXR.js | `quest3` | used |
 
-Device-specific profiles such as `apple-vision-pro`, `ipad-pro`, and `quest3`
-are also accepted when their fixed device defaults are preferred.
+The runtime also accepts the device-specific native profiles
+`apple-vision-pro` and `ipad-pro`. Quest clients run CloudXR.js in the headset
+browser and therefore use the WebRTC profile rather than a native profile.
 
 ## Notes
 
