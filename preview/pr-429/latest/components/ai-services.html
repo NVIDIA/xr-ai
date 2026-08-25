@@ -587,7 +587,8 @@ copy server YAML into their own configuration directories. Follow
 its hardware-specific server YAML, and copy compatible endpoint entries into
 the sample’s models JSON with <code class="docutils literal notranslate"><span class="pre">deployment.ownership</span></code> set to <code class="docutils literal notranslate"><span class="pre">reused</span></code>.</p>
 <p>Declare each model dependency in the sample orchestrator as reuse-only so the
-process list records startup ordering without starting or stopping the server:</p>
+process list records the external dependency without transferring lifecycle
+ownership to the sample:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">Process</span><span class="p">(</span>
     <span class="s2">"vlm"</span><span class="p">,</span>
     <span class="s2">"../../services/vlm-server"</span><span class="p">,</span>
@@ -596,9 +597,10 @@ process list records startup ordering without starting or stopping the server:</
 <span class="p">)</span>
 </pre></div>
 </div>
-<p>Start <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> before the application sample. Application capability
-services such as RAG remain sample-owned and keep their configuration with the
-sample that launches them.</p>
+<p>The launcher skips reuse-only entries completely: it does not start, order, or
+readiness-check them. Start <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> separately before the application
+sample. Application capability services such as RAG remain sample-owned and
+keep their configuration with the sample that launches them.</p>
 </section>
 <section id="calling-these-from-a-worker">
 <h2>Calling these from a worker<a class="headerlink" href="#calling-these-from-a-worker" title="Link to this heading">#</a></h2>
