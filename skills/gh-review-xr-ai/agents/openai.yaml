@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+interface:
+  display_name: "XR-AI Pull Request Review"
+  short_description: "Review XR-AI PRs with strict scope discipline"
+  default_prompt: "Use $gh-review-xr-ai to review this XR-AI pull request without posting an approval."
