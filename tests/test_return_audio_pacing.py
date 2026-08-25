@@ -215,3 +215,53 @@ async def test_room_client_applies_buffer_limit_per_participant(monkeypatch):
         assert alice_source is not bob_source
     finally:
         await asyncio.gather(alice_pipe.close(), bob_pipe.close())
+
+
+async def test_voice_preroll_pacing_does_not_overflow_120ms_pipe(monkeypatch):
+    """The shared voice primer remains intact in the real bounded hub pipe."""
+    from pipecat.transports.base_transport import TransportParams
+    from xr_ai_voice import _transport as voice_transport_module
+    from xr_ai_voice._transport import DeviceIOHubOutputTransport
+
+    class _ImmediateSource:
+        def __init__(self) -> None:
+            self.captured: list[object] = []
+
+        async def capture_frame(self, frame) -> None:
+            self.captured.append(frame)
+
+        def clear_queue(self) -> None:
+            return None
+
+    now_s = 100.0
+    source = _ImmediateSource()
+    pipe = _ReturnAudioPipe(source, participant_id="alice", max_buffer_s=0.12)
+
+    async def fake_sleep(delay_s: float) -> None:
+        nonlocal now_s
+        now_s += delay_s
+        await asyncio.sleep(0)
+
+    class _PipeEndpoint:
+        async def send_return_audio(self, chunk) -> None:
+            pipe.push(
+                _FakeFrame(
+                    f"pre-roll-{len(source.captured) + pipe.queued_frames}",
+                    samples_per_channel=chunk.samples,
+                    sample_rate=chunk.sample_rate,
+                )
+            )
+
+    monkeypatch.setattr(voice_transport_module, "_monotonic_s", lambda: now_s)
+    monkeypatch.setattr(voice_transport_module, "_sleep_s", fake_sleep)
+    output = DeviceIOHubOutputTransport(_PipeEndpoint(), TransportParams())
+    try:
+        output.start_return_audio_preroll("alice")
+        await output._wait_return_audio_preroll("alice")  # noqa: SLF001
+        await asyncio.sleep(0)
+
+        assert pipe.dropped_frames == 0
+        assert len(source.captured) + pipe.queued_frames == 8
+        assert output._return_audio_deadline_s["alice"] == pytest.approx(100.32)  # noqa: SLF001
+    finally:
+        await pipe.close()

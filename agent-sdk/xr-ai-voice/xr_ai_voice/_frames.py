@@ -6,8 +6,8 @@
 Everything pipecat already ships (``InputAudioRawFrame``,
 ``OutputAudioRawFrame``, ``TranscriptionFrame``, ``UserStartedSpeakingFrame``,
 ``UserStoppedSpeakingFrame``, ``InterruptionFrame``, ``TextFrame``) is reused
-directly — only the participant lifecycle and the voicegate-emitted query
-frame live here.
+directly — only participant lifecycle, voice-gate queries, and synthesized-text
+response boundaries live here.
 """
 from __future__ import annotations
 
@@ -55,7 +55,20 @@ class GatedQueryFrame(DataFrame):
 
 
 @dataclass
-class AssistantResponseEndFrame(DataFrame):
+class TextResponseEndFrame(DataFrame):
+    """One participant-scoped sequence of synthesized text has ended.
+
+    Every producer that emits ``TextFrame`` objects for one utterance follows
+    them with this frame. ``StreamingTtsProcessor`` uses it to flush trailing
+    text and place the audio boundary behind all synthesis already queued for
+    the participant.
+    """
+
+    pid: str
+
+
+@dataclass
+class AssistantResponseEndFrame(TextResponseEndFrame):
     """A single assistant turn finished emitting ``TextFrame``s.
 
     Emitted by the private assistant processor when a query completes
@@ -70,6 +83,5 @@ class AssistantResponseEndFrame(DataFrame):
     was interrupted out of saying.
     """
 
-    pid: str
     text: str
     pts_us: int

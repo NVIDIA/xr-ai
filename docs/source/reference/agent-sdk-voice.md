@@ -74,6 +74,16 @@ independent agents cannot merge accidentally.
 caption channel. The echo describes intended completed text, not client playback
 acknowledgement.
 
+When a participant joins, the voice transport sends 320 ms of paced silence.
+The first chunk causes the hub to publish the return track, and the remaining
+interval gives the participant time to subscribe before an immediate greeting
+or response. If no output follows immediately, the pre-roll drains and does not
+delay a later response. During speech, the sender maintains up to 120 ms of
+downstream reserve to absorb ordinary event-loop and IPC jitter. It sends
+initial chunks immediately rather than waiting to fill the reserve, and
+interruption flushes participant-scoped queued audio. The hub setting
+`return_audio_max_buffer_s` must be at least `0.12` for built-in voice output.
+
 (multiple-voice-producers)=
 ## Multiple speech producers
 
