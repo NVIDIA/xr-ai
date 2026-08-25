@@ -415,6 +415,8 @@ def test_reworded_headings_keep_compatibility_anchors() -> None:
     tools = (_ROOT / "docs/source/reference/agent-sdk-tools.md").read_text()
     voice = (_ROOT / "docs/source/reference/agent-sdk-voice.md").read_text()
     xr_render = (_ROOT / "docs/source/reference/xr-render-demo.md").read_text()
+    adding_cloudxr = (_ROOT / "docs/source/guides/adding-cloudxr.md").read_text()
+    troubleshooting = (_ROOT / "docs/source/guides/troubleshooting.md").read_text()
 
     for anchor in (
         "which-clients-exist",
@@ -459,6 +461,13 @@ def test_reworded_headings_keep_compatibility_anchors() -> None:
             (
                 "multiple-voice-producers",
                 "voice-tuning-and-data-echo",
+            ),
+        ),
+        (adding_cloudxr, ("add-cloudxr-runtime-yaml-to-the-sample-root",)),
+        (
+            troubleshooting,
+            (
+                "vllm-backend-docker-docker-run-fails-with-could-not-select-device-driver",
             ),
         ),
     ):

@@ -7,8 +7,8 @@ Stack launcher with per-process readiness files.
 Design
 ------
 Every launchable sub-project is self-describing: it exposes an entry-point
-command and accepts ``--config <path>.yaml`` (auto-discovered) and
-``--ready-file <path>`` (injected by the launcher).
+command and accepts an explicitly configured ``--config <path>.yaml`` when
+needed and ``--ready-file <path>`` (injected by the launcher).
 
 The stack is declared as a sequence of ``Process`` or ``Parallel`` items:
 
