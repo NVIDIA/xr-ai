@@ -313,7 +313,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
 </ul>
@@ -332,6 +332,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
@@ -346,6 +347,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -448,10 +450,9 @@
 clients connect to and agents fan out from. It owns the internal LiveKit
 transport, the shared-memory + ZMQ IPC boundary to agents, the per-participant
 return path, and the same-origin <code class="docutils literal notranslate"><span class="pre">wss://</span></code> proxy that fronts LiveKit signaling.</p>
-<p>It runs as one process:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">uv</span> <span class="n">run</span> <span class="n">device_io_hub</span>                       <span class="c1"># auto-discovers ./device_io_hub.yaml</span>
-<span class="n">uv</span> <span class="n">run</span> <span class="n">device_io_hub</span> <span class="o">--</span><span class="n">config</span> <span class="n">path</span><span class="o">.</span><span class="n">yaml</span>    <span class="c1"># explicit config</span>
-<span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">device_io_hub</span>                    <span class="c1"># equivalent module form</span>
+<p>From the repository root, run it as one process:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">uv</span> <span class="n">run</span> <span class="o">--</span><span class="n">project</span> <span class="n">services</span><span class="o">/</span><span class="n">device</span><span class="o">-</span><span class="n">io</span><span class="o">-</span><span class="n">hub</span> <span class="n">device_io_hub</span> \
+  <span class="o">--</span><span class="n">config</span> <span class="n">services</span><span class="o">/</span><span class="n">device</span><span class="o">-</span><span class="n">io</span><span class="o">-</span><span class="n">hub</span><span class="o">/</span><span class="n">device_io_hub</span><span class="o">.</span><span class="n">yaml</span>
 </pre></div>
 </div>
 <p>Configuration comes from a <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> file. When none is found,
@@ -471,7 +472,7 @@ traffic back to the originating client only.</p>
 <p>On startup, <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code> constructs a <code class="docutils literal notranslate"><span class="pre">HubEndpoint</span></code> (the IPC server),
 registers hub-local callbacks (<code class="docutils literal notranslate"><span class="pre">on_frame</span></code>, <code class="docutils literal notranslate"><span class="pre">on_audio</span></code>, <code class="docutils literal notranslate"><span class="pre">on_data</span></code>,
 <code class="docutils literal notranslate"><span class="pre">on_participant</span></code>), loads the configuration, and brings up the <code class="docutils literal notranslate"><span class="pre">LiveKitConnector</span></code>.
-The hub task and the connector task then run concurrently until <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> /
+The hub task and the connector task then run concurrently until <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or
 <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code>. A periodic stats loop logs per-participant video, audio, and data
 rates.</p>
 <section id="isolation-contract">
@@ -501,21 +502,23 @@ is addressed with <code class="docutils literal notranslate"><span class="pre">d
 transport. LiveKit natively supports client-to-client communication, and an
 application is free to use those native features directly for peer-to-peer
 media or data. Doing so is <strong>outside the scope of XR AI</strong>: the hub neither
-routes nor guarantees that traffic. This traffic is outside the hub contract and is not portable across transports. Build on the hub’s participant ↔ agent contract
-for behavior that ports across backends.</p>
+routes nor guarantees that traffic, and it is not portable across transports.
+Build on the hub’s participant ↔ agent contract for behavior that must port
+across backends.</p>
 </div>
 </section>
 </section>
 <section id="internal-livekit-transport">
 <h2>Internal LiveKit transport<a class="headerlink" href="#internal-livekit-transport" title="Link to this heading">#</a></h2>
 <p>LiveKit is an internal transport implementation detail. It is not exposed to
-the agent or MCP layer — agents only ever speak the IPC protocol below, and
-never need to know which transport carries the media.</p>
+agent APIs: agents speak only the IPC protocol below and never need to know
+which transport carries the media.</p>
 <p><code class="docutils literal notranslate"><span class="pre">LiveKitConnector</span></code> (<code class="docutils literal notranslate"><span class="pre">transport/livekit/</span></code>) owns the transport lifecycle:</p>
 <ol class="arabic simple">
-<li><p>Starts the LiveKit server in a Docker container, listening on the loopback
-interface only (signaling <code class="docutils literal notranslate"><span class="pre">ws://127.0.0.1:7880</span></code>, plus WebRTC TCP/UDP media
-ports 7881/7882).</p></li>
+<li><p>Starts the LiveKit server in a host-networked Docker container (plaintext
+signaling on port 7880, plus WebRTC TCP/UDP media ports 7881/7882). The
+generated configuration does not restrict the signaling listener to
+loopback, so deployment firewalls must control direct access.</p></li>
 <li><p>Optionally starts the browser-facing web server and/or token server.</p></li>
 <li><p>Registers itself as a <code class="docutils literal notranslate"><span class="pre">ConnectorEndpoint</span></code> with the IPC layer.</p></li>
 <li><p>Connects a Python <code class="docutils literal notranslate"><span class="pre">RoomClient</span></code> to the LiveKit room. The room client is
@@ -655,10 +658,13 @@ agent.</p>
 </section>
 <section id="same-origin-wss-proxy">
 <h2>Same-origin wss proxy<a class="headerlink" href="#same-origin-wss-proxy" title="Link to this heading">#</a></h2>
-<p>LiveKit server itself runs plain <code class="docutils literal notranslate"><span class="pre">ws://</span></code> on the loopback interface
-(<code class="docutils literal notranslate"><span class="pre">127.0.0.1:7880</span></code>) and nothing reaches that port from off-box. External
-clients — browser, web-xr, Android, iOS, visionOS — connect only to a
-same-origin <code class="docutils literal notranslate"><span class="pre">wss://</span></code> URL exposed by the hub’s web server.</p>
+<p>The LiveKit server runs plaintext <code class="docutils literal notranslate"><span class="pre">ws://</span></code> on port 7880. Its host-networked
+container and generated configuration do not limit the listener to loopback,
+so it can be reachable through host interfaces unless a firewall blocks it.
+Browser, web-xr, Android, iOS, and visionOS clients connect through the
+same-origin <code class="docutils literal notranslate"><span class="pre">wss://</span></code> URL exposed by the hub’s web server. The native C++ client
+may connect directly to port 7880 only as a local or source-restricted trusted
+network debugging path. Refer to <a class="reference internal" href="../getting_started/networking.html"><span class="doc">Networking and firewall</span></a>.</p>
 <p>When <code class="docutils literal notranslate"><span class="pre">web_server_tls</span></code> is enabled (the default), the web server
 (<code class="docutils literal notranslate"><span class="pre">_web_server.py</span></code>) terminates TLS on <code class="docutils literal notranslate"><span class="pre">web_server_port</span></code> (8080 by default) and
 mounts a <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> route that proxies LiveKit signaling bidirectionally to the

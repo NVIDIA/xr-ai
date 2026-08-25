@@ -60,7 +60,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Credentials" href="credentials.html" />
-    <link rel="prev" title="Connecting Clients" href="clients.html" />
+    <link rel="prev" title="Connecting clients" href="clients.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -313,7 +313,7 @@
 <li class="toctree-l2"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
 <li class="toctree-l2"><a class="reference internal" href="skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="requirements.html">Requirements</a></li>
-<li class="toctree-l2"><a class="reference internal" href="clients.html">Connecting Clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clients.html">Connecting clients</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Networking and firewall</a></li>
 <li class="toctree-l2"><a class="reference internal" href="credentials.html">Credentials</a></li>
 </ul>
@@ -332,6 +332,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
@@ -346,6 +347,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -456,7 +458,7 @@ ports. Open only the externally reachable ports required by the deployment.</p>
 <tbody>
 <tr class="row-even"><td><p>7880</p></td>
 <td><p>TCP</p></td>
-<td><p>LiveKit signaling (internal — bound to 127.0.0.1 via the hub’s /rtc proxy; browsers and mobile clients do not connect here)</p></td>
+<td><p>Plaintext LiveKit signaling (used behind the hub’s <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> proxy; optional direct native-client debugging path)</p></td>
 </tr>
 <tr class="row-odd"><td><p>7881</p></td>
 <td><p>TCP</p></td>
@@ -468,7 +470,7 @@ ports. Open only the externally reachable ports required by the deployment.</p>
 </tr>
 <tr class="row-odd"><td><p>8080</p></td>
 <td><p>TCP</p></td>
-<td><p>Web client + token server + wss:// /rtc proxy (HTTPS — the single entry point for browser, Android, iOS, and visionOS clients)</p></td>
+<td><p>Web client, token server, and <code class="docutils literal notranslate"><span class="pre">wss://</span></code> <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> proxy (HTTPS; the normal LiveKit signaling entry point for shipped clients)</p></td>
 </tr>
 <tr class="row-even"><td><p>8092</p></td>
 <td><p>TCP</p></td>
@@ -476,7 +478,7 @@ ports. Open only the externally reachable ports required by the deployment.</p>
 </tr>
 <tr class="row-odd"><td><p>48322</p></td>
 <td><p>TCP</p></td>
-<td><p>CloudXR WSS proxy (XR headset or client connection)</p></td>
+<td><p>CloudXR WSS proxy (<code class="docutils literal notranslate"><span class="pre">auto-webrtc</span></code> clients only; unused by <code class="docutils literal notranslate"><span class="pre">auto-native</span></code> Apple clients)</p></td>
 </tr>
 </tbody>
 </table>
@@ -490,9 +492,23 @@ sudo<span class="w"> </span>ufw<span class="w"> </span>allow<span class="w"> </s
 sudo<span class="w"> </span>ufw<span class="w"> </span>reload
 </pre></div>
 </div>
-<p>7880 stays on <code class="docutils literal notranslate"><span class="pre">127.0.0.1</span></code>; do not expose it externally — browsers and
-mobile clients reach LiveKit through the same-origin <code class="docutils literal notranslate"><span class="pre">wss://&lt;host&gt;:8080/rtc</span></code>
-proxy, not directly.</p>
+<p>These rules intentionally omit port 7880. The generated LiveKit configuration
+does not set <code class="docutils literal notranslate"><span class="pre">bind_addresses</span></code>, and the container uses host networking, so the
+plaintext listener can accept connections on the host’s network interfaces.
+Merely omitting an allow rule protects it only when the host firewall and any
+cloud security group reject other inbound traffic. Browsers and mobile clients
+must use the same-origin <code class="docutils literal notranslate"><span class="pre">wss://&lt;host&gt;:8080/rtc</span></code> proxy.</p>
+<p>The native C++ executable defaults to port 7880 for direct, insecure debugging.
+Keep that traffic on the XR AI host whenever possible. If a native client must
+connect directly from a trusted development network, restrict access to its
+source subnet. For example, with a <code class="docutils literal notranslate"><span class="pre">192.168.1.0/24</span></code> development network:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>ufw<span class="w"> </span>allow<span class="w"> </span>from<span class="w"> </span><span class="m">192</span>.168.1.0/24<span class="w"> </span>to<span class="w"> </span>any<span class="w"> </span>port<span class="w"> </span><span class="m">7880</span><span class="w"> </span>proto<span class="w"> </span>tcp
+sudo<span class="w"> </span>ufw<span class="w"> </span>reload
+</pre></div>
+</div>
+<p>Apply the equivalent source restriction to the cloud security group. Do not
+expose port 7880 to the public Internet: it carries plaintext signaling, and a
+LiveKit bearer token authenticates a client but does not encrypt the transport.</p>
 </section>
 <section id="cloud-vms-behind-nat">
 <h2>Cloud VMs behind NAT<a class="headerlink" href="#cloud-vms-behind-nat" title="Link to this heading">#</a></h2>
@@ -566,14 +582,15 @@ the public Internet. Use the loopback binding with an SSH tunnel, or put the
 viewer behind an authenticated TLS reverse proxy.</p>
 </div>
 </section>
-<section id="tls-for-the-web-client">
-<h2>TLS for the web client<a class="headerlink" href="#tls-for-the-web-client" title="Link to this heading">#</a></h2>
+<section id="tls-for-clients">
+<span id="tls-for-the-web-client"></span><h2>TLS for clients<a class="headerlink" href="#tls-for-clients" title="Link to this heading">#</a></h2>
 <p>TLS is <strong>on by default</strong> — <code class="docutils literal notranslate"><span class="pre">web_server_tls:</span> <span class="pre">true</span></code> is the built-in default.
 The web server terminates HTTPS on <code class="docutils literal notranslate"><span class="pre">web_server_port</span></code> (8080 by default) and
 also exposes a same-origin <code class="docutils literal notranslate"><span class="pre">wss://&lt;host&gt;:8080/rtc</span></code> proxy that forwards
-LiveKit signaling to the internal plaintext port. This is the only path
-browser, Android, iOS, and visionOS clients use; LiveKit’s native 7880 is
-never reached directly by client traffic.</p>
+LiveKit signaling to the internal plaintext port. Browsers and mobile clients
+use only this path. It is also the supported native C++ path when the executable
+runs with <code class="docutils literal notranslate"><span class="pre">--secure</span> <span class="pre">--port</span> <span class="pre">8080</span></code>; the native executable’s port 7880 default is
+an insecure debugging exception.</p>
 <p>On first run a self-signed certificate is generated at
 <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code>. To use your own, set <code class="docutils literal notranslate"><span class="pre">cert_file</span></code>
 and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>.</p>
@@ -616,9 +633,28 @@ does not expose a server-trust auth-challenge hook, and ATS does not
 bypass certificate-chain validation regardless of <code class="docutils literal notranslate"><span class="pre">NSAllowsArbitraryLoads</span></code>.
 Until the certificate is trusted at the OS level, the wss handshake fails.</p>
 </div>
+<section id="linux-native-certificate-trust">
+<span id="id1"></span><h3>Linux native certificate trust<a class="headerlink" href="#linux-native-certificate-trust" title="Link to this heading">#</a></h3>
+<p>The native C++ client validates the hub through the Linux system CA bundle.
+Before copying the certificate, ensure the address passed to <code class="docutils literal notranslate"><span class="pre">--host</span></code> appears
+in its subject alternative names. If the native client uses another IP address
+or DNS name, configure <code class="docutils literal notranslate"><span class="pre">web_server_extra_sans</span></code> and restart the hub to regenerate
+the certificate and key.</p>
+<p>Copy the resulting <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code> securely from the hub
+host to the native client host. On Ubuntu or Debian, install that copy and
+refresh the bundle:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>install<span class="w"> </span>-m<span class="w"> </span><span class="m">0644</span><span class="w"> </span>/path/to/web-server.crt<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/usr/local/share/ca-certificates/xr-ai-hub.crt
+sudo<span class="w"> </span>update-ca-certificates
+</pre></div>
+</div>
+<p>Restart the native client after updating the bundle. If the SAN configuration
+changes later, regenerate the certificate, copy it again, and repeat the trust
+installation.</p>
 <p>For production deployments on any platform, replace the auto-generated
 certificate with one from a public CA by setting <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in
 <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>.</p>
+</section>
 </section>
 </section>
 
@@ -638,7 +674,7 @@ certificate with one from a public CA by setting <code class="docutils literal n
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Connecting Clients</p>
+        <p class="prev-next-title">Connecting clients</p>
       </div>
     </a>
     <a class="right-next"
@@ -675,7 +711,10 @@ certificate with one from a public CA by setting <code class="docutils literal n
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cloud-vms-behind-nat">Cloud VMs behind NAT</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rhel-fedora-or-centos-firewall-cmd">RHEL, Fedora, or CentOS (<code class="docutils literal notranslate"><span class="pre">firewall-cmd</span></code>)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#live-agent-event-viewer">Live agent-event viewer</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tls-for-the-web-client">TLS for the web client</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tls-for-clients">TLS for clients</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#linux-native-certificate-trust">Linux native certificate trust</a></li>
+</ul>
+</li>
 </ul>
   </nav></div>
 

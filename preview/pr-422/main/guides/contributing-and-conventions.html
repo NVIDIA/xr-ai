@@ -309,7 +309,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
 </ul>
@@ -328,6 +328,7 @@
 <li class="toctree-l2"><a class="reference internal" href="customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
@@ -342,6 +343,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -440,14 +442,15 @@
 -->
 <section id="contributing-and-conventions">
 <h1>Contributing and conventions<a class="headerlink" href="#contributing-and-conventions" title="Link to this heading">#</a></h1>
-<p>The root <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
-explains setup, testing, pull requests, and DCO sign-off.
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> contains the
-architecture and change constraints used by both humans and coding agents.
-<a class="reference internal" href="documentation-style.html"><span class="doc">Documentation style</span></a> contains the house style for
-customer-facing Markdown and reStructuredText.
+<p>Refer to the root
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
+for setup, testing, pull requests, and DCO sign-off. Refer to
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> for the
+architecture and change constraints used by humans and coding agents. Refer to
+<a class="reference internal" href="documentation-style.html"><span class="doc">Documentation style</span></a> for requirements governing
+customer-facing Markdown and reStructuredText. Refer to
 <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
-is the package dependency map.</p>
+for the package dependency map.</p>
 <p>For a Python change:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>&lt;affected-project&gt;
 uv<span class="w"> </span>sync
@@ -459,8 +462,12 @@ uv<span class="w"> </span>tool<span class="w"> </span>run<span class="w"> </span
 <code class="docutils literal notranslate"><span class="pre">__all__</span></code>, declarations, annotations, defaults, and docstrings. An API-only
 change therefore updates the code, its co-located documentation, and tests; the
 strict documentation build rejects unresolved or undocumented exports. Update
-a README or narrative page when concepts, workflows, operations, or
-architecture change, and add a migration entry for a breaking change.</p>
+a narrative page when concepts, workflows, operations, or architecture change,
+and add a migration entry for a breaking change.</p>
+<p>The repository-wide README and documentation ownership rules live in the
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md#comments-and-documentation"><code class="docutils literal notranslate"><span class="pre">Comments</span> <span class="pre">and</span> <span class="pre">documentation</span></code></a>
+section of <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>. Follow that contract instead of introducing another
+placement rule in a package or sample.</p>
 <p>The user-facing command catalog is generated from top-level sample
 <code class="docutils literal notranslate"><span class="pre">[project.scripts]</span></code> entries and literal <code class="docutils literal notranslate"><span class="pre">argparse</span></code> declarations. Keep option
 descriptions in <code class="docutils literal notranslate"><span class="pre">help=</span></code> and do not repeat flag tables in narrative pages.</p>

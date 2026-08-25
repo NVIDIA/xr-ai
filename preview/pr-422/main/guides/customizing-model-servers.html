@@ -313,7 +313,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
 </ul>
@@ -332,6 +332,7 @@
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
@@ -346,6 +347,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -444,7 +446,7 @@
 -->
 <section id="customizing-model-servers">
 <h1>Customizing model servers<a class="headerlink" href="#customizing-model-servers" title="Link to this heading">#</a></h1>
-<p>Use this guide to change which shared models run, where they run, or how a
+<p>Use this workflow to change which shared models run, where they run, or how a
 sample connects to them. Model-server customization has two separate parts:</p>
 <ol class="arabic simple">
 <li><p>A <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> deployment profile declares which shared services the
@@ -507,7 +509,8 @@ Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner NIM containers.</p></li>
 <span class="w">  </span>model_servers<span class="w"> </span>--models<span class="w"> </span>my-stack
 </pre></div>
 </div>
-<p>You can also pass an absolute or repository-relative JSON path to <code class="docutils literal notranslate"><span class="pre">--models</span></code>.
+<p>You can also pass an absolute JSON path or a path relative to the current
+working directory to <code class="docutils literal notranslate"><span class="pre">--models</span></code>.
 The profile must retain the wrapped JSON shape:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
@@ -661,8 +664,8 @@ launcher process:</p>
 <span class="p">}</span>
 </pre></div>
 </div>
-<p>Do not put the credential value in JSON. Export it or use the credential store
-described in <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>.</p>
+<p>Do not put the credential value in JSON. Export it or use the credential store.
+Refer to <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a> for credential options.</p>
 </section>
 <section id="riva-speech-boundary">
 <h2>Riva speech boundary<a class="headerlink" href="#riva-speech-boundary" title="Link to this heading">#</a></h2>
@@ -679,9 +682,9 @@ endpoint-only customization.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>jq<span class="w"> </span>empty<span class="w"> </span>agent-samples/model-servers/yaml/models.my-stack.json
 
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>pytest<span class="w"> </span>-q<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>test_model_servers.py<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>test_launcher_config.py<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>test_nim_docker.py
+<span class="w">  </span>tests/test_model_servers.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>tests/test_launcher_config.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>tests/test_nim_docker.py
 </pre></div>
 </div>
 <p>Model servers persist after the <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> command reports readiness.
@@ -693,9 +696,9 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 <span class="w">  </span>model_servers<span class="w"> </span>--models<span class="w"> </span>my-stack
 </pre></div>
 </div>
-<p>For adapter fields and model capabilities, see
+<p>For adapter fields and model capabilities, refer to
 <a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>. For server runtime behavior, persistence,
-and NIM credentials, see <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a>.</p>
+and NIM credentials, refer to <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a>.</p>
 </section>
 </section>
 
