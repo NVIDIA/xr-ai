@@ -428,7 +428,7 @@ the private media pipeline; applications use typed runtime events and model
 service protocols. Refer to <a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a> for exact constructors, fields,
 and defaults.</p>
 <section id="voice-agent">
-<h2>Voice agent<a class="headerlink" href="#voice-agent" title="Link to this heading">#</a></h2>
+<span id="usage"></span><h2>Voice agent<a class="headerlink" href="#voice-agent" title="Link to this heading">#</a></h2>
 <p>Applications register one <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> with their runtime:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">Topic</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">UserQuery</span><span class="p">,</span> <span class="n">VadConfig</span><span class="p">,</span> <span class="n">VoiceAgent</span><span class="p">,</span> <span class="n">VoiceInterrupted</span>
@@ -471,7 +471,7 @@ leave publication is serialized per participant and does not block the media
 processor. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> cancels and awaits all owned delivery tasks on shutdown.</p>
 </section>
 <section id="voice-output-and-interruption">
-<h2>Voice output and interruption<a class="headerlink" href="#voice-output-and-interruption" title="Link to this heading">#</a></h2>
+<span id="voice-tuning-and-data-echo"></span><h2>Voice output and interruption<a class="headerlink" href="#voice-output-and-interruption" title="Link to this heading">#</a></h2>
 <p>Applications publish finite or incremental <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code> values. Chunks in one
 stream share <code class="docutils literal notranslate"><span class="pre">response_id</span></code> and end with <code class="docutils literal notranslate"><span class="pre">final=True</span></code>. Output is serialized per
 participant; <code class="docutils literal notranslate"><span class="pre">interrupt=True</span></code> flushes queued hub audio and replaces active
@@ -483,7 +483,7 @@ caption channel. The echo describes intended completed text, not client playback
 acknowledgement.</p>
 </section>
 <section id="multiple-speech-producers">
-<h2>Multiple speech producers<a class="headerlink" href="#multiple-speech-producers" title="Link to this heading">#</a></h2>
+<span id="multiple-voice-producers"></span><h2>Multiple speech producers<a class="headerlink" href="#multiple-speech-producers" title="Link to this heading">#</a></h2>
 <p>Applications with foreground replies, background monitors, and alerts may
 register one <code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code>. Producers publish to
 <code class="docutils literal notranslate"><span class="pre">VOICE_CONTRIBUTION_TOPIC</span></code>; only the aggregator publishes to

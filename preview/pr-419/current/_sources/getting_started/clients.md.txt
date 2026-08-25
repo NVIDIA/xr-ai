@@ -77,8 +77,10 @@ cd client-samples/web-xr-build
 ```
 
 The idempotent script reads the CloudXR version from `.sdk-version`, reuses a
-cached `sdk.tgz` when present, otherwise downloads the public NGC tarball,
-installs npm dependencies, and writes both ESM bundles to `../web-xr/vendor/`.
+cached `sdk.tgz` when present, otherwise reuses the matching IsaacTeleop tarball
+at `~/hub/IsaacTeleop/deps/cloudxr/` when available, and finally downloads the
+public NGC tarball. It installs npm dependencies and writes both ESM bundles to
+`../web-xr/vendor/`.
 To bump CloudXR, edit `.sdk-version` and remove `sdk.tgz` plus `node_modules`.
 To bump LiveKit, edit `package.json` and remove `node_modules`. Re-run the script
 after either change.
@@ -151,6 +153,11 @@ Open `client-samples/ios-visionos/StreamKitSample.xcworkspace`, select the
 owned by that team, then build and run. The workspace already includes the app
 project and local StreamKit package; do not create a replacement Xcode project.
 
+The checked-in bundle ID is `com.nvidia.xr-ai-example`. Changing it does not
+change the `StreamKitSample` display name, but it does select a new
+`UserDefaults` domain, so saved settings reset on the first launch after a
+rename.
+
 The simulators stream
 `StreamKit/Sources/StreamKit/Resources/SimulatorFeed.gif` instead of a physical
 camera. Replace that resource to customize the simulated feed.
@@ -199,6 +206,12 @@ When microphone or camera state appears stuck, filter Console.app by
 `-50` and `FigAudioSession` `-19224` messages also appear during successful
 microphone starts and are not failure indicators by themselves.
 
+If microphone startup fails with
+`io.livekit.swift-sdk Code=101 "Timed out"` after about five seconds, the
+LiveKit recording engine did not produce the first buffer. Current builds
+pre-warm that engine before publishing. After leaving XR, an iOS microphone
+activation sound can play while capture restarts; this is expected.
+
 ### Native CloudXR
 
 Native Apple clients require the CloudXR native device profile. Start the demo
@@ -239,6 +252,22 @@ with `-DSTREAMKIT_BUILD_TESTS=ON` and run:
 
 ```bash
 ctest --test-dir build --output-on-failure
+```
+
+| Test | Coverage |
+|---|---|
+| `streamkit_mapping_tests` | `ConnectionState` operations |
+| `streamkit_agent_status_tests` | Canonical, missing, truncated, and empty `_agent.status` values |
+| `streamkit_frame_sink_tests` | Move and span frame-injection overloads |
+| `streamkit_audio_sink_tests` | Audio parameter forwarding and virtual dispatch |
+| `streamkit_session_tests` | Mock-backed connection, media, data, status, and disconnection lifecycle |
+| `streamkit_livekit_backend_tests` | State deduplication, disconnect races, stale metrics, and callback exceptions |
+
+Run one test or rerun failures with CTest:
+
+```bash
+ctest --test-dir build -R streamkit_frame_sink_tests --output-on-failure
+ctest --test-dir build --rerun-failed --output-on-failure
 ```
 
 The backend implements connection state, data, `_agent.status`, network

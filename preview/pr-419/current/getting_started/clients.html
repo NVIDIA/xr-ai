@@ -511,8 +511,10 @@ bundles automatically when <code class="docutils literal notranslate"><span clas
 </pre></div>
 </div>
 <p>The idempotent script reads the CloudXR version from <code class="docutils literal notranslate"><span class="pre">.sdk-version</span></code>, reuses a
-cached <code class="docutils literal notranslate"><span class="pre">sdk.tgz</span></code> when present, otherwise downloads the public NGC tarball,
-installs npm dependencies, and writes both ESM bundles to <code class="docutils literal notranslate"><span class="pre">../web-xr/vendor/</span></code>.
+cached <code class="docutils literal notranslate"><span class="pre">sdk.tgz</span></code> when present, otherwise reuses the matching IsaacTeleop tarball
+at <code class="docutils literal notranslate"><span class="pre">~/hub/IsaacTeleop/deps/cloudxr/</span></code> when available, and finally downloads the
+public NGC tarball. It installs npm dependencies and writes both ESM bundles to
+<code class="docutils literal notranslate"><span class="pre">../web-xr/vendor/</span></code>.
 To bump CloudXR, edit <code class="docutils literal notranslate"><span class="pre">.sdk-version</span></code> and remove <code class="docutils literal notranslate"><span class="pre">sdk.tgz</span></code> plus <code class="docutils literal notranslate"><span class="pre">node_modules</span></code>.
 To bump LiveKit, edit <code class="docutils literal notranslate"><span class="pre">package.json</span></code> and remove <code class="docutils literal notranslate"><span class="pre">node_modules</span></code>. Re-run the script
 after either change.</p>
@@ -588,6 +590,10 @@ LiveKit Swift and CloudXRKit through Swift Package Manager.</p>
 <code class="docutils literal notranslate"><span class="pre">StreamKitSample</span></code> scheme and destination, choose a signing team and a bundle ID
 owned by that team, then build and run. The workspace already includes the app
 project and local StreamKit package; do not create a replacement Xcode project.</p>
+<p>The checked-in bundle ID is <code class="docutils literal notranslate"><span class="pre">com.nvidia.xr-ai-example</span></code>. Changing it does not
+change the <code class="docutils literal notranslate"><span class="pre">StreamKitSample</span></code> display name, but it does select a new
+<code class="docutils literal notranslate"><span class="pre">UserDefaults</span></code> domain, so saved settings reset on the first launch after a
+rename.</p>
 <p>The simulators stream
 <code class="docutils literal notranslate"><span class="pre">StreamKit/Sources/StreamKit/Resources/SimulatorFeed.gif</span></code> instead of a physical
 camera. Replace that resource to customize the simulated feed.</p>
@@ -630,6 +636,11 @@ Refer to <a class="reference internal" href="../guides/troubleshooting.html"><sp
 <code class="docutils literal notranslate"><span class="pre">category:MediaSession</span></code> to inspect interruption and recovery events. CoreAudio
 <code class="docutils literal notranslate"><span class="pre">-50</span></code> and <code class="docutils literal notranslate"><span class="pre">FigAudioSession</span></code> <code class="docutils literal notranslate"><span class="pre">-19224</span></code> messages also appear during successful
 microphone starts and are not failure indicators by themselves.</p>
+<p>If microphone startup fails with
+<code class="docutils literal notranslate"><span class="pre">io.livekit.swift-sdk</span> <span class="pre">Code=101</span> <span class="pre">&quot;Timed</span> <span class="pre">out&quot;</span></code> after about five seconds, the
+LiveKit recording engine did not produce the first buffer. Current builds
+pre-warm that engine before publishing. After leaving XR, an iOS microphone
+activation sound can play while capture restarts; this is expected.</p>
 </section>
 <section id="native-cloudxr">
 <h3>Native CloudXR<a class="headerlink" href="#native-cloudxr" title="Link to this heading">#</a></h3>
@@ -665,6 +676,39 @@ or a trusted development network.</p>
 without opening a network session. Build the standalone assertion-based tests
 with <code class="docutils literal notranslate"><span class="pre">-DSTREAMKIT_BUILD_TESTS=ON</span></code> and run:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ctest<span class="w"> </span>--test-dir<span class="w"> </span>build<span class="w"> </span>--output-on-failure
+</pre></div>
+</div>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Test</p></th>
+<th class="head"><p>Coverage</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_mapping_tests</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ConnectionState</span></code> operations</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_agent_status_tests</span></code></p></td>
+<td><p>Canonical, missing, truncated, and empty <code class="docutils literal notranslate"><span class="pre">_agent.status</span></code> values</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_frame_sink_tests</span></code></p></td>
+<td><p>Move and span frame-injection overloads</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_audio_sink_tests</span></code></p></td>
+<td><p>Audio parameter forwarding and virtual dispatch</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_session_tests</span></code></p></td>
+<td><p>Mock-backed connection, media, data, status, and disconnection lifecycle</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_livekit_backend_tests</span></code></p></td>
+<td><p>State deduplication, disconnect races, stale metrics, and callback exceptions</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Run one test or rerun failures with CTest:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ctest<span class="w"> </span>--test-dir<span class="w"> </span>build<span class="w"> </span>-R<span class="w"> </span>streamkit_frame_sink_tests<span class="w"> </span>--output-on-failure
+ctest<span class="w"> </span>--test-dir<span class="w"> </span>build<span class="w"> </span>--rerun-failed<span class="w"> </span>--output-on-failure
 </pre></div>
 </div>
 <p>The backend implements connection state, data, <code class="docutils literal notranslate"><span class="pre">_agent.status</span></code>, network

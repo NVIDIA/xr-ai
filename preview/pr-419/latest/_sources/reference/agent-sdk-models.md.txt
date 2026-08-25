@@ -5,12 +5,14 @@
 
 # xr-ai-models
 
+(contract)=
 `xr-ai-models` defines typed LLM, VLM, STT, TTS, and embedding protocols and
 constructs concrete clients from deployment profiles. Workers depend on those
 protocols instead of hand-written HTTP or vendor SDK calls. Refer to
 {doc}`python/index` for exact classes, methods, fields, and defaults. Refer to
 {doc}`/components/ai-services` for server operation.
 
+(quickstart)=
 ## Construct a model client
 
 ```python
@@ -26,6 +28,7 @@ async with make_llm(config, "agent_llm") as llm:
     print(response.content, response.reasoning)
 ```
 
+(profile-contract)=
 A profile names logical roles and separates three concerns:
 
 ```json
@@ -52,10 +55,14 @@ A profile names logical roles and separates three concerns:
 - `deployment` tells an orchestrator whether the process is managed, reused, or
   external.
 
-Workers may load JSON or YAML, including legacy flat entries. Profiles shared
-with the stdlib-only launcher must use the wrapped nested JSON form. Launcher
-credentials are explicit: endpoint credentials use `api_key_env`, while
-credentials needed by a managed service itself use `deployment.credentials`.
+(deployment-profiles)=
+Workers may load JSON or YAML. For compatibility, the loader accepts a direct
+role mapping, legacy flat entries, `health_check: true` or `health_check: false`,
+and `kind: preset:<name>`. The public role-spec classes also retain their legacy
+flat constructors and read-only flat properties. Profiles shared with the
+stdlib-only launcher must use the wrapped nested JSON form. Launcher credentials
+are explicit: endpoint credentials use `api_key_env`, while credentials needed
+by a managed service itself use `deployment.credentials`.
 
 ## Built-in adapters
 
@@ -77,6 +84,7 @@ profile sets `max_videos_per_prompt: 0` to avoid reserving unused activation
 memory. Set it to at least `1` and restart the persistent VLM server before
 sending a video request.
 
+(protocols)=
 `ChatResponse.reasoning` is the canonical post-normalization field. Model
 adapters absorb whether the provider calls it `reasoning` or
 `reasoning_content`. LLM and VLM calls accept controlled per-request headers for
@@ -85,6 +93,9 @@ Relay lineage, but callers cannot replace the profile's `Authorization` header.
 Single-image `ask_image()` and `stream()` calls are wrappers over the ordered
 multi-image methods. All images are placed in one user message in caller order.
 
+(remote-and-hosted-nim-endpoints)=
+<a id="remote--hosted-nim-endpoints"></a>
+(remote-hosted-nim-endpoints)=
 ## Hosted endpoints
 
 A hosted OpenAI-compatible endpoint changes only the profile:
@@ -113,6 +124,7 @@ Use `readiness: none` only when the remote provider has no compatible health
 route. It makes `health()` succeed without a request, preventing an impossible
 local readiness gate.
 
+(riva-grpc-speech-nim-stttts)=
 ## Riva speech over gRPC
 
 Riva speech NIMs use `kind: riva_grpc`, not OpenAI `/v1/audio`. Install the

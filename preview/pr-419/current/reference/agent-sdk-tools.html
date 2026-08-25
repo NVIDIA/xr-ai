@@ -428,7 +428,7 @@ streaming <code class="docutils literal notranslate"><span class="pre">AsyncTool
 every execution passes through NeMo Relay. Refer to <a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a> for the
 exact public APIs.</p>
 <section id="bounded-model-tool-loops">
-<h2>Bounded model tool loops<a class="headerlink" href="#bounded-model-tool-loops" title="Link to this heading">#</a></h2>
+<span id="native-tools-and-model-tool-calls"></span><h2>Bounded model tool loops<a class="headerlink" href="#bounded-model-tool-loops" title="Link to this heading">#</a></h2>
 <p>Install the <code class="docutils literal notranslate"><span class="pre">relay</span></code> extra for <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code> adapters and <code class="docutils literal notranslate"><span class="pre">run_tool_loop()</span></code>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatMessage</span>
@@ -462,24 +462,32 @@ exact public APIs.</p>
 </div>
 <p>The runner is stateless and bounded. It validates tool IDs and arguments,
 executes emitted calls sequentially, returns a resumable transcript and audit,
-and reports unknown or invalid calls to the model for repair. Exhausted budgets,
-empty or truncated responses, and unsafe mixed <code class="docutils literal notranslate"><span class="pre">return_direct</span></code> batches raise
-typed errors with the partial audit. It never retries an already executed tool.
-Applications retain prompts, history, model parameters, retries, participant
-context, cancellation, and task ownership.</p>
+and reports unknown or invalid calls to the model for repair. Blank, non-string,
+or duplicate tool-call IDs are rejected before any call in that batch executes.
+Exhausted budgets, empty or truncated responses, and unsafe mixed
+<code class="docutils literal notranslate"><span class="pre">return_direct</span></code> batches raise <code class="docutils literal notranslate"><span class="pre">ToolLoopError</span></code> with the partial audit. Its
+<code class="docutils literal notranslate"><span class="pre">messages</span></code> field contains only a valid transcript that can resume; the rejected
+model turn remains separate in <code class="docutils literal notranslate"><span class="pre">rejected_response</span></code> for diagnostics. The runner
+never retries an already executed tool.</p>
+<p>A unary side-effect tool declares <code class="docutils literal notranslate"><span class="pre">result_model=None</span></code>, returns <code class="docutils literal notranslate"><span class="pre">None</span></code>, and
+produces <code class="docutils literal notranslate"><span class="pre">null</span></code> as its model-visible result. Applications retain prompts,
+history, model parameters, retries, participant context, cancellation, and task
+ownership. Preserve <code class="docutils literal notranslate"><span class="pre">ToolLoopError.messages</span></code> explicitly during recovery;
+NeMo Relay AutoAPI exception serialization does not reconstruct fields assigned
+dynamically to an exception.</p>
 <p>Use <code class="docutils literal notranslate"><span class="pre">ToolSet.namespaced()</span></code> when independently named groups share a model-visible
 catalog. Aliasing changes only catalog names. Only finite tools belong in a
 <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code>; callers consume an <code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> explicitly with <code class="docutils literal notranslate"><span class="pre">stream()</span></code>.</p>
 </section>
 <section id="capability-services">
-<h2>Capability services<a class="headerlink" href="#capability-services" title="Link to this heading">#</a></h2>
+<span id="typed-capability-services"></span><h2>Capability services<a class="headerlink" href="#capability-services" title="Link to this heading">#</a></h2>
 <p>The <code class="docutils literal notranslate"><span class="pre">services</span></code> extra provides typed msgpack over ZMQ RPC primitives plus tracking,
 video-memory, text-memory, and spatial tool groups. Applications compose these
 tools directly; the private transport is not an agent API and does not require
 an HTTP or agent framework.</p>
 </section>
 <section id="image-selection-and-inference">
-<h2>Image selection and inference<a class="headerlink" href="#image-selection-and-inference" title="Link to this heading">#</a></h2>
+<span id="image-selection-and-vlm-query-tools"></span><h2>Image selection and inference<a class="headerlink" href="#image-selection-and-inference" title="Link to this heading">#</a></h2>
 <p>Install the <code class="docutils literal notranslate"><span class="pre">frames</span></code> extra for <code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code> and the <code class="docutils literal notranslate"><span class="pre">vision</span></code> extra for
 VLM query tools. The XR AI SDK packages are not published to PyPI. Declare the
 extras and their editable repository sources in the consuming project. This
@@ -557,7 +565,7 @@ uv<span class="w"> </span>run<span class="w"> </span>xr_ai_tools/utilities/gener
 </div>
 </section>
 <section id="derived-image-editing">
-<h2>Derived-image editing<a class="headerlink" href="#derived-image-editing" title="Link to this heading">#</a></h2>
+<span id="magenta-polygon-image-editing"></span><h2>Derived-image editing<a class="headerlink" href="#derived-image-editing" title="Link to this heading">#</a></h2>
 <p>The <code class="docutils literal notranslate"><span class="pre">image-editing</span></code> extra provides <code class="docutils literal notranslate"><span class="pre">ImagePolygonFillTool</span></code> for filling a validated
 image-space polygon with standard magenta. It stores a new lossless PNG, keeps
 the source unchanged, and inherits source ownership. Stale references and

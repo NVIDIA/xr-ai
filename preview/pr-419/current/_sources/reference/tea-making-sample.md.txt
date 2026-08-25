@@ -439,6 +439,10 @@ is healthy, then run from `agent-samples/tea-making-sample/`:
 uv run --project worker python eval/eval.py
 ```
 
+The command prints one `PASS` or `FAIL` line for each case and exits with a
+nonzero status when a tool choice, argument schema, or response contract does
+not match.
+
 When debugging, inspect the workflow, background, foreground, and Relay JSONL
 files as separate stages. This shows whether the problem came from evidence,
 tool selection, state policy, event delivery, or presentation.

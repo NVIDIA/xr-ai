@@ -435,7 +435,7 @@ ports. Open only the externally reachable ports required by the deployment.</p>
 <tbody>
 <tr class="row-even"><td><p>7880</p></td>
 <td><p>TCP</p></td>
-<td><p>LiveKit signaling (internal — bound to 127.0.0.1 via the hub’s /rtc proxy; browsers and mobile clients do not connect here)</p></td>
+<td><p>LiveKit signaling (internal; bound to 127.0.0.1 behind the hub’s <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> proxy; also the native C++ client’s default insecure debugging path)</p></td>
 </tr>
 <tr class="row-odd"><td><p>7881</p></td>
 <td><p>TCP</p></td>
@@ -447,7 +447,7 @@ ports. Open only the externally reachable ports required by the deployment.</p>
 </tr>
 <tr class="row-odd"><td><p>8080</p></td>
 <td><p>TCP</p></td>
-<td><p>Web client + token server + wss:// /rtc proxy (HTTPS — the single entry point for browser, Android, iOS, visionOS, and native C++ clients)</p></td>
+<td><p>Web client, token server, and <code class="docutils literal notranslate"><span class="pre">wss://</span></code> <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> proxy (HTTPS; the supported external entry point for every client)</p></td>
 </tr>
 <tr class="row-even"><td><p>8092</p></td>
 <td><p>TCP</p></td>
@@ -469,9 +469,10 @@ sudo<span class="w"> </span>ufw<span class="w"> </span>allow<span class="w"> </s
 sudo<span class="w"> </span>ufw<span class="w"> </span>reload
 </pre></div>
 </div>
-<p>7880 stays on <code class="docutils literal notranslate"><span class="pre">127.0.0.1</span></code>; do not expose it externally — browsers and
-mobile clients reach LiveKit through the same-origin <code class="docutils literal notranslate"><span class="pre">wss://&lt;host&gt;:8080/rtc</span></code>
-proxy, not directly.</p>
+<p>7880 stays on <code class="docutils literal notranslate"><span class="pre">127.0.0.1</span></code>; do not expose it externally. Browsers and mobile
+clients reach LiveKit through the same-origin <code class="docutils literal notranslate"><span class="pre">wss://&lt;host&gt;:8080/rtc</span></code> proxy.
+The native C++ executable defaults to port 7880 only for direct, insecure
+debugging on the XR AI host or a trusted development network.</p>
 </section>
 <section id="cloud-vms-behind-nat">
 <h2>Cloud VMs behind NAT<a class="headerlink" href="#cloud-vms-behind-nat" title="Link to this heading">#</a></h2>
@@ -550,9 +551,10 @@ viewer behind an authenticated TLS reverse proxy.</p>
 <p>TLS is <strong>on by default</strong> — <code class="docutils literal notranslate"><span class="pre">web_server_tls:</span> <span class="pre">true</span></code> is the built-in default.
 The web server terminates HTTPS on <code class="docutils literal notranslate"><span class="pre">web_server_port</span></code> (8080 by default) and
 also exposes a same-origin <code class="docutils literal notranslate"><span class="pre">wss://&lt;host&gt;:8080/rtc</span></code> proxy that forwards
-LiveKit signaling to the internal plaintext port. This is the only path
-browser, Android, iOS, visionOS, and native C++ clients use; LiveKit’s native
-7880 is never reached directly by client traffic.</p>
+LiveKit signaling to the internal plaintext port. Browsers and mobile clients
+use only this path. It is also the supported native C++ path when the executable
+runs with <code class="docutils literal notranslate"><span class="pre">--secure</span> <span class="pre">--port</span> <span class="pre">8080</span></code>; the native executable’s port 7880 default is
+an insecure debugging exception.</p>
 <p>On first run a self-signed certificate is generated at
 <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code>. To use your own, set <code class="docutils literal notranslate"><span class="pre">cert_file</span></code>
 and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>.</p>

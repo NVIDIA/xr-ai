@@ -10,6 +10,7 @@ the private media pipeline; applications use typed runtime events and model
 service protocols. Refer to {doc}`python/index` for exact constructors, fields,
 and defaults.
 
+(usage)=
 ## Voice agent
 
 Applications register one `VoiceAgent` with their runtime:
@@ -58,6 +59,7 @@ remains connected and emits a new join after a leave and reconnect. Join and
 leave publication is serialized per participant and does not block the media
 processor. `VoiceAgent` cancels and awaits all owned delivery tasks on shutdown.
 
+(voice-tuning-and-data-echo)=
 ## Voice output and interruption
 
 Applications publish finite or incremental `VoiceOutput` values. Chunks in one
@@ -71,6 +73,7 @@ independent agents cannot merge accidentally.
 caption channel. The echo describes intended completed text, not client playback
 acknowledgement.
 
+(multiple-voice-producers)=
 ## Multiple speech producers
 
 Applications with foreground replies, background monitors, and alerts may

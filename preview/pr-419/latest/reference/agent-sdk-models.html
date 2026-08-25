@@ -423,13 +423,13 @@
 -->
 <section id="xr-ai-models">
 <h1>xr-ai-models<a class="headerlink" href="#xr-ai-models" title="Link to this heading">#</a></h1>
-<p><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> defines typed LLM, VLM, STT, TTS, and embedding protocols and
+<p id="contract"><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> defines typed LLM, VLM, STT, TTS, and embedding protocols and
 constructs concrete clients from deployment profiles. Workers depend on those
 protocols instead of hand-written HTTP or vendor SDK calls. Refer to
 <a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a> for exact classes, methods, fields, and defaults. Refer to
 <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> for server operation.</p>
 <section id="construct-a-model-client">
-<h2>Construct a model client<a class="headerlink" href="#construct-a-model-client" title="Link to this heading">#</a></h2>
+<span id="quickstart"></span><h2>Construct a model client<a class="headerlink" href="#construct-a-model-client" title="Link to this heading">#</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatMessage</span><span class="p">,</span> <span class="n">load_models_config</span><span class="p">,</span> <span class="n">make_llm</span>
 
 <span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">"yaml/models.json"</span><span class="p">)</span>
@@ -442,7 +442,7 @@ protocols instead of hand-written HTTP or vendor SDK calls. Refer to
     <span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">response</span><span class="o">.</span><span class="n">reasoning</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>A profile names logical roles and separates three concerns:</p>
+<p id="profile-contract">A profile names logical roles and separates three concerns:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">"agent_llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
@@ -467,10 +467,13 @@ credentials.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">deployment</span></code> tells an orchestrator whether the process is managed, reused, or
 external.</p></li>
 </ul>
-<p>Workers may load JSON or YAML, including legacy flat entries. Profiles shared
-with the stdlib-only launcher must use the wrapped nested JSON form. Launcher
-credentials are explicit: endpoint credentials use <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>, while
-credentials needed by a managed service itself use <code class="docutils literal notranslate"><span class="pre">deployment.credentials</span></code>.</p>
+<p id="deployment-profiles">Workers may load JSON or YAML. For compatibility, the loader accepts a direct
+role mapping, legacy flat entries, <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">true</span></code> or <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">false</span></code>,
+and <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">preset:&lt;name&gt;</span></code>. The public role-spec classes also retain their legacy
+flat constructors and read-only flat properties. Profiles shared with the
+stdlib-only launcher must use the wrapped nested JSON form. Launcher credentials
+are explicit: endpoint credentials use <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>, while credentials needed
+by a managed service itself use <code class="docutils literal notranslate"><span class="pre">deployment.credentials</span></code>.</p>
 </section>
 <section id="built-in-adapters">
 <h2>Built-in adapters<a class="headerlink" href="#built-in-adapters" title="Link to this heading">#</a></h2>
@@ -526,15 +529,16 @@ server controls whether video input is enabled. Every checked-in <code class="do
 profile sets <code class="docutils literal notranslate"><span class="pre">max_videos_per_prompt:</span> <span class="pre">0</span></code> to avoid reserving unused activation
 memory. Set it to at least <code class="docutils literal notranslate"><span class="pre">1</span></code> and restart the persistent VLM server before
 sending a video request.</p>
-<p><code class="docutils literal notranslate"><span class="pre">ChatResponse.reasoning</span></code> is the canonical post-normalization field. Model
+<p id="protocols"><code class="docutils literal notranslate"><span class="pre">ChatResponse.reasoning</span></code> is the canonical post-normalization field. Model
 adapters absorb whether the provider calls it <code class="docutils literal notranslate"><span class="pre">reasoning</span></code> or
 <code class="docutils literal notranslate"><span class="pre">reasoning_content</span></code>. LLM and VLM calls accept controlled per-request headers for
 Relay lineage, but callers cannot replace the profile’s <code class="docutils literal notranslate"><span class="pre">Authorization</span></code> header.</p>
 <p>Single-image <code class="docutils literal notranslate"><span class="pre">ask_image()</span></code> and <code class="docutils literal notranslate"><span class="pre">stream()</span></code> calls are wrappers over the ordered
 multi-image methods. All images are placed in one user message in caller order.</p>
+<p id="remote-and-hosted-nim-endpoints"><a id="remote--hosted-nim-endpoints"></a></p>
 </section>
 <section id="hosted-endpoints">
-<h2>Hosted endpoints<a class="headerlink" href="#hosted-endpoints" title="Link to this heading">#</a></h2>
+<span id="remote-hosted-nim-endpoints"></span><h2>Hosted endpoints<a class="headerlink" href="#hosted-endpoints" title="Link to this heading">#</a></h2>
 <p>A hosted OpenAI-compatible endpoint changes only the profile:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
@@ -560,7 +564,7 @@ route. It makes <code class="docutils literal notranslate"><span class="pre">hea
 local readiness gate.</p>
 </section>
 <section id="riva-speech-over-grpc">
-<h2>Riva speech over gRPC<a class="headerlink" href="#riva-speech-over-grpc" title="Link to this heading">#</a></h2>
+<span id="riva-grpc-speech-nim-stttts"></span><h2>Riva speech over gRPC<a class="headerlink" href="#riva-speech-over-grpc" title="Link to this heading">#</a></h2>
 <p>Riva speech NIMs use <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">riva_grpc</span></code>, not OpenAI <code class="docutils literal notranslate"><span class="pre">/v1/audio</span></code>. Install the
 <code class="docutils literal notranslate"><span class="pre">riva</span></code> extra; its <code class="docutils literal notranslate"><span class="pre">nvidia-riva-client</span></code> import is deferred until <code class="docutils literal notranslate"><span class="pre">make_stt()</span></code> or
 <code class="docutils literal notranslate"><span class="pre">make_tts()</span></code> selects that kind.</p>

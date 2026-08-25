@@ -1021,10 +1021,14 @@ per inference request. Current frames stay with the caller’s hub client.
 When <code class="docutils literal notranslate"><span class="pre">recordings_dir</span></code> is empty, participant discovery returns an empty list
 and recorded-media operations return <code class="docutils literal notranslate"><span class="pre">recording_disabled</span></code>.</p></li>
 <li><p>Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).</p></li>
-<li><p><strong>Sample YAMLs</strong> for each service ship in their own service directory.
-Copy them to your sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory and set <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> to
-<code class="docutils literal notranslate"><span class="pre">../../../models</span></code>, which resolves to <code class="docutils literal notranslate"><span class="pre">xr-ai/models/</span></code> from
-<code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;name&gt;/yaml/</span></code>.</p></li>
+<li><p>Standalone service YAMLs live beside the services that support direct local
+launch. When copying one into <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;name&gt;/yaml/</span></code>, set
+<code class="docutils literal notranslate"><span class="pre">model_cache</span></code> to <code class="docutils literal notranslate"><span class="pre">../../../models</span></code> so it still resolves to the repository’s
+<code class="docutils literal notranslate"><span class="pre">models/</span></code> directory.</p></li>
+<li><p>The generic NIM wrapper has no service-local YAML. Use a hardware profile
+under <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code>; its
+<code class="docutils literal notranslate"><span class="pre">nim_&lt;role&gt;_server.yaml</span></code> files use <code class="docutils literal notranslate"><span class="pre">nim_cache</span></code>, normally
+<code class="docutils literal notranslate"><span class="pre">../../../../models/nim</span></code> from that location.</p></li>
 </ul>
 </section>
 </section>

@@ -10,6 +10,7 @@ only on pyzmq and msgpack and contains no LiveKit, web-server, model, tool, or
 voice-pipeline code. Refer to the generated {doc}`python/index` for public types
 and signatures.
 
+(subscription-and-roster-contract)=
 ## Processor endpoints
 
 ```python
@@ -39,6 +40,7 @@ therefore be idempotent. Because ZMQ subscription changes are asynchronous,
 workers that own readiness wait for `wait_for_subscriptions()` before announcing
 availability.
 
+(frames)=
 ## Frames and return routing
 
 Frame callbacks carry metadata without copying pixels. `request_frame()` obtains
@@ -47,11 +49,13 @@ same participant and track. `LiveFrameSource` adds a fresh-frame cache and
 participant cleanup. Conversion to opaque image references belongs in
 `xr_ai_tools.current_frame`; VLM inference remains a separate vision tool.
 
+(return-path)=
 Return data, audio, and flush messages always name their participant. Status is
 agent state: `set_status()` and `mark_ready()` record it on the endpoint, while
 DeviceIOHub aggregates responsible agents and publishes client readiness.
 `republish_statuses()` restores one-shot state after reconnects.
 
+(readiness)=
 Readiness participation is opt-in with `announces_readiness=True`. Passive
 endpoints do not contribute status. An endpoint answers only for subscribed
 participants, and a live subscription must be confirmed before the hub exposes
