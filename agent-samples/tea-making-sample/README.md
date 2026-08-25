@@ -118,8 +118,11 @@ development network or put it behind an authenticated TLS proxy.
   and workflow paths.
 - `yaml/workflow.yaml` defines the tea steps, typed state, evidence gates, and
   user-facing messages.
-- `worker/tea_making_worker/prompts/` is the default source for model prompts;
-  explicit inline YAML values override those files.
+- `worker/tea_making_worker/prompts/` is the default source for model prompts.
+  An inline `foreground_prompt` or `foreground_prompt_file` replaces the shared
+  foreground instructions, while the packaged idle or active route policy is
+  always appended. Other prompt and prompt-file settings replace their matching
+  packaged files.
 - `yaml/voice_gate.yaml` is the checked-in wake-word configuration. Set
   `voice_gate_yaml: voice_gate.always-on.yaml` in the worker YAML to dispatch
   every finalized utterance without a wake phrase.

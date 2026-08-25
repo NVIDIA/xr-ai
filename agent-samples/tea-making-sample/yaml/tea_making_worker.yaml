@@ -6,6 +6,11 @@ models_config: models.local.json
 workflow_config: workflow.yaml
 voice_gate_yaml: voice_gate.yaml
 
+# Choose one to replace the shared foreground instructions. The packaged idle
+# or active route policy is always appended after the configured shared prompt.
+# foreground_prompt: <inline shared foreground instructions>
+# foreground_prompt_file: ../worker/tea_making_worker/prompts/foreground_prompt.txt
+
 rag_endpoint: tcp://127.0.0.1:8340
 artifacts_dir: ../artifacts
 
