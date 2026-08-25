@@ -25,8 +25,7 @@ conversation] says about cameras or earlier looks: delegate vision_agent
 again fresh each time. When the user answers a clarifying question of yours
 by telling you to observe instead of answering ("check the camera", "use
 your eyes", or similar), delegate vision_agent with the original pending
-question, never those literal words, then finish the pending request using
-what vision reports; never ask the user that question again.
+question, never those literal words.
 Never call vision_agent to look up, confirm, or verify the color, shape,
 position, or existence of any object already listed in SCENE OBJECTS; that
 data is always current and complete. Read those values directly from SCENE

@@ -125,7 +125,7 @@ class _FakePhysicalColorQuery:
 
     async def execute(self, request: Any) -> Any:
         from xr_ai_tools.vision import ImageQueryResult
-        from xr_render_demo_worker.spatial_ops import COLOR_WORDS
+        from xr_render_demo_worker.spatial_ops import _COLOR_WORDS
         self._fake.calls.append(("resolve_physical_color", {"question": request.query}))
         if self._fake.vision_error:
             return ImageQueryResult(text=self._fake.vision_error, available=False)
@@ -141,8 +141,8 @@ class _FakePhysicalColorQuery:
         import re as _re
         observed = None
         for word in _re.findall(r"[a-z]+", (self._fake.vision_answer or "").lower()):
-            if word in COLOR_WORDS:
-                observed = COLOR_WORDS[word]
+            if word in _COLOR_WORDS:
+                observed = _COLOR_WORDS[word]
         if observed is None:
             return ImageQueryResult(text="UNKNOWN", available=True)
         r, g, b = observed
@@ -824,6 +824,20 @@ UTTERANCES = (
         ),
         required_tools=frozenset({"add_primitive"}),
         expected_colors=(("sphere-0", (0.0, 0.4, 1.0)),),
+    ),
+    Case(
+        name="basics_repeat_identical_create",
+        # A verbatim repeat of a completed creation is a NEW creation; the
+        # existing object never satisfies it.
+        request="Make a red cube.",
+        scene=(
+            {"id": "box-0", "type": "box",
+             "position": {"x": 0.0, "y": 1.6, "z": -1.5},
+             "color": {"r": 1, "g": 0, "b": 0}, "size": 0.1},
+        ),
+        history=(("Make a red cube.", "Created a red cube in front of you."),),
+        required_tools=frozenset({"add_primitive"}),
+        expected_colors=(("box-1", (1.0, 0.0, 0.0)),),
     ),
     Case(
         name="basics_create_despite_similar_existing",

@@ -45,7 +45,7 @@ _AnchorRelation = Literal["toward_user", "away_from_user", "left_of", "right_of"
 
 _DEFAULT_COLOR = (0.2, 0.9, 1.0)
 
-COLOR_WORDS = {
+_COLOR_WORDS = {
     "red": (1, 0, 0), "green": (0, 0.8, 0), "blue": (0, 0.4, 1), "yellow": (1, 1, 0),
     "cyan": (0, 1, 1), "magenta": (1, 0, 1), "orange": (1, 0.5, 0), "purple": (0.6, 0, 1),
     "white": (1, 1, 1), "black": (0, 0, 0), "teal": (0, 0.8, 0.8), "turquoise": (0.2, 0.9, 1),
@@ -60,7 +60,7 @@ _SHAPE_WORDS = {
 
 # A discriminated color source: the subagent LLM picks the kind through the
 # tool schema; the code dispatches on it without reinterpreting the phrase.
-ColorKind = Literal["literal", "scene_object", "physical"]
+_ColorKind = Literal["literal", "scene_object", "physical"]
 
 _COLOR_KIND_GUIDE = (
     "Which kind of color source the instruction names: literal for stated "
@@ -202,7 +202,7 @@ class _Leaves:
             raise ValueError(f"No scene object with id {object_ref!r}; the scene has {known}")
         words = re.findall(r"[a-z]+", wanted)
         exact_shape = next((_SHAPE_WORDS[word] for word in words if word in _SHAPE_WORDS), None)
-        color = next((COLOR_WORDS[word] for word in words if word in COLOR_WORDS), None)
+        color = next((_COLOR_WORDS[word] for word in words if word in _COLOR_WORDS), None)
 
         def select(shape: str | None) -> list[SceneObject]:
             pool = [item for item in state.objects if shape is None or item.type == shape]
@@ -219,7 +219,7 @@ class _Leaves:
         candidates = select(exact_shape) if (exact_shape or color) else []
         if len(candidates) != 1 and exact_shape is None:
             for word in words:
-                if word in COLOR_WORDS:
+                if word in _COLOR_WORDS:
                     continue
                 close = difflib.get_close_matches(word, _SHAPE_WORDS, n=1, cutoff=0.6)
                 if close:
@@ -256,7 +256,7 @@ class _Leaves:
         shapes = ", ".join(sorted(set(_SHAPE_WORDS.values())))
         raise ValueError(f"Unknown shape {shape_words!r}; the renderer draws: {shapes}")
 
-    async def resolve_color(self, kind: str, value: str) -> tuple[float, float, float]:
+    async def resolve_color(self, kind: _ColorKind, value: str) -> tuple[float, float, float]:
         if kind == "literal":
             numbers = [float(v) for v in re.findall(r"-?\d*\.\d+|-?\d+", value)]
             if len(numbers) == 3 and all(0.0 <= v <= 1.0 for v in numbers):
@@ -269,14 +269,14 @@ class _Leaves:
             if not words:
                 return _DEFAULT_COLOR
             for word in words:
-                if word in COLOR_WORDS:
-                    return COLOR_WORDS[word]
+                if word in _COLOR_WORDS:
+                    return _COLOR_WORDS[word]
             for word in words:
-                close = difflib.get_close_matches(word, COLOR_WORDS, n=1, cutoff=0.75)
+                close = difflib.get_close_matches(word, _COLOR_WORDS, n=1, cutoff=0.75)
                 if close:
                     logger.debug("color words resolved {!r} -> {}", value, close[0])
-                    return COLOR_WORDS[close[0]]
-            known = ", ".join(sorted(COLOR_WORDS))
+                    return _COLOR_WORDS[close[0]]
+            known = ", ".join(sorted(_COLOR_WORDS))
             raise ValueError(
                 f"Unknown color {value!r}; use one of {known}, copy a scene object, "
                 "or observe a physical source"
@@ -447,14 +447,14 @@ class _MoveToRequest(_ObjRequest):
 
 
 class _RecolorRequest(_ObjRequest):
-    color_kind: ColorKind = Field(description=_COLOR_KIND_GUIDE)
+    color_kind: _ColorKind = Field(description=_COLOR_KIND_GUIDE)
     color_value: str = Field(description=_COLOR_VALUE_GUIDE)
 
 
 class _CreateUserRelativeRequest(BaseModel):
     prim_type: str = Field(description="The instruction's exact shape word, copied verbatim.")
     direction: _UserDirection
-    color_kind: ColorKind = Field(default="literal", description=_COLOR_KIND_GUIDE)
+    color_kind: _ColorKind = Field(default="literal", description=_COLOR_KIND_GUIDE)
     color_value: str = Field(
         default="",
         description=_COLOR_VALUE_GUIDE + " Leave empty when the instruction states no color."
@@ -474,7 +474,7 @@ class _CreateObjectRelativeRequest(BaseModel):
             "'between X and Y'. Leave empty for all other relations."
         ),
     )
-    color_kind: ColorKind = Field(default="literal", description=_COLOR_KIND_GUIDE)
+    color_kind: _ColorKind = Field(default="literal", description=_COLOR_KIND_GUIDE)
     color_value: str = Field(
         default="",
         description=_COLOR_VALUE_GUIDE + " Include whenever the instruction names a "
@@ -489,7 +489,7 @@ class _CreateAtRequest(BaseModel):
     x: float
     y: float
     z: float
-    color_kind: ColorKind = Field(default="literal", description=_COLOR_KIND_GUIDE)
+    color_kind: _ColorKind = Field(default="literal", description=_COLOR_KIND_GUIDE)
     color_value: str = Field(
         default="",
         description=_COLOR_VALUE_GUIDE + " Include whenever the instruction names a "
@@ -745,7 +745,6 @@ def make_object_tools(
 
 
 __all__ = [
-    "COLOR_WORDS", "ColorKind",
     "CreatedObject", "CreationLedger", "MovedObject", "RecoloredObject", "RemovedObject",
     "SwappedObjects", "TurnGuard",
     "make_appearance_tools", "make_object_tools", "make_placement_tools",
