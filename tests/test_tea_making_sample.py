@@ -46,10 +46,7 @@ from tea_making_worker.background_context import (  # noqa: E402  # pyright: ign
     BackgroundContextAgent,
 )
 from tea_making_worker.change_watch import ChangeWatchAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
-from tea_making_worker.config import (  # noqa: E402  # pyright: ignore[reportMissingImports]
-    _PackagedPrompt,
-    load_config,
-)
+from tea_making_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.events import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     BACKGROUND_FACT_TOPIC,
     CHANGE_WATCH_RECORD_TOPIC,
@@ -1321,7 +1318,6 @@ def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:
         config.foreground_prompt
         == (prompt_dir / "foreground_prompt.txt").read_text().strip()
     )
-    assert isinstance(config.foreground_prompt, _PackagedPrompt)
     assert (
         config.video_delta_prompt
         == (prompt_dir / "video_delta_prompt.txt").read_text().strip()
@@ -1336,9 +1332,6 @@ def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:
     override.write_text("foreground_prompt_file: matching-prompt.txt\n")
     matching_config = load_config(override)
     assert matching_config.foreground_prompt == config.foreground_prompt
-    assert not isinstance(
-        matching_config.foreground_prompt, _PackagedPrompt
-    )
 
 
 def test_foreground_prompt_has_route_eval_cases() -> None:
@@ -1355,6 +1348,8 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     refusal = "I can only help with the active tea guide right now."
     assert refusal not in common_prompt
     assert refusal not in idle_prompt
+    assert "color of visible clothing" not in common_prompt
+    assert "color of visible clothing" in idle_prompt
     assert "general-purpose assistant" in idle_prompt
     assert f"reply exactly:\n{refusal}" in active_prompt
 
@@ -1425,20 +1420,33 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     assert active_visual["expected_response"] == refusal
 
 
-def test_foreground_route_injects_only_its_policy() -> None:
-    foreground = object.__new__(ForegroundAgent)
-    foreground._prompt = (
-        _WORKER / "tea_making_worker/prompts/foreground_prompt.txt"
-    ).read_text().strip()
-    foreground._uses_default_route_policy = True
-    foreground._guidance = SimpleNamespace(
-        active_context=lambda participant_id: (
-            None if participant_id == "idle" else '{"step":"fill_water"}'
-        ),
-        active_tools=lambda _participant_id: ToolSet(()),
+def _foreground_for_route_test(prompt: str) -> ForegroundAgent:
+    images = SimpleNamespace(images=ImageRegistry())
+    foreground = ForegroundAgent(
+        llm=SimpleNamespace(),  # type: ignore[arg-type]
+        images=images,  # type: ignore[arg-type]
+        vlm=SimpleNamespace(),  # type: ignore[arg-type]
+        rag=SimpleNamespace(),  # type: ignore[arg-type]
+        guidance=SimpleNamespace(
+            active_context=lambda participant_id: (
+                None if participant_id == "idle" else '{"step":"fill_water"}'
+            ),
+            active_tools=lambda _participant_id: ToolSet(()),
+        ),  # type: ignore[arg-type]
+        background_context=SimpleNamespace(),  # type: ignore[arg-type]
+        change_watch=SimpleNamespace(),  # type: ignore[arg-type]
+        transcript=SimpleNamespace(),  # type: ignore[arg-type]
+        video_log=SimpleNamespace(),  # type: ignore[arg-type]
+        prompt=prompt,
     )
     foreground._root_tools = lambda *_args, **_kwargs: ToolSet(())
     foreground._background_tools = lambda *_args, **_kwargs: ToolSet(())
+    return foreground
+
+
+def test_foreground_route_appends_policy_through_constructor() -> None:
+    config = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
+    foreground = _foreground_for_route_test(config.foreground_prompt)
 
     idle_prompt, _, idle_route = foreground._prepare_route(
         "idle", ctx=None, timestamp_us=None
@@ -1456,31 +1464,27 @@ def test_foreground_route_injects_only_its_policy() -> None:
     assert refusal in active_prompt
 
 
-def test_foreground_route_preserves_explicit_prompt_override() -> None:
-    foreground = object.__new__(ForegroundAgent)
-    foreground._prompt = (
-        _WORKER / "tea_making_worker/prompts/foreground_prompt.txt"
-    ).read_text().strip()
-    foreground._uses_default_route_policy = False
-    foreground._guidance = SimpleNamespace(
-        active_context=lambda participant_id: (
-            None if participant_id == "idle" else '{"step":"fill_water"}'
-        ),
-        active_tools=lambda _participant_id: ToolSet(()),
-    )
-    foreground._root_tools = lambda *_args, **_kwargs: ToolSet(())
-    foreground._background_tools = lambda *_args, **_kwargs: ToolSet(())
+def test_foreground_route_appends_policy_to_prompt_override(tmp_path: Path) -> None:
+    override = tmp_path / "worker.yaml"
+    override.write_text("foreground_prompt: Explicit override\n")
+    config = load_config(override)
+    foreground = _foreground_for_route_test(config.foreground_prompt)
 
-    idle_prompt, _, _ = foreground._prepare_route(
+    idle_prompt, _, idle_route = foreground._prepare_route(
         "idle", ctx=None, timestamp_us=None
     )
-    active_prompt, _, _ = foreground._prepare_route(
+    active_prompt, _, active_route = foreground._prepare_route(
         "active", ctx=None, timestamp_us=None
     )
     refusal = "I can only help with the active tea guide right now."
 
-    assert idle_prompt == foreground._prompt
-    assert active_prompt == (
-        f'{foreground._prompt}\n\nActive tea guide:\n{{"step":"fill_water"}}'
+    assert idle_route == "root"
+    assert idle_prompt.startswith("Explicit override\n\n")
+    assert "general-purpose assistant" in idle_prompt
+    assert refusal not in idle_prompt
+    assert active_route == "tea"
+    assert active_prompt.startswith("Explicit override\n\n")
+    assert refusal in active_prompt
+    assert active_prompt.endswith(
+        'Active tea guide:\n{"step":"fill_water"}'
     )
-    assert refusal not in active_prompt

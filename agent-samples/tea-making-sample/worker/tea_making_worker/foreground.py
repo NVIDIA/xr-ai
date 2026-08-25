@@ -33,7 +33,6 @@ from xr_ai_voice import (
 
 from .background_context import BackgroundContextAgent
 from .change_watch import ChangeWatchAgent
-from .config import _PackagedPrompt
 from .events import (
     FOREGROUND_RECORD_TOPIC,
     INTERRUPTED_TOPIC,
@@ -85,7 +84,6 @@ class ForegroundAgent(Agent):
         self._change_watch = change_watch
         self._transcript = transcript
         self._video_log = video_log
-        self._uses_default_route_policy = isinstance(prompt, _PackagedPrompt)
         self._prompt = prompt.strip()
         self._vlm_timeout_s = vlm_timeout_s
         self._tasks: dict[str, asyncio.Task[None]] = {}
@@ -269,7 +267,7 @@ class ForegroundAgent(Agent):
                 ctx=ctx,
                 timestamp_us=timestamp_us,
             )
-            system_prompt = self._with_default_route_policy(_IDLE_PROMPT)
+            system_prompt = self._with_route_policy(_IDLE_PROMPT)
             route = "root"
         else:
             active_tools = self._guidance.active_tools(participant_id)
@@ -280,15 +278,13 @@ class ForegroundAgent(Agent):
                 self._background_tools(participant_id),
             )
             system_prompt = (
-                f"{self._with_default_route_policy(_ACTIVE_PROMPT)}"
+                f"{self._with_route_policy(_ACTIVE_PROMPT)}"
                 f"\n\nActive tea guide:\n{active_context}"
             )
             route = "tea"
         return system_prompt, tools, route
 
-    def _with_default_route_policy(self, route_prompt: str) -> str:
-        if not getattr(self, "_uses_default_route_policy", False):
-            return self._prompt
+    def _with_route_policy(self, route_prompt: str) -> str:
         return f"{self._prompt}\n\n{route_prompt}"
 
     def _root_tools(
