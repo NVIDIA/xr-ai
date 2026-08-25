@@ -152,7 +152,10 @@ Package Contents
 
 .. py:data:: VOICE_TRANSCRIPT_TOPIC
 
-   All final STT results, published before voice-gate filtering.
+   Non-empty final STT results queued for publication before gate filtering.
+
+   Delivery is best effort: the bounded queue drops its oldest pending item on
+   overflow, and shutdown discards queued items that have not been published.
 
 
 .. py:class:: UserQuery
