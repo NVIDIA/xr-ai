@@ -554,6 +554,13 @@ to the voice pipeline during the playback hold is not counted as discarded.</p>
 <p><code class="docutils literal notranslate"><span class="pre">VadConfig</span></code> controls utterance boundaries and bounded early transcription:
 the generated Python reference lists every field, type, default, and description.
 Set <code class="docutils literal notranslate"><span class="pre">stop_probe_after_s</span></code> to <code class="docutils literal notranslate"><span class="pre">0</span></code> or less to disable early probes.</p>
+<p>Return audio queues 320 ms of silence when a participant joins so LiveKit can
+publish and subscribe to the track before the greeting or first response. The
+first audible output therefore follows that one-time pre-roll. During speech,
+the sender maintains up to 120 ms of downstream reserve to absorb ordinary
+event-loop and IPC jitter. It sends initial chunks immediately rather than
+waiting to fill the reserve, and interruption flushes participant-scoped queued
+audio.</p>
 <p><code class="docutils literal notranslate"><span class="pre">VoiceAgent.text_topic</span></code> controls the completed-response echo sent through the
 hub data channel. Its default is <code class="docutils literal notranslate"><span class="pre">&quot;agent.response&quot;</span></code>; set it to <code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> when the
 application publishes its own response data so each turn is delivered only
