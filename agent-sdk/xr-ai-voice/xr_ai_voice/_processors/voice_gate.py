@@ -18,6 +18,7 @@ acknowledge a wake phrase before the complete command is available.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 
 from loguru import logger
 from pipecat.frames.frames import (
@@ -81,6 +82,7 @@ class VoiceGateProcessor(FrameProcessor):
             on_participant_joined = self._on_gate_participant_joined,
         )
         self._early_wake_ack: set[str] = set()
+        self._tts_response_active: Callable[[str], bool] = lambda _pid: False
         self._feeding_speech_transcript = False
         # Speech-onset timestamp (µs) of the transcript currently being fed to
         # the gate. ``VoiceGate.feed`` invokes ``_on_gate_query`` synchronously,
@@ -97,6 +99,13 @@ class VoiceGateProcessor(FrameProcessor):
     def early_wake_ack_enabled(self) -> bool:
         """Whether partial STT should probe for an early wake acknowledgement."""
         return self._gate.wake_ack_enabled
+
+    def set_tts_response_active_probe(
+        self,
+        probe: Callable[[str], bool],
+    ) -> None:
+        """Bind the downstream ordered-TTS activity check used by chimes."""
+        self._tts_response_active = probe
 
     async def handle_partial_transcript(self, pid: str, text: str) -> bool:
         """Handle a partial transcript and acknowledge a complete wake phrase.
@@ -127,7 +136,12 @@ class VoiceGateProcessor(FrameProcessor):
             return
         for out in frames:
             await self.push_frame(out)
-        if frames:
+        # A chime may arrive from the early wake probe while response audio is
+        # still flowing through StreamingTtsProcessor. Its raw frames can join
+        # that stream, but a stop marker here would pad-flush the response in
+        # the middle of a word. The response's own ordered marker will flush
+        # both. An idle chime still needs its marker so a short tail is audible.
+        if frames and not self._tts_response_active(pid):
             stopped = TTSStoppedFrame()
             stopped.transport_destination = pid
             await self.push_frame(stopped)

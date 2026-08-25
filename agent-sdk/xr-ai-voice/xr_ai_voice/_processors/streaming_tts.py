@@ -77,6 +77,7 @@ class _TtsPidState:
     """Per-participant streaming state: pending text + its ordered sender."""
 
     __slots__ = (
+        "active_responses",
         "pending",
         "response_sentences",
         "sender_task",
@@ -85,6 +86,7 @@ class _TtsPidState:
     )
 
     def __init__(self) -> None:
+        self.active_responses: int = 0
         self.pending: str = ""
         self.response_sentences: int = 0
         self.sender_task: asyncio.Task | None = None
@@ -186,6 +188,11 @@ class StreamingTtsProcessor(FrameProcessor):
             )
         return st.sender_queue
 
+    def has_active_response(self, pid: str) -> bool:
+        """Return whether ordered response audio is still open for ``pid``."""
+        st = self._by_pid.get(pid)
+        return bool(st is not None and st.active_responses)
+
     async def _handle_text(self, frame: TextFrame) -> None:
         if not frame.text:
             return
@@ -266,6 +273,8 @@ class StreamingTtsProcessor(FrameProcessor):
         logger.info("tts sentence dispatch pid={!r} len={}", pid, len(sentence))
         queue = self._ensure_sender(pid)
         st = self._state(pid)
+        if not st.response_sentences:
+            st.active_responses += 1
         st.response_sentences += 1
         st.synth_seq += 1
         task  = asyncio.create_task(
@@ -296,6 +305,9 @@ class StreamingTtsProcessor(FrameProcessor):
                     stopped = TTSStoppedFrame()
                     stopped.transport_destination = item.pid
                     await self.push_frame(stopped)
+                    st = self._by_pid.get(item.pid)
+                    if st is not None and st.active_responses:
+                        st.active_responses -= 1
                     continue
                 task, pid = item
                 try:

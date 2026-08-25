@@ -1098,6 +1098,35 @@ async def test_voice_gate_processor_chime_routes_through_pipeline_audio_path():
 
 
 @pytest.mark.asyncio
+async def test_voice_gate_processor_chime_does_not_stop_active_response():
+    """An early chime cannot pad-flush another response in mid-utterance."""
+    cfg = VoiceGateConfig(magic_phrases=("agent",), listening_chime=True)
+    proc = VoiceGateProcessor(cfg=cfg, tts=_FakeTts())
+    proc.gate.observe_tts_wav(_silence_wav(24000))
+    active_probes: list[str] = []
+
+    def response_active(pid: str) -> bool:
+        active_probes.append(pid)
+        return True
+
+    proc.set_tts_response_active_probe(response_active)
+    sink = await _run_chain(
+        proc,
+        sends=[
+            TranscriptionFrame(
+                text="agent, what time is it",
+                user_id="pid-1",
+                timestamp="t",
+            )
+        ],
+    )
+
+    assert active_probes == ["pid-1"]
+    assert any(isinstance(f, OutputAudioRawFrame) for f in sink.frames)
+    assert not any(isinstance(f, TTSStoppedFrame) for f in sink.frames)
+
+
+@pytest.mark.asyncio
 async def test_voice_gate_processor_never_falls_back_to_late_chime_for_speech_query():
     cfg = VoiceGateConfig(magic_phrases=("agent",), listening_chime=True)
     proc = VoiceGateProcessor(cfg=cfg, tts=_FakeTts())
@@ -1914,6 +1943,48 @@ async def test_response_boundary_flushes_each_partial_output_chunk():
     assert endpoint.chunks[0].samples == endpoint.chunks[1].samples
 
 
+@pytest.mark.asyncio
+async def test_interrupt_drains_boundary_parked_behind_slow_tts():
+    """Teardown must skip an ordered boundary while cancelling synthesis."""
+    class _SlowTts(_FakeTts):
+        def __init__(self) -> None:
+            super().__init__()
+            self.cancelled = asyncio.Event()
+
+        async def synthesize(self, text: str, **_kwargs) -> bytes:
+            self.calls.append(text)
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                self.cancelled.set()
+                raise
+
+    tts = _SlowTts()
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    proc = StreamingTtsProcessor(tts=tts, voice_gate=gate)
+    text = TextFrame(text="slow response.")
+    text.transport_destination = "alice"
+    interruption = InterruptionFrame()
+    interruption.transport_source = "alice"
+
+    await _run_chain(
+        proc,
+        sends=[
+            text,
+            AssistantResponseEndFrame(
+                pid="alice",
+                text="slow response.",
+                pts_us=1,
+            ),
+            interruption,
+        ],
+        per_send_delay_s=0.03,
+    )
+
+    assert tts.cancelled.is_set()
+    assert proc._by_pid == {}  # noqa: SLF001
+
+
 def _constant_wav(sample_rate: int, *, ms: int, value: int) -> bytes:
     samples = max(1, int(sample_rate * ms / 1000))
     pcm = np.full(samples, value, dtype=np.int16).tobytes()
@@ -2351,6 +2422,7 @@ async def test_input_transport_emits_participant_joined_frame():
     from xr_ai_voice._transport import (
         SAMPLE_RATE,
         DeviceIOHubInputTransport,
+        DeviceIOHubOutputTransport,
     )
     from pipecat.transports.base_transport import TransportParams
 
@@ -2360,7 +2432,12 @@ async def test_input_transport_emits_participant_joined_frame():
         audio_in_sample_rate=SAMPLE_RATE,
         audio_in_channels=1,
     )
-    transport = DeviceIOHubInputTransport(ep, params)
+    output = DeviceIOHubOutputTransport(ep, TransportParams())
+    transport = DeviceIOHubInputTransport(
+        ep,
+        params,
+        return_audio_primer=output.prime_return_audio,
+    )
     transport._started = True
 
     pushed: list[Frame] = []
@@ -2393,7 +2470,11 @@ async def test_input_transport_emits_join_when_return_audio_preroll_fails():
     """Track priming is best-effort and cannot suppress participant lifecycle."""
     from pipecat.transports.base_transport import TransportParams
     from xr_ai_hub import ParticipantEvent
-    from xr_ai_voice._transport import SAMPLE_RATE, DeviceIOHubInputTransport
+    from xr_ai_voice._transport import (
+        SAMPLE_RATE,
+        DeviceIOHubInputTransport,
+        DeviceIOHubOutputTransport,
+    )
 
     class _FailingEndpoint(_CallbackStubEndpoint):
         def __init__(self) -> None:
@@ -2405,6 +2486,7 @@ async def test_input_transport_emits_join_when_return_audio_preroll_fails():
             raise RuntimeError("return audio unavailable")
 
     ep = _FailingEndpoint()
+    output = DeviceIOHubOutputTransport(ep, TransportParams())
     transport = DeviceIOHubInputTransport(
         ep,
         TransportParams(
@@ -2412,6 +2494,7 @@ async def test_input_transport_emits_join_when_return_audio_preroll_fails():
             audio_in_sample_rate=SAMPLE_RATE,
             audio_in_channels=1,
         ),
+        return_audio_primer=output.prime_return_audio,
     )
     transport._started = True
     pushed: list[Frame] = []
@@ -2429,6 +2512,60 @@ async def test_input_transport_emits_join_when_return_audio_preroll_fails():
     assert len(pushed) == 1
     assert isinstance(pushed[0], ParticipantJoinedFrame)
     assert pushed[0].participant_id == "web-client"
+
+
+@pytest.mark.asyncio
+async def test_input_transport_preserves_join_leave_order_during_preroll():
+    """Detached leave delivery cannot overtake a join blocked on priming."""
+    from pipecat.transports.base_transport import TransportParams
+    from xr_ai_hub import ParticipantEvent
+    from xr_ai_voice._transport import SAMPLE_RATE, DeviceIOHubInputTransport
+
+    primer_started = asyncio.Event()
+    release_primer = asyncio.Event()
+
+    async def slow_primer(_pid: str) -> None:
+        primer_started.set()
+        await release_primer.wait()
+
+    ep = _CallbackStubEndpoint()
+    transport = DeviceIOHubInputTransport(
+        ep,
+        TransportParams(
+            audio_in_enabled=True,
+            audio_in_sample_rate=SAMPLE_RATE,
+            audio_in_channels=1,
+        ),
+        return_audio_primer=slow_primer,
+    )
+    transport._started = True
+    pushed: list[Frame] = []
+
+    async def capture(frame, direction=FrameDirection.DOWNSTREAM):
+        pushed.append(frame)
+
+    transport.push_frame = capture  # type: ignore[method-assign]
+
+    join = ep.participant_cb(
+        ParticipantEvent(participant_id="web-client", joined=True, pts_us=1),
+    )
+    join_task = asyncio.create_task(join)
+    await primer_started.wait()
+    leave = ep.participant_cb(
+        ParticipantEvent(participant_id="web-client", joined=False, pts_us=2),
+    )
+    leave_task = asyncio.create_task(leave)
+    await asyncio.sleep(0)
+
+    assert pushed == []
+    release_primer.set()
+    await asyncio.gather(join_task, leave_task)
+
+    assert [type(frame) for frame in pushed] == [
+        ParticipantJoinedFrame,
+        ParticipantLeftFrame,
+    ]
+    assert transport._participant_event_tails == {}  # noqa: SLF001
 
 
 @pytest.mark.asyncio
@@ -3179,6 +3316,48 @@ async def test_output_transport_writes_audio_to_target_participant():
 
 
 @pytest.mark.asyncio
+async def test_output_transport_accounts_preroll_before_pacing(monkeypatch):
+    """Real pre-roll backlog must reduce the pacer's initial burst."""
+    from pipecat.transports.base_transport import TransportParams
+    from xr_ai_voice import _transport as transport_module
+    from xr_ai_voice._transport import DeviceIOHubOutputTransport
+
+    now_s = 100.0
+    sent_at: list[float] = []
+    sleeps: list[float] = []
+
+    async def fake_sleep(delay_s: float) -> None:
+        nonlocal now_s
+        sleeps.append(delay_s)
+        now_s += delay_s
+
+    class _StubEndpoint:
+        async def send_return_audio(self, _chunk) -> None:
+            sent_at.append(now_s)
+
+    monkeypatch.setattr(transport_module, "_monotonic_s", lambda: now_s)
+    monkeypatch.setattr(transport_module, "_sleep_s", fake_sleep)
+    transport = DeviceIOHubOutputTransport(_StubEndpoint(), TransportParams())
+
+    await transport.prime_return_audio("alice")
+
+    assert sent_at == [100.0] * 8
+    assert transport._return_audio_deadline_s["alice"] == pytest.approx(100.32)  # noqa: SLF001
+
+    frame = OutputAudioRawFrame(
+        audio=b"\x00\x00" * 320,
+        sample_rate=16_000,
+        num_channels=1,
+    )
+    frame.transport_destination = "alice"
+    assert await transport.write_audio_frame(frame) is True
+
+    assert sleeps == pytest.approx([0.22])
+    assert sent_at[-1] == pytest.approx(100.22)
+    assert transport._return_audio_deadline_s["alice"] == pytest.approx(100.34)  # noqa: SLF001
+
+
+@pytest.mark.asyncio
 async def test_output_transport_paces_return_audio_before_ipc(monkeypatch):
     """Normal TTS builds bounded reserve, then advances at playback rate."""
     from xr_ai_voice import _transport as transport_module
@@ -3256,6 +3435,72 @@ async def test_output_transport_reserve_absorbs_periodic_ipc_stalls(monkeypatch)
         starvation_s += max(0.0, arrival_s - playout_until)
         playout_until = max(playout_until, arrival_s) + 0.02
     assert starvation_s == pytest.approx(0.0)
+
+
+@pytest.mark.asyncio
+async def test_output_transport_interrupt_cannot_restore_stale_reserve(monkeypatch):
+    """An interruption during pacing clears the deadline after the writer."""
+    from pipecat.transports.base_transport import TransportParams
+    from xr_ai_voice import _transport as transport_module
+    from xr_ai_voice._transport import DeviceIOHubOutputTransport
+
+    now_s = 100.0
+    sleep_started = asyncio.Event()
+    release_sleep = asyncio.Event()
+    sleeps: list[float] = []
+    sends: list[float] = []
+
+    async def blocking_sleep(delay_s: float) -> None:
+        nonlocal now_s
+        sleeps.append(delay_s)
+        sleep_started.set()
+        await release_sleep.wait()
+        now_s += delay_s
+
+    class _StubEndpoint:
+        async def send_return_audio(self, _chunk) -> None:
+            sends.append(now_s)
+
+    class _StubSender:
+        def __init__(self) -> None:
+            self.interruptions = 0
+
+        async def handle_interruptions(self, _frame) -> None:
+            self.interruptions += 1
+
+    monkeypatch.setattr(transport_module, "_monotonic_s", lambda: now_s)
+    monkeypatch.setattr(transport_module, "_sleep_s", blocking_sleep)
+    transport = DeviceIOHubOutputTransport(_StubEndpoint(), TransportParams())
+    sender = _StubSender()
+    transport._media_senders["alice"] = sender  # noqa: SLF001
+    transport._return_audio_deadline_s["alice"] = 100.12  # noqa: SLF001
+    frame = OutputAudioRawFrame(
+        audio=b"\x00\x00" * 320,
+        sample_rate=16_000,
+        num_channels=1,
+    )
+    frame.transport_destination = "alice"
+
+    write_task = asyncio.create_task(transport.write_audio_frame(frame))
+    await sleep_started.wait()
+    interruption = InterruptionFrame()
+    interruption.transport_source = "alice"
+    interrupt_task = asyncio.create_task(
+        transport._handle_frame(interruption),  # noqa: SLF001
+    )
+    await asyncio.sleep(0)
+
+    assert not interrupt_task.done()
+    release_sleep.set()
+    await asyncio.gather(write_task, interrupt_task)
+
+    assert sender.interruptions == 1
+    assert "alice" not in transport._return_audio_deadline_s  # noqa: SLF001
+    assert len(sleeps) == 1
+
+    assert await transport.write_audio_frame(frame) is True
+    assert len(sleeps) == 1
+    assert len(sends) == 2
 
 
 @pytest.mark.asyncio
