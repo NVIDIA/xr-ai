@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# VLM server — DGX Spark (GB10, ~120 GiB GPU-visible HBM).
+# VLM server — DGX Spark (GB10, ~120 GiB GPU-visible unified memory).
 #
 # vlm is THIRD in load order: STT → Omni → vlm.
 # free_at_startup ≈ 120 − 30 (Omni) − 2 (STT) ≈ 88 GiB.

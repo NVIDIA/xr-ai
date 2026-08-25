@@ -248,10 +248,13 @@ installable iOS profile.
 Set `web_server_tls: false` for the two cases where the hub does not
 terminate TLS itself: a TLS-terminating reverse proxy (nginx, Caddy,
 Cloudflare Tunnel) sits in front and speaks plain `http://` + `ws://` to the
-hub on the loopback, or localhost-only development where browsers already grant
-camera and microphone access on `http://localhost`. In that mode `/token`
-returns a plain
-`ws://` URL and the proxy carries plain WebSocket.
+hub, or localhost-only development where browsers already grant camera and
+microphone access on `http://localhost`. Bind the hub to loopback with
+`web_server_host: 127.0.0.1`, or source-restrict it with a firewall, when a
+reverse proxy is the public entry point. In this mode `/token` returns the
+direct `ws://<request-host>:<lk_port_ws>` URL, not the hub's `/rtc` proxy.
+Custom clients behind the TLS terminator must use the external same-origin
+`wss://` proxy URL and must not expose port 7880 publicly.
 
 For runtime symptoms and fixes, refer to
 {doc}`Troubleshooting </guides/troubleshooting>`.

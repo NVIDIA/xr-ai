@@ -97,7 +97,8 @@ def _check_linux() -> None:
             missing,
             "Ensure the NVIDIA driver and CUDA Video SDK are installed and that\n"
             "  /dev/nvidia* devices are accessible to this process.\n"
-            "  In Docker: pass --gpus all  (or --device /dev/nvcuvid etc.).",
+            "  In Docker: use --runtime=nvidia with NVIDIA_VISIBLE_DEVICES=all\n"
+            "  and NVIDIA_DRIVER_CAPABILITIES=video.",
         )
 
 

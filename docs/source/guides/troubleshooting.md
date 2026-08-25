@@ -167,9 +167,10 @@ curl -fsS http://127.0.0.1:8100/health   # vlm_server (default Cosmos VLM)
 curl -fsS http://127.0.0.1:8107/health   # superseded nemotron3_nano
 ```
 
-**Container post-mortem** — the wrapper streams `docker logs -f` into the
-per-run log file, so on the next run the actual vLLM error lands next to the
-wrapper messages. To inspect manually:
+**Container post-mortem** — during the current run, the wrapper streams
+`docker logs -f` into a sibling
+`/tmp/log_<sample>_<timestamp>/xr-ai-vllm-*.log` file. To inspect the retained
+container manually:
 
 ```bash
 docker ps -a --filter name=xr-ai-vllm-
@@ -177,23 +178,24 @@ docker logs --tail=200 <container-name>
 ```
 
 **Cause:** vLLM crashed during startup — common reasons: model weights
-missing or inaccessible in the bind-mounted `model_cache`, GPU not visible to
-the container (`nvidia-container-cli` or `--gpus`), HF token missing for a
+missing or inaccessible in the bind-mounted `model_cache`, the `nvidia` runtime
+not exposing the selected GPU, HF token missing for a
 gated model, or a reasoning-parser plugin file that is not present inside
 the container.
 
-**Fix:** read the container logs (the next run captures them automatically),
-address the root cause shown there, and retry. If the container was
-auto-removed by `--rm` before you could check, the next failed run will
-have the streamed output in the per-run log file — just re-run.
+**Fix:** read the current run's container log, address the root cause shown
+there, and retry. Failed containers remain available to `docker logs` until
+managed cleanup removes them.
 
-### `vllm_backend: docker` — `docker run` fails with `could not select device driver`
+(vllm-backend-docker-docker-run-fails-with-could-not-select-device-driver)=
+### `vllm_backend: docker` — the NVIDIA runtime is unavailable
 
-**Symptom:** `docker run` exits with a message mentioning `nvidia-container-cli`
-or "could not select device driver "" with capabilities: [[gpu]]".
+**Symptom:** `docker run` exits with a message that the `nvidia` runtime is
+unknown or unavailable, or with an `nvidia-container-cli` initialization error.
 
 **Cause:** the NVIDIA Container Toolkit is not installed (or the daemon was
-not restarted after install), so docker cannot honor `--gpus`.
+not restarted and configured after install), so Docker cannot use
+`--runtime=nvidia`.
 
 **Fix:** install the toolkit and restart docker:
 https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
@@ -214,8 +216,9 @@ OpenH264, which is royalty-bearing.
 **Fix:**
 - **Bare metal:** install or repair the NVIDIA driver. The libraries ship with the
   driver, not with CUDA.
-- **Docker:** pass `--gpus all` (or `--device /dev/nvidia*` plus the codec
-  device nodes) when starting the container.
+- **Docker:** use the NVIDIA runtime, request the needed devices with
+  `NVIDIA_VISIBLE_DEVICES`, and include `video` in
+  `NVIDIA_DRIVER_CAPABILITIES` when starting the container.
 
 ## Runtime and connection issues
 
@@ -273,7 +276,7 @@ validates against the system and user CA store, the same as iOS.
    automatically.
 
 Repeat for each hub host. Replace the auto-generated certificate with one from a
-public CA via `cert_file` or `key_file` in `device_io_hub.yaml` for
+public CA via `cert_file` and `key_file` in `device_io_hub.yaml` for
 production.
 
 ### iOS and visionOS — connection fails with certificate-trust errors
@@ -308,9 +311,9 @@ certificate's SubjectAlternativeName doesn't cover that IP. The hub detects
 local IPv4 addresses via a UDP-connect probe and auto-regenerates the
 certificate whenever the SAN is missing one (logged as `TLS: cached cert
 SAN is missing …; regenerating…`); just restart the hub and re-install the
-profile on the device. If the dialed address is not on any of the hub's
-interfaces, add it to `web_server_extra_sans` in `device_io_hub.yaml` and
-restart. Refer to {doc}`Networking </getting_started/networking>` for details.
+profile on the device. If the dialed address is absent from the certificate,
+add it to `web_server_extra_sans` in `device_io_hub.yaml` and restart. Refer to
+{doc}`Networking </getting_started/networking>` for details.
 To force regeneration, delete `~/.local/share/xr-ai/web-server.crt` and
 `web-server.key` before restarting.
 
@@ -321,7 +324,7 @@ SDK sends. Update to the latest DeviceIOHub and restart; the proxy
 forwards the `Authorization` header on `/rtc/validate` and the WebSocket.
 
 Repeat the install step per hub host, or replace the auto-generated certificate
-with a public-CA certificate via `cert_file` or `key_file` in `device_io_hub.yaml`
+with a public-CA certificate via `cert_file` and `key_file` in `device_io_hub.yaml`
 for production.
 
 ### iOS and visionOS — microphone or camera is interrupted
@@ -354,8 +357,8 @@ the IWER emulator built into the web client itself for desktop dev.
 **Symptom:** a vLLM server's weight load is fast,
 but the server then sits silent for several minutes before becoming healthy.
 
-**Cause:** CUDA graph capture + FlashInfer FP4 MoE autotune happen on first
-run after weight load. They are silent.
+**Cause:** CUDA graph capture and, for FP4 MoE models, FlashInfer autotuning
+happen on first run after weight load. They are silent.
 
 **Fix:** the default Omni profiles set `enforce_eager: false` to enable CUDA
 graph capture and maximize steady-state throughput, so this startup delay is

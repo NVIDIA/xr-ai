@@ -7,7 +7,7 @@
 #
 # GPU auto-selection:
 #   Blackwell (SM100+) → model_blackwell  (NVFP4, --kv-cache-dtype fp8)
-#   Ada / Hopper       → model_ada        (FP8,   --kv-cache-dtype fp8)
+#   Ada, Hopper, Ampere → model_ada        (FP8,   --kv-cache-dtype fp8)
 #   use_bf16: true     → model_bf16       (BF16,  no kv-cache quantisation)
 
 model_blackwell: nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-NVFP4
