@@ -252,8 +252,14 @@ substantive findings:
    XR_AI_REVIEW_HEAD=0123456789abcdef0123456789abcdef01234567
    XR_AI_REVIEW_BODY=/absolute/path/to/reviewed-draft.md
    XR_AI_REVIEW_TMPDIR="$(mktemp -d)"
-   chmod 700 "$XR_AI_REVIEW_TMPDIR"
    XR_AI_REVIEW_REQUEST="$XR_AI_REVIEW_TMPDIR/request.json"
+
+   cleanup_xr_ai_review_request() {
+     rm -f -- "$XR_AI_REVIEW_REQUEST"
+     rmdir -- "$XR_AI_REVIEW_TMPDIR"
+   }
+   trap cleanup_xr_ai_review_request EXIT
+   chmod 700 "$XR_AI_REVIEW_TMPDIR"
 
    jq -n --rawfile body "$XR_AI_REVIEW_BODY" \
      --arg commit_id "$XR_AI_REVIEW_HEAD" \
@@ -269,7 +275,9 @@ substantive findings:
    bind the review to the authorized commit. Confirm the response `commit_id`
    exactly matches the authorized SHA. Do not use an ordinary PR conversation
    comment. Do not approve, request changes, add inline comments, resolve
-   threads, or modify existing reviews.
+   threads, or modify existing reviews. The exit trap must remove only the
+   generated request and its private directory; preserve the reviewed draft for
+   ambiguous-result recovery and the user's audit trail.
 6. If submission fails or its result is ambiguous, do not retry automatically.
    Refresh all reviews, not only reviews on the current head, and search for a
    review by the acting identity with the submitted body and authorized
@@ -302,3 +310,6 @@ boundaries behaviorally in addition to running structural validators:
    response is lost, then move the head to B. Verify that recovery searches all
    reviews for the acting identity, submitted body, and commit A regardless of
    the current head, reports the existing review, and never resubmits it.
+4. **Temporary cleanup:** exercise both successful and failed submissions.
+   Verify that each removes the generated request and private directory while
+   preserving the reviewed draft used for recovery.
