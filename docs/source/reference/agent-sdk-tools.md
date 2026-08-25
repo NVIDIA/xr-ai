@@ -10,6 +10,7 @@ streaming `AsyncTool` objects share one typed Pydantic invocation contract, and
 every execution passes through NeMo Relay. Refer to {doc}`python/index` for the
 exact public APIs.
 
+(native-tools-and-model-tool-calls)=
 ## Bounded model tool loops
 
 Install the `relay` extra for `ToolSet` adapters and `run_tool_loop()`:
@@ -47,16 +48,26 @@ result = await run_tool_loop(
 
 The runner is stateless and bounded. It validates tool IDs and arguments,
 executes emitted calls sequentially, returns a resumable transcript and audit,
-and reports unknown or invalid calls to the model for repair. Exhausted budgets,
-empty or truncated responses, and unsafe mixed `return_direct` batches raise
-typed errors with the partial audit. It never retries an already executed tool.
-Applications retain prompts, history, model parameters, retries, participant
-context, cancellation, and task ownership.
+and reports unknown or invalid calls to the model for repair. Blank, non-string,
+or duplicate tool-call IDs are rejected before any call in that batch executes.
+Exhausted budgets, empty or truncated responses, and unsafe mixed
+`return_direct` batches raise `ToolLoopError` with the partial audit. Its
+`messages` field contains only a valid transcript that can resume; the rejected
+model turn remains separate in `rejected_response` for diagnostics. The runner
+never retries an already executed tool.
+
+A unary side-effect tool declares `result_model=None`, returns `None`, and
+produces `null` as its model-visible result. Applications retain prompts,
+history, model parameters, retries, participant context, cancellation, and task
+ownership. Preserve `ToolLoopError.messages` explicitly during recovery;
+NeMo Relay AutoAPI exception serialization does not reconstruct fields assigned
+dynamically to an exception.
 
 Use `ToolSet.namespaced()` when independently named groups share a model-visible
 catalog. Aliasing changes only catalog names. Only finite tools belong in a
 `ToolSet`; callers consume an `AsyncTool` explicitly with `stream()`.
 
+(typed-capability-services)=
 ## Capability services
 
 The `services` extra provides typed msgpack over ZMQ RPC primitives plus tracking,
@@ -64,6 +75,7 @@ video-memory, text-memory, and spatial tool groups. Applications compose these
 tools directly; the private transport is not an agent API and does not require
 an HTTP or agent framework.
 
+(image-selection-and-vlm-query-tools)=
 ## Image selection and inference
 
 Install the `frames` extra for `CurrentFrameTool` and the `vision` extra for
@@ -151,6 +163,7 @@ uv run xr_ai_tools/utilities/generate_marker.py qr "XR AI" --output qr.png
 uv run xr_ai_tools/utilities/generate_marker.py aruco 23 --output aruco.png
 ```
 
+(magenta-polygon-image-editing)=
 ## Derived-image editing
 
 The `image-editing` extra provides `ImagePolygonFillTool` for filling a validated

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Verify that README links under ``/latest/`` exist in a rendered docs tree."""
+"""Verify that repository entry-point links resolve in rendered ``/latest/`` docs."""
 
 from __future__ import annotations
 
@@ -37,9 +37,9 @@ class _AnchorParser(HTMLParser):
     handle_startendtag = handle_starttag
 
 
-def _tracked_readmes(repository_root: Path) -> tuple[Path, ...]:
+def _tracked_entry_points(repository_root: Path) -> tuple[Path, ...]:
     result = subprocess.run(
-        ["git", "ls-files", "*README.md"],
+        ["git", "ls-files", "*README.md", "CONTRIBUTING.md"],
         cwd=repository_root,
         check=True,
         capture_output=True,
@@ -51,13 +51,17 @@ def _tracked_readmes(repository_root: Path) -> tuple[Path, ...]:
 def check_latest_docs_links(
     repository_root: Path,
     rendered_docs: Path,
-    readmes: tuple[Path, ...] | None = None,
+    entry_points: tuple[Path, ...] | None = None,
 ) -> tuple[str, ...]:
-    """Return errors for missing pages or fragments linked by tracked READMEs."""
+    """Return errors for missing pages or fragments linked by entry points."""
 
     repository_root = repository_root.resolve()
     rendered_docs = rendered_docs.resolve()
-    paths = readmes if readmes is not None else _tracked_readmes(repository_root)
+    paths = (
+        entry_points
+        if entry_points is not None
+        else _tracked_entry_points(repository_root)
+    )
     errors: list[str] = []
     anchor_cache: dict[Path, set[str]] = {}
     checked: set[tuple[Path, str]] = set()

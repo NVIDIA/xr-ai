@@ -10,10 +10,10 @@ ports. Open only the externally reachable ports required by the deployment.
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
-| 7880 | TCP | LiveKit signaling (internal — bound to 127.0.0.1 via the hub's /rtc proxy; browsers and mobile clients do not connect here) |
+| 7880 | TCP | LiveKit signaling (internal; bound to 127.0.0.1 behind the hub's `/rtc` proxy; also the native C++ client's default insecure debugging path) |
 | 7881 | TCP | LiveKit WebRTC TCP fallback (DTLS/SRTP — already encrypted) |
 | 7882 | UDP | LiveKit WebRTC UDP media (DTLS/SRTP — already encrypted) |
-| 8080 | TCP | Web client + token server + wss:// /rtc proxy (HTTPS — the single entry point for browser, Android, iOS, visionOS, and native C++ clients) |
+| 8080 | TCP | Web client, token server, and `wss://` `/rtc` proxy (HTTPS; the supported external entry point for every client) |
 | 8092 | TCP | Optional live agent-event viewer (plain HTTP — bound to 127.0.0.1 by default; do not expose to an untrusted network) |
 | 48322 | TCP | CloudXR WSS proxy (XR headset or client connection) |
 
@@ -27,9 +27,10 @@ sudo ufw allow 48322/tcp    # CloudXR (xr-render-demo)
 sudo ufw reload
 ```
 
-7880 stays on `127.0.0.1`; do not expose it externally — browsers and
-mobile clients reach LiveKit through the same-origin `wss://<host>:8080/rtc`
-proxy, not directly.
+7880 stays on `127.0.0.1`; do not expose it externally. Browsers and mobile
+clients reach LiveKit through the same-origin `wss://<host>:8080/rtc` proxy.
+The native C++ executable defaults to port 7880 only for direct, insecure
+debugging on the XR AI host or a trusted development network.
 
 ## Cloud VMs behind NAT
 
@@ -121,9 +122,10 @@ viewer behind an authenticated TLS reverse proxy.
 TLS is **on by default** — `web_server_tls: true` is the built-in default.
 The web server terminates HTTPS on `web_server_port` (8080 by default) and
 also exposes a same-origin `wss://<host>:8080/rtc` proxy that forwards
-LiveKit signaling to the internal plaintext port. This is the only path
-browser, Android, iOS, visionOS, and native C++ clients use; LiveKit's native
-7880 is never reached directly by client traffic.
+LiveKit signaling to the internal plaintext port. Browsers and mobile clients
+use only this path. It is also the supported native C++ path when the executable
+runs with `--secure --port 8080`; the native executable's port 7880 default is
+an insecure debugging exception.
 
 On first run a self-signed certificate is generated at
 `~/.local/share/xr-ai/web-server.crt`. To use your own, set `cert_file`

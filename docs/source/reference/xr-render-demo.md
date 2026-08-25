@@ -443,7 +443,7 @@ parameter is the precedent: the model copies descriptors verbatim, and
 `spatial_ops` resolves shapes, damaged nouns, and colors against scene state.
 
 Run `uv run xr_render_demo_eval utterances` after every prompt or operations
-change. Its 25 cases take about three minutes. Run the longer scenario and
+change. Its 35 cases take about three minutes. Run the longer scenario and
 precision tiers before completing a tuning round.
 
 (prompt-eval-overlap-audit)=

@@ -131,6 +131,7 @@ def test_latest_docs_alias_contains_complete_rendered_version() -> None:
     assert "check_latest_docs_links.py --quiet" in workflow
     assert '"docs/_build/${latest_source}"' in workflow
     assert workflow.count('- "**/README.md"') == 2
+    assert workflow.count('- "CONTRIBUTING.md"') == 2
     assert not (_ROOT / "docs/source/_static/latest-redirect.html").exists()
     for page in (
         "getting_started/skills.html",
@@ -169,6 +170,28 @@ def test_latest_docs_link_checker_validates_pages_and_fragments(tmp_path) -> Non
 
     assert len(errors) == 1
     assert "rendered fragment does not exist" in errors[0]
+
+    readme.write_text(
+        "[Start](https://nvidia.github.io/xr-ai/latest/guide/start.html#setup)\n",
+        encoding="utf-8",
+    )
+    contributing = repository / "CONTRIBUTING.md"
+    contributing.write_text(
+        "[Missing](https://nvidia.github.io/xr-ai/latest/guide/contributing.html)\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+    subprocess.run(
+        ["git", "add", "README.md", "CONTRIBUTING.md"],
+        cwd=repository,
+        check=True,
+    )
+
+    errors = check_links(repository, rendered)
+
+    assert len(errors) == 1
+    assert "CONTRIBUTING.md" in errors[0]
+    assert "rendered page does not exist" in errors[0]
 
 
 def test_getting_started_skill_routes_to_versioned_setup_docs() -> None:
@@ -240,6 +263,117 @@ def test_readme_relative_links_resolve_and_docs_links_are_rendered() -> None:
             )
 
 
+def test_consolidated_readme_headings_keep_github_compatibility_anchors() -> None:
+    expected = {
+        "README.md": """
+            public-beta-notice what-is-xr-ai requirements architecture quickstart
+            model-servers-shared-ai-services simple-vlm-example-vision-qa-over-voice-text
+            step-1-start-the-server step-2-connect-a-client
+            lab-instrument-monitoring-marker-associated-readings-foreground-voice
+            xr-render-demo-voice-driven-sphere-in-cloudxr step-1-start-model-servers-once
+            step-2-start-the-demo hub-only-standalone clients web android
+            ios-and-visionos networking tests deeper-docs project-meta ios--visionos
+        """,
+        "agent-samples/lab-instrument-monitoring/README.md": """
+            file-outputs foreground-routing-eval
+        """,
+        "agent-samples/simple-vlm-example/README.md": "relay-visibility",
+        "agent-samples/tea-making-sample/README.md": """
+            run-it foreground-behavior foreground-routing-eval file-outputs
+            configuration safety
+        """,
+        "agent-samples/xr-render-demo/README.md": """
+            file-map composition-chain how-to-extend add-a-subagent
+            add-a-scene-tool-function-group add-an-eval-case edit-a-prompt running
+        """,
+        "agent-samples/xr-render-demo/eval/README.md": """
+            live-drivers prompt-tuning-law prompt-tuning-loop writing-a-case
+            dont-train-on-the-test-set what-the-harness-does-not-cover
+        """,
+        "agent-sdk/README.md": "removed-in-this-release",
+        "agent-sdk/xr-ai-hub/README.md": """
+            subscription-and-roster-contract frames return-path readiness
+            shared-memory-and-codec-extensions
+        """,
+        "agent-sdk/xr-ai-models/README.md": """
+            contract quickstart profile-contract deployment-profiles protocols
+            remote-and-hosted-nim-endpoints riva-grpc-speech-nim-stttts tests
+            remote--hosted-nim-endpoints remote-hosted-nim-endpoints
+        """,
+        "agent-sdk/xr-ai-tools/README.md": """
+            native-tools-and-model-tool-calls typed-capability-services
+            image-selection-and-vlm-query-tools marker-tracking
+            magenta-polygon-image-editing
+        """,
+        "agent-sdk/xr-ai-voice/README.md": """
+            usage multiple-voice-producers voice-tuning-and-data-echo
+        """,
+        "client-samples/android/README.md": """
+            feature-set architecture setup requirements open-in-android-studio
+            connecting-to-the-server permissions dependencies
+        """,
+        "client-samples/ios-visionos/README.md": """
+            ai-sdk-sample repository-layout creating-the-xcode-project 1-new-project
+            2-add-destinations 3-add-the-streamkit-package
+            4-replace-the-generated-source-files 5-infoplist-entries
+            6-visionos-passthrough-camera-device-only bundling-enterpriselicense
+            7-build-and-run simulator-camera-feed
+            trusting-the-hubs-self-signed-cert-one-time-per-device
+            enable-full-trust-toggle-does-not-appear
+            connection-fails-with-errsslbadcert--1202-after-the-cert-is-trusted
+            tls-succeeds-but-the-room-rejects-the-token-with-401
+            microphone-fails-to-start-with-a-timed-out-error
+            orange-mic-indicator-stays-lit-after-stopping-audio
+            mic-camera-go-dead-while-the-ui-still-says-on launching-xr-cloudxr
+            two-parallel-transports
+            server-prerequisite-change-nv_device_profile-to-auto-native
+            cloudxrkit-spm-dependency apple-developer-program on-device-flow
+            cert-trust-notes render-target quick-start-usage adding-a-custom-backend
+            token-server-livekit
+        """,
+        "client-samples/native/README.md": """
+            streamkit-for-native-c-livekit-backed-client running-the-tests
+            constraints-in-the-current-native-backend what-streamkit-is-and-isnt
+            what-streamkit-adds-on-top-of-livekit
+            1-a-single-entry-point-with-decoupled-media
+            2-a-typed-connectionstate-enum 3-typed-errors 4-the-agent-status-channel
+            5-audioconfig-and-microphonemode 6-token-acquisition
+            7-frame-injection-optional-for-external-video-sources
+            the-streamingbackend-interface-you-need-to-implement
+            implementing-livekitbackend-in-c what-you-get-for-free-once-the-backend-is-done
+        """,
+        "client-samples/web-xr-build/README.md": """
+            web-xr-build-web-vendor-bundles usage bumping-the-cloudxr-sdk-version
+            bumping-livekit-client files
+        """,
+        "services/embedding-server/README.md": """
+            quickstart endpoints config-keys-embedding_serveryaml matryoshka-dimensions
+            example-request choosing-the-vllm-runtime-pip-vs-docker
+        """,
+        "services/llama-nemotron-llm/README.md": """
+            quickstart endpoints config-keys-llama_nemotron_llm_serveryaml
+            tool-calling-native-llama-31-format reasoning-toggle-per-turn-via-system-prompt
+            choosing-the-vllm-runtime-pip-vs-docker swap-models license
+        """,
+        "services/nemotron3-nano-llm/README.md": """
+            quickstart endpoints config-keys-nemotron3_nano_llm_serveryaml
+            tool-calling-native-qwen3-coder-format reasoning-mode-thinking
+            sampling-recommendations-from-the-model-card hardware-notes swap-models
+            notes license
+        """,
+        "skills/README.md": "available-skills setup",
+        "tests/README.md": """
+            xr-ai-integration-tests layout running gpu-docker-nvenc-tests
+            test-taxonomy no-cross-talk-guarantee
+        """,
+    }
+
+    anchor_pattern = re.compile(r'<a id="([^"]+)"></a>')
+    for relative, required in expected.items():
+        anchors = set(anchor_pattern.findall((_ROOT / relative).read_text()))
+        assert set(required.split()) <= anchors, relative
+
+
 def test_service_root_commands_declare_their_working_directory() -> None:
     for readme_path in sorted((_ROOT / "services").glob("*/README.md")):
         source = _visible_markdown(readme_path.read_text(encoding="utf-8"))
@@ -251,6 +385,10 @@ def test_service_root_commands_declare_their_working_directory() -> None:
 
 def test_reworded_headings_keep_compatibility_anchors() -> None:
     clients = (_ROOT / "docs/source/getting_started/clients.md").read_text()
+    hub = (_ROOT / "docs/source/reference/agent-sdk-hub.md").read_text()
+    models = (_ROOT / "docs/source/reference/agent-sdk-models.md").read_text()
+    tools = (_ROOT / "docs/source/reference/agent-sdk-tools.md").read_text()
+    voice = (_ROOT / "docs/source/reference/agent-sdk-voice.md").read_text()
     xr_render = (_ROOT / "docs/source/reference/xr-render-demo.md").read_text()
 
     for anchor in (
@@ -267,4 +405,48 @@ def test_reworded_headings_keep_compatibility_anchors() -> None:
         "adding-a-client-for-a-new-platform",
     ):
         assert f"({anchor})=" in clients
+    for page, anchors in (
+        (
+            hub,
+            (
+                "subscription-and-roster-contract",
+                "frames",
+                "return-path",
+                "readiness",
+            ),
+        ),
+        (
+            models,
+            (
+                "contract",
+                "quickstart",
+                "profile-contract",
+                "deployment-profiles",
+                "protocols",
+                "remote-and-hosted-nim-endpoints",
+                "remote-hosted-nim-endpoints",
+                "riva-grpc-speech-nim-stttts",
+            ),
+        ),
+        (
+            tools,
+            (
+                "native-tools-and-model-tool-calls",
+                "typed-capability-services",
+                "image-selection-and-vlm-query-tools",
+                "magenta-polygon-image-editing",
+            ),
+        ),
+        (
+            voice,
+            (
+                "usage",
+                "multiple-voice-producers",
+                "voice-tuning-and-data-echo",
+            ),
+        ),
+    ):
+        for anchor in anchors:
+            assert f"({anchor})=" in page
+    assert '<a id="remote--hosted-nim-endpoints"></a>' in models
     assert "(worker-configuration)=" in xr_render

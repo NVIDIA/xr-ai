@@ -25,5 +25,19 @@ The sample also defaults to insecure port 7880 for direct LiveKit SDK debugging,
 but that internal port must remain restricted to the XR AI host or a trusted
 development network.
 
+<!-- Compatibility anchors for headings consolidated into the documentation. -->
+<a id="streamkit-for-native-c-livekit-backed-client"></a>
+<a id="running-the-tests"></a><a id="constraints-in-the-current-native-backend"></a>
+<a id="what-streamkit-is-and-isnt"></a>
+<a id="what-streamkit-adds-on-top-of-livekit"></a>
+<a id="1-a-single-entry-point-with-decoupled-media"></a>
+<a id="2-a-typed-connectionstate-enum"></a><a id="3-typed-errors"></a>
+<a id="4-the-agent-status-channel"></a>
+<a id="5-audioconfig-and-microphonemode"></a><a id="6-token-acquisition"></a>
+<a id="7-frame-injection-optional-for-external-video-sources"></a>
+<a id="the-streamingbackend-interface-you-need-to-implement"></a>
+<a id="implementing-livekitbackend-in-c"></a>
+<a id="what-you-get-for-free-once-the-backend-is-done"></a>
+
 Refer to [Connecting clients](https://nvidia.github.io/xr-ai/latest/getting_started/clients.html#native-c)
 for the current backend contract and limitations.

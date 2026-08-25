@@ -71,6 +71,9 @@ ready.
 The shared models remain running after the sample stops. From this directory,
 stop them with `uv run --project ../model-servers model_servers --stop`.
 
+<!-- Compatibility anchor for a heading consolidated into the documentation. -->
+<a id="relay-visibility"></a>
+
 Refer to the [sample reference](https://nvidia.github.io/xr-ai/latest/reference/simple-vlm-example.html)
 for architecture, configuration, warmup behavior, voice gating, and Relay
 output.

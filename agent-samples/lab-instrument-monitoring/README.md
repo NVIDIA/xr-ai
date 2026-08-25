@@ -79,6 +79,9 @@ is available at `http://127.0.0.1:8092` by default.
 The shared models remain running after the sample stops. From this directory,
 stop them with `uv run --project ../model-servers model_servers --stop`.
 
+<!-- Compatibility anchors for headings consolidated into the documentation. -->
+<a id="file-outputs"></a><a id="foreground-routing-eval"></a>
+
 Refer to the
 [sample reference](https://nvidia.github.io/xr-ai/latest/reference/lab-instrument-monitoring.html)
 for architecture, privacy and output contracts, marker setup, configuration,

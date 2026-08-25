@@ -24,3 +24,6 @@ boundaries.
 
 Refer to the [migration guide](https://nvidia.github.io/xr-ai/latest/reference/migrations.html) for
 breaking-change replacements.
+
+<!-- Compatibility anchor for a heading consolidated into the documentation. -->
+<a id="removed-in-this-release"></a>

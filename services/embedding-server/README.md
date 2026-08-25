@@ -15,6 +15,12 @@ uv run --project services/embedding-server embedding_server \
   --config services/embedding-server/embedding_server.yaml
 ```
 
+<!-- Compatibility anchors for headings consolidated into the documentation. -->
+<a id="quickstart"></a><a id="endpoints"></a>
+<a id="config-keys-embedding_serveryaml"></a>
+<a id="matryoshka-dimensions"></a><a id="example-request"></a>
+<a id="choosing-the-vllm-runtime-pip-vs-docker"></a>
+
 Refer to [AI inference servers](https://nvidia.github.io/xr-ai/latest/components/ai-services.html#per-server-notes)
 for endpoints, dimensions, deployment, cache, and runtime guidance. The
 adjacent `embedding_server.yaml` and its comments define the standalone

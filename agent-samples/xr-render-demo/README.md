@@ -82,6 +82,11 @@ Ctrl+C to stop the demo stack; do not stop its individual child processes.
 The shared models remain running after the sample stops. From this directory,
 stop them with `uv run --project ../model-servers model_servers --stop`.
 
+<!-- Compatibility anchors for headings consolidated into the documentation. -->
+<a id="file-map"></a><a id="composition-chain"></a><a id="how-to-extend"></a>
+<a id="add-a-subagent"></a><a id="add-a-scene-tool-function-group"></a>
+<a id="add-an-eval-case"></a><a id="edit-a-prompt"></a><a id="running"></a>
+
 Refer to the [sample reference](https://nvidia.github.io/xr-ai/latest/reference/xr-render-demo.html)
 for client selection, the process stack, extension points, evaluation, GPU
 placement, and tracing guidance.

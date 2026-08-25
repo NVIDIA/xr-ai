@@ -24,3 +24,9 @@ uv run xr_render_demo_live_manip
 uv run xr_render_demo_live_garble
 uv run xr_render_demo_live_explore
 ```
+
+<!-- Compatibility anchors for headings consolidated into the documentation. -->
+<a id="live-drivers"></a><a id="prompt-tuning-law"></a>
+<a id="prompt-tuning-loop"></a><a id="writing-a-case"></a>
+<a id="dont-train-on-the-test-set"></a>
+<a id="what-the-harness-does-not-cover"></a>

@@ -60,6 +60,20 @@ evaluation, and adaptation guidance.
 For repository constraints and dependency boundaries, refer to
 [`AGENTS.md`](AGENTS.md) and [`DEPENDENCIES.md`](DEPENDENCIES.md).
 
+<!-- Compatibility anchors for headings consolidated into the documentation. -->
+<a id="public-beta-notice"></a><a id="what-is-xr-ai"></a>
+<a id="requirements"></a><a id="architecture"></a><a id="quickstart"></a>
+<a id="model-servers-shared-ai-services"></a>
+<a id="simple-vlm-example-vision-qa-over-voice-text"></a>
+<a id="step-1-start-the-server"></a><a id="step-2-connect-a-client"></a>
+<a id="lab-instrument-monitoring-marker-associated-readings-foreground-voice"></a>
+<a id="xr-render-demo-voice-driven-sphere-in-cloudxr"></a>
+<a id="step-1-start-model-servers-once"></a><a id="step-2-start-the-demo"></a>
+<a id="hub-only-standalone"></a><a id="clients"></a><a id="web"></a>
+<a id="android"></a><a id="ios-and-visionos"></a><a id="networking"></a>
+<a id="tests"></a><a id="deeper-docs"></a><a id="project-meta"></a>
+<a id="ios--visionos"></a>
+
 ## Contributing
 
 Refer to [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contribution process and

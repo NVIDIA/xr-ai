@@ -81,6 +81,11 @@ allow microphone and camera access, and connect. Begin voice commands with
 The shared models remain running after the sample stops. From this directory,
 stop them with `uv run --project ../model-servers model_servers --stop`.
 
+<!-- Compatibility anchors for headings consolidated into the documentation. -->
+<a id="run-it"></a><a id="foreground-behavior"></a>
+<a id="foreground-routing-eval"></a><a id="file-outputs"></a>
+<a id="configuration"></a><a id="safety"></a>
+
 Refer to the [sample reference](https://nvidia.github.io/xr-ai/latest/reference/tea-making-sample.html)
 for architecture, configuration, output contracts, safety, foreground-routing
 behavior, evaluation, and adaptation guidance.

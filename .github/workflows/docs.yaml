@@ -35,6 +35,7 @@ on:
     tags: ["v*"]
     paths:
       - "README.md"
+      - "CONTRIBUTING.md"
       - "**/README.md"
       - "docs/**"
       - "agent-sdk/*/README.md"
@@ -55,6 +56,7 @@ on:
     types: [opened, synchronize, reopened]
     paths:
       - "README.md"
+      - "CONTRIBUTING.md"
       - "**/README.md"
       - "docs/**"
       - "agent-sdk/*/README.md"
