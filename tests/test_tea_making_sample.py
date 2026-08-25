@@ -1327,15 +1327,34 @@ def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:
     override.write_text("foreground_prompt: Explicit override\n")
     assert load_config(override).foreground_prompt == "Explicit override"
 
+    matching_prompt = tmp_path / "matching-prompt.txt"
+    matching_prompt.write_text((prompt_dir / "foreground_prompt.txt").read_text())
+    override.write_text("foreground_prompt_file: matching-prompt.txt\n")
+    matching_config = load_config(override)
+    assert matching_config.foreground_prompt == config.foreground_prompt
+
 
 def test_foreground_prompt_has_route_eval_cases() -> None:
     cases = yaml.safe_load((_SAMPLE / "eval/cases.yaml").read_text())
-    prompt = (
+    common_prompt = (
         _WORKER / "tea_making_worker/prompts/foreground_prompt.txt"
     ).read_text()
+    idle_prompt = (
+        _WORKER / "tea_making_worker/prompts/foreground_idle.txt"
+    ).read_text()
+    active_prompt = (
+        _WORKER / "tea_making_worker/prompts/foreground_active.txt"
+    ).read_text()
     refusal = "I can only help with the active tea guide right now."
-    assert "While the tea guide is active, decline requests" in prompt
-    assert f"reply exactly:\n{refusal}" in prompt
+    idle_model_prompt = f"{common_prompt}\n\n{idle_prompt}".lower()
+    active_model_prompt = f"{common_prompt}\n\n{active_prompt}".lower()
+    assert refusal not in common_prompt
+    assert refusal not in idle_prompt
+    for worked_example_term in ("holding", "color", "shirt", "clothing"):
+        assert worked_example_term not in idle_model_prompt
+        assert worked_example_term not in active_model_prompt
+    assert "general-purpose assistant" in idle_prompt
+    assert f"reply exactly:\n{refusal}" in active_prompt
 
     root_cases = [case for case in cases if case.get("route", "root") == "root"]
     assert {case["expected_tool"] for case in root_cases} == {
@@ -1388,3 +1407,87 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
         if case["name"] == "idle-answers-unrelated-general-knowledge"
     )
     assert idle_unrelated["forbidden_response"] == refusal
+    idle_visual = next(
+        case
+        for case in root_cases
+        if case["name"] == "idle-routes-visible-shirt-color"
+    )
+    assert idle_visual["expected_tool"] == "current_view"
+    assert idle_visual["forbidden_response"] == refusal
+    active_visual = next(
+        case
+        for case in active_cases
+        if case["name"] == "active-rejects-unrelated-visual-question"
+    )
+    assert active_visual["expected_tool"] is None
+    assert active_visual["expected_response"] == refusal
+
+
+def _foreground_for_route_test(prompt: str) -> ForegroundAgent:
+    images = SimpleNamespace(images=ImageRegistry())
+    foreground = ForegroundAgent(
+        llm=SimpleNamespace(),  # type: ignore[arg-type]
+        images=images,  # type: ignore[arg-type]
+        vlm=SimpleNamespace(),  # type: ignore[arg-type]
+        rag=SimpleNamespace(),  # type: ignore[arg-type]
+        guidance=SimpleNamespace(
+            active_context=lambda participant_id: (
+                None if participant_id == "idle" else '{"step":"fill_water"}'
+            ),
+            active_tools=lambda _participant_id: ToolSet(()),
+        ),  # type: ignore[arg-type]
+        background_context=SimpleNamespace(),  # type: ignore[arg-type]
+        change_watch=SimpleNamespace(),  # type: ignore[arg-type]
+        transcript=SimpleNamespace(),  # type: ignore[arg-type]
+        video_log=SimpleNamespace(),  # type: ignore[arg-type]
+        prompt=prompt,
+    )
+    foreground._root_tools = lambda *_args, **_kwargs: ToolSet(())
+    foreground._background_tools = lambda *_args, **_kwargs: ToolSet(())
+    return foreground
+
+
+def test_foreground_route_appends_policy_through_constructor() -> None:
+    config = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
+    foreground = _foreground_for_route_test(config.foreground_prompt)
+
+    idle_prompt, _, idle_route = foreground._prepare_route(
+        "idle", ctx=None, timestamp_us=None
+    )
+    active_prompt, _, active_route = foreground._prepare_route(
+        "active", ctx=None, timestamp_us=None
+    )
+    refusal = "I can only help with the active tea guide right now."
+
+    assert idle_route == "root"
+    assert "general-purpose assistant" in idle_prompt
+    assert refusal not in idle_prompt
+    assert active_route == "tea"
+    assert "general-purpose assistant" not in active_prompt
+    assert refusal in active_prompt
+
+
+def test_foreground_route_appends_policy_to_prompt_override(tmp_path: Path) -> None:
+    override = tmp_path / "worker.yaml"
+    override.write_text("foreground_prompt: Explicit override\n")
+    config = load_config(override)
+    foreground = _foreground_for_route_test(config.foreground_prompt)
+
+    idle_prompt, _, idle_route = foreground._prepare_route(
+        "idle", ctx=None, timestamp_us=None
+    )
+    active_prompt, _, active_route = foreground._prepare_route(
+        "active", ctx=None, timestamp_us=None
+    )
+    refusal = "I can only help with the active tea guide right now."
+
+    assert idle_route == "root"
+    assert idle_prompt.startswith("Explicit override\n\n")
+    assert "general-purpose assistant" in idle_prompt
+    assert refusal not in idle_prompt
+    assert active_route == "tea"
+    assert active_prompt.startswith("Explicit override\n\n")
+    assert refusal in active_prompt
+    assert active_prompt.endswith(
+        'Active tea guide:\n{"step":"fill_water"}'
+    )

@@ -8,6 +8,10 @@
   query: What is the capital of France?
   expected_tool: null
   forbidden_response: I can only help with the active tea guide right now.
+- name: idle-routes-visible-shirt-color
+  query: What color is the shirt?
+  expected_tool: current_view
+  forbidden_response: I can only help with the active tea guide right now.
 - name: start-tea-guide
   query: Help me make a cup of tea.
   expected_tool: workflow__start
@@ -81,6 +85,13 @@
   route: active
   step: start_steeping
   query: Please translate good morning into Japanese.
+  expected_tool: null
+  expected_response: I can only help with the active tea guide right now.
+
+- name: active-rejects-unrelated-visual-question
+  route: active
+  step: fill_water
+  query: What color is the person's shirt?
   expected_tool: null
   expected_response: I can only help with the active tea guide right now.
 
