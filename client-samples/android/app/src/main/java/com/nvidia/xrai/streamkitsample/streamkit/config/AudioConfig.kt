@@ -10,11 +10,15 @@ package com.nvidia.xrai.streamkitsample.streamkit.config
  *
  * ## Presets
  * ```kotlin
- * AudioConfig.DEFAULT          // Voice processing — best for voice calls
- * AudioConfig.SOFTWARE         // WebRTC DSP stack
- * AudioConfig.RAW              // No processing — let the server handle DSP
+ * AudioConfig.DEFAULT          // LiveKit Android capture defaults
+ * AudioConfig.SOFTWARE         // Same behavior in the current Android backend
+ * AudioConfig.RAW              // Same behavior in the current Android backend
  * AudioConfig.DISABLED         // Microphone off
  * ```
+ *
+ * The mode names preserve the cross-platform StreamKit configuration shape.
+ * The current Android backend maps every enabled mode to LiveKit's default
+ * microphone capture and does not select different DSP settings.
  */
 data class AudioConfig(
     val mode: MicrophoneMode = MicrophoneMode.VOICE_PROCESSING,
@@ -27,28 +31,19 @@ data class AudioConfig(
      */
     enum class MicrophoneMode {
         /**
-         * Android hardware acoustic echo cancellation / AGC / noise suppression via
-         * [android.media.audiofx.AcousticEchoCanceler] etc. Mapped to
-         * `echoCancellation=false` on the LiveKit WebRTC track because the OS-level
-         * processing happens before the audio ever reaches WebRTC.
-         *
-         * Mirrors Swift `.voiceProcessing` (AUVoiceIO).
+         * Uses LiveKit Android's default microphone capture settings.
          */
         VOICE_PROCESSING,
 
         /**
-         * WebRTC software DSP: echo cancellation, AGC, and noise suppression applied
-         * inside libwebrtc. Use when hardware effects are unavailable.
-         *
-         * Mirrors Swift `.softwareProcessing` and web `MicrophoneMode.SOFTWARE_PROCESSING`.
+         * Reserved for cross-platform parity; currently uses the same LiveKit
+         * Android defaults as [VOICE_PROCESSING].
          */
         SOFTWARE_PROCESSING,
 
         /**
-         * Raw PCM capture — all DSP disabled. Choose this when the server handles
-         * audio processing (for example, an application voice worker).
-         *
-         * Mirrors Swift `.raw` and web `MicrophoneMode.RAW`.
+         * Reserved for cross-platform parity; currently uses the same LiveKit
+         * Android defaults as [VOICE_PROCESSING].
          */
         RAW,
 
@@ -61,13 +56,13 @@ data class AudioConfig(
     }
 
     companion object {
-        /** Voice-processing mode — best default for voice calls. */
+        /** LiveKit Android's default microphone capture. */
         @JvmField val DEFAULT = AudioConfig(mode = MicrophoneMode.VOICE_PROCESSING)
 
-        /** WebRTC software DSP. */
+        /** Cross-platform alias; equivalent to [DEFAULT] in this backend. */
         @JvmField val SOFTWARE = AudioConfig(mode = MicrophoneMode.SOFTWARE_PROCESSING)
 
-        /** Raw PCM — no DSP. */
+        /** Cross-platform alias; equivalent to [DEFAULT] in this backend. */
         @JvmField val RAW = AudioConfig(mode = MicrophoneMode.RAW)
 
         /** Microphone disabled. */

@@ -57,6 +57,9 @@ accepted speech or typed query         ├─> current frame + generic VLM query
 out to independent consumers. LiveKit remains inside DeviceIOHub and does not
 appear in the worker's agent contracts.
 
+The worker uses native `xr_ai_runtime` agents and `xr_ai_tools` instances. It
+does not use NVIDIA Agent Toolkit, PydanticAI, MCP clients, or MCP servers.
+
 ## Agent responsibilities
 
 | Agent | Owns | Does not own |
@@ -274,11 +277,13 @@ proxy in front of it.
 
 ## File outputs and persistence
 
-Every non-empty final STT result is written to `transcript.jsonl` before voice
-gating, including ambient speech rejected by a configured wake phrase. Wake-word
-gating controls dispatch to the foreground, not storage: rejected speech is
-still transcribed and persisted. The default gate accepts `agent` and
-`hey agent`, plays a listening chime, and allows one follow-up utterance for
+Each non-empty final STT result delivered on `voice.transcript` is written to
+`transcript.jsonl` before voice gating, including ambient speech rejected by a
+configured wake phrase. Transcript-topic delivery is bounded and best effort;
+overflow drops the oldest pending transcript, and shutdown discards pending
+items. Wake-word gating controls dispatch to the foreground, not storage:
+delivered rejected speech is still persisted. The default gate accepts `agent`
+and `hey agent`, plays a listening chime, and allows one follow-up utterance for
 five seconds. Accepted speech reaches the foreground as a `UserQuery`. Typed
 text reaches the foreground but is not an STT transcript.
 

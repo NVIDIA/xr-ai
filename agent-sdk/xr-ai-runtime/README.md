@@ -9,5 +9,5 @@ Typed participant-scoped publication and fan-out for composable XR AI agents.
 Agents own their tools, resources, concurrency, and lifecycle; the runtime owns
 only event delivery tasks.
 
-Refer to the [xr-ai-runtime guide](../../docs/source/reference/agent-sdk-runtime.md)
-and the [generated Python API](../../docs/source/reference/python/index.md).
+Refer to the
+[xr-ai-runtime guide](../../docs/source/reference/agent-sdk-runtime.md).

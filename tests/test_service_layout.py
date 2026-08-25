@@ -197,6 +197,45 @@ def test_xr_render_checks_the_web_xr_vendor_bundle() -> None:
 
     assert "client-samples/web-xr/vendor" in source
     assert "client-samples/web/vendor" not in source
+    assert 'vendor_dir / "cloudxr-sdk.esm.mjs"' in source
+    assert 'vendor_dir / "livekit-client.esm.mjs"' in source
+
+
+def test_xr_render_repairs_an_incomplete_web_xr_vendor_bundle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sample = _load_module(
+        "service_layout_render_vendor_bundle",
+        "agent-samples/xr-render-demo/main.py",
+    )
+    sample_root = tmp_path / "agent-samples" / "xr-render-demo"
+    sample_root.mkdir(parents=True)
+    vendor_dir = (sample_root / "../../client-samples/web-xr/vendor").resolve()
+    vendor_dir.mkdir(parents=True)
+    (vendor_dir / "cloudxr-sdk.esm.mjs").write_text("cloudxr")
+    build_script = (
+        sample_root / "../../client-samples/web-xr-build/build.sh"
+    ).resolve()
+    build_script.parent.mkdir(parents=True)
+    build_script.write_text("#!/bin/sh\n")
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], *, cwd: str) -> subprocess.CompletedProcess:
+        calls.append(command)
+        (vendor_dir / "livekit-client.esm.mjs").write_text("livekit")
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(sample, "_BASE", sample_root)
+    monkeypatch.setattr(sample.shutil, "which", lambda _command: "/usr/bin/npm")
+    monkeypatch.setattr(sample.subprocess, "run", fake_run)
+
+    sample._ensure_web_vendor()
+    assert calls == [[str(build_script)]]
+
+    calls.clear()
+    sample._ensure_web_vendor()
+    assert calls == []
 
 
 def test_every_service_editable_source_path_resolves() -> None:

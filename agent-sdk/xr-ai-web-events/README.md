@@ -9,5 +9,5 @@ Bounded, read-only browser presentation for application-selected runtime events.
 It is an observation aid, not persistence, and defaults to a loopback-only HTTP
 listener without application authentication or TLS.
 
-Refer to the [xr-ai-web-events guide](../../docs/source/reference/agent-sdk-web-events.md)
-and the [generated Python API](../../docs/source/reference/python/index.md).
+Refer to the
+[xr-ai-web-events guide](../../docs/source/reference/agent-sdk-web-events.md).

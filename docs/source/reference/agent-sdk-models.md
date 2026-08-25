@@ -61,15 +61,21 @@ credentials needed by a managed service itself use `deployment.credentials`.
 
 | Preset | Target | Important behavior |
 |---|---|---|
-| `cosmos3_nano_reasoner` | Cosmos3 Nano VLM | Image and video; no reasoning-field mapping |
-| `cosmos_vlm` | Cosmos-Reason1 compatibility | Image and video; thinking disabled by default |
+| `cosmos3_nano_reasoner` | Cosmos3 Nano VLM | Image; video requires `max_videos_per_prompt >= 1`; no reasoning-field mapping |
+| `cosmos_vlm` | Cosmos-Reason1 compatibility | Image; video requires `max_videos_per_prompt >= 1`; thinking disabled by default |
 | `llama_nemotron` | Llama Nemotron LLM | Server-side `llama3_json` tool calls |
 | `nemotron3_nano` | Nemotron 3 Nano LLM | Normalizes the `reasoning` field |
-| `nemotron_omni` | Nemotron Omni | Tool calls, image and video, `reasoning_content` normalization |
+| `nemotron_omni` | Nemotron Omni | Tool calls, image and video, `reasoning_content` normalization; thinking disabled unless requested |
 | `nemotron_embedding` | Embedding server | OpenAI-compatible dense vectors |
 | `parakeet_stt` | STT server | OpenAI-compatible transcription |
 | `piper_tts` | Piper TTS | OpenAI-compatible speech synthesis |
 | `magpie_tts` | Magpie TTS | OpenAI-compatible speech synthesis |
+
+The Cosmos adapter capability describes the supported request shape, but the
+server controls whether video input is enabled. Every checked-in `vlm-server`
+profile sets `max_videos_per_prompt: 0` to avoid reserving unused activation
+memory. Set it to at least `1` and restart the persistent VLM server before
+sending a video request.
 
 `ChatResponse.reasoning` is the canonical post-normalization field. Model
 adapters absorb whether the provider calls it `reasoning` or
@@ -125,3 +131,13 @@ STT accepts 16-bit PCM WAV or raw int16 PCM with an explicit sample rate. TTS
 also accepts `voice` and `sample_rate`. A hosted NVCF endpoint uses TLS,
 `api_key_env`, its `function_id`, and `health_check: false` because it has no
 Riva channel-ready health surface.
+
+## Tests
+
+The CPU-only `tests/test_models_*.py` modules exercise model wire formats with
+the `tests/_stub_openai.StubOpenAI` httpx mock transport. Run them from the
+repository root:
+
+```bash
+uv run --project tests pytest -q tests/test_models_*.py
+```

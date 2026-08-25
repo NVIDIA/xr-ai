@@ -29,7 +29,7 @@ Tests that require a real GPU, Docker, or NVENC use the `gpu` marker and run
 only on a suitably configured developer host:
 
 ```bash
-bash tests/run_local_gpu_tests.sh
+bash run_local_gpu_tests.sh
 ```
 
 Pass extra pytest arguments after the script name to select a file or test.

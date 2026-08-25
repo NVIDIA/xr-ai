@@ -514,7 +514,11 @@ cleanup.
 - **rag-service** is a typed dense document-retrieval capability. Point
   `documents_dir` at an application-owned tree and `models_config` at a profile
   with an `embedding` role. It chunks and embeds supported documents at
-  startup, caches its index, and returns matches above `min_score`.
+  startup, caches its index, and returns matches above `min_score`. Start the
+  embedding service first, RAG second, and the consuming worker last. The cache
+  includes document content, indexing settings, and the model profile; change
+  `cache_key` when a remote endpoint changes its backing model without changing
+  that profile.
 - **video-memory-service** owns recorded chunk queries, NVDEC, and PNG output
   behind typed msgpack over ZMQ on port 8310. Set `recordings_dir` in its YAML to
   enable recorded-video operations; the path must match the hub's

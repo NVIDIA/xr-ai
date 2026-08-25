@@ -20,14 +20,15 @@ from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent, WebEventsAgent
 
 viewer = runtime.register("web-events", WebEventsAgent(title="Agent events"))
 
-await ctx.publish(
-    WEB_EVENT_TOPIC,
-    WebEvent(
-        topic="application.reading",
-        title="Readings",
-        payload=reading.model_dump(mode="json"),
-    ),
-)
+async def report_reading(reading, ctx) -> None:
+    await ctx.publish(
+        WEB_EVENT_TOPIC,
+        WebEvent(
+            topic="application.reading",
+            title="Readings",
+            payload=reading.model_dump(mode="json"),
+        ),
+    )
 
 async with viewer:
     async with runtime:

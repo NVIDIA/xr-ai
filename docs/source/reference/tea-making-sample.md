@@ -104,6 +104,8 @@ accepted speech or typed query         ├─> GuidanceAgent observation loop
 `VoiceAgent` publishes participant-scoped queries, transcripts, and lifecycle
 events. The runtime fans typed events out to peer agents. Agents call peer
 tools directly, and each background agent owns its participant tasks.
+The worker uses native `xr_ai_runtime` agents and `xr_ai_tools` instances; it
+does not use NVIDIA Agent Toolkit, PydanticAI, MCP clients, or MCP servers.
 Wake-word gating is the sample default; callers can explicitly select
 always-on speech. Every spoken response is also sent to the connection client
 on `agent.response` so the client can render accessible text alongside audio.

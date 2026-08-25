@@ -40,16 +40,23 @@ text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
 session remains private. Applications that need a shared public
 `HubVoiceTransport` construct and inject one explicitly.
 
-Every non-empty final STT result is published on `VOICE_TRANSCRIPT_TOPIC`
-before wake-phrase filtering. Accepted speech and untopiced typed text become
-`UserQuery`; named application and control messages are never interpreted as
-user text. Optional participant join, leave, and interruption topics let
-application agents own their state cleanup.
+Each non-empty final STT result is queued for publication on
+`VOICE_TRANSCRIPT_TOPIC` before wake-phrase filtering. Accepted speech and
+untopiced typed text become `UserQuery`; named application and control messages
+are never interpreted as user text. Optional participant join, leave, and
+interruption topics let application agents own their state cleanup.
 
-Transcript delivery uses a bounded FIFO so a slow subscriber cannot delay STT
-or command gating. Join and leave publication is serialized per participant and
-does not block the media processor. VoiceAgent cancels and awaits all owned
-delivery tasks on shutdown.
+Transcript delivery uses one private 32-entry FIFO so a slow subscriber cannot
+delay STT or command gating. The queue preserves retained-item order and drops
+its oldest pending transcript when full. Shutdown cancels active delivery and
+discards pending transcripts. Runtime subscribers must enqueue long-running
+work internally and return promptly.
+
+Join publication occurs after the voice gate handles its greeting. DeviceIOHub
+suppresses duplicate roster joins while a participant remains connected and
+emits a new join after a leave and reconnect. Join and leave publication is
+serialized per participant and does not block the media processor. `VoiceAgent`
+cancels and awaits all owned delivery tasks on shutdown.
 
 ## Voice output and interruption
 

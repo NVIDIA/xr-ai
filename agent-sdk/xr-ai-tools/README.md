@@ -9,5 +9,4 @@ Native finite and streaming tools for model loops, live and recorded vision,
 tracking, spatial operations, memory, and typed capability services. Every tool
 execution passes through NeMo Relay.
 
-Refer to the [xr-ai-tools guide](../../docs/source/reference/agent-sdk-tools.md) and
-the [generated Python API](../../docs/source/reference/python/index.md).
+Refer to the [xr-ai-tools guide](../../docs/source/reference/agent-sdk-tools.md).

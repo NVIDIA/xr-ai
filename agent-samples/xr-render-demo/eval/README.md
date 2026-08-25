@@ -17,4 +17,10 @@ uv run xr_render_demo_eval
 uv run xr_render_demo_eval utterances
 uv run xr_render_demo_eval_supervisor
 uv run xr_render_demo_eval_subagents placement
+
+uv run xr_render_demo_live_smoke
+uv run xr_render_demo_live_pose_matrix
+uv run xr_render_demo_live_manip
+uv run xr_render_demo_live_garble
+uv run xr_render_demo_live_explore
 ```

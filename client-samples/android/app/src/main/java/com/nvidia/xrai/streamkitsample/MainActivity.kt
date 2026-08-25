@@ -624,9 +624,7 @@ private fun AudioModeRow(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val options = listOf(
-        AudioConfig.MicrophoneMode.VOICE_PROCESSING to "Voice Processing",
-        AudioConfig.MicrophoneMode.SOFTWARE_PROCESSING to "Software (AEC on)",
-        AudioConfig.MicrophoneMode.RAW to "Raw (no DSP)",
+        AudioConfig.MicrophoneMode.VOICE_PROCESSING to "LiveKit default",
     )
     val selectedLabel = options.firstOrNull { it.first == mode }?.second ?: "—"
 

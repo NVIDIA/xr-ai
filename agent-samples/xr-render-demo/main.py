@@ -204,7 +204,8 @@ def _ensure_web_vendor() -> None:
     """
     vendor_dir   = (_BASE / "../../client-samples/web-xr/vendor").resolve()
     cloudxr_out  = vendor_dir / "cloudxr-sdk.esm.mjs"
-    if cloudxr_out.exists():
+    livekit_out  = vendor_dir / "livekit-client.esm.mjs"
+    if cloudxr_out.exists() and livekit_out.exists():
         return
 
     build_sh = (_BASE / "../../client-samples/web-xr-build/build.sh").resolve()

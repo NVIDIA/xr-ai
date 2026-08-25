@@ -11,11 +11,17 @@ participant data, status, telemetry, and host-injected audio and video frames.
 ```bash
 cmake -S . -B build -DLIVEKIT_SDK_ROOT=/path/to/livekit-cpp-sdk
 cmake --build build
-./build/bin/streamkit_sample --host 192.168.1.100 --token <jwt>
+./build/bin/streamkit_sample --host 192.168.1.100 --port 8080 \
+  --secure --token <jwt>
 ```
 
 Omit `LIVEKIT_SDK_ROOT` for stub mode. Build unit tests with
 `-DSTREAMKIT_BUILD_TESTS=ON` and run `ctest --test-dir build`.
+
+Trust the hub's TLS certificate on the native host before connecting. The
+sample also defaults to insecure port 7880 for direct LiveKit SDK debugging,
+but that internal port must remain restricted to the XR AI host or a trusted
+development network.
 
 Refer to [Connecting clients](../../docs/source/getting_started/clients.md#native-c)
 for the current backend contract and limitations.

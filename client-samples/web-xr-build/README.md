@@ -5,7 +5,7 @@
 
 # Web-XR vendor bundles
 
-Builds the pinned CloudXR and LiveKit ESM bundles into `../web-xr/vendor/` for
+Builds the CloudXR and LiveKit ESM bundles into `../web-xr/vendor/` for
 same-origin XR and offline-LAN use.
 
 ```bash
