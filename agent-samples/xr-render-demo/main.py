@@ -202,9 +202,10 @@ def _ensure_web_vendor() -> None:
     from NGC and produces vendor/cloudxr-sdk.esm.mjs and livekit-client.esm.mjs.
     Requires npm on PATH. Skipped when the output files already exist.
     """
-    vendor_dir   = (_BASE / "../../client-samples/web/vendor").resolve()
+    vendor_dir   = (_BASE / "../../client-samples/web-xr/vendor").resolve()
     cloudxr_out  = vendor_dir / "cloudxr-sdk.esm.mjs"
-    if cloudxr_out.exists():
+    livekit_out  = vendor_dir / "livekit-client.esm.mjs"
+    if cloudxr_out.exists() and livekit_out.exists():
         return
 
     build_sh = (_BASE / "../../client-samples/web-xr-build/build.sh").resolve()
@@ -227,6 +228,13 @@ def _ensure_web_vendor() -> None:
         sys.exit(
             f"\n  [setup] build.sh failed (exit {result.returncode}).\n"
             f"  Check the output above, then re-run.\n"
+        )
+    missing = [path.name for path in (cloudxr_out, livekit_out) if not path.exists()]
+    if missing:
+        sys.exit(
+            "\n  [setup] build.sh completed without producing: "
+            f"{', '.join(missing)}.\n"
+            "  Check the output above, then re-run.\n"
         )
     logger.info("Web vendor bundle ready")
 

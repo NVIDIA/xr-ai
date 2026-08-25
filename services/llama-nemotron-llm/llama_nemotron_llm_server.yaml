@@ -29,7 +29,8 @@ enforce_eager:          false
 enable_tool_choice: true
 tool_call_parser:   llama3_json
 
-# vLLM runtime — pip-installed vllm (default) or NGC docker container.
+# vLLM runtime. If this key is omitted, the wrapper falls back to pip;
+# the checked-in configuration below selects the NGC Docker container.
 #   pip     — vllm CLI from this wrapper's venv (today's behavior)
 #   docker  — `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …`
 # Both honor the same config keys above; only the runtime hosting vllm differs.

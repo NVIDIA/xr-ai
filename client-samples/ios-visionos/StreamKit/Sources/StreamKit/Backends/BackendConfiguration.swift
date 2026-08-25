@@ -66,7 +66,8 @@ public struct LiveKitConfig: Sendable {
 
     /// URL of a token-generation endpoint.
     ///
-    /// The SDK appends `?room=<roomName>&identity=<identity>` query parameters.
+    /// The SDK appends `?identity=<identity>` as a query parameter. The endpoint
+    /// selects the room and encodes it in the returned token.
     /// The endpoint must return either a plain JWT string or `{ "token": "eyJ…" }`.
     public var tokenURL: URL?
 

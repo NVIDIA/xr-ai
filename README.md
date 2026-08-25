@@ -3,572 +3,82 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-<!-- TODO: hero image -->
-
 # XR AI
 
-Agentic AI for XR — an open-source foundation for multi-modal, real-time
-conversational AI within the CloudXR ecosystem.
+Agentic AI for XR — an open-source foundation for multimodal, real-time
+conversational AI in the NVIDIA CloudXR ecosystem.
 
-Docs: <https://nvidia.github.io/xr-ai/>
+XR AI connects web, Android, iOS/visionOS, and native clients to a shared media
+hub, GPU-accelerated AI services, tool-using agents, and optional CloudXR remote
+rendering. Agents can see and hear what a participant experiences, call native
+tools, and return audio or data to the same participant.
 
-**Using a coding agent?** Paste this to it:
+This project is a public beta. APIs and behavior may change as it evolves.
 
-```text
-Set up xr-ai for me: ask me whether to build against the latest release
-(newest stable tag; a prerelease only if no stable exists) or main, then
-fetch skills/getting-started/SKILL.md at that ref from
-https://raw.githubusercontent.com/NVIDIA/xr-ai/. If the file does not exist
-at that ref, the release predates agent setup: get my OK to use main for
-both the skill and the checkout. Install the skill (or just follow it), and
-walk me through the rest of the setup.
-```
+## Get started
 
-## Public Beta Notice
+Refer to the [versioned documentation](https://nvidia.github.io/xr-ai/) for
+setup, requirements, credentials, networking, architecture, and
+troubleshooting. The landing page opens the newest complete documentation set;
+a release takes precedence once it contains the current entry points. Start
+with:
 
-This project is publicly available in beta and is under active development.
-Features, APIs, documentation, and behavior may change as the project evolves.
-Expect bugs, incomplete functionality, and breaking changes. Use at your own
-discretion, and please report issues or feedback to help improve the project.
+- [Set up with a coding agent](https://nvidia.github.io/xr-ai/latest/getting_started/skills.html)
+- [Manual quickstart](https://nvidia.github.io/xr-ai/latest/getting_started/quickstart.html)
+- [System requirements](https://nvidia.github.io/xr-ai/latest/getting_started/requirements.html)
+- [Architecture](https://nvidia.github.io/xr-ai/latest/overview/architecture.html)
 
-## What is XR AI?
+The site also publishes the current `main` branch and release-tagged versions.
 
-XR AI is a developer stack for building powerful XR and AI systems across devices, platforms, and deployment environments. It connects web, iOS/visionOS, AR glasses, and XR headset clients to GPU-accelerated AI services, tool-using agents, and the CloudXR stack for remote rendering.
+## Samples
 
-With XR AI, developers can build agents that see and hear what the user experiences, reason over live physical context, call native tools, and respond with audio or data in the same XR session. The stack provides an end-to-end foundation for multimodal spatial computing applications: real-time media routing, participant-aware response handling, agent interfaces, AI service integration, remote rendering, and sample applications that show the pieces working together.
-
-The value is speed without lock-in. XR AI is designed to work quickly with NVIDIA open models for vision, language, and speech, plus swappable speech synthesis services, while still giving developers the flexibility to bring their own models, services, tools, and application logic. Because it is built around NVIDIA GPU infrastructure, the same architecture can be deployed where the workload needs to run: cloud, data center, workstation, or edge.
-
-XR AI also gives developers a practical path across product categories. Teams can start with AI glasses-style experiences that use live camera, audio, and agent responses, then extend the same framework to richer AR glasses or XR headset experiences that use CloudXR remote rendering. This lets developers build for today's lightweight AI devices while keeping a clear path to immersive, GPU-rendered spatial applications.
-
-XR AI is especially useful when you need to:
-
-- **Build multimodal XR agents** that can see, hear, reason, use tools, and respond in real time.
-- **Target multiple client platforms** including web, iOS/visionOS, AR glasses, and XR headsets.
-- **Use NVIDIA open models out of the box** while preserving the flexibility to bring your own models and services.
-- **Deploy wherever NVIDIA GPUs are available**, from cloud and data center to workstation and edge.
-- **Start with AI glasses-style experiences and scale to CloudXR remote rendering** for richer AR and XR applications.
-- **Keep transport, rendering, model services, tools, and agent logic separated** so teams can evolve each layer independently.
-
-
-## Requirements
-
-**Hardware**
-
-XR AI samples are designed for a single NVIDIA RTX PRO 6000 Blackwell workstation GPU or an
-NVIDIA DGX Spark.  Both provide enough VRAM to run the
-full model stack locally.  If you prefer not to run models on local hardware,
-model endpoints are plain URLs — point the worker config at a cloud NIM or model
-endpoint and no local GPU is required for the agent or hub.
-
-| Sample | Local VRAM needed |
+| Sample | Purpose |
 |---|---|
-| model-servers (shared models) | ~58 GB |
-| simple-vlm-example (requires model services) | Uses the model-services allocation |
-| lab-instrument-monitoring (requires model-servers) | ~55 GB (models) + Piper TTS |
-| tea-making-sample (requires model services) | Uses the model-services allocation + <1 GB sample services |
-| xr-render-demo (requires model-servers) | ~55 GB (models) + ~2 GB (hub and TTS) |
-| Hub only | none |
-
-**Software**
-
-| Requirement | Version | Notes |
-|---|---|---|
-| OS | Linux | Ubuntu 22.04 or 24.04 recommended; WSL2 is not officially supported (refer to [Windows (WSL2)](docs/source/getting_started/requirements.md#windows-wsl2)) |
-| Python | 3.11 or 3.12 | 3.10 and 3.13 are not supported |
-| [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
-| NVIDIA driver | 570+ | required for local model inference |
-| Docker | 24+ | required: all vLLM-backed services (LLM, VLM) run in `nvcr.io/nvidia/vllm` containers |
-| NVIDIA Container Toolkit | latest | required: gives Docker access to the GPU.  Without it, `model_servers` fails with `failed to discover GPU vendor from CDI: no known GPU vendor found` |
-
-`uv` handles all Python dependencies per-sample — no global `pip install`
-or virtual-environment setup needed.  If you do not have it:
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-The NVIDIA Container Toolkit install is one-time per host. Follow the
-official install guide and run the CDI and runtime-configuration steps from
-there:
-
-> https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
-
-Quick smoke-test once installed:
-
-```bash
-docker run --rm --gpus all nvidia/cuda:13.0.3-base-ubuntu24.04 nvidia-smi
-```
-
-**Windows (WSL2)**: not an officially supported or tested platform.
-Per a single field report, `model-servers` and `simple-vlm-example` ran
-end-to-end under WSL2 with Docker Engine installed inside the distribution
-(Docker Desktop's WSL integration does not work for this stack), while
-`xr-render-demo` cannot run there at all (no Vulkan ICD in the WSL GPU
-stack).  Networking caveats and workarounds:
-[Windows (WSL2)](docs/source/getting_started/requirements.md#windows-wsl2).
-
-**GPU-profile prerequisites** — install before `uv sync` for these targets:
-
-- **DGX Spark** (`xr-render-demo/yaml/spark/`): `sudo apt install python3-dev`
-
-(All GPU profiles default to `vllm_backend: docker`, so the vLLM
-container ships nvcc + FlashInfer. If you switch a profile to
-`vllm_backend: pip`, refer to [`docs/source/guides/troubleshooting.md`](docs/source/guides/troubleshooting.md)
-for the host CUDA toolchain prereq.)
-
-If `uv sync` or the VLM fails on first run, refer to
-[`docs/source/guides/troubleshooting.md`](docs/source/guides/troubleshooting.md).
-
-**Network** — open the firewall ports listed in
-[`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md) before connecting from another
-machine.  UDP 7882 is a silent-failure path: signaling succeeds but media
-frames are dropped if it is closed.
-
-## Architecture
-
-| Layer | Directory | Description |
-|---|---|---|
-| Clients | `client-samples/` | Android, iOS/visionOS, Web, and native StreamKit clients |
-| Hub service | `services/device-io-hub/` | DeviceIOHub + LiveKit internal transport |
-| Launcher | `utils/xr-ai-launcher/` | stdlib-only process manager used by samples |
-| Logging | `utils/xr-ai-logging/` | shared loguru sink + stdlib bridge for every process |
-| Hub IPC | `agent-sdk/xr-ai-hub/` | Minimal agent-facing msgpack over ZMQ client |
-| Agent runtime | `agent-sdk/xr-ai-runtime/` | Agent registration and typed pub/sub routing |
-| Models | `agent-sdk/xr-ai-models/` | Typed model protocols and OpenAI-compatible clients |
-| Voice | `agent-sdk/xr-ai-voice/` | Voice agent, session, transport, and pipeline |
-| Web events | `agent-sdk/xr-ai-web-events/` | Live participant/topic browser views over selected agent events |
-| Agent tools | `agent-sdk/xr-ai-tools/` | Toolkit-independent Relay-managed native tools, including QR and ArUco marker tracking |
-| Reusable services | `services/` | Model-serving and typed capability processes |
-| Agent demos | `agent-samples/` | End-to-end agent pipelines |
-| Tests | `tests/` | Multi-client and multi-agent integration tests |
-
-Samples split model loading from the application stack: start shared model
-services once, then run samples as many times as you like without reloading
-weights. Simple VLM, Lab Instrument Monitoring, Tea Making, and XR Render also
-reuse Piper TTS on port 8105.
-
-The [tea-making guidance sample](agent-samples/tea-making-sample/README.md)
-combines a deterministic foreground workflow with file-backed transcript and
-visual background tasks, using Nemotron-3-Nano-Omni for both language and vision.
-
-Every sample worker depends on `agent-sdk/xr-ai-models` — one SDK that
-abstracts the OpenAI-compatible HTTP wire format for LLM, VLM, STT, TTS, and
-embeddings behind typed service protocols. Model profiles name the logical roles
-(`llm`, `vlm`, `stt`, …) and separate adapter behavior, endpoint connectivity,
-and deployment ownership. Presets pre-fill model-specific quirks
-(reasoning-field aliasing, `chat_template_kwargs`, served-model-name strings).
-Workers call `make_llm(config, "llm")`, `make_vlm(config, "vlm")`,
-`make_stt(config, "stt")`, `make_tts(config, "tts")`, or
-`make_embedding(config, "embedding")` — no hand-rolled httpx clients, no model
-quirks leaking out of the SDK.  Full quickstart and the built-in preset
-table: [`agent-sdk/xr-ai-models/README.md`](agent-sdk/xr-ai-models/README.md).
-
-## Quickstart
-
-Every sample follows the same pattern: **start the server, then connect a
-client.**  Once it is ready, any supported client — web browser, Android app,
-iOS/visionOS app, or AR glasses — can join the session using the token printed
-on startup.
-
-### Model servers (shared AI services)
-
-`model-servers` starts the shared inference services used across demos and exits
-immediately — the services keep running in the background with weights hot.
-Start this once before running `simple-vlm-example`,
-`lab-instrument-monitoring`, `tea-making-sample`, or `xr-render-demo`, or
-whenever you want to pre-warm models:
-
-> [!IMPORTANT]
-> After updating, stop any existing model servers before starting this stack:
->
-> ```bash
-> uv run model_servers --stop
-> ```
->
-> Persisted vLLM processes or containers may otherwise keep serving the
-> previous models and images even though the checked-in configuration now selects
-> Nemotron-3 Nano Omni and Cosmos3 Nano Reasoner.
-
-```bash
-cd agent-samples/model-servers
-uv sync
-uv run model_servers
-```
-
-Known GPU profiles are auto-detected (`dual_48G_ada`, `spark`, or
-`96G_blackwell`). Unsupported or ambiguous topologies stop with the complete
-inventory instead of assuming a profile; use `--gpu-profile NAME` only after
-copying and reviewing a custom YAML profile for that hardware.
-On first run the stack downloads tens of GB from Hugging Face and can take
-tens of minutes. On subsequent runs the containers restart in under a minute.
-
-Which servers start is a deployment profile: `--models <name|path>` selects
-`default`, `vlm_llm_nim` (LLM and VLM as self-hosted NIM containers;
-requires docker + `NGC_API_KEY`), or any profile JSON of your own. The NIM
-profile serves Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner. Starting a
-profile stops persisted servers outside it first and aborts if they cannot be
-stopped, avoiding GPU overcommit.
-
-The default profile starts Nemotron-3 Nano Omni (8108, serving both the
-reactive and agent LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103),
-Piper TTS (8105), and embeddings (8109).
-
-```bash
-uv run model_servers --models vlm_llm_nim
-```
-
-`HF_TOKEN` is required by default: without it the roughly 60 GB first-run download
-can stall indefinitely. Refer to [`docs/source/getting_started/credentials.md`](docs/source/getting_started/credentials.md)
-for how to set it, or pass `--allow-anonymous` to run without one.
-
-To stop all model servers when done:
-
-```bash
-uv run model_servers --stop
-```
-
-`--stop` stops every persisted model service in the shared topology.
-
-### Simple VLM example (vision Q&A over voice + text)
-
-End-to-end voice + vision sample. Speak into the mic or type into the data
-channel; both routes use the same VLM pipeline against the latest video frame.
-Replies arrive as streaming Piper TTS audio plus a `vlm.response` text message.
-
-The packaged worker uses `CurrentFrameTool` to select an image, then passes its
-lightweight reference to `StreamingImageQueryTool` inside `SimpleVlmAgent` and
-publishes the result chunks to `VoiceAgent`. The same inference path supports
-one image, ordered image collections, and timestamped frame sequences. Pipecat
-remains private to the voice runtime and no MCP client is involved. Refer to the
-[sample README](agent-samples/simple-vlm-example/README.md) for the worker
-layout and configuration boundaries.
-
-Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. Refer to the
-[VLM server notes](docs/source/components/ai-services.md#per-server-notes) for
-runtime-selection details.
-
-The sample always reuses model services and never starts or stops them. Start
-the repository-default shared stack, which includes VLM, STT, and Piper TTS:
-
-```bash
-uv run --project agent-samples/model-servers model_servers
-```
-
-The command may download model weights on its first run and requires the
-credentials described in the
-[credentials guide](docs/source/getting_started/credentials.md).
-
-#### Step 1 — Start the server
-
-```bash
-cd agent-samples/simple-vlm-example
-uv sync
-uv run simple_vlm_example
-```
-
-Only the hub and worker start. The worker probes the reused VLM, STT, and TTS
-services before becoming ready.
-The hub prints:
-
-```
-[hub]   LiveKit URL : wss://localhost:8080
-[hub]   Room        : xr-room
-[hub]   Token       : eyJ…
-[hub]   Web client  : https://localhost:8080
-```
-
-This banner appears as soon as the hub itself is ready, while the model
-services and worker are still starting.  Clients can connect as soon as it
-appears, but the agent answers queries only after the launcher prints its
-`All processes ready` banner.
-
-#### Step 2 — Connect a client
-
-Open `https://localhost:8080` in a browser.  The samples ship with HTTPS
-on by default (a self-signed certificate is generated on first run at
-`~/.local/share/xr-ai/web-server.crt`), so you'll see a "Your connection
-is not private" warning the first time — click **Advanced → Proceed**
-(Chrome/Edge) or **Accept the Risk and Continue** (Firefox). Refer to
-[`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md) for trusting the certificate
-permanently or running over plain HTTP instead.
-
-Leave **Token URL** blank — the web client fetches a token from the server
-automatically.  Click **Connect**.
-
-You are now live in the XR session.  To test the agent:
-
-- Type any question → sent verbatim to the VLM.
-- Speak into your mic → speech is transcribed and sent as a query.
-
-A successful round trip: your query appears in the log, the agent responds
-after a moment, and you hear the reply through your speakers.
-
-To use compatible services at different locations, edit their endpoints in
-`agent-samples/simple-vlm-example/yaml/models.json`:
-
-```json
-{
-  "endpoint": {"base_url": "https://your-remote-vlm.example.com"},
-  "deployment": {"ownership": "reused", "service": "vlm"}
-}
-```
-
-The sample has no deployment-profile selector; every configured service stays
-operator-owned.
-
-Each sample has its own `device_io_hub.yaml` controlling the hub. Refer to
-[`services/device-io-hub/device_io_hub.yaml`](services/device-io-hub/device_io_hub.yaml)
-for the full option list.
-
----
-
-### Lab instrument monitoring (marker-associated readings + foreground voice)
-
-This sample provides an on-demand visual observation task per connected
-participant and runs foreground voice or typed queries through a generic
-tool-calling agent. The foreground agent can start, stop, or inspect the
-monitor without giving up the foreground, inspect the current view, or query
-recent monitor history. Accepted STT and typed queries, monitoring records,
-foreground turns, and Relay telemetry are written as JSONL under `artifacts/`;
-the shared connection web client remains available on port 8080.
-
-The sample always uses Cosmos for visual inference. Start the shared
-`model-servers` stack, including Piper TTS, then run the sample:
-
-```bash
-uv run --project agent-samples/model-servers model_servers
-```
-
-```bash
-cd agent-samples/lab-instrument-monitoring
-uv sync
-uv sync --project worker
-uv run lab_instrument_monitoring
-```
-
-Connect an existing glasses or platform client with the authenticated URL and
-token printed by the hub. See the
-[reference guide](docs/source/reference/lab-instrument-monitoring.md) for the
-agent topology, output-record contract, and transcription semantics. The
-[sample README](agent-samples/lab-instrument-monitoring/README.md) covers
-operation and the routing eval.
-
----
-
-### XR render demo (voice-driven sphere in CloudXR)
-
-Speak to the web client and a sphere in the streamed scene tracks your
-voice — radius follows loudness, colour and position follow spoken commands
-("make it red", "put it to my left", "where I'm looking"). Runs against a
-Quest 3 or Vision Pro on the same LAN, or the IWER emulator built into the
-web client for desktop dev.
-
-Under the hood, the orchestrator launches the hub, CloudXR runtime, typed
-capability processes, and the worker, while reusing the prestarted model
-endpoints. The worker calls those processes through Relay-managed native tools.
-The voice runtime runs
-quick-acks and a Nemotron-30B agentic tool-calling loop over
-scene, XR tracking, spatial math, vision, and video-memory tools. Full process map,
-agentic-loop details, and the XR session lifecycle:
-[`docs/source/reference/xr-render-demo.md`](docs/source/reference/xr-render-demo.md).
-
-**Requires `model-servers` to be running first** — the demo does not start
-its own model services.
-
-#### Step 1 — Start model servers (once)
-
-```bash
-cd agent-samples/model-servers
-uv sync && uv run model_servers
-```
-
-This exits immediately once all services are ready. Weights stay loaded
-in the background.
-
-#### Step 2 — Start the demo
-
-This demo has two extra host prerequisites beyond the shared
-[Requirements](#requirements):
-
-- **Vulkan loader + headers** — the CloudXR compositor and LOVR render through
-  Vulkan, so install them before running the demo: `sudo apt install libvulkan-dev`
-- **npm 18+** on PATH — the orchestrator builds the web vendor bundle on first
-  run (skipped on subsequent runs).
-
-Start XR Render:
-
-```bash
-cd agent-samples/xr-render-demo
-uv sync
-uv run xr_render_demo
-```
-
-By default this serves the web-based WebRTC client
-(`NV_DEVICE_PROFILE=auto-webrtc`).
-For a native Apple Vision Pro client, start it with `NV_DEVICE_PROFILE=auto-native`
-instead. Refer to [`docs/source/reference/xr-render-demo.md`](docs/source/reference/xr-render-demo.md#selecting-the-client-type-webrtc-vs-native).
-
-On first run the orchestrator automatically downloads the pinned LOVR version to
-`deps/lovr/` inside the repo and builds the web vendor bundle (requires npm
-and network access). Both steps are skipped on subsequent runs.
-
-**DGX Spark (aarch64):** LOVR does not publish a prebuilt aarch64 Linux
-binary, so the auto-download is not available — build LOVR from source and
-export `LOVR_BIN`. Refer to
-[`docs/source/guides/troubleshooting.md`](docs/source/guides/troubleshooting.md#dgx-spark--lovr-auto-download-is-not-supported).
-
-To use a custom LOVR build:
-
-```bash
-export LOVR_BIN=/path/to/your/lovr   # or set lovr_bin: in scene/scene_service.yaml
-uv run xr_render_demo
-```
-
-**GPU pinning** for the XR side is controlled by `gpu_index` in
-`agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml`. cloudxr-runtime
-applies the pin to its own process and writes the selectors into
-`cloudxr.env`; the scene process and LOVR inherit from that file. Refer to
-[`docs/source/reference/xr-render-demo.md`](docs/source/reference/xr-render-demo.md#gpu-pinning-for-the-xr-side)
-for full details.
-
-To stop the model servers when done:
-
-```bash
-cd agent-samples/model-servers
-uv run model_servers --stop
-```
-
-XR Render uses the fixed reuse-only endpoints in `yaml/models.json`; it does
-not select or own model deployment profiles.
-
----
-
-### Hub only (standalone)
-
-```bash
-cd services/device-io-hub
-uv sync
-uv run device_io_hub
-```
-
-Useful for development or when running an agent in a separate terminal.
-The hub auto-discovers `services/device-io-hub/device_io_hub.yaml`.
-
-## Clients
-
-### Web
-
-Open `https://localhost:8080` in a browser.  The samples ship with HTTPS
-on by default; the first connection shows a self-signed certificate warning
-that you click through. To trust the certificate permanently, refer to
-[`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md).
-Leave **Token URL** blank to
-use the server's built-in `/token` endpoint, or paste the printed token
-directly.
-
-The page's import map loads `livekit-client` and `@nvidia/cloudxr` from
-`client-samples/web/vendor/` (same-origin, so XR headsets and offline LANs
-work).  Both bundles are gitignored build output.  The xr-render-demo
-orchestrator builds them automatically on first run (requires npm on PATH).
-For a manual rebuild after an SDK bump, refer to
-[`client-samples/web-xr-build/README.md`](client-samples/web-xr-build/README.md).
-
-### Android
-
-Refer to [`client-samples/android/README.md`](client-samples/android/README.md) for
-full setup. Quick steps:
-
-1. Open `client-samples/android/` in Android Studio (Hedgehog or later).
-2. Let Gradle sync finish — it downloads the LiveKit Android SDK automatically.
-3. Run on a device or emulator (API 24+).
-4. Enter the server IP, port (`8080` — the hub's web-server port, *not* LiveKit's internal 7880), and paste the printed token.
-
-Permissions (`RECORD_AUDIO`, `CAMERA`) are requested at runtime on first use.
-
+| [`model-servers`](agent-samples/model-servers/README.md) | Start and persist the shared model stack |
+| [`simple-vlm-example`](agent-samples/simple-vlm-example/README.md) | Voice and text questions about the current camera frame |
+| [`lab-instrument-monitoring`](agent-samples/lab-instrument-monitoring/README.md) | Marker-associated visual monitoring with a foreground voice agent |
+| [`tea-making-sample`](agent-samples/tea-making-sample/README.md) | Guided workflow with visual evidence and background observations |
+| [`xr-render-demo`](agent-samples/xr-render-demo/README.md) | Voice-driven CloudXR scene manipulation |
+
+Each sample README gives the shortest runnable command sequence. The linked
+documentation contains architecture, behavior, configuration, output contracts,
+evaluation, and adaptation guidance.
+
+## Repository map
+
+| Directory | Contents |
+|---|---|
+| `client-samples/` | Platform clients and shared StreamKit implementations |
+| `agent-sdk/` | Hub IPC, model clients, runtime, tools, voice, and web events |
+| `agent-samples/` | Runnable agent stacks |
+| `services/` | Hub, model servers, and typed capability services |
+| `utils/` | Launcher, logging, VAD, vLLM, and voice-gate utilities |
+| `tests/` | Cross-package and integration tests |
+| `docs/source/` | Canonical user and contributor documentation |
+| `skills/` | Setup skills for coding agents |
+
+For repository constraints and dependency boundaries, refer to
+[`AGENTS.md`](AGENTS.md) and [`DEPENDENCIES.md`](DEPENDENCIES.md).
+
+<!-- Compatibility anchors for headings consolidated into the documentation. -->
+<a id="public-beta-notice"></a><a id="what-is-xr-ai"></a>
+<a id="requirements"></a><a id="architecture"></a><a id="quickstart"></a>
+<a id="model-servers-shared-ai-services"></a>
+<a id="simple-vlm-example-vision-qa-over-voice--text"></a>
+<a id="step-1--start-the-server"></a><a id="step-2--connect-a-client"></a>
+<a id="lab-instrument-monitoring-marker-associated-readings--foreground-voice"></a>
+<a id="xr-render-demo-voice-driven-sphere-in-cloudxr"></a>
+<a id="step-1--start-model-servers-once"></a><a id="step-2--start-the-demo"></a>
+<a id="hub-only-standalone"></a><a id="clients"></a><a id="web"></a>
+<a id="android"></a><a id="ios-and-visionos"></a><a id="networking"></a>
+<a id="tests"></a><a id="deeper-docs"></a><a id="project-meta"></a>
 <a id="ios--visionos"></a>
 
-### iOS and visionOS
+## Contributing
 
-Refer to [`client-samples/ios-visionos/README.md`](client-samples/ios-visionos/README.md)
-for full Xcode setup. Quick connection settings:
+Refer to [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contribution process and
+[`tests/README.md`](tests/README.md) for the shortest test commands. Refer to
+[`SECURITY.md`](SECURITY.md) to report security issues.
 
-| Field | Value |
-|---|---|
-| Host | IP of the machine running the server |
-| Port | `8080` (the hub web-server port; *not* LiveKit's internal 7880) |
-| Token | Paste the token printed on server startup |
-
-The token is valid for 24 hours. To get a fresh one restart the server or call
-`GET https://<host>:8080/token?identity=<name>`.
-
-> **One-time per device:** the LiveKit Swift SDK does not expose a
-> server-trust hook, so iOS rejects the hub's self-signed certificate until you
-> install it as a trusted profile. On the device, open
-> `https://<host>:8080/cert` in Safari → bypass the warning → install →
-> enable **Settings → General → About → Certificate Trust Settings →
-> Enable Full Trust**. Full walkthrough plus recovery for the common
-> failure modes is in
-> [`client-samples/ios-visionos/README.md`](client-samples/ios-visionos/README.md)
-> under its certificate-trust section.
-
-## Networking
-
-The hub and CloudXR runtime use a small set of TCP/UDP ports (web client and
-`/rtc` WSS proxy on 8080, WebRTC fallbacks on 7881/TCP and 7882/UDP, CloudXR
-WSS proxy on 48322). LiveKit's native 7880 stays on loopback — clients
-connect through the same-origin wss proxy, not directly. Full table and
-distro-specific `ufw` and `firewall-cmd` recipes are in
-[`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md).
-The networking reference also covers HTTPS for the web client and self-signed
-certificate trust on each browser.
-
-## Tests
-
-`tests/` contains the multi-client and multi-agent integration suite. The
-core IPC tests run without Docker or LiveKit — they spin up real
-`HubEndpoint`, `ConnectorEndpoint`, and `ProcessorEndpoint` instances over
-`ipc://` sockets and verify routing, isolation, and the
-`ReturnAudioFlush` control path.
-
-```bash
-cd tests
-uv sync
-uv run pytest -v
-```
-
-Refer to [`tests/README.md`](tests/README.md) for the full breakdown. CI runs
-the suite on every push and pull request via
-[`.github/workflows/tests.yml`](.github/workflows/tests.yml) on Python 3.11
-and 3.12.
-
-## Deeper docs
-
-For engineers and agents working in the repo:
-
-| Doc | Topic |
-|---|---|
-| [`AGENTS.md`](AGENTS.md) | Working contract — hard rules every change must satisfy |
-| [`docs/source/guides/documentation-style.md`](docs/source/guides/documentation-style.md) | House style for customer-facing Markdown and reStructuredText |
-| [`DEPENDENCIES.md`](DEPENDENCIES.md) | Authoritative dependency map (update with every `pyproject.toml` change) |
-| [Versioned documentation](https://nvidia.github.io/xr-ai/) | Latest release by default, plus `main` development and release-tag documentation |
-| [`skills/README.md`](skills/README.md) | Skill bank: setup skills for coding agents |
-| [`docs/source/overview/architecture.md`](docs/source/overview/architecture.md) | System topology, runtime data paths, ownership, and extension boundaries |
-| [`docs/source/components/launcher-and-process-model.md`](docs/source/components/launcher-and-process-model.md) | `Process` and `run_stack` mechanics; ready-file protocol |
-| [`docs/source/components/ai-services.md`](docs/source/components/ai-services.md) | VLM, STT, TTS, LLM, and embedding server reference with worker call examples |
-| [`docs/source/reference/xr-render-demo.md`](docs/source/reference/xr-render-demo.md) | xr-render-demo architecture: native functions, supervisor and subagents, XR lifecycle |
-| [`docs/source/guides/adding-a-sample.md`](docs/source/guides/adding-a-sample.md) | Boilerplate for scaffolding a new sample |
-| [`docs/source/guides/adding-cloudxr.md`](docs/source/guides/adding-cloudxr.md) | Wiring CloudXR into a sample |
-| [`docs/source/getting_started/credentials.md`](docs/source/getting_started/credentials.md) | HF and NGC token management |
-| [`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md) | Firewall ports and HTTPS for the web client |
-| [`docs/source/guides/troubleshooting.md`](docs/source/guides/troubleshooting.md) | Known frictions and runtime symptoms |
-| [`docs/source/guides/spdx-headers.md`](docs/source/guides/spdx-headers.md) | SPDX header style and enforcement |
-
-## Project meta
-
-- [`LICENSE`](LICENSE) — Apache-2.0.
-- [`SECURITY.md`](SECURITY.md) — how to report a vulnerability.
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — contribution process and DCO.
-- [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) — community standards.
-- [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) — bundled third-party
-  components and their licenses.
+XR AI is licensed under [Apache-2.0](LICENSE). Third-party components are listed
+in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

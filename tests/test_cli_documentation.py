@@ -42,13 +42,12 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
     assert commands["xr_render_demo"].arguments == ()
 
 
-def test_catalog_builds_repository_root_invocation() -> None:
+def test_catalog_builds_sample_directory_invocation() -> None:
     commands = {command.program: command for command in load_cli_catalog(_ROOT)}
 
     assert commands["model_servers"].invocation == (
-        "uv run --project agent-samples/model-servers model_servers "
-        "[--stop] [--models NAME_OR_PATH] [--allow-anonymous] "
-        "[--gpu-profile NAME]"
+        "uv run model_servers [--stop] [--models NAME_OR_PATH] "
+        "[--allow-anonymous] [--gpu-profile NAME]"
     )
 
 

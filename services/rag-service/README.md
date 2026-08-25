@@ -5,40 +5,21 @@
 
 # RAG service
 
-Indexes Markdown and text documents and exposes dense retrieval through private
-RPC using msgpack over ZMQ. Applications construct `xr_ai_tools.rag.RAGTools`
-with the private endpoint; the transport itself is not an agent-facing API.
+Private typed msgpack over ZMQ service that indexes Markdown and text documents with
+an `xr-ai-models` embedding endpoint and serves dense retrieval to
+`xr_ai_tools.rag.RAGTools`.
 
-The checked-in `rag_service.yaml` is a reference configuration. Copy it into
-the consuming application's `yaml/` directory, set `documents_dir` and
-`models_config` relative to that copy, and launch the service with the explicit
-configuration path:
+Run this command from the repository root after starting the embedding service
+selected by the sample's model profile:
 
 ```bash
 uv run --project services/rag-service rag_service \
-  --config agent-samples/my-agent/yaml/rag_service.yaml
+  --config agent-samples/tea-making-sample/yaml/rag_service.yaml
 ```
 
-The referenced model profile needs an `embedding` role:
+That sample configuration points `documents_dir` at its application-owned
+documents and `models_config` at a profile with an embedding role. Set both
+fields when adapting the service to another application.
 
-```json
-{
-  "models": {
-    "embedding": {
-      "adapter": {"preset": "nemotron_embedding"},
-      "endpoint": {"base_url": "http://localhost:8109"},
-      "deployment": {"ownership": "reused", "service": "embedding"}
-    }
-  }
-}
-```
-
-At startup, the service recursively loads `.md` and `.txt` files, chunks and
-embeds changed content, then touches its ready file. Embeddings are cached by
-document content, indexing settings, and model profile. Set `cache_key` when a
-remote endpoint changes its backing model without changing the profile.
-`min_score` filters unrelated passages before results reach an agent.
-
-Launch the embedding service first, this service second, and the consuming
-worker last. Construct `RAGTools` in the worker and expose its finite tools to
-the agent; application code should not call the private transport directly.
+Refer to [AI inference servers](https://nvidia.github.io/xr-ai/latest/components/ai-services.html#per-server-notes)
+for startup order, profile requirements, caching, and integration guidance.

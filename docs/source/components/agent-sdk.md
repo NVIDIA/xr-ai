@@ -18,13 +18,12 @@ installation.
 | `xr-ai-voice` | `xr_ai_voice` | Voice agent, transport, and private media pipeline |
 | `xr-ai-web-events` | `xr_ai_web_events` | Bounded live browser views over selected application events |
 
-Package guides are versioned with this site:
+Refer to these versioned package guides:
 {doc}`/reference/agent-sdk-hub`, {doc}`/reference/agent-sdk-models`,
 {doc}`/reference/agent-sdk-runtime`, {doc}`/reference/agent-sdk-tools`,
 {doc}`/reference/agent-sdk-voice`, and {doc}`/reference/agent-sdk-web-events`.
-The generated {doc}`/reference/python/index`
-is the source of truth for public names, signatures, types, defaults, fields,
-and method-level behavior.
+Refer to the generated {doc}`/reference/python/index` for public names,
+signatures, types, defaults, fields, and method-level behavior.
 
 ## Ownership boundaries
 
@@ -35,7 +34,7 @@ direct execution and model tool-call loops. Bounded turns use `ToolSet` and
 retries, participant context, cancellation, and task ownership. `AgentRuntime`
 owns only typed publication and delivery tasks; it does not own model loops,
 planning, memory, media, or agent-created work. A publication waits for its
-subscribers, so a subscriber that performs lengthy work should hand the work to
+subscribers, so a subscriber that performs lengthy work must hand the work to
 its own bounded queue.
 
 Workers construct model clients with the factories in `xr_ai_models` and depend
@@ -87,8 +86,8 @@ hub path rather than entering agent APIs.
 
 Public API membership comes from literal `__all__` declarations. Sphinx parses
 the source without importing SDK packages, then renders co-located docstrings,
-annotations, and defaults. Package READMEs retain installation, quickstarts,
-and cross-call behavioral guidance; this component page records only shared
-architecture and ownership. Guides, troubleshooting, and migrations remain
-handwritten because they describe workflows and decisions rather than API
-shape.
+annotations, and defaults. Package READMEs are concise entry points into these
+published package guides; cross-call behavior, architecture, and ownership live
+here and in the package reference pages. Guides, troubleshooting, and
+migrations remain handwritten because they describe workflows and decisions
+rather than API shape.

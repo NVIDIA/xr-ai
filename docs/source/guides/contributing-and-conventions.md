@@ -5,14 +5,15 @@
 
 # Contributing and conventions
 
-The root [`CONTRIBUTING.md`](https://github.com/NVIDIA/xr-ai/blob/main/CONTRIBUTING.md)
-explains setup, testing, pull requests, and DCO sign-off.
-[`AGENTS.md`](https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md) contains the
-architecture and change constraints used by both humans and coding agents.
-{doc}`Documentation style <documentation-style>` contains the house style for
-customer-facing Markdown and reStructuredText.
+Refer to the root
+[`CONTRIBUTING.md`](https://github.com/NVIDIA/xr-ai/blob/main/CONTRIBUTING.md)
+for setup, testing, pull requests, and DCO sign-off. Refer to
+[`AGENTS.md`](https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md) for the
+architecture and change constraints used by humans and coding agents. Refer to
+{doc}`Documentation style <documentation-style>` for requirements governing
+customer-facing Markdown and reStructuredText. Refer to
 [`DEPENDENCIES.md`](https://github.com/NVIDIA/xr-ai/blob/main/DEPENDENCIES.md)
-is the package dependency map.
+for the package dependency map.
 
 For a Python change:
 
@@ -27,8 +28,13 @@ Public Python references are generated from each enrolled module's literal
 `__all__`, declarations, annotations, defaults, and docstrings. An API-only
 change therefore updates the code, its co-located documentation, and tests; the
 strict documentation build rejects unresolved or undocumented exports. Update
-a README or narrative page when concepts, workflows, operations, or
-architecture change, and add a migration entry for a breaking change.
+a narrative page when concepts, workflows, operations, or architecture change,
+and add a migration entry for a breaking change.
+
+The repository-wide README and documentation ownership rules live in the
+[`Comments and documentation`](https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md#comments-and-documentation)
+section of `AGENTS.md`. Follow that contract instead of introducing another
+placement rule in a package or sample.
 
 The user-facing command catalog is generated from top-level sample
 `[project.scripts]` entries and literal `argparse` declarations. Keep option

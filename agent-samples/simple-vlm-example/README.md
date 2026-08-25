@@ -5,91 +5,75 @@
 
 # Simple VLM example
 
-For a walkthrough of running this sample, see
-[`docs/source/getting_started/quickstart.md`](../../docs/source/getting_started/quickstart.md).
-
-This sample answers voice and text questions against each participant's latest
-camera frame. Responses stream to both Piper TTS and the `vlm.response` data
+This sample is the smallest complete voice-and-vision application in the
+repository. A participant can ask a spoken or typed question about the latest
+camera frame. The response streams to Piper TTS and to the `vlm.response` data
 topic.
 
-The worker is a package under `worker/simple_vlm_example_worker/`:
+The sample launches DeviceIOHub and its worker. It reuses Parakeet STT,
+Cosmos3 Nano Reasoner, and Piper TTS from the shared model stack. Before the
+agent reports ready, the worker sends a representative image request through
+the VLM so the first user query does not pay the multimodal warmup cost.
 
-- `__main__.py` parses launcher arguments.
-- `agent.py` owns participant-scoped vision turns and cancellation.
-- `config.py` resolves worker, model, voice-gate, and prompt settings.
-- `app.py` composes the native runtime (`VoiceAgent` + `SimpleVlmAgent`).
-- `prompts/system.txt` owns the VLM system prompt.
+## Configure
 
-`VoiceAgent` privately owns STT/TTS/VLM readiness, the hub voice transport,
-voice-gate processing, streaming TTS, signals, and cleanup. It publishes every
-final pre-gate STT result on `voice.transcript`, including speech without the
-wake phrase, and publishes accepted speech and typed text as `UserQuery` on
-this sample's topic. `SimpleVlmAgent` subscribes to that topic, selects the participant's
-current image with `CurrentFrameTool`, passes its opaque reference to the
-transport-independent `StreamingImageQueryTool`, and publishes chunks to
-`voice.output`. The query tool has no voice dependency and sends its provider
-stream through Relay's managed LLM path. Camera bytes stay out of tool results
-and image locations are redacted from VLM telemetry. `VoiceAgent` publishes
-participant departure and interruption on sample-named topics;
-`SimpleVlmAgent` subscribes and releases its own cached frames and tasks. A
-newer turn cancels and interrupts a superseded response. `app.py` only composes
-the two agents and their dependencies.
+The launcher reads the checked-in configuration automatically. Edit these
+files before starting the sample:
 
-No MCP client or MCP tool invocation is part of this sample.
+| File | Common changes |
+|---|---|
+| `yaml/simple_vlm_example_worker.yaml` | Frame freshness, VAD sensitivity, idle timeout, or prompt override |
+| `yaml/voice_gate.yaml` | Wake phrases, listening chime, and follow-up window |
+| `yaml/models.json` | Reused model adapters and endpoint addresses |
+| `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
+
+For example, change `followup_grace_s` in `yaml/voice_gate.yaml` to control how
+long a second utterance can omit “Hey Agent”:
+
+```yaml
+followup_grace_s: 10.0
+```
+
+Restart the sample after an edit. If you change a shared model server rather
+than only its sample endpoint, stop and restart that stack separately. Refer to
+the [sample configuration guide](https://nvidia.github.io/xr-ai/latest/reference/simple-vlm-example.html#configuration)
+for the edit workflow and to the generated
+[configuration reference](https://nvidia.github.io/xr-ai/latest/reference/configuration.html) for
+every checked-in field and example value.
 
 ## Run
 
-The sample reuses model services and never starts or stops them. Its fixed
-`yaml/models.json` expects Parakeet STT on port 8103, Cosmos3-Nano on port
-8100, and Piper TTS on port 8105. Start compatible services before the sample.
-For the repository defaults, run the shared stack from the repository root:
+Run all commands from `agent-samples/simple-vlm-example/`. Start the shared
+models first:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers
+uv run --project ../model-servers model_servers
 ```
 
-Then, in another terminal:
+Wait for the launcher to report that all processes are ready and return. Then
+start the sample from the same terminal:
 
 ```bash
-cd agent-samples/simple-vlm-example
 uv sync
 uv run simple_vlm_example
 ```
 
-Open the web client shown in the hub banner, connect, and then speak or type a
-question.
-
-`yaml/models.json` owns model behavior, endpoints, and readiness. All model
-deployments are `reused`; the orchestrator launches only the DeviceIOHub and
-worker. Before announcing readiness, the worker completes a small streaming
-request with a 1280x720 JPEG so the first user query does not pay the
-multimodal initialization cost.
-
-## Relay visibility
-
-The worker writes a compact Relay lifecycle stream to `relay-events.jsonl`
-beside `worker.log` in the per-run log directory printed at startup. The JSONL
-records include runtime publications, receiving-agent callbacks, the complete
-`simple-vlm.turn` lifetime, and nested vision tool and VLM calls. Per-token
-`llm.chunk` marks, incremental `voice.output` fragments, and empty stream
-terminators are omitted. `VoiceAgent` emits one `voice.response` scope containing
-the complete text and timing for both non-streamed and aggregated incremental
-output. Each real STT request is a `voice.stt` scope with a transcript result
-mark, and each sentence synthesis is a `voice.tts` scope. Raw audio is summarized
-by byte count, duration, and sample rate; TTS records synthesis rather than
-client playback. The completed LLM and turn records remain available alongside
-them. No telemetry server or network exporter is required. Image locations are
-replaced with `<redacted:image>`; prompts, questions, responses, participant
-IDs, and correlation metadata remain visible and may contain sensitive data.
-Opaque live-frame handles remain small even when the source frame is large.
+Alternatively, run the source file directly after synchronization:
 
 ```bash
-tail -F /tmp/log_simple-vlm-example_*/relay-events.jsonl
+uv run main.py
 ```
 
-Voice-gate behavior remains in `yaml/voice_gate.yaml`. Wake phrases match at
-the start of the transcript or after sentence-final `.`, `?`, or `!` followed
-by whitespace or a closing quote; preceding text is discarded before dispatch.
-Worker timing, frame freshness, and optional prompt overrides are in
-`yaml/simple_vlm_example_worker.yaml`; the default system prompt ships inside
-the worker package.
+Open the authenticated web-client URL printed by DeviceIOHub, allow microphone
+and camera access, and connect. Speak or type a question after the agent reports
+ready.
+
+The shared models remain running after the sample stops. From this directory,
+stop them with `uv run --project ../model-servers model_servers --stop`.
+
+<!-- Compatibility anchor for a heading consolidated into the documentation. -->
+<a id="relay-visibility"></a>
+
+Refer to the [sample reference](https://nvidia.github.io/xr-ai/latest/reference/simple-vlm-example.html)
+for architecture, configuration, warmup behavior, voice gating, and Relay
+output.

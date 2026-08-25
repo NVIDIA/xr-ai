@@ -83,7 +83,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
-import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
 import com.nvidia.xrai.streamkitsample.streamkit.ui.CameraPreviewView
 import com.nvidia.xrai.streamkitsample.streamkit.ui.rememberCameraPreviewAspectRatio
 import java.text.SimpleDateFormat
@@ -518,13 +517,6 @@ private fun MediaSection(vm: AppViewModel) {
     }
 
     SectionCard(title = "Media") {
-        // Audio mode dropdown — disabled while mic is active
-        AudioModeRow(
-            mode = vm.audioMode,
-            onModeChange = { vm.audioMode = it },
-            enabled = !vm.isAudioActive,
-        )
-
         // Microphone toggle
         CardRow {
             val audioLabel = if (vm.isAudioActive) "Stop Microphone" else "Start Microphone"
@@ -611,61 +603,6 @@ private fun MediaSection(vm: AppViewModel) {
                 else              -> "Not connected" to ColorSecondary
             }
             Text(statusText, style = MaterialTheme.typography.bodyMedium, color = statusColor)
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AudioModeRow(
-    mode: AudioConfig.MicrophoneMode,
-    onModeChange: (AudioConfig.MicrophoneMode) -> Unit,
-    enabled: Boolean,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val options = listOf(
-        AudioConfig.MicrophoneMode.VOICE_PROCESSING to "Voice Processing",
-        AudioConfig.MicrophoneMode.SOFTWARE_PROCESSING to "Software (AEC on)",
-        AudioConfig.MicrophoneMode.RAW to "Raw (no DSP)",
-    )
-    val selectedLabel = options.firstOrNull { it.first == mode }?.second ?: "—"
-
-    CardRow {
-        Text(
-            "Mic Mode",
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.width(90.dp),
-        )
-        Spacer(Modifier.weight(1f))
-        ExposedDropdownMenuBox(
-            expanded = expanded && enabled,
-            onExpandedChange = { if (enabled) expanded = !expanded },
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
-            ) {
-                Text(
-                    selectedLabel,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (enabled) MaterialTheme.colorScheme.onSurface else ColorSecondary,
-                )
-                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded && enabled)
-            }
-            ExposedDropdownMenu(
-                expanded = expanded && enabled,
-                onDismissRequest = { expanded = false },
-            ) {
-                options.forEach { (modeOption, label) ->
-                    DropdownMenuItem(
-                        text = { Text(label) },
-                        onClick = {
-                            onModeChange(modeOption)
-                            expanded = false
-                        },
-                    )
-                }
-            }
         }
     }
 }

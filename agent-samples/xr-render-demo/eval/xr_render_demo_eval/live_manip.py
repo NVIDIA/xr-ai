@@ -152,7 +152,7 @@ async def main() -> None:
         await tracking.call("set_sim_pose", CANONICAL)
     except Exception as error:
         print(f"openxr service refused set_sim_pose ({error}); set allow_sim_pose: true in "
-              "agent-samples/xr-render-demo/yaml/openxr_service.yaml and restart the stack")
+              "../yaml/openxr_service.yaml and restart the stack")
         await scene.close()
         await tracking.close()
         await endpoint.close()

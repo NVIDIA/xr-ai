@@ -2,15 +2,18 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Build the XR AI Sphinx docs. On every docs PR: strict build (warnings = errors).
-# GitHub Pages defaults to the latest semantic-version release while retaining
-# ``main`` as development docs; sphinx-multiversion selects release tags from
-# complete Git history.
+# GitHub Pages defaults to the latest complete semantic-version release while
+# retaining ``main`` as development docs. If that release predates a page linked
+# by a current repository entry point, ``/latest/`` falls back to the complete
+# ``main`` build.
+# sphinx-multiversion selects release tags from complete Git history.
 #
 # The site is assembled on the ``gh-pages`` branch rather than straight from a
 # build artifact, because one artifact can only serve one site and per-PR
 # previews need to live beside the real one:
 #
-#   /                      the published site (root redirect -> latest release)
+#   /                      the published site (root redirect -> /latest/)
+#   /latest/               complete mirror of the selected documentation build
 #   /preview/pr-<N>/       one preview per open same-repo PR
 #
 # Publishing the site never touches ``preview/``; closing a PR removes only its
@@ -32,6 +35,9 @@ on:
     branches: [main]
     tags: ["v*"]
     paths:
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "**/README.md"
       - "docs/**"
       - "agent-sdk/*/README.md"
       - "agent-sdk/**/*.py"
@@ -42,6 +48,7 @@ on:
       - "agent-samples/**/*.yaml"
       - "agent-samples/**/*.yml"
       - ".github/workflows/docs.yaml"
+      - ".github/scripts/check_latest_docs_links.py"
       - ".github/scripts/select_latest_docs_release.py"
       - ".github/scripts/publish_docs.sh"
       - ".github/scripts/remove_docs_preview.sh"
@@ -49,6 +56,9 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "**/README.md"
       - "docs/**"
       - "agent-sdk/*/README.md"
       - "agent-sdk/**/*.py"
@@ -59,6 +69,7 @@ on:
       - "agent-samples/**/*.yaml"
       - "agent-samples/**/*.yml"
       - ".github/workflows/docs.yaml"
+      - ".github/scripts/check_latest_docs_links.py"
       - ".github/scripts/select_latest_docs_release.py"
       - ".github/scripts/publish_docs.sh"
       - ".github/scripts/remove_docs_preview.sh"
@@ -99,21 +110,28 @@ jobs:
         run: make -C docs strict
       - name: Strict versioned documentation build
         run: make -C docs strict-versions
-      - name: Point the site root at the review or release entry point
+      - name: Publish a complete latest-version alias
         shell: bash
         run: |
           latest_release="$(make -s -C docs latest-release)"
 
-          latest_target="../main/"
+          latest_source="main"
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-            latest_target="../current/"
+            latest_source="current"
+          elif [[ -n "$latest_release" ]] && python3 \
+            .github/scripts/check_latest_docs_links.py --quiet \
+            "docs/_build/${latest_release}"; then
+            latest_source="${latest_release}"
           elif [[ -n "$latest_release" ]]; then
-            latest_target="../${latest_release}/"
+            echo "::notice::${latest_release} predates a current entry-point target;" \
+              "using main for /latest/."
           fi
 
+          python3 .github/scripts/check_latest_docs_links.py \
+            "docs/_build/${latest_source}"
+          rm -rf docs/_build/latest
           mkdir -p docs/_build/latest
-          sed "s|__XR_AI_DOCS_TARGET__|${latest_target}|g" \
-            docs/source/_static/latest-redirect.html > docs/_build/latest/index.html
+          cp -R "docs/_build/${latest_source}/." docs/_build/latest/
           cp docs/source/_static/root-redirect.html docs/_build/index.html
       - name: Upload documentation site
         uses: actions/upload-artifact@v4

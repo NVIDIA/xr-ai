@@ -8,7 +8,8 @@
  *   connect → start audio → start camera → send data → receive data → disconnect
  *
  * Usage:
- *   streamkit_sample --host <ip> --token <jwt> [--port 7880] [--identity <name>]
+ *   streamkit_sample --host <ip> --token <jwt> [--port 7880]
+ *                    [--identity <name>] [--secure]
  *
  * The LiveKit C++ SDK is wired in via CMake — pass
  * `-DLIVEKIT_SDK_ROOT=/path/to/sdk` to build against a real LiveKit server.
@@ -43,6 +44,7 @@ struct Args {
     std::string token;
     int         port     = 7880;
     std::string identity = "native-client";
+    bool        secure   = false;
 };
 
 static std::string GetArg(const std::vector<std::string>& argv,
@@ -62,10 +64,11 @@ static Args ParseArgs(int argc, char** argv) {
     result.token    = GetArg(args, "--token");
     result.port     = std::stoi(GetArg(args, "--port", "7880"));
     result.identity = GetArg(args, "--identity", "native-client");
+    result.secure   = std::ranges::find(args, "--secure") != args.end();
 
     if (result.host.empty() || result.token.empty()) {
         std::cerr << "Usage: streamkit_sample --host <ip> --token <jwt>"
-                  << " [--port 7880] [--identity <name>]\n";
+                  << " [--port 7880] [--identity <name>] [--secure]\n";
         std::exit(1);
     }
     return result;
@@ -118,6 +121,7 @@ int main(int argc, char** argv) {
     lk_config.host  = args.host;
     lk_config.port  = args.port;
     lk_config.token = args.token;
+    lk_config.secure = args.secure;
 
     // ── Create StreamSession ──────────────────────────────────────────────
     streamkit::StreamSession session{streamkit::BackendConfiguration{lk_config}};
