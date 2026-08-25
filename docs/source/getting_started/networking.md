@@ -10,12 +10,12 @@ ports. Open only the externally reachable ports required by the deployment.
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
-| 7880 | TCP | LiveKit signaling (internal; bound to 127.0.0.1 behind the hub's `/rtc` proxy; also the native C++ client's default insecure debugging path) |
+| 7880 | TCP | Plaintext LiveKit signaling (used behind the hub's `/rtc` proxy; optional direct native-client debugging path) |
 | 7881 | TCP | LiveKit WebRTC TCP fallback (DTLS/SRTP — already encrypted) |
 | 7882 | UDP | LiveKit WebRTC UDP media (DTLS/SRTP — already encrypted) |
-| 8080 | TCP | Web client, token server, and `wss://` `/rtc` proxy (HTTPS; the supported external entry point for every client) |
+| 8080 | TCP | Web client, token server, and `wss://` `/rtc` proxy (HTTPS; the normal external entry point for every client) |
 | 8092 | TCP | Optional live agent-event viewer (plain HTTP — bound to 127.0.0.1 by default; do not expose to an untrusted network) |
-| 48322 | TCP | CloudXR WSS proxy (XR headset or client connection) |
+| 48322 | TCP | CloudXR WSS proxy (`auto-webrtc` clients only; unused by `auto-native` Apple clients) |
 
 ## Ubuntu or Debian (`ufw`)
 
@@ -27,10 +27,26 @@ sudo ufw allow 48322/tcp    # CloudXR (xr-render-demo)
 sudo ufw reload
 ```
 
-7880 stays on `127.0.0.1`; do not expose it externally. Browsers and mobile
-clients reach LiveKit through the same-origin `wss://<host>:8080/rtc` proxy.
-The native C++ executable defaults to port 7880 only for direct, insecure
-debugging on the XR AI host or a trusted development network.
+These rules intentionally omit port 7880. The generated LiveKit configuration
+does not set `bind_addresses`, and the container uses host networking, so the
+plaintext listener can accept connections on the host's network interfaces.
+Merely omitting an allow rule protects it only when the host firewall and any
+cloud security group reject other inbound traffic. Browsers and mobile clients
+must use the same-origin `wss://<host>:8080/rtc` proxy.
+
+The native C++ executable defaults to port 7880 for direct, insecure debugging.
+Keep that traffic on the XR AI host whenever possible. If a native client must
+connect directly from a trusted development network, restrict access to its
+source subnet. For example, with a `192.168.1.0/24` development network:
+
+```bash
+sudo ufw allow from 192.168.1.0/24 to any port 7880 proto tcp
+sudo ufw reload
+```
+
+Apply the equivalent source restriction to the cloud security group. Do not
+expose port 7880 to the public Internet: it carries plaintext signaling, and a
+LiveKit bearer token authenticates a client but does not encrypt the transport.
 
 ## Cloud VMs behind NAT
 

@@ -36,9 +36,11 @@ telemetry service is involved.
 ## Shared connection flow
 
 The hub prints a URL, room, development token, and web-client URL at startup.
-Clients connect to the hub's web-server port `8080`, which proxies LiveKit on
-the same origin. Do not expose or connect directly to LiveKit's internal port
-`7880`.
+Browser, Android, and Apple clients connect to the hub's web-server port `8080`,
+which proxies LiveKit on the same origin. The native C++ client also supports
+this TLS path with `--secure --port 8080`. Its port 7880 default is a plaintext
+direct-debugging exception; restrict it to the XR AI host or a trusted source
+subnet as described in {doc}`networking`.
 
 A client may paste the printed 24-hour development JWT or fetch a shorter-lived
 token from:
@@ -228,6 +230,11 @@ transport. Connecting or stopping XR does not disconnect the LiveKit agent
 session. Closing the immersive space or disconnecting from the hub stops the XR
 session so no render component is orphaned.
 
+In `auto-native` mode, CloudXR does not use the web client's port 48322 WSS
+proxy and needs no additional certificate installation. CloudXRKit's native
+transport provides its own encryption without a user-facing trust prompt. The
+hub certificate on port 8080 remains required for the LiveKit channel.
+
 ## Native C++
 
 The C++20 sample ships a working backend for the LiveKit C++ SDK v0.4.1.
@@ -263,10 +270,11 @@ ctest --test-dir build --output-on-failure
 | `streamkit_session_tests` | Mock-backed connection, media, data, status, and disconnection lifecycle |
 | `streamkit_livekit_backend_tests` | State deduplication, disconnect races, stale metrics, and callback exceptions |
 
-Run one test or rerun failures with CTest:
+Run one test with CTest, invoke its binary directly, or rerun failures:
 
 ```bash
 ctest --test-dir build -R streamkit_frame_sink_tests --output-on-failure
+./build/StreamKit/Tests/StreamKitTests/streamkit_frame_sink_tests
 ctest --test-dir build --rerun-failed --output-on-failure
 ```
 

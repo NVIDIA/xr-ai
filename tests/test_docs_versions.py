@@ -267,11 +267,11 @@ def test_consolidated_readme_headings_keep_github_compatibility_anchors() -> Non
     expected = {
         "README.md": """
             public-beta-notice what-is-xr-ai requirements architecture quickstart
-            model-servers-shared-ai-services simple-vlm-example-vision-qa-over-voice-text
-            step-1-start-the-server step-2-connect-a-client
-            lab-instrument-monitoring-marker-associated-readings-foreground-voice
-            xr-render-demo-voice-driven-sphere-in-cloudxr step-1-start-model-servers-once
-            step-2-start-the-demo hub-only-standalone clients web android
+            model-servers-shared-ai-services simple-vlm-example-vision-qa-over-voice--text
+            step-1--start-the-server step-2--connect-a-client
+            lab-instrument-monitoring-marker-associated-readings--foreground-voice
+            xr-render-demo-voice-driven-sphere-in-cloudxr step-1--start-model-servers-once
+            step-2--start-the-demo hub-only-standalone clients web android
             ios-and-visionos networking tests deeper-docs project-meta ios--visionos
         """,
         "agent-samples/lab-instrument-monitoring/README.md": """
@@ -284,7 +284,7 @@ def test_consolidated_readme_headings_keep_github_compatibility_anchors() -> Non
         """,
         "agent-samples/xr-render-demo/README.md": """
             file-map composition-chain how-to-extend add-a-subagent
-            add-a-scene-tool-function-group add-an-eval-case edit-a-prompt running
+            add-a-scene-tool--function-group add-an-eval-case edit-a-prompt running
         """,
         "agent-samples/xr-render-demo/eval/README.md": """
             live-drivers prompt-tuning-law prompt-tuning-loop writing-a-case
@@ -316,23 +316,23 @@ def test_consolidated_readme_headings_keep_github_compatibility_anchors() -> Non
             ai-sdk-sample repository-layout creating-the-xcode-project 1-new-project
             2-add-destinations 3-add-the-streamkit-package
             4-replace-the-generated-source-files 5-infoplist-entries
-            6-visionos-passthrough-camera-device-only bundling-enterpriselicense
+            6-visionos-passthrough-camera--device-only bundling-enterpriselicense
             7-build-and-run simulator-camera-feed
             trusting-the-hubs-self-signed-cert-one-time-per-device
             enable-full-trust-toggle-does-not-appear
-            connection-fails-with-errsslbadcert--1202-after-the-cert-is-trusted
+            connection-fails-with-errsslbadcert---1202-after-the-cert-is-trusted
             tls-succeeds-but-the-room-rejects-the-token-with-401
             microphone-fails-to-start-with-a-timed-out-error
             orange-mic-indicator-stays-lit-after-stopping-audio
-            mic-camera-go-dead-while-the-ui-still-says-on launching-xr-cloudxr
+            mic--camera-go-dead-while-the-ui-still-says-on launching-xr-cloudxr
             two-parallel-transports
             server-prerequisite-change-nv_device_profile-to-auto-native
             cloudxrkit-spm-dependency apple-developer-program on-device-flow
-            cert-trust-notes render-target quick-start-usage adding-a-custom-backend
+            cert--trust-notes render-target quick-start-usage adding-a-custom-backend
             token-server-livekit
         """,
         "client-samples/native/README.md": """
-            streamkit-for-native-c-livekit-backed-client running-the-tests
+            streamkit-for-native-c--livekit-backed-client running-the-tests
             constraints-in-the-current-native-backend what-streamkit-is-and-isnt
             what-streamkit-adds-on-top-of-livekit
             1-a-single-entry-point-with-decoupled-media
@@ -343,7 +343,7 @@ def test_consolidated_readme_headings_keep_github_compatibility_anchors() -> Non
             implementing-livekitbackend-in-c what-you-get-for-free-once-the-backend-is-done
         """,
         "client-samples/web-xr-build/README.md": """
-            web-xr-build-web-vendor-bundles usage bumping-the-cloudxr-sdk-version
+            web-xr-build--web-vendor-bundles usage bumping-the-cloudxr-sdk-version
             bumping-livekit-client files
         """,
         "services/embedding-server/README.md": """
@@ -352,7 +352,7 @@ def test_consolidated_readme_headings_keep_github_compatibility_anchors() -> Non
         """,
         "services/llama-nemotron-llm/README.md": """
             quickstart endpoints config-keys-llama_nemotron_llm_serveryaml
-            tool-calling-native-llama-31-format reasoning-toggle-per-turn-via-system-prompt
+            tool-calling-native-llama-31-format reasoning-toggle--per-turn-via-system-prompt
             choosing-the-vllm-runtime-pip-vs-docker swap-models license
         """,
         "services/nemotron3-nano-llm/README.md": """
@@ -363,7 +363,7 @@ def test_consolidated_readme_headings_keep_github_compatibility_anchors() -> Non
         """,
         "skills/README.md": "available-skills setup",
         "tests/README.md": """
-            xr-ai-integration-tests layout running gpu-docker-nvenc-tests
+            xr-ai-integration-tests layout running gpu--docker--nvenc-tests
             test-taxonomy no-cross-talk-guarantee
         """,
     }

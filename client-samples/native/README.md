@@ -22,11 +22,11 @@ Install the hub certificate in the native host's trust store before connecting.
 Refer to the
 [Linux trust procedure](https://nvidia.github.io/xr-ai/latest/getting_started/networking.html#linux-native-certificate-trust).
 The sample also defaults to insecure port 7880 for direct LiveKit SDK debugging,
-but that internal port must remain restricted to the XR AI host or a trusted
+but that plaintext port must remain restricted to the XR AI host or a trusted
 development network.
 
 <!-- Compatibility anchors for headings consolidated into the documentation. -->
-<a id="streamkit-for-native-c-livekit-backed-client"></a>
+<a id="streamkit-for-native-c--livekit-backed-client"></a>
 <a id="running-the-tests"></a><a id="constraints-in-the-current-native-backend"></a>
 <a id="what-streamkit-is-and-isnt"></a>
 <a id="what-streamkit-adds-on-top-of-livekit"></a>

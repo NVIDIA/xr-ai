@@ -4,7 +4,8 @@
 # Build the XR AI Sphinx docs. On every docs PR: strict build (warnings = errors).
 # GitHub Pages defaults to the latest complete semantic-version release while
 # retaining ``main`` as development docs. If that release predates a page linked
-# by a current README, ``/latest/`` falls back to the complete ``main`` build.
+# by a current repository entry point, ``/latest/`` falls back to the complete
+# ``main`` build.
 # sphinx-multiversion selects release tags from complete Git history.
 #
 # The site is assembled on the ``gh-pages`` branch rather than straight from a
@@ -122,7 +123,7 @@ jobs:
             "docs/_build/${latest_release}"; then
             latest_source="${latest_release}"
           elif [[ -n "$latest_release" ]]; then
-            echo "::notice::${latest_release} predates a current README target;" \
+            echo "::notice::${latest_release} predates a current entry-point target;" \
               "using main for /latest/."
           fi
 

@@ -486,7 +486,14 @@ cleanup.
   footprint. Keep `served_model_name: llm` to retain the built-in
   `llama_nemotron` adapter, or update the model profile's adapter when changing
   that name or any wire behavior. Hosting backend is selectable per YAML
-  (refer to *Choosing the vLLM runtime*).
+  (refer to *Choosing the vLLM runtime*). The
+  [model card](https://huggingface.co/nvidia/Llama-3.1-Nemotron-Nano-8B-v1)
+  recommends `temperature=0.6` and `top_p=0.95` with reasoning enabled, and
+  greedy decoding with reasoning disabled. It identifies the model as ready
+  for commercial use under the
+  [NVIDIA Open Model License](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/)
+  and the
+  [Llama 3.1 Community License](https://www.llama.com/llama3_1/license/).
 - **nemotron3-nano-llm** is a thin wrapper around `vllm serve` for
   `NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}` (auto-selected by GPU compute
   capability). vLLM handles tool calling (`qwen3_coder` parser), reasoning
@@ -500,7 +507,12 @@ cleanup.
   Hopper, and Ampere.
   `enforce_eager: true` by default to avoid the silent 3–8 min CUDA graph and
   FlashInfer autotune on cold start. Hosting backend is selectable per YAML
-  (refer to *Choosing the vLLM runtime*).
+  (refer to *Choosing the vLLM runtime*). The
+  [model card](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4)
+  recommends `temperature=1.0` and `top_p=1.0` for reasoning, and
+  `temperature=0.6` and `top_p=0.95` for tool calling. It identifies the model
+  as ready for commercial use under the
+  [NVIDIA Nemotron Open Model License](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-nemotron-open-model-license/).
 - **nemotron-omni-llm** is a vLLM-backed multimodal LLM serving
   `Nemotron-3-Nano-Omni-30B-A3B-Reasoning` (text + video input) at port 8108.
   The YAML auto-selects between three model variants by detected GPU compute

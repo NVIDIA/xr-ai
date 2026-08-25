@@ -19,7 +19,7 @@ uv run --project services/llama-nemotron-llm llama_nemotron_llm_server \
 <a id="quickstart"></a><a id="endpoints"></a>
 <a id="config-keys-llama_nemotron_llm_serveryaml"></a>
 <a id="tool-calling-native-llama-31-format"></a>
-<a id="reasoning-toggle-per-turn-via-system-prompt"></a>
+<a id="reasoning-toggle--per-turn-via-system-prompt"></a>
 <a id="choosing-the-vllm-runtime-pip-vs-docker"></a>
 <a id="swap-models"></a><a id="license"></a>
 

@@ -19,7 +19,7 @@ any owned process exit terminates the application stack.
 
 | Role | Ownership | Directory | Command | Port |
 |---|---|---|---|---|
-| hub | sample | `services/device-io-hub/` | `device_io_hub` | 8080 (HTTPS and `/rtc` WSS proxy); LiveKit 7880 stays on 127.0.0.1 |
+| hub | sample | `services/device-io-hub/` | `device_io_hub` | 8080 (HTTPS and `/rtc` WSS proxy); 7880 (plaintext LiveKit direct-debug path; firewall-restricted) |
 | cloudxr | sample | `services/cloudxr-runtime/` | `cloudxr_runtime` | 48322 (WSS proxy) |
 | stt | reused | `services/stt-server/` | `stt_server` | 8103 |
 | tts | reused | `services/piper-tts/` | `piper_tts_server` | 8105 |

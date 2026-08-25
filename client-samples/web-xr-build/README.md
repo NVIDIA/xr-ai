@@ -13,7 +13,7 @@ same-origin XR and offline-LAN use.
 ```
 
 <!-- Compatibility anchors for headings consolidated into the documentation. -->
-<a id="web-xr-build-web-vendor-bundles"></a><a id="usage"></a>
+<a id="web-xr-build--web-vendor-bundles"></a><a id="usage"></a>
 <a id="bumping-the-cloudxr-sdk-version"></a>
 <a id="bumping-livekit-client"></a><a id="files"></a>
 
