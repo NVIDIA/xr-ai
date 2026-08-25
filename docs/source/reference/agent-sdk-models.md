@@ -5,14 +5,16 @@
 
 # xr-ai-models
 
-(contract)=
+<a id="contract"></a>
+(agent-sdk-models-contract)=
 `xr-ai-models` defines typed LLM, VLM, STT, TTS, and embedding protocols and
 constructs concrete clients from deployment profiles. Workers depend on those
 protocols instead of hand-written HTTP or vendor SDK calls. Refer to
 {doc}`python/index` for exact classes, methods, fields, and defaults. Refer to
 {doc}`/components/ai-services` for server operation.
 
-(quickstart)=
+<a id="quickstart"></a>
+(agent-sdk-models-quickstart)=
 ## Construct a model client
 
 ```python
@@ -84,7 +86,8 @@ profile sets `max_videos_per_prompt: 0` to avoid reserving unused activation
 memory. Set it to at least `1` and restart the persistent VLM server before
 sending a video request.
 
-(protocols)=
+<a id="protocols"></a>
+(agent-sdk-models-protocols)=
 `ChatResponse.reasoning` is the canonical post-normalization field. Model
 adapters absorb whether the provider calls it `reasoning` or
 `reasoning_content`. LLM and VLM calls accept controlled per-request headers for
@@ -124,7 +127,7 @@ Use `readiness: none` only when the remote provider has no compatible health
 route. It makes `health()` succeed without a request, preventing an impossible
 local readiness gate.
 
-(riva-grpc-speech-nim-stttts)=
+(riva-grpc-speech-nim-stt-tts)=
 ## Riva speech over gRPC
 
 Riva speech NIMs use `kind: riva_grpc`, not OpenAI `/v1/audio`. Install the

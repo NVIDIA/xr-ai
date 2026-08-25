@@ -194,6 +194,29 @@ def test_latest_docs_link_checker_validates_pages_and_fragments(tmp_path) -> Non
     assert "rendered page does not exist" in errors[0]
 
 
+def test_latest_docs_link_checker_reads_reference_bare_and_html_links(tmp_path) -> None:
+    check_links = runpy.run_path(str(_LATEST_LINK_CHECKER))["check_latest_docs_links"]
+    repository = tmp_path / "repository"
+    rendered = tmp_path / "rendered"
+    readme = repository / "README.md"
+    repository.mkdir()
+    rendered.mkdir()
+    readme.write_text(
+        "[Reference][missing-reference]\n"
+        "[missing-reference]: "
+        "https://nvidia.github.io/xr-ai/latest/missing-reference.html\n"
+        "https://nvidia.github.io/xr-ai/latest/missing-bare.html\n"
+        '<a href="https://nvidia.github.io/xr-ai/latest/missing-html.html">'
+        "HTML</a>\n",
+        encoding="utf-8",
+    )
+
+    errors = check_links(repository, rendered, (readme,))
+
+    assert len(errors) == 3
+    assert all("rendered page does not exist" in error for error in errors)
+
+
 def test_getting_started_skill_routes_to_versioned_setup_docs() -> None:
     skill = (_ROOT / "skills" / "getting-started" / "SKILL.md").read_text()
     normalized = " ".join(skill.split())
@@ -264,6 +287,8 @@ def test_readme_relative_links_resolve_and_docs_links_are_rendered() -> None:
 
 
 def test_consolidated_readme_headings_keep_github_compatibility_anchors() -> None:
+    # GitHub drops the punctuation in "NIM (STT/TTS)" while MyST replaces the
+    # slash with a hyphen, so the README and published-page fragments differ.
     expected = {
         "README.md": """
             public-beta-notice what-is-xr-ai requirements architecture quickstart
@@ -397,9 +422,6 @@ def test_reworded_headings_keep_compatibility_anchors() -> None:
         "the-connect-flow",
         "self-signed-certificate-trust",
         "web-basic-sample",
-        "requirements",
-        "build-and-run",
-        "connect",
         "android-xr",
         "create-the-xcode-project",
         "adding-a-client-for-a-new-platform",
@@ -410,22 +432,17 @@ def test_reworded_headings_keep_compatibility_anchors() -> None:
             hub,
             (
                 "subscription-and-roster-contract",
-                "frames",
                 "return-path",
-                "readiness",
             ),
         ),
         (
             models,
             (
-                "contract",
-                "quickstart",
                 "profile-contract",
                 "deployment-profiles",
-                "protocols",
                 "remote-and-hosted-nim-endpoints",
                 "remote-hosted-nim-endpoints",
-                "riva-grpc-speech-nim-stttts",
+                "riva-grpc-speech-nim-stt-tts",
             ),
         ),
         (
@@ -440,7 +457,6 @@ def test_reworded_headings_keep_compatibility_anchors() -> None:
         (
             voice,
             (
-                "usage",
                 "multiple-voice-producers",
                 "voice-tuning-and-data-echo",
             ),
@@ -448,5 +464,35 @@ def test_reworded_headings_keep_compatibility_anchors() -> None:
     ):
         for anchor in anchors:
             assert f"({anchor})=" in page
+    for page, aliases in (
+        (
+            clients,
+            (
+                ("requirements", "clients-requirements"),
+                ("build-and-run", "clients-build-and-run"),
+                ("connect", "clients-connect"),
+            ),
+        ),
+        (
+            hub,
+            (
+                ("frames", "agent-sdk-hub-frames"),
+                ("readiness", "agent-sdk-hub-readiness"),
+            ),
+        ),
+        (
+            models,
+            (
+                ("contract", "agent-sdk-models-contract"),
+                ("quickstart", "agent-sdk-models-quickstart"),
+                ("protocols", "agent-sdk-models-protocols"),
+            ),
+        ),
+        (voice, (("usage", "agent-sdk-voice-usage"),)),
+    ):
+        for legacy, scoped in aliases:
+            assert f'<a id="{legacy}"></a>' in page
+            assert f"({scoped})=" in page
+            assert f"({legacy})=" not in page
     assert '<a id="remote--hosted-nim-endpoints"></a>' in models
     assert "(worker-configuration)=" in xr_render

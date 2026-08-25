@@ -98,9 +98,9 @@ class CliCommand:
 
     @property
     def invocation(self) -> str:
-        """Return the canonical repository-root invocation."""
+        """Return the canonical invocation from the sample directory."""
 
-        base = f"uv run --project {self.project_dir.as_posix()} {self.program}"
+        base = f"uv run {self.program}"
         usage = " ".join(argument.usage for argument in self.arguments)
         return f"{base} {usage}" if usage else base
 
@@ -225,6 +225,11 @@ def _directive_type():
                 section = nodes.section(ids=[nodes.make_id(command.program)])
                 section += nodes.title(text=command.program)
                 section += nodes.paragraph(text=command.description)
+                location = nodes.paragraph()
+                location += nodes.Text("Run from ")
+                location += nodes.literal(text=f"{command.project_dir.as_posix()}/")
+                location += nodes.Text(":")
+                section += location
                 invocation = f"$ {command.invocation}"
                 literal = nodes.literal_block(invocation, invocation)
                 literal["language"] = "console"

@@ -13,9 +13,8 @@ from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlsplit
 
-_LATEST_LINK = re.compile(
-    r"(?<!!)\[[^]]+\]\((https://nvidia\.github\.io/xr-ai/latest/[^)\s]+)"
-    r"(?:\s+[^)]*)?\)"
+_LATEST_URL = re.compile(
+    r"https://nvidia\.github\.io/xr-ai/latest/[^\s<>'\"\])}]+"
 )
 
 
@@ -68,7 +67,8 @@ def check_latest_docs_links(
 
     for readme in paths:
         source = readme.read_text(encoding="utf-8")
-        for url in _LATEST_LINK.findall(source):
+        for match in _LATEST_URL.finditer(source):
+            url = match.group().rstrip(".,;:!?")
             parsed = urlsplit(url)
             relative_url = unquote(parsed.path.removeprefix("/xr-ai/latest/"))
             relative_path = PurePosixPath(relative_url)

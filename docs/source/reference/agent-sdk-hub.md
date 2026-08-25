@@ -40,7 +40,8 @@ therefore be idempotent. Because ZMQ subscription changes are asynchronous,
 workers that own readiness wait for `wait_for_subscriptions()` before announcing
 availability.
 
-(frames)=
+<a id="frames"></a>
+(agent-sdk-hub-frames)=
 ## Frames and return routing
 
 Frame callbacks carry metadata without copying pixels. `request_frame()` obtains
@@ -55,7 +56,8 @@ agent state: `set_status()` and `mark_ready()` record it on the endpoint, while
 DeviceIOHub aggregates responsible agents and publishes client readiness.
 `republish_statuses()` restores one-shot state after reconnects.
 
-(readiness)=
+<a id="readiness"></a>
+(agent-sdk-hub-readiness)=
 Readiness participation is opt-in with `announces_readiness=True`. Passive
 endpoints do not contribute status. An endpoint answers only for subscribed
 participants, and a live subscription must be confirmed before the hub exposes
