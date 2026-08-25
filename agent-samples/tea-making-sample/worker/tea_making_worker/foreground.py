@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
+from pathlib import Path
 
 import nemo_relay
 from loguru import logger
@@ -48,6 +49,9 @@ from .workflow import GuidanceAgent
 from .workflow_tools import CurrentViewRequest, rag_lookup_tool
 
 _MAX_TOOL_ROUNDS = 4
+_PROMPTS = Path(__file__).resolve().parent / "prompts"
+_IDLE_PROMPT = (_PROMPTS / "foreground_idle.txt").read_text(encoding="utf-8").strip()
+_ACTIVE_PROMPT = (_PROMPTS / "foreground_active.txt").read_text(encoding="utf-8").strip()
 
 
 class ForegroundAgent(Agent):
@@ -263,7 +267,7 @@ class ForegroundAgent(Agent):
                 ctx=ctx,
                 timestamp_us=timestamp_us,
             )
-            system_prompt = self._prompt
+            system_prompt = f"{self._prompt}\n\n{_IDLE_PROMPT}"
             route = "root"
         else:
             active_tools = self._guidance.active_tools(participant_id)
@@ -273,7 +277,10 @@ class ForegroundAgent(Agent):
                 active_tools,
                 self._background_tools(participant_id),
             )
-            system_prompt = f"{self._prompt}\n\nActive tea guide:\n{active_context}"
+            system_prompt = (
+                f"{self._prompt}\n\n{_ACTIVE_PROMPT}"
+                f"\n\nActive tea guide:\n{active_context}"
+            )
             route = "tea"
         return system_prompt, tools, route
 

@@ -1330,12 +1330,20 @@ def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:
 
 def test_foreground_prompt_has_route_eval_cases() -> None:
     cases = yaml.safe_load((_SAMPLE / "eval/cases.yaml").read_text())
-    prompt = (
+    common_prompt = (
         _WORKER / "tea_making_worker/prompts/foreground_prompt.txt"
     ).read_text()
+    idle_prompt = (
+        _WORKER / "tea_making_worker/prompts/foreground_idle.txt"
+    ).read_text()
+    active_prompt = (
+        _WORKER / "tea_making_worker/prompts/foreground_active.txt"
+    ).read_text()
     refusal = "I can only help with the active tea guide right now."
-    assert "While the tea guide is active, decline requests" in prompt
-    assert f"reply exactly:\n{refusal}" in prompt
+    assert refusal not in common_prompt
+    assert refusal not in idle_prompt
+    assert "general-purpose assistant" in idle_prompt
+    assert f"reply exactly:\n{refusal}" in active_prompt
 
     root_cases = [case for case in cases if case.get("route", "root") == "root"]
     assert {case["expected_tool"] for case in root_cases} == {
@@ -1388,3 +1396,45 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
         if case["name"] == "idle-answers-unrelated-general-knowledge"
     )
     assert idle_unrelated["forbidden_response"] == refusal
+    idle_visual = next(
+        case
+        for case in root_cases
+        if case["name"] == "idle-routes-visible-shirt-color"
+    )
+    assert idle_visual["expected_tool"] == "current_view"
+    assert idle_visual["forbidden_response"] == refusal
+    active_visual = next(
+        case
+        for case in active_cases
+        if case["name"] == "active-rejects-unrelated-visual-question"
+    )
+    assert active_visual["expected_tool"] is None
+    assert active_visual["expected_response"] == refusal
+
+
+def test_foreground_route_injects_only_its_policy() -> None:
+    foreground = object.__new__(ForegroundAgent)
+    foreground._prompt = "Common policy."
+    foreground._guidance = SimpleNamespace(
+        active_context=lambda participant_id: (
+            None if participant_id == "idle" else '{"step":"fill_water"}'
+        ),
+        active_tools=lambda _participant_id: ToolSet(()),
+    )
+    foreground._root_tools = lambda *_args, **_kwargs: ToolSet(())
+    foreground._background_tools = lambda *_args, **_kwargs: ToolSet(())
+
+    idle_prompt, _, idle_route = foreground._prepare_route(
+        "idle", ctx=None, timestamp_us=None
+    )
+    active_prompt, _, active_route = foreground._prepare_route(
+        "active", ctx=None, timestamp_us=None
+    )
+    refusal = "I can only help with the active tea guide right now."
+
+    assert idle_route == "root"
+    assert "general-purpose assistant" in idle_prompt
+    assert refusal not in idle_prompt
+    assert active_route == "tea"
+    assert "general-purpose assistant" not in active_prompt
+    assert refusal in active_prompt
