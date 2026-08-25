@@ -155,7 +155,7 @@ locks, and participant cleanup.
 | `guidance_voice.py` | Guidance notice speech policy | Add another presentation channel |
 | `file_output.py` | Participant JSONL artifacts | Replace files with backend persistence |
 | `web_events.py` | Explicit typed event-to-view projections | Select or reshape live presentation topics |
-| `prompts/` | Default model instructions | Tune one agent without duplicating prompts in YAML |
+| `prompts/` | Shared model instructions and packaged route policies | Tune configurable prompts without duplicating them in YAML |
 | `yaml/workflow.yaml` | Five-step procedure and evidence contract | Define a different guided task |
 | `rag-documents/` | Sample retrieval corpus | Replace with domain documents or a backend |
 
@@ -211,6 +211,11 @@ independent background applications. For a request unrelated to all of those,
 the model must call no tool, leave guide state unchanged, and reply exactly “I
 can only help with the active tea guide right now.” The rule is scoped to the
 active route; the idle root assistant can answer ordinary questions.
+
+An inline `foreground_prompt` or `foreground_prompt_file` overrides only the
+shared foreground instructions. The packaged idle or active policy is appended
+after that shared prompt so configuration overrides cannot remove route
+selection, active-guide refusal, or workflow-control safeguards.
 
 There is exactly one model loop. The foreground agent does not ask one model to
 route to another agent, and background agents never capture a foreground turn.

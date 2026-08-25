@@ -1643,6 +1643,11 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="nt">workflow_config</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workflow.yaml</span>
 <span class="nt">voice_gate_yaml</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">voice_gate.yaml</span>
 
+<span class="c1"># Choose one to replace the shared foreground instructions. The packaged idle</span>
+<span class="c1"># or active route policy is always appended after the configured shared prompt.</span>
+<span class="c1"># foreground_prompt: &lt;inline shared foreground instructions&gt;</span>
+<span class="c1"># foreground_prompt_file: ../worker/tea_making_worker/prompts/foreground_prompt.txt</span>
+
 <span class="nt">rag_endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tcp://127.0.0.1:8340</span>
 <span class="nt">artifacts_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../artifacts</span>
 

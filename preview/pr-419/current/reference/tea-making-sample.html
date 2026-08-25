@@ -667,8 +667,8 @@ locks, and participant cleanup.</p>
 <td><p>Select or reshape live presentation topics</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">prompts/</span></code></p></td>
-<td><p>Default model instructions</p></td>
-<td><p>Tune one agent without duplicating prompts in YAML</p></td>
+<td><p>Shared model instructions and packaged route policies</p></td>
+<td><p>Tune configurable prompts without duplicating them in YAML</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/workflow.yaml</span></code></p></td>
 <td><p>Five-step procedure and evidence contract</p></td>
@@ -749,6 +749,10 @@ independent background applications. For a request unrelated to all of those,
 the model must call no tool, leave guide state unchanged, and reply exactly “I
 can only help with the active tea guide right now.” The rule is scoped to the
 active route; the idle root assistant can answer ordinary questions.</p>
+<p>An inline <code class="docutils literal notranslate"><span class="pre">foreground_prompt</span></code> or <code class="docutils literal notranslate"><span class="pre">foreground_prompt_file</span></code> overrides only the
+shared foreground instructions. The packaged idle or active policy is appended
+after that shared prompt so configuration overrides cannot remove route
+selection, active-guide refusal, or workflow-control safeguards.</p>
 <p>There is exactly one model loop. The foreground agent does not ask one model to
 route to another agent, and background agents never capture a foreground turn.
 <code class="docutils literal notranslate"><span class="pre">current_view</span></code> is a direct-return exception within that loop: after the route is
