@@ -91,6 +91,25 @@ def test_agent_prompt_is_owned_by_docs_snippet() -> None:
         assert "```{literalinclude} /_snippets/agent-setup-prompt.txt" in page.read_text()
 
 
+def test_getting_started_skill_routes_to_versioned_setup_docs() -> None:
+    skill = (_ROOT / "skills" / "getting-started" / "SKILL.md").read_text()
+    normalized = " ".join(skill.split())
+
+    assert "root `README.md` Requirements" not in skill
+    assert (
+        "https://nvidia.github.io/xr-ai/<ref>/getting_started/requirements.html"
+        in skill
+    )
+    assert (
+        "https://nvidia.github.io/xr-ai/<ref>/getting_started/quickstart.html"
+        in skill
+    )
+    assert (
+        "Start `agent-samples/model-servers` and wait for it to report readiness "
+        "before starting `agent-samples/simple-vlm-example`"
+    ) in normalized
+
+
 def test_sample_readmes_use_sample_directory_commands() -> None:
     commands = {
         "lab-instrument-monitoring": "lab_instrument_monitoring",

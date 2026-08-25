@@ -22,13 +22,16 @@ Ask the user, then tailor the pointers below to the answers.
    skill from the chosen ref if it does not. Releases that predate the skill
    bank are not covered: with the user's OK, use `main` for both this skill
    and the checkout. The answer selects both the git ref to check out and the
-   version of the docs site to read: <https://nvidia.github.io/xr-ai/> serves
-   the released version once one is published, with `main` and per-tag
-   versions available.
+   version of the docs site to read. Use
+   `https://nvidia.github.io/xr-ai/main/` for `main`, or replace `main` with
+   the selected release tag. <https://nvidia.github.io/xr-ai/> opens the
+   latest published release.
 2. **Local or remote GPU?** Models on the local GPU, or a hosted/remote
    endpoint?
-   - **Local:** the Requirements section of the root `README.md` applies,
-     including the VRAM table.
+   - **Local:** read the matching version of the requirements page at
+     `https://nvidia.github.io/xr-ai/<ref>/getting_started/requirements.html`,
+     including the VRAM table. Replace `<ref>` with `main` or the selected
+     release tag.
    - **Remote/hosted:** the LLM and VLM can run on hosted endpoints, and no
      local GPU is needed for the agent or hub. STT and TTS stay local. Read
      `docs/source/components/ai-services.md` (section "Hosting models on
@@ -49,7 +52,8 @@ Ask the user, then tailor the pointers below to the answers.
   and copy.
 - **Scaffolding a new sample:** `docs/source/guides/adding-a-sample.md`, full
   boilerplate templates.
-- **Quickstart order:** root `README.md` Requirements first. Then
-  `agent-samples/simple-vlm-example` runs directly;
-  `agent-samples/model-servers` is a prerequisite for
-  `agent-samples/xr-render-demo`.
+- **Quickstart order:** follow
+  `https://nvidia.github.io/xr-ai/<ref>/getting_started/quickstart.html`, with
+  `<ref>` replaced as above. Start `agent-samples/model-servers` and wait for
+  it to report readiness before starting `agent-samples/simple-vlm-example`
+  or another agent sample.
