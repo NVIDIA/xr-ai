@@ -12,10 +12,11 @@ required for the browser camera tests.
 
 ## Run the suite
 
+From the repository root:
+
 ```bash
-cd tests
-uv sync
-uv run pytest -v
+uv sync --project tests
+uv run --project tests pytest -v
 ```
 
 CI runs the same project on Python 3.11 and 3.12 with:

@@ -18,9 +18,8 @@ for the package dependency map.
 For a Python change:
 
 ```bash
-cd <affected-project>
-uv sync
-uv run pytest
+uv sync --project <affected-project>
+uv run --project tests pytest <affected-test-files>
 uv tool run ruff check <changed-python-files>
 ```
 

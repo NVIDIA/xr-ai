@@ -594,11 +594,11 @@ an insecure debugging exception.</p>
 <p>On first run a self-signed certificate is generated at
 <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code>. To use your own, set <code class="docutils literal notranslate"><span class="pre">cert_file</span></code>
 and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>.</p>
-<p>The generated certificate covers <code class="docutils literal notranslate"><span class="pre">localhost</span></code>, the hostname, and every local
-interface IP. When clients dial an address that is not on any local
-interface (the public IP of a NAT’d cloud VM such as Brev, a forwarding
-proxy’s address, or a DNS name), list it in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> and the
-certificate is regenerated to include it on the next hub start:</p>
+<p>The generated certificate covers <code class="docutils literal notranslate"><span class="pre">localhost</span></code>, the hostname, and automatically
+discovered local IPv4 addresses. When clients dial an address that discovery
+misses, or one that is not local (the public IP of a NAT’d cloud VM such as Brev,
+a forwarding proxy’s address, or a DNS name), list it in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> and
+the certificate is regenerated to include it on the next hub start:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">web_server_extra_sans</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">203.0.113.7</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub.example.com</span>

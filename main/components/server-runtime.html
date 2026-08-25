@@ -686,10 +686,13 @@ installable iOS profile.</p>
 <p>Set <code class="docutils literal notranslate"><span class="pre">web_server_tls:</span> <span class="pre">false</span></code> for the two cases where the hub does not
 terminate TLS itself: a TLS-terminating reverse proxy (nginx, Caddy,
 Cloudflare Tunnel) sits in front and speaks plain <code class="docutils literal notranslate"><span class="pre">http://</span></code> + <code class="docutils literal notranslate"><span class="pre">ws://</span></code> to the
-hub on the loopback, or localhost-only development where browsers already grant
-camera and microphone access on <code class="docutils literal notranslate"><span class="pre">http://localhost</span></code>. In that mode <code class="docutils literal notranslate"><span class="pre">/token</span></code>
-returns a plain
-<code class="docutils literal notranslate"><span class="pre">ws://</span></code> URL and the proxy carries plain WebSocket.</p>
+hub, or localhost-only development where browsers already grant camera and
+microphone access on <code class="docutils literal notranslate"><span class="pre">http://localhost</span></code>. Bind the hub to loopback with
+<code class="docutils literal notranslate"><span class="pre">web_server_host:</span> <span class="pre">127.0.0.1</span></code>, or source-restrict it with a firewall, when a
+reverse proxy is the public entry point. In this mode <code class="docutils literal notranslate"><span class="pre">/token</span></code> returns the
+direct <code class="docutils literal notranslate"><span class="pre">ws://&lt;request-host&gt;:&lt;lk_port_ws&gt;</span></code> URL, not the hub’s <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> proxy.
+Custom clients behind the TLS terminator must use the external same-origin
+<code class="docutils literal notranslate"><span class="pre">wss://</span></code> proxy URL and must not expose port 7880 publicly.</p>
 <p>For runtime symptoms and fixes, refer to
 <a class="reference internal" href="../guides/troubleshooting.html"><span class="doc">Troubleshooting</span></a>.</p>
 </section>

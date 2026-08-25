@@ -49,7 +49,8 @@ accepted speech or typed query         ├─> current frame + generic VLM query
               └─> current readings             │
                                                ├─> change event ─┬─> voice aggregation
                                                ├─> lost event ───┤
-                                               └─> state event ──┴─> JSONL/backend
+                                               │                 └─> JSONL/backend
+                                               └─> state event ────> JSONL/backend
 ```
 
 `VoiceAgent` publishes participant-scoped queries and lifecycle events into

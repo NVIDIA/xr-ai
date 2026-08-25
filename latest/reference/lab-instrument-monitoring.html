@@ -487,7 +487,8 @@ accepted speech or typed query         ├─&gt; current frame + generic VLM qu
               └─&gt; current readings             │
                                                ├─&gt; change event ─┬─&gt; voice aggregation
                                                ├─&gt; lost event ───┤
-                                               └─&gt; state event ──┴─&gt; JSONL/backend
+                                               │                 └─&gt; JSONL/backend
+                                               └─&gt; state event ────&gt; JSONL/backend
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes participant-scoped queries and lifecycle events into
