@@ -48,10 +48,10 @@ gpu_index: 1
 
 Choose a `gpu_index` that exists in `nvidia-smi`. Restart the demo after an
 edit. Refer to the
-[sample configuration guide](../../docs/source/reference/xr-render-demo.md#configuration)
+[sample configuration guide](https://nvidia.github.io/xr-ai/latest/reference/xr-render-demo.html#configuration)
 for precedence and GPU-placement details and to the generated
-[configuration reference](../../docs/source/reference/configuration.rst) for
-every field and default.
+[configuration reference](https://nvidia.github.io/xr-ai/latest/reference/configuration.html) for
+every checked-in field and example value.
 
 ## Run
 
@@ -82,6 +82,6 @@ Ctrl+C to stop the demo stack; do not stop its individual child processes.
 The shared models remain running after the sample stops. From this directory,
 stop them with `uv run --project ../model-servers model_servers --stop`.
 
-Refer to the [sample reference](../../docs/source/reference/xr-render-demo.md)
+Refer to the [sample reference](https://nvidia.github.io/xr-ai/latest/reference/xr-render-demo.html)
 for client selection, the process stack, extension points, evaluation, GPU
 placement, and tracing guidance.

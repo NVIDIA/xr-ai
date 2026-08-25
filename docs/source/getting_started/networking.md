@@ -13,7 +13,7 @@ ports. Open only the externally reachable ports required by the deployment.
 | 7880 | TCP | LiveKit signaling (internal — bound to 127.0.0.1 via the hub's /rtc proxy; browsers and mobile clients do not connect here) |
 | 7881 | TCP | LiveKit WebRTC TCP fallback (DTLS/SRTP — already encrypted) |
 | 7882 | UDP | LiveKit WebRTC UDP media (DTLS/SRTP — already encrypted) |
-| 8080 | TCP | Web client + token server + wss:// /rtc proxy (HTTPS — the single entry point for browser, Android, iOS, and visionOS clients) |
+| 8080 | TCP | Web client + token server + wss:// /rtc proxy (HTTPS — the single entry point for browser, Android, iOS, visionOS, and native C++ clients) |
 | 8092 | TCP | Optional live agent-event viewer (plain HTTP — bound to 127.0.0.1 by default; do not expose to an untrusted network) |
 | 48322 | TCP | CloudXR WSS proxy (XR headset or client connection) |
 
@@ -115,14 +115,15 @@ the public Internet. Use the loopback binding with an SSH tunnel, or put the
 viewer behind an authenticated TLS reverse proxy.
 ```
 
-## TLS for the web client
+(tls-for-the-web-client)=
+## TLS for clients
 
 TLS is **on by default** — `web_server_tls: true` is the built-in default.
 The web server terminates HTTPS on `web_server_port` (8080 by default) and
 also exposes a same-origin `wss://<host>:8080/rtc` proxy that forwards
 LiveKit signaling to the internal plaintext port. This is the only path
-browser, Android, iOS, and visionOS clients use; LiveKit's native 7880 is
-never reached directly by client traffic.
+browser, Android, iOS, visionOS, and native C++ clients use; LiveKit's native
+7880 is never reached directly by client traffic.
 
 On first run a self-signed certificate is generated at
 `~/.local/share/xr-ai/web-server.crt`. To use your own, set `cert_file`
@@ -170,6 +171,25 @@ does not expose a server-trust auth-challenge hook, and ATS does not
 bypass certificate-chain validation regardless of `NSAllowsArbitraryLoads`.
 Until the certificate is trusted at the OS level, the wss handshake fails.
 ```
+
+(linux-native-certificate-trust)=
+### Linux native certificate trust
+
+The native C++ client validates the hub through the Linux system CA bundle.
+Copy `~/.local/share/xr-ai/web-server.crt` securely from the hub host to the
+native client host. On Ubuntu or Debian, install that copy and refresh the
+bundle:
+
+```bash
+sudo install -m 0644 /path/to/web-server.crt \
+  /usr/local/share/ca-certificates/xr-ai-hub.crt
+sudo update-ca-certificates
+```
+
+Restart the native client after updating the bundle. The address passed to
+`--host` must appear in the certificate's subject alternative names. Configure
+`web_server_extra_sans` and restart the hub to regenerate the certificate when
+the native client uses another IP address or DNS name.
 
 For production deployments on any platform, replace the auto-generated
 certificate with one from a public CA by setting `cert_file` and `key_file` in

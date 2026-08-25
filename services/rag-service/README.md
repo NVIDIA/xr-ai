@@ -9,10 +9,17 @@ Private typed msgpack over ZMQ service that indexes Markdown and text documents 
 an `xr-ai-models` embedding endpoint and serves dense retrieval to
 `xr_ai_tools.rag.RAGTools`.
 
+Run this command from the repository root after starting the embedding service
+selected by the sample's model profile:
+
 ```bash
 uv run --project services/rag-service rag_service \
-  --config agent-samples/my-agent/yaml/rag_service.yaml
+  --config agent-samples/tea-making-sample/yaml/rag_service.yaml
 ```
 
-Refer to [AI inference servers](../../docs/source/components/ai-services.md#per-server-notes)
+That sample configuration points `documents_dir` at its application-owned
+documents and `models_config` at a profile with an embedding role. Set both
+fields when adapting the service to another application.
+
+Refer to [AI inference servers](https://nvidia.github.io/xr-ai/latest/components/ai-services.html#per-server-notes)
 for startup order, profile requirements, caching, and integration guidance.

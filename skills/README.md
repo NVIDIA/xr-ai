@@ -9,6 +9,6 @@ Setup skills that teach coding agents the xr-ai working contract, documentation,
 and reference sample. Each directory follows the open
 [Agent Skills](https://agentskills.io) specification.
 
-Refer to [Set up with a coding agent](../docs/source/getting_started/skills.md) for
+Refer to [Set up with a coding agent](https://nvidia.github.io/xr-ai/latest/getting_started/skills.html) for
 the setup prompt, available skills, installation, and the fallback for agents
 without a skills mechanism.

@@ -9,11 +9,14 @@ OpenAI-compatible vLLM wrapper for Nemotron 3 Nano 30B-A3B. It selects NVFP4
 on Blackwell and FP8 on earlier supported GPU architectures and serves port
 8107.
 
+Run this command from the repository root:
+
 ```bash
 uv run --project services/nemotron3-nano-llm nemotron3_nano_llm_server \
   --config services/nemotron3-nano-llm/nemotron3_nano_llm_server.yaml
 ```
 
-Refer to [AI inference servers](../../docs/source/components/ai-services.md#per-server-notes)
+Refer to [AI inference servers](https://nvidia.github.io/xr-ai/latest/components/ai-services.html#per-server-notes)
 for model selection, tool calling, reasoning, hardware, persistence, and runtime
-guidance. Exact configuration fields are generated from the adjacent YAML.
+guidance. The adjacent YAML and its comments define the standalone
+configuration.

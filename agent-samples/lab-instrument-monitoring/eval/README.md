@@ -7,7 +7,7 @@
 
 `cases.yaml` checks foreground routing and `visual_cases.yaml` checks the
 monitor and instrument VLM prompts. Refer to the
-[sample guide](../../../docs/source/reference/lab-instrument-monitoring.md#routing-and-visual-evals)
+[sample guide](https://nvidia.github.io/xr-ai/latest/reference/lab-instrument-monitoring.html#routing-and-visual-evals)
 for the evaluation contract and coverage. Start `model-servers`, then run from
 the sample root:
 

@@ -13,5 +13,5 @@ same-origin XR and offline-LAN use.
 ```
 
 The xr-render orchestrator runs this automatically when needed. Refer to
-[Connecting clients](../../docs/source/getting_started/clients.md#web-xr-xr-render-demo)
+[Connecting clients](https://nvidia.github.io/xr-ai/latest/getting_started/clients.html#web-xr-xr-render-demo)
 for cache behavior and dependency updates.

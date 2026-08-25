@@ -79,7 +79,7 @@ async def main() -> None:
                 await tracking.call("set_sim_pose", p)
             except Exception as error:
                 print(f"openxr service refused set_sim_pose ({error}); set allow_sim_pose: true in "
-                      "yaml/openxr_service.yaml and restart the stack")
+                      "../yaml/openxr_service.yaml and restart the stack")
                 raise SystemExit(2) from None
             for prompt, distance in PROMPT_SETS[pose_name]:
                 participant = f"live-pose-{int(time.time())}-{case_index}"

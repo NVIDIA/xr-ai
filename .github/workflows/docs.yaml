@@ -11,6 +11,7 @@
 # previews need to live beside the real one:
 #
 #   /                      the published site (root redirect -> latest release)
+#   /latest/               complete mirror of the selected latest release
 #   /preview/pr-<N>/       one preview per open same-repo PR
 #
 # Publishing the site never touches ``preview/``; closing a PR removes only its
@@ -99,21 +100,21 @@ jobs:
         run: make -C docs strict
       - name: Strict versioned documentation build
         run: make -C docs strict-versions
-      - name: Point the site root at the review or release entry point
+      - name: Publish a complete latest-version alias
         shell: bash
         run: |
           latest_release="$(make -s -C docs latest-release)"
 
-          latest_target="../main/"
+          latest_source="main"
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-            latest_target="../current/"
+            latest_source="current"
           elif [[ -n "$latest_release" ]]; then
-            latest_target="../${latest_release}/"
+            latest_source="${latest_release}"
           fi
 
+          rm -rf docs/_build/latest
           mkdir -p docs/_build/latest
-          sed "s|__XR_AI_DOCS_TARGET__|${latest_target}|g" \
-            docs/source/_static/latest-redirect.html > docs/_build/latest/index.html
+          cp -R "docs/_build/${latest_source}/." docs/_build/latest/
           cp docs/source/_static/root-redirect.html docs/_build/index.html
       - name: Upload documentation site
         uses: actions/upload-artifact@v4

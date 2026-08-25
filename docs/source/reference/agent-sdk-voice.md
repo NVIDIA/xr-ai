@@ -52,11 +52,11 @@ its oldest pending transcript when full. Shutdown cancels active delivery and
 discards pending transcripts. Runtime subscribers must enqueue long-running
 work internally and return promptly.
 
-Join publication occurs after the voice gate handles its greeting. DeviceIOHub
-suppresses duplicate roster joins while a participant remains connected and
-emits a new join after a leave and reconnect. Join and leave publication is
-serialized per participant and does not block the media processor. `VoiceAgent`
-cancels and awaits all owned delivery tasks on shutdown.
+Join publication occurs after the voice gate handles its greeting.
+`ProcessorEndpoint` suppresses duplicate roster joins while a participant
+remains connected and emits a new join after a leave and reconnect. Join and
+leave publication is serialized per participant and does not block the media
+processor. `VoiceAgent` cancels and awaits all owned delivery tasks on shutdown.
 
 ## Voice output and interruption
 

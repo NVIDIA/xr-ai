@@ -37,10 +37,10 @@ voice_gate_yaml: voice_gate.always-on.yaml
 ```
 
 Restart the sample after an edit. Refer to the
-[sample configuration guide](../../docs/source/reference/tea-making-sample.md#configuration)
+[sample configuration guide](https://nvidia.github.io/xr-ai/latest/reference/tea-making-sample.html#configuration)
 for the workflow and path-resolution rules and to the generated
-[configuration reference](../../docs/source/reference/configuration.rst) for
-every field and default.
+[configuration reference](https://nvidia.github.io/xr-ai/latest/reference/configuration.html) for
+every checked-in field and example value.
 
 ## Run
 
@@ -81,6 +81,6 @@ allow microphone and camera access, and connect. Begin voice commands with
 The shared models remain running after the sample stops. From this directory,
 stop them with `uv run --project ../model-servers model_servers --stop`.
 
-Refer to the [sample reference](../../docs/source/reference/tea-making-sample.md)
+Refer to the [sample reference](https://nvidia.github.io/xr-ai/latest/reference/tea-making-sample.html)
 for architecture, configuration, output contracts, safety, foreground-routing
 behavior, evaluation, and adaptation guidance.

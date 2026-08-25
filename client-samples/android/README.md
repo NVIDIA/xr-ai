@@ -14,5 +14,5 @@ Open this directory in Android Studio, or build from the directory with:
 ./gradlew assembleDebug
 ```
 
-Refer to [Connecting clients](../../docs/source/getting_started/clients.md#android)
+Refer to [Connecting clients](https://nvidia.github.io/xr-ai/latest/getting_started/clients.html#android)
 for requirements, permissions, connection, and certificate instructions.

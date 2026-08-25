@@ -10,6 +10,7 @@ This client reference is the canonical build and connection guide for the
 clients under `client-samples/`. Refer to {doc}`quickstart` for starting an
 agent sample and {doc}`networking` for firewall and TLS configuration.
 
+(which-clients-exist)=
 ## Client matrix
 
 | Client | Directory | Transport | Build |
@@ -25,11 +26,13 @@ delegates to a `StreamingBackend`, and `LiveKitBackend` is the only layer that
 imports a LiveKit SDK. Connection, microphone, camera, participant status, data,
 and network metrics remain separate operations.
 
+(network-telemetry)=
 Graphical clients display LiveKit connection quality, round-trip time, and
 receive jitter; the C++ sample reports them through its callback. Backends sample
 existing WebRTC statistics about once per second. No hub message or separate
 telemetry service is involved.
 
+(the-connect-flow)=
 ## Shared connection flow
 
 The hub prints a URL, room, development token, and web-client URL at startup.
@@ -48,11 +51,13 @@ The response is a JSON object containing `token`, `room`, and `url`. StreamKit
 token fetchers also accept a plain JWT response. The room is encoded in the
 token; clients do not send a separate room query parameter.
 
+(self-signed-certificate-trust)=
 The default HTTPS certificate is self-signed and stored under
 `~/.local/share/xr-ai/`. Browsers allow a development click-through; Android
 and Apple devices require the platform trust procedures below. Use a public or
 managed certificate for production.
 
+(web-basic-sample)=
 ## Web
 
 The basic page in `client-samples/web/` uses plain ES modules and loads LiveKit
@@ -83,6 +88,8 @@ after either change.
 The Android app is a Jetpack Compose client with selectable Camera2 devices,
 microphone capture, participant status, arbitrary data, and network metrics.
 
+(requirements)=
+(build-and-run)=
 ### Requirements and build
 
 | Requirement | Version |
@@ -100,6 +107,7 @@ cd client-samples/android
 ./gradlew assembleDebug
 ```
 
+(connect)=
 ### Connect and permissions
 
 Enter the server host, port `8080`, a unique identity, and either the printed
@@ -115,8 +123,8 @@ depending on Bluetooth audio routing.
 
 The current Android backend maps every enabled `AudioConfig` mode to LiveKit's
 default microphone capture. It does not yet select distinct voice-processing,
-software-processing, or raw DSP settings, so the sample UI exposes only the
-LiveKit default. LiveKit plays remote agent audio automatically. Camera choices
+software-processing, or raw DSP settings, so the sample UI does not expose a
+DSP-mode picker. LiveKit plays remote agent audio automatically. Camera choices
 come from Camera2 and include front, back, extra built-in lenses, and attached
 USB cameras when the device exposes them.
 
@@ -124,6 +132,7 @@ The root Android build pins the Netty dependency pulled in by AGP's test tooling
 above known vulnerable 4.1 releases. After changing AGP or the version catalog,
 run `./gradlew verifyNettyPin` from `client-samples/android/`.
 
+(android-xr)=
 The app can run as a flat Android panel on Android XR, but that path is not
 validated. It does not use Jetpack XR or immersive Android XR APIs, and its
 Camera2 selector is not a passthrough-camera integration.
@@ -134,6 +143,7 @@ The Apple client is a checked-in SwiftUI project and local Swift package. It
 targets iOS 18 and visionOS 26, requires Xcode 26 with Swift 6.2, and resolves
 LiveKit Swift and CloudXRKit through Swift Package Manager.
 
+(create-the-xcode-project)=
 ### Build
 
 Open `client-samples/ios-visionos/StreamKitSample.xcworkspace`, select the
@@ -217,10 +227,11 @@ cmake --build build
   --secure --token <jwt>
 ```
 
-Trust the hub certificate on the native host before connecting. The command
-uses the supported TLS proxy on port 8080. Insecure port 7880 is a direct
-LiveKit debugging path; do not expose it outside the XR AI host or a trusted
-development network.
+Install the hub certificate in the native host's trust store before connecting.
+Refer to {ref}`linux-native-certificate-trust` for the Ubuntu and Debian
+procedure. The command uses the supported TLS proxy on port 8080. Insecure port
+7880 is a direct LiveKit debugging path; do not expose it outside the XR AI host
+or a trusted development network.
 
 Without `LIVEKIT_SDK_ROOT`, it builds in stub mode and reports a connected state
 without opening a network session. Build the standalone assertion-based tests
@@ -245,6 +256,7 @@ for remote audio rendering or AEC reference capture. Microphone processing
 presets are not mapped because the C++ SDK exposes no corresponding source
 controls.
 
+(adding-a-client-for-a-new-platform)=
 ## Adding another platform
 
 DeviceIOHub uses standard LiveKit. A new client fetches a token, joins through

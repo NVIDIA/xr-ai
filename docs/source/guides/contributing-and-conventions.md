@@ -31,15 +31,10 @@ strict documentation build rejects unresolved or undocumented exports. Update
 a narrative page when concepts, workflows, operations, or architecture change,
 and add a migration entry for a breaking change.
 
-`docs/source/` owns user-facing narrative content. READMEs are concise entry
-points that identify their directory and link to the canonical page instead of
-repeating it. A top-level README under `agent-samples/` also keeps the exact
-commands needed to start that sample. Sample architecture, behavior,
-configuration guidance, artifacts, extension instructions, and eval methodology
-belong in the sample's reference guide. Preserve unique, still-valid guidance
-when consolidating an older README; move it before replacing the duplicate with
-a link. Nested READMEs are reserved for genuinely artifact-local instructions
-that do not belong on the published site.
+The repository-wide README and documentation ownership rules live in the
+[`Comments and documentation`](https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md#comments-and-documentation)
+section of `AGENTS.md`. Follow that contract instead of introducing another
+placement rule in a package or sample.
 
 The user-facing command catalog is generated from top-level sample
 `[project.scripts]` entries and literal `argparse` declarations. Keep option

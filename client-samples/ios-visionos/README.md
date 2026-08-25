@@ -12,6 +12,6 @@ Vision Pro.
 Open `StreamKitSample.xcworkspace` in Xcode, select an iOS or visionOS
 destination and signing team, then build and run.
 
-Refer to [Connecting clients](../../docs/source/getting_started/clients.md#iosvisionos)
+Refer to [Connecting clients](https://nvidia.github.io/xr-ai/latest/getting_started/clients.html#ios-visionos)
 for platform requirements, enterprise camera access, certificate trust,
 connection, and CloudXR instructions.

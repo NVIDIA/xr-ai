@@ -9,5 +9,5 @@ Typed LLM, VLM, STT, TTS, and embedding service protocols plus factories for
 model deployment profiles. It keeps endpoint credentials and provider-specific
 OpenAI-compatible behavior out of workers.
 
-Refer to the [xr-ai-models guide](../../docs/source/reference/agent-sdk-models.md)
-and [AI services](../../docs/source/components/ai-services.md).
+Refer to the [xr-ai-models guide](https://nvidia.github.io/xr-ai/latest/reference/agent-sdk-models.html)
+and [AI services](https://nvidia.github.io/xr-ai/latest/components/ai-services.html).

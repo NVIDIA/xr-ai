@@ -6,11 +6,42 @@ import re
 import runpy
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SELECTOR = _ROOT / ".github" / "scripts" / "select_latest_docs_release.py"
 _CONF = _ROOT / "docs" / "source" / "conf.py"
+_HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+_BASH_FENCE = re.compile(r"^```bash\s*\n(.*?)^```\s*$", re.MULTILINE | re.DOTALL)
+_MARKDOWN_LINK = re.compile(r"(?<!!)\[[^]]+\]\(([^)\s]+)(?:\s+[^)]*)?\)")
+
+
+def _visible_markdown(source: str) -> str:
+    return _HTML_COMMENT.sub("", source)
+
+
+def _section(source: str, heading: str) -> str:
+    match = re.search(
+        rf"^## {re.escape(heading)}\s*$\n(.*?)(?=^##\s|\Z)",
+        source,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    assert match is not None, f"missing {heading!r} section"
+    return match.group(1)
+
+
+def _sample_projects() -> list[tuple[Path, str]]:
+    projects: list[tuple[Path, str]] = []
+    for project_path in sorted((_ROOT / "agent-samples").glob("*/pyproject.toml")):
+        sample_dir = project_path.parent
+        if not (sample_dir / "main.py").is_file():
+            continue
+        metadata = tomllib.loads(project_path.read_text(encoding="utf-8"))
+        scripts = metadata["project"].get("scripts", {})
+        assert len(scripts) == 1, f"{project_path}: expected one top-level script"
+        projects.append((sample_dir, next(iter(scripts))))
+    return projects
 
 
 def _select(*tags: str) -> str:
@@ -91,6 +122,21 @@ def test_agent_prompt_is_owned_by_docs_snippet() -> None:
         assert "```{literalinclude} /_snippets/agent-setup-prompt.txt" in page.read_text()
 
 
+def test_latest_docs_alias_contains_complete_rendered_version() -> None:
+    workflow = (_ROOT / ".github" / "workflows" / "docs.yaml").read_text()
+    readme = (_ROOT / "README.md").read_text()
+
+    assert 'cp -R "docs/_build/${latest_source}/." docs/_build/latest/' in workflow
+    assert not (_ROOT / "docs/source/_static/latest-redirect.html").exists()
+    for page in (
+        "getting_started/skills.html",
+        "getting_started/quickstart.html",
+        "getting_started/requirements.html",
+        "overview/architecture.html",
+    ):
+        assert f"https://nvidia.github.io/xr-ai/latest/{page}" in readme
+
+
 def test_getting_started_skill_routes_to_versioned_setup_docs() -> None:
     skill = (_ROOT / "skills" / "getting-started" / "SKILL.md").read_text()
     normalized = " ".join(skill.split())
@@ -111,25 +157,80 @@ def test_getting_started_skill_routes_to_versioned_setup_docs() -> None:
 
 
 def test_sample_readmes_use_sample_directory_commands() -> None:
-    commands = {
-        "lab-instrument-monitoring": "lab_instrument_monitoring",
-        "model-servers": "model_servers",
-        "simple-vlm-example": "simple_vlm_example",
-        "tea-making-sample": "tea_making_sample",
-        "xr-render-demo": "xr_render_demo",
-    }
+    for sample_dir, command in _sample_projects():
+        directory = sample_dir.name
+        readme = _visible_markdown((sample_dir / "README.md").read_text())
+        run_section = _section(readme, "Run")
+        configure_section = _section(readme, "Configure")
+        bash = "\n".join(_BASH_FENCE.findall(run_section))
 
-    for directory, command in commands.items():
-        readme = (_ROOT / "agent-samples" / directory / "README.md").read_text()
-
-        assert f"Run all commands from `agent-samples/{directory}/`" in readme
-        assert f"--project agent-samples/{directory}" not in readme
+        assert f"Run all commands from `agent-samples/{directory}/`" in run_section
         assert "another terminal" not in readme
-        assert f"uv run {command}" in readme
-        assert "## Configure" in readme
-        assert "yaml/" in readme
-        assert "configuration reference" in readme
+        assert not re.search(r"^\s*cd\s", bash, flags=re.MULTILINE)
+        assert "uv run --directory" not in bash
+        assert f"--project agent-samples/{directory}" not in bash
+        assert re.search(rf"^uv run {re.escape(command)}(?:\s|$)", bash, re.MULTILINE)
+        assert re.search(r"^uv run main\.py\s*$", bash, re.MULTILINE)
+        assert "yaml/" in configure_section
+        assert (
+            "https://nvidia.github.io/xr-ai/latest/reference/configuration.html"
+            in configure_section
+        )
         if directory != "model-servers":
-            assert "uv run --project ../model-servers model_servers" in readme
-            assert "same terminal" in readme
-            assert "sample configuration guide" in readme
+            assert "uv run --project ../model-servers model_servers" in bash
+            assert "same terminal" in run_section
+            assert "sample configuration guide" in configure_section
+
+
+def test_readme_relative_links_resolve_and_docs_links_are_rendered() -> None:
+    tracked = subprocess.run(
+        ["git", "ls-files", "*README.md"],
+        cwd=_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+
+    for relative in tracked:
+        readme_path = _ROOT / relative
+        source = _visible_markdown(readme_path.read_text(encoding="utf-8"))
+        for target in _MARKDOWN_LINK.findall(source):
+            assert "docs/source/" not in target, (
+                f"{relative}: link to rendered versioned documentation instead"
+            )
+            path = target.split("#", 1)[0]
+            if not path or "://" in path or path.startswith("mailto:"):
+                continue
+            assert (readme_path.parent / path).resolve().exists(), (
+                f"{relative}: unresolved link {target!r}"
+            )
+
+
+def test_service_root_commands_declare_their_working_directory() -> None:
+    for readme_path in sorted((_ROOT / "services").glob("*/README.md")):
+        source = _visible_markdown(readme_path.read_text(encoding="utf-8"))
+        if "uv run --project services/" not in source:
+            continue
+        first_fence = source.index("```bash")
+        assert "repository root" in source[:first_fence], readme_path
+
+
+def test_reworded_headings_keep_compatibility_anchors() -> None:
+    clients = (_ROOT / "docs/source/getting_started/clients.md").read_text()
+    xr_render = (_ROOT / "docs/source/reference/xr-render-demo.md").read_text()
+
+    for anchor in (
+        "which-clients-exist",
+        "network-telemetry",
+        "the-connect-flow",
+        "self-signed-certificate-trust",
+        "web-basic-sample",
+        "requirements",
+        "build-and-run",
+        "connect",
+        "android-xr",
+        "create-the-xcode-project",
+        "adding-a-client-for-a-new-platform",
+    ):
+        assert f"({anchor})=" in clients
+    assert "(worker-configuration)=" in xr_render

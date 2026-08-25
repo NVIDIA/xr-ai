@@ -36,10 +36,10 @@ followup_grace_s: 10.0
 
 Restart the sample after an edit. If you change a shared model server rather
 than only its sample endpoint, stop and restart that stack separately. Refer to
-the [sample configuration guide](../../docs/source/reference/simple-vlm-example.md#configuration)
+the [sample configuration guide](https://nvidia.github.io/xr-ai/latest/reference/simple-vlm-example.html#configuration)
 for the edit workflow and to the generated
-[configuration reference](../../docs/source/reference/configuration.rst) for
-every field and default.
+[configuration reference](https://nvidia.github.io/xr-ai/latest/reference/configuration.html) for
+every checked-in field and example value.
 
 ## Run
 
@@ -71,6 +71,6 @@ ready.
 The shared models remain running after the sample stops. From this directory,
 stop them with `uv run --project ../model-servers model_servers --stop`.
 
-Refer to the [sample reference](../../docs/source/reference/simple-vlm-example.md)
+Refer to the [sample reference](https://nvidia.github.io/xr-ai/latest/reference/simple-vlm-example.html)
 for architecture, configuration, warmup behavior, voice gating, and Relay
 output.

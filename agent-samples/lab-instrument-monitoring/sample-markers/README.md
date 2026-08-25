@@ -6,5 +6,5 @@
 # Lab instrument sample markers
 
 These printable QR and ArUco markers match `yaml/device_map.yaml`. Refer to the
-[sample guide](../../../docs/source/reference/lab-instrument-monitoring.md#printable-sample-markers)
+[sample guide](https://nvidia.github.io/xr-ai/latest/reference/lab-instrument-monitoring.html#printable-sample-markers)
 for their IDs and printing requirements.

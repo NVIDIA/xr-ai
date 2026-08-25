@@ -38,10 +38,10 @@ Use `--models NAME` to select a deployment JSON and
 
 Because model processes persist, stop and restart the stack after changing a
 server YAML file. Refer to the
-[customization guide](../../docs/source/guides/customizing-model-servers.md) for
+[customization guide](https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html) for
 instructions to copy a profile, size GPU budgets, change endpoints, and
 validate the result. Refer to the generated
-[configuration reference](../../docs/source/reference/configuration.rst) for
+[configuration reference](https://nvidia.github.io/xr-ai/latest/reference/configuration.html) for
 the checked-in fields and comments.
 
 ## Run
@@ -61,7 +61,7 @@ uv run main.py
 
 The first cold start downloads model weights and can take tens of minutes.
 Refer to the
-[credentials reference](../../docs/source/getting_started/credentials.md) and
+[credentials reference](https://nvidia.github.io/xr-ai/latest/getting_started/credentials.html) and
 configure the required credentials before starting the stack.
 
 To use the self-hosted NIM profile instead of the default profile:
@@ -77,5 +77,5 @@ they are no longer needed:
 uv run model_servers --stop
 ```
 
-Refer to [AI services](../../docs/source/components/ai-services.md) for model
+Refer to [AI services](https://nvidia.github.io/xr-ai/latest/components/ai-services.html) for model
 runtime behavior, persistence, health checks, and service-specific notes.

@@ -67,11 +67,28 @@ an HTTP or agent framework.
 ## Image selection and inference
 
 Install the `frames` extra for `CurrentFrameTool` and the `vision` extra for
-VLM query tools. The example below requires both:
+VLM query tools. The XR AI SDK packages are not published to PyPI. Declare the
+extras and their editable repository sources in the consuming project. This
+example assumes the project is an agent worker under
+`agent-samples/<sample>/worker/`; source paths are relative to that project's
+`pyproject.toml`:
 
-```bash
-uv add "xr-ai-tools[frames,vision]"
+```toml
+[project]
+dependencies = [
+    "xr-ai-hub-client",
+    "xr-ai-models",
+    "xr-ai-tools[frames,vision]",
+]
+
+[tool.uv.sources]
+xr-ai-hub-client = { path = "../../../agent-sdk/xr-ai-hub", editable = true }
+xr-ai-models = { path = "../../../agent-sdk/xr-ai-models", editable = true }
+xr-ai-tools = { path = "../../../agent-sdk/xr-ai-tools", editable = true }
 ```
+
+Run `uv sync` from the consuming project after updating its metadata. The
+checked-in `simple-vlm-example` worker contains the same source mapping.
 
 Selection and inference are separate contracts:
 

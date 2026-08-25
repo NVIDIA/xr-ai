@@ -9,4 +9,4 @@ Minimal msgpack over ZMQ client for connecting agents to DeviceIOHub. The packag
 contains participant subscriptions, return routing, on-demand frames, readiness,
 the wire codec, and shared-memory access without LiveKit or model dependencies.
 
-Refer to the [xr-ai-hub guide](../../docs/source/reference/agent-sdk-hub.md).
+Refer to the [xr-ai-hub guide](https://nvidia.github.io/xr-ai/latest/reference/agent-sdk-hub.html).

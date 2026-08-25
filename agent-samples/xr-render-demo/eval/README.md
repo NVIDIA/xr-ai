@@ -6,7 +6,7 @@
 # xr-render-demo eval harness
 
 Offline and live regression tiers for the xr-render agent. Refer to the
-[sample guide](../../../docs/source/reference/xr-render-demo.md#eval-harness)
+[sample guide](https://nvidia.github.io/xr-ai/latest/reference/xr-render-demo.html#eval-harness)
 for tier definitions, case placement, prompt-tuning policy, isolation rules,
 and coverage boundaries. Run commands from the evaluation project:
 

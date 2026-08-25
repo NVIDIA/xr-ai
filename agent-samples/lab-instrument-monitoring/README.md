@@ -37,10 +37,10 @@ instrument_monitor_interval_s: 2.0
 
 Restart the sample after an edit. Use `--expose-web-events` to change the
 event-viewer bind address; that option overrides the YAML host. Refer to the
-[sample configuration guide](../../docs/source/reference/lab-instrument-monitoring.md#configuration)
+[sample configuration guide](https://nvidia.github.io/xr-ai/latest/reference/lab-instrument-monitoring.html#configuration)
 for how the files fit together and to the generated
-[configuration reference](../../docs/source/reference/configuration.rst) for
-every field and default.
+[configuration reference](https://nvidia.github.io/xr-ai/latest/reference/configuration.html) for
+every checked-in field and example value.
 
 ## Run
 
@@ -80,6 +80,6 @@ The shared models remain running after the sample stops. From this directory,
 stop them with `uv run --project ../model-servers model_servers --stop`.
 
 Refer to the
-[sample reference](../../docs/source/reference/lab-instrument-monitoring.md)
+[sample reference](https://nvidia.github.io/xr-ai/latest/reference/lab-instrument-monitoring.html)
 for architecture, privacy and output contracts, marker setup, configuration,
 and evaluation instructions.

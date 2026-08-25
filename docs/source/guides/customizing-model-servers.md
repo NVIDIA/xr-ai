@@ -53,7 +53,8 @@ uv run --project agent-samples/model-servers \
   model_servers --models my-stack
 ```
 
-You can also pass an absolute or repository-relative JSON path to `--models`.
+You can also pass an absolute JSON path or a path relative to the current
+working directory to `--models`.
 The profile must retain the wrapped JSON shape:
 
 ```json

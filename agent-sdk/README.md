@@ -19,8 +19,8 @@ its own environment and concise entry-point README.
 
 Start with `xr_ai_hub` for raw media/data IPC, or compose `xr_ai_runtime`,
 `xr_ai_tools`, `xr_ai_models`, and `xr_ai_voice` for a tool-using voice agent.
-Refer to the [Agent SDK guide](../docs/source/components/agent-sdk.md) for the package
+Refer to the [Agent SDK guide](https://nvidia.github.io/xr-ai/latest/components/agent-sdk.html) for the package
 boundaries.
 
-Refer to the [migration guide](../docs/source/reference/migrations.md) for
+Refer to the [migration guide](https://nvidia.github.io/xr-ai/latest/reference/migrations.html) for
 breaking-change replacements.

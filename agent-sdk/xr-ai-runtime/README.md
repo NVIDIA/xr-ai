@@ -10,4 +10,4 @@ Agents own their tools, resources, concurrency, and lifecycle; the runtime owns
 only event delivery tasks.
 
 Refer to the
-[xr-ai-runtime guide](../../docs/source/reference/agent-sdk-runtime.md).
+[xr-ai-runtime guide](https://nvidia.github.io/xr-ai/latest/reference/agent-sdk-runtime.html).

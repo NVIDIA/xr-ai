@@ -13,7 +13,6 @@ import androidx.lifecycle.viewModelScope
 import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
 import com.nvidia.xrai.streamkitsample.streamkit.NetworkMetrics
 import com.nvidia.xrai.streamkitsample.streamkit.StreamSession
-import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.BackendConfiguration
 import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.LiveKitConfig
@@ -65,10 +64,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Token server URL. Defaults to https://<host>:<port>/token when blank. */
     var tokenServerURL by mutableStateOf("")
     var identity by mutableStateOf("android-client")
-
-    // ── Audio settings ─────────────────────────────────────────────────────────
-
-    var audioMode by mutableStateOf(AudioConfig.MicrophoneMode.VOICE_PROCESSING)
 
     // ── Camera settings ────────────────────────────────────────────────────────
 
@@ -257,7 +252,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun startAudio() {
         viewModelScope.launch {
             try {
-                session?.startAudio(AudioConfig(mode = audioMode))
+                session?.startAudio()
                 isAudioActive = true
             } catch (e: Exception) {
                 lastError = e.message

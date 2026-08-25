@@ -13,26 +13,44 @@ for the public APIs.
 ## Publishing selected events
 
 Applications explicitly project compact JSON-compatible payloads to
-`WEB_EVENT_TOPIC`. Each serialized event is limited to 16 KiB.
+`WEB_EVENT_TOPIC`. Each event's serialized `payload` is limited to 16 KiB.
 
 ```python
+from pydantic import BaseModel
+from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent, WebEventsAgent
 
-viewer = runtime.register("web-events", WebEventsAgent(title="Agent events"))
+class Reading(BaseModel):
+    value: float
 
-async def report_reading(reading, ctx) -> None:
-    await ctx.publish(
-        WEB_EVENT_TOPIC,
-        WebEvent(
-            topic="application.reading",
-            title="Readings",
-            payload=reading.model_dump(mode="json"),
-        ),
-    )
+READING_TOPIC = Topic("application.reading", Reading)
+
+class ReadingEventsAgent(Agent):
+    def __init__(self) -> None:
+        super().__init__()
+
+    @subscribe(READING_TOPIC)
+    async def report_reading(
+        self,
+        reading: Reading,
+        ctx: RuntimeContext,
+    ) -> None:
+        await ctx.publish(
+            WEB_EVENT_TOPIC,
+            WebEvent(
+                topic="application.reading",
+                title="Readings",
+                payload=reading.model_dump(mode="json"),
+            ),
+        )
+
+runtime = AgentRuntime()
+viewer = runtime.register("web-events", WebEventsAgent(title="Agent events"))
+runtime.register("reading-events", ReadingEventsAgent())
 
 async with viewer:
     async with runtime:
-        await run_application()
+        await runtime.publish(READING_TOPIC, Reading(value=21.5))
 ```
 
 Start the viewer before worker readiness so a bind failure fails the worker.

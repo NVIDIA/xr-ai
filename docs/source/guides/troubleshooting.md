@@ -67,22 +67,18 @@ If `git clone` was run without `--recursive`, run
 **Symptom:** the VLM server logs FlashInfer or NVFP4 kernel errors and never
 becomes healthy on a Blackwell-class system.
 
-**Cause:** Blackwell FP4 MoE kernels need both the **NVIDIA Container Toolkit**
-and a working **CUDA NVCC** toolchain present on the host (the kernels are
-JIT-compiled at first use).
+**Cause:** The Docker backend cannot expose the Blackwell GPU, or the selected
+vLLM image does not contain compatible kernels. Any first-use kernel
+compilation occurs inside the container; host NVCC is not required.
 
-**Fix:** install both before launching:
+**Fix:** install the NVIDIA Container Toolkit, restart Docker as its installation
+guide requires, and retain the vLLM image pinned by the reviewed hardware
+profile:
 
-```bash
-# NVIDIA Container Toolkit (covers both Docker and bare-metal CUDA driver bits)
-# Follow the latest instructions at:
-# https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+[NVIDIA Container Toolkit installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
 
-# CUDA NVCC — install the matching CUDA toolkit for your driver
-sudo apt install nvidia-cuda-toolkit
-```
-
-This applies to the `xr-render-demo/yaml/96G_blackwell/` profile.
+This applies to the
+`agent-samples/model-servers/yaml/96G_blackwell/` profile.
 
 ### GPU service aborts with `cuDNN version incompatibility`
 

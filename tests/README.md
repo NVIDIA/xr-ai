@@ -21,5 +21,5 @@ from the repository root:
 bash tests/run_local_gpu_tests.sh
 ```
 
-Refer to [Testing](../docs/source/guides/testing.md) for suite scope, markers, CI,
+Refer to [Testing](https://nvidia.github.io/xr-ai/latest/guides/testing.html) for suite scope, markers, CI,
 routing guarantees, and guidance for adding tests.

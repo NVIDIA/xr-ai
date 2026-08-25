@@ -32,10 +32,12 @@ recorded video, and document retrieval.
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
 | `services/rag-service/` | `rag_service` | 8340 | — | Typed dense document retrieval capability |
 
-All model weights land in the service's `model_cache` directory, set per YAML
-and resolved relative to the YAML file (every `models/` tree is excluded from
-version control). The model-servers profiles share `models/` at the
-repository root; the exact layout per launch style is below.
+Local model artifacts land in the service's `model_cache` directory, set per
+YAML and resolved relative to the YAML file. Self-hosted NIM containers use
+`nim_cache` for their optimized engines and weights; hosted endpoints keep no
+weights in this repository. Every `models/` tree is excluded from version
+control. The model-servers profiles share `models/` at the repository root;
+the exact layout per launch style is below.
 
 ## Two HuggingFace cache roots
 
@@ -476,17 +478,24 @@ cleanup.
   the model's chat template and the resulting tool calls come back in OpenAI
   wire format (`finish_reason: "tool_calls"`). Per-turn reasoning toggle via
   `"detailed thinking on"` or `"detailed thinking off"` in a system or user
-  message; reasoning preamble is **not** stripped server-side. Hosting backend
-  is selectable per YAML (refer to *Choosing the vLLM runtime*). The YAML owns
-  the vLLM tuning knobs and the model profile owns the client-side served model
-  name and reasoning mapping.
+  message. Without either phrase, this model reasons by default; the reasoning
+  preamble is **not** stripped server-side. To swap checkpoints, change `model`
+  only to one with a compatible chat template, and update `tool_call_parser`
+  for the replacement model's tool syntax. Revisit `max_model_len`,
+  `gpu_memory_utilization`, and `tensor_parallel_size` for its context and GPU
+  footprint. Keep `served_model_name: llm` to retain the built-in
+  `llama_nemotron` adapter, or update the model profile's adapter when changing
+  that name or any wire behavior. Hosting backend is selectable per YAML
+  (refer to *Choosing the vLLM runtime*).
 - **nemotron3-nano-llm** is a thin wrapper around `vllm serve` for
   `NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}` (auto-selected by GPU compute
   capability). vLLM handles tool calling (`qwen3_coder` parser), reasoning
   extraction (`nano_v3` parser — auto-fetched into `model_cache`), and
   FlashInfer FP4 MoE kernels. `model_blackwell` selects the NVFP4 checkpoint
   on SM100+; `model_ada` selects FP8 on earlier supported GPUs. Parsed
-  reasoning is returned in the `reasoning` field. Native FP4 requires a
+  reasoning is returned in the `reasoning` field. The `nemotron3_nano` client
+  preset disables thinking by default so short calls retain an answer token
+  budget; pass `enable_thinking=True` on a call to opt in. Native FP4 requires a
   Blackwell-class GPU such as B200 or RTX PRO 6000; FP8 is used on Ada,
   Hopper, and Ampere.
   `enforce_eager: true` by default to avoid the silent 3–8 min CUDA graph and
@@ -531,6 +540,8 @@ cleanup.
   estimates interpolated from chunk metadata. The selection budget may be up
   to 256, but the shipped Cosmos VLM accepts no more than four selected images
   per inference request. Current frames stay with the caller's hub client.
+  When `recordings_dir` is empty, participant discovery returns an empty list
+  and recorded-media operations return `recording_disabled`.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
 - **Sample YAMLs** for each service ship in their own service directory.
   Copy them to your sample's `yaml/` directory and set `model_cache` to

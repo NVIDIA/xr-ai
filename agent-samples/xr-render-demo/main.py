@@ -229,6 +229,13 @@ def _ensure_web_vendor() -> None:
             f"\n  [setup] build.sh failed (exit {result.returncode}).\n"
             f"  Check the output above, then re-run.\n"
         )
+    missing = [path.name for path in (cloudxr_out, livekit_out) if not path.exists()]
+    if missing:
+        sys.exit(
+            "\n  [setup] build.sh completed without producing: "
+            f"{', '.join(missing)}.\n"
+            "  Check the output above, then re-run.\n"
+        )
     logger.info("Web vendor bundle ready")
 
 

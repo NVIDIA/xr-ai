@@ -10,4 +10,4 @@ It is an observation aid, not persistence, and defaults to a loopback-only HTTP
 listener without application authentication or TLS.
 
 Refer to the
-[xr-ai-web-events guide](../../docs/source/reference/agent-sdk-web-events.md).
+[xr-ai-web-events guide](https://nvidia.github.io/xr-ai/latest/reference/agent-sdk-web-events.html).

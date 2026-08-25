@@ -220,10 +220,12 @@ def test_xr_render_repairs_an_incomplete_web_xr_vendor_bundle(
     build_script.parent.mkdir(parents=True)
     build_script.write_text("#!/bin/sh\n")
     calls: list[list[str]] = []
+    produce_livekit = True
 
     def fake_run(command: list[str], *, cwd: str) -> subprocess.CompletedProcess:
         calls.append(command)
-        (vendor_dir / "livekit-client.esm.mjs").write_text("livekit")
+        if produce_livekit:
+            (vendor_dir / "livekit-client.esm.mjs").write_text("livekit")
         return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(sample, "_BASE", sample_root)
@@ -236,6 +238,12 @@ def test_xr_render_repairs_an_incomplete_web_xr_vendor_bundle(
     calls.clear()
     sample._ensure_web_vendor()
     assert calls == []
+
+    (vendor_dir / "livekit-client.esm.mjs").unlink()
+    produce_livekit = False
+    with pytest.raises(SystemExit, match="completed without producing"):
+        sample._ensure_web_vendor()
+    assert calls == [[str(build_script)]]
 
 
 def test_every_service_editable_source_path_resolves() -> None:

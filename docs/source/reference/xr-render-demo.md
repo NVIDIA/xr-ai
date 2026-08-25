@@ -99,6 +99,7 @@ The model-side fields live under `agent-samples/model-servers/yaml/`. Set them
 to different GPUs so
 the XR compositor and the agentic LLM do not share a card.
 
+(worker-configuration)=
 ## Configuration
 
 Run and edit the sample from `agent-samples/xr-render-demo/`. Each process
@@ -137,10 +138,12 @@ fields, checked-in values, and adjacent YAML comments.
 
 ### Nemotron-3-Nano-Omni-30B-A3B-Reasoning — port 8108
 
-A vLLM `execvp` shim: a small Python wrapper that reads YAML configuration,
-sets `HF_HOME` and token environment variables, then `os.execvp`s into `vllm serve`. The
-Python process is replaced by vLLM; vLLM owns the HTTP API, weight loading,
-and tool calling from that point on.
+A small Python wrapper reads YAML configuration, sets the model environment,
+and starts vLLM through the selected `pip` or Docker backend. The vLLM process
+or container runs in a separate session so the shared model remains available
+across stack restarts; the wrapper monitors its health and reports readiness.
+The shared model-server stack reuses a healthy instance and replaces one whose
+launch configuration changed.
 
 `vllm serve` uses `--tool-call-parser qwen3_coder` and
 `--reasoning-parser nemotron_v3`. The launcher selects NVFP4 on Blackwell and
@@ -381,7 +384,7 @@ services, or LOVR.
 ### Live drivers
 
 Start the demo stack and set `allow_sim_pose: true` in
-`yaml/openxr_service.yaml` before running live evaluations:
+`../yaml/openxr_service.yaml` before running live evaluations:
 
 ```bash
 uv run xr_render_demo_live_smoke

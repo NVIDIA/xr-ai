@@ -21,10 +21,10 @@ Refer to the [versioned documentation](https://nvidia.github.io/xr-ai/) for
 setup, requirements, credentials, networking, architecture, and
 troubleshooting. The landing page opens the latest release. Start with:
 
-- [Set up with a coding agent](docs/source/getting_started/skills.md)
-- [Manual quickstart](docs/source/getting_started/quickstart.md)
-- [System requirements](docs/source/getting_started/requirements.md)
-- [Architecture](docs/source/overview/architecture.md)
+- [Set up with a coding agent](https://nvidia.github.io/xr-ai/latest/getting_started/skills.html)
+- [Manual quickstart](https://nvidia.github.io/xr-ai/latest/getting_started/quickstart.html)
+- [System requirements](https://nvidia.github.io/xr-ai/latest/getting_started/requirements.html)
+- [Architecture](https://nvidia.github.io/xr-ai/latest/overview/architecture.html)
 
 The site also publishes the current `main` branch and release-tagged versions.
 
