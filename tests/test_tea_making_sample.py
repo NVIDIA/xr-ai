@@ -1414,7 +1414,7 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
 
 def test_foreground_route_injects_only_its_policy() -> None:
     foreground = object.__new__(ForegroundAgent)
-    foreground._prompt = "Common policy."
+    foreground._prompt = foreground_module._DEFAULT_PROMPT
     foreground._guidance = SimpleNamespace(
         active_context=lambda participant_id: (
             None if participant_id == "idle" else '{"step":"fill_water"}'
@@ -1438,3 +1438,30 @@ def test_foreground_route_injects_only_its_policy() -> None:
     assert active_route == "tea"
     assert "general-purpose assistant" not in active_prompt
     assert refusal in active_prompt
+
+
+def test_foreground_route_preserves_explicit_prompt_override() -> None:
+    foreground = object.__new__(ForegroundAgent)
+    foreground._prompt = "Explicit override."
+    foreground._guidance = SimpleNamespace(
+        active_context=lambda participant_id: (
+            None if participant_id == "idle" else '{"step":"fill_water"}'
+        ),
+        active_tools=lambda _participant_id: ToolSet(()),
+    )
+    foreground._root_tools = lambda *_args, **_kwargs: ToolSet(())
+    foreground._background_tools = lambda *_args, **_kwargs: ToolSet(())
+
+    idle_prompt, _, _ = foreground._prepare_route(
+        "idle", ctx=None, timestamp_us=None
+    )
+    active_prompt, _, _ = foreground._prepare_route(
+        "active", ctx=None, timestamp_us=None
+    )
+    refusal = "I can only help with the active tea guide right now."
+
+    assert idle_prompt == "Explicit override."
+    assert active_prompt == (
+        'Explicit override.\n\nActive tea guide:\n{"step":"fill_water"}'
+    )
+    assert refusal not in active_prompt
