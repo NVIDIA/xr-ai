@@ -17,9 +17,10 @@ browser-based Web-XR experience.
 
 ## Prerequisites
 
-Install the Vulkan loader and headers and make Node.js 18 or newer with npm
-available on `PATH`. On its first run, the orchestrator downloads the pinned
-LOVR build and creates the Web-XR vendor bundle; later runs reuse those files.
+Install the Vulkan loader and headers. For the default WebRTC profile, also make
+Node.js 18 or newer with npm available on `PATH`. On its first run, the
+orchestrator downloads the pinned LOVR build for every profile and creates the
+Web-XR vendor bundle only for WebRTC profiles; later runs reuse those files.
 
 ## Configure
 

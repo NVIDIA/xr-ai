@@ -7,7 +7,7 @@
 
 `services/cloudxr-runtime/` is the shared CloudXR service.
 Any sample can stream XR content to a device by adding one line to its
-orchestrator and a configuration file in the sample root. For the broader
+orchestrator and a configuration file under the sample's `yaml/` directory. For the broader
 orchestrator pattern, refer to {doc}`adding-a-sample <adding-a-sample>`.
 
 ## 1 — Add the process to the orchestrator
@@ -15,16 +15,21 @@ orchestrator pattern, refer to {doc}`adding-a-sample <adding-a-sample>`.
 ```python
 PROCESSES = [
     Process("hub",     "../../services/device-io-hub",  "device_io_hub"),
-    Process("cloudxr", "../../services/cloudxr-runtime", "cloudxr_runtime"),  # ← add this
+    Process("cloudxr", "../../services/cloudxr-runtime", "cloudxr_runtime",
+            config="yaml/cloudxr_runtime.yaml"),  # ← add this
     Process("worker",  "worker",                "my_agent_worker"),
 ]
 ```
 
-## 2 — Add `cloudxr_runtime.yaml` to the sample root
+(2-add-cloudxr-runtime-yaml-to-the-sample-root)=
+## 2 — Add `cloudxr_runtime.yaml` to the sample's `yaml/` directory
 
-The launcher auto-discovers this file and passes it as `--config`.
+The `Process.config` value above passes this file as `--config`.
 
 ```yaml
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # CloudXR runtime configuration.
 cloudxr_install_dir: ~/.cloudxr
 
@@ -53,7 +58,8 @@ clients, not both. Change the profile and restart the stack when switching.
 |---|---|---|
 | `client-samples/web-xr/` | `auto-webrtc` | used |
 | `client-samples/ios-visionos/` | `auto-native` | unused |
-| Other native devices, including Quest 3 | `auto-native` | unused |
+| Other native CloudXR clients | `auto-native` | unused |
+| Meta Quest 3 with CloudXR.js | `quest3` | used |
 
 Device-specific profiles such as `apple-vision-pro`, `ipad-pro`, and `quest3`
 are also accepted when their fixed device defaults are preferred.
