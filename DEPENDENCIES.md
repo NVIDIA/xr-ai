@@ -119,7 +119,7 @@ change, even when an individual dependency publishes newer Python wheels.
   - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
-  - `pipecat-ai>=1.3`
+  - `pipecat-ai>=1.6`
   - `nltk!=3.10.1`
   - `numpy>=1.24`
   - `scipy>=1.11`
