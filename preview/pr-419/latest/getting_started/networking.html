@@ -598,18 +598,21 @@ Until the certificate is trusted at the OS level, the wss handshake fails.</p>
 <section id="linux-native-certificate-trust">
 <span id="id1"></span><h3>Linux native certificate trust<a class="headerlink" href="#linux-native-certificate-trust" title="Link to this heading">#</a></h3>
 <p>The native C++ client validates the hub through the Linux system CA bundle.
-Copy <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code> securely from the hub host to the
-native client host. On Ubuntu or Debian, install that copy and refresh the
-bundle:</p>
+Before copying the certificate, ensure the address passed to <code class="docutils literal notranslate"><span class="pre">--host</span></code> appears
+in its subject alternative names. If the native client uses another IP address
+or DNS name, configure <code class="docutils literal notranslate"><span class="pre">web_server_extra_sans</span></code> and restart the hub to regenerate
+the certificate and key.</p>
+<p>Copy the resulting <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code> securely from the hub
+host to the native client host. On Ubuntu or Debian, install that copy and
+refresh the bundle:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>install<span class="w"> </span>-m<span class="w"> </span><span class="m">0644</span><span class="w"> </span>/path/to/web-server.crt<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>/usr/local/share/ca-certificates/xr-ai-hub.crt
 sudo<span class="w"> </span>update-ca-certificates
 </pre></div>
 </div>
-<p>Restart the native client after updating the bundle. The address passed to
-<code class="docutils literal notranslate"><span class="pre">--host</span></code> must appear in the certificate’s subject alternative names. Configure
-<code class="docutils literal notranslate"><span class="pre">web_server_extra_sans</span></code> and restart the hub to regenerate the certificate when
-the native client uses another IP address or DNS name.</p>
+<p>Restart the native client after updating the bundle. If the SAN configuration
+changes later, regenerate the certificate, copy it again, and repeat the trust
+installation.</p>
 <p>For production deployments on any platform, replace the auto-generated
 certificate with one from a public CA by setting <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in
 <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>.</p>
