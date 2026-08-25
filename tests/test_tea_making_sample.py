@@ -1346,10 +1346,13 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
         _WORKER / "tea_making_worker/prompts/foreground_active.txt"
     ).read_text()
     refusal = "I can only help with the active tea guide right now."
+    idle_model_prompt = f"{common_prompt}\n\n{idle_prompt}".lower()
+    active_model_prompt = f"{common_prompt}\n\n{active_prompt}".lower()
     assert refusal not in common_prompt
     assert refusal not in idle_prompt
-    assert "color of visible clothing" not in common_prompt
-    assert "color of visible clothing" in idle_prompt
+    for worked_example_term in ("holding", "color", "shirt", "clothing"):
+        assert worked_example_term not in idle_model_prompt
+        assert worked_example_term not in active_model_prompt
     assert "general-purpose assistant" in idle_prompt
     assert f"reply exactly:\n{refusal}" in active_prompt
 

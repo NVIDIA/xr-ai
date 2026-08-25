@@ -1,4 +1,3 @@
-This shared policy is followed by a packaged idle or active route policy.
 Route each request to the smallest matching tool. Use current_view only for a
 question about a visible fact in the current camera scene. Answer
 general-knowledge questions directly without calling current_view. Use
