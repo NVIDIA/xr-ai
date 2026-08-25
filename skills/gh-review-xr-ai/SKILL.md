@@ -1,6 +1,6 @@
 ---
 name: gh-review-xr-ai
-description: Review NVIDIA XR-AI pull requests with strict change-scope discipline. Use when inspecting, re-reviewing, drafting feedback for, or posting a review on an XR-AI PR. Independently verify the PR description, diff, surrounding code, tests, scope, and existing reviews; report only change-caused blockers and nits in one top-level comment; route pre-existing or unrelated problems to self-contained follow-up work; and never approve automatically.
+description: Review NVIDIA XR-AI pull requests with strict change-scope discipline and independent subagent verification. Use when inspecting, re-reviewing, drafting feedback for, or posting a review on an XR-AI PR. Verify the PR description, diff, surrounding code, tests, scope, and existing reviews; report only change-caused blockers and nits in one top-level comment; route pre-existing or unrelated problems to self-contained follow-up work; and never approve automatically.
 ---
 
 <!--
@@ -51,11 +51,43 @@ Before evaluating the change, inspect all available review evidence:
 
 Use other reviews as leads, not conclusions. Independently reproduce each
 relevant claim against the current head and actual code. Do not repeat an
-existing point unless it remains unresolved and the consolidated review would
-otherwise omit a merge-relevant issue. If repeating it, add evidence or clarify
-why it is still applicable.
+existing point that an active review already covers fully and accurately. Tell
+the user separately when independent analysis confirms such a blocker. Repeat
+it in the posted review only when the earlier feedback is stale, ambiguous, or
+missing evidence needed to make the problem actionable.
 
-### 3. Verify the description and scope
+### 3. Delegate independent verification
+
+Use subagents for every PR review when subagents are available. Keep their
+tasks read-only, bounded, and independent so they reduce coordinator context
+load without weakening review quality.
+
+- Give each subagent the PR URL or exact repository, base revision, and head
+  revision. Identify its review surface, but do not give it suspected findings
+  or another agent's conclusions before its first pass.
+- Make at least one verifier's first pass review-blind: give it the description,
+  diff, base code, and relevant repository context, but instruct it not to read
+  PR comments or reviews until it returns its initial candidate findings.
+- Assign at least one subagent to independently inspect the implementation and
+  base comparison. For a large or cross-cutting PR, assign separate subagents
+  to scope and description accuracy, implementation correctness, and tests or
+  domain-specific risks when capacity permits.
+- Partition work by files or concerns. Do not make every subagent load the
+  entire PR when a smaller evidence packet is sufficient.
+- Require each subagent to return only candidate findings with category,
+  location, observable impact, evidence relative to base, and smallest fix.
+- Prohibit subagents from posting comments, changing GitHub state, editing the
+  checkout, approving, or requesting changes. The coordinator owns all writes.
+- Independently inspect the cited code before accepting any candidate finding.
+  Reconcile duplicates and disagreements; never post a finding merely because
+  a subagent reported it.
+
+For small PRs, use one verifier plus the coordinator's own review. For large
+PRs, use multiple non-overlapping verification tasks rather than one
+context-heavy task. If subagents are unavailable, perform a fresh sequential
+second pass and disclose that independent subagent verification was unavailable.
+
+### 4. Verify the description and scope
 
 Compare every material claim in the title and description with the diff and
 tests. Check that the description accurately states behavior changes,
@@ -78,7 +110,7 @@ true:
 Otherwise, treat unjustified size or mixed purpose as a blocker and recommend
 independently reviewable PRs.
 
-### 4. Inspect the actual implementation
+### 5. Inspect the actual implementation
 
 Read the complete diff, then inspect enough unchanged neighboring code and the
 base implementation to understand control flow, ownership, configuration, and
@@ -100,7 +132,7 @@ Evaluate at least:
 Do not propose a new or broader public API unless the user explicitly requests
 one. Prefer private implementation details and existing APIs.
 
-### 5. Classify findings by relationship to the change
+### 6. Classify findings by relationship to the change
 
 Use these categories:
 
@@ -111,11 +143,12 @@ Use these categories:
 - **Nit:** A small, actionable, non-blocking issue introduced by the PR. Keep
   nits sparse; do not use them for personal style preferences already allowed
   by repository patterns.
-- **Follow-up (not blocking):** A valid pre-existing or unrelated issue that
-  should not expand this PR. Describe a self-contained follow-up PR with a
-  narrow outcome, affected area, and validation target. If deferral needs
-  durable tracking, suggest filing an issue; file it only with explicit user
-  authorization.
+- **Follow-up (not blocking):** A high-confidence, actionable, and material
+  pre-existing or unrelated issue that should not expand this PR. Describe a
+  self-contained follow-up PR with a narrow outcome, affected area, and
+  validation target. Omit speculative or stylistic side observations. If
+  deferral needs durable tracking, suggest filing an issue; file it only with
+  explicit user authorization.
 
 Do not disguise out-of-scope work as a blocker or nit. Conversely, scope creep
 inside the PR is itself change-caused: ask for it to be removed or split.
@@ -127,7 +160,7 @@ For each blocker or nit, include:
 3. Evidence that the PR causes it relative to base.
 4. The smallest viable correction, without prescribing unnecessary redesign.
 
-### 6. Draft one top-level review comment
+### 7. Draft one top-level review comment
 
 Use this structure, omitting empty sections:
 
@@ -148,23 +181,28 @@ Use this structure, omitting empty sections:
 ```
 
 If there are no change-scoped findings, write: `No change-scoped blockers or
-nits found.` Do not use approval language such as “Approved,” “LGTM,” or “good
-to merge.”
+nits found.` If active reviews already cover findings that this review
+independently confirmed, write: `No additional change-scoped blockers or nits
+beyond the active review threads.` Do not use approval language such as
+“Approved,” “LGTM,” or “good to merge.”
 
 Keep the comment concise. Do not add a generic summary that restates the PR.
 
-### 7. Refresh and post safely
+### 8. Refresh and post safely
 
 When the user has authorized posting:
 
 1. Re-fetch the current head revision, description, labels, checks, comments,
    reviews, and thread states.
 2. If the head changed, re-review the affected diff before posting.
-3. Remove findings already fixed or fully covered by another active review;
-   preserve independently verified unresolved blockers.
-4. Submit exactly one top-level comment-only review. Do not approve, request
-   changes, add inline comments, resolve threads, or modify existing reviews.
+3. Remove findings already fixed or fully and accurately covered by another
+   active review. Preserve independently verified unresolved blockers only
+   when the earlier feedback is stale, ambiguous, or incomplete.
+4. Submit exactly one top-level GitHub review with the `COMMENT` event, such as
+   `gh pr review --comment`. Do not use an ordinary PR conversation comment.
+   Do not approve, request changes, add inline comments, resolve threads, or
+   modify existing reviews.
 5. Report the posted review URL to the user.
 
-If posting cannot be guaranteed to use a comment-only event, stop and ask the
-user rather than risk submitting an approval.
+If posting cannot be guaranteed to use the GitHub `COMMENT` review event, stop
+and ask the user rather than risk submitting an approval.
