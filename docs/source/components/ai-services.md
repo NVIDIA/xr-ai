@@ -519,10 +519,11 @@ cleanup.
   When `recordings_dir` is empty, participant discovery returns an empty list
   and recorded-media operations return `recording_disabled`.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
-- Standalone service YAMLs live beside the services that support direct local
-  launch. When copying one into `agent-samples/<name>/yaml/`, set
-  `model_cache` to `../../../models` so it still resolves to the repository's
-  `models/` directory.
+- Standalone service YAMLs live beside services for direct single-service
+  launches; they are not sample configuration. Shared deployments use the
+  hardware-specific YAML under
+  `agent-samples/model-servers/yaml/<gpu-profile>/`, while samples reuse the
+  resulting endpoints through their models JSON.
 - The generic NIM wrapper has no service-local YAML. Use a hardware profile
   under `agent-samples/model-servers/yaml/<gpu-profile>/`; its
   `nim_<role>_server.yaml` files use `nim_cache`, normally
