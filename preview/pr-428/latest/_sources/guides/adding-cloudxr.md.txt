@@ -21,7 +21,7 @@ PROCESSES = [
 ]
 ```
 
-(2-add-cloudxr-runtime-yaml-to-the-sample-root)=
+(add-cloudxr-runtime-yaml-to-the-sample-root)=
 ## 2 — Add `cloudxr_runtime.yaml` to the sample's `yaml/` directory
 
 The `Process.config` value above passes this file as `--config`.
