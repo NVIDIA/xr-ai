@@ -51,6 +51,7 @@ from xr_ai_voice._frames import (
     GatedQueryFrame,
     ParticipantJoinedFrame,
     ParticipantLeftFrame,
+    TextResponseEndFrame,
 )
 from xr_ai_voice._processors import (
     _VoiceIOProcessor,
@@ -1011,6 +1012,11 @@ async def test_voice_gate_processor_stop_emits_interruption_and_ack_text():
     assert indices_interrupt[0] < indices_text[0]
     ack = next(f for f in sink.frames if isinstance(f, TextFrame))
     assert ack.text == "Okay, I will stop."
+    boundary_indices = [
+        i for i, f in enumerate(sink.frames) if isinstance(f, TextResponseEndFrame)
+    ]
+    assert len(boundary_indices) == 1
+    assert indices_text[0] < boundary_indices[0]
 
 
 @pytest.mark.asyncio
@@ -1025,6 +1031,9 @@ async def test_voice_gate_processor_greeting_emitted_when_phrases_configured():
     texts = [f for f in sink.frames if isinstance(f, TextFrame)]
     assert len(texts) == 1
     assert texts[0].text.startswith("To talk to me")
+    boundaries = [f for f in sink.frames if isinstance(f, TextResponseEndFrame)]
+    assert len(boundaries) == 1
+    assert boundaries[0].pid == "pid-1"
     assert any(isinstance(f, ParticipantJoinedFrame) for f in sink.frames)
 
 
@@ -1905,6 +1914,153 @@ async def test_response_boundary_flushes_each_partial_output_chunk():
     assert endpoint.chunks[0].samples == endpoint.chunks[1].samples
 
 
+def _constant_wav(sample_rate: int, *, ms: int, value: int) -> bytes:
+    samples = max(1, int(sample_rate * ms / 1000))
+    pcm = np.full(samples, value, dtype=np.int16).tobytes()
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm)
+    return buf.getvalue()
+
+
+class _TaggedShortTts(_FakeTts):
+    """Sub-40 ms WAVs with distinct samples for gate and assistant text."""
+
+    async def synthesize(self, text: str, **_kwargs) -> bytes:
+        self.calls.append(text)
+        value = 2_000 if text.startswith("answer:") else 1_000
+        return _constant_wav(self.sample_rate, ms=27, value=value)
+
+
+class _BoundaryEndpoint:
+    def __init__(self) -> None:
+        self.chunks = []
+
+    async def send_return_audio(self, chunk) -> None:
+        self.chunks.append(chunk)
+
+
+def _nonzero_sample_values(chunk) -> set[int]:
+    samples = np.frombuffer(chunk.data, dtype=np.float32)
+    restored = np.rint(samples * 32767).astype(np.int16)
+    return {
+        int(round(value / 1_000) * 1_000)
+        for value in restored.tolist()
+        if value
+    }
+
+
+def _has_silence_padding(chunk) -> bool:
+    return bool(np.any(np.frombuffer(chunk.data, dtype=np.float32) == 0.0))
+
+
+@pytest.mark.asyncio
+async def test_greeting_boundary_flushes_before_assistant_response():
+    """A short greeting tail must not share a 40 ms chunk with the reply."""
+    from pipecat.transports.base_transport import TransportParams
+    from xr_ai_voice._transport import (
+        TTS_NATIVE_SAMPLE_RATE,
+        DeviceIOHubOutputTransport,
+    )
+
+    endpoint = _BoundaryEndpoint()
+    tts = _TaggedShortTts(sample_rate=TTS_NATIVE_SAMPLE_RATE)
+    gate = VoiceGateProcessor(
+        cfg=VoiceGateConfig(magic_phrases=("agent",)),
+        tts=tts,
+    )
+    assistant = _StringAssistant()
+    streaming = StreamingTtsProcessor(tts=tts, voice_gate=gate.gate)
+    output = DeviceIOHubOutputTransport(
+        endpoint,
+        TransportParams(
+            audio_out_enabled=True,
+            audio_out_sample_rate=TTS_NATIVE_SAMPLE_RATE,
+            audio_out_channels=1,
+        ),
+    )
+
+    await _run_chain(
+        gate,
+        assistant,
+        streaming,
+        output,
+        sends=[
+            ParticipantJoinedFrame(participant_id="alice"),
+            GatedQueryFrame(
+                participant_id="alice",
+                text="next",
+                fresh_match=False,
+                pts_us=1,
+            ),
+        ],
+        settle_s=0.4,
+    )
+
+    # The two-sentence greeting occupies two chunks. Its padded tail is
+    # completed before the independently padded assistant chunk begins.
+    assert [_nonzero_sample_values(c) for c in endpoint.chunks] == [
+        {1_000},
+        {1_000},
+        {2_000},
+    ]
+    assert _has_silence_padding(endpoint.chunks[1])
+    assert _has_silence_padding(endpoint.chunks[2])
+
+
+@pytest.mark.asyncio
+async def test_stop_ack_boundary_flushes_before_next_response():
+    """A short stop acknowledgement must not share a chunk with later text."""
+    from pipecat.transports.base_transport import TransportParams
+    from xr_ai_voice._transport import (
+        TTS_NATIVE_SAMPLE_RATE,
+        DeviceIOHubOutputTransport,
+    )
+
+    endpoint = _BoundaryEndpoint()
+    tts = _TaggedShortTts(sample_rate=TTS_NATIVE_SAMPLE_RATE)
+    gate = VoiceGateProcessor(
+        cfg=VoiceGateConfig(magic_phrases=("agent",)),
+        tts=tts,
+    )
+    assistant = _StringAssistant()
+    streaming = StreamingTtsProcessor(tts=tts, voice_gate=gate.gate)
+    output = DeviceIOHubOutputTransport(
+        endpoint,
+        TransportParams(
+            audio_out_enabled=True,
+            audio_out_sample_rate=TTS_NATIVE_SAMPLE_RATE,
+            audio_out_channels=1,
+        ),
+    )
+
+    await _run_chain(
+        gate,
+        assistant,
+        streaming,
+        output,
+        sends=[
+            TranscriptionFrame(text="stop", user_id="alice", timestamp="t"),
+            GatedQueryFrame(
+                participant_id="alice",
+                text="next",
+                fresh_match=False,
+                pts_us=2,
+            ),
+        ],
+        settle_s=0.4,
+    )
+
+    assert [_nonzero_sample_values(c) for c in endpoint.chunks] == [
+        {1_000},
+        {2_000},
+    ]
+    assert all(_has_silence_padding(c) for c in endpoint.chunks)
+
+
 @pytest.mark.asyncio
 async def test_streaming_tts_parallel_synth_keeps_order():
     """Out-of-order completion of synth tasks must NOT reorder the
@@ -2230,6 +2386,49 @@ async def test_input_transport_emits_participant_joined_frame():
     assert sum(chunk.samples for chunk in ep.return_audio) / 22_050 == pytest.approx(0.32)
     assert all(chunk.participant_id == "web-client" for chunk in ep.return_audio)
     assert all(not any(chunk.data) for chunk in ep.return_audio)
+
+
+@pytest.mark.asyncio
+async def test_input_transport_emits_join_when_return_audio_preroll_fails():
+    """Track priming is best-effort and cannot suppress participant lifecycle."""
+    from pipecat.transports.base_transport import TransportParams
+    from xr_ai_hub import ParticipantEvent
+    from xr_ai_voice._transport import SAMPLE_RATE, DeviceIOHubInputTransport
+
+    class _FailingEndpoint(_CallbackStubEndpoint):
+        def __init__(self) -> None:
+            super().__init__()
+            self.return_audio_attempts = 0
+
+        async def send_return_audio(self, _chunk) -> None:
+            self.return_audio_attempts += 1
+            raise RuntimeError("return audio unavailable")
+
+    ep = _FailingEndpoint()
+    transport = DeviceIOHubInputTransport(
+        ep,
+        TransportParams(
+            audio_in_enabled=True,
+            audio_in_sample_rate=SAMPLE_RATE,
+            audio_in_channels=1,
+        ),
+    )
+    transport._started = True
+    pushed: list[Frame] = []
+
+    async def capture(frame, direction=FrameDirection.DOWNSTREAM):
+        pushed.append(frame)
+
+    transport.push_frame = capture  # type: ignore[method-assign]
+
+    await ep.participant_cb(
+        ParticipantEvent(participant_id="web-client", joined=True, pts_us=0),
+    )
+
+    assert ep.return_audio_attempts == 1
+    assert len(pushed) == 1
+    assert isinstance(pushed[0], ParticipantJoinedFrame)
+    assert pushed[0].participant_id == "web-client"
 
 
 @pytest.mark.asyncio

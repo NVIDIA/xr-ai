@@ -48,7 +48,11 @@ from xr_ai_models import TTSService
 from xr_ai_voicegate import VoiceGate
 
 from .._audio import wav_to_output_frames
-from .._frames import AssistantResponseEndFrame, ParticipantLeftFrame
+from .._frames import (
+    AssistantResponseEndFrame,
+    ParticipantLeftFrame,
+    TextResponseEndFrame,
+)
 
 if TYPE_CHECKING:
     from .._transport import HubVoiceTransport
@@ -147,8 +151,10 @@ class StreamingTtsProcessor(FrameProcessor):
             await self.push_frame(frame, direction)
             return
 
-        if isinstance(frame, AssistantResponseEndFrame):
-            await self._handle_response_end(frame)
+        if isinstance(frame, TextResponseEndFrame):
+            await self._handle_text_response_end(frame)
+            if isinstance(frame, AssistantResponseEndFrame):
+                await self._echo_assistant_response(frame)
             # Forward the marker so any tail processor / sink that tracks turn
             # boundaries still sees it.
             await self.push_frame(frame, direction)
@@ -189,13 +195,13 @@ class StreamingTtsProcessor(FrameProcessor):
         self._state(pid).pending += frame.text
         await self._flush_complete_sentences(pid)
 
-    async def _handle_response_end(self, frame: AssistantResponseEndFrame) -> None:
-        """Flush ``frame.pid``'s trailing pending text, then send the data echo.
+    async def _handle_text_response_end(self, frame: TextResponseEndFrame) -> None:
+        """Flush trailing text and queue its participant-scoped audio boundary.
 
-        The assistant may finish a turn with text that has no sentence-final
-        punctuation (e.g. an aborted partial answer); the boundary regex would
-        leave that fragment buffered forever. End-of-response flushes it so the
-        user hears the tail of the reply.
+        A producer may finish an utterance with text that has no sentence-final
+        punctuation. The boundary regex would leave that fragment buffered
+        forever, so end-of-response flushes it before placing the boundary on
+        the same ordered queue as synthesis.
         """
         st = self._by_pid.get(frame.pid)
         if st is not None and st.pending.strip():
@@ -212,6 +218,8 @@ class StreamingTtsProcessor(FrameProcessor):
             await queue.put(_TtsResponseBoundary(pid=frame.pid))
             st.response_sentences = 0
 
+    async def _echo_assistant_response(self, frame: AssistantResponseEndFrame) -> None:
+        """Send one completed assistant response on the configured data topic."""
         if not self._text_topic or self._transport is None:
             return
         if not frame.text:
