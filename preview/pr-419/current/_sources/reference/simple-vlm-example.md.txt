@@ -32,6 +32,19 @@ its voice response. Participant departure releases the sample agent's cached
 frames and tasks. This is the reference composition for a single foreground
 streaming image query.
 
+## Source map
+
+The worker package is under
+`agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/`:
+
+| File | Responsibility |
+|---|---|
+| `__main__.py` | Parses launcher arguments and starts the worker |
+| `app.py` | Composes `VoiceAgent`, `SimpleVlmAgent`, services, and readiness |
+| `agent.py` | Owns participant-scoped vision turns, cancellation, and cleanup |
+| `config.py` | Resolves worker, model, voice-gate, and prompt settings |
+| `prompts/system.txt` | Defines the default VLM instruction |
+
 ## Readiness and warmup
 
 Before announcing readiness, the worker performs a streaming VLM request with

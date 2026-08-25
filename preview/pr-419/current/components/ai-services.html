@@ -992,7 +992,11 @@ configuration reserves 20% of a GPU and uses Docker.</p></li>
 <li><p><strong>rag-service</strong> is a typed dense document-retrieval capability. Point
 <code class="docutils literal notranslate"><span class="pre">documents_dir</span></code> at an application-owned tree and <code class="docutils literal notranslate"><span class="pre">models_config</span></code> at a profile
 with an <code class="docutils literal notranslate"><span class="pre">embedding</span></code> role. It chunks and embeds supported documents at
-startup, caches its index, and returns matches above <code class="docutils literal notranslate"><span class="pre">min_score</span></code>.</p></li>
+startup, caches its index, and returns matches above <code class="docutils literal notranslate"><span class="pre">min_score</span></code>. Start the
+embedding service first, RAG second, and the consuming worker last. The cache
+includes document content, indexing settings, and the model profile; change
+<code class="docutils literal notranslate"><span class="pre">cache_key</span></code> when a remote endpoint changes its backing model without changing
+that profile.</p></li>
 <li><p><strong>video-memory-service</strong> owns recorded chunk queries, NVDEC, and PNG output
 behind typed msgpack over ZMQ on port 8310. Set <code class="docutils literal notranslate"><span class="pre">recordings_dir</span></code> in its YAML to
 enable recorded-video operations; the path must match the hub’s

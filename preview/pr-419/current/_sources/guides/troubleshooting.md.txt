@@ -24,7 +24,7 @@ headers.
 sudo apt install python3-dev
 ```
 
-This applies to the `xr-render-demo/yaml/spark/` profile.
+This applies to the `agent-samples/model-servers/yaml/spark/` profile.
 
 ### DGX Spark — LOVR auto-download is not supported
 

@@ -435,14 +435,15 @@ for the public APIs.</p>
 
 <span class="n">viewer</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"web-events"</span><span class="p">,</span> <span class="n">WebEventsAgent</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="s2">"Agent events"</span><span class="p">))</span>
 
-<span class="k">await</span> <span class="n">ctx</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span>
-    <span class="n">WEB_EVENT_TOPIC</span><span class="p">,</span>
-    <span class="n">WebEvent</span><span class="p">(</span>
-        <span class="n">topic</span><span class="o">=</span><span class="s2">"application.reading"</span><span class="p">,</span>
-        <span class="n">title</span><span class="o">=</span><span class="s2">"Readings"</span><span class="p">,</span>
-        <span class="n">payload</span><span class="o">=</span><span class="n">reading</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">"json"</span><span class="p">),</span>
-    <span class="p">),</span>
-<span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">report_reading</span><span class="p">(</span><span class="n">reading</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">await</span> <span class="n">ctx</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span>
+        <span class="n">WEB_EVENT_TOPIC</span><span class="p">,</span>
+        <span class="n">WebEvent</span><span class="p">(</span>
+            <span class="n">topic</span><span class="o">=</span><span class="s2">"application.reading"</span><span class="p">,</span>
+            <span class="n">title</span><span class="o">=</span><span class="s2">"Readings"</span><span class="p">,</span>
+            <span class="n">payload</span><span class="o">=</span><span class="n">reading</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">"json"</span><span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
 
 <span class="k">async</span> <span class="k">with</span> <span class="n">viewer</span><span class="p">:</span>
     <span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>

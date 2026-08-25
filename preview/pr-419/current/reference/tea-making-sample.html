@@ -520,6 +520,8 @@ accepted speech or typed query         ├─&gt; GuidanceAgent observation loop
 <p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes participant-scoped queries, transcripts, and lifecycle
 events. The runtime fans typed events out to peer agents. Agents call peer
 tools directly, and each background agent owns its participant tasks.
+The worker uses native <code class="docutils literal notranslate"><span class="pre">xr_ai_runtime</span></code> agents and <code class="docutils literal notranslate"><span class="pre">xr_ai_tools</span></code> instances; it
+does not use NVIDIA Agent Toolkit, PydanticAI, MCP clients, or MCP servers.
 Wake-word gating is the sample default; callers can explicitly select
 always-on speech. Every spoken response is also sent to the connection client
 on <code class="docutils literal notranslate"><span class="pre">agent.response</span></code> so the client can render accessible text alongside audio.

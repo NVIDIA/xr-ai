@@ -715,9 +715,9 @@ not select or own model deployment profiles.</p>
 </section>
 <section id="hub-only-standalone">
 <h2>Hub only (standalone)<a class="headerlink" href="#hub-only-standalone" title="Link to this heading">#</a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>services/device-io-hub
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/device-io-hub<span class="w"> </span>device_io_hub<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--config<span class="w"> </span>services/device-io-hub/device_io_hub.yaml
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>services/device-io-hub
+uv<span class="w"> </span>sync
+uv<span class="w"> </span>run<span class="w"> </span>device_io_hub<span class="w"> </span>--config<span class="w"> </span>device_io_hub.yaml
 </pre></div>
 </div>
 <p>Useful for development or when running an agent in a separate terminal. The

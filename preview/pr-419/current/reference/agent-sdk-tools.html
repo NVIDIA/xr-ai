@@ -480,6 +480,11 @@ an HTTP or agent framework.</p>
 </section>
 <section id="image-selection-and-inference">
 <h2>Image selection and inference<a class="headerlink" href="#image-selection-and-inference" title="Link to this heading">#</a></h2>
+<p>Install the <code class="docutils literal notranslate"><span class="pre">frames</span></code> extra for <code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code> and the <code class="docutils literal notranslate"><span class="pre">vision</span></code> extra for
+VLM query tools. The example below requires both:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>add<span class="w"> </span><span class="s2">"xr-ai-tools[frames,vision]"</span>
+</pre></div>
+</div>
 <p>Selection and inference are separate contracts:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code> selects a live frame.</p></li>
@@ -495,6 +500,9 @@ accept only their own references unless a trusted application opts into local
 paths or URLs with <code class="docutils literal notranslate"><span class="pre">allow_external=True</span></code>; do not expose an external-enabled
 query tool directly to an untrusted model. Derived images inherit the source
 owner so participant cleanup releases the complete image lineage.</p>
+<p>Query tools forward only controlled Relay lineage headers. They preserve image
+locations in provider input while redacting every image location from VLM Relay
+events.</p>
 <p>The shipped Cosmos endpoint accepts at most four images per inference request.
 That model limit is independent of the larger recorded-frame selection budget;
 applications select the relevant subset before inference. Recorded timestamps

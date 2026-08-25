@@ -490,7 +490,7 @@ local GPU is required for the agent or DeviceIOHub.</p>
 </tr>
 <tr class="row-even"><td><p>Docker</p></td>
 <td><p>24+</p></td>
-<td><p>required by the checked-in model-server profiles: their LLM, VLM, and embedding services run in <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm</span></code> containers</p></td>
+<td><p>required by the checked-in model-server profiles, which use vLLM containers from NGC and Docker Hub</p></td>
 </tr>
 <tr class="row-odd"><td><p>NVIDIA Container Toolkit</p></td>
 <td><p>latest</p></td>
@@ -522,7 +522,7 @@ install guide and run the CDI and runtime-configuration steps from there:</p>
 <h2>GPU-profile prerequisites<a class="headerlink" href="#gpu-profile-prerequisites" title="Link to this heading">#</a></h2>
 <p>Install before <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> for these targets:</p>
 <ul class="simple">
-<li><p><strong>DGX Spark</strong> (<code class="docutils literal notranslate"><span class="pre">xr-render-demo/yaml/spark/</span></code>): <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">apt</span> <span class="pre">install</span> <span class="pre">python3-dev</span></code></p></li>
+<li><p><strong>DGX Spark</strong> (<code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/spark/</span></code>): <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">apt</span> <span class="pre">install</span> <span class="pre">python3-dev</span></code></p></li>
 </ul>
 <p>All GPU profiles default to <code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">docker</span></code>, so the vLLM container ships
 nvcc + FlashInfer. If you switch a profile to <code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">pip</span></code>, refer to the

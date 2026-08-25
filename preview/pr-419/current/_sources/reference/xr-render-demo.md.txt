@@ -32,7 +32,7 @@ any owned process exit terminates the application stack.
 
 Before starting the stack, the orchestrator runs two setup steps:
 
-- **Web vendor bundle** — builds the CloudXR + LiveKit ESM bundle via
+- **Web vendor bundle** — builds the CloudXR and LiveKit ESM bundle via
   `client-samples/web-xr-build/build.sh` (skipped if already present;
   requires `npm`). Built only for WebRTC device profiles; native profiles
   never serve the web page, so the build (and its npm dependency) is skipped.
@@ -314,14 +314,14 @@ CloudXR returns `XR_ERROR_FORM_FACTOR_UNAVAILABLE` from `xrGetSystem` until
 a streaming client connects. LOVR cannot start before then.
 
 ```
-1. User opens https://<host>:8080, grants mic + XR permissions
+1. User opens https://<host>:8080, grants microphone and XR permissions
 2. User clicks "Launch XR"
 3. Client sends `xr.session.started` data message → hub IPC → worker
 4. Worker invokes native `start_xr`
-   → scene process spawns LOVR + waits for CloudXR in a background task
+   → scene process spawns LOVR and waits for CloudXR in a background task
 5. Worker polls `get_health` every 500 ms (up to 120s)
    lovr_started: true  → send `render.ready` to client → XR session unlocked
-   spawn_error: "..."  → log + abort
+   spawn_error: "..."  → log and abort
 6. On reconnect or refresh: `xr.session.started` arrives again
    → `_xr_started` is already True → skip spawn, send `render.ready`
    immediately
@@ -329,45 +329,127 @@ a streaming client connects. LOVR cannot start before then.
 
 ## Eval harness
 
-Offline regression suite for the agentic loop, run against the live agent LLM.
-It derives schemas from the worker's native tools and evaluates tool
-effects against deterministic fixtures, so the live LOVR scene is not mutated.
-Run the full offline corpus with:
+The evaluation project derives schemas from the worker's native tools. Offline
+tiers call the live agent LLM but apply tool effects to deterministic fixtures,
+so they do not mutate the LOVR scene.
+
+| Tier | Command | Runs against | Approximate cost |
+|---|---|---|---|
+| Supervisor routing | `xr_render_demo_eval_supervisor` | Fake subagents that record delegations | 15 seconds per case |
+| Subagent components | `xr_render_demo_eval_subagents` | One real subagent over fake leaf functions | 30 seconds per case |
+| End-to-end offline | `xr_render_demo_eval` | Supervisor and subagents over deterministic services | 30 minutes for the full corpus |
+| Live smoke | `xr_render_demo_live_smoke` | Running demo stack | Minutes |
+| Live pose matrix | `xr_render_demo_live_pose_matrix` | Running demo stack and simulated poses | Minutes |
+| Live manipulation | `xr_render_demo_live_manip` | Running demo stack and real scene state | Minutes |
+| Live speech noise | `xr_render_demo_live_garble` | Running demo stack with noisy utterances | Minutes |
+| Live exploration | `xr_render_demo_live_explore` | Running demo stack with novel prompts | Minutes |
+
+Run all commands from `agent-samples/xr-render-demo/eval/`:
 
 ```bash
-uv run --project eval xr_render_demo_eval
+uv sync
+
+# Full offline corpus, precision cases, and utterance battery
+uv run xr_render_demo_eval
+
+# Fast prompt-change gate
+uv run xr_render_demo_eval utterances
+
+# Filter by case name; unknown names fail
+uv run xr_render_demo_eval move_left_one_meter between_two_spheres
+
+# Routing and component tiers; the component command accepts an agent or case
+uv run xr_render_demo_eval_supervisor
+uv run xr_render_demo_eval_subagents placement
 ```
 
-The eval project provides four tiers:
+The offline tiers require only the agent LLM, which defaults to
+`http://localhost:8108`. They do not require the demo stack, capability
+services, or LOVR.
 
-| Tier | Command | Scope |
-|---|---|---|
-| Supervisor routing | `xr_render_demo_eval_supervisor` | Fake subagents record delegations |
-| Subagent components | `xr_render_demo_eval_subagents` | One real subagent over fake leaf functions |
-| End-to-end offline | `xr_render_demo_eval` | Supervisor and subagents over deterministic services |
-| Live | `xr_render_demo_live_*` | Running demo stack and real scene state |
+### Live drivers
 
-The offline tiers require only the agent LLM. The `utterances` subset is the
-fast prompt-change gate:
+Start the demo stack and set `allow_sim_pose: true` in
+`yaml/openxr_service.yaml` before running live evaluations:
 
 ```bash
-uv run --project eval xr_render_demo_eval utterances
+uv run xr_render_demo_live_smoke
+uv run xr_render_demo_live_pose_matrix
+uv run xr_render_demo_live_manip
+uv run xr_render_demo_live_garble
+uv run xr_render_demo_live_explore
 ```
 
-Live drivers create a fresh participant per case, clear the scene through typed
-RPC, vary phrasing, and preserve the complete run log. Repeat them before
-treating a near-tie model result as a regression. They require
-`allow_sim_pose: true` in `yaml/openxr_service.yaml`.
+Live drivers join as synthetic participants, inject typed text, set simulated
+head pose, and score real scene state. Preserve these isolation rules:
 
-Cases belong beside the tier that owns them: end-to-end cases in `cases.py`,
-precision and utterance cases in `harness.py`, routing cases in `supervisor.py`,
-component cases in `subagents.py`, and live cases in the relevant `live_*.py`.
-The harness intentionally does not cover real camera perception in offline
-tiers or voice-media behavior; those require a live tier.
+- Use a fresh participant ID for every case so transcript history cannot affect
+  later supervisor behavior.
+- Clear the scene through typed RPC between cases so stale objects cannot make
+  referents ambiguous.
+- Vary prompt phrasing across cases rather than building an artificial repeated
+  self-history.
+- Write the complete run log to a file, then filter that file. Do not filter the
+  live command's output pipeline.
+- Repeat each run three times before treating a near-tie result as a regression;
+  model choices can vary even at temperature zero.
 
-The model responds better to worked examples and contrast pairs than bare
-prohibitions. Every prompt change must retain the overlap audit described below
-and pass the utterances gate before the longer suites.
+`xr_render_demo_live_garble` covers homophones, truncations, corrections, and
+stutters. Its restraint scoring fails incorrect mutations and accepts a
+clarifying response. `xr_render_demo_live_explore` sends novel conversational
+phrasing and scores intent invariants. Promote any violation into a permanent
+tier case before fixing it.
+
+### Add or change a case
+
+End-to-end cases are dictionaries in `cases.py`; use the existing cases for
+pose overrides, multi-turn `history`, and undo `recent_moves` examples.
+Precision and utterance cases are `Case` values in `harness.py`, routing cases
+are in `supervisor.py`, component cases are in `subagents.py`, and live cases
+are in the corresponding `live_*.py` module. A live manipulation case has this
+shape:
+
+```python
+{
+    "name": "my_case",
+    "fixtures": [("sphere", x, y, z, r, g, b, size)],
+    "prompt": "...",
+    "check": lambda ids, objects: ...,  # True means pass
+}
+```
+
+### Prompt-tuning loop
+
+The current model follows worked examples and contrast pairs more reliably than
+bare prohibitions. Pair every refusal example with a proceed example so the
+restriction does not contaminate neighboring behavior. When examples cannot
+produce reliable schema arguments, move deterministic resolution into code and
+name the parameter for the text the model can copy. The `anchor_words`
+parameter is the precedent: the model copies descriptors verbatim, and
+`spatial_ops` resolves shapes, damaged nouns, and colors against scene state.
+
+Run `uv run xr_render_demo_eval utterances` after every prompt or operations
+change. Its 25 cases take about three minutes. Run the longer scenario and
+precision tiers before completing a tuning round.
+
+(prompt-eval-overlap-audit)=
+
+### Prompt and evaluation overlap audit
+
+The harness audits every worker prompt against every tier's inputs at startup.
+It warns when:
+
+1. a case utterance appears verbatim in a prompt;
+2. a case fixture ID appears in a prompt;
+3. a quoted prompt example pairs an evaluation color with an evaluation shape.
+
+Fix overlap by changing the prompt, not the case. Use colors such as teal,
+lavender, magenta, or turquoise and shapes such as cone, cylinder, capsule, or
+torus in worked examples. A case that passes only while its vocabulary appears
+in the prompt measures recall rather than capability.
+
+Offline tiers do not cover the live worker's voice pipeline, real LOVR effects,
+or real camera perception. Use a live tier for those boundaries.
 
 ## Tracing and debugging
 
@@ -389,7 +471,7 @@ unavailable (e.g. in offline eval). Key log landmarks:
 | Subagent delegated | `xr_render_demo_worker.agents.*` | DEBUG |
 | Tool loop error | `xr_render_demo_worker.supervisor` | WARNING (ToolLoopError) |
 | Subagent tool loop error | `xr_render_demo_worker.agents.*` | WARNING (ToolLoopError) |
-| Turn failed | `xr_render_demo_worker.agent` | ERROR + traceback |
+| Turn failed | `xr_render_demo_worker.agent` | ERROR with traceback |
 
 **Error policy.** Expected degradation paths (camera unavailable, scene
 not started) surface as subagent result strings and reach the user as a
@@ -402,13 +484,3 @@ turn is recorded as failed in the runtime event log.
 the supervisor's per-participant lock, and a global scene lock serializes
 the snapshot, mutation, and verification window across participants, so scene
 turns from different participants queue rather than interleave.
-
-(prompt-eval-overlap-audit)=
-
-### Prompt and evaluation overlap audit
-
-Per `AGENTS.md` "Prompt-driven samples", the harness audits every worker
-prompt against every tier's case inputs at startup and warns on overlap:
-verbatim case utterances, case fixture ids, and any quoted prompt example
-pairing an eval-vocabulary color with an eval-vocabulary shape. Clearing a
-warning means changing the prompt, not the case.

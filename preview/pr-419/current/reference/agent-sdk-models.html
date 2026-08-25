@@ -484,11 +484,11 @@ credentials needed by a managed service itself use <code class="docutils literal
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cosmos3_nano_reasoner</span></code></p></td>
 <td><p>Cosmos3 Nano VLM</p></td>
-<td><p>Image and video; no reasoning-field mapping</p></td>
+<td><p>Image; video requires <code class="docutils literal notranslate"><span class="pre">max_videos_per_prompt</span> <span class="pre">&gt;=</span> <span class="pre">1</span></code>; no reasoning-field mapping</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code></p></td>
 <td><p>Cosmos-Reason1 compatibility</p></td>
-<td><p>Image and video; thinking disabled by default</p></td>
+<td><p>Image; video requires <code class="docutils literal notranslate"><span class="pre">max_videos_per_prompt</span> <span class="pre">&gt;=</span> <span class="pre">1</span></code>; thinking disabled by default</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">llama_nemotron</span></code></p></td>
 <td><p>Llama Nemotron LLM</p></td>
@@ -500,7 +500,7 @@ credentials needed by a managed service itself use <code class="docutils literal
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nemotron_omni</span></code></p></td>
 <td><p>Nemotron Omni</p></td>
-<td><p>Tool calls, image and video, <code class="docutils literal notranslate"><span class="pre">reasoning_content</span></code> normalization</p></td>
+<td><p>Tool calls, image and video, <code class="docutils literal notranslate"><span class="pre">reasoning_content</span></code> normalization; thinking disabled unless requested</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nemotron_embedding</span></code></p></td>
 <td><p>Embedding server</p></td>
@@ -521,6 +521,11 @@ credentials needed by a managed service itself use <code class="docutils literal
 </tbody>
 </table>
 </div>
+<p>The Cosmos adapter capability describes the supported request shape, but the
+server controls whether video input is enabled. Every checked-in <code class="docutils literal notranslate"><span class="pre">vlm-server</span></code>
+profile sets <code class="docutils literal notranslate"><span class="pre">max_videos_per_prompt:</span> <span class="pre">0</span></code> to avoid reserving unused activation
+memory. Set it to at least <code class="docutils literal notranslate"><span class="pre">1</span></code> and restart the persistent VLM server before
+sending a video request.</p>
 <p><code class="docutils literal notranslate"><span class="pre">ChatResponse.reasoning</span></code> is the canonical post-normalization field. Model
 adapters absorb whether the provider calls it <code class="docutils literal notranslate"><span class="pre">reasoning</span></code> or
 <code class="docutils literal notranslate"><span class="pre">reasoning_content</span></code>. LLM and VLM calls accept controlled per-request headers for
@@ -570,6 +575,15 @@ local readiness gate.</p>
 also accepts <code class="docutils literal notranslate"><span class="pre">voice</span></code> and <code class="docutils literal notranslate"><span class="pre">sample_rate</span></code>. A hosted NVCF endpoint uses TLS,
 <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>, its <code class="docutils literal notranslate"><span class="pre">function_id</span></code>, and <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">false</span></code> because it has no
 Riva channel-ready health surface.</p>
+</section>
+<section id="tests">
+<h2>Tests<a class="headerlink" href="#tests" title="Link to this heading">#</a></h2>
+<p>The CPU-only <code class="docutils literal notranslate"><span class="pre">tests/test_models_*.py</span></code> modules exercise model wire formats with
+the <code class="docutils literal notranslate"><span class="pre">tests/_stub_openai.StubOpenAI</span></code> httpx mock transport. Run them from the
+repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>pytest<span class="w"> </span>-q<span class="w"> </span>tests/test_models_*.py
+</pre></div>
+</div>
 </section>
 </section>
 
@@ -626,6 +640,7 @@ Riva channel-ready health surface.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#built-in-adapters">Built-in adapters</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hosted-endpoints">Hosted endpoints</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#riva-speech-over-grpc">Riva speech over gRPC</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tests">Tests</a></li>
 </ul>
   </nav></div>
 

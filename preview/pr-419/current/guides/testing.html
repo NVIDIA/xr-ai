@@ -441,7 +441,7 @@ uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </sp
 <p>Tests marked <code class="docutils literal notranslate"><span class="pre">integration</span></code> may start real CPU subprocesses and still run in CI.
 Tests that require a real GPU, Docker, or NVENC use the <code class="docutils literal notranslate"><span class="pre">gpu</span></code> marker and run
 only on a suitably configured developer host:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>bash<span class="w"> </span>tests/run_local_gpu_tests.sh
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>bash<span class="w"> </span>run_local_gpu_tests.sh
 </pre></div>
 </div>
 <p>Pass extra pytest arguments after the script name to select a file or test.</p>

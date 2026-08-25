@@ -455,7 +455,7 @@ audio framing, and pipeline processors are implementation details.</p>
 <td><p>Finite or incremental responses consumed by <a class="reference internal" href="#xr_ai_voice.VoiceAgent" title="xr_ai_voice.VoiceAgent"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceAgent</span></code></a>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_voice.VOICE_TRANSCRIPT_TOPIC" title="xr_ai_voice.VOICE_TRANSCRIPT_TOPIC"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code></a></p></td>
-<td><p>All final STT results, published before voice-gate filtering.</p></td>
+<td><p>Non-empty final STT results queued for publication before gate filtering.</p></td>
 </tr>
 </tbody>
 </table>
@@ -620,7 +620,9 @@ ends. Set to <code class="docutils literal notranslate"><span class="pre">0</spa
 <dl class="py data">
 <dt class="sig sig-object py" id="xr_ai_voice.VOICE_TRANSCRIPT_TOPIC">
 <span class="sig-prename descclassname"><span class="pre">xr_ai_voice.</span></span><span class="sig-name descname"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></span><a class="headerlink" href="#xr_ai_voice.VOICE_TRANSCRIPT_TOPIC" title="Link to this definition">#</a></dt>
-<dd><p>All final STT results, published before voice-gate filtering.</p>
+<dd><p>Non-empty final STT results queued for publication before gate filtering.</p>
+<p>Delivery is best effort: the bounded queue drops its oldest pending item on
+overflow, and shutdown discards queued items that have not been published.</p>
 </dd></dl>
 
 <dl class="py class">

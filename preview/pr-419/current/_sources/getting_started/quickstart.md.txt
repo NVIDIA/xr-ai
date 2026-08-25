@@ -351,9 +351,9 @@ not select or own model deployment profiles.
 ## Hub only (standalone)
 
 ```bash
-uv sync --project services/device-io-hub
-uv run --project services/device-io-hub device_io_hub \
-  --config services/device-io-hub/device_io_hub.yaml
+cd services/device-io-hub
+uv sync
+uv run device_io_hub --config device_io_hub.yaml
 ```
 
 Useful for development or when running an agent in a separate terminal. The

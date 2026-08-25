@@ -222,11 +222,10 @@ Before committing a custom profile:
 ```bash
 jq empty agent-samples/model-servers/yaml/models.my-stack.json
 
-cd tests
-uv run pytest -q \
-  test_model_servers.py \
-  test_launcher_config.py \
-  test_nim_docker.py
+uv run --project tests pytest -q \
+  tests/test_model_servers.py \
+  tests/test_launcher_config.py \
+  tests/test_nim_docker.py
 ```
 
 Model servers persist after the `model_servers` command reports readiness.

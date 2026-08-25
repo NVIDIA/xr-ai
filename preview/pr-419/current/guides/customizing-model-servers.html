@@ -657,11 +657,10 @@ endpoint-only customization.</p>
 <p>Before committing a custom profile:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>jq<span class="w"> </span>empty<span class="w"> </span>agent-samples/model-servers/yaml/models.my-stack.json
 
-<span class="nb">cd</span><span class="w"> </span>tests
-uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-q<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>test_model_servers.py<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>test_launcher_config.py<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>test_nim_docker.py
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>pytest<span class="w"> </span>-q<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>tests/test_model_servers.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>tests/test_launcher_config.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>tests/test_nim_docker.py
 </pre></div>
 </div>
 <p>Model servers persist after the <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> command reports readiness.

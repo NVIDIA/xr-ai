@@ -520,8 +520,7 @@ after either change.</p>
 <section id="android">
 <h2>Android<a class="headerlink" href="#android" title="Link to this heading">#</a></h2>
 <p>The Android app is a Jetpack Compose client with selectable Camera2 devices,
-three microphone modes, participant status, arbitrary data, and network
-metrics.</p>
+microphone capture, participant status, arbitrary data, and network metrics.</p>
 <section id="requirements-and-build">
 <h3>Requirements and build<a class="headerlink" href="#requirements-and-build" title="Link to this heading">#</a></h3>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -532,7 +531,7 @@ metrics.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p>Android Studio</p></td>
-<td><p>Hedgehog or newer</p></td>
+<td><p>Koala 2024.1.1 or newer</p></td>
 </tr>
 <tr class="row-odd"><td><p>JDK</p></td>
 <td><p>17</p></td>
@@ -564,12 +563,12 @@ permission when opening a physical camera. <code class="docutils literal notrans
 runtime permission on Android 12 and newer; the current sample declares it but
 does not prompt for it, so grant Nearby devices in system settings before
 depending on Bluetooth audio routing.</p>
-<p>Voice Processing prefers the platform audio path, Software Processing enables
-WebRTC echo cancellation, gain control, and noise suppression, and Raw disables
-that DSP for applications that process audio elsewhere. LiveKit plays remote
-agent audio automatically. Camera choices come from Camera2 and include front,
-back, extra built-in lenses, and attached USB cameras when the device exposes
-them.</p>
+<p>The current Android backend maps every enabled <code class="docutils literal notranslate"><span class="pre">AudioConfig</span></code> mode to LiveKit’s
+default microphone capture. It does not yet select distinct voice-processing,
+software-processing, or raw DSP settings, so the sample UI exposes only the
+LiveKit default. LiveKit plays remote agent audio automatically. Camera choices
+come from Camera2 and include front, back, extra built-in lenses, and attached
+USB cameras when the device exposes them.</p>
 <p>The root Android build pins the Netty dependency pulled in by AGP’s test tooling
 above known vulnerable 4.1 releases. After changing AGP or the version catalog,
 run <code class="docutils literal notranslate"><span class="pre">./gradlew</span> <span class="pre">verifyNettyPin</span></code> from <code class="docutils literal notranslate"><span class="pre">client-samples/android/</span></code>.</p>
@@ -581,8 +580,8 @@ Camera2 selector is not a passthrough-camera integration.</p>
 <section id="ios-visionos">
 <h2>iOS/visionOS<a class="headerlink" href="#ios-visionos" title="Link to this heading">#</a></h2>
 <p>The Apple client is a checked-in SwiftUI project and local Swift package. It
-targets iOS 18 and visionOS 26 and resolves LiveKit Swift and CloudXRKit through
-Swift Package Manager.</p>
+targets iOS 18 and visionOS 26, requires Xcode 26 with Swift 6.2, and resolves
+LiveKit Swift and CloudXRKit through Swift Package Manager.</p>
 <section id="build">
 <h3>Build<a class="headerlink" href="#build" title="Link to this heading">#</a></h3>
 <p>Open <code class="docutils literal notranslate"><span class="pre">client-samples/ios-visionos/StreamKitSample.xcworkspace</span></code>, select the
@@ -602,12 +601,18 @@ capture. Start the immersive space before camera capture on a Vision Pro device.
 <p>Main passthrough camera access on a Vision Pro device requires both the
 <code class="docutils literal notranslate"><span class="pre">com.apple.developer.arkit.main-camera-access.allow</span></code> entitlement and the team’s
 Apple-issued <code class="docutils literal notranslate"><span class="pre">Enterprise.license</span></code>. Put the non-redistributable license at
-<code class="docutils literal notranslate"><span class="pre">App/Enterprise.license</span></code>; the build phase copies it into the application. A
-missing license leaves audio, data, simulator camera, and the rest of the app
-usable, but disables device passthrough camera access.</p>
+<code class="docutils literal notranslate"><span class="pre">client-samples/ios-visionos/App/Enterprise.license</span></code>; the build phase copies it
+into the application. A missing license leaves audio, data, simulator camera,
+and the rest of the app usable, but disables device passthrough camera access.</p>
+<p>Xcode automatic signing supports development builds. App Store and TestFlight
+distribution require a manually issued provisioning profile that grants the
+main-camera entitlement.</p>
 <p>The native CloudXR path also declares
 <code class="docutils literal notranslate"><span class="pre">com.apple.developer.low-latency-streaming</span></code>, which requires an Apple Developer
-Program team. Simulators do not require the enterprise camera license.</p>
+Program team. A team that cannot provision this entitlement can remove it from
+<code class="docutils literal notranslate"><span class="pre">client-samples/ios-visionos/App/StreamKitSample.entitlements</span></code>; native CloudXR
+remains available with higher latency. Simulators do not require the enterprise
+camera license.</p>
 </section>
 <section id="connect-and-trust-the-certificate">
 <h3>Connect and trust the certificate<a class="headerlink" href="#connect-and-trust-the-certificate" title="Link to this heading">#</a></h3>
@@ -621,6 +626,10 @@ install it under <strong>Settings → General → VPN &amp; Device Management</s
 full trust under <strong>Settings → General → About → Certificate Trust Settings</strong>.
 Refer to <a class="reference internal" href="../guides/troubleshooting.html"><span class="doc">Troubleshooting</span></a> for certificate regeneration, SAN mismatch,
 401, and media-interruption diagnostics.</p>
+<p>When microphone or camera state appears stuck, filter Console.app by
+<code class="docutils literal notranslate"><span class="pre">category:MediaSession</span></code> to inspect interruption and recovery events. CoreAudio
+<code class="docutils literal notranslate"><span class="pre">-50</span></code> and <code class="docutils literal notranslate"><span class="pre">FigAudioSession</span></code> <code class="docutils literal notranslate"><span class="pre">-19224</span></code> messages also appear during successful
+microphone starts and are not failure indicators by themselves.</p>
 </section>
 <section id="native-cloudxr">
 <h3>Native CloudXR<a class="headerlink" href="#native-cloudxr" title="Link to this heading">#</a></h3>
@@ -643,9 +652,14 @@ session so no render component is orphaned.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>client-samples/native
 cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DLIVEKIT_SDK_ROOT<span class="o">=</span>/path/to/livekit-cpp-sdk
 cmake<span class="w"> </span>--build<span class="w"> </span>build
-./build/bin/streamkit_sample<span class="w"> </span>--host<span class="w"> </span><span class="m">192</span>.168.1.100<span class="w"> </span>--token<span class="w"> </span>&lt;jwt&gt;
+./build/bin/streamkit_sample<span class="w"> </span>--host<span class="w"> </span><span class="m">192</span>.168.1.100<span class="w"> </span>--port<span class="w"> </span><span class="m">8080</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--secure<span class="w"> </span>--token<span class="w"> </span>&lt;jwt&gt;
 </pre></div>
 </div>
+<p>Trust the hub certificate on the native host before connecting. The command
+uses the supported TLS proxy on port 8080. Insecure port 7880 is a direct
+LiveKit debugging path; do not expose it outside the XR AI host or a trusted
+development network.</p>
 <p>Without <code class="docutils literal notranslate"><span class="pre">LIVEKIT_SDK_ROOT</span></code>, it builds in stub mode and reports a connected state
 without opening a network session. Build the standalone assertion-based tests
 with <code class="docutils literal notranslate"><span class="pre">-DSTREAMKIT_BUILD_TESTS=ON</span></code> and run:</p>
@@ -657,7 +671,9 @@ metrics, host-injected audio, and host-injected video. <code class="docutils lit
 <code class="docutils literal notranslate"><span class="pre">StartCamera()</span></code> arm publication; the host opens its devices and pushes PCM or
 frames through <code class="docutils literal notranslate"><span class="pre">AudioSink</span></code> and <code class="docutils literal notranslate"><span class="pre">FrameSink</span></code>. Camera facing and device ID are
 therefore inert in this backend, while optional encoding settings apply before
-the first frame creates the video track.</p>
+the first frame creates the video track. Real-time producers must prefer the
+<code class="docutils literal notranslate"><span class="pre">std::vector&lt;uint8_t&gt;&amp;&amp;</span></code> frame-injection overload; the span overload copies each
+frame and can add about 1.4 MB of copying for a typical frame.</p>
 <p>Token-URL HTTP fetching is not implemented; pass an inline token or subclass
 <code class="docutils literal notranslate"><span class="pre">LiveKitBackend::FetchToken</span></code>. <code class="docutils literal notranslate"><span class="pre">GetRoom()</span></code> is the LiveKit-specific escape hatch
 for remote audio rendering or AEC reference capture. Microphone processing

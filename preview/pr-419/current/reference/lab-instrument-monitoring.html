@@ -471,6 +471,8 @@ accepted speech or typed query         ├─&gt; current frame + generic VLM qu
 <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code>. Agents call peer tools directly, while typed topics fan results
 out to independent consumers. LiveKit remains inside DeviceIOHub and does not
 appear in the worker’s agent contracts.</p>
+<p>The worker uses native <code class="docutils literal notranslate"><span class="pre">xr_ai_runtime</span></code> agents and <code class="docutils literal notranslate"><span class="pre">xr_ai_tools</span></code> instances. It
+does not use NVIDIA Agent Toolkit, PydanticAI, MCP clients, or MCP servers.</p>
 </section>
 <section id="agent-responsibilities">
 <h2>Agent responsibilities<a class="headerlink" href="#agent-responsibilities" title="Link to this heading">#</a></h2>
@@ -780,11 +782,13 @@ proxy in front of it.</p>
 </section>
 <section id="file-outputs-and-persistence">
 <h2>File outputs and persistence<a class="headerlink" href="#file-outputs-and-persistence" title="Link to this heading">#</a></h2>
-<p>Every non-empty final STT result is written to <code class="docutils literal notranslate"><span class="pre">transcript.jsonl</span></code> before voice
-gating, including ambient speech rejected by a configured wake phrase. Wake-word
-gating controls dispatch to the foreground, not storage: rejected speech is
-still transcribed and persisted. The default gate accepts <code class="docutils literal notranslate"><span class="pre">agent</span></code> and
-<code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span></code>, plays a listening chime, and allows one follow-up utterance for
+<p>Each non-empty final STT result delivered on <code class="docutils literal notranslate"><span class="pre">voice.transcript</span></code> is written to
+<code class="docutils literal notranslate"><span class="pre">transcript.jsonl</span></code> before voice gating, including ambient speech rejected by a
+configured wake phrase. Transcript-topic delivery is bounded and best effort;
+overflow drops the oldest pending transcript, and shutdown discards pending
+items. Wake-word gating controls dispatch to the foreground, not storage:
+delivered rejected speech is still persisted. The default gate accepts <code class="docutils literal notranslate"><span class="pre">agent</span></code>
+and <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span></code>, plays a listening chime, and allows one follow-up utterance for
 five seconds. Accepted speech reaches the foreground as a <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>. Typed
 text reaches the foreground but is not an STT transcript.</p>
 <p>Each connection writes to a new participant-scoped directory:</p>

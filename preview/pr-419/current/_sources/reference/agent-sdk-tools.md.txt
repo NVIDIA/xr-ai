@@ -66,6 +66,13 @@ an HTTP or agent framework.
 
 ## Image selection and inference
 
+Install the `frames` extra for `CurrentFrameTool` and the `vision` extra for
+VLM query tools. The example below requires both:
+
+```bash
+uv add "xr-ai-tools[frames,vision]"
+```
+
 Selection and inference are separate contracts:
 
 - `CurrentFrameTool` selects a live frame.
@@ -81,6 +88,10 @@ accept only their own references unless a trusted application opts into local
 paths or URLs with `allow_external=True`; do not expose an external-enabled
 query tool directly to an untrusted model. Derived images inherit the source
 owner so participant cleanup releases the complete image lineage.
+
+Query tools forward only controlled Relay lineage headers. They preserve image
+locations in provider input while redacting every image location from VLM Relay
+events.
 
 The shipped Cosmos endpoint accepts at most four images per inference request.
 That model limit is independent of the larger recorded-frame selection budget;

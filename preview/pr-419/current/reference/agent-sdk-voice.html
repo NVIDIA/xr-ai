@@ -454,15 +454,21 @@ and defaults.</p>
 text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
 session remains private. Applications that need a shared public
 <code class="docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code> construct and inject one explicitly.</p>
-<p>Every non-empty final STT result is published on <code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code>
-before wake-phrase filtering. Accepted speech and untopiced typed text become
-<code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>; named application and control messages are never interpreted as
-user text. Optional participant join, leave, and interruption topics let
-application agents own their state cleanup.</p>
-<p>Transcript delivery uses a bounded FIFO so a slow subscriber cannot delay STT
-or command gating. Join and leave publication is serialized per participant and
-does not block the media processor. VoiceAgent cancels and awaits all owned
-delivery tasks on shutdown.</p>
+<p>Each non-empty final STT result is queued for publication on
+<code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code> before wake-phrase filtering. Accepted speech and
+untopiced typed text become <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>; named application and control messages
+are never interpreted as user text. Optional participant join, leave, and
+interruption topics let application agents own their state cleanup.</p>
+<p>Transcript delivery uses one private 32-entry FIFO so a slow subscriber cannot
+delay STT or command gating. The queue preserves retained-item order and drops
+its oldest pending transcript when full. Shutdown cancels active delivery and
+discards pending transcripts. Runtime subscribers must enqueue long-running
+work internally and return promptly.</p>
+<p>Join publication occurs after the voice gate handles its greeting. DeviceIOHub
+suppresses duplicate roster joins while a participant remains connected and
+emits a new join after a leave and reconnect. Join and leave publication is
+serialized per participant and does not block the media processor. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>
+cancels and awaits all owned delivery tasks on shutdown.</p>
 </section>
 <section id="voice-output-and-interruption">
 <h2>Voice output and interruption<a class="headerlink" href="#voice-output-and-interruption" title="Link to this heading">#</a></h2>
