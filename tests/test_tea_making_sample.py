@@ -36,7 +36,6 @@ _SAMPLE = _ROOT / "agent-samples" / "tea-making-sample"
 _WORKER = _SAMPLE / "worker"
 sys.path.insert(0, str(_WORKER))
 
-import tea_making_worker.config as config_module  # noqa: E402  # pyright: ignore[reportMissingImports]
 import tea_making_worker.foreground as foreground_module  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     _CLIENT_TEXT_TOPIC,
@@ -47,7 +46,10 @@ from tea_making_worker.background_context import (  # noqa: E402  # pyright: ign
     BackgroundContextAgent,
 )
 from tea_making_worker.change_watch import ChangeWatchAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
-from tea_making_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.config import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    _PackagedPrompt,
+    load_config,
+)
 from tea_making_worker.events import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     BACKGROUND_FACT_TOPIC,
     CHANGE_WATCH_RECORD_TOPIC,
@@ -1319,7 +1321,7 @@ def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:
         config.foreground_prompt
         == (prompt_dir / "foreground_prompt.txt").read_text().strip()
     )
-    assert isinstance(config.foreground_prompt, config_module._PackagedPrompt)
+    assert isinstance(config.foreground_prompt, _PackagedPrompt)
     assert (
         config.video_delta_prompt
         == (prompt_dir / "video_delta_prompt.txt").read_text().strip()
@@ -1335,7 +1337,7 @@ def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:
     matching_config = load_config(override)
     assert matching_config.foreground_prompt == config.foreground_prompt
     assert not isinstance(
-        matching_config.foreground_prompt, config_module._PackagedPrompt
+        matching_config.foreground_prompt, _PackagedPrompt
     )
 
 
