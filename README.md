@@ -19,7 +19,9 @@ This project is a public beta. APIs and behavior may change as it evolves.
 
 Refer to the [versioned documentation](https://nvidia.github.io/xr-ai/) for
 setup, requirements, credentials, networking, architecture, and
-troubleshooting. The landing page opens the latest release. Start with:
+troubleshooting. The landing page opens the newest complete documentation set;
+a release takes precedence once it contains the current entry points. Start
+with:
 
 - [Set up with a coding agent](https://nvidia.github.io/xr-ai/latest/getting_started/skills.html)
 - [Manual quickstart](https://nvidia.github.io/xr-ai/latest/getting_started/quickstart.html)

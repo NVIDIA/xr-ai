@@ -11,6 +11,7 @@ from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SELECTOR = _ROOT / ".github" / "scripts" / "select_latest_docs_release.py"
+_LATEST_LINK_CHECKER = _ROOT / ".github" / "scripts" / "check_latest_docs_links.py"
 _CONF = _ROOT / "docs" / "source" / "conf.py"
 _HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 _BASH_FENCE = re.compile(r"^```bash\s*\n(.*?)^```\s*$", re.MULTILINE | re.DOTALL)
@@ -127,6 +128,9 @@ def test_latest_docs_alias_contains_complete_rendered_version() -> None:
     readme = (_ROOT / "README.md").read_text()
 
     assert 'cp -R "docs/_build/${latest_source}/." docs/_build/latest/' in workflow
+    assert "check_latest_docs_links.py --quiet" in workflow
+    assert '"docs/_build/${latest_source}"' in workflow
+    assert workflow.count('- "**/README.md"') == 2
     assert not (_ROOT / "docs/source/_static/latest-redirect.html").exists()
     for page in (
         "getting_started/skills.html",
@@ -135,6 +139,36 @@ def test_latest_docs_alias_contains_complete_rendered_version() -> None:
         "overview/architecture.html",
     ):
         assert f"https://nvidia.github.io/xr-ai/latest/{page}" in readme
+
+
+def test_latest_docs_link_checker_validates_pages_and_fragments(tmp_path) -> None:
+    check_links = runpy.run_path(str(_LATEST_LINK_CHECKER))["check_latest_docs_links"]
+    repository = tmp_path / "repository"
+    rendered = tmp_path / "rendered"
+    readme = repository / "README.md"
+    page = rendered / "guide" / "start.html"
+    readme.parent.mkdir()
+    page.parent.mkdir(parents=True)
+    readme.write_text(
+        "[Start](https://nvidia.github.io/xr-ai/latest/guide/start.html#setup)\n"
+        "[Missing](https://nvidia.github.io/xr-ai/latest/guide/missing.html)\n",
+        encoding="utf-8",
+    )
+    page.write_text('<section id="setup"></section>', encoding="utf-8")
+
+    errors = check_links(repository, rendered, (readme,))
+
+    assert len(errors) == 1
+    assert "rendered page does not exist" in errors[0]
+
+    readme.write_text(
+        "[Start](https://nvidia.github.io/xr-ai/latest/guide/start.html#other)\n",
+        encoding="utf-8",
+    )
+    errors = check_links(repository, rendered, (readme,))
+
+    assert len(errors) == 1
+    assert "rendered fragment does not exist" in errors[0]
 
 
 def test_getting_started_skill_routes_to_versioned_setup_docs() -> None:

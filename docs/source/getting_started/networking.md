@@ -176,9 +176,14 @@ Until the certificate is trusted at the OS level, the wss handshake fails.
 ### Linux native certificate trust
 
 The native C++ client validates the hub through the Linux system CA bundle.
-Copy `~/.local/share/xr-ai/web-server.crt` securely from the hub host to the
-native client host. On Ubuntu or Debian, install that copy and refresh the
-bundle:
+Before copying the certificate, ensure the address passed to `--host` appears
+in its subject alternative names. If the native client uses another IP address
+or DNS name, configure `web_server_extra_sans` and restart the hub to regenerate
+the certificate and key.
+
+Copy the resulting `~/.local/share/xr-ai/web-server.crt` securely from the hub
+host to the native client host. On Ubuntu or Debian, install that copy and
+refresh the bundle:
 
 ```bash
 sudo install -m 0644 /path/to/web-server.crt \
@@ -186,10 +191,9 @@ sudo install -m 0644 /path/to/web-server.crt \
 sudo update-ca-certificates
 ```
 
-Restart the native client after updating the bundle. The address passed to
-`--host` must appear in the certificate's subject alternative names. Configure
-`web_server_extra_sans` and restart the hub to regenerate the certificate when
-the native client uses another IP address or DNS name.
+Restart the native client after updating the bundle. If the SAN configuration
+changes later, regenerate the certificate, copy it again, and repeat the trust
+installation.
 
 For production deployments on any platform, replace the auto-generated
 certificate with one from a public CA by setting `cert_file` and `key_file` in
