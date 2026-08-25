@@ -94,9 +94,9 @@ The worker writes `relay-events.jsonl` beside `worker.log` in the per-run log
 directory printed at startup. It records runtime publications, receiving-agent
 callbacks, the complete `simple-vlm.turn` lifetime, and nested vision and model
 calls. Per-token model marks, incremental voice fragments, and empty stream
-terminators are omitted. Voice, STT, and TTS each emit one semantic scope for
-the completed operation; raw audio is represented only by size, duration, and
-sample rate.
+terminators are omitted. Voice and STT each emit one semantic scope for a
+completed operation. TTS emits one ``voice.tts`` scope for each sentence sent
+to synthesis. Raw audio is represented only by size, duration, and sample rate.
 
 Image locations appear as `<redacted:image>`. Prompts, questions, responses,
 participant identities, and correlation metadata remain visible and may be

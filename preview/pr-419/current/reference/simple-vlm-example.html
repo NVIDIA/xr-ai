@@ -538,9 +538,9 @@ before that boundary and the phrase itself are discarded before dispatch.</p>
 directory printed at startup. It records runtime publications, receiving-agent
 callbacks, the complete <code class="docutils literal notranslate"><span class="pre">simple-vlm.turn</span></code> lifetime, and nested vision and model
 calls. Per-token model marks, incremental voice fragments, and empty stream
-terminators are omitted. Voice, STT, and TTS each emit one semantic scope for
-the completed operation; raw audio is represented only by size, duration, and
-sample rate.</p>
+terminators are omitted. Voice and STT each emit one semantic scope for a
+completed operation. TTS emits one <code class="docutils literal notranslate"><span class="pre">voice.tts</span></code> scope for each sentence sent
+to synthesis. Raw audio is represented only by size, duration, and sample rate.</p>
 <p>Image locations appear as <code class="docutils literal notranslate"><span class="pre">&lt;redacted:image&gt;</span></code>. Prompts, questions, responses,
 participant identities, and correlation metadata remain visible and may be
 sensitive. Inspect a running sample with:</p>
