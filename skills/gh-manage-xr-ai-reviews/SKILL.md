@@ -21,7 +21,9 @@ classification, and comment-only rules apply separately to every inbox item.
 
 Never approve, request changes, post inline feedback, or alter an existing
 review. Draft by default. Treat posting authorization as PR-specific unless the
-user explicitly names a batch.
+user explicitly names a batch. Authorization covers only the exact draft and
+head SHA shown to the user; invalidate it when the head changes or the draft
+changes materially.
 
 ## Accept PRs into the inbox
 
@@ -76,9 +78,9 @@ known items from the latest visible status and current GitHub data. If the PR
 list itself cannot be recovered, ask the user for it; never guess by importing
 all open PRs. Keep unposted draft bodies in working context; a status label is
 not a substitute for the draft. If a `draft-ready` body cannot be recovered,
-change the item to `reviewing` and regenerate the review against the current
-head before posting. Do not create repository tracking files for inbox
-persistence.
+change the item to `reviewing`, regenerate the review against the current head,
+show the replacement draft, and obtain fresh posting authorization. Do not
+create repository tracking files for inbox persistence.
 
 ## Refresh before answering status questions
 
@@ -95,8 +97,8 @@ only meaningful deltas:
 - draft/ready or merge-state changes.
 
 Avoid re-reading complete diffs for unchanged PRs. Re-review changed PRs using
-the new commits plus the cumulative base-to-head diff and affected neighboring
-code.
+the new commits plus the cumulative merge-base-to-head three-dot diff and
+affected neighboring code.
 
 ## Provide an action-oriented status view
 
@@ -146,7 +148,9 @@ Interpret common requests consistently:
   and next actions.
 - **“Re-review 387.”** Reuse the stored reviewed head and prior findings, then
   inspect new changes and current cumulative behavior before replacing the
-  unposted draft. If feedback was already posted, create a new draft review;
+  unposted draft. If the acting identity already reviewed the current head,
+  report that review unless there are genuinely new findings. Show any
+  supplemental draft and require explicit supplemental-post authorization;
   never edit or replace the existing review.
 - **“Ignore PRs matching a filter.”** Apply the filter to future summaries and
   retain excluded items only if the user may want them restored later.
@@ -154,36 +158,24 @@ Interpret common requests consistently:
 After completing review work on multiple PRs, always provide a short overall
 status even if the user did not explicitly request one.
 
-## Use subagents without losing control
+## Coordinate inbox parallelism
 
-Use subagents as read-only independent reviewers so multiple PRs can progress
-without combining their code context.
+Apply the per-PR skill's independent-verification workflow separately to each
+inbox item. The inbox-specific rules are:
 
 - Keep one coordinator responsible for the inbox, final verification, user
   communication, and every GitHub write.
-- Assign a subagent one PR, or one bounded concern in a large PR, with exact
-  base and head SHAs.
 - Run independent PRs in parallel when capacity permits; use waves when the
   inbox is larger than available capacity.
-- Do not give a subagent conclusions from another PR or let it post, approve,
-  edit, push, resolve threads, or mutate GitHub.
-- Require evidence-bearing candidate findings, then have the coordinator
-  independently verify each one against the actual code and base.
+- Record results under the correct PR number immediately. Never carry a
+  finding to another PR without reproducing it against that PR's own base and
+  head.
 
-Record results under the correct PR number immediately. Never carry a finding
-to another PR without reproducing it against that PR's own base and head.
+## Handle authorized batches
 
-## Post and update safely
-
-Immediately before each authorized post:
-
-1. Refresh the head, description, labels, reviews, comments, threads, and
-   checks for that PR.
-2. Mark the draft stale and re-review if the head changed.
-3. Remove fixed, out-of-scope, or already-covered findings.
-4. Submit exactly one top-level GitHub `COMMENT` review using the per-PR
-   template.
-5. Store the posted URL and reviewed head, then update the inbox state.
+Apply the per-PR skill's complete refresh, reauthorization, duplicate-review,
+and posting checks to every authorized inbox item. After a successful post,
+store the posted URL and reviewed head, then update that item's state.
 
 If a batch partially fails, continue only with other explicitly authorized,
 independent PRs. Report exactly what posted, what did not, and the resulting
