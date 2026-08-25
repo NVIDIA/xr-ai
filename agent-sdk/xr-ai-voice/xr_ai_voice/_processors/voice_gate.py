@@ -24,6 +24,7 @@ from pipecat.frames.frames import (
     Frame,
     InterruptionFrame,
     TextFrame,
+    TTSStoppedFrame,
     TranscriptionFrame,
     UserStartedSpeakingFrame,
 )
@@ -121,6 +122,10 @@ class VoiceGateProcessor(FrameProcessor):
             return
         for out in frames:
             await self.push_frame(out)
+        if frames:
+            stopped = TTSStoppedFrame()
+            stopped.transport_destination = pid
+            await self.push_frame(stopped)
 
     # ── pipecat frame entrypoint ──────────────────────────────────────────────
 

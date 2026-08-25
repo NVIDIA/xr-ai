@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import nemo_relay
@@ -38,6 +39,7 @@ from pipecat.frames.frames import (
     Frame,
     InterruptionFrame,
     TextFrame,
+    TTSStoppedFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
@@ -60,13 +62,27 @@ _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 _TRAILING_SENTENCE_END = re.compile(r"""[.!?]["')\]]*\s*$""")
 
 
+@dataclass(frozen=True, slots=True)
+class _TtsResponseBoundary:
+    """Ordered marker placed behind every sentence in one assistant response."""
+
+    pid: str
+
+
 class _TtsPidState:
     """Per-participant streaming state: pending text + its ordered sender."""
 
-    __slots__ = ("pending", "sender_task", "sender_queue", "synth_seq")
+    __slots__ = (
+        "pending",
+        "response_sentences",
+        "sender_task",
+        "sender_queue",
+        "synth_seq",
+    )
 
     def __init__(self) -> None:
         self.pending: str = ""
+        self.response_sentences: int = 0
         self.sender_task: asyncio.Task | None = None
         self.sender_queue: asyncio.Queue | None = None
         self.synth_seq: int = 0
@@ -187,6 +203,15 @@ class StreamingTtsProcessor(FrameProcessor):
             st.pending = ""
             await self._dispatch_sentence(sentence, pid=frame.pid)
 
+        # The output transport aggregates small frames into 40 ms chunks. Put
+        # the boundary on the same FIFO as synthesis so it arrives only after
+        # every WAV in this response; Pipecat then flushes and silence-pads the
+        # final partial chunk instead of carrying it into the next response.
+        if st is not None and st.response_sentences:
+            queue = self._ensure_sender(frame.pid)
+            await queue.put(_TtsResponseBoundary(pid=frame.pid))
+            st.response_sentences = 0
+
         if not self._text_topic or self._transport is None:
             return
         if not frame.text:
@@ -233,6 +258,7 @@ class StreamingTtsProcessor(FrameProcessor):
         logger.info("tts sentence dispatch pid={!r} len={}", pid, len(sentence))
         queue = self._ensure_sender(pid)
         st = self._state(pid)
+        st.response_sentences += 1
         st.synth_seq += 1
         task  = asyncio.create_task(
             self._synthesize(sentence, pid=pid),
@@ -258,6 +284,11 @@ class StreamingTtsProcessor(FrameProcessor):
                 item = await queue.get()
                 if item is None:
                     return
+                if isinstance(item, _TtsResponseBoundary):
+                    stopped = TTSStoppedFrame()
+                    stopped.transport_destination = item.pid
+                    await self.push_frame(stopped)
+                    continue
                 task, pid = item
                 try:
                     wav = await task
@@ -306,6 +337,8 @@ class StreamingTtsProcessor(FrameProcessor):
                 except asyncio.QueueEmpty:
                     break
                 if item is None:
+                    continue
+                if isinstance(item, _TtsResponseBoundary):
                     continue
                 synth_task, _ = item
                 synth_task.cancel()

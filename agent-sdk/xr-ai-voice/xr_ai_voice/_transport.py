@@ -51,6 +51,18 @@ SAMPLE_RATE            = 16_000
 NUM_CHANNELS           = 1
 TTS_NATIVE_SAMPLE_RATE = 22_050
 
+# Keep a small amount of audio queued ahead of LiveKit playout. An exact-rate
+# producer has no reserve for normal event-loop or IPC latency, so every late
+# wakeup becomes an audible underrun. The hub still enforces its independent
+# hard queue bound for faulty producers.
+_RETURN_AUDIO_TARGET_BUFFER_S = 0.12
+
+# The return track is created lazily by the LiveKit connector when it receives
+# the first audio chunk. Put silence at the head of that new track so its
+# publication/subscription handshake cannot consume the start of real speech.
+_RETURN_AUDIO_PREROLL_S = 0.32
+_RETURN_AUDIO_CHUNK_S = 0.04
+
 
 def _monotonic_s() -> float:
     return asyncio.get_running_loop().time()
@@ -181,12 +193,42 @@ class DeviceIOHubInputTransport(BaseInputTransport):
         if not self._started:
             return
         if event.joined:
+            await self._prime_return_audio(event.participant_id)
             await self.push_frame(
                 ParticipantJoinedFrame(participant_id=event.participant_id),
             )
         else:
             await self.push_frame(
                 ParticipantLeftFrame(participant_id=event.participant_id),
+            )
+
+    async def _prime_return_audio(self, pid: str) -> None:
+        """Queue silence before any greeting or response for a new participant."""
+        samples = round(TTS_NATIVE_SAMPLE_RATE * _RETURN_AUDIO_CHUNK_S)
+        data = bytes(samples * NUM_CHANNELS * np.dtype(np.float32).itemsize)
+        chunks = round(_RETURN_AUDIO_PREROLL_S / _RETURN_AUDIO_CHUNK_S)
+        pts_us = time.time_ns() // 1_000
+        try:
+            for index in range(chunks):
+                await self._ep.send_return_audio(AudioChunk(
+                    pts_us=pts_us + round(index * _RETURN_AUDIO_CHUNK_S * 1_000_000),
+                    sample_rate=TTS_NATIVE_SAMPLE_RATE,
+                    channels=NUM_CHANNELS,
+                    samples=samples,
+                    data=data,
+                    participant_id=pid,
+                    track_id="tts",
+                ))
+            logger.info(
+                "return-audio pre-roll queued pid={!r} duration_ms={:.0f}",
+                pid,
+                _RETURN_AUDIO_PREROLL_S * 1_000,
+            )
+        except Exception:
+            # Track preparation improves first-response quality but must not
+            # suppress participant lifecycle delivery if the hub is stopping.
+            logger.opt(exception=True).warning(
+                "return-audio pre-roll failed pid={!r}", pid,
             )
 
 
@@ -379,9 +421,22 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
         lock = self._return_audio_locks.setdefault(pid, asyncio.Lock())
         async with lock:
             now_s = _monotonic_s()
-            deadline_s = self._return_audio_deadline_s.get(pid, now_s)
-            if deadline_s > now_s:
-                await _sleep_s(deadline_s - now_s)
+            buffered_until_s = max(
+                self._return_audio_deadline_s.get(pid, now_s),
+                now_s,
+            )
+            # Send immediately while the estimated downstream reserve is below
+            # the target. Once full, wait only long enough to make room for this
+            # frame. A scheduler/IPC stall drains the estimate and therefore
+            # causes subsequent frames to catch up instead of preserving a gap.
+            delay_s = max(
+                0.0,
+                buffered_until_s + duration_s
+                - now_s
+                - _RETURN_AUDIO_TARGET_BUFFER_S,
+            )
+            if delay_s:
+                await _sleep_s(delay_s)
 
             chunk = AudioChunk(
                 pts_us=time.time_ns() // 1_000,
@@ -393,7 +448,10 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
                 track_id="tts",
             )
             await self._ep.send_return_audio(chunk)
-            self._return_audio_deadline_s[pid] = _monotonic_s() + duration_s
+            sent_s = _monotonic_s()
+            self._return_audio_deadline_s[pid] = (
+                max(buffered_until_s, sent_s) + duration_s
+            )
         return True
 
 

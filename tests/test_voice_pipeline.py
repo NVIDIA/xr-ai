@@ -34,6 +34,7 @@ from pipecat.frames.frames import (
     OutputAudioRawFrame,
     TextFrame,
     TranscriptionFrame,
+    TTSStoppedFrame,
     UserStartedSpeakingFrame,
     UserStoppedSpeakingFrame,
 )
@@ -198,6 +199,7 @@ class _CallbackStubEndpoint:
         self.run_started = asyncio.Event()
         self.run_finished = asyncio.Event()
         self.ready_to_receive = asyncio.Event()
+        self.return_audio = []
 
     def on_audio(self, cb) -> None:
         self.audio_cb = cb
@@ -214,6 +216,9 @@ class _CallbackStubEndpoint:
 
     def stop(self) -> None:
         self.run_finished.set()
+
+    async def send_return_audio(self, chunk) -> None:
+        self.return_audio.append(chunk)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1078,6 +1083,9 @@ async def test_voice_gate_processor_chime_routes_through_pipeline_audio_path():
     audio_out = [f for f in sink.frames if isinstance(f, OutputAudioRawFrame)]
     assert audio_out, "chime should have emitted at least one OutputAudioRawFrame"
     assert all(f.transport_destination == "pid-1" for f in audio_out)
+    boundaries = [f for f in sink.frames if isinstance(f, TTSStoppedFrame)]
+    assert len(boundaries) == 1
+    assert boundaries[0].transport_destination == "pid-1"
 
 
 @pytest.mark.asyncio
@@ -1805,6 +1813,99 @@ async def test_streaming_tts_sentence_boundary_triggers_synth():
 
 
 @pytest.mark.asyncio
+async def test_streaming_tts_queues_scoped_boundary_after_response_audio():
+    tts = _FakeTts(sample_rate=22050)
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    proc = StreamingTtsProcessor(tts=tts, voice_gate=gate)
+    text = TextFrame(text="hello world.")
+    text.transport_destination = "alice"
+
+    sink = await _run_chain(
+        proc,
+        sends=[
+            text,
+            AssistantResponseEndFrame(
+                pid="alice",
+                text="hello world.",
+                pts_us=1,
+            ),
+        ],
+    )
+
+    audio_indices = [
+        index
+        for index, frame in enumerate(sink.frames)
+        if isinstance(frame, OutputAudioRawFrame)
+    ]
+    boundaries = [
+        (index, frame)
+        for index, frame in enumerate(sink.frames)
+        if isinstance(frame, TTSStoppedFrame)
+    ]
+    assert audio_indices
+    assert len(boundaries) == 1
+    boundary_index, boundary = boundaries[0]
+    assert boundary_index > max(audio_indices)
+    assert boundary.transport_destination == "alice"
+
+
+@pytest.mark.asyncio
+async def test_response_boundary_flushes_each_partial_output_chunk():
+    """Two short replies must remain two clips, not one cross-turn chunk."""
+    from pipecat.transports.base_transport import TransportParams
+    from xr_ai_voice._transport import (
+        TTS_NATIVE_SAMPLE_RATE,
+        DeviceIOHubOutputTransport,
+    )
+
+    class _ShortTts(_FakeTts):
+        async def synthesize(self, text: str, **_kwargs) -> bytes:
+            self.calls.append(text)
+            return _silence_wav(self.sample_rate, ms=27)
+
+    class _StubEndpoint:
+        def __init__(self) -> None:
+            self.chunks = []
+
+        async def send_return_audio(self, chunk) -> None:
+            self.chunks.append(chunk)
+
+    endpoint = _StubEndpoint()
+    tts = _ShortTts(sample_rate=TTS_NATIVE_SAMPLE_RATE)
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    streaming = StreamingTtsProcessor(tts=tts, voice_gate=gate)
+    output = DeviceIOHubOutputTransport(
+        endpoint,
+        TransportParams(
+            audio_out_enabled=True,
+            audio_out_sample_rate=TTS_NATIVE_SAMPLE_RATE,
+            audio_out_channels=1,
+        ),
+    )
+    first = TextFrame(text="first.")
+    first.transport_destination = "alice"
+    second = TextFrame(text="second.")
+    second.transport_destination = "alice"
+
+    await _run_chain(
+        streaming,
+        output,
+        sends=[
+            first,
+            AssistantResponseEndFrame(pid="alice", text="first.", pts_us=1),
+            second,
+            AssistantResponseEndFrame(pid="alice", text="second.", pts_us=2),
+        ],
+        settle_s=0.2,
+    )
+
+    assert tts.calls == ["first.", "second."]
+    assert len(endpoint.chunks) == 2
+    assert all(chunk.participant_id == "alice" for chunk in endpoint.chunks)
+    assert endpoint.chunks[0].samples == endpoint.chunks[1].samples
+
+
+@pytest.mark.asyncio
 async def test_streaming_tts_parallel_synth_keeps_order():
     """Out-of-order completion of synth tasks must NOT reorder the
     output audio: the ordered sender awaits in FIFO. ``call_starts``
@@ -2125,6 +2226,10 @@ async def test_input_transport_emits_participant_joined_frame():
     frame = pushed[0]
     assert isinstance(frame, ParticipantJoinedFrame)
     assert frame.participant_id == "web-client"
+    assert len(ep.return_audio) == 8
+    assert sum(chunk.samples for chunk in ep.return_audio) / 22_050 == pytest.approx(0.32)
+    assert all(chunk.participant_id == "web-client" for chunk in ep.return_audio)
+    assert all(not any(chunk.data) for chunk in ep.return_audio)
 
 
 @pytest.mark.asyncio
@@ -2876,7 +2981,7 @@ async def test_output_transport_writes_audio_to_target_participant():
 
 @pytest.mark.asyncio
 async def test_output_transport_paces_return_audio_before_ipc(monkeypatch):
-    """Normal TTS cannot flood DeviceIOHub's hard participant queue bound."""
+    """Normal TTS builds bounded reserve, then advances at playback rate."""
     from xr_ai_voice import _transport as transport_module
     from xr_ai_voice._transport import DeviceIOHubOutputTransport
     from pipecat.transports.base_transport import TransportParams
@@ -2907,8 +3012,51 @@ async def test_output_transport_paces_return_audio_before_ipc(monkeypatch):
     for _ in range(60):
         assert await transport.write_audio_frame(frame) is True
 
-    assert sent_at == pytest.approx([100.0 + i * 0.02 for i in range(60)])
-    assert sleeps == pytest.approx([0.02] * 59)
+    expected = [100.0] * 6 + [100.0 + (i - 5) * 0.02 for i in range(6, 60)]
+    assert sent_at == pytest.approx(expected)
+    assert sleeps == pytest.approx([0.02] * 54)
+
+
+@pytest.mark.asyncio
+async def test_output_transport_reserve_absorbs_periodic_ipc_stalls(monkeypatch):
+    """Sub-reserve endpoint stalls must not create modeled playout gaps."""
+    from pipecat.transports.base_transport import TransportParams
+    from xr_ai_voice import _transport as transport_module
+    from xr_ai_voice._transport import DeviceIOHubOutputTransport
+
+    now_s = 100.0
+    arrivals: list[float] = []
+
+    async def fake_sleep(delay_s: float) -> None:
+        nonlocal now_s
+        now_s += delay_s
+
+    class _StubEndpoint:
+        async def send_return_audio(self, _chunk) -> None:
+            nonlocal now_s
+            if (len(arrivals) + 1) % 10 == 0:
+                now_s += 0.065
+            arrivals.append(now_s)
+
+    monkeypatch.setattr(transport_module, "_monotonic_s", lambda: now_s)
+    monkeypatch.setattr(transport_module, "_sleep_s", fake_sleep)
+    transport = DeviceIOHubOutputTransport(_StubEndpoint(), TransportParams())
+    transport.set_target_participant("web-client")
+    frame = OutputAudioRawFrame(
+        audio=b"\x00\x00" * 320,
+        sample_rate=16_000,
+        num_channels=1,
+    )
+
+    for _ in range(80):
+        assert await transport.write_audio_frame(frame) is True
+
+    playout_until = arrivals[0]
+    starvation_s = 0.0
+    for arrival_s in arrivals:
+        starvation_s += max(0.0, arrival_s - playout_until)
+        playout_until = max(playout_until, arrival_s) + 0.02
+    assert starvation_s == pytest.approx(0.0)
 
 
 @pytest.mark.asyncio
