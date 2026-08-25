@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+interface:
+  display_name: "Manage XR-AI PR Reviews"
+  short_description: "Track multiple XR-AI PR reviews and status"
+  default_prompt: "Use $gh-manage-xr-ai-reviews to coordinate and track reviews for these XR-AI pull requests."
