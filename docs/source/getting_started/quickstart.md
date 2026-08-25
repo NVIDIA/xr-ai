@@ -16,10 +16,13 @@ walking you through the choices below. Refer to {doc}`skills` for how it works.
 
 The remainder of this quickstart is the manual path.
 
-Every sample follows the same pattern: **start the server, then connect a
-client.** Once it is ready, any supported client — web browser, Android app,
-iOS/visionOS app, or AR glasses — can join the session using the token printed
-on startup.
+Every sample follows the same pattern: **start the shared model stack, wait for
+its launcher to report readiness and return, start the sample from the same
+terminal, then connect a client.** Once the sample is ready, any supported
+client — web browser, Android app, iOS/visionOS app, or AR glasses — can join
+the session using the token printed on startup. Each procedure below starts
+with a `cd` from the repository root; keep running that procedure's commands
+from the selected sample directory.
 
 ## Model servers (shared AI services)
 
@@ -28,6 +31,12 @@ immediately — the services keep running in the background with weights hot.
 Start this once before running `simple-vlm-example`,
 `lab-instrument-monitoring`, `tea-making-sample`, or `xr-render-demo`, or
 whenever you want to pre-warm models:
+
+From the repository root, enter the model-server sample directory:
+
+```bash
+cd agent-samples/model-servers
+```
 
 :::{important}
 After updating, stop any existing model servers before starting this stack:
@@ -42,28 +51,27 @@ Nemotron-3 Nano Omni and Cosmos3 Nano Reasoner.
 :::
 
 ```bash
-cd agent-samples/model-servers
 uv sync
 uv run model_servers
 ```
 
 GPU profiles are auto-detected (`dual_48G_ada`, `spark`, `96G_blackwell`). The
-profiles are presets for common configurations; to run on a different GPU, refer to
-{doc}`Running on other GPUs </getting_started/requirements>`.
+profiles are presets for common configurations; to run on a different GPU,
+refer to {doc}`Running on other GPUs </getting_started/requirements>`.
 Detection inventories every visible device. If `nvidia-smi` fails, returns
 malformed data, or reports a topology without an existing model-server
 configuration, startup stops with the detected per-GPU capacity instead of
 assuming a fallback.
-On first run each model downloads from HuggingFace (tens of GB; can take
+On first run each model downloads from Hugging Face (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.
 
 Which servers start is a deployment profile selected with
 `--models <name|path>`. The default starts Nemotron-3 Nano Omni (8108,
 serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), Piper TTS
-(8105), and embeddings (8109); `vlm_llm_nim` serves the LLM and VLM as self-hosted NIM
-containers (Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner; requires docker and
-`NGC_API_KEY`). Starting a profile stops persisted servers outside it first
-and aborts if they cannot be stopped, avoiding GPU overcommit.
+(8105), and embeddings (8109). `vlm_llm_nim` serves the LLM and VLM as
+self-hosted NIM containers (Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner;
+requires Docker and `NGC_API_KEY`). Starting a profile stops persisted servers
+outside it first and aborts if they cannot be stopped, avoiding GPU overcommit.
 
 ```bash
 uv run model_servers --models vlm_llm_nim
@@ -93,24 +101,29 @@ Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. Refer to
 
 The sample always reuses model services and never starts or stops them. Its
 fixed `yaml/models.json` expects Parakeet STT on port 8103, Cosmos3-Nano on
-port 8100, and Piper TTS on port 8105. Start the repository defaults first
-from the repository root:
+port 8100, and Piper TTS on port 8105. From the sample directory, start the
+repository defaults first:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers
+cd agent-samples/simple-vlm-example
+uv run --project ../model-servers model_servers
 ```
 
-The command may download model weights on its first run and requires the
-credentials described in the {doc}`credentials guide
-</getting_started/credentials>`. The model services remain running across
-sample restarts.
+The command may download model weights on its first run. Refer to the
+{doc}`credentials guide </getting_started/credentials>` for the required
+credentials. The model services remain running across sample restarts.
 
 ### Step 1 — Start the server
 
 ```bash
-cd agent-samples/simple-vlm-example
 uv sync
 uv run simple_vlm_example
+```
+
+Alternatively, run the source file directly after synchronization:
+
+```bash
+uv run main.py
 ```
 
 Only the DeviceIOHub and worker start. Worker readiness probes all three reused
@@ -150,7 +163,7 @@ A successful round trip: your query appears in the log, the agent responds after
 a moment, and you hear the reply through your speakers.
 
 To use compatible services at different locations, edit their endpoints in
-`agent-samples/simple-vlm-example/yaml/models.json`:
+`yaml/models.json`:
 
 ```json
 {
@@ -179,16 +192,22 @@ configuration uses Cosmos for visual inference.
 Start the shared `model-servers` stack, which includes Piper TTS:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers
+cd agent-samples/lab-instrument-monitoring
+uv run --project ../model-servers model_servers
 ```
 
-Then start the sample in another terminal:
+Wait for the model launcher to report readiness and return, then start the
+sample from the same terminal:
 
 ```bash
-cd agent-samples/lab-instrument-monitoring
 uv sync
-uv sync --project worker
 uv run lab_instrument_monitoring
+```
+
+Alternatively, run the source file directly after synchronization:
+
+```bash
+uv run main.py
 ```
 
 Connect an existing glasses or platform client using the authenticated URL,
@@ -206,15 +225,28 @@ and visual inference. Records are written as JSON Lines under the sample's
 `artifacts/` directory. A separate live event viewer presents selected runtime
 events without replacing those durable records.
 
-Start the shared model services, including Piper TTS, then launch the sample:
+Start the shared model services, including Piper TTS:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers
-
-uv run --project agent-samples/tea-making-sample tea_making_sample
+cd agent-samples/tea-making-sample
+uv run --project ../model-servers model_servers
 ```
 
-Open the XR-Media-Hub connection page at `https://localhost:8080`, accept the
+Wait for the model launcher to report readiness and return, then launch the
+sample from the same terminal:
+
+```bash
+uv sync
+uv run tea_making_sample
+```
+
+Alternatively, run the source file directly after synchronization:
+
+```bash
+uv run main.py
+```
+
+Open the DeviceIOHub connection page at `https://localhost:8080`, accept the
 self-signed certificate on first use, allow camera and microphone access, and
 connect. The checked-in voice-gate YAML requires “Agent” or “Hey Agent.” Set
 `voice_gate_yaml: voice_gate.always-on.yaml` in `yaml/tea_making_worker.yaml`
@@ -240,12 +272,13 @@ red", "put it to my left", "where I'm looking"). Runs against a Quest 3 or Visio
 Pro on the same LAN, or the IWER emulator built into the web client for desktop
 dev.
 
-Under the hood, the orchestrator launches the hub, CloudXR runtime, model
-endpoints, typed capability processes, and the worker. The worker calls those
-processes through Relay-managed native tools. The voice runtime runs quick-acks
-and a Nemotron-30B agentic tool-calling loop over scene, tracking,
-spatial math, vision, and video-memory tools. Refer to the xr-render-demo guide for the
-full process map, agentic-loop details, and the XR session lifecycle.
+Under the hood, the orchestrator launches the hub, CloudXR runtime, typed
+capability processes, and the worker alongside the reused model endpoints. The
+worker calls those processes through Relay-managed native tools. The voice
+runtime runs quick-acks and a Nemotron-30B agentic tool-calling loop over scene,
+tracking, spatial math, vision, and video-memory tools. Refer to the
+{doc}`xr-render-demo reference </reference/xr-render-demo>` for the full process
+map, agentic-loop details, and XR session lifecycle.
 
 **Requires `model-servers` to be running first** — the demo does not start its
 own model services.
@@ -253,29 +286,34 @@ own model services.
 ### Step 1 — Start model servers (once)
 
 ```bash
-cd agent-samples/model-servers
-uv sync && uv run model_servers
+cd agent-samples/xr-render-demo
+uv run --project ../model-servers model_servers
 ```
 
-This exits immediately once all configured services are ready. Weights stay loaded in
-the background.
+This exits immediately once all configured services are ready. Weights stay
+loaded in the background.
 
 ### Step 2 — Start the demo
 
-This demo has two extra host prerequisites beyond the shared
-{doc}`Requirements <requirements>`:
+Refer to the shared {doc}`Requirements <requirements>` first. This demo has two
+additional host prerequisites:
 
 - **Vulkan loader + headers** — the CloudXR compositor and LOVR render through
   Vulkan, so install them before running the demo: `sudo apt install libvulkan-dev`
-- **npm 18+** on PATH — the orchestrator builds the web vendor bundle on first
-  run (skipped on subsequent runs).
+- **Node.js 18+ with npm** on PATH — the orchestrator builds the web vendor
+  bundle on first run (skipped on subsequent runs).
 
 Start XR Render:
 
 ```bash
-cd agent-samples/xr-render-demo
 uv sync
 uv run xr_render_demo
+```
+
+Alternatively, run the source file directly after synchronization:
+
+```bash
+uv run main.py
 ```
 
 On first run the orchestrator automatically downloads the pinned LOVR version to
@@ -285,7 +323,7 @@ and network access). Both steps are skipped on subsequent runs.
 ```{note}
 On **DGX Spark** (aarch64), LOVR does not publish a prebuilt aarch64 Linux
 binary, so the auto-download is not available: build LOVR from source and export
-`LOVR_BIN`. Refer to the troubleshooting guide.
+`LOVR_BIN`. Refer to {doc}`/guides/troubleshooting` for build instructions.
 ```
 
 To use a custom LOVR build:
@@ -296,16 +334,15 @@ uv run xr_render_demo
 ```
 
 **GPU pinning** for the XR side is controlled by `gpu_index` in
-`agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml`. cloudxr-runtime applies
+`yaml/cloudxr_runtime.yaml`. cloudxr-runtime applies
 the pin to its own process and writes the selectors into `cloudxr.env`;
-the scene process and LOVR inherit from that file. Refer to the xr-render-demo guide
-for full details.
+the scene process and LOVR inherit from that file. Refer to the
+{doc}`xr-render-demo reference </reference/xr-render-demo>` for full details.
 
 To stop the model servers when done:
 
 ```bash
-cd agent-samples/model-servers
-uv run model_servers --stop
+uv run --project ../model-servers model_servers --stop
 ```
 
 XR Render uses the fixed reuse-only endpoints in `yaml/models.json`; it does
@@ -316,8 +353,9 @@ not select or own model deployment profiles.
 ```bash
 cd services/device-io-hub
 uv sync
-uv run device_io_hub
+uv run device_io_hub --config device_io_hub.yaml
 ```
 
 Useful for development or when running an agent in a separate terminal. The
-DeviceIOHub auto-discovers `services/device-io-hub/device_io_hub.yaml`.
+explicit configuration is the repository reference copy with every field
+documented beside its value.

@@ -1262,19 +1262,31 @@ def audit_prompts() -> None:
                 )
 
 
+def _resolve_case_names(case_names: list[str]) -> set[str]:
+    wanted = set(case_names)
+    if wanted == {"utterances"}:
+        return {case.name for case in UTTERANCES}
+
+    available = (
+        {case["name"] for case in CORPUS_CASES}
+        | {case.name for case in CASES}
+        | {case.name for case in UTTERANCES}
+    )
+    unknown = wanted - available
+    if unknown:
+        raise SystemExit(f"unknown cases: {sorted(unknown)}")
+    return wanted
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("cases", nargs="*", help="Case names; omit to run all cases")
     args = parser.parse_args()
     audit_prompts()
-    wanted = set(args.cases)
-    if wanted == {"utterances"}:
-        wanted = {case.name for case in UTTERANCES}
+    wanted = _resolve_case_names(args.cases)
     corpus = [case for case in CORPUS_CASES if not wanted or case["name"] in wanted]
     precision = [case for case in CASES if not wanted or case.name in wanted]
     utterances = [case for case in UTTERANCES if not wanted or case.name in wanted]
-    if not corpus and not precision and not utterances:
-        raise SystemExit(f"unknown cases: {args.cases}")
     corpus_results = [await run_corpus_case(case) for case in corpus]
     precision_results = [await run_case(case) for case in precision]
     utterances_results = [await run_case(case) for case in utterances]

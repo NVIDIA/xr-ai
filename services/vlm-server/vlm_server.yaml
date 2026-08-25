@@ -46,7 +46,8 @@ max_images_per_prompt:  4
 # feature size. Leave at 0 unless your worker sends video_url content blocks.
 max_videos_per_prompt:  0
 
-# vLLM runtime — pip-installed vllm (default) or NGC docker container.
+# vLLM runtime. If this key is omitted, the wrapper falls back to pip;
+# the checked-in configuration below selects the NGC Docker container.
 #   pip     — vllm CLI from this wrapper's venv (today's behavior)
 #   docker  — `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …`
 # Both honor the same config keys above; only the runtime hosting vllm differs.

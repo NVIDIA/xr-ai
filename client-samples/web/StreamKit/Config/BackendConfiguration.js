@@ -26,7 +26,7 @@
  * // Static token (pre-signed JWT)
  * const cfg = new LiveKitConfig({ host: '192.168.1.100', token: myJwt });
  *
- * // Token endpoint (the SDK appends ?room=…&identity=… automatically)
+ * // Token endpoint (the SDK appends ?identity=… automatically)
  * const cfg = new LiveKitConfig({ host: '192.168.1.100', tokenURL: 'https://…/token' });
  */
 export class LiveKitConfig {
@@ -64,7 +64,8 @@ export class LiveKitConfig {
   /**
    * URL string of a token-generation endpoint.
    *
-   * The SDK appends `?room=xr-room&identity=<identity>` query parameters.
+   * The SDK appends `?identity=<identity>` as a query parameter. The endpoint
+   * selects the room and encodes it in the returned token.
    * The endpoint must return either a plain JWT string or `{ "token": "eyJ…" }`.
    *
    * @type {string|null}

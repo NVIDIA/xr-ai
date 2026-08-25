@@ -111,7 +111,11 @@ class VoiceOutput(BaseModel):
 
 
 VOICE_TRANSCRIPT_TOPIC = Topic("voice.transcript", VoiceTranscript)
-"""All final STT results, published before voice-gate filtering."""
+"""Non-empty final STT results queued for publication before gate filtering.
+
+Delivery is best effort: the bounded queue drops its oldest pending item on
+overflow, and shutdown discards queued items that have not been published.
+"""
 
 VOICE_OUTPUT_TOPIC = Topic("voice.output", VoiceOutput, telemetry="none")
 """Finite or incremental responses consumed by :class:`VoiceAgent`."""

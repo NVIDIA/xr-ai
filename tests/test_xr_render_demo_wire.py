@@ -109,6 +109,23 @@ def test_prompt_audit_is_clean() -> None:
     assert not warnings, warnings
 
 
+def test_eval_case_filter_rejects_unknown_names_in_mixed_selection() -> None:
+    from xr_render_demo_eval import harness
+
+    valid = harness.CASES[0].name
+    with pytest.raises(SystemExit, match="unknown cases:.*misspelled_case"):
+        harness._resolve_case_names([valid, "misspelled_case"])
+
+
+def test_eval_utterances_alias_selects_the_complete_battery() -> None:
+    from xr_render_demo_eval import harness
+
+    assert len(harness.UTTERANCES) == 35
+    assert harness._resolve_case_names(["utterances"]) == {
+        case.name for case in harness.UTTERANCES
+    }
+
+
 @pytest.mark.parametrize("entry", ["xr_render_demo_worker.__main__"])
 def test_entry_module_imports(entry: str) -> None:
     __import__(entry)
