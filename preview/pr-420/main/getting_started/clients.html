@@ -9,7 +9,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Connecting Clients &#8212; XR AI</title>
+    <title>Connecting clients &#8212; XR AI</title>
   
   
   
@@ -313,7 +313,7 @@
 <li class="toctree-l2"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
 <li class="toctree-l2"><a class="reference internal" href="skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="requirements.html">Requirements</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Connecting Clients</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Connecting clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="networking.html">Networking and firewall</a></li>
 <li class="toctree-l2"><a class="reference internal" href="credentials.html">Credentials</a></li>
 </ul>
@@ -332,6 +332,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
@@ -346,6 +347,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -421,7 +423,7 @@
     
     <li class="breadcrumb-item"><a href="index.html" class="nav-link">Getting Started</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Connecting Clients</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Connecting clients</span></li>
   </ul>
 </nav>
 </div>
@@ -443,406 +445,325 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 <section id="connecting-clients">
-<h1>Connecting Clients<a class="headerlink" href="#connecting-clients" title="Link to this heading">#</a></h1>
-<p>Every sample follows the same pattern: <strong>start the server, then connect a
-client.</strong> This client reference covers the clients that ship under
-<code class="docutils literal notranslate"><span class="pre">client-samples/</span></code>, how to set up, build, and run each one, and the shared
-token-on-startup connection flow they all use.</p>
-<p>For the server side — starting the DeviceIOHub and the agent samples — refer to
-<a class="reference internal" href="quickstart.html"><span class="doc">Quickstart</span></a>.</p>
-<section id="which-clients-exist">
-<h2>Which clients exist<a class="headerlink" href="#which-clients-exist" title="Link to this heading">#</a></h2>
+<h1>Connecting clients<a class="headerlink" href="#connecting-clients" title="Link to this heading">#</a></h1>
+<p>Every sample starts DeviceIOHub and then accepts one or more platform clients.
+This client reference is the canonical build and connection guide for the
+clients under <code class="docutils literal notranslate"><span class="pre">client-samples/</span></code>. Refer to <a class="reference internal" href="quickstart.html"><span class="doc">Quickstart</span></a> for starting an
+agent sample and <a class="reference internal" href="networking.html"><span class="doc">Networking and firewall</span></a> for firewall and TLS configuration.</p>
+<section id="client-matrix">
+<span id="which-clients-exist"></span><h2>Client matrix<a class="headerlink" href="#client-matrix" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Client</p></th>
-<th class="head"><p>Location</p></th>
+<th class="head"><p>Directory</p></th>
 <th class="head"><p>Transport</p></th>
-<th class="head"><p>Build step</p></th>
+<th class="head"><p>Build</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><strong>Web</strong> (basic sample)</p></td>
+<tr class="row-even"><td><p>Web</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">client-samples/web/</span></code></p></td>
-<td><p>LiveKit JS SDK from CDN</p></td>
-<td><p>None — plain ES modules</p></td>
+<td><p>LiveKit from CDN</p></td>
+<td><p>None</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>Web-XR</strong> (XR render demo)</p></td>
+<tr class="row-odd"><td><p>Web-XR</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">client-samples/web-xr/</span></code></p></td>
-<td><p>LiveKit + CloudXR, same-origin vendor bundles</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">client-samples/web-xr-build/build.sh</span></code></p></td>
+<td><p>Local LiveKit and CloudXR bundles</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">web-xr-build/build.sh</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><strong>Android</strong></p></td>
+<tr class="row-even"><td><p>Android</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">client-samples/android/</span></code></p></td>
-<td><p>LiveKit Android SDK</p></td>
+<td><p>LiveKit Android</p></td>
 <td><p>Android Studio or Gradle</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>iOS/visionOS</strong></p></td>
+<tr class="row-odd"><td><p>iOS/visionOS</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">client-samples/ios-visionos/</span></code></p></td>
-<td><p>LiveKit Swift SDK</p></td>
+<td><p>LiveKit Swift and CloudXRKit</p></td>
 <td><p>Xcode</p></td>
 </tr>
-<tr class="row-even"><td><p><strong>Native C++</strong></p></td>
+<tr class="row-even"><td><p>Native C++</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">client-samples/native/</span></code></p></td>
-<td><p>LiveKit C++ SDK</p></td>
+<td><p>LiveKit C++</p></td>
 <td><p>CMake</p></td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>All five share the same <strong>StreamKit</strong> shape: a single transport-agnostic
-<code class="docutils literal notranslate"><span class="pre">StreamSession</span></code> entry-point delegating to a <code class="docutils literal notranslate"><span class="pre">StreamingBackend</span></code>, with
-<code class="docutils literal notranslate"><span class="pre">LiveKitBackend</span></code> as the only component that imports LiveKit directly. The web,
-Android, and iOS/visionOS clients are feature-equivalent (connection, audio,
-camera, agent-status badge, data channel).</p>
-<section id="network-telemetry">
-<h3>Network telemetry<a class="headerlink" href="#network-telemetry" title="Link to this heading">#</a></h3>
-<p>Every graphical sample displays the same three network values; the native C++
-sample prints them to stdout. Each exposes the values through StreamKit’s
-<code class="docutils literal notranslate"><span class="pre">onNetworkMetrics</span></code> callback (spelled <code class="docutils literal notranslate"><span class="pre">on_network_metrics</span></code> in C++):</p>
-<ul class="simple">
-<li><p><strong>Quality</strong> — LiveKit’s connection-quality estimate for the local participant.</p></li>
-<li><p><strong>Round-trip time</strong> — the highest current RTT across the publisher and
-subscriber transports’ selected ICE candidate pairs.</p></li>
-<li><p><strong>Receive jitter</strong> — the highest inbound RTP jitter in the current sample.</p></li>
-</ul>
-<p><code class="docutils literal notranslate"><span class="pre">LiveKitBackend</span></code> samples LiveKit’s existing WebRTC statistics about once per
-second and converts seconds to milliseconds. No hub messages or additional
-telemetry service are involved. RTT and jitter display as unavailable until the
-SDK has a matching stats record, such as before a media track is active.</p>
+<p>The clients share a StreamKit shape: one transport-neutral <code class="docutils literal notranslate"><span class="pre">StreamSession</span></code>
+delegates to a <code class="docutils literal notranslate"><span class="pre">StreamingBackend</span></code>, and <code class="docutils literal notranslate"><span class="pre">LiveKitBackend</span></code> is the only layer that
+imports a LiveKit SDK. Connection, microphone, camera, participant status, data,
+and network metrics remain separate operations.</p>
+<p id="network-telemetry">Graphical clients display LiveKit connection quality, round-trip time, and
+receive jitter; the C++ sample reports them through its callback. Backends sample
+existing WebRTC statistics about once per second. No hub message or separate
+telemetry service is involved.</p>
 </section>
-</section>
-<section id="the-connect-flow">
-<h2>The connect flow<a class="headerlink" href="#the-connect-flow" title="Link to this heading">#</a></h2>
-<p>When you start a server sample, the hub prints its connection details on
-startup:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>[hub]   LiveKit URL : wss://localhost:8080
-[hub]   Room        : xr-room
-[hub]   Token       : eyJ…
-[hub]   Web client  : https://localhost:8080
+<section id="shared-connection-flow">
+<span id="the-connect-flow"></span><h2>Shared connection flow<a class="headerlink" href="#shared-connection-flow" title="Link to this heading">#</a></h2>
+<p>The hub prints a URL, room, development token, and web-client URL at startup.
+Browser, Android, and Apple clients connect to the hub’s web-server port <code class="docutils literal notranslate"><span class="pre">8080</span></code>,
+which proxies LiveKit on the same origin. The native C++ client also supports
+this TLS path with <code class="docutils literal notranslate"><span class="pre">--secure</span> <span class="pre">--port</span> <span class="pre">8080</span></code>. Its port 7880 default is a plaintext
+direct-debugging exception; restrict it to the XR AI host or a trusted source
+subnet as described in <a class="reference internal" href="networking.html"><span class="doc">Networking and firewall</span></a>.</p>
+<p>A client may paste the printed 24-hour development JWT or fetch a shorter-lived
+token from:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>GET https://&lt;host&gt;:8080/token?identity=&lt;identity&gt;
 </pre></div>
 </div>
-<p>Three values matter to every client:</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Value</p></th>
-<th class="head"><p>Notes</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><strong>Host or IP</strong></p></td>
-<td><p>The machine running the server. <code class="docutils literal notranslate"><span class="pre">localhost</span></code> for the same machine; the LAN IP for a separate device.</p></td>
-</tr>
-<tr class="row-odd"><td><p><strong>Port</strong></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">8080</span></code> — the hub’s web-server port. Clients connect through the same-origin wss <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> proxy on <code class="docutils literal notranslate"><span class="pre">8080</span></code>, <strong>not</strong> LiveKit’s internal <code class="docutils literal notranslate"><span class="pre">7880</span></code>, which stays on loopback.</p></td>
-</tr>
-<tr class="row-even"><td><p><strong>Token</strong></p></td>
-<td><p>A signed LiveKit JWT. Paste the printed token directly, or leave the token-URL field blank to fetch one from the hub’s built-in <code class="docutils literal notranslate"><span class="pre">/token</span></code> endpoint.</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>A client either pastes the printed JWT into its <strong>Token</strong> field, or points its
-<strong>Token URL</strong> field at the hub’s <code class="docutils literal notranslate"><span class="pre">/token</span></code> endpoint and lets the SDK fetch one.
-The token endpoint accepts both response shapes — a plain JWT string or a
-<code class="docutils literal notranslate"><span class="pre">{&quot;token&quot;:</span> <span class="pre">&quot;eyJ…&quot;}</span></code> JSON envelope:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>GET https://&lt;host&gt;:8080/token?identity=&lt;identity&gt;
-</pre></div>
-</div>
-<p>Tokens are valid for 24 hours. To get a fresh one, restart the server or call
-the <code class="docutils literal notranslate"><span class="pre">/token</span></code> endpoint above.</p>
-<section id="self-signed-certificate-trust">
-<h3>Self-signed certificate trust<a class="headerlink" href="#self-signed-certificate-trust" title="Link to this heading">#</a></h3>
-<p>The samples ship with HTTPS on by default — a self-signed certificate is
-generated on first run at <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code>. Each platform
-trusts it differently (browser click-through, Android KeyChain install, iOS
-profile install); the per-platform sections below describe each. Firewall ports
-and the option to run over plain HTTP instead are covered in <a class="reference internal" href="networking.html"><span class="doc">Networking and firewall</span></a>.</p>
+<p>The response is a JSON object containing <code class="docutils literal notranslate"><span class="pre">token</span></code>, <code class="docutils literal notranslate"><span class="pre">room</span></code>, and <code class="docutils literal notranslate"><span class="pre">url</span></code>. StreamKit
+token fetchers also accept a plain JWT response. The room is encoded in the
+token; clients do not send a separate room query parameter.</p>
+<p id="self-signed-certificate-trust">The default HTTPS certificate is self-signed and stored under
+<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/</span></code>. Browsers allow a development click-through; Android
+and Apple devices require the platform trust procedures below. Use a public or
+managed certificate for production.</p>
 </section>
-</section>
-<section id="web-basic-sample">
-<h2>Web (basic sample)<a class="headerlink" href="#web-basic-sample" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">client-samples/web/</span></code> is the plain-ES-module browser client. It loads the
-LiveKit JS SDK v2 directly from CDN via an import map, so there is <strong>no build
-step</strong> — the hub serves the page at <code class="docutils literal notranslate"><span class="pre">https://localhost:8080</span></code>.</p>
-<p>To connect:</p>
-<ol class="arabic simple">
-<li><p>Open <code class="docutils literal notranslate"><span class="pre">https://localhost:8080</span></code> in a browser.</p></li>
-<li><p>On the first connection you’ll see a “Your connection is not private”
-warning from the self-signed certificate. Click <strong>Advanced → Proceed</strong>
-(Chrome or Edge) or <strong>Accept the Risk and Continue</strong> (Firefox). To trust the
-certificate permanently or run over plain HTTP instead, refer to
-<a class="reference internal" href="networking.html"><span class="doc">Networking and firewall</span></a>.</p></li>
-<li><p>Leave <strong>Token URL</strong> blank — the web client fetches a token from the server’s
-<code class="docutils literal notranslate"><span class="pre">/token</span></code> endpoint automatically. Alternatively, paste the printed token
-directly.</p></li>
-<li><p>Click <strong>Connect</strong>. You are now live in the XR session.</p></li>
-</ol>
-<p>The camera preview displays the same browser track published to the hub and
-adapts to its captured aspect ratio. The browser console logs the published
-track settings when the camera starts.</p>
+<section id="web">
+<span id="web-basic-sample"></span><h2>Web<a class="headerlink" href="#web" title="Link to this heading">#</a></h2>
+<p>The basic page in <code class="docutils literal notranslate"><span class="pre">client-samples/web/</span></code> uses plain ES modules and loads LiveKit
+from jsDelivr. It has no build step. Open <code class="docutils literal notranslate"><span class="pre">https://&lt;host&gt;:8080</span></code>, accept the
+development certificate warning, leave Token URL blank to use <code class="docutils literal notranslate"><span class="pre">/token</span></code>, and
+connect. The camera preview follows the published track’s aspect ratio.</p>
 </section>
 <section id="web-xr-xr-render-demo">
-<h2>Web-XR (XR render demo)<a class="headerlink" href="#web-xr-xr-render-demo" title="Link to this heading">#</a></h2>
-<p>The XR render demo client lives in <code class="docutils literal notranslate"><span class="pre">client-samples/web-xr/</span></code>. Unlike the basic
-web sample, it loads <code class="docutils literal notranslate"><span class="pre">livekit-client</span></code> and <code class="docutils literal notranslate"><span class="pre">&#64;nvidia/cloudxr</span></code> from same-origin
-<strong>vendor bundles</strong> under <code class="docutils literal notranslate"><span class="pre">client-samples/web-xr/vendor/</span></code>, so XR headsets and
-offline LANs work after the host has built the bundles once. The bundles are
-generated build output, not shipped in the repository.</p>
-<p>The <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code> orchestrator builds the bundles automatically on first run
-(requires <code class="docutils literal notranslate"><span class="pre">npm</span></code> on PATH). For a manual rebuild — for example after bumping an
-SDK version — use the build script:</p>
+<h2>Web-XR (xr-render-demo)<a class="headerlink" href="#web-xr-xr-render-demo" title="Link to this heading">#</a></h2>
+<p>The Web-XR page uses same-origin bundles under
+<code class="docutils literal notranslate"><span class="pre">client-samples/web-xr/vendor/</span></code>. The xr-render orchestrator builds missing
+bundles automatically when <code class="docutils literal notranslate"><span class="pre">npm</span></code> is available. To rebuild manually:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>client-samples/web-xr-build
 ./build.sh
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">build.sh</span></code> is idempotent. It reads the pinned CloudXR version from
-<code class="docutils literal notranslate"><span class="pre">.sdk-version</span></code>, fetches the CloudXR Web SDK tarball (reusing a local copy if
-present, otherwise downloading from public NGC), runs <code class="docutils literal notranslate"><span class="pre">npm</span> <span class="pre">install</span></code> (which also
-pulls <code class="docutils literal notranslate"><span class="pre">livekit-client</span></code>), and webpacks the two ESM bundles into
-<code class="docutils literal notranslate"><span class="pre">client-samples/web-xr/vendor/</span></code>.</p>
-<p>To bump a dependency, edit <code class="docutils literal notranslate"><span class="pre">.sdk-version</span></code> (CloudXR) or the <code class="docutils literal notranslate"><span class="pre">livekit-client</span></code>
-version in <code class="docutils literal notranslate"><span class="pre">package.json</span></code>, remove the cached artifacts (<code class="docutils literal notranslate"><span class="pre">rm</span> <span class="pre">-rf</span> <span class="pre">sdk.tgz</span> <span class="pre">node_modules</span></code> for CloudXR, <code class="docutils literal notranslate"><span class="pre">rm</span> <span class="pre">-rf</span> <span class="pre">node_modules</span></code> for livekit-client), and
-re-run <code class="docutils literal notranslate"><span class="pre">./build.sh</span></code>.</p>
-<p>Once the bundles exist, connect through the demo the same way as the basic web
-client — open the served page, click through the certificate warning, leave the token
-URL blank, and connect. The basic <code class="docutils literal notranslate"><span class="pre">web/</span></code> sample does <strong>not</strong> need this build
-step; only <code class="docutils literal notranslate"><span class="pre">web-xr/</span></code> does.</p>
+<p>The idempotent script reads the CloudXR version from <code class="docutils literal notranslate"><span class="pre">.sdk-version</span></code>, reuses a
+cached <code class="docutils literal notranslate"><span class="pre">sdk.tgz</span></code> when present, otherwise reuses the matching IsaacTeleop tarball
+at <code class="docutils literal notranslate"><span class="pre">~/hub/IsaacTeleop/deps/cloudxr/</span></code> when available, and finally downloads the
+public NGC tarball. It installs npm dependencies and writes both ESM bundles to
+<code class="docutils literal notranslate"><span class="pre">../web-xr/vendor/</span></code>.
+To bump CloudXR, edit <code class="docutils literal notranslate"><span class="pre">.sdk-version</span></code> and remove <code class="docutils literal notranslate"><span class="pre">sdk.tgz</span></code> plus <code class="docutils literal notranslate"><span class="pre">node_modules</span></code>.
+To bump LiveKit, edit <code class="docutils literal notranslate"><span class="pre">package.json</span></code> and remove <code class="docutils literal notranslate"><span class="pre">node_modules</span></code>. Re-run the script
+after either change.</p>
 </section>
 <section id="android">
 <h2>Android<a class="headerlink" href="#android" title="Link to this heading">#</a></h2>
-<p>The Android client (<code class="docutils literal notranslate"><span class="pre">client-samples/android/</span></code>) provides feature parity with the
-web and iOS/visionOS clients: connection, audio (Voice Processing, Software
-AEC, or Raw modes), camera (Camera2 selector), agent-status badge, and data
-channel. Remote audio plays automatically once a remote participant publishes a
-track.</p>
-<section id="requirements">
-<h3>Requirements<a class="headerlink" href="#requirements" title="Link to this heading">#</a></h3>
+<p>The Android app is a Jetpack Compose client with selectable Camera2 devices,
+microphone capture, participant status, arbitrary data, and network metrics.</p>
+<p><a id="requirements"></a><a id="build-and-run"></a></p>
+<section id="requirements-and-build">
+<span id="clients-build-and-run"></span><span id="clients-requirements"></span><h3>Requirements and build<a class="headerlink" href="#requirements-and-build" title="Link to this heading">#</a></h3>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
-<tr class="row-odd"><th class="head"><p>Tool</p></th>
-<th class="head"><p>Minimum version</p></th>
+<tr class="row-odd"><th class="head"><p>Requirement</p></th>
+<th class="head"><p>Version</p></th>
 </tr>
 </thead>
 <tbody>
 <tr class="row-even"><td><p>Android Studio</p></td>
-<td><p>Hedgehog (2023.1.1) or later</p></td>
+<td><p>Koala 2024.1.1 or newer</p></td>
 </tr>
 <tr class="row-odd"><td><p>JDK</p></td>
 <td><p>17</p></td>
 </tr>
-<tr class="row-even"><td><p>Android Gradle Plugin</p></td>
-<td><p>8.5</p></td>
+<tr class="row-even"><td><p>Minimum Android</p></td>
+<td><p>API 24</p></td>
 </tr>
-<tr class="row-odd"><td><p>Kotlin</p></td>
-<td><p>2.0</p></td>
-</tr>
-<tr class="row-even"><td><p>Min Android SDK</p></td>
-<td><p>API 24 (Android 7.0)</p></td>
-</tr>
-<tr class="row-odd"><td><p>Target Android SDK</p></td>
-<td><p>API 34 (Android 14)</p></td>
+<tr class="row-odd"><td><p>Target Android</p></td>
+<td><p>API 34</p></td>
 </tr>
 </tbody>
 </table>
 </div>
-</section>
-<section id="build-and-run">
-<h3>Build and run<a class="headerlink" href="#build-and-run" title="Link to this heading">#</a></h3>
-<ol class="arabic simple">
-<li><p>In Android Studio, choose <strong>File → Open</strong> and select
-<code class="docutils literal notranslate"><span class="pre">client-samples/android/</span></code>.</p></li>
-<li><p>Let Gradle sync finish — it downloads the LiveKit Android SDK and other
-dependencies (~300 MB on first run) automatically.</p></li>
-<li><p>Select a device or emulator running API 24+, then <strong>Run</strong>.</p></li>
-</ol>
-<p>Android Studio generates the Gradle wrapper on first sync. For command-line builds, run
-<code class="docutils literal notranslate"><span class="pre">gradle</span> <span class="pre">wrapper</span> <span class="pre">--gradle-version</span> <span class="pre">8.9</span></code> then <code class="docutils literal notranslate"><span class="pre">./gradlew</span> <span class="pre">assembleDebug</span></code>.</p>
-<p>The app requests <code class="docutils literal notranslate"><span class="pre">RECORD_AUDIO</span></code> on the first tap of <strong>Start Microphone</strong> and
-<code class="docutils literal notranslate"><span class="pre">CAMERA</span></code> on the first tap of <strong>Start Camera</strong>; <code class="docutils literal notranslate"><span class="pre">INTERNET</span></code>,
-<code class="docutils literal notranslate"><span class="pre">MODIFY_AUDIO_SETTINGS</span></code>, and <code class="docutils literal notranslate"><span class="pre">BLUETOOTH_CONNECT</span></code> are granted at install.</p>
-</section>
-<section id="connect">
-<h3>Connect<a class="headerlink" href="#connect" title="Link to this heading">#</a></h3>
-<p>In the app’s Connection section:</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Field</p></th>
-<th class="head"><p>Value</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>Host or IP</p></td>
-<td><p>IP of the machine running the server</p></td>
-</tr>
-<tr class="row-odd"><td><p>Port</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">8080</span></code> (the hub web-server port, not LiveKit’s internal 7880)</p></td>
-</tr>
-<tr class="row-even"><td><p>Token</p></td>
-<td><p>Paste the printed JWT</p></td>
-</tr>
-<tr class="row-odd"><td><p>Identity</p></td>
-<td><p>Any string unique to this device</p></td>
-</tr>
-</tbody>
-</table>
+<p>Open <code class="docutils literal notranslate"><span class="pre">client-samples/android/</span></code> in Android Studio, allow Gradle sync to finish,
+select a device, and run. The checked-in wrapper also supports:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>client-samples/android
+./gradlew<span class="w"> </span>assembleDebug
+</pre></div>
 </div>
-<p>Leave <strong>Token URL</strong> blank to use the server’s default <code class="docutils literal notranslate"><span class="pre">/token</span></code> endpoint, or
-paste the printed JWT directly into <strong>Token</strong>.</p>
-<p>Before connecting for the first time, tap <strong>Install hub certificate</strong> in the
-Connection section. The app fetches the certificate from the hub and opens the
-system certificate-install dialog — confirm to install. After install, Android
-validates
-against the system + user CA store automatically.</p>
+<p><a id="connect"></a></p>
 </section>
-<section id="android-xr">
-<h3>Android XR<a class="headerlink" href="#android-xr" title="Link to this heading">#</a></h3>
-<p>The Android client is a standard Android app (<code class="docutils literal notranslate"><span class="pre">targetSdk</span></code> 34, <code class="docutils literal notranslate"><span class="pre">minSdk</span></code> 24) with
-no XR-specific code. Because Android XR runs unmodified Android apps, the sample
-is expected to install and launch on an Android XR device or emulator as a flat
-2D windowed panel. The LiveKit audio and data paths, agent-status badge, and
-token flow are expected to work the same as on a phone.</p>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>Android XR support is <strong>not yet validated</strong>. The sample has not been tested on
-Android XR hardware or the emulator, and two areas are expected to need work:</p>
-<ul class="simple">
-<li><p><strong>Camera.</strong> The <code class="docutils literal notranslate"><span class="pre">Camera2</span></code> selector targets phone front and back cameras.
-World-facing and passthrough camera access on Android XR is governed by
-different APIs and permissions, so live-camera perception may select the
-wrong camera or none.</p></li>
-<li><p><strong>Immersive rendering.</strong> The app draws a 2D panel. It does not use Android XR’s
-immersive APIs (Jetpack XR, OpenXR, spatial panels, head tracking, hand input,
-or passthrough), so it will not render head-tracked or spatialized content.</p></li>
-</ul>
-</div>
+<section id="connect-and-permissions">
+<span id="clients-connect"></span><h3>Connect and permissions<a class="headerlink" href="#connect-and-permissions" title="Link to this heading">#</a></h3>
+<p>Enter the server host, port <code class="docutils literal notranslate"><span class="pre">8080</span></code>, a unique identity, and either the printed
+token or the default token URL. Tap <strong>Install hub certificate</strong> before the
+first connection; Android opens the system certificate-install flow.</p>
+<p>The app requests microphone permission when starting the microphone and camera
+permission when opening a physical camera. <code class="docutils literal notranslate"><span class="pre">INTERNET</span></code> and
+<code class="docutils literal notranslate"><span class="pre">MODIFY_AUDIO_SETTINGS</span></code> are install-time permissions. <code class="docutils literal notranslate"><span class="pre">BLUETOOTH_CONNECT</span></code> is a
+runtime permission on Android 12 and newer; the current sample declares it but
+does not prompt for it, so grant Nearby devices in system settings before
+depending on Bluetooth audio routing.</p>
+<p>The current Android backend maps every enabled <code class="docutils literal notranslate"><span class="pre">AudioConfig</span></code> mode to LiveKit’s
+default microphone capture. It does not yet select distinct voice-processing,
+software-processing, or raw DSP settings, so the sample UI does not expose a
+DSP-mode picker. LiveKit plays remote agent audio automatically. Camera choices
+come from Camera2 and include front, back, extra built-in lenses, and attached
+USB cameras when the device exposes them.</p>
+<p>The root Android build pins the Netty dependency pulled in by AGP’s test tooling
+above known vulnerable 4.1 releases. After changing AGP or the version catalog,
+run <code class="docutils literal notranslate"><span class="pre">./gradlew</span> <span class="pre">verifyNettyPin</span></code> from <code class="docutils literal notranslate"><span class="pre">client-samples/android/</span></code>.</p>
+<p id="android-xr">The app can run as a flat Android panel on Android XR, but that path is not
+validated. It does not use Jetpack XR or immersive Android XR APIs, and its
+Camera2 selector is not a passthrough-camera integration.</p>
 </section>
 </section>
 <section id="ios-visionos">
 <h2>iOS/visionOS<a class="headerlink" href="#ios-visionos" title="Link to this heading">#</a></h2>
-<p>The iOS/visionOS client (<code class="docutils literal notranslate"><span class="pre">client-samples/ios-visionos/</span></code>) is a SwiftUI sample
-for both iOS and visionOS, built on StreamKit over LiveKit WebRTC. The sample
-ships as source files plus a local Swift Package; you assemble the Xcode
-project from them.</p>
-<p>The StreamKit library depends on an unmodified upstream
-<a class="reference external" href="https://github.com/livekit/client-sdk-swift">livekit-client-sdk-swift</a> checked
-out at <code class="docutils literal notranslate"><span class="pre">../livekit-client-sdk-swift</span></code> (one level above the sample folder).</p>
-<section id="create-the-xcode-project">
-<h3>Create the Xcode project<a class="headerlink" href="#create-the-xcode-project" title="Link to this heading">#</a></h3>
-<p>Following the sample’s README, create a Multiplatform SwiftUI app, then:</p>
-<ol class="arabic simple">
-<li><p><strong>New project</strong> — Xcode → <strong>File → New → Project → Multiplatform → App</strong>;
-Product Name <code class="docutils literal notranslate"><span class="pre">StreamKitSample</span></code>, Interface SwiftUI, Language Swift.</p></li>
-<li><p><strong>Add destinations</strong> — select the project root, then <strong>Supported
-Destinations → +</strong>; add <strong>visionOS</strong>, remove <strong>macOS</strong> if auto-added. You
-should be left with iOS and visionOS.</p></li>
-<li><p><strong>Add the StreamKit package</strong> — <strong>File → Add Package Dependencies… → Add
-Local…</strong>, navigate to <code class="docutils literal notranslate"><span class="pre">client-samples/ios-visionos/StreamKit/</span></code>, and add it,
-ticking <strong>StreamKit</strong> and your app target.</p></li>
-<li><p><strong>Replace the generated sources</strong> — delete the auto-generated
-<code class="docutils literal notranslate"><span class="pre">ContentView.swift</span></code> and app entry point, then drag in the four files from
-the sample’s <code class="docutils literal notranslate"><span class="pre">App/</span></code> directory (<code class="docutils literal notranslate"><span class="pre">StreamKitSampleApp.swift</span></code>, <code class="docutils literal notranslate"><span class="pre">AppModel.swift</span></code>,
-<code class="docutils literal notranslate"><span class="pre">ContentView.swift</span></code>, <code class="docutils literal notranslate"><span class="pre">ImmersiveView.swift</span></code>) with both targets checked.</p></li>
-<li><p><strong>Add <code class="docutils literal notranslate"><span class="pre">Info.plist</span></code> keys</strong> — <code class="docutils literal notranslate"><span class="pre">NSMicrophoneUsageDescription</span></code>,
-<code class="docutils literal notranslate"><span class="pre">NSCameraUsageDescription</span></code>, and (for visionOS passthrough)
-<code class="docutils literal notranslate"><span class="pre">NSMainCameraUsageDescription</span></code>.</p></li>
-</ol>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>On visionOS, main-passthrough-camera access is an Apple <strong>enterprise</strong> API: it
-requires both the <code class="docutils literal notranslate"><span class="pre">com.apple.developer.arkit.main-camera-access.allow</span></code>
-entitlement and your team’s <code class="docutils literal notranslate"><span class="pre">Enterprise.license</span></code> bundled into the <code class="docutils literal notranslate"><span class="pre">.app</span></code>. The
-license is not bundled with the sample; place it at
-<code class="docutils literal notranslate"><span class="pre">client-samples/ios-visionos/App/Enterprise.license</span></code>. Without it the build
-still succeeds and every feature except main-camera passthrough works. The
-visionOS and iOS <strong>simulators</strong> require none of this: they stream a bundled
-<code class="docutils literal notranslate"><span class="pre">SimulatorFeed.gif</span></code> in place of a physical camera.</p>
-</div>
-<p>Refer to the sample’s README for the authoritative build steps.</p>
+<p>The Apple client is a checked-in SwiftUI project and local Swift package. It
+targets iOS 18 and visionOS 26, requires Xcode 26 with Swift 6.2, and resolves
+LiveKit Swift and CloudXRKit through Swift Package Manager.</p>
+<section id="build">
+<span id="create-the-xcode-project"></span><h3>Build<a class="headerlink" href="#build" title="Link to this heading">#</a></h3>
+<p>Open <code class="docutils literal notranslate"><span class="pre">client-samples/ios-visionos/StreamKitSample.xcworkspace</span></code>, select the
+<code class="docutils literal notranslate"><span class="pre">StreamKitSample</span></code> scheme and destination, choose a signing team and a bundle ID
+owned by that team, then build and run. The workspace already includes the app
+project and local StreamKit package; do not create a replacement Xcode project.</p>
+<p>The checked-in bundle ID is <code class="docutils literal notranslate"><span class="pre">com.nvidia.xr-ai-example</span></code>. Changing it does not
+change the <code class="docutils literal notranslate"><span class="pre">StreamKitSample</span></code> display name, but it does select a new
+<code class="docutils literal notranslate"><span class="pre">UserDefaults</span></code> domain, so saved settings reset on the first launch after a
+rename.</p>
+<p>The simulators stream
+<code class="docutils literal notranslate"><span class="pre">StreamKit/Sources/StreamKit/Resources/SimulatorFeed.gif</span></code> instead of a physical
+camera. Replace that resource to customize the simulated feed.</p>
+<p>On an iOS device the preview follows the live camera aspect ratio. The Vision
+Pro main-camera track goes directly from ARKit to LiveKit and is not copied into
+the 2D preview; the <code class="docutils literal notranslate"><span class="pre">LIVE</span></code> badge, rather than the placeholder preview, indicates
+capture. Start the immersive space before camera capture on a Vision Pro device.</p>
 </section>
-<section id="id1">
-<h3>Connect<a class="headerlink" href="#id1" title="Link to this heading">#</a></h3>
-<p>In the app’s Connection section:</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Field</p></th>
-<th class="head"><p>Value</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>Host</p></td>
-<td><p>IP of the machine running the server</p></td>
-</tr>
-<tr class="row-odd"><td><p>Port</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">8080</span></code> (the hub web-server port; not LiveKit’s internal 7880)</p></td>
-</tr>
-<tr class="row-even"><td><p>Token</p></td>
-<td><p>Paste the token printed on server startup</p></td>
-</tr>
-</tbody>
-</table>
+<section id="vision-pro-permissions">
+<h3>Vision Pro permissions<a class="headerlink" href="#vision-pro-permissions" title="Link to this heading">#</a></h3>
+<p>Main passthrough camera access on a Vision Pro device requires both the
+<code class="docutils literal notranslate"><span class="pre">com.apple.developer.arkit.main-camera-access.allow</span></code> entitlement and the team’s
+Apple-issued <code class="docutils literal notranslate"><span class="pre">Enterprise.license</span></code>. Put the non-redistributable license at
+<code class="docutils literal notranslate"><span class="pre">client-samples/ios-visionos/App/Enterprise.license</span></code>; the build phase copies it
+into the application. A missing license leaves audio, data, simulator camera,
+and the rest of the app usable, but disables device passthrough camera access.</p>
+<p>Xcode automatic signing supports development builds. App Store and TestFlight
+distribution require a manually issued provisioning profile that grants the
+main-camera entitlement.</p>
+<p>The native CloudXR path also declares
+<code class="docutils literal notranslate"><span class="pre">com.apple.developer.low-latency-streaming</span></code>, which requires an Apple Developer
+Program team. A team that cannot provision this entitlement can remove it from
+<code class="docutils literal notranslate"><span class="pre">client-samples/ios-visionos/App/StreamKitSample.entitlements</span></code>; native CloudXR
+remains available with higher latency. Simulators do not require the enterprise
+camera license.</p>
+</section>
+<section id="connect-and-trust-the-certificate">
+<h3>Connect and trust the certificate<a class="headerlink" href="#connect-and-trust-the-certificate" title="Link to this heading">#</a></h3>
+<p>Enter the host and port <code class="docutils literal notranslate"><span class="pre">8080</span></code>, then use a pasted token or the default <code class="docutils literal notranslate"><span class="pre">/token</span></code>
+endpoint. <code class="docutils literal notranslate"><span class="pre">SessionConfig</span></code> contains only the participant identity; the token
+encodes the room. Incoming data callbacks receive <code class="docutils literal notranslate"><span class="pre">(topic,</span> <span class="pre">data)</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">_agent.status</span></code> is delivered separately through the status callback.</p>
+<p>The LiveKit WebSocket requires system trust for the hub certificate. In the
+app, tap <strong>Install hub certificate</strong>, allow Safari to download the profile,
+install it under <strong>Settings → General → VPN &amp; Device Management</strong>, then enable
+full trust under <strong>Settings → General → About → Certificate Trust Settings</strong>.
+Refer to <a class="reference internal" href="../guides/troubleshooting.html"><span class="doc">Troubleshooting</span></a> for certificate regeneration, SAN mismatch,
+401, and media-interruption diagnostics.</p>
+<p>When microphone or camera state appears stuck, filter Console.app by
+<code class="docutils literal notranslate"><span class="pre">category:MediaSession</span></code> to inspect interruption and recovery events. CoreAudio
+<code class="docutils literal notranslate"><span class="pre">-50</span></code> and <code class="docutils literal notranslate"><span class="pre">FigAudioSession</span></code> <code class="docutils literal notranslate"><span class="pre">-19224</span></code> messages also appear during successful
+microphone starts and are not failure indicators by themselves.</p>
+<p>If microphone startup fails with
+<code class="docutils literal notranslate"><span class="pre">io.livekit.swift-sdk</span> <span class="pre">Code=101</span> <span class="pre">&quot;Timed</span> <span class="pre">out&quot;</span></code> after about five seconds, the
+LiveKit recording engine did not produce the first buffer. Current builds
+pre-warm that engine before publishing. After leaving XR, an iOS microphone
+activation sound can play while capture restarts; this is expected.</p>
+</section>
+<section id="native-cloudxr">
+<h3>Native CloudXR<a class="headerlink" href="#native-cloudxr" title="Link to this heading">#</a></h3>
+<p>Native Apple clients require the CloudXR native device profile. Start the demo
+from the repository root with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">NV_DEVICE_PROFILE</span><span class="o">=</span>auto-native<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo<span class="w"> </span>xr_render_demo
+</pre></div>
 </div>
-<p>The token is valid for 24 hours; restart the server or call
-<code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">https://&lt;host&gt;:8080/token?identity=&lt;name&gt;</span></code> for a fresh one.</p>
-<p><strong>Trusting the self-signed certificate (one-time per device):</strong> the LiveKit
-Swift SDK’s <code class="docutils literal notranslate"><span class="pre">URLSession</span></code> does not expose a server-trust hook, so iOS rejects the
-hub’s self-signed certificate until you install it as a trusted profile. In the app’s
-Connection section, enter the host and port and tap <strong>Install hub
-certificate</strong> — this opens Safari at <code class="docutils literal notranslate"><span class="pre">https://&lt;host&gt;:&lt;port&gt;/cert</span></code>. Bypass the
-warning (<strong>Show Details → visit this website</strong>), allow the configuration
-profile download, then install it under <strong>Settings → General → VPN &amp; Device
-Management</strong> and finally enable <strong>Settings → General → About → Certificate
-Trust Settings → Enable Full Trust</strong> for the new certificate. The connection then
-completes without warnings. The sample’s README documents recovery for the
-common failure modes (the Full-Trust toggle not appearing, <code class="docutils literal notranslate"><span class="pre">errSSLBadCert</span></code> or
-<code class="docutils literal notranslate"><span class="pre">-1202</span></code>, and a 401 on the room after the certificate is trusted).</p>
+<p>The environment variable overrides the <code class="docutils literal notranslate"><span class="pre">auto-webrtc</span></code> YAML default without a
+checkout edit. LiveKit remains on port 8080 while CloudXRKit uses its native
+transport. Connecting or stopping XR does not disconnect the LiveKit agent
+session. Closing the immersive space or disconnecting from the hub stops the XR
+session so no render component is orphaned.</p>
+<p>In <code class="docutils literal notranslate"><span class="pre">auto-native</span></code> mode, CloudXR does not use the web client’s port 48322 WSS
+proxy and needs no additional certificate installation. CloudXRKit’s native
+transport provides its own encryption without a user-facing trust prompt. The
+hub certificate on port 8080 remains required for the LiveKit channel.</p>
 </section>
 </section>
 <section id="native-c">
 <h2>Native C++<a class="headerlink" href="#native-c" title="Link to this heading">#</a></h2>
-<p>The native client (<code class="docutils literal notranslate"><span class="pre">client-samples/native/</span></code>) is a C++ StreamKit
-implementation backed by the LiveKit C++ SDK (<code class="docutils literal notranslate"><span class="pre">livekit::Room</span></code>). It is aimed at
-developers embedding StreamKit in a native host — an embedded device, a game
-engine plugin, or a CloudXR client.</p>
-<section id="id2">
-<h3>Build and run<a class="headerlink" href="#id2" title="Link to this heading">#</a></h3>
-<p>Point CMake at a LiveKit SDK install, build, and run with <code class="docutils literal notranslate"><span class="pre">--host</span></code> and
-<code class="docutils literal notranslate"><span class="pre">--token</span></code>. The backend is tested against the released LiveKit C++ SDK v0.4.1:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DLIVEKIT_SDK_ROOT<span class="o">=</span>/path/to/livekit-cpp-sdk
+<p>The C++20 sample ships a working backend for the LiveKit C++ SDK v0.4.1.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>client-samples/native
+cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DLIVEKIT_SDK_ROOT<span class="o">=</span>/path/to/livekit-cpp-sdk
 cmake<span class="w"> </span>--build<span class="w"> </span>build
-./build/bin/streamkit_sample<span class="w"> </span>--host<span class="w"> </span><span class="m">192</span>.168.1.100<span class="w"> </span>--token<span class="w"> </span>&lt;jwt&gt;
+./build/bin/streamkit_sample<span class="w"> </span>--host<span class="w"> </span><span class="m">192</span>.168.1.100<span class="w"> </span>--port<span class="w"> </span><span class="m">8080</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--secure<span class="w"> </span>--token<span class="w"> </span>&lt;jwt&gt;
 </pre></div>
 </div>
-<p>If <code class="docutils literal notranslate"><span class="pre">LIVEKIT_SDK_ROOT</span></code> is not set, the backend compiles in <strong>stub mode</strong>:
-<code class="docutils literal notranslate"><span class="pre">Connect()</span></code> reports connected immediately without opening a real session. This
-lets you build the rest of StreamKit without the LiveKit SDK present.</p>
-<p>The native backend takes the JWT inline via <code class="docutils literal notranslate"><span class="pre">--token</span></code> or <code class="docutils literal notranslate"><span class="pre">LiveKitConfig::token</span></code>;
-the token-URL HTTP fetch is not implemented in this backend. A small unit-test
-suite is available with <code class="docutils literal notranslate"><span class="pre">-DSTREAMKIT_BUILD_TESTS=ON</span></code>, run via CTest. Refer to the
-sample’s README for the test matrix and the current backend constraints.</p>
+<p>Install the hub certificate in the native host’s trust store before connecting.
+Refer to <a class="reference internal" href="networking.html#linux-native-certificate-trust"><span class="std std-ref">Linux native certificate trust</span></a> for the Ubuntu and Debian
+procedure. The command uses the supported TLS proxy on port 8080. Insecure port
+7880 is a direct LiveKit debugging path; do not expose it outside the XR AI host
+or a trusted development network.</p>
+<p>Without <code class="docutils literal notranslate"><span class="pre">LIVEKIT_SDK_ROOT</span></code>, it builds in stub mode and reports a connected state
+without opening a network session. Build the standalone assertion-based tests
+with <code class="docutils literal notranslate"><span class="pre">-DSTREAMKIT_BUILD_TESTS=ON</span></code> and run:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ctest<span class="w"> </span>--test-dir<span class="w"> </span>build<span class="w"> </span>--output-on-failure
+</pre></div>
+</div>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Test</p></th>
+<th class="head"><p>Coverage</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_mapping_tests</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ConnectionState</span></code> operations</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_agent_status_tests</span></code></p></td>
+<td><p>Canonical, missing, truncated, and empty <code class="docutils literal notranslate"><span class="pre">_agent.status</span></code> values</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_frame_sink_tests</span></code></p></td>
+<td><p>Move and span frame-injection overloads</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_audio_sink_tests</span></code></p></td>
+<td><p>Audio parameter forwarding and virtual dispatch</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_session_tests</span></code></p></td>
+<td><p>Mock-backed connection, media, data, status, and disconnection lifecycle</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_livekit_backend_tests</span></code></p></td>
+<td><p>State deduplication, disconnect races, stale metrics, and callback exceptions</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Run one test with CTest, invoke its binary directly, or rerun failures:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ctest<span class="w"> </span>--test-dir<span class="w"> </span>build<span class="w"> </span>-R<span class="w"> </span>streamkit_frame_sink_tests<span class="w"> </span>--output-on-failure
+./build/StreamKit/Tests/StreamKitTests/streamkit_frame_sink_tests
+ctest<span class="w"> </span>--test-dir<span class="w"> </span>build<span class="w"> </span>--rerun-failed<span class="w"> </span>--output-on-failure
+</pre></div>
+</div>
+<p>The backend implements connection state, data, <code class="docutils literal notranslate"><span class="pre">_agent.status</span></code>, network
+metrics, host-injected audio, and host-injected video. <code class="docutils literal notranslate"><span class="pre">StartAudio()</span></code> and
+<code class="docutils literal notranslate"><span class="pre">StartCamera()</span></code> arm publication; the host opens its devices and pushes PCM or
+frames through <code class="docutils literal notranslate"><span class="pre">AudioSink</span></code> and <code class="docutils literal notranslate"><span class="pre">FrameSink</span></code>. Camera facing and device ID are
+therefore inert in this backend, while optional encoding settings apply before
+the first frame creates the video track. Real-time producers must prefer the
+<code class="docutils literal notranslate"><span class="pre">std::vector&lt;uint8_t&gt;&amp;&amp;</span></code> frame-injection overload; the span overload copies each
+frame and can add about 1.4 MB of copying for a typical frame.</p>
+<p>Token-URL HTTP fetching is not implemented; pass an inline token or subclass
+<code class="docutils literal notranslate"><span class="pre">LiveKitBackend::FetchToken</span></code>. <code class="docutils literal notranslate"><span class="pre">GetRoom()</span></code> is the LiveKit-specific escape hatch
+for remote audio rendering or AEC reference capture. Microphone processing
+presets are not mapped because the C++ SDK exposes no corresponding source
+controls.</p>
 </section>
-</section>
-<section id="adding-a-client-for-a-new-platform">
-<h2>Adding a client for a new platform<a class="headerlink" href="#adding-a-client-for-a-new-platform" title="Link to this heading">#</a></h2>
-<p>The DeviceIOHub speaks standard LiveKit, so you are not limited to the bundled clients.
-If <a class="reference external" href="https://docs.livekit.io/reference/">LiveKit publishes a client SDK</a> for your
-platform — Unity, Flutter, React Native, Rust, Go, and others — you can build a
-client for it against the same contract the existing samples use:</p>
-<ol class="arabic simple">
-<li><p><strong>Get a token.</strong> Fetch a JWT from the hub at
-<code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">https://&lt;host&gt;:8080/token?identity=&lt;name&gt;</span></code>, or paste the token printed on
-server startup.</p></li>
-<li><p><strong>Join the room.</strong> Point the SDK at the hub’s web-server port (<code class="docutils literal notranslate"><span class="pre">8080</span></code>, not
-LiveKit’s internal <code class="docutils literal notranslate"><span class="pre">7880</span></code>) and connect with the token.</p></li>
-<li><p><strong>Publish input.</strong> Publish the microphone track, and the camera track if the
-agent needs vision.</p></li>
-<li><p><strong>Handle agent output.</strong> Play the remote audio track the agent publishes, and
-read its data-channel messages (for example, the <code class="docutils literal notranslate"><span class="pre">agent.response</span></code> text topic).</p></li>
-</ol>
-<p>That is the whole integration surface — no XR-AI-specific protocol. The brittle
-part is usually the hub’s self-signed certificate: each platform trusts it
-differently, so reuse the per-platform guidance above, or run the hub over plain
-HTTP on a trusted network. Refer to <a class="reference internal" href="networking.html"><span class="doc">Networking and firewall</span></a> for the certificate and
-plain-HTTP options.</p>
+<section id="adding-another-platform">
+<span id="adding-a-client-for-a-new-platform"></span><h2>Adding another platform<a class="headerlink" href="#adding-another-platform" title="Link to this heading">#</a></h2>
+<p>DeviceIOHub uses standard LiveKit. A new client fetches a token, joins through
+the hub’s port 8080, publishes microphone and optional camera tracks, plays the
+remote audio track, and reads data topics such as <code class="docutils literal notranslate"><span class="pre">agent.response</span></code>. Keep the
+transport-specific SDK behind a StreamKit backend and reuse the same status,
+interruption, and participant-routing contracts.</p>
 </section>
 </section>
 
@@ -895,33 +816,24 @@ plain-HTTP options.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#which-clients-exist">Which clients exist</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#network-telemetry">Network telemetry</a></li>
-</ul>
-</li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-connect-flow">The connect flow</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#self-signed-certificate-trust">Self-signed certificate trust</a></li>
-</ul>
-</li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#web-basic-sample">Web (basic sample)</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#web-xr-xr-render-demo">Web-XR (XR render demo)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#client-matrix">Client matrix</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-connection-flow">Shared connection flow</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#web">Web</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#web-xr-xr-render-demo">Web-XR (xr-render-demo)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#android">Android</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#requirements">Requirements</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#build-and-run">Build and run</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#connect">Connect</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#android-xr">Android XR</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#requirements-and-build">Requirements and build</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#connect-and-permissions">Connect and permissions</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ios-visionos">iOS/visionOS</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#create-the-xcode-project">Create the Xcode project</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id1">Connect</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#build">Build</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vision-pro-permissions">Vision Pro permissions</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#connect-and-trust-the-certificate">Connect and trust the certificate</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#native-cloudxr">Native CloudXR</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-c">Native C++</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id2">Build and run</a></li>
-</ul>
-</li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-a-client-for-a-new-platform">Adding a client for a new platform</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-c">Native C++</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-another-platform">Adding another platform</a></li>
 </ul>
   </nav></div>
 

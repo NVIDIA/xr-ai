@@ -313,7 +313,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
 </ul>
@@ -332,6 +332,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
@@ -346,6 +347,7 @@
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -446,9 +448,23 @@ beside a direct capability subproject. Adding a file in either location enrolls
 it automatically. Values are sample- and hardware-specific examples, not
 universal defaults. Keep field guidance beside the value as a source comment;
 the generated page preserves those comments verbatim.</p>
-<p>Public typed model configuration fields are also available in the generated
-<a class="reference internal" href="python/xr_ai_models/index.html"><span class="doc">Python API reference</span></a>. Operational choices,
-credentials, and deployment workflows remain in the handwritten guides.</p>
+<p>Refer to the generated
+<a class="reference internal" href="python/xr_ai_models/index.html"><span class="doc">Python API reference</span></a> for public typed model
+configuration fields. Operational choices, credentials, and deployment
+workflows remain in the handwritten guides.</p>
+<p>To change a sample parameter:</p>
+<ol class="arabic simple">
+<li><p>Start in <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;sample&gt;/</span></code> and find the owning file in that
+sample’s README or published guide.</p></li>
+<li><p>Edit the checked-in YAML or JSON value, preserving its documented type.
+Resolve relative paths from the file that declares them unless the sample
+guide documents different precedence.</p></li>
+<li><p>Restart the sample process that owns the file. Sample configuration is not
+hot-reloaded.</p></li>
+<li><p>If the edit changes a persistent model server, stop and restart the shared
+model stack. Refer to <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for that
+workflow.</p></li>
+</ol>
 <section id="config-lab-instrument-monitoring">
 <h2>lab-instrument-monitoring<a class="headerlink" href="#config-lab-instrument-monitoring" title="Link to this heading">#</a></h2>
 <section id="config-lab-instrument-monitoring-yaml-device-io-hub-yaml">
@@ -1423,7 +1439,7 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># DeviceIOHub configuration for the vlm-agent sample.</span>
+<span class="c1"># DeviceIOHub configuration for the simple-vlm-example sample.</span>
 <span class="c1"># Paths are relative to this file's directory.</span>
 <span class="c1"># See services/device-io-hub/device_io_hub.yaml for all available options.</span>
 
@@ -1642,6 +1658,11 @@ credentials, and deployment workflows remain in the handwritten guides.</p>
 <span class="nt">models_config</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">models.local.json</span>
 <span class="nt">workflow_config</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workflow.yaml</span>
 <span class="nt">voice_gate_yaml</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">voice_gate.yaml</span>
+
+<span class="c1"># Choose one to replace the shared foreground instructions. The packaged idle</span>
+<span class="c1"># or active route policy is always appended after the configured shared prompt.</span>
+<span class="c1"># foreground_prompt: &lt;inline shared foreground instructions&gt;</span>
+<span class="c1"># foreground_prompt_file: ../worker/tea_making_worker/prompts/foreground_prompt.txt</span>
 
 <span class="nt">rag_endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tcp://127.0.0.1:8340</span>
 <span class="nt">artifacts_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../artifacts</span>

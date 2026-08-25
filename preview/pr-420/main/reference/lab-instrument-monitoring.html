@@ -313,7 +313,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
 </ul>
@@ -332,6 +332,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
@@ -346,6 +347,7 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -446,9 +448,10 @@
 <h1>Lab instrument monitoring — building marker-associated visual agents<a class="headerlink" href="#lab-instrument-monitoring-building-marker-associated-visual-agents" title="Link to this heading">#</a></h1>
 <p>The lab instrument sample is a reference for applications that combine
 foreground questions, opt-in background work, persistent participant state,
-visual identification, and event-driven notifications. Start with the
-<a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a> to run it. This architecture
-reference focuses on reusing the sample’s structure for another application.</p>
+visual identification, and event-driven notifications. Refer to the
+<a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a> to run the sample. This
+architecture reference focuses on reusing the sample’s structure for another
+application.</p>
 <p>The central design choice is to separate perception, interpretation, state,
 policy, and presentation. A marker scan identifies an instrument, a VLM reads
 its display, a stateful agent decides whether the reading changed, and a
@@ -491,6 +494,8 @@ accepted speech or typed query         ├─&gt; current frame + generic VLM qu
 <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code>. Agents call peer tools directly, while typed topics fan results
 out to independent consumers. LiveKit remains inside DeviceIOHub and does not
 appear in the worker’s agent contracts.</p>
+<p>The worker uses native <code class="docutils literal notranslate"><span class="pre">xr_ai_runtime</span></code> agents and <code class="docutils literal notranslate"><span class="pre">xr_ai_tools</span></code> instances. It
+does not use NVIDIA Agent Toolkit, PydanticAI, MCP clients, or MCP servers.</p>
 </section>
 <section id="agent-responsibilities">
 <h2>Agent responsibilities<a class="headerlink" href="#agent-responsibilities" title="Link to this heading">#</a></h2>
@@ -623,9 +628,55 @@ client’s <code class="docutils literal notranslate"><span class="pre">agent.re
 </tbody>
 </table>
 </div>
-<p>Configuration and command syntax are also included automatically in the
-generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> and
-<a class="reference internal" href="command-line.html"><span class="doc">command-line</span></a> references.</p>
+<p>Refer to the generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> and
+<a class="reference internal" href="command-line.html"><span class="doc">command-line</span></a> references for configuration fields and
+command syntax.</p>
+</section>
+<section id="configuration">
+<h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h2>
+<p>Run and edit the sample from <code class="docutils literal notranslate"><span class="pre">agent-samples/lab-instrument-monitoring/</span></code>. The
+orchestrator reads the files below on every start and materializes a temporary
+worker configuration with absolute paths. Edit the checked-in files, not the
+temporary copy named in the logs.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>File</p></th>
+<th class="head"><p>Owns</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/lab_instrument_monitoring_worker.yaml</span></code></p></td>
+<td><p>Monitor and snapshot cadence, lost-device threshold, image freshness, VAD, output directory, and event-viewer port and history</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_map.yaml</span></code></p></td>
+<td><p>QR payloads and ArUco IDs mapped to instrument names</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code></p></td>
+<td><p>Wake phrases, listening chime, and follow-up window</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
+<td><p>Reused model adapters, endpoints, and readiness checks</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code></p></td>
+<td><p>LiveKit room and ports, web and token servers, and network behavior</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>For example, shorten both visual polling periods by setting
+<code class="docutils literal notranslate"><span class="pre">monitor_interval_s</span></code> and <code class="docutils literal notranslate"><span class="pre">instrument_monitor_interval_s</span></code> in the worker YAML,
+or replace entries under <code class="docutils literal notranslate"><span class="pre">devices</span></code> in <code class="docutils literal notranslate"><span class="pre">device_map.yaml</span></code> with the identifiers
+attached to real instruments. Paths such as <code class="docutils literal notranslate"><span class="pre">device_map_yaml</span></code> and
+<code class="docutils literal notranslate"><span class="pre">artifacts_dir</span></code> are resolved relative to the worker YAML.</p>
+<p>Restart <code class="docutils literal notranslate"><span class="pre">lab_instrument_monitoring</span></code> after an edit; configuration is not
+hot-reloaded. The <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code> option intentionally overrides
+<code class="docutils literal notranslate"><span class="pre">web_events_host</span></code> in the runtime copy, so use that option rather than editing
+the host to expose the unauthenticated viewer. Changing <code class="docutils literal notranslate"><span class="pre">models.json</span></code> changes
+only the endpoints consumed by this sample. Refer to
+<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for server-side model, GPU, port, or
+memory changes, then restart the persistent shared stack.</p>
+<p>Refer to the generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference for exact
+fields, checked-in values, and adjacent YAML comments.</p>
 </section>
 <section id="foreground-tool-loop">
 <h2>Foreground tool loop<a class="headerlink" href="#foreground-tool-loop" title="Link to this heading">#</a></h2>
@@ -754,11 +805,13 @@ proxy in front of it.</p>
 </section>
 <section id="file-outputs-and-persistence">
 <h2>File outputs and persistence<a class="headerlink" href="#file-outputs-and-persistence" title="Link to this heading">#</a></h2>
-<p>Every non-empty final STT result is written to <code class="docutils literal notranslate"><span class="pre">transcript.jsonl</span></code> before voice
-gating, including ambient speech rejected by a configured wake phrase. Wake-word
-gating controls dispatch to the foreground, not storage: rejected speech is
-still transcribed and persisted. The default gate accepts <code class="docutils literal notranslate"><span class="pre">agent</span></code> and
-<code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span></code>, plays a listening chime, and allows one follow-up utterance for
+<p>Each non-empty final STT result delivered on <code class="docutils literal notranslate"><span class="pre">voice.transcript</span></code> is written to
+<code class="docutils literal notranslate"><span class="pre">transcript.jsonl</span></code> before voice gating, including ambient speech rejected by a
+configured wake phrase. Transcript-topic delivery is bounded and best effort;
+overflow drops the oldest pending transcript, and shutdown discards pending
+items. Wake-word gating controls dispatch to the foreground, not storage:
+delivered rejected speech is still persisted. The default gate accepts <code class="docutils literal notranslate"><span class="pre">agent</span></code>
+and <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span></code>, plays a listening chime, and allows one follow-up utterance for
 five seconds. Accepted speech reaches the foreground as a <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>. Typed
 text reaches the foreground but is not an STT transcript.</p>
 <p>Each connection writes to a new participant-scoped directory:</p>
@@ -849,7 +902,51 @@ the exact source frame used for the marker scan and separates camera and framing
 problems from detector or VLM problems. Then inspect Relay events and the
 participant JSONL files to follow the tool call, reading, state update, and
 notification as distinct stages.</p>
+<section id="routing-and-visual-evals">
+<h3>Routing and visual evals<a class="headerlink" href="#routing-and-visual-evals" title="Link to this heading">#</a></h3>
+<p>Start the shared model servers, then run these commands from
+<code class="docutils literal notranslate"><span class="pre">agent-samples/lab-instrument-monitoring/</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>worker<span class="w"> </span>python<span class="w"> </span>eval/eval.py
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>worker<span class="w"> </span>python<span class="w"> </span>eval/visual_eval.py
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">eval/cases.yaml</span></code> checks the foreground model’s complete first action, exact
+tool-call count, and every call’s request model. It separates current-view,
+recent-history, background-control, ordinary conversation, and general
+knowledge requests. <code class="docutils literal notranslate"><span class="pre">eval/visual_cases.yaml</span></code> exercises generated images for
+monitor baselines and changes, adversarial visible instructions, multiple
+readable devices, competing markers, and exact joint label-to-reading output.</p>
+</section>
+<section id="printable-sample-markers">
+<h3>Printable sample markers<a class="headerlink" href="#printable-sample-markers" title="Link to this heading">#</a></h3>
+<p>The checked-in marker assets match <code class="docutils literal notranslate"><span class="pre">yaml/device_map.yaml</span></code>:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Files</p></th>
+<th class="head"><p>Family</p></th>
+<th class="head"><p>Encoded IDs</p></th>
+<th class="head"><p>Device names</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">sample-markers/qr/*.png</span></code></p></td>
+<td><p>QR</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device-1</span></code> through <code class="docutils literal notranslate"><span class="pre">device-5</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Device1</span></code> through <code class="docutils literal notranslate"><span class="pre">Device5</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">sample-markers/aruco/*.png</span></code></p></td>
+<td><p>ArUco <code class="docutils literal notranslate"><span class="pre">DICT_4X4_50</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0</span></code> through <code class="docutils literal notranslate"><span class="pre">4</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Device1</span></code> through <code class="docutils literal notranslate"><span class="pre">Device5</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Keep the white border, print without interpolation or cropping, and place a
+marker close enough to its instrument display for both to be clear in one
+camera frame.</p>
 <p><a id="what-should-become-shared"></a></p>
+</section>
 </section>
 <section id="what-belongs-in-shared-code">
 <h2>What belongs in shared code<a class="headerlink" href="#what-belongs-in-shared-code" title="Link to this heading">#</a></h2>
@@ -914,6 +1011,7 @@ another concrete application needs exactly the same behavior.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#architecture">Architecture</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-responsibilities">Agent responsibilities</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#source-map">Source map</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration">Configuration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#foreground-tool-loop">Foreground tool loop</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#visual-identification-and-reading">Visual identification and reading</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stateful-monitoring">Stateful monitoring</a></li>
@@ -928,7 +1026,11 @@ another concrete application needs exactly the same behavior.</p>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lifecycle-invariants">Lifecycle invariants</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validation-strategy">Validation strategy</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validation-strategy">Validation strategy</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#routing-and-visual-evals">Routing and visual evals</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#printable-sample-markers">Printable sample markers</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-belongs-in-shared-code">What belongs in shared code</a></li>
 </ul>
   </nav></div>

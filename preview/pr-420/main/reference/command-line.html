@@ -309,7 +309,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
 </ul>
@@ -328,6 +328,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
@@ -342,6 +343,7 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -444,7 +446,8 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 <section id="lab-instrument-monitoring">
 <h2>lab_instrument_monitoring<a class="headerlink" href="#lab-instrument-monitoring" title="Link to this heading">#</a></h2>
 <p>Launch lab instrument monitoring with reused model dependencies.</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/lab-instrument-monitoring<span class="w"> </span>lab_instrument_monitoring<span class="w"> </span><span class="o">[</span>--expose-web-events<span class="o">]</span>
+<p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/lab-instrument-monitoring/</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>lab_instrument_monitoring<span class="w"> </span><span class="o">[</span>--expose-web-events<span class="o">]</span>
 </pre></div>
 </div>
 <p class="rubric">Options</p>
@@ -456,7 +459,8 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 <section id="model-servers">
 <h2>model_servers<a class="headerlink" href="#model-servers" title="Link to this heading">#</a></h2>
 <p>model-servers orchestrator — starts one shared AI inference stack and exits.</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span><span class="o">[</span>--stop<span class="o">]</span><span class="w"> </span><span class="o">[</span>--models<span class="w"> </span>NAME_OR_PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--allow-anonymous<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-profile<span class="w"> </span>NAME<span class="o">]</span>
+<p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span><span class="o">[</span>--stop<span class="o">]</span><span class="w"> </span><span class="o">[</span>--models<span class="w"> </span>NAME_OR_PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--allow-anonymous<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-profile<span class="w"> </span>NAME<span class="o">]</span>
 </pre></div>
 </div>
 <p class="rubric">Options</p>
@@ -474,7 +478,8 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 <section id="simple-vlm-example">
 <h2>simple_vlm_example<a class="headerlink" href="#simple-vlm-example" title="Link to this heading">#</a></h2>
 <p>simple-vlm-example orchestrator — vision Q&amp;A over voice or text.</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/simple-vlm-example<span class="w"> </span>simple_vlm_example
+<p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example
 </pre></div>
 </div>
 <p>This command has no sample-specific options.</p>
@@ -482,7 +487,8 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 <section id="tea-making-sample">
 <h2>tea_making_sample<a class="headerlink" href="#tea-making-sample" title="Link to this heading">#</a></h2>
 <p>Launch native tea guidance with reused model services.</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample<span class="w"> </span>tea_making_sample<span class="w"> </span><span class="o">[</span>--expose-web-events<span class="o">]</span>
+<p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>tea_making_sample<span class="w"> </span><span class="o">[</span>--expose-web-events<span class="o">]</span>
 </pre></div>
 </div>
 <p class="rubric">Options</p>
@@ -494,7 +500,8 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 <section id="xr-render-demo">
 <h2>xr_render_demo<a class="headerlink" href="#xr-render-demo" title="Link to this heading">#</a></h2>
 <p>xr-render-demo orchestrator. Runs the process stack for this sample.</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo<span class="w"> </span>xr_render_demo
+<p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo
 </pre></div>
 </div>
 <p>This command has no sample-specific options.</p>

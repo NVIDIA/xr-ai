@@ -7,10 +7,10 @@
 
 The tea-making sample is a reference for applications that combine a guided
 procedure, visual evidence, foreground questions, independent background
-observers, and voice output. Start with the
-{doc}`quickstart </getting_started/quickstart>` to run it. This architecture
-reference explains how to adapt the sample to another procedure rather than
-merely changing model settings.
+observers, and voice output. Refer to the
+{doc}`quickstart </getting_started/quickstart>` to run the sample. This
+architecture reference explains how to adapt the sample to another procedure
+rather than merely changing model settings.
 
 The defining pattern is a deterministic workflow around an agentic core. YAML
 declares the steps and state contract. Application code owns transitions and
@@ -36,17 +36,19 @@ ownership, and event composition are reusable.
 
 ## Quick start
 
-Run commands from the repository root. The tea sample reuses all model
-services, so start the shared stack, including Piper TTS, first:
+Run commands from `agent-samples/tea-making-sample/`. The tea sample reuses all
+model services, so start the shared stack, including Piper TTS, first:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers
+uv run --project ../model-servers model_servers
 ```
 
-Then launch the sample:
+Wait for the model launcher to report readiness and return. Then launch the
+sample from the same terminal:
 
 ```bash
-uv run --project agent-samples/tea-making-sample tea_making_sample
+uv sync
+uv run tea_making_sample
 ```
 
 Open `https://localhost:8080`, accept the development certificate, allow camera
@@ -102,6 +104,8 @@ accepted speech or typed query         ├─> GuidanceAgent observation loop
 `VoiceAgent` publishes participant-scoped queries, transcripts, and lifecycle
 events. The runtime fans typed events out to peer agents. Agents call peer
 tools directly, and each background agent owns its participant tasks.
+The worker uses native `xr_ai_runtime` agents and `xr_ai_tools` instances; it
+does not use NVIDIA Agent Toolkit, PydanticAI, MCP clients, or MCP servers.
 Wake-word gating is the sample default; callers can explicitly select
 always-on speech. Every spoken response is also sent to the connection client
 on `agent.response` so the client can render accessible text alongside audio.
@@ -151,13 +155,46 @@ locks, and participant cleanup.
 | `guidance_voice.py` | Guidance notice speech policy | Add another presentation channel |
 | `file_output.py` | Participant JSONL artifacts | Replace files with backend persistence |
 | `web_events.py` | Explicit typed event-to-view projections | Select or reshape live presentation topics |
-| `prompts/` | Default model instructions | Tune one agent without duplicating prompts in YAML |
+| `prompts/` | Shared model instructions and packaged route policies | Tune configurable prompts without duplicating them in YAML |
 | `yaml/workflow.yaml` | Five-step procedure and evidence contract | Define a different guided task |
 | `rag-documents/` | Sample retrieval corpus | Replace with domain documents or a backend |
 
-Configuration and command syntax are included automatically in the generated
-{doc}`configuration <configuration>` and
-{doc}`command-line <command-line>` references.
+Refer to the generated {doc}`configuration <configuration>` and
+{doc}`command-line <command-line>` references for configuration fields and
+command syntax.
+
+## Configuration
+
+Run and edit the sample from `agent-samples/tea-making-sample/`. The
+orchestrator reads the checked-in files on every start and materializes a
+temporary worker configuration with absolute paths. Edit the files under
+`yaml/`, not the temporary copy named in the logs.
+
+| File | Owns |
+|---|---|
+| `yaml/tea_making_worker.yaml` | Selected subordinate configuration files, frame and model timeouts, background cadence, VAD, output directory, and event-viewer port and history |
+| `yaml/workflow.yaml` | Typed state, steps, triggers, evidence, tool access, transitions, and user messages |
+| `yaml/voice_gate.yaml` and `yaml/voice_gate.always-on.yaml` | Wake-word and always-on speech presets |
+| `yaml/rag_service.yaml` | Document path, model configuration, cache, chunking, embedding dimensions, and score threshold |
+| `yaml/models.local.json` | Reused model adapters, endpoints, and readiness checks |
+| `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
+
+Choose a voice preset through `voice_gate_yaml` in
+`tea_making_worker.yaml`. Change observation and summary frequency in that
+worker file, retrieval behavior in `rag_service.yaml`, and the procedure itself
+in `workflow.yaml`. Relative paths declared in each configuration file resolve
+from that file's directory. Workflow state and step references are validated at
+startup, so an invalid contract fails before a participant session begins.
+
+Restart `tea_making_sample` after an edit; configuration is not hot-reloaded.
+The `--expose-web-events` option intentionally overrides `web_events_host` in
+the runtime copy. Changing `models.local.json` changes the endpoints used by
+the worker and RAG service but not the persistent servers. Refer to
+{doc}`/guides/customizing-model-servers` for a server-side model, GPU, port, or
+memory change, then restart the shared stack.
+
+Refer to the generated {doc}`configuration <configuration>` reference for exact
+fields, checked-in values, and adjacent YAML comments.
 
 ## Deterministic foreground routing
 
@@ -175,6 +212,11 @@ the model must call no tool, leave guide state unchanged, and reply exactly “I
 can only help with the active tea guide right now.” The rule is scoped to the
 active route; the idle root assistant can answer ordinary questions.
 
+An inline `foreground_prompt` or `foreground_prompt_file` overrides only the
+shared foreground instructions. The packaged idle or active policy is appended
+after that shared prompt so configuration overrides cannot remove route
+selection, active-guide refusal, or workflow-control safeguards.
+
 There is exactly one model loop. The foreground agent does not ask one model to
 route to another agent, and background agents never capture a foreground turn.
 `current_view` is a direct-return exception within that loop: after the route is
@@ -184,12 +226,11 @@ the visual answer.
 Each turn contains the system prompt, current query, and current workflow
 context—no accumulated conversation history.
 
-The checked-in Omni deployment accepts one image per request by default, and
-every visual tool in this sample sends exactly one image. If an adaptation adds
-a multi-image tool such as ``query_images``, configure the model server's
-``--limit-mm-per-prompt`` value before exposing that tool. The explicit
-``reasoning_field`` in ``models.local.json`` also keeps the inline VLM adapter
-aligned with the Nemotron Omni preset.
+Every visual tool in this sample sends exactly one image. The checked-in Omni
+wrapper does not expose multi-image request configuration, so this deployment
+does not support adapting these tools to send multiple images. The explicit
+``reasoning_field`` in ``models.local.json`` keeps the inline VLM adapter aligned
+with the Nemotron Omni preset.
 
 This makes routing easy to reason about: application state decides which
 capabilities exist, and the model decides how to use only those capabilities.
@@ -334,9 +375,8 @@ public `execute()` boundary so validation and Relay tracing are preserved.
 Follow the same contract as the three existing applications: an agent-owned
 task per participant, idempotent start, stop, and status tools, cancellation on
 leave, a typed durable record topic, and optional compact `BackgroundFact`
-output.
-Decide explicitly whether to speak the result; do not make every background
-record a voice message.
+output. Decide explicitly whether to speak the result; do not make every
+background record a voice message.
 
 ### Replace files with production persistence
 
@@ -374,6 +414,13 @@ open-loop playback estimate remains private scheduling state.
 Preserve these rules when extracting or replacing agents. State ownership and
 cleanup are one design decision, not separate implementation details.
 
+## Safety
+
+This sample demonstrates agent composition; it is not a safety controller.
+Keep hot vessels stable, follow appliance and tea-package instructions, and do
+not use visual inference as the sole protection against burns, spills, or
+electrical hazards.
+
 ## Validation strategy
 
 Test deterministic behavior separately from model quality:
@@ -391,12 +438,15 @@ The checked-in live-model routing eval shares the production foreground's
 root-versus-active prompt and tool preparation. It validates the first model
 action, tool arguments, exact active-guide refusal, and positive active-guide
 routes. Start `model-servers` so the configured Omni LLM endpoint on port 8108
-is healthy, then run from the repository root:
+is healthy, then run from `agent-samples/tea-making-sample/`:
 
 ```bash
-uv run --project agent-samples/tea-making-sample/worker \
-  python agent-samples/tea-making-sample/eval/eval.py
+uv run --project worker python eval/eval.py
 ```
+
+The command prints one `PASS` or `FAIL` line for each case and exits with a
+nonzero status when a tool choice, argument schema, or response contract does
+not match.
 
 When debugging, inspect the workflow, background, foreground, and Relay JSONL
 files as separate stages. This shows whether the problem came from evidence,

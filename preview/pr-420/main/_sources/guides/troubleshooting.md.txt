@@ -24,11 +24,12 @@ headers.
 sudo apt install python3-dev
 ```
 
-This applies to the `xr-render-demo/yaml/spark/` profile.
+This applies to the `agent-samples/model-servers/yaml/spark/` profile.
 
 ### DGX Spark — LOVR auto-download is not supported
 
-**Symptom:** `uv run xr_render_demo` exits at startup with:
+**Symptom:** `uv run --project agent-samples/xr-render-demo xr_render_demo`
+exits at startup with:
 
 ```
 xr-render-demo: LOVR auto-download is not supported on linux/aarch64.
@@ -66,22 +67,18 @@ If `git clone` was run without `--recursive`, run
 **Symptom:** the VLM server logs FlashInfer or NVFP4 kernel errors and never
 becomes healthy on a Blackwell-class system.
 
-**Cause:** Blackwell FP4 MoE kernels need both the **NVIDIA Container Toolkit**
-and a working **CUDA NVCC** toolchain present on the host (the kernels are
-JIT-compiled at first use).
+**Cause:** The Docker backend cannot expose the Blackwell GPU, or the selected
+vLLM image does not contain compatible kernels. Any first-use kernel
+compilation occurs inside the container; host NVCC is not required.
 
-**Fix:** install both before launching:
+**Fix:** install the NVIDIA Container Toolkit, restart Docker as its installation
+guide requires, and retain the vLLM image pinned by the reviewed hardware
+profile:
 
-```bash
-# NVIDIA Container Toolkit (covers both Docker and bare-metal CUDA driver bits)
-# Follow the latest instructions at:
-# https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+[NVIDIA Container Toolkit installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
 
-# CUDA NVCC — install the matching CUDA toolkit for your driver
-sudo apt install nvidia-cuda-toolkit
-```
-
-This applies to the `xr-render-demo/yaml/96G_blackwell/` profile.
+This applies to the
+`agent-samples/model-servers/yaml/96G_blackwell/` profile.
 
 ### GPU service aborts with `cuDNN version incompatibility`
 
@@ -99,7 +96,7 @@ LD_LIBRARY_PATH contains incompatible version of cudnn.
 venv — the exact version that venv's PyTorch was compiled against — so torch
 loads the wrong runtime and aborts.
 
-**Fix:** the launcher handles this automatically — `model_servers` /
+**Fix:** the launcher handles this automatically — `model_servers` or
 `xr_render_demo` strip any `libcudnn`-bearing directory from each child's
 `LD_LIBRARY_PATH` before spawning (logged once as a WARNING), so the
 venv-bundled cuDNN is used. If you hit this running a service **directly**
@@ -209,7 +206,7 @@ local install.
 ### Hub fails immediately because NVIDIA codec libraries are missing
 
 **Cause:** The hub raises
-`RuntimeError: missing libnvcuvid.so / libnvidia-encode.so` because NVDEC
+`RuntimeError: missing libnvcuvid.so or libnvidia-encode.so` because NVDEC
 (`libnvcuvid.so`) and NVENC (`libnvidia-encode.so`) are required. The
 DeviceIOHub refuses to start without them so it never silently falls back to
 OpenH264, which is royalty-bearing.
@@ -231,7 +228,7 @@ with no user or bot speech.
 timeout disabled, so a quiet session stays connected indefinitely.
 
 **If you want it:** set `idle_timeout_secs: <seconds>` (e.g. `300` for 5 min)
-in the sample's worker YAML (`simple_vlm_example_worker.yaml` /
+in the sample's worker YAML (`simple_vlm_example_worker.yaml` or
 `xr_render_demo_worker.yaml`); `0` or unset keeps it disabled. The knob is
 owned by `xr_ai_voice.VoiceAgent`.
 
@@ -240,8 +237,8 @@ owned by `xr_ai_voice.VoiceAgent`.
 **Most common cause:** firewall blocking WebRTC media on UDP 7882 (LiveKit).
 
 **Fix:** open ports per {doc}`/getting_started/networking`. The web client
-will appear to connect (signaling on 7880 succeeds) but media frames are
-silently dropped without 7882.
+will appear to connect (signaling through the port 8080 proxy succeeds) but
+media frames are silently dropped without 7882.
 
 ### HTTPS web client → `ws://` mixed-content warning
 
@@ -326,6 +323,22 @@ forwards the `Authorization` header on `/rtc/validate` and the WebSocket.
 Repeat the install step per hub host, or replace the auto-generated certificate
 with a public-CA certificate via `cert_file` or `key_file` in `device_io_hub.yaml`
 for production.
+
+### iOS and visionOS — microphone or camera is interrupted
+
+An occasional LiveKit microphone timeout means its recording engine did not
+produce the first buffer before publication. The current client enables prepared
+recording mode before publishing to make that first buffer available. Stopping
+the microphone then disables prepared input while leaving output active, so the
+orange microphone indicator clears without silencing agent audio.
+
+Phone calls, Siri, route changes, media-service resets, another capture app, or
+closing an XR space can interrupt audio or camera while the control still shows
+the user's requested state. The client re-arms capture when the OS allows it.
+If it does not recover, filter Console.app for the `MediaSession` category to
+inspect the recorded interruption, route, and capture-session events. CoreAudio
+`-50` and `FigAudioSession -19224` messages alone are not evidence of failure;
+they can also appear on successful starts.
 
 ### Chrome — Immersive Web extension cannot be enabled
 
