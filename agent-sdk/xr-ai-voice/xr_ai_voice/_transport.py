@@ -331,12 +331,27 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
             if self._return_audio_preroll_tasks.get(pid) is task:
                 self._return_audio_preroll_tasks.pop(pid, None)
 
-    async def _wait_return_audio_preroll(self, pid: str) -> None:
-        """Keep real speech ordered behind an active pre-roll."""
+    async def _wait_return_audio_preroll(self, pid: str) -> bool:
+        """Keep real speech ordered behind an active pre-roll.
+
+        Return ``False`` when participant cleanup cancelled the pre-roll so
+        the waiting audio frame is dropped without cancelling Pipecat's
+        long-lived media-sender task. Cancellation of the caller itself must
+        still propagate through the shield.
+        """
         task = self._return_audio_preroll_tasks.get(pid)
         if task is None:
-            return
-        await asyncio.shield(task)
+            return True
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            waiter = asyncio.current_task()
+            if waiter is not None and waiter.cancelling():
+                raise
+            if task.cancelled():
+                return False
+            raise
+        return True
 
     async def _cancel_return_audio_preroll(self, pid: str) -> None:
         task = self._return_audio_preroll_tasks.pop(pid, None)
@@ -347,6 +362,7 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
         try:
             await task
         except asyncio.CancelledError:
+            # Expected after cancelling this participant's pre-roll above.
             pass
 
     async def _cancel_all_return_audio_prerolls(self) -> None:
@@ -544,7 +560,8 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
                 self._missing_target_warned = True
             return False
         num_samples = len(frame.audio) // (2 * frame.num_channels)
-        await self._wait_return_audio_preroll(pid)
+        if not await self._wait_return_audio_preroll(pid):
+            return False
         lock = self._return_audio_locks.setdefault(pid, asyncio.Lock())
         async with lock:
             # Send immediately while the estimated downstream reserve is below

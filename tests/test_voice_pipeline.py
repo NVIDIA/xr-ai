@@ -3826,12 +3826,127 @@ async def test_output_transport_release_cancels_active_preroll(monkeypatch):
     await asyncio.sleep(0)
     await transport._release_destination("alice")  # noqa: SLF001
 
-    with pytest.raises(asyncio.CancelledError):
-        await speech_task
+    assert await speech_task is False
     assert len(endpoint.chunks) == 1
     assert "alice" not in transport._return_audio_preroll_tasks  # noqa: SLF001
     assert "alice" not in transport._return_audio_deadline_s  # noqa: SLF001
     assert "alice" not in transport._return_audio_locks  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_preroll_cancellation_keeps_default_media_sender_alive(monkeypatch):
+    """Participant cleanup cannot cancel Pipecat's shared audio task."""
+    from pipecat.frames.frames import CancelFrame, StartFrame
+    from pipecat.transports.base_transport import TransportParams
+    from pipecat.utils.asyncio.task_manager import TaskManager
+    from xr_ai_voice import _transport as transport_module
+    from xr_ai_voice._transport import DeviceIOHubOutputTransport
+
+    pacing_started = asyncio.Event()
+    speech_waiting = asyncio.Event()
+    bob_received = asyncio.Event()
+
+    async def blocking_sleep(_delay_s: float) -> None:
+        pacing_started.set()
+        await asyncio.Event().wait()
+
+    class _StubEndpoint:
+        def __init__(self) -> None:
+            self.participant_ids: list[str] = []
+
+        async def send_return_audio(self, chunk) -> None:
+            self.participant_ids.append(chunk.participant_id)
+            if chunk.participant_id == "bob":
+                bob_received.set()
+
+    params = TransportParams(
+        audio_out_enabled=True,
+        audio_out_sample_rate=16_000,
+        audio_out_channels=1,
+        audio_out_end_silence_secs=0,
+    )
+    endpoint = _StubEndpoint()
+    transport = DeviceIOHubOutputTransport(
+        endpoint,
+        params,
+        task_manager=TaskManager(),
+    )
+    await transport.process_frame(StartFrame(), FrameDirection.DOWNSTREAM)
+    default_sender = transport._media_senders[None]  # noqa: SLF001
+    original_wait = transport._wait_return_audio_preroll  # noqa: SLF001
+
+    async def tracked_wait(pid: str) -> bool:
+        speech_waiting.set()
+        return await original_wait(pid)
+
+    monkeypatch.setattr(transport_module, "_sleep_s", blocking_sleep)
+    monkeypatch.setattr(transport, "_wait_return_audio_preroll", tracked_wait)
+
+    try:
+        transport.set_target_participant("alice")
+        transport.start_return_audio_preroll("alice")
+        await pacing_started.wait()
+
+        speech = OutputAudioRawFrame(
+            audio=b"\x00\x00" * 640,
+            sample_rate=16_000,
+            num_channels=1,
+        )
+        await transport._handle_frame(speech)  # noqa: SLF001
+        await speech_waiting.wait()
+        await transport._release_destination("alice")  # noqa: SLF001
+
+        audio_task = default_sender._audio_task  # noqa: SLF001
+        assert audio_task is not None
+        assert not audio_task.done()
+
+        transport.set_target_participant("bob")
+        await transport._handle_frame(speech)  # noqa: SLF001
+        await asyncio.wait_for(bob_received.wait(), timeout=1.0)
+
+        assert not audio_task.done()
+        assert endpoint.participant_ids == ["alice", "bob"]
+    finally:
+        await transport.cancel(CancelFrame())
+
+
+@pytest.mark.asyncio
+async def test_waiting_speech_task_cancellation_still_propagates(monkeypatch):
+    """Shielding the pre-roll cannot swallow cancellation of its waiter."""
+    from pipecat.transports.base_transport import TransportParams
+    from xr_ai_voice import _transport as transport_module
+    from xr_ai_voice._transport import DeviceIOHubOutputTransport
+
+    pacing_started = asyncio.Event()
+
+    async def blocking_sleep(_delay_s: float) -> None:
+        pacing_started.set()
+        await asyncio.Event().wait()
+
+    class _StubEndpoint:
+        async def send_return_audio(self, _chunk) -> None:
+            return
+
+    monkeypatch.setattr(transport_module, "_sleep_s", blocking_sleep)
+    transport = DeviceIOHubOutputTransport(_StubEndpoint(), TransportParams())
+    transport.start_return_audio_preroll("alice")
+    await pacing_started.wait()
+
+    speech = OutputAudioRawFrame(
+        audio=b"\x00\x00" * 640,
+        sample_rate=16_000,
+        num_channels=1,
+    )
+    speech.transport_destination = "alice"
+    speech_task = asyncio.create_task(transport.write_audio_frame(speech))
+    await asyncio.sleep(0)
+    speech_task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await speech_task
+    assert "alice" in transport._return_audio_preroll_tasks  # noqa: SLF001
+
+    await transport._cancel_all_return_audio_prerolls()  # noqa: SLF001
 
 
 @pytest.mark.asyncio
