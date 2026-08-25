@@ -685,10 +685,15 @@ as context so the model understands references like “fix that” or “undo”
 runs its own inner <code class="docutils literal notranslate"><span class="pre">run_tool_loop</span></code> (up to 4 iterations) against the
 scene, XR-tracking, and vision services.</p></li>
 <li><p><strong>Verification pass</strong> — only for turns with mutation intent (a
-mutating subagent was delegated, or the utterance contains a
+mutating subagent was delegated, or a non-question utterance contains a
 change-requesting verb): if no scene change is observed within 150 ms
 of the loop completing, a second <code class="docutils literal notranslate"><span class="pre">run_tool_loop</span></code> call is made so the
-supervisor can delegate remaining work or confirm a no-op turn.</p></li>
+supervisor can delegate remaining work or confirm a no-op turn. Success
+is then evidence-backed: unless a scene write was applied somewhere in
+the turn (or a recolor found the requested color already in place), a
+completion claim is replaced with a fixed honest no-change sentence and
+any other non-question reply gets the no-change fact appended. Evidence
+is counted per turn, not per delegated task.</p></li>
 <li><p><strong>Conversation history persisted</strong> — the user utterance and agent reply
 are written to <code class="docutils literal notranslate"><span class="pre">TextMemoryTools</span></code> under <code class="docutils literal notranslate"><span class="pre">{participant_id}:user</span></code> and
 <code class="docutils literal notranslate"><span class="pre">{participant_id}:agent</span></code> source keys.</p></li>
@@ -726,8 +731,14 @@ offsets), <code class="docutils literal notranslate"><span class="pre">move_user
 the instruction’s exact words for each object, resolves them against the
 scene, performs the move itself, and returns the final position; the LLM
 never applies signs to user-frame axes or copies coordinates.</p></li>
-<li><p><strong>Appearance tool</strong>: <code class="docutils literal notranslate"><span class="pre">recolor</span></code> resolves color words, RGB triples, and
-copy-the-color-of-an-object references deterministically.</p></li>
+<li><p><strong>Appearance tool</strong>: <code class="docutils literal notranslate"><span class="pre">recolor</span></code> takes a discriminated color source the
+model selects through the tool schema — <code class="docutils literal notranslate"><span class="pre">literal</span></code> (stated color words or
+numbers, garbles repaired), <code class="docutils literal notranslate"><span class="pre">scene_object</span></code> (copy an XR object), or
+<code class="docutils literal notranslate"><span class="pre">physical</span></code> (observe a real-world thing). The code dispatches on the
+variant without reinterpreting the phrase; the <code class="docutils literal notranslate"><span class="pre">physical</span></code> variant runs
+one camera query through <code class="docutils literal notranslate"><span class="pre">resolve_physical_color</span></code>, whose VLM answers in
+a closed grammar (<code class="docutils literal notranslate"><span class="pre">VISIBLE</span> <span class="pre">r</span> <span class="pre">g</span> <span class="pre">b</span></code> or <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code>) and fails closed on
+anything else. The same source type drives the object tools’ creations.</p></li>
 <li><p><strong>Object tools</strong> create and retire objects: <code class="docutils literal notranslate"><span class="pre">create_user_relative</span></code>,
 <code class="docutils literal notranslate"><span class="pre">create_object_relative</span></code> (one anchor, or the midpoint of two),
 <code class="docutils literal notranslate"><span class="pre">create_at</span></code>, <code class="docutils literal notranslate"><span class="pre">change_shape</span></code> (the scene replaces the object and returns

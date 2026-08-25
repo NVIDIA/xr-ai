@@ -199,10 +199,15 @@ services. On each accepted `xr-render.user-query` event:
    runs its own inner `run_tool_loop` (up to 4 iterations) against the
    scene, XR-tracking, and vision services.
 3. **Verification pass** — only for turns with mutation intent (a
-   mutating subagent was delegated, or the utterance contains a
+   mutating subagent was delegated, or a non-question utterance contains a
    change-requesting verb): if no scene change is observed within 150 ms
    of the loop completing, a second `run_tool_loop` call is made so the
-   supervisor can delegate remaining work or confirm a no-op turn.
+   supervisor can delegate remaining work or confirm a no-op turn. Success
+   is then evidence-backed: unless a scene write was applied somewhere in
+   the turn (or a recolor found the requested color already in place), a
+   completion claim is replaced with a fixed honest no-change sentence and
+   any other non-question reply gets the no-change fact appended. Evidence
+   is counted per turn, not per delegated task.
 4. **Conversation history persisted** — the user utterance and agent reply
    are written to `TextMemoryTools` under `{participant_id}:user` and
    `{participant_id}:agent` source keys.
@@ -243,8 +248,14 @@ in one place:
   the instruction's exact words for each object, resolves them against the
   scene, performs the move itself, and returns the final position; the LLM
   never applies signs to user-frame axes or copies coordinates.
-- **Appearance tool**: `recolor` resolves color words, RGB triples, and
-  copy-the-color-of-an-object references deterministically.
+- **Appearance tool**: `recolor` takes a discriminated color source the
+  model selects through the tool schema — `literal` (stated color words or
+  numbers, garbles repaired), `scene_object` (copy an XR object), or
+  `physical` (observe a real-world thing). The code dispatches on the
+  variant without reinterpreting the phrase; the `physical` variant runs
+  one camera query through `resolve_physical_color`, whose VLM answers in
+  a closed grammar (`VISIBLE r g b` or `UNKNOWN`) and fails closed on
+  anything else. The same source type drives the object tools' creations.
 - **Object tools** create and retire objects: `create_user_relative`,
   `create_object_relative` (one anchor, or the midpoint of two),
   `create_at`, `change_shape` (the scene replaces the object and returns
