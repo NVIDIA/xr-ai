@@ -425,22 +425,26 @@
 <h1>Adding CloudXR to a sample<a class="headerlink" href="#adding-cloudxr-to-a-sample" title="Link to this heading">#</a></h1>
 <p><code class="docutils literal notranslate"><span class="pre">services/cloudxr-runtime/</span></code> is the shared CloudXR service.
 Any sample can stream XR content to a device by adding one line to its
-orchestrator and a configuration file in the sample root. For the broader
+orchestrator and a configuration file under the sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory. For the broader
 orchestrator pattern, refer to <a class="reference internal" href="adding-a-sample.html"><span class="doc">adding-a-sample</span></a>.</p>
 <section id="add-the-process-to-the-orchestrator">
 <h2>1 — Add the process to the orchestrator<a class="headerlink" href="#add-the-process-to-the-orchestrator" title="Link to this heading">#</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>     <span class="s2">"../../services/device-io-hub"</span><span class="p">,</span>  <span class="s2">"device_io_hub"</span><span class="p">),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"cloudxr"</span><span class="p">,</span> <span class="s2">"../../services/cloudxr-runtime"</span><span class="p">,</span> <span class="s2">"cloudxr_runtime"</span><span class="p">),</span>  <span class="c1"># ← add this</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"cloudxr"</span><span class="p">,</span> <span class="s2">"../../services/cloudxr-runtime"</span><span class="p">,</span> <span class="s2">"cloudxr_runtime"</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/cloudxr_runtime.yaml"</span><span class="p">),</span>  <span class="c1"># ← add this</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span>  <span class="s2">"worker"</span><span class="p">,</span>                <span class="s2">"my_agent_worker"</span><span class="p">),</span>
 <span class="p">]</span>
 </pre></div>
 </div>
 </section>
-<section id="add-cloudxr-runtime-yaml-to-the-sample-root">
-<h2>2 — Add <code class="docutils literal notranslate"><span class="pre">cloudxr_runtime.yaml</span></code> to the sample root<a class="headerlink" href="#add-cloudxr-runtime-yaml-to-the-sample-root" title="Link to this heading">#</a></h2>
-<p>The launcher auto-discovers this file and passes it as <code class="docutils literal notranslate"><span class="pre">--config</span></code>.</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># CloudXR runtime configuration.</span>
+<section id="add-cloudxr-runtime-yaml-to-the-sample-s-yaml-directory">
+<span id="add-cloudxr-runtime-yaml-to-the-sample-root"></span><h2>2 — Add <code class="docutils literal notranslate"><span class="pre">cloudxr_runtime.yaml</span></code> to the sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory<a class="headerlink" href="#add-cloudxr-runtime-yaml-to-the-sample-s-yaml-directory" title="Link to this heading">#</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">Process.config</span></code> value above passes this file as <code class="docutils literal notranslate"><span class="pre">--config</span></code>.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># CloudXR runtime configuration.</span>
 <span class="nt">cloudxr_install_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">~/.cloudxr</span>
 
 <span class="c1"># Accept the NVIDIA CloudXR EULA non-interactively.</span>
@@ -480,9 +484,13 @@ clients, not both. Change the profile and restart the stack when switching.</p>
 <td><p><code class="docutils literal notranslate"><span class="pre">auto-native</span></code></p></td>
 <td><p>unused</p></td>
 </tr>
-<tr class="row-even"><td><p>Other native devices, including Quest 3</p></td>
+<tr class="row-even"><td><p>Other native CloudXR clients</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">auto-native</span></code></p></td>
 <td><p>unused</p></td>
+</tr>
+<tr class="row-odd"><td><p>Meta Quest 3 with CloudXR.js</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">quest3</span></code></p></td>
+<td><p>used</p></td>
 </tr>
 </tbody>
 </table>
@@ -562,7 +570,7 @@ CloudXR runtime documentation.</p></li>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#add-the-process-to-the-orchestrator">1 — Add the process to the orchestrator</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#add-cloudxr-runtime-yaml-to-the-sample-root">2 — Add <code class="docutils literal notranslate"><span class="pre">cloudxr_runtime.yaml</span></code> to the sample root</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#add-cloudxr-runtime-yaml-to-the-sample-s-yaml-directory">2 — Add <code class="docutils literal notranslate"><span class="pre">cloudxr_runtime.yaml</span></code> to the sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#select-one-client-profile">Select one client profile</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#notes">Notes</a></li>
 </ul>

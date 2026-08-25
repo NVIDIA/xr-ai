@@ -147,11 +147,11 @@ On first run a self-signed certificate is generated at
 `~/.local/share/xr-ai/web-server.crt`. To use your own, set `cert_file`
 and `key_file` in `device_io_hub.yaml`.
 
-The generated certificate covers `localhost`, the hostname, and every local
-interface IP. When clients dial an address that is not on any local
-interface (the public IP of a NAT'd cloud VM such as Brev, a forwarding
-proxy's address, or a DNS name), list it in `device_io_hub.yaml` and the
-certificate is regenerated to include it on the next hub start:
+The generated certificate covers `localhost`, the hostname, and automatically
+discovered local IPv4 addresses. When clients dial an address that discovery
+misses, or one that is not local (the public IP of a NAT'd cloud VM such as Brev,
+a forwarding proxy's address, or a DNS name), list it in `device_io_hub.yaml` and
+the certificate is regenerated to include it on the next hub start:
 
 ```yaml
 web_server_extra_sans:

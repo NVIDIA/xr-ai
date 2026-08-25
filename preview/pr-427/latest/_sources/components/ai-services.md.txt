@@ -100,20 +100,27 @@ start successfully without network access. Recreate project environments with
 ```python
 PROCESSES = [
     Process("hub",    "../../services/device-io-hub",                    "device_io_hub"),
-    Process("vlm",    "../../services/vlm-server",               "vlm_server"),   # ← add as needed
+    Process("vlm",    "../../services/vlm-server",               "vlm_server",
+            config="yaml/vlm_server.yaml"),   # ← add as needed
     # Pick ONE LLM backend per sample — they bind different default ports
     # (8106 or 8107) so running more than one at once is allowed but
     # usually unnecessary.
-    Process("llm",    "../../services/llama-nemotron-llm",       "llama_nemotron_llm_server"),
-    # Process("llm",  "../../services/nemotron3-nano-llm",       "nemotron3_nano_llm_server"),
-    Process("stt",    "../../services/stt-server",               "stt_server"),
+    Process("llm",    "../../services/llama-nemotron-llm",       "llama_nemotron_llm_server",
+            config="yaml/llama_nemotron_llm_server.yaml"),
+    # Process("llm",  "../../services/nemotron3-nano-llm",       "nemotron3_nano_llm_server",
+    #         config="yaml/nemotron3_nano_llm_server.yaml"),
+    Process("stt",    "../../services/stt-server",               "stt_server",
+            config="yaml/stt_server.yaml"),
     # Add these together when the application uses native document retrieval.
-    Process("embedding", "../../services/embedding-server",      "embedding_server"),
+    Process("embedding", "../../services/embedding-server",      "embedding_server",
+            config="yaml/embedding_server.yaml"),
     Process("rag",    "../../services/rag-service",               "rag_service",
             config="yaml/rag_service.yaml"),
     # Pick one TTS server
-    Process("tts",    "../../services/piper-tts",                 "piper_tts_server"),
-    # Process("tts",  "../../services/magpie-tts",                "magpie_tts_server"),
+    Process("tts",    "../../services/piper-tts",                 "piper_tts_server",
+            config="yaml/piper_tts_server.yaml"),
+    # Process("tts",  "../../services/magpie-tts",                "magpie_tts_server",
+    #         config="yaml/magpie_tts_server.yaml"),
     Process("worker", "worker",                                   "my_agent_worker"),
 ]
 ```
@@ -151,8 +158,9 @@ and capability configurations without a `model_cache` key need no change.
 Its fixed `yaml/models.json` points at operator-owned STT, VLM, and TTS
 endpoints; the sample orchestrator only launches its hub and worker.
 
-Edit the YAML as needed (model, port, device, etc.). The launcher auto-discovers
-`yaml/<command>.yaml` in the sample root and passes it as `--config`.
+Edit the YAML as needed (model, port, device, etc.). Set every copied path
+explicitly with `Process(config=...)`; the launcher does not discover files by
+command name.
 For RAG, also point `rag_service.yaml` at an application-owned document
 directory and a model profile containing an `embedding` role.
 
@@ -307,9 +315,9 @@ Requirements: docker + NVIDIA Container Toolkit, `NGC_API_KEY` (used for the
 GPU-matched optimized engine from NGC on first start; multi-GB, cached
 under `models/nim/` for later runs), and GPU capacity for every container.
 `cuda_visible_devices` placement lives in the per-GPU-profile
-`nim_*_server.yaml` files (dual_48G_ada values are live-validated; the
-other profiles ship estimates). Readiness gates on each container's
-`/v1/health/ready`.
+`nim_*_server.yaml` files. Their adjacent comments record profile-specific
+validation status and hardware cautions; verify startup and capacity on the
+target host. Readiness gates on each container's `/v1/health/ready`.
 
 A NIM container serving something the samples don't ship is the same
 mechanism by hand: point an `openai_compat` entry's `base_url` at its port
@@ -393,7 +401,7 @@ All five vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
 | `vllm_backend` | Runtime | Code fallback | Shipped standalone YAMLs | Use when |
 |---|---|---|---|---|
 | `pip` | `vllm serve` from the wrapper's venv | yes | no | Developing the wrapper in its local environment or using a custom pip installation. |
-| `docker` | `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …` | no | yes | Running the pinned NVIDIA vLLM container used by the checked-in configurations. |
+| `docker` | `docker run <vllm_image> vllm serve …` | no | yes | Running the configured vLLM container used by the checked-in configurations. |
 
 Both modes honor identical configuration keys — same model, same port, same vLLM
 flags. The dispatcher lives in `utils/xr-ai-vllm/`. Switching is one YAML edit:
@@ -415,7 +423,8 @@ mirror, or a custom build.
   must succeed without `sudo`).
 - **NVIDIA Container Toolkit** so the `nvidia` runtime can expose GPUs:
   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
-- **NGC pull access** for `nvcr.io/nvidia/vllm`. The wrapper auto-runs
+- **NGC pull access**, when the configured `vllm_image` is restricted or
+  requires authentication on `nvcr.io`. The wrapper auto-runs
   `docker login nvcr.io` if `NGC_API_KEY` is in the environment (loaded by
   `load_credentials()` from `~/.config/xr-ai/credentials.json` per
   {doc}`/getting_started/credentials`). Otherwise, log in manually once:
@@ -516,7 +525,7 @@ cleanup.
 - **nemotron-omni-llm** is a vLLM-backed multimodal LLM serving
   `Nemotron-3-Nano-Omni-30B-A3B-Reasoning` (text + video input) at port 8108.
   The YAML auto-selects between three model variants by detected GPU compute
-  capability: NVFP4 on Blackwell (SM100+), FP8 on Ada and Hopper, BF16 forced via
+  capability: NVFP4 on Blackwell (SM100+), FP8 on Ada, Hopper, and Ampere, BF16 forced via
   `use_bf16: true` for highest quality at the largest VRAM cost. Same
   OpenAI-compatible HTTP contract as the other LLM servers — swap the port to
   swap backends. Hosting backend is selectable per YAML (refer to *Choosing the

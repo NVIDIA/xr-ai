@@ -579,29 +579,30 @@ curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8100/he
 curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8107/health<span class="w">   </span><span class="c1"># superseded nemotron3_nano</span>
 </pre></div>
 </div>
-<p><strong>Container post-mortem</strong> — the wrapper streams <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">logs</span> <span class="pre">-f</span></code> into the
-per-run log file, so on the next run the actual vLLM error lands next to the
-wrapper messages. To inspect manually:</p>
+<p><strong>Container post-mortem</strong> — during the current run, the wrapper streams
+<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">logs</span> <span class="pre">-f</span></code> into a sibling
+<code class="docutils literal notranslate"><span class="pre">/tmp/log_&lt;sample&gt;_&lt;timestamp&gt;/xr-ai-vllm-*.log</span></code> file. To inspect the retained
+container manually:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>ps<span class="w"> </span>-a<span class="w"> </span>--filter<span class="w"> </span><span class="nv">name</span><span class="o">=</span>xr-ai-vllm-
 docker<span class="w"> </span>logs<span class="w"> </span>--tail<span class="o">=</span><span class="m">200</span><span class="w"> </span>&lt;container-name&gt;
 </pre></div>
 </div>
 <p><strong>Cause:</strong> vLLM crashed during startup — common reasons: model weights
-missing or inaccessible in the bind-mounted <code class="docutils literal notranslate"><span class="pre">model_cache</span></code>, GPU not visible to
-the container (<code class="docutils literal notranslate"><span class="pre">nvidia-container-cli</span></code> or <code class="docutils literal notranslate"><span class="pre">--gpus</span></code>), HF token missing for a
+missing or inaccessible in the bind-mounted <code class="docutils literal notranslate"><span class="pre">model_cache</span></code>, the <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime
+not exposing the selected GPU, HF token missing for a
 gated model, or a reasoning-parser plugin file that is not present inside
 the container.</p>
-<p><strong>Fix:</strong> read the container logs (the next run captures them automatically),
-address the root cause shown there, and retry. If the container was
-auto-removed by <code class="docutils literal notranslate"><span class="pre">--rm</span></code> before you could check, the next failed run will
-have the streamed output in the per-run log file — just re-run.</p>
+<p><strong>Fix:</strong> read the current run’s container log, address the root cause shown
+there, and retry. Failed containers remain available to <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">logs</span></code> until
+managed cleanup removes them.</p>
 </section>
-<section id="vllm-backend-docker-docker-run-fails-with-could-not-select-device-driver">
-<h3><code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">docker</span></code> — <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span></code> fails with <code class="docutils literal notranslate"><span class="pre">could</span> <span class="pre">not</span> <span class="pre">select</span> <span class="pre">device</span> <span class="pre">driver</span></code><a class="headerlink" href="#vllm-backend-docker-docker-run-fails-with-could-not-select-device-driver" title="Link to this heading">#</a></h3>
-<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span></code> exits with a message mentioning <code class="docutils literal notranslate"><span class="pre">nvidia-container-cli</span></code>
-or “could not select device driver “” with capabilities: [[gpu]]”.</p>
+<section id="vllm-backend-docker-the-nvidia-runtime-is-unavailable">
+<span id="vllm-backend-docker-docker-run-fails-with-could-not-select-device-driver"></span><h3><code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">docker</span></code> — the NVIDIA runtime is unavailable<a class="headerlink" href="#vllm-backend-docker-the-nvidia-runtime-is-unavailable" title="Link to this heading">#</a></h3>
+<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span></code> exits with a message that the <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime is
+unknown or unavailable, or with an <code class="docutils literal notranslate"><span class="pre">nvidia-container-cli</span></code> initialization error.</p>
 <p><strong>Cause:</strong> the NVIDIA Container Toolkit is not installed (or the daemon was
-not restarted after install), so docker cannot honor <code class="docutils literal notranslate"><span class="pre">--gpus</span></code>.</p>
+not restarted and configured after install), so Docker cannot use
+<code class="docutils literal notranslate"><span class="pre">--runtime=nvidia</span></code>.</p>
 <p><strong>Fix:</strong> install the toolkit and restart docker:
 <a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html">https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html</a></p>
 <p>Switch back to <code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">pip</span></code> in the service YAML if you only need the
@@ -618,8 +619,9 @@ OpenH264, which is royalty-bearing.</p>
 <ul class="simple">
 <li><p><strong>Bare metal:</strong> install or repair the NVIDIA driver. The libraries ship with the
 driver, not with CUDA.</p></li>
-<li><p><strong>Docker:</strong> pass <code class="docutils literal notranslate"><span class="pre">--gpus</span> <span class="pre">all</span></code> (or <code class="docutils literal notranslate"><span class="pre">--device</span> <span class="pre">/dev/nvidia*</span></code> plus the codec
-device nodes) when starting the container.</p></li>
+<li><p><strong>Docker:</strong> use the NVIDIA runtime, request the needed devices with
+<code class="docutils literal notranslate"><span class="pre">NVIDIA_VISIBLE_DEVICES</span></code>, and include <code class="docutils literal notranslate"><span class="pre">video</span></code> in
+<code class="docutils literal notranslate"><span class="pre">NVIDIA_DRIVER_CAPABILITIES</span></code> when starting the container.</p></li>
 </ul>
 </section>
 </section>
@@ -672,7 +674,7 @@ the system certificate-install dialog.</p></li>
 automatically.</p></li>
 </ol>
 <p>Repeat for each hub host. Replace the auto-generated certificate with one from a
-public CA via <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> or <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> for
+public CA via <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> for
 production.</p>
 </section>
 <section id="ios-and-visionos-connection-fails-with-certificate-trust-errors">
@@ -702,9 +704,9 @@ to be 192.168.1.42”</em> (that is, the IP you typed into the app), the
 certificate’s SubjectAlternativeName doesn’t cover that IP. The hub detects
 local IPv4 addresses via a UDP-connect probe and auto-regenerates the
 certificate whenever the SAN is missing one (logged as <code class="docutils literal notranslate"><span class="pre">TLS:</span> <span class="pre">cached</span> <span class="pre">cert</span> <span class="pre">SAN</span> <span class="pre">is</span> <span class="pre">missing</span> <span class="pre">…;</span> <span class="pre">regenerating…</span></code>); just restart the hub and re-install the
-profile on the device. If the dialed address is not on any of the hub’s
-interfaces, add it to <code class="docutils literal notranslate"><span class="pre">web_server_extra_sans</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> and
-restart. Refer to <a class="reference internal" href="../getting_started/networking.html"><span class="doc">Networking</span></a> for details.
+profile on the device. If the dialed address is absent from the certificate,
+add it to <code class="docutils literal notranslate"><span class="pre">web_server_extra_sans</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> and restart. Refer to
+<a class="reference internal" href="../getting_started/networking.html"><span class="doc">Networking</span></a> for details.
 To force regeneration, delete <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code> and
 <code class="docutils literal notranslate"><span class="pre">web-server.key</span></code> before restarting.</p>
 <p>If the certificate is trusted (no <code class="docutils literal notranslate"><span class="pre">-1202</span></code>) but the room connection still fails
@@ -713,7 +715,7 @@ proxy is dropping the <code class="docutils literal notranslate"><span class="pr
 SDK sends. Update to the latest DeviceIOHub and restart; the proxy
 forwards the <code class="docutils literal notranslate"><span class="pre">Authorization</span></code> header on <code class="docutils literal notranslate"><span class="pre">/rtc/validate</span></code> and the WebSocket.</p>
 <p>Repeat the install step per hub host, or replace the auto-generated certificate
-with a public-CA certificate via <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> or <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>
+with a public-CA certificate via <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>
 for production.</p>
 </section>
 <section id="ios-and-visionos-microphone-or-camera-is-interrupted">
@@ -742,8 +744,8 @@ the IWER emulator built into the web client itself for desktop dev.</p>
 <h3>vLLM cold start takes 3–8 minutes<a class="headerlink" href="#vllm-cold-start-takes-38-minutes" title="Link to this heading">#</a></h3>
 <p><strong>Symptom:</strong> a vLLM server’s weight load is fast,
 but the server then sits silent for several minutes before becoming healthy.</p>
-<p><strong>Cause:</strong> CUDA graph capture + FlashInfer FP4 MoE autotune happen on first
-run after weight load. They are silent.</p>
+<p><strong>Cause:</strong> CUDA graph capture and, for FP4 MoE models, FlashInfer autotuning
+happen on first run after weight load. They are silent.</p>
 <p><strong>Fix:</strong> the default Omni profiles set <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">false</span></code> to enable CUDA
 graph capture and maximize steady-state throughput, so this startup delay is
 expected. For development, set <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> in the active model YAML
@@ -849,7 +851,7 @@ stall indefinitely; set <code class="docutils literal notranslate"><span class="
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#gpu-service-aborts-with-cudnn-version-incompatibility">GPU service aborts with <code class="docutils literal notranslate"><span class="pre">cuDNN</span> <span class="pre">version</span> <span class="pre">incompatibility</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vllm-backend-docker-image-pull-fails-with-unauthorized-or-denied"><code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">docker</span></code> — image pull fails with “unauthorized” or “denied”</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vllm-backend-docker-wrapper-exits-with-vllm-exited-before-health-became-reachable"><code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">docker</span></code> — wrapper exits with <code class="docutils literal notranslate"><span class="pre">vLLM</span> <span class="pre">exited</span> <span class="pre">before</span> <span class="pre">/health</span> <span class="pre">became</span> <span class="pre">reachable</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vllm-backend-docker-docker-run-fails-with-could-not-select-device-driver"><code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">docker</span></code> — <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span></code> fails with <code class="docutils literal notranslate"><span class="pre">could</span> <span class="pre">not</span> <span class="pre">select</span> <span class="pre">device</span> <span class="pre">driver</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vllm-backend-docker-the-nvidia-runtime-is-unavailable"><code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">docker</span></code> — the NVIDIA runtime is unavailable</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#hub-fails-immediately-because-nvidia-codec-libraries-are-missing">Hub fails immediately because NVIDIA codec libraries are missing</a></li>
 </ul>
 </li>

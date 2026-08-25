@@ -250,8 +250,8 @@ capabilities exist, and the model decides how to use only those capabilities.
 `WorkflowStore` enforces the contract. An observation can update only fields
 listed in the active step's `writes`. Updates are atomic, validated against
 their declared types, and ignored after the step is complete. Completion emits
-a notice but never moves to the next step. Only explicit next, skip, reset, or
-restart controls change the participant's position.
+a notice but never moves to the next step. Only explicit start, next, skip,
+reset, or restart controls change the participant's position.
 
 The model can propose state only through the commit tool. It cannot mutate the
 session object directly. Deterministic clock and temperature tools perform
