@@ -54,9 +54,9 @@ details.
 
 Applications may publish selected compact payloads to `WEB_EVENT_TOPIC` for a
 `WebEventsAgent` to display. The viewer owns only a bounded live history and a
-loopback HTTP listener. It is not persistence, does not inspect every runtime
-topic, and does not enter model, voice, media, or hub authentication paths. The
-application explicitly selects which typed events to forward.
+loopback HTTP listener by default. It is not persistence, does not inspect every
+runtime topic, and does not enter model, voice, media, or hub authentication
+paths. The application explicitly selects which typed events to forward.
 
 Applications with multiple speech producers may place
 `VoiceAggregationAgent` before `VoiceAgent`. Producers publish candidate
