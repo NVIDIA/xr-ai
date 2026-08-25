@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Nemotron-3-Nano-Omni — DGX Spark (GB10).
-# The NVFP4 model shares physical HBM with STT and the runtime, so retain the
+# The NVFP4 model shares unified memory with STT and the runtime, so retain the
 # conservative allocation used by the standard Nano stack.
 
 host: "0.0.0.0"

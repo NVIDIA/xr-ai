@@ -5,7 +5,8 @@
 
 # Connecting clients
 
-Every sample starts DeviceIOHub and then accepts one or more platform clients.
+Every interactive agent sample starts DeviceIOHub and then accepts one or more
+platform clients.
 This client reference is the canonical build and connection guide for the
 clients under `client-samples/`. Refer to {doc}`quickstart` for starting an
 agent sample and {doc}`networking` for firewall and TLS configuration.
