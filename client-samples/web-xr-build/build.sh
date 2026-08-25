@@ -15,29 +15,31 @@ cd "$(dirname "$0")"
 
 VERSION="$(tr -d '[:space:]' < .sdk-version)"
 SDK_FILE="nvidia-cloudxr-${VERSION}.tgz"
+SDK_CACHE="${SDK_FILE}"
 LOCAL_TARBALL="sdk.tgz"
 VENDOR_DIR="../web-xr/vendor"
 OUT_CLOUDXR="${VENDOR_DIR}/cloudxr-sdk.esm.mjs"
 OUT_LIVEKIT="${VENDOR_DIR}/livekit-client.esm.mjs"
+VERSION_MARKER="${VENDOR_DIR}/.cloudxr-sdk-version"
 
 mkdir -p "${VENDOR_DIR}"
 
 echo "CloudXR SDK version: ${VERSION}"
 
-# ── 1. Obtain sdk.tgz ────────────────────────────────────────────────────────
+# ── 1. Obtain the versioned SDK tarball ──────────────────────────────────────
 # Download (or copy) into a sibling .partial file first and rename only on
 # success — otherwise an interrupted curl/wget / failed cp leaves a truncated
-# sdk.tgz in place that future runs happily reuse, producing a corrupt bundle
-# whose root cause looks like "npm install crashed in @nvidia/cloudxr".
+# cache entry that future runs happily reuse, producing a corrupt bundle whose
+# root cause looks like "npm install crashed in @nvidia/cloudxr".
 #
 # We don't pin a checksum here because the SDK tarball is fetched live from
 # NGC and only the .sdk-version pin is committed; the npm install + webpack
 # build will fail loudly on a corrupt tarball, so this only protects against
 # the silent "previous run was interrupted" failure mode.
-if [[ -f "${LOCAL_TARBALL}" ]]; then
-    echo "Using existing ${LOCAL_TARBALL}"
+if [[ -f "${SDK_CACHE}" ]]; then
+    echo "Using existing ${SDK_CACHE}"
 else
-    PARTIAL="${LOCAL_TARBALL}.partial"
+    PARTIAL="${SDK_CACHE}.partial"
     rm -f "${PARTIAL}"
     # Convenience fallback: if IsaacTeleop has already downloaded the same
     # version, reuse it instead of hitting the network.
@@ -59,7 +61,23 @@ else
             exit 1
         fi
     fi
-    mv "${PARTIAL}" "${LOCAL_TARBALL}"
+    mv "${PARTIAL}" "${SDK_CACHE}"
+fi
+
+# package.json uses the stable sdk.tgz path. Replace it atomically from the
+# versioned cache, and invalidate npm's file-dependency state whenever the
+# generated bundles were built from a different CloudXR release.
+BUILT_VERSION=""
+if [[ -f "${VERSION_MARKER}" ]]; then
+    BUILT_VERSION="$(tr -d '[:space:]' < "${VERSION_MARKER}")"
+fi
+if [[ "${BUILT_VERSION}" != "${VERSION}" ]]; then
+    rm -rf node_modules/@nvidia/cloudxr
+    rm -f package-lock.json
+fi
+if [[ ! -f "${LOCAL_TARBALL}" ]] || ! cmp -s "${SDK_CACHE}" "${LOCAL_TARBALL}"; then
+    cp "${SDK_CACHE}" "${LOCAL_TARBALL}.partial"
+    mv "${LOCAL_TARBALL}.partial" "${LOCAL_TARBALL}"
 fi
 
 # ── 2. Install deps ──────────────────────────────────────────────────────────
@@ -86,6 +104,9 @@ if [[ ! -f "${LIVEKIT_SRC}" ]]; then
 fi
 cp "${LIVEKIT_SRC}" "${OUT_LIVEKIT}"
 echo "Copied $(basename "${OUT_LIVEKIT}")  ($(stat -c%s "${OUT_LIVEKIT}") bytes)"
+
+printf '%s\n' "${VERSION}" > "${VERSION_MARKER}.partial"
+mv "${VERSION_MARKER}.partial" "${VERSION_MARKER}"
 
 echo
 echo "Done. Vendor bundles ready under ${VENDOR_DIR}/."
