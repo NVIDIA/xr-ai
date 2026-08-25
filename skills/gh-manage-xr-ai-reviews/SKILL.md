@@ -21,9 +21,10 @@ classification, and comment-only rules apply separately to every inbox item.
 
 Never approve, request changes, post inline feedback, or alter an existing
 review. Draft by default. Treat posting authorization as PR-specific unless the
-user explicitly names a batch. Authorization covers only the exact draft and
-head SHA shown to the user; invalidate it when the head changes or the draft
-changes materially.
+user explicitly names a batch. Authorization covers the reviewed head SHA and
+the substantive findings shown to the user. Invalidate it when the head changes
+or a finding, its classification, evidence, or requested action changes;
+editorial formatting or whitespace changes alone do not invalidate it.
 
 ## Accept PRs into the inbox
 
