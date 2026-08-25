@@ -237,8 +237,8 @@ owned by `xr_ai_voice.VoiceAgent`.
 **Most common cause:** firewall blocking WebRTC media on UDP 7882 (LiveKit).
 
 **Fix:** open ports per {doc}`/getting_started/networking`. The web client
-will appear to connect (signaling on 7880 succeeds) but media frames are
-silently dropped without 7882.
+will appear to connect (signaling through the port 8080 proxy succeeds) but
+media frames are silently dropped without 7882.
 
 ### HTTPS web client → `ws://` mixed-content warning
 

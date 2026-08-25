@@ -59,9 +59,7 @@ never retries an already executed tool.
 A unary side-effect tool declares `result_model=None`, returns `None`, and
 produces `null` as its model-visible result. Applications retain prompts,
 history, model parameters, retries, participant context, cancellation, and task
-ownership. Preserve `ToolLoopError.messages` explicitly during recovery;
-NeMo Relay AutoAPI exception serialization does not reconstruct fields assigned
-dynamically to an exception.
+ownership. Preserve `ToolLoopError.messages` explicitly during recovery.
 
 Use `ToolSet.namespaced()` when independently named groups share a model-visible
 catalog. Aliasing changes only catalog names. Only finite tools belong in a

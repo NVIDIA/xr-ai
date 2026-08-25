@@ -964,7 +964,14 @@ for the replacement model’s tool syntax. Revisit <code class="docutils literal
 footprint. Keep <code class="docutils literal notranslate"><span class="pre">served_model_name:</span> <span class="pre">llm</span></code> to retain the built-in
 <code class="docutils literal notranslate"><span class="pre">llama_nemotron</span></code> adapter, or update the model profile’s adapter when changing
 that name or any wire behavior. Hosting backend is selectable per YAML
-(refer to <em>Choosing the vLLM runtime</em>).</p></li>
+(refer to <em>Choosing the vLLM runtime</em>). The
+<a class="reference external" href="https://huggingface.co/nvidia/Llama-3.1-Nemotron-Nano-8B-v1">model card</a>
+recommends <code class="docutils literal notranslate"><span class="pre">temperature=0.6</span></code> and <code class="docutils literal notranslate"><span class="pre">top_p=0.95</span></code> with reasoning enabled, and
+greedy decoding with reasoning disabled. It identifies the model as ready
+for commercial use under the
+<a class="reference external" href="https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/">NVIDIA Open Model License</a>
+and the
+<a class="reference external" href="https://www.llama.com/llama3_1/license/">Llama 3.1 Community License</a>.</p></li>
 <li><p><strong>nemotron3-nano-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</span></code> (auto-selected by GPU compute
 capability). vLLM handles tool calling (<code class="docutils literal notranslate"><span class="pre">qwen3_coder</span></code> parser), reasoning
@@ -978,7 +985,12 @@ Blackwell-class GPU such as B200 or RTX PRO 6000; FP8 is used on Ada,
 Hopper, and Ampere.
 <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> by default to avoid the silent 3–8 min CUDA graph and
 FlashInfer autotune on cold start. Hosting backend is selectable per YAML
-(refer to <em>Choosing the vLLM runtime</em>).</p></li>
+(refer to <em>Choosing the vLLM runtime</em>). The
+<a class="reference external" href="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4">model card</a>
+recommends <code class="docutils literal notranslate"><span class="pre">temperature=1.0</span></code> and <code class="docutils literal notranslate"><span class="pre">top_p=1.0</span></code> for reasoning, and
+<code class="docutils literal notranslate"><span class="pre">temperature=0.6</span></code> and <code class="docutils literal notranslate"><span class="pre">top_p=0.95</span></code> for tool calling. It identifies the model
+as ready for commercial use under the
+<a class="reference external" href="https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-nemotron-open-model-license/">NVIDIA Nemotron Open Model License</a>.</p></li>
 <li><p><strong>nemotron-omni-llm</strong> is a vLLM-backed multimodal LLM serving
 <code class="docutils literal notranslate"><span class="pre">Nemotron-3-Nano-Omni-30B-A3B-Reasoning</span></code> (text + video input) at port 8108.
 The YAML auto-selects between three model variants by detected GPU compute

@@ -492,9 +492,10 @@ agent APIs: agents speak only the IPC protocol below and never need to know
 which transport carries the media.</p>
 <p><code class="docutils literal notranslate"><span class="pre">LiveKitConnector</span></code> (<code class="docutils literal notranslate"><span class="pre">transport/livekit/</span></code>) owns the transport lifecycle:</p>
 <ol class="arabic simple">
-<li><p>Starts the LiveKit server in a Docker container, listening on the loopback
-interface only (signaling <code class="docutils literal notranslate"><span class="pre">ws://127.0.0.1:7880</span></code>, plus WebRTC TCP/UDP media
-ports 7881/7882).</p></li>
+<li><p>Starts the LiveKit server in a host-networked Docker container (plaintext
+signaling on port 7880, plus WebRTC TCP/UDP media ports 7881/7882). The
+generated configuration does not restrict the signaling listener to
+loopback, so deployment firewalls must control direct access.</p></li>
 <li><p>Optionally starts the browser-facing web server and/or token server.</p></li>
 <li><p>Registers itself as a <code class="docutils literal notranslate"><span class="pre">ConnectorEndpoint</span></code> with the IPC layer.</p></li>
 <li><p>Connects a Python <code class="docutils literal notranslate"><span class="pre">RoomClient</span></code> to the LiveKit room. The room client is
@@ -634,10 +635,13 @@ agent.</p>
 </section>
 <section id="same-origin-wss-proxy">
 <h2>Same-origin wss proxy<a class="headerlink" href="#same-origin-wss-proxy" title="Link to this heading">#</a></h2>
-<p>LiveKit server itself runs plain <code class="docutils literal notranslate"><span class="pre">ws://</span></code> on the loopback interface
-(<code class="docutils literal notranslate"><span class="pre">127.0.0.1:7880</span></code>) and nothing reaches that port from off-box. External
-clients — browser, web-xr, Android, iOS, visionOS — connect only to a
-same-origin <code class="docutils literal notranslate"><span class="pre">wss://</span></code> URL exposed by the hub’s web server.</p>
+<p>The LiveKit server runs plaintext <code class="docutils literal notranslate"><span class="pre">ws://</span></code> on port 7880. Its host-networked
+container and generated configuration do not limit the listener to loopback,
+so it can be reachable through host interfaces unless a firewall blocks it.
+Browser, web-xr, Android, iOS, and visionOS clients connect through the
+same-origin <code class="docutils literal notranslate"><span class="pre">wss://</span></code> URL exposed by the hub’s web server. The native C++ client
+may connect directly to port 7880 only as a local or source-restricted trusted
+network debugging path. Refer to <a class="reference internal" href="../getting_started/networking.html"><span class="doc">Networking and firewall</span></a>.</p>
 <p>When <code class="docutils literal notranslate"><span class="pre">web_server_tls</span></code> is enabled (the default), the web server
 (<code class="docutils literal notranslate"><span class="pre">_web_server.py</span></code>) terminates TLS on <code class="docutils literal notranslate"><span class="pre">web_server_port</span></code> (8080 by default) and
 mounts a <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> route that proxies LiveKit signaling bidirectionally to the

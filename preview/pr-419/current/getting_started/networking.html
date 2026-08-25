@@ -435,7 +435,7 @@ ports. Open only the externally reachable ports required by the deployment.</p>
 <tbody>
 <tr class="row-even"><td><p>7880</p></td>
 <td><p>TCP</p></td>
-<td><p>LiveKit signaling (internal; bound to 127.0.0.1 behind the hub’s <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> proxy; also the native C++ client’s default insecure debugging path)</p></td>
+<td><p>Plaintext LiveKit signaling (used behind the hub’s <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> proxy; optional direct native-client debugging path)</p></td>
 </tr>
 <tr class="row-odd"><td><p>7881</p></td>
 <td><p>TCP</p></td>
@@ -447,7 +447,7 @@ ports. Open only the externally reachable ports required by the deployment.</p>
 </tr>
 <tr class="row-odd"><td><p>8080</p></td>
 <td><p>TCP</p></td>
-<td><p>Web client, token server, and <code class="docutils literal notranslate"><span class="pre">wss://</span></code> <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> proxy (HTTPS; the supported external entry point for every client)</p></td>
+<td><p>Web client, token server, and <code class="docutils literal notranslate"><span class="pre">wss://</span></code> <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> proxy (HTTPS; the normal external entry point for every client)</p></td>
 </tr>
 <tr class="row-even"><td><p>8092</p></td>
 <td><p>TCP</p></td>
@@ -455,7 +455,7 @@ ports. Open only the externally reachable ports required by the deployment.</p>
 </tr>
 <tr class="row-odd"><td><p>48322</p></td>
 <td><p>TCP</p></td>
-<td><p>CloudXR WSS proxy (XR headset or client connection)</p></td>
+<td><p>CloudXR WSS proxy (<code class="docutils literal notranslate"><span class="pre">auto-webrtc</span></code> clients only; unused by <code class="docutils literal notranslate"><span class="pre">auto-native</span></code> Apple clients)</p></td>
 </tr>
 </tbody>
 </table>
@@ -469,10 +469,23 @@ sudo<span class="w"> </span>ufw<span class="w"> </span>allow<span class="w"> </s
 sudo<span class="w"> </span>ufw<span class="w"> </span>reload
 </pre></div>
 </div>
-<p>7880 stays on <code class="docutils literal notranslate"><span class="pre">127.0.0.1</span></code>; do not expose it externally. Browsers and mobile
-clients reach LiveKit through the same-origin <code class="docutils literal notranslate"><span class="pre">wss://&lt;host&gt;:8080/rtc</span></code> proxy.
-The native C++ executable defaults to port 7880 only for direct, insecure
-debugging on the XR AI host or a trusted development network.</p>
+<p>These rules intentionally omit port 7880. The generated LiveKit configuration
+does not set <code class="docutils literal notranslate"><span class="pre">bind_addresses</span></code>, and the container uses host networking, so the
+plaintext listener can accept connections on the host’s network interfaces.
+Merely omitting an allow rule protects it only when the host firewall and any
+cloud security group reject other inbound traffic. Browsers and mobile clients
+must use the same-origin <code class="docutils literal notranslate"><span class="pre">wss://&lt;host&gt;:8080/rtc</span></code> proxy.</p>
+<p>The native C++ executable defaults to port 7880 for direct, insecure debugging.
+Keep that traffic on the XR AI host whenever possible. If a native client must
+connect directly from a trusted development network, restrict access to its
+source subnet. For example, with a <code class="docutils literal notranslate"><span class="pre">192.168.1.0/24</span></code> development network:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>ufw<span class="w"> </span>allow<span class="w"> </span>from<span class="w"> </span><span class="m">192</span>.168.1.0/24<span class="w"> </span>to<span class="w"> </span>any<span class="w"> </span>port<span class="w"> </span><span class="m">7880</span><span class="w"> </span>proto<span class="w"> </span>tcp
+sudo<span class="w"> </span>ufw<span class="w"> </span>reload
+</pre></div>
+</div>
+<p>Apply the equivalent source restriction to the cloud security group. Do not
+expose port 7880 to the public Internet: it carries plaintext signaling, and a
+LiveKit bearer token authenticates a client but does not encrypt the transport.</p>
 </section>
 <section id="cloud-vms-behind-nat">
 <h2>Cloud VMs behind NAT<a class="headerlink" href="#cloud-vms-behind-nat" title="Link to this heading">#</a></h2>

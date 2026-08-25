@@ -617,8 +617,8 @@ owned by <code class="docutils literal notranslate"><span class="pre">xr_ai_voic
 <h3>Browser client connects but no audio or no video<a class="headerlink" href="#browser-client-connects-but-no-audio-or-no-video" title="Link to this heading">#</a></h3>
 <p><strong>Most common cause:</strong> firewall blocking WebRTC media on UDP 7882 (LiveKit).</p>
 <p><strong>Fix:</strong> open ports per <a class="reference internal" href="../getting_started/networking.html"><span class="doc">Networking and firewall</span></a>. The web client
-will appear to connect (signaling on 7880 succeeds) but media frames are
-silently dropped without 7882.</p>
+will appear to connect (signaling through the port 8080 proxy succeeds) but
+media frames are silently dropped without 7882.</p>
 </section>
 <section id="https-web-client-ws-mixed-content-warning">
 <h3>HTTPS web client → <code class="docutils literal notranslate"><span class="pre">ws://</span></code> mixed-content warning<a class="headerlink" href="#https-web-client-ws-mixed-content-warning" title="Link to this heading">#</a></h3>

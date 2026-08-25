@@ -82,9 +82,10 @@ which transport carries the media.
 
 `LiveKitConnector` (`transport/livekit/`) owns the transport lifecycle:
 
-1. Starts the LiveKit server in a Docker container, listening on the loopback
-   interface only (signaling `ws://127.0.0.1:7880`, plus WebRTC TCP/UDP media
-   ports 7881/7882).
+1. Starts the LiveKit server in a host-networked Docker container (plaintext
+   signaling on port 7880, plus WebRTC TCP/UDP media ports 7881/7882). The
+   generated configuration does not restrict the signaling listener to
+   loopback, so deployment firewalls must control direct access.
 2. Optionally starts the browser-facing web server and/or token server.
 3. Registers itself as a `ConnectorEndpoint` with the IPC layer.
 4. Connects a Python `RoomClient` to the LiveKit room. The room client is
@@ -216,10 +217,13 @@ agent.
 
 ## Same-origin wss proxy
 
-LiveKit server itself runs plain `ws://` on the loopback interface
-(`127.0.0.1:7880`) and nothing reaches that port from off-box. External
-clients — browser, web-xr, Android, iOS, visionOS — connect only to a
-same-origin `wss://` URL exposed by the hub's web server.
+The LiveKit server runs plaintext `ws://` on port 7880. Its host-networked
+container and generated configuration do not limit the listener to loopback,
+so it can be reachable through host interfaces unless a firewall blocks it.
+Browser, web-xr, Android, iOS, and visionOS clients connect through the
+same-origin `wss://` URL exposed by the hub's web server. The native C++ client
+may connect directly to port 7880 only as a local or source-restricted trusted
+network debugging path. Refer to {doc}`/getting_started/networking`.
 
 When `web_server_tls` is enabled (the default), the web server
 (`_web_server.py`) terminates TLS on `web_server_port` (8080 by default) and

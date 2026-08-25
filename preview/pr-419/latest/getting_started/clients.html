@@ -478,9 +478,11 @@ telemetry service is involved.</p>
 <section id="shared-connection-flow">
 <span id="the-connect-flow"></span><h2>Shared connection flow<a class="headerlink" href="#shared-connection-flow" title="Link to this heading">#</a></h2>
 <p>The hub prints a URL, room, development token, and web-client URL at startup.
-Clients connect to the hub’s web-server port <code class="docutils literal notranslate"><span class="pre">8080</span></code>, which proxies LiveKit on
-the same origin. Do not expose or connect directly to LiveKit’s internal port
-<code class="docutils literal notranslate"><span class="pre">7880</span></code>.</p>
+Browser, Android, and Apple clients connect to the hub’s web-server port <code class="docutils literal notranslate"><span class="pre">8080</span></code>,
+which proxies LiveKit on the same origin. The native C++ client also supports
+this TLS path with <code class="docutils literal notranslate"><span class="pre">--secure</span> <span class="pre">--port</span> <span class="pre">8080</span></code>. Its port 7880 default is a plaintext
+direct-debugging exception; restrict it to the XR AI host or a trusted source
+subnet as described in <a class="reference internal" href="networking.html"><span class="doc">Networking and firewall</span></a>.</p>
 <p>A client may paste the printed 24-hour development JWT or fetch a shorter-lived
 token from:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>GET https://&lt;host&gt;:8080/token?identity=&lt;identity&gt;
@@ -655,6 +657,10 @@ checkout edit. LiveKit remains on port 8080 while CloudXRKit uses its native
 transport. Connecting or stopping XR does not disconnect the LiveKit agent
 session. Closing the immersive space or disconnecting from the hub stops the XR
 session so no render component is orphaned.</p>
+<p>In <code class="docutils literal notranslate"><span class="pre">auto-native</span></code> mode, CloudXR does not use the web client’s port 48322 WSS
+proxy and needs no additional certificate installation. CloudXRKit’s native
+transport provides its own encryption without a user-facing trust prompt. The
+hub certificate on port 8080 remains required for the LiveKit channel.</p>
 </section>
 </section>
 <section id="native-c">
@@ -706,8 +712,9 @@ with <code class="docutils literal notranslate"><span class="pre">-DSTREAMKIT_BU
 </tbody>
 </table>
 </div>
-<p>Run one test or rerun failures with CTest:</p>
+<p>Run one test with CTest, invoke its binary directly, or rerun failures:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ctest<span class="w"> </span>--test-dir<span class="w"> </span>build<span class="w"> </span>-R<span class="w"> </span>streamkit_frame_sink_tests<span class="w"> </span>--output-on-failure
+./build/StreamKit/Tests/StreamKitTests/streamkit_frame_sink_tests
 ctest<span class="w"> </span>--test-dir<span class="w"> </span>build<span class="w"> </span>--rerun-failed<span class="w"> </span>--output-on-failure
 </pre></div>
 </div>
