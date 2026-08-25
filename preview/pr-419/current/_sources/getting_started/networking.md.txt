@@ -13,7 +13,7 @@ ports. Open only the externally reachable ports required by the deployment.
 | 7880 | TCP | Plaintext LiveKit signaling (used behind the hub's `/rtc` proxy; optional direct native-client debugging path) |
 | 7881 | TCP | LiveKit WebRTC TCP fallback (DTLS/SRTP — already encrypted) |
 | 7882 | UDP | LiveKit WebRTC UDP media (DTLS/SRTP — already encrypted) |
-| 8080 | TCP | Web client, token server, and `wss://` `/rtc` proxy (HTTPS; the normal external entry point for every client) |
+| 8080 | TCP | Web client, token server, and `wss://` `/rtc` proxy (HTTPS; the normal LiveKit signaling entry point for shipped clients) |
 | 8092 | TCP | Optional live agent-event viewer (plain HTTP — bound to 127.0.0.1 by default; do not expose to an untrusted network) |
 | 48322 | TCP | CloudXR WSS proxy (`auto-webrtc` clients only; unused by `auto-native` Apple clients) |
 

@@ -10,7 +10,8 @@ the private media pipeline; applications use typed runtime events and model
 service protocols. Refer to {doc}`python/index` for exact constructors, fields,
 and defaults.
 
-(usage)=
+<a id="usage"></a>
+(agent-sdk-voice-usage)=
 ## Voice agent
 
 Applications register one `VoiceAgent` with their runtime:

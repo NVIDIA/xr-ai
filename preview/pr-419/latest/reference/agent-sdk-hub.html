@@ -453,9 +453,10 @@ ordinary joined events for participants already present. Join callbacks must
 therefore be idempotent. Because ZMQ subscription changes are asynchronous,
 workers that own readiness wait for <code class="docutils literal notranslate"><span class="pre">wait_for_subscriptions()</span></code> before announcing
 availability.</p>
+<p><a id="frames"></a></p>
 </section>
 <section id="frames-and-return-routing">
-<span id="frames"></span><h2>Frames and return routing<a class="headerlink" href="#frames-and-return-routing" title="Link to this heading">#</a></h2>
+<span id="agent-sdk-hub-frames"></span><h2>Frames and return routing<a class="headerlink" href="#frames-and-return-routing" title="Link to this heading">#</a></h2>
 <p>Frame callbacks carry metadata without copying pixels. <code class="docutils literal notranslate"><span class="pre">request_frame()</span></code> obtains
 the selected <code class="docutils literal notranslate"><span class="pre">FrameData</span></code> only on demand and coalesces concurrent requests for the
 same participant and track. <code class="docutils literal notranslate"><span class="pre">LiveFrameSource</span></code> adds a fresh-frame cache and
@@ -465,7 +466,8 @@ participant cleanup. Conversion to opaque image references belongs in
 agent state: <code class="docutils literal notranslate"><span class="pre">set_status()</span></code> and <code class="docutils literal notranslate"><span class="pre">mark_ready()</span></code> record it on the endpoint, while
 DeviceIOHub aggregates responsible agents and publishes client readiness.
 <code class="docutils literal notranslate"><span class="pre">republish_statuses()</span></code> restores one-shot state after reconnects.</p>
-<p id="readiness">Readiness participation is opt-in with <code class="docutils literal notranslate"><span class="pre">announces_readiness=True</span></code>. Passive
+<p><a id="readiness"></a></p>
+<p id="agent-sdk-hub-readiness">Readiness participation is opt-in with <code class="docutils literal notranslate"><span class="pre">announces_readiness=True</span></code>. Passive
 endpoints do not contribute status. An endpoint answers only for subscribed
 participants, and a live subscription must be confirmed before the hub exposes
 it as ready. <code class="docutils literal notranslate"><span class="pre">agent_id</span></code> comes from the constructor, <code class="docutils literal notranslate"><span class="pre">XR_AI_AGENT_ID</span></code>, or a

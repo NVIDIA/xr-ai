@@ -92,8 +92,9 @@ after either change.
 The Android app is a Jetpack Compose client with selectable Camera2 devices,
 microphone capture, participant status, arbitrary data, and network metrics.
 
-(requirements)=
-(build-and-run)=
+<a id="requirements"></a><a id="build-and-run"></a>
+(clients-requirements)=
+(clients-build-and-run)=
 ### Requirements and build
 
 | Requirement | Version |
@@ -111,7 +112,8 @@ cd client-samples/android
 ./gradlew assembleDebug
 ```
 
-(connect)=
+<a id="connect"></a>
+(clients-connect)=
 ### Connect and permissions
 
 Enter the server host, port `8080`, a unique identity, and either the printed

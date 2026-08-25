@@ -423,13 +423,15 @@
 -->
 <section id="xr-ai-models">
 <h1>xr-ai-models<a class="headerlink" href="#xr-ai-models" title="Link to this heading">#</a></h1>
-<p id="contract"><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> defines typed LLM, VLM, STT, TTS, and embedding protocols and
+<p><a id="contract"></a></p>
+<p id="agent-sdk-models-contract"><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> defines typed LLM, VLM, STT, TTS, and embedding protocols and
 constructs concrete clients from deployment profiles. Workers depend on those
 protocols instead of hand-written HTTP or vendor SDK calls. Refer to
 <a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a> for exact classes, methods, fields, and defaults. Refer to
 <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> for server operation.</p>
+<p><a id="quickstart"></a></p>
 <section id="construct-a-model-client">
-<span id="quickstart"></span><h2>Construct a model client<a class="headerlink" href="#construct-a-model-client" title="Link to this heading">#</a></h2>
+<span id="agent-sdk-models-quickstart"></span><h2>Construct a model client<a class="headerlink" href="#construct-a-model-client" title="Link to this heading">#</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatMessage</span><span class="p">,</span> <span class="n">load_models_config</span><span class="p">,</span> <span class="n">make_llm</span>
 
 <span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">"yaml/models.json"</span><span class="p">)</span>
@@ -529,7 +531,8 @@ server controls whether video input is enabled. Every checked-in <code class="do
 profile sets <code class="docutils literal notranslate"><span class="pre">max_videos_per_prompt:</span> <span class="pre">0</span></code> to avoid reserving unused activation
 memory. Set it to at least <code class="docutils literal notranslate"><span class="pre">1</span></code> and restart the persistent VLM server before
 sending a video request.</p>
-<p id="protocols"><code class="docutils literal notranslate"><span class="pre">ChatResponse.reasoning</span></code> is the canonical post-normalization field. Model
+<p><a id="protocols"></a></p>
+<p id="agent-sdk-models-protocols"><code class="docutils literal notranslate"><span class="pre">ChatResponse.reasoning</span></code> is the canonical post-normalization field. Model
 adapters absorb whether the provider calls it <code class="docutils literal notranslate"><span class="pre">reasoning</span></code> or
 <code class="docutils literal notranslate"><span class="pre">reasoning_content</span></code>. LLM and VLM calls accept controlled per-request headers for
 Relay lineage, but callers cannot replace the profile’s <code class="docutils literal notranslate"><span class="pre">Authorization</span></code> header.</p>
@@ -564,7 +567,7 @@ route. It makes <code class="docutils literal notranslate"><span class="pre">hea
 local readiness gate.</p>
 </section>
 <section id="riva-speech-over-grpc">
-<span id="riva-grpc-speech-nim-stttts"></span><h2>Riva speech over gRPC<a class="headerlink" href="#riva-speech-over-grpc" title="Link to this heading">#</a></h2>
+<span id="riva-grpc-speech-nim-stt-tts"></span><h2>Riva speech over gRPC<a class="headerlink" href="#riva-speech-over-grpc" title="Link to this heading">#</a></h2>
 <p>Riva speech NIMs use <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">riva_grpc</span></code>, not OpenAI <code class="docutils literal notranslate"><span class="pre">/v1/audio</span></code>. Install the
 <code class="docutils literal notranslate"><span class="pre">riva</span></code> extra; its <code class="docutils literal notranslate"><span class="pre">nvidia-riva-client</span></code> import is deferred until <code class="docutils literal notranslate"><span class="pre">make_stt()</span></code> or
 <code class="docutils literal notranslate"><span class="pre">make_tts()</span></code> selects that kind.</p>
