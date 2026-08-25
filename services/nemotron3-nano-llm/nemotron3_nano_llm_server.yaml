@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Nemotron-3-Nano LLM server configuration —
-# nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4.
+# Nemotron-3-Nano LLM server configuration. The wrapper selects NVFP4 on
+# Blackwell and FP8 on earlier supported GPU architectures.
 # Auto-discovered by xr-ai-launcher (filename matches the
 # 'nemotron3_nano_llm_server' process command) and passed as --config.
 # Exposes an OpenAI-compatible API at http://localhost:8107/v1 via vLLM.
@@ -13,7 +13,9 @@
 # actual answer in message.content is never polluted — this is what keeps
 # voice TTS from reading the reasoning aloud.
 
-model: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+# The wrapper selects the checkpoint from the detected GPU compute capability.
+model_blackwell: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4
+model_ada: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
 
 host: "0.0.0.0"
 port: 8107
@@ -31,9 +33,9 @@ model_cache: ../../models
 
 # vLLM server knobs.
 #
-# On Blackwell (B200 / RTX PRO 6000 96 GB): NVFP4 weights ~20 GB; keep
-# gpu_memory_utilization at 0.6 to share the single GPU with vlm-server
-# (~14 GB) and stt-server (~1.5 GB).
+# On Blackwell (B200 / RTX PRO 6000 96 GB): NVFP4 weights are ~20 GB. The
+# checked-in 0.85 value gives a dedicated server room for its KV cache; lower
+# it in a reviewed GPU profile when sharing the device with another model.
 #
 # On Ada Lovelace (RTX 6000 Ada 48 GB): FP8 weights ~30 GB; run the LLM
 # on a dedicated GPU and keep the vlm-server + stt-server on the second GPU.
@@ -54,7 +56,8 @@ gpu_memory_utilization: 0.85
 # maximum throughput and can wait for graph capture to finish.
 enforce_eager: true
 
-# vLLM runtime — pip-installed vllm (default) or NGC docker container.
+# vLLM runtime. If this key is omitted, the wrapper falls back to pip;
+# the checked-in configuration below selects the NGC Docker container.
 #   pip     — vllm CLI from this wrapper's venv (today's behavior)
 #   docker  — `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …`
 # Both honor the same config keys above; only the runtime hosting vllm differs.

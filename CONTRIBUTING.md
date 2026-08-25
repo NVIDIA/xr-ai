@@ -25,13 +25,9 @@ External review cycles may take longer; respond promptly to requested changes.
 
 ## Development setup
 
-Each Python subproject owns its environment:
-
-```bash
-cd tests
-uv sync
-uv run pytest -v
-```
+Each Python subproject owns its environment. Refer to
+[Testing](https://nvidia.github.io/xr-ai/latest/guides/testing.html) for the
+current suite, environment, GPU, and documentation commands.
 
 Install the repository hooks once per clone:
 
