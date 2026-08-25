@@ -313,7 +313,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
 </ul>
@@ -332,6 +332,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
@@ -346,6 +347,7 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -444,181 +446,126 @@
 -->
 <section id="xr-ai-models">
 <h1>xr-ai-models<a class="headerlink" href="#xr-ai-models" title="Link to this heading">#</a></h1>
-<p>Unified service protocols and OpenAI-compatible HTTP clients for the xr-ai
-model layer. Worker code depends on the typed protocols <code class="docutils literal notranslate"><span class="pre">LLMService</span></code>,
-<code class="docutils literal notranslate"><span class="pre">VLMService</span></code>, <code class="docutils literal notranslate"><span class="pre">STTService</span></code>, <code class="docutils literal notranslate"><span class="pre">TTSService</span></code>, and <code class="docutils literal notranslate"><span class="pre">EmbeddingService</span></code>, and constructs
-concrete clients from a model deployment profile — no hand-rolled httpx calls
-in callers, no model quirks leaking out of this package.</p>
-<section id="contract">
-<h2>Contract<a class="headerlink" href="#contract" title="Link to this heading">#</a></h2>
-<p>Model profiles name logical roles and keep endpoint and model-specific behavior
-inside this package. Callers depend on the typed protocol and can change models
-through configuration.</p>
-</section>
-<section id="quickstart">
-<h2>Quickstart<a class="headerlink" href="#quickstart" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_models_config</span><span class="p">,</span> <span class="n">make_llm</span><span class="p">,</span> <span class="n">ChatMessage</span>
+<p><a id="contract"></a></p>
+<p id="agent-sdk-models-contract"><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> defines typed LLM, VLM, STT, TTS, and embedding protocols and
+constructs concrete clients from deployment profiles. Workers depend on those
+protocols instead of hand-written HTTP or vendor SDK calls. Refer to
+<a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a> for exact classes, methods, fields, and defaults. Refer to
+<a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> for server operation.</p>
+<p><a id="quickstart"></a></p>
+<section id="construct-a-model-client">
+<span id="agent-sdk-models-quickstart"></span><h2>Construct a model client<a class="headerlink" href="#construct-a-model-client" title="Link to this heading">#</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatMessage</span><span class="p">,</span> <span class="n">load_models_config</span><span class="p">,</span> <span class="n">make_llm</span>
 
-<span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">"yaml/models.local.json"</span><span class="p">)</span>
+<span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">"yaml/models.json"</span><span class="p">)</span>
 <span class="k">async</span> <span class="k">with</span> <span class="n">make_llm</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">"agent_llm"</span><span class="p">)</span> <span class="k">as</span> <span class="n">llm</span><span class="p">:</span>
-    <span class="n">resp</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span>
+    <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span>
         <span class="p">[</span><span class="n">ChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">"user"</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">"hello"</span><span class="p">)],</span>
         <span class="n">max_tokens</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span>
         <span class="n">enable_thinking</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">resp</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">resp</span><span class="o">.</span><span class="n">reasoning</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">response</span><span class="o">.</span><span class="n">reasoning</span><span class="p">)</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">models.local.json</span></code>:</p>
+<p id="profile-contract">A profile names logical roles and separates three concerns:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">"agent_llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm"</span><span class="p">,</span>
 <span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8108"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8108"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"timeout"</span><span class="p">:</span><span class="w"> </span><span class="mf">60.0</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">      </span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"omni"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
 </pre></div>
 </div>
-<p>Built-in presets are in <code class="docutils literal notranslate"><span class="pre">xr_ai_models/presets/</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">adapter</span></code> owns the model name, wire quirks, capabilities, default request
+extras, and reasoning-field normalization.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">endpoint</span></code> owns connectivity, readiness, timeouts, and environment-variable
+credentials.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">deployment</span></code> tells an orchestrator whether the process is managed, reused, or
+external.</p></li>
+</ul>
+<p id="deployment-profiles">Workers may load JSON or YAML. For compatibility, the loader accepts a direct
+role mapping, legacy flat entries, <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">true</span></code> or <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">false</span></code>,
+and <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">preset:&lt;name&gt;</span></code>. The public role-spec classes also retain their legacy
+flat constructors and read-only flat properties. Profiles shared with the
+stdlib-only launcher must use the wrapped nested JSON form. Launcher credentials
+are explicit: endpoint credentials use <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>, while credentials needed
+by a managed service itself use <code class="docutils literal notranslate"><span class="pre">deployment.credentials</span></code>.</p>
+</section>
+<section id="built-in-adapters">
+<h2>Built-in adapters<a class="headerlink" href="#built-in-adapters" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Preset</p></th>
-<th class="head"><p>Service it targets</p></th>
-<th class="head"><p>Notes</p></th>
+<th class="head"><p>Target</p></th>
+<th class="head"><p>Important behavior</p></th>
 </tr>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cosmos3_nano_reasoner</span></code></p></td>
-<td><p>vlm-server</p></td>
-<td><p>default; Cosmos3 Nano text-output Reasoner, image + video; video requires <code class="docutils literal notranslate"><span class="pre">max_videos_per_prompt</span> <span class="pre">&gt;=</span> <span class="pre">1</span></code></p></td>
+<td><p>Cosmos3 Nano VLM</p></td>
+<td><p>Image; video requires <code class="docutils literal notranslate"><span class="pre">max_videos_per_prompt</span> <span class="pre">&gt;=</span> <span class="pre">1</span></code>; no reasoning-field mapping</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code></p></td>
-<td><p>vlm-server</p></td>
-<td><p>Cosmos-Reason1 compatibility option; image + video; <code class="docutils literal notranslate"><span class="pre">enable_thinking=false</span></code> by default; video requires <code class="docutils literal notranslate"><span class="pre">max_videos_per_prompt</span> <span class="pre">&gt;=</span> <span class="pre">1</span></code></p></td>
+<td><p>Cosmos-Reason1 compatibility</p></td>
+<td><p>Image; video requires <code class="docutils literal notranslate"><span class="pre">max_videos_per_prompt</span> <span class="pre">&gt;=</span> <span class="pre">1</span></code>; thinking disabled by default</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">llama_nemotron</span></code></p></td>
-<td><p>llama-nemotron-llm-server</p></td>
-<td><p>OpenAI tool calling via llama3_json (server-side)</p></td>
+<td><p>Llama Nemotron LLM</p></td>
+<td><p>Server-side <code class="docutils literal notranslate"><span class="pre">llama3_json</span></code> tool calls</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nemotron3_nano</span></code></p></td>
-<td><p>nemotron3-nano-llm-server</p></td>
-<td><p>reasoning field: <code class="docutils literal notranslate"><span class="pre">reasoning</span></code></p></td>
+<td><p>Nemotron 3 Nano LLM</p></td>
+<td><p>Normalizes the <code class="docutils literal notranslate"><span class="pre">reasoning</span></code> field; thinking disabled unless requested</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nemotron_omni</span></code></p></td>
-<td><p>nemotron-omni-llm-server</p></td>
-<td><p>default LLM; reasoning field: <code class="docutils literal notranslate"><span class="pre">reasoning_content</span></code>, thinking off unless requested, vision + video</p></td>
+<td><p>Nemotron Omni</p></td>
+<td><p>Tool calls, image and video, <code class="docutils literal notranslate"><span class="pre">reasoning_content</span></code> normalization; thinking disabled unless requested</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nemotron_embedding</span></code></p></td>
-<td><p>embedding-server</p></td>
-<td><p>OpenAI-compatible dense embeddings</p></td>
+<td><p>Embedding server</p></td>
+<td><p>OpenAI-compatible dense vectors</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">parakeet_stt</span></code></p></td>
-<td><p>stt-server</p></td>
-<td><p></p></td>
+<td><p>STT server</p></td>
+<td><p>OpenAI-compatible transcription</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">piper_tts</span></code></p></td>
-<td><p>tts/piper</p></td>
-<td><p></p></td>
+<td><p>Piper TTS</p></td>
+<td><p>OpenAI-compatible speech synthesis</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">magpie_tts</span></code></p></td>
-<td><p>tts/magpie</p></td>
-<td><p></p></td>
+<td><p>Magpie TTS</p></td>
+<td><p>OpenAI-compatible speech synthesis</p></td>
 </tr>
 </tbody>
 </table>
 </div>
+<p>The Cosmos adapter capability describes the supported request shape, but the
+server controls whether video input is enabled. Every checked-in <code class="docutils literal notranslate"><span class="pre">vlm-server</span></code>
+profile sets <code class="docutils literal notranslate"><span class="pre">max_videos_per_prompt:</span> <span class="pre">0</span></code> to avoid reserving unused activation
+memory. Set it to at least <code class="docutils literal notranslate"><span class="pre">1</span></code> and restart the persistent VLM server before
+sending a video request.</p>
+<p><a id="protocols"></a></p>
+<p id="agent-sdk-models-protocols"><code class="docutils literal notranslate"><span class="pre">ChatResponse.reasoning</span></code> is the canonical post-normalization field. Model
+adapters absorb whether the provider calls it <code class="docutils literal notranslate"><span class="pre">reasoning</span></code> or
+<code class="docutils literal notranslate"><span class="pre">reasoning_content</span></code>. LLM and VLM calls accept controlled per-request headers for
+Relay lineage, but callers cannot replace the profile’s <code class="docutils literal notranslate"><span class="pre">Authorization</span></code> header.</p>
+<p>Single-image <code class="docutils literal notranslate"><span class="pre">ask_image()</span></code> and <code class="docutils literal notranslate"><span class="pre">stream()</span></code> calls are wrappers over the ordered
+multi-image methods. All images are placed in one user message in caller order.</p>
+<p id="remote-and-hosted-nim-endpoints"><a id="remote--hosted-nim-endpoints"></a></p>
 </section>
-<section id="profile-contract">
-<h2>Profile contract<a class="headerlink" href="#profile-contract" title="Link to this heading">#</a></h2>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">"agent_llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm"</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"tool_calls"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"reasoning"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">},</span>
-<span class="w">        </span><span class="nt">"reasoning_field"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reasoning"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8107"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"timeout"</span><span class="p">:</span><span class="w"> </span><span class="mf">60.0</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"agent-llm"</span><span class="p">}</span>
-<span class="w">    </span><span class="p">}</span>
-<span class="w">  </span><span class="p">}</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-<p><code class="docutils literal notranslate"><span class="pre">category</span></code> selects the service protocol. <code class="docutils literal notranslate"><span class="pre">adapter</span></code> owns model and wire quirks;
-<code class="docutils literal notranslate"><span class="pre">endpoint</span></code> owns connectivity, environment-based credentials, timeouts, and
-readiness; <code class="docutils literal notranslate"><span class="pre">deployment</span></code> tells a launcher whether the service is <code class="docutils literal notranslate"><span class="pre">managed</span></code>,
-<code class="docutils literal notranslate"><span class="pre">reused</span></code>, or <code class="docutils literal notranslate"><span class="pre">external</span></code>.</p>
-<p>Profiles may be JSON or YAML. The loader also accepts a direct role mapping,
-flat entries, <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">true|false</span></code>, and <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">preset:&lt;name&gt;</span></code> for
-backward compatibility. The public role-spec classes also retain their legacy
-flat positional and keyword constructors and expose flat fields as read-only
-properties.</p>
-</section>
-<section id="deployment-profiles">
-<h2>Deployment profiles<a class="headerlink" href="#deployment-profiles" title="Link to this heading">#</a></h2>
-<p>A profile may separate model behavior, endpoint connectivity, and process
-ownership. The existing flat YAML format remains supported for workers. A
-profile shared with the stdlib-only launcher must be wrapped in <code class="docutils literal notranslate"><span class="pre">models</span></code>, use
-the nested shape below, and be JSON so both consumers read the same file.</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">"agent_llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron3_nano"</span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8107"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"agent-llm"</span><span class="p">}</span>
-<span class="w">    </span><span class="p">}</span>
-<span class="w">  </span><span class="p">}</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-<p>Workers pass the profile to <code class="docutils literal notranslate"><span class="pre">load_models_config()</span></code> as usual. A stdlib-only
-orchestrator can call <code class="docutils literal notranslate"><span class="pre">load_model_deployment(worker_config)</span></code> from
-<code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code> to map <code class="docutils literal notranslate"><span class="pre">managed</span></code> to <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;own&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">reused</span></code> to
-<code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;reuse&quot;</span></code>, and <code class="docutils literal notranslate"><span class="pre">external</span></code> to no local process. Credentials used by
-the launcher must be declared explicitly as <code class="docutils literal notranslate"><span class="pre">endpoint.api_key_env</span></code>; launcher
-profiles do not inherit credentials from adapter presets. A deployment may
-additionally list <code class="docutils literal notranslate"><span class="pre">credentials</span></code> the launched service itself needs (e.g.
-<code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> for a NIM container’s <a class="reference external" href="http://nvcr.io">nvcr.io</a> pull and engine download) even
-when the endpoint takes no API key; only the launcher collects these, and
-<code class="docutils literal notranslate"><span class="pre">ModelsConfig.required_credentials</span></code> stays endpoint keys only.</p>
-<p>The launcher validates the <code class="docutils literal notranslate"><span class="pre">.json</span></code> suffix before reading a profile; selecting a
-YAML profile is supported only for worker-side <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> loading. Model
-roles compose <code class="docutils literal notranslate"><span class="pre">AdapterSpec</span></code>, <code class="docutils literal notranslate"><span class="pre">EndpointSpec</span></code>, and <code class="docutils literal notranslate"><span class="pre">DeploymentSpec</span></code>, while their
-legacy flat attributes remain available as read-only compatibility aliases.
-The simple VLM sample provides complete local and hosted profiles.</p>
-</section>
-<section id="protocols">
-<h2>Protocols<a class="headerlink" href="#protocols" title="Link to this heading">#</a></h2>
-<p>The versioned documentation site generates exact protocol methods, parameters,
-types, and defaults from the public Python declarations. This README keeps only
-the behavioral rules that span multiple calls or implementations.</p>
-<p><code class="docutils literal notranslate"><span class="pre">ChatResponse.reasoning</span></code> is the canonical reasoning field — the
-<code class="docutils literal notranslate"><span class="pre">reasoning_field</span></code> knob normalizes <code class="docutils literal notranslate"><span class="pre">reasoning_content</span></code> (nemotron_v3 parser)
-into the same surface.</p>
-<p><code class="docutils literal notranslate"><span class="pre">LLMService</span></code> and <code class="docutils literal notranslate"><span class="pre">VLMService</span></code> request methods accept optional string-valued
-per-call headers for execution context such as Relay session lineage. The model
-profile remains the authority for credentials: callers cannot supply an
-<code class="docutils literal notranslate"><span class="pre">Authorization</span></code> header.</p>
-<p><code class="docutils literal notranslate"><span class="pre">ask_image()</span></code> and <code class="docutils literal notranslate"><span class="pre">stream()</span></code> are one-image wrappers over <code class="docutils literal notranslate"><span class="pre">ask_images()</span></code> and
-<code class="docutils literal notranslate"><span class="pre">stream_images()</span></code>. Multi-image calls preserve caller order and place every
-image in one OpenAI-compatible user message before the question.</p>
-<p><a id="remote--hosted-nim-endpoints"></a>
-<a id="remote-hosted-nim-endpoints"></a></p>
-</section>
-<section id="remote-and-hosted-nim-endpoints">
-<h2>Remote and hosted NIM endpoints<a class="headerlink" href="#remote-and-hosted-nim-endpoints" title="Link to this heading">#</a></h2>
-<p>Cloud and remote endpoints, such as hosted <a class="reference external" href="https://build.nvidia.com">NVIDIA NIM</a>,
-are a profile change:</p>
+<section id="hosted-endpoints">
+<span id="remote-hosted-nim-endpoints"></span><h2>Hosted endpoints<a class="headerlink" href="#hosted-endpoints" title="Link to this heading">#</a></h2>
+<p>A hosted OpenAI-compatible endpoint changes only the profile:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
@@ -638,43 +585,35 @@ are a profile change:</p>
 <span class="p">}</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">health</span></code> makes <code class="docutils literal notranslate"><span class="pre">health()</span></code> probe <code class="docutils literal notranslate"><span class="pre">base_url/health</span></code>. Remote endpoints
-without that route use <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code>, which makes
-<code class="docutils literal notranslate"><span class="pre">health()</span></code> return <code class="docutils literal notranslate"><span class="pre">True</span></code> without a request — otherwise a worker’s readiness
-gate would block forever. Refer to
-<a class="reference internal" href="../components/ai-services.html"><span class="std std-doc">AI services</span></a>
-for hosted endpoint operation.</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code> only when the remote provider has no compatible health
+route. It makes <code class="docutils literal notranslate"><span class="pre">health()</span></code> succeed without a request, preventing an impossible
+local readiness gate.</p>
 </section>
-<section id="riva-grpc-speech-nim-stt-tts">
-<h2>Riva gRPC speech (NIM STT/TTS)<a class="headerlink" href="#riva-grpc-speech-nim-stt-tts" title="Link to this heading">#</a></h2>
-<p>NIM speech is Riva over gRPC, not OpenAI <code class="docutils literal notranslate"><span class="pre">/v1/audio</span></code>. The <code class="docutils literal notranslate"><span class="pre">riva_grpc</span></code> kind
-covers it, for self-hosted Riva/NIM speech containers and for hosted NVCF
-endpoints alike. It requires the <code class="docutils literal notranslate"><span class="pre">riva</span></code> extra (<code class="docutils literal notranslate"><span class="pre">xr-ai-models[riva]</span></code> →
-<code class="docutils literal notranslate"><span class="pre">nvidia-riva-client</span></code>); the import is deferred to <code class="docutils literal notranslate"><span class="pre">make_stt</span></code>/<code class="docutils literal notranslate"><span class="pre">make_tts</span></code> so
-the base install stays gRPC-free.</p>
+<section id="riva-speech-over-grpc">
+<span id="riva-grpc-speech-nim-stt-tts"></span><h2>Riva speech over gRPC<a class="headerlink" href="#riva-speech-over-grpc" title="Link to this heading">#</a></h2>
+<p>Riva speech NIMs use <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">riva_grpc</span></code>, not OpenAI <code class="docutils literal notranslate"><span class="pre">/v1/audio</span></code>. Install the
+<code class="docutils literal notranslate"><span class="pre">riva</span></code> extra; its <code class="docutils literal notranslate"><span class="pre">nvidia-riva-client</span></code> import is deferred until <code class="docutils literal notranslate"><span class="pre">make_stt()</span></code> or
+<code class="docutils literal notranslate"><span class="pre">make_tts()</span></code> selects that kind.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">stt</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">riva_grpc</span>
-<span class="w">  </span><span class="nt">category</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">stt</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">localhost:50051</span><span class="w">   </span><span class="c1"># self-hosted container's gRPC port</span>
-<span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">en-US</span>
+<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">riva_grpc</span>
+<span class="w">  </span><span class="nt">category</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">stt</span>
+<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">localhost:50051</span>
+<span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">en-US</span>
 </pre></div>
 </div>
-<p>STT input must be 16-bit PCM: <code class="docutils literal notranslate"><span class="pre">transcribe</span></code> accepts a 16-bit PCM WAV (any
-other sample width raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>, since the frames go to Riva labelled
-LINEAR_PCM and would transcribe as garbage) or raw int16 PCM with an
-explicit <code class="docutils literal notranslate"><span class="pre">sample_rate=</span></code>.</p>
-<p>TTS additionally takes <code class="docutils literal notranslate"><span class="pre">voice:</span></code> and <code class="docutils literal notranslate"><span class="pre">sample_rate:</span></code> (default 44100).
-<code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">true</span></code> (the default) runs a gRPC channel-ready probe. For a
-hosted NVCF endpoint, set <code class="docutils literal notranslate"><span class="pre">base_url:</span> <span class="pre">grpc.nvcf.nvidia.com:443</span></code>,
-<code class="docutils literal notranslate"><span class="pre">use_ssl:</span> <span class="pre">true</span></code>, <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>, the model’s <code class="docutils literal notranslate"><span class="pre">function_id:</span></code> from
-<a class="reference external" href="http://build.nvidia.com">build.nvidia.com</a>, and <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">false</span></code> (no health surface).</p>
-<p>Future non-OpenAI-compat backends (LiteLLM, vendor SDKs) plug in as new
-<code class="docutils literal notranslate"><span class="pre">kind</span></code>s in <code class="docutils literal notranslate"><span class="pre">_factory.py::make_*</span></code>; the protocols and callers do not change.</p>
+<p>STT accepts 16-bit PCM WAV or raw int16 PCM with an explicit sample rate. TTS
+also accepts <code class="docutils literal notranslate"><span class="pre">voice</span></code> and <code class="docutils literal notranslate"><span class="pre">sample_rate</span></code>. A hosted NVCF endpoint uses TLS,
+<code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>, its <code class="docutils literal notranslate"><span class="pre">function_id</span></code>, and <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">false</span></code> because it has no
+Riva channel-ready health surface.</p>
 </section>
 <section id="tests">
 <h2>Tests<a class="headerlink" href="#tests" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">tests/test_models_*.py</span></code> exercise the wire format against a
-<code class="docutils literal notranslate"><span class="pre">tests/_stub_openai.StubOpenAI</span></code> httpx MockTransport — no GPU required.</p>
+<p>The CPU-only <code class="docutils literal notranslate"><span class="pre">tests/test_models_*.py</span></code> modules exercise model wire formats with
+the <code class="docutils literal notranslate"><span class="pre">tests/_stub_openai.StubOpenAI</span></code> httpx mock transport. Run them from the
+repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>pytest<span class="w"> </span>-q<span class="w"> </span>tests/test_models_*.py
+</pre></div>
+</div>
 </section>
 </section>
 
@@ -727,13 +666,10 @@ hosted NVCF endpoint, set <code class="docutils literal notranslate"><span class
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#contract">Contract</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#quickstart">Quickstart</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#profile-contract">Profile contract</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deployment-profiles">Deployment profiles</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocols">Protocols</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#remote-and-hosted-nim-endpoints">Remote and hosted NIM endpoints</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#riva-grpc-speech-nim-stt-tts">Riva gRPC speech (NIM STT/TTS)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#construct-a-model-client">Construct a model client</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#built-in-adapters">Built-in adapters</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hosted-endpoints">Hosted endpoints</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#riva-speech-over-grpc">Riva speech over gRPC</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tests">Tests</a></li>
 </ul>
   </nav></div>

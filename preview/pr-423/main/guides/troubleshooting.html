@@ -60,7 +60,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Reference" href="../reference/index.html" />
-    <link rel="prev" title="SPDX license headers" href="spdx-headers.html" />
+    <link rel="prev" title="Testing" href="testing.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -313,7 +313,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
 </ul>
@@ -332,6 +332,7 @@
 <li class="toctree-l2"><a class="reference internal" href="customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing.html">Testing</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Troubleshooting</a></li>
 </ul>
 </details></li>
@@ -346,6 +347,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -458,11 +460,12 @@ headers.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>python3-dev
 </pre></div>
 </div>
-<p>This applies to the <code class="docutils literal notranslate"><span class="pre">xr-render-demo/yaml/spark/</span></code> profile.</p>
+<p>This applies to the <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/spark/</span></code> profile.</p>
 </section>
 <section id="dgx-spark-lovr-auto-download-is-not-supported">
 <h3>DGX Spark — LOVR auto-download is not supported<a class="headerlink" href="#dgx-spark-lovr-auto-download-is-not-supported" title="Link to this heading">#</a></h3>
-<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">xr_render_demo</span></code> exits at startup with:</p>
+<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--project</span> <span class="pre">agent-samples/xr-render-demo</span> <span class="pre">xr_render_demo</span></code>
+exits at startup with:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">xr</span><span class="o">-</span><span class="n">render</span><span class="o">-</span><span class="n">demo</span><span class="p">:</span> <span class="n">LOVR</span> <span class="n">auto</span><span class="o">-</span><span class="n">download</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">supported</span> <span class="n">on</span> <span class="n">linux</span><span class="o">/</span><span class="n">aarch64</span><span class="o">.</span>
 </pre></div>
 </div>
@@ -493,19 +496,15 @@ append the line to <code class="docutils literal notranslate"><span class="pre">
 <h3>Blackwell GPUs (B200, RTX PRO 6000) — VLM fails to start<a class="headerlink" href="#blackwell-gpus-b200-rtx-pro-6000-vlm-fails-to-start" title="Link to this heading">#</a></h3>
 <p><strong>Symptom:</strong> the VLM server logs FlashInfer or NVFP4 kernel errors and never
 becomes healthy on a Blackwell-class system.</p>
-<p><strong>Cause:</strong> Blackwell FP4 MoE kernels need both the <strong>NVIDIA Container Toolkit</strong>
-and a working <strong>CUDA NVCC</strong> toolchain present on the host (the kernels are
-JIT-compiled at first use).</p>
-<p><strong>Fix:</strong> install both before launching:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># NVIDIA Container Toolkit (covers both Docker and bare-metal CUDA driver bits)</span>
-<span class="c1"># Follow the latest instructions at:</span>
-<span class="c1"># https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html</span>
-
-<span class="c1"># CUDA NVCC — install the matching CUDA toolkit for your driver</span>
-sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>nvidia-cuda-toolkit
-</pre></div>
-</div>
-<p>This applies to the <code class="docutils literal notranslate"><span class="pre">xr-render-demo/yaml/96G_blackwell/</span></code> profile.</p>
+<p><strong>Cause:</strong> The Docker backend cannot expose the Blackwell GPU, or the selected
+vLLM image does not contain compatible kernels. Any first-use kernel
+compilation occurs inside the container; host NVCC is not required.</p>
+<p><strong>Fix:</strong> install the NVIDIA Container Toolkit, restart Docker as its installation
+guide requires, and retain the vLLM image pinned by the reviewed hardware
+profile:</p>
+<p><a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html">NVIDIA Container Toolkit installation guide</a></p>
+<p>This applies to the
+<code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/96G_blackwell/</span></code> profile.</p>
 </section>
 <section id="gpu-service-aborts-with-cudnn-version-incompatibility">
 <h3>GPU service aborts with <code class="docutils literal notranslate"><span class="pre">cuDNN</span> <span class="pre">version</span> <span class="pre">incompatibility</span></code><a class="headerlink" href="#gpu-service-aborts-with-cudnn-version-incompatibility" title="Link to this heading">#</a></h3>
@@ -520,7 +519,7 @@ import with:</p>
 (common on cloud GPU images). It shadows the cuDNN bundled in the service’s
 venv — the exact version that venv’s PyTorch was compiled against — so torch
 loads the wrong runtime and aborts.</p>
-<p><strong>Fix:</strong> the launcher handles this automatically — <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> /
+<p><strong>Fix:</strong> the launcher handles this automatically — <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> or
 <code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code> strip any <code class="docutils literal notranslate"><span class="pre">libcudnn</span></code>-bearing directory from each child’s
 <code class="docutils literal notranslate"><span class="pre">LD_LIBRARY_PATH</span></code> before spawning (logged once as a WARNING), so the
 venv-bundled cuDNN is used. If you hit this running a service <strong>directly</strong>
@@ -611,7 +610,7 @@ local install.</p>
 <section id="hub-fails-immediately-because-nvidia-codec-libraries-are-missing">
 <span id="hub-fails-immediately-with-runtimeerror-missing-libnvcuvid-so-libnvidia-encode-so"></span><h3>Hub fails immediately because NVIDIA codec libraries are missing<a class="headerlink" href="#hub-fails-immediately-because-nvidia-codec-libraries-are-missing" title="Link to this heading">#</a></h3>
 <p><strong>Cause:</strong> The hub raises
-<code class="docutils literal notranslate"><span class="pre">RuntimeError:</span> <span class="pre">missing</span> <span class="pre">libnvcuvid.so</span> <span class="pre">/</span> <span class="pre">libnvidia-encode.so</span></code> because NVDEC
+<code class="docutils literal notranslate"><span class="pre">RuntimeError:</span> <span class="pre">missing</span> <span class="pre">libnvcuvid.so</span> <span class="pre">or</span> <span class="pre">libnvidia-encode.so</span></code> because NVDEC
 (<code class="docutils literal notranslate"><span class="pre">libnvcuvid.so</span></code>) and NVENC (<code class="docutils literal notranslate"><span class="pre">libnvidia-encode.so</span></code>) are required. The
 DeviceIOHub refuses to start without them so it never silently falls back to
 OpenH264, which is royalty-bearing.</p>
@@ -633,7 +632,7 @@ with no user or bot speech.</p>
 <p><strong>Status:</strong> disabled by default. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> leaves its private Pipecat idle
 timeout disabled, so a quiet session stays connected indefinitely.</p>
 <p><strong>If you want it:</strong> set <code class="docutils literal notranslate"><span class="pre">idle_timeout_secs:</span> <span class="pre">&lt;seconds&gt;</span></code> (e.g. <code class="docutils literal notranslate"><span class="pre">300</span></code> for 5 min)
-in the sample’s worker YAML (<code class="docutils literal notranslate"><span class="pre">simple_vlm_example_worker.yaml</span></code> /
+in the sample’s worker YAML (<code class="docutils literal notranslate"><span class="pre">simple_vlm_example_worker.yaml</span></code> or
 <code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.yaml</span></code>); <code class="docutils literal notranslate"><span class="pre">0</span></code> or unset keeps it disabled. The knob is
 owned by <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.VoiceAgent</span></code>.</p>
 </section>
@@ -641,8 +640,8 @@ owned by <code class="docutils literal notranslate"><span class="pre">xr_ai_voic
 <h3>Browser client connects but no audio or no video<a class="headerlink" href="#browser-client-connects-but-no-audio-or-no-video" title="Link to this heading">#</a></h3>
 <p><strong>Most common cause:</strong> firewall blocking WebRTC media on UDP 7882 (LiveKit).</p>
 <p><strong>Fix:</strong> open ports per <a class="reference internal" href="../getting_started/networking.html"><span class="doc">Networking and firewall</span></a>. The web client
-will appear to connect (signaling on 7880 succeeds) but media frames are
-silently dropped without 7882.</p>
+will appear to connect (signaling through the port 8080 proxy succeeds) but
+media frames are silently dropped without 7882.</p>
 </section>
 <section id="https-web-client-ws-mixed-content-warning">
 <h3>HTTPS web client → <code class="docutils literal notranslate"><span class="pre">ws://</span></code> mixed-content warning<a class="headerlink" href="#https-web-client-ws-mixed-content-warning" title="Link to this heading">#</a></h3>
@@ -717,6 +716,21 @@ forwards the <code class="docutils literal notranslate"><span class="pre">Author
 with a public-CA certificate via <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> or <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>
 for production.</p>
 </section>
+<section id="ios-and-visionos-microphone-or-camera-is-interrupted">
+<h3>iOS and visionOS — microphone or camera is interrupted<a class="headerlink" href="#ios-and-visionos-microphone-or-camera-is-interrupted" title="Link to this heading">#</a></h3>
+<p>An occasional LiveKit microphone timeout means its recording engine did not
+produce the first buffer before publication. The current client enables prepared
+recording mode before publishing to make that first buffer available. Stopping
+the microphone then disables prepared input while leaving output active, so the
+orange microphone indicator clears without silencing agent audio.</p>
+<p>Phone calls, Siri, route changes, media-service resets, another capture app, or
+closing an XR space can interrupt audio or camera while the control still shows
+the user’s requested state. The client re-arms capture when the OS allows it.
+If it does not recover, filter Console.app for the <code class="docutils literal notranslate"><span class="pre">MediaSession</span></code> category to
+inspect the recorded interruption, route, and capture-session events. CoreAudio
+<code class="docutils literal notranslate"><span class="pre">-50</span></code> and <code class="docutils literal notranslate"><span class="pre">FigAudioSession</span> <span class="pre">-19224</span></code> messages alone are not evidence of failure;
+they can also appear on successful starts.</p>
+</section>
 <section id="chrome-immersive-web-extension-cannot-be-enabled">
 <h3>Chrome — Immersive Web extension cannot be enabled<a class="headerlink" href="#chrome-immersive-web-extension-cannot-be-enabled" title="Link to this heading">#</a></h3>
 <p><strong>Symptom:</strong> the Immersive Web extension for Chrome cannot be enabled.</p>
@@ -790,12 +804,12 @@ stall indefinitely; set <code class="docutils literal notranslate"><span class="
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="spdx-headers.html"
+       href="testing.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">SPDX license headers</p>
+        <p class="prev-next-title">Testing</p>
       </div>
     </a>
     <a class="right-next"
@@ -845,6 +859,7 @@ stall indefinitely; set <code class="docutils literal notranslate"><span class="
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#https-web-client-ws-mixed-content-warning">HTTPS web client → <code class="docutils literal notranslate"><span class="pre">ws://</span></code> mixed-content warning</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#android-connection-fails-with-tls-or-certificate-errors">Android — connection fails with TLS or certificate errors</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#ios-and-visionos-connection-fails-with-certificate-trust-errors">iOS and visionOS — connection fails with certificate-trust errors</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#ios-and-visionos-microphone-or-camera-is-interrupted">iOS and visionOS — microphone or camera is interrupted</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#chrome-immersive-web-extension-cannot-be-enabled">Chrome — Immersive Web extension cannot be enabled</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vllm-cold-start-takes-38-minutes">vLLM cold start takes 3–8 minutes</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vllm-exits-before-readiness-with-insufficient-gpu-memory">vLLM exits before readiness with insufficient GPU memory</a></li>

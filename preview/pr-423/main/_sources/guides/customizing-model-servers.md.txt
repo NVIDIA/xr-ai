@@ -5,7 +5,7 @@
 
 # Customizing model servers
 
-Use this guide to change which shared models run, where they run, or how a
+Use this workflow to change which shared models run, where they run, or how a
 sample connects to them. Model-server customization has two separate parts:
 
 1. A `model-servers` deployment profile declares which shared services the
@@ -53,7 +53,8 @@ uv run --project agent-samples/model-servers \
   model_servers --models my-stack
 ```
 
-You can also pass an absolute or repository-relative JSON path to `--models`.
+You can also pass an absolute JSON path or a path relative to the current
+working directory to `--models`.
 The profile must retain the wrapped JSON shape:
 
 ```json
@@ -203,8 +204,8 @@ launcher process:
 }
 ```
 
-Do not put the credential value in JSON. Export it or use the credential store
-described in {doc}`/getting_started/credentials`.
+Do not put the credential value in JSON. Export it or use the credential store.
+Refer to {doc}`/getting_started/credentials` for credential options.
 
 ## Riva speech boundary
 
@@ -223,9 +224,9 @@ Before committing a custom profile:
 jq empty agent-samples/model-servers/yaml/models.my-stack.json
 
 uv run --project tests pytest -q \
-  test_model_servers.py \
-  test_launcher_config.py \
-  test_nim_docker.py
+  tests/test_model_servers.py \
+  tests/test_launcher_config.py \
+  tests/test_nim_docker.py
 ```
 
 Model servers persist after the `model_servers` command reports readiness.
@@ -239,6 +240,6 @@ uv run --project agent-samples/model-servers \
   model_servers --models my-stack
 ```
 
-For adapter fields and model capabilities, see
+For adapter fields and model capabilities, refer to
 {doc}`/reference/agent-sdk-models`. For server runtime behavior, persistence,
-and NIM credentials, see {doc}`/components/ai-services`.
+and NIM credentials, refer to {doc}`/components/ai-services`.

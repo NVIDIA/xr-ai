@@ -313,7 +313,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
 </ul>
@@ -332,6 +332,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
@@ -346,6 +347,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -482,13 +484,12 @@ installation.</p>
 </tbody>
 </table>
 </div>
-<p>Package guides are versioned with this site:
+<p>Refer to these versioned package guides:
 <a class="reference internal" href="../reference/agent-sdk-hub.html"><span class="doc">xr-ai-hub</span></a>, <a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>,
 <a class="reference internal" href="../reference/agent-sdk-runtime.html"><span class="doc">xr-ai-runtime</span></a>, <a class="reference internal" href="../reference/agent-sdk-tools.html"><span class="doc">xr-ai-tools</span></a>,
 <a class="reference internal" href="../reference/agent-sdk-voice.html"><span class="doc">xr-ai-voice</span></a>, and <a class="reference internal" href="../reference/agent-sdk-web-events.html"><span class="doc">xr-ai-web-events</span></a>.
-The generated <a class="reference internal" href="../reference/python/index.html"><span class="doc">API Reference</span></a>
-is the source of truth for public names, signatures, types, defaults, fields,
-and method-level behavior.</p>
+Refer to the generated <a class="reference internal" href="../reference/python/index.html"><span class="doc">API Reference</span></a> for public names,
+signatures, types, defaults, fields, and method-level behavior.</p>
 <section id="ownership-boundaries">
 <h2>Ownership boundaries<a class="headerlink" href="#ownership-boundaries" title="Link to this heading">#</a></h2>
 <p>An <code class="docutils literal notranslate"><span class="pre">Agent</span></code> owns its state, resources, background tasks, lifecycle, and
@@ -498,7 +499,7 @@ direct execution and model tool-call loops. Bounded turns use <code class="docut
 retries, participant context, cancellation, and task ownership. <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code>
 owns only typed publication and delivery tasks; it does not own model loops,
 planning, memory, media, or agent-created work. A publication waits for its
-subscribers, so a subscriber that performs lengthy work should hand the work to
+subscribers, so a subscriber that performs lengthy work must hand the work to
 its own bounded queue.</p>
 <p>Workers construct model clients with the factories in <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code> and depend
 on the corresponding typed service protocols. Adapter behavior, endpoint
@@ -545,11 +546,11 @@ hub path rather than entering agent APIs.</p>
 <h2>Documentation boundary<a class="headerlink" href="#documentation-boundary" title="Link to this heading">#</a></h2>
 <p>Public API membership comes from literal <code class="docutils literal notranslate"><span class="pre">__all__</span></code> declarations. Sphinx parses
 the source without importing SDK packages, then renders co-located docstrings,
-annotations, and defaults. Package READMEs retain installation, quickstarts,
-and cross-call behavioral guidance; this component page records only shared
-architecture and ownership. Guides, troubleshooting, and migrations remain
-handwritten because they describe workflows and decisions rather than API
-shape.</p>
+annotations, and defaults. Package READMEs are concise entry points into these
+published package guides; cross-call behavior, architecture, and ownership live
+here and in the package reference pages. Guides, troubleshooting, and
+migrations remain handwritten because they describe workflows and decisions
+rather than API shape.</p>
 </section>
 </section>
 

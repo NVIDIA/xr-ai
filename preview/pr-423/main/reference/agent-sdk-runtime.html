@@ -199,6 +199,10 @@
   
 
   
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
 </div>
 
     </header>
@@ -309,7 +313,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
 </ul>
@@ -328,6 +332,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
@@ -342,6 +347,7 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -440,101 +446,62 @@
 -->
 <section id="xr-ai-runtime">
 <h1>xr-ai-runtime<a class="headerlink" href="#xr-ai-runtime" title="Link to this heading">#</a></h1>
-<p>The <code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code> distribution provides typed pub/sub for composable XR AI agents. An
-<code class="docutils literal notranslate"><span class="pre">Agent</span></code> owns private state and exposes ordinary <code class="docutils literal notranslate"><span class="pre">Tool</span></code> or <code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> instances
-from <code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code>.</p>
-<p>Tools have one invocation path everywhere:</p>
-<ul class="simple">
-<li><p>Direct callers and other agents use <code class="docutils literal notranslate"><span class="pre">Tool.execute()</span></code> or <code class="docutils literal notranslate"><span class="pre">AsyncTool.stream()</span></code>.</p></li>
-<li><p>Model loops expose unary tools with <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code> and <code class="docutils literal notranslate"><span class="pre">handle_tool_call()</span></code>.</p></li>
-<li><p>The agent runtime never wraps or redispatches a tool call.</p></li>
-</ul>
-<p>Unary tools return one validated Pydantic response or <code class="docutils literal notranslate"><span class="pre">None</span></code> for an
-acknowledged side effect. Streaming tools yield validated chunks without
-buffering the complete result.</p>
+<p><code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code> provides typed, participant-scoped publication and fan-out
+for composable agents. It does not own models, planning, memory, tools, media,
+application state, or agent-created tasks. Refer to <a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a> for the
+exact public APIs.</p>
+<section id="agents-and-tools">
+<h2>Agents and tools<a class="headerlink" href="#agents-and-tools" title="Link to this heading">#</a></h2>
+<p>An <code class="docutils literal notranslate"><span class="pre">Agent</span></code> owns private state and exposes ordinary finite <code class="docutils literal notranslate"><span class="pre">Tool</span></code> or streaming
+<code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> objects from <code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code>. Direct callers execute those tools
+directly; model loops expose finite tools through a <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code>. The runtime never
+wraps or redispatches tool calls.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">Agent</span><span class="p">,</span> <span class="n">AgentRuntime</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tool</span>
 
-
-<span class="k">class</span><span class="w"> </span><span class="nc">TextRequest</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Text</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
     <span class="n">text</span><span class="p">:</span> <span class="nb">str</span>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">TextResponse</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
-    <span class="n">text</span><span class="p">:</span> <span class="nb">str</span>
-
 
 <span class="k">class</span><span class="w"> </span><span class="nc">TextAgent</span><span class="p">(</span><span class="n">Agent</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">echo</span> <span class="o">=</span> <span class="n">Tool</span><span class="p">(</span>
-            <span class="s2">"echo"</span><span class="p">,</span>
-            <span class="s2">"Echo the supplied text."</span><span class="p">,</span>
-            <span class="n">TextRequest</span><span class="p">,</span>
-            <span class="n">TextResponse</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_echo</span><span class="p">,</span>
-        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">uppercase</span> <span class="o">=</span> <span class="n">Tool</span><span class="p">(</span>
-            <span class="s2">"uppercase"</span><span class="p">,</span>
-            <span class="s2">"Uppercase the supplied text."</span><span class="p">,</span>
-            <span class="n">TextRequest</span><span class="p">,</span>
-            <span class="n">TextResponse</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_uppercase</span><span class="p">,</span>
+            <span class="s2">"uppercase"</span><span class="p">,</span> <span class="s2">"Uppercase text."</span><span class="p">,</span> <span class="n">Text</span><span class="p">,</span> <span class="n">Text</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_uppercase</span>
         <span class="p">)</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">echo</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">uppercase</span><span class="p">))</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">uppercase</span><span class="p">,))</span>
 
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_echo</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">TextRequest</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TextResponse</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">TextResponse</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
-
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_uppercase</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">TextRequest</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TextResponse</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">TextResponse</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">text</span><span class="o">.</span><span class="n">upper</span><span class="p">())</span>
-
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_uppercase</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Text</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Text</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">Text</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">text</span><span class="o">.</span><span class="n">upper</span><span class="p">())</span>
 
 <span class="n">runtime</span> <span class="o">=</span> <span class="n">AgentRuntime</span><span class="p">()</span>
 <span class="n">text</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"text"</span><span class="p">,</span> <span class="n">TextAgent</span><span class="p">())</span>
-
 <span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">text</span><span class="o">.</span><span class="n">uppercase</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">TextRequest</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"hello"</span><span class="p">))</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">text</span><span class="o">.</span><span class="n">uppercase</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">Text</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"hello"</span><span class="p">))</span>
 </pre></div>
 </div>
-<p>Another agent receives the concrete tools it needs and calls them normally.
-No runtime address or adapter is involved.</p>
-<p>When tools from several agents are combined for one model, namespace them at
-the workflow boundary with
-<code class="docutils literal notranslate"><span class="pre">ToolSet.namespaced({&quot;vision&quot;:</span> <span class="pre">vision.tools,</span> <span class="pre">&quot;planner&quot;:</span> <span class="pre">planner.tools})</span></code>.
-This remaps only model-visible catalog names; the agents and underlying tools
-remain unchanged. Participant identity needed by a direct tool belongs in that
-tool’s typed request. Relay records each publication as a function scope
-and each subscription delivery as an agent scope, carrying topic, participant,
-message, correlation, parent-message, source, and subscriber metadata. Tool and
-model scopes invoked by a callback nest under that delivery. Agent-owned
-detached tasks must open a fresh Relay scope stack when their lifetime extends
-beyond the callback, then add an agent scope and preserve logical correlation in
-metadata. This prevents a detached operation from becoming the child of a scope
-that has already ended.</p>
-<p><code class="docutils literal notranslate"><span class="pre">publish(topic,</span> <span class="pre">event)</span></code> is the separate asynchronous fan-out operation for
-participant-scoped or global events. An agent that owns resources or background
-work is responsible for controlling them, including creating, cancelling, and
-awaiting its own tasks. The runtime neither knows nor controls whether an
-agent’s internal work is running. <code class="docutils literal notranslate"><span class="pre">publish()</span></code> waits for every fan-out delivery
-to settle before propagating any subscriber failures. Subscriber callbacks
-should hand off lengthy work to agent-owned bounded queues and return promptly.</p>
-<p>Topics default to <code class="docutils literal notranslate"><span class="pre">telemetry=&quot;full&quot;</span></code>. High-cardinality transport topics use
-<code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> when their consumer aggregates fragments and records one semantic
-operation scope. Delivery and failure behavior remains unchanged. Keeping the
-policy on the topic declaration gives every producer and consumer the same
-cardinality behavior.</p>
-<p>Tools and subscription callbacks may run concurrently. An agent whose mutable
-state is shared between them owns the appropriate synchronization, such as an
-<code class="docutils literal notranslate"><span class="pre">asyncio.Lock</span></code> or a private queue. This avoids imposing serialization and
-head-of-line blocking on unrelated or streaming tools.</p>
-<p>Domain controls such as <code class="docutils literal notranslate"><span class="pre">start_monitoring</span></code>, <code class="docutils literal notranslate"><span class="pre">stop_monitoring</span></code>, and <code class="docutils literal notranslate"><span class="pre">status</span></code> are
-ordinary tools. Agent lifetime itself is not a model tool. Model loops,
-planning, memory, and model clients remain agent implementations. Raw video
-stays on the DeviceIOHub path. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes final pre-gate STT
-results on <code class="docutils literal notranslate"><span class="pre">voice.transcript</span></code> for explicit subscribers. Its media session is
-private, and its bounded transcript-delivery queue prevents slow subscribers
-from delaying STT or command gating.</p>
+<p>When one model sees tools from several agents, namespace only the model-visible
+catalog with <code class="docutils literal notranslate"><span class="pre">ToolSet.namespaced(...)</span></code>. Participant identity remains a typed
+tool input supplied at the application boundary.</p>
+</section>
+<section id="publication-and-ownership">
+<h2>Publication and ownership<a class="headerlink" href="#publication-and-ownership" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">publish(topic,</span> <span class="pre">event)</span></code> is asynchronous fan-out. It waits for all subscriber
+deliveries and then propagates failures. A subscriber that performs lengthy
+work must hand it to its own bounded queue and return promptly. The runtime
+owns delivery tasks only; an agent owns creation, synchronization, cancellation,
+and cleanup for its resources and background work.</p>
+<p>Callbacks and tools may run concurrently. Agents protect shared mutable state
+with their own lock or queue so unrelated and streaming work is not globally
+serialized. Participant controls such as start, stop, and status are ordinary
+application tools; agent lifetime is not a model tool.</p>
+<p>Topics use full Relay telemetry by default. High-cardinality transport topics
+may declare <code class="docutils literal notranslate"><span class="pre">telemetry=&quot;none&quot;</span></code> when their consumer emits one semantic operation
+scope instead. Runtime publication and delivery scopes carry participant,
+message, correlation, parent-message, source, and subscriber metadata. A
+detached agent task whose lifetime exceeds its callback starts a fresh Relay
+scope stack and preserves logical correlation in metadata rather than retaining
+an ended delivery scope.</p>
+</section>
 </section>
 
 
@@ -572,9 +539,26 @@ from delaying STT or command gating.</p>
             
             
 
-<div class="bd-sidebar-secondary"></div>
+
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
 
 
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agents-and-tools">Agents and tools</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#publication-and-ownership">Publication and ownership</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
               
             
 

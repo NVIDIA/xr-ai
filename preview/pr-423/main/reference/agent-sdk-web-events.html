@@ -199,6 +199,10 @@
   
 
   
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
 </div>
 
     </header>
@@ -309,7 +313,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
 </ul>
@@ -328,6 +332,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
@@ -342,6 +347,7 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -440,58 +446,68 @@
 -->
 <section id="xr-ai-web-events">
 <h1>xr-ai-web-events<a class="headerlink" href="#xr-ai-web-events" title="Link to this heading">#</a></h1>
-<p><code class="docutils literal notranslate"><span class="pre">xr-ai-web-events</span></code> provides a read-only browser view for selected typed runtime
-events. It groups live output by participant and presentation topic without
-tailing application files or entering model, voice, or media paths. The bounded
-in-memory history is for observation only; durable output remains an
-application responsibility.</p>
-<p>Applications opt in explicitly by publishing compact JSON-compatible payloads
-to <code class="docutils literal notranslate"><span class="pre">WEB_EVENT_TOPIC</span></code>. Each payload is limited to 16 KiB of serialized UTF-8 so
-the count-bounded history also has a per-event size bound:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_web_events</span><span class="w"> </span><span class="kn">import</span> <span class="n">WEB_EVENT_TOPIC</span><span class="p">,</span> <span class="n">WebEvent</span><span class="p">,</span> <span class="n">WebEventsAgent</span>
+<p><code class="docutils literal notranslate"><span class="pre">xr-ai-web-events</span></code> presents application-selected runtime events in a bounded,
+read-only browser view. It does not tail files, persist data, or enter model,
+voice, media, or DeviceIOHub authentication paths. Refer to <a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a>
+for the public APIs.</p>
+<section id="publishing-selected-events">
+<h2>Publishing selected events<a class="headerlink" href="#publishing-selected-events" title="Link to this heading">#</a></h2>
+<p>Applications explicitly project compact JSON-compatible payloads to
+<code class="docutils literal notranslate"><span class="pre">WEB_EVENT_TOPIC</span></code>. Each event’s serialized <code class="docutils literal notranslate"><span class="pre">payload</span></code> is limited to 16 KiB.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">Agent</span><span class="p">,</span> <span class="n">AgentRuntime</span><span class="p">,</span> <span class="n">RuntimeContext</span><span class="p">,</span> <span class="n">Topic</span><span class="p">,</span> <span class="n">subscribe</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_web_events</span><span class="w"> </span><span class="kn">import</span> <span class="n">WEB_EVENT_TOPIC</span><span class="p">,</span> <span class="n">WebEvent</span><span class="p">,</span> <span class="n">WebEventsAgent</span>
 
-<span class="n">viewer</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-    <span class="s2">"web-events"</span><span class="p">,</span>
-    <span class="n">WebEventsAgent</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="s2">"Lab instrument events"</span><span class="p">),</span>
-<span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Reading</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">value</span><span class="p">:</span> <span class="nb">float</span>
 
+<span class="n">READING_TOPIC</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"application.reading"</span><span class="p">,</span> <span class="n">Reading</span><span class="p">)</span>
 
-<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">report_reading</span><span class="p">(</span><span class="n">reading</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="k">await</span> <span class="n">ctx</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span>
-        <span class="n">WEB_EVENT_TOPIC</span><span class="p">,</span>
-        <span class="n">WebEvent</span><span class="p">(</span>
-            <span class="n">topic</span><span class="o">=</span><span class="s2">"instruments.readings"</span><span class="p">,</span>
-            <span class="n">title</span><span class="o">=</span><span class="s2">"Instrument readings"</span><span class="p">,</span>
-            <span class="n">payload</span><span class="o">=</span><span class="n">reading</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">"json"</span><span class="p">),</span>
-        <span class="p">),</span>
-    <span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ReadingEventsAgent</span><span class="p">(</span><span class="n">Agent</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
 
+    <span class="nd">@subscribe</span><span class="p">(</span><span class="n">READING_TOPIC</span><span class="p">)</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">report_reading</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">reading</span><span class="p">:</span> <span class="n">Reading</span><span class="p">,</span>
+        <span class="n">ctx</span><span class="p">:</span> <span class="n">RuntimeContext</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">ctx</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span>
+            <span class="n">WEB_EVENT_TOPIC</span><span class="p">,</span>
+            <span class="n">WebEvent</span><span class="p">(</span>
+                <span class="n">topic</span><span class="o">=</span><span class="s2">"application.reading"</span><span class="p">,</span>
+                <span class="n">title</span><span class="o">=</span><span class="s2">"Readings"</span><span class="p">,</span>
+                <span class="n">payload</span><span class="o">=</span><span class="n">reading</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">"json"</span><span class="p">),</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+
+<span class="n">runtime</span> <span class="o">=</span> <span class="n">AgentRuntime</span><span class="p">()</span>
+<span class="n">viewer</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"web-events"</span><span class="p">,</span> <span class="n">WebEventsAgent</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="s2">"Agent events"</span><span class="p">))</span>
+<span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"reading-events"</span><span class="p">,</span> <span class="n">ReadingEventsAgent</span><span class="p">())</span>
 
 <span class="k">async</span> <span class="k">with</span> <span class="n">viewer</span><span class="p">:</span>
     <span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
-        <span class="k">await</span> <span class="n">run_application</span><span class="p">()</span>
+        <span class="k">await</span> <span class="n">runtime</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span><span class="n">READING_TOPIC</span><span class="p">,</span> <span class="n">Reading</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="mf">21.5</span><span class="p">))</span>
 </pre></div>
 </div>
-<p>The server defaults to <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code>. Start it before the worker
-announces readiness so a bind failure fails the worker instead of leaving a
-partially ready stack. <code class="docutils literal notranslate"><span class="pre">start()</span></code> and <code class="docutils literal notranslate"><span class="pre">stop()</span></code> are idempotent, and the agent is
-also an async context manager.</p>
-<p>The page polls the same-origin read-only API and dynamically creates participant
-and topic views. <code class="docutils literal notranslate"><span class="pre">/api/events?after=&lt;sequence&gt;</span></code> reports cursor rollover so a
-browser can recover after falling behind the bounded store. <code class="docutils literal notranslate"><span class="pre">/healthz</span></code> reports
-whether the HTTP listener can answer requests.</p>
-<p>The listener has no application authentication or TLS. Its loopback default is
-intentional because payloads may contain speech transcripts or camera-derived
-text. For remote development, keep it on loopback and use an SSH tunnel:</p>
+<p>Start the viewer before worker readiness so a bind failure fails the worker.
+<code class="docutils literal notranslate"><span class="pre">start()</span></code> and <code class="docutils literal notranslate"><span class="pre">stop()</span></code> are idempotent, and the agent is an async context manager.
+The page groups events by participant and presentation topic. Its cursor API
+reports bounded-history rollover; <code class="docutils literal notranslate"><span class="pre">/healthz</span></code> checks the listener.</p>
+</section>
+<section id="exposure-boundary">
+<h2>Exposure boundary<a class="headerlink" href="#exposure-boundary" title="Link to this heading">#</a></h2>
+<p>The default is <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code>. The listener has no application
+authentication or TLS, and payloads may include transcripts or camera-derived
+text. Prefer an SSH tunnel for remote development:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ssh<span class="w"> </span>-L<span class="w"> </span><span class="m">8092</span>:127.0.0.1:8092<span class="w"> </span>user@xr-host
 </pre></div>
 </div>
-<p>Do not bind it to <code class="docutils literal notranslate"><span class="pre">0.0.0.0</span></code> on an untrusted network. A remotely exposed viewer
-needs an authenticated TLS reverse proxy chosen by the deployment owner; it
-does not reuse DeviceIOHub participant credentials. The server also rejects
-unrecognized HTTP <code class="docutils literal notranslate"><span class="pre">Host</span></code> names. A reverse proxy must preserve a configured host,
-use a literal listener address, or rewrite <code class="docutils literal notranslate"><span class="pre">Host</span></code> to <code class="docutils literal notranslate"><span class="pre">127.0.0.1</span></code>. Listener
-addresses are IPv4-only; IPv6 literals are rejected with a configuration error.</p>
+<p>Direct exposure belongs only on a trusted network or behind an authenticated
+TLS reverse proxy. The proxy must preserve an allowed <code class="docutils literal notranslate"><span class="pre">Host</span></code> value or rewrite it
+to the configured listener address. Listener addresses are IPv4-only.</p>
+</section>
 </section>
 
 
@@ -529,9 +545,26 @@ addresses are IPv4-only; IPv6 literals are rejected with a configuration error.<
             
             
 
-<div class="bd-sidebar-secondary"></div>
+
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
 
 
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#publishing-selected-events">Publishing selected events</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exposure-boundary">Exposure boundary</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
               
             
 

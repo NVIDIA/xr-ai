@@ -313,7 +313,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting Clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
 </ul>
@@ -332,6 +332,7 @@
 <li class="toctree-l2"><a class="reference internal" href="customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
@@ -346,6 +347,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -510,7 +512,7 @@ entry point.</p>
 ├── yaml/                           ← all YAML configs for this sample
 │   ├── device_io_hub.yaml
 │   ├── &lt;command&gt;.yaml              ← one per launchable process
-│   ├── models.local.json           ← adapter, endpoint, and deployment specs
+│   ├── models.json                 ← adapter, endpoint, and deployment specs
 │   └── …
 └── worker/
     ├── pyproject.toml              ← worker project
@@ -520,7 +522,7 @@ entry point.</p>
         └── …                       ← cohesive workflow, transport, and config modules
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code> names the logical models the worker needs (<code class="docutils literal notranslate"><span class="pre">llm</span></code>,
+<p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> names the logical models the worker needs (<code class="docutils literal notranslate"><span class="pre">llm</span></code>,
 <code class="docutils literal notranslate"><span class="pre">vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>, or any sample-specific name). Each role composes an
 adapter, endpoint, and deployment spec. Worker-only profiles may remain in the
 legacy flat JSON or YAML shape; a profile shared with the stdlib-only orchestrator
@@ -556,6 +558,24 @@ workflow composition become distinct responsibilities.</p>
 </tbody>
 </table>
 </div>
+</section>
+<section id="sample-readme-and-configuration-guide">
+<h2>Sample README and configuration guide<a class="headerlink" href="#sample-readme-and-configuration-guide" title="Link to this heading">#</a></h2>
+<p>Give the sample README enough information for a first successful local edit:</p>
+<ul class="simple">
+<li><p>describe what the sample does and which processes or shared models it uses;</p></li>
+<li><p>state <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;name&gt;/</span></code> as the working directory and write every run
+command relative to it;</p></li>
+<li><p>add a compact <strong>Configure</strong> section that maps the sample-owned YAML and JSON
+files to their common settings and shows one representative YAML change;</p></li>
+<li><p>link to the sample’s canonical guide and generated configuration reference.</p></li>
+</ul>
+<p>Keep the corresponding <code class="docutils literal notranslate"><span class="pre">docs/source/</span></code> guide complete. The guide explains how
+the launcher selects the files, path and environment precedence, restart
+behavior, the responsibility of each configuration file, and the boundary
+between a sample endpoint change and a persistent model-server change. Exact
+field values and field-level guidance stay beside the checked-in YAML or JSON.
+Refer to <a class="reference internal" href="../reference/configuration.html"><span class="doc">Sample configuration reference</span></a> for the rendered reference.</p>
 </section>
 <section id="orchestrator-pyproject-toml">
 <h2>Orchestrator <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code><a class="headerlink" href="#orchestrator-pyproject-toml" title="Link to this heading">#</a></h2>
@@ -796,6 +816,7 @@ if __name__ == "__main__":
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#naming-conventions">Naming conventions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#directory-layout">Directory layout</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sample-readme-and-configuration-guide">Sample README and configuration guide</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#orchestrator-pyproject-toml">Orchestrator <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#worker-pyproject-toml">Worker <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#orchestrator-main-py">Orchestrator <code class="docutils literal notranslate"><span class="pre">main.py</span></code></a></li>

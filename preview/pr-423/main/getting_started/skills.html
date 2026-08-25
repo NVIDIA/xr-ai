@@ -313,7 +313,7 @@
 <li class="toctree-l2"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Skills</a></li>
 <li class="toctree-l2"><a class="reference internal" href="requirements.html">Requirements</a></li>
-<li class="toctree-l2"><a class="reference internal" href="clients.html">Connecting Clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clients.html">Connecting clients</a></li>
 <li class="toctree-l2"><a class="reference internal" href="networking.html">Networking and firewall</a></li>
 <li class="toctree-l2"><a class="reference internal" href="credentials.html">Credentials</a></li>
 </ul>
@@ -332,6 +332,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
@@ -346,6 +347,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
@@ -481,6 +483,20 @@ with no skills mechanism can follow the <code class="docutils literal notranslat
 <a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/main/skills"><code class="docutils literal notranslate"><span class="pre">skills/</span></code></a> in the
 repository; new skills land there with the features they cover.</p>
 </section>
+<section id="manual-installation">
+<h2>Manual installation<a class="headerlink" href="#manual-installation" title="Link to this heading">#</a></h2>
+<p>Set <code class="docutils literal notranslate"><span class="pre">REF</span></code> to the repository ref you will build against and download the skill
+into the directory used by your coding agent:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">SKILLS_DIR</span><span class="o">=</span>/path/to/your/agent/skills
+<span class="nv">REF</span><span class="o">=</span>main<span class="w">  </span><span class="c1"># or a release tag such as v0.3.0</span>
+curl<span class="w"> </span>-fsSL<span class="w"> </span>--create-dirs<span class="w"> </span>-o<span class="w"> </span><span class="s2">"</span><span class="nv">$SKILLS_DIR</span><span class="s2">/getting-started/SKILL.md"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s2">"https://raw.githubusercontent.com/NVIDIA/xr-ai/</span><span class="nv">$REF</span><span class="s2">/skills/getting-started/SKILL.md"</span>
+</pre></div>
+</div>
+<p>If the selected release predates the skill bank, use <code class="docutils literal notranslate"><span class="pre">main</span></code> for both the skill
+and your checkout. An agent without a skill installation mechanism can read the
+downloaded <code class="docutils literal notranslate"><span class="pre">SKILL.md</span></code> and follow it directly in the current session.</p>
+</section>
 </section>
 
 
@@ -533,6 +549,7 @@ repository; new skills land there with the features they cover.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#available-skills">Available skills</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#manual-installation">Manual installation</a></li>
 </ul>
   </nav></div>
 

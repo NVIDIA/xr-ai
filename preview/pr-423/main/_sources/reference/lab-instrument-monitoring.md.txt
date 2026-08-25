@@ -7,9 +7,10 @@
 
 The lab instrument sample is a reference for applications that combine
 foreground questions, opt-in background work, persistent participant state,
-visual identification, and event-driven notifications. Start with the
-{doc}`quickstart </getting_started/quickstart>` to run it. This architecture
-reference focuses on reusing the sample's structure for another application.
+visual identification, and event-driven notifications. Refer to the
+{doc}`quickstart </getting_started/quickstart>` to run the sample. This
+architecture reference focuses on reusing the sample's structure for another
+application.
 
 The central design choice is to separate perception, interpretation, state,
 policy, and presentation. A marker scan identifies an instrument, a VLM reads
@@ -55,6 +56,9 @@ accepted speech or typed query         ├─> current frame + generic VLM query
 `AgentRuntime`. Agents call peer tools directly, while typed topics fan results
 out to independent consumers. LiveKit remains inside DeviceIOHub and does not
 appear in the worker's agent contracts.
+
+The worker uses native `xr_ai_runtime` agents and `xr_ai_tools` instances. It
+does not use NVIDIA Agent Toolkit, PydanticAI, MCP clients, or MCP servers.
 
 ## Agent responsibilities
 
@@ -103,9 +107,41 @@ client's `agent.response` topic so the same output can be rendered as captions.
 | `yaml/device_map.yaml` | Sample identity data | Map real marker IDs to domain objects |
 | `sample-markers/` | Five QR and five ArUco examples | Print or replace with deployment markers |
 
-Configuration and command syntax are also included automatically in the
-generated {doc}`configuration <configuration>` and
-{doc}`command-line <command-line>` references.
+Refer to the generated {doc}`configuration <configuration>` and
+{doc}`command-line <command-line>` references for configuration fields and
+command syntax.
+
+## Configuration
+
+Run and edit the sample from `agent-samples/lab-instrument-monitoring/`. The
+orchestrator reads the files below on every start and materializes a temporary
+worker configuration with absolute paths. Edit the checked-in files, not the
+temporary copy named in the logs.
+
+| File | Owns |
+|---|---|
+| `yaml/lab_instrument_monitoring_worker.yaml` | Monitor and snapshot cadence, lost-device threshold, image freshness, VAD, output directory, and event-viewer port and history |
+| `yaml/device_map.yaml` | QR payloads and ArUco IDs mapped to instrument names |
+| `yaml/voice_gate.yaml` | Wake phrases, listening chime, and follow-up window |
+| `yaml/models.json` | Reused model adapters, endpoints, and readiness checks |
+| `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
+
+For example, shorten both visual polling periods by setting
+`monitor_interval_s` and `instrument_monitor_interval_s` in the worker YAML,
+or replace entries under `devices` in `device_map.yaml` with the identifiers
+attached to real instruments. Paths such as `device_map_yaml` and
+`artifacts_dir` are resolved relative to the worker YAML.
+
+Restart `lab_instrument_monitoring` after an edit; configuration is not
+hot-reloaded. The `--expose-web-events` option intentionally overrides
+`web_events_host` in the runtime copy, so use that option rather than editing
+the host to expose the unauthenticated viewer. Changing `models.json` changes
+only the endpoints consumed by this sample. Refer to
+{doc}`/guides/customizing-model-servers` for server-side model, GPU, port, or
+memory changes, then restart the persistent shared stack.
+
+Refer to the generated {doc}`configuration <configuration>` reference for exact
+fields, checked-in values, and adjacent YAML comments.
 
 ## Foreground tool loop
 
@@ -241,11 +277,13 @@ proxy in front of it.
 
 ## File outputs and persistence
 
-Every non-empty final STT result is written to `transcript.jsonl` before voice
-gating, including ambient speech rejected by a configured wake phrase. Wake-word
-gating controls dispatch to the foreground, not storage: rejected speech is
-still transcribed and persisted. The default gate accepts `agent` and
-`hey agent`, plays a listening chime, and allows one follow-up utterance for
+Each non-empty final STT result delivered on `voice.transcript` is written to
+`transcript.jsonl` before voice gating, including ambient speech rejected by a
+configured wake phrase. Transcript-topic delivery is bounded and best effort;
+overflow drops the oldest pending transcript, and shutdown discards pending
+items. Wake-word gating controls dispatch to the foreground, not storage:
+delivered rejected speech is still persisted. The default gate accepts `agent`
+and `hey agent`, plays a listening chime, and allows one follow-up utterance for
 five seconds. Accepted speech reaches the foreground as a `UserQuery`. Typed
 text reaches the foreground but is not an STT transcript.
 
@@ -335,6 +373,36 @@ the exact source frame used for the marker scan and separates camera and framing
 problems from detector or VLM problems. Then inspect Relay events and the
 participant JSONL files to follow the tool call, reading, state update, and
 notification as distinct stages.
+
+### Routing and visual evals
+
+Start the shared model servers, then run these commands from
+`agent-samples/lab-instrument-monitoring/`:
+
+```bash
+uv run --project worker python eval/eval.py
+uv run --project worker python eval/visual_eval.py
+```
+
+`eval/cases.yaml` checks the foreground model's complete first action, exact
+tool-call count, and every call's request model. It separates current-view,
+recent-history, background-control, ordinary conversation, and general
+knowledge requests. `eval/visual_cases.yaml` exercises generated images for
+monitor baselines and changes, adversarial visible instructions, multiple
+readable devices, competing markers, and exact joint label-to-reading output.
+
+### Printable sample markers
+
+The checked-in marker assets match `yaml/device_map.yaml`:
+
+| Files | Family | Encoded IDs | Device names |
+|---|---|---|---|
+| `sample-markers/qr/*.png` | QR | `device-1` through `device-5` | `Device1` through `Device5` |
+| `sample-markers/aruco/*.png` | ArUco `DICT_4X4_50` | `0` through `4` | `Device1` through `Device5` |
+
+Keep the white border, print without interpolation or cropping, and place a
+marker close enough to its instrument display for both to be clear in one
+camera frame.
 
 <a id="what-should-become-shared"></a>
 

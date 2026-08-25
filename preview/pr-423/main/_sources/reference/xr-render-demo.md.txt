@@ -5,9 +5,10 @@
 
 # xr-render-demo — architecture
 
-This architecture reference describes the xr-render-demo sample. Start with
-{doc}`/getting_started/quickstart` to run it. For inference-server mechanics
-shared with other samples, refer to {doc}`/components/ai-services`.
+This architecture reference describes the xr-render-demo sample. Refer to
+{doc}`/getting_started/quickstart` to run the sample. For inference-server
+mechanics shared with other samples, refer to
+{doc}`/components/ai-services`.
 
 ## Process stack
 
@@ -18,7 +19,7 @@ any owned process exit terminates the application stack.
 
 | Role | Ownership | Directory | Command | Port |
 |---|---|---|---|---|
-| hub | sample | `services/device-io-hub/` | `device_io_hub` | 8080 (HTTPS and `/rtc` WSS proxy); LiveKit 7880 stays on 127.0.0.1 |
+| hub | sample | `services/device-io-hub/` | `device_io_hub` | 8080 (HTTPS and `/rtc` WSS proxy); 7880 (plaintext LiveKit direct-debug path; firewall-restricted) |
 | cloudxr | sample | `services/cloudxr-runtime/` | `cloudxr_runtime` | 48322 (WSS proxy) |
 | stt | reused | `services/stt-server/` | `stt_server` | 8103 |
 | tts | reused | `services/piper-tts/` | `piper_tts_server` | 8105 |
@@ -31,7 +32,7 @@ any owned process exit terminates the application stack.
 
 Before starting the stack, the orchestrator runs two setup steps:
 
-- **Web vendor bundle** — builds the CloudXR + LiveKit ESM bundle via
+- **Web vendor bundle** — builds the CloudXR and LiveKit ESM bundle via
   `client-samples/web-xr-build/build.sh` (skipped if already present;
   requires `npm`). Built only for WebRTC device profiles; native profiles
   never serve the web page, so the build (and its npm dependency) is skipped.
@@ -39,10 +40,30 @@ Before starting the stack, the orchestrator runs two setup steps:
   not present and sets `$LOVR_BIN`. Resolution order: `$LOVR_BIN` env var →
   `lovr_bin:` in `scene/scene_service.yaml` → cached AppImage → fresh download.
 
+## Source map and extension points
+
+`main.py` is the orchestrator. `worker/xr_render_demo_worker/app.py` composes
+the SDK tools and `RenderAgent`; `agent.py` receives participant turns;
+`supervisor.py` owns the top-level tool loop; and `scene.py` owns snapshots,
+diffs, and move history. The `agents/` packages contain placement, appearance,
+object, vision, and memory subagents. The separately packaged `scene/` process
+owns LOVR and scene state, while `eval/` owns offline and live regression tiers.
+
+To add a subagent, create a package under `agents/`, return its model-visible
+`Tool` from a `make_<name>_agent()` factory, export it, compose it into the
+supervisor, and add component eval cases. Add shared capability groups to
+`xr-ai-tools` once two applications need them; otherwise keep a sample-specific
+group with the worker and inject it into the relevant subagent.
+
+Prompt-only changes need no rebuild. Edit the supervisor or subagent prompt in
+place and add a corresponding eval case without copying the worked example's
+specific vocabulary into the fixture.
+
 ## Selecting the client type (WebRTC vs native)
 
 `NV_DEVICE_PROFILE` selects which XR clients can connect. For the native iOS
-and visionOS apps, set it to `auto-native`:
+and visionOS apps, set it to `auto-native`. Run from
+`agent-samples/xr-render-demo/`:
 
 ```bash
 NV_DEVICE_PROFILE=auto-native uv run xr_render_demo
@@ -78,25 +99,51 @@ The model-side fields live under `agent-samples/model-servers/yaml/`. Set them
 to different GPUs so
 the XR compositor and the agentic LLM do not share a card.
 
-## Worker configuration
+(worker-configuration)=
+## Configuration
 
-The worker reads two config files:
+Run and edit the sample from `agent-samples/xr-render-demo/`. Each process
+receives its checked-in configuration directly. Edit the owning file and
+restart `xr_render_demo` to apply a change.
 
-- `yaml/xr_render_demo_worker.yaml` — native capability endpoints, text-memory directory, and VAD tunables.
-- `yaml/models.json` — fixed reuse-only model endpoint declarations consumed by
-  `xr-ai-models`. Each entry maps a logical name
-  (`llm`, `agent_llm`, `stt`, `tts`, `vlm`) to an adapter (preset or explicit
-  spec), an endpoint, and a deployment. Edit this file to change which model
-  runs where without touching the worker code.
+| File | Owns |
+|---|---|
+| `yaml/cloudxr_runtime.yaml` | CloudXR install state, EULA acceptance, client profile, compositor GPU, and environment overrides |
+| `yaml/xr_render_demo_worker.yaml` | Native capability endpoints, text-memory directory, VAD, idle timeout, and voice-gate selection |
+| `yaml/voice_gate.yaml` | Always-on speech or wake phrases, listening chime, and follow-up window |
+| `yaml/models.json` | Reused model adapters, endpoints, and readiness checks |
+| `yaml/device_io_hub.yaml` | LiveKit, web and token servers, networking, and video recording |
+| `yaml/video_memory_service.yaml` | Recorded-query endpoint, output directory, and GPU |
+| `yaml/openxr_service.yaml` | OpenXR endpoint, CloudXR environment, and eval-only simulated pose |
+| `scene/scene_service.yaml` | LOVR binary and app, scene endpoint, and CloudXR environment |
+
+`NV_DEVICE_PROFILE` in the environment overrides
+`cloudxr_env.NV_DEVICE_PROFILE` in `cloudxr_runtime.yaml`. `LOVR_BIN` similarly
+overrides `lovr_bin` in `scene/scene_service.yaml`. Use a GPU index reported by
+`nvidia-smi` for `gpu_index`; the CloudXR, video-memory, and model-server GPU
+settings are independent and must be planned together. Keep
+`allow_sim_pose: false` outside the live eval harness.
+
+Each `models.json` entry maps a logical role (`llm`, `agent_llm`, `stt`, `tts`,
+or `vlm`) to an adapter, endpoint, and deployment. Editing it changes which
+operator-owned endpoint the demo consumes; it does not reconfigure or restart
+the shared model. Refer to {doc}`/guides/customizing-model-servers` for
+server-side model, port, GPU, or memory changes, then restart the persistent
+model stack.
+
+Refer to the generated {doc}`configuration <configuration>` reference for exact
+fields, checked-in values, and adjacent YAML comments.
 
 ## The LLM server
 
 ### Nemotron-3-Nano-Omni-30B-A3B-Reasoning — port 8108
 
-A vLLM `execvp` shim: a small Python wrapper that reads YAML configuration,
-sets `HF_HOME` and token environment variables, then `os.execvp`s into `vllm serve`. The
-Python process is replaced by vLLM; vLLM owns the HTTP API, weight loading,
-and tool calling from that point on.
+A small Python wrapper reads YAML configuration, sets the model environment,
+and starts vLLM through the selected `pip` or Docker backend. The vLLM process
+or container runs in a separate session so the shared model remains available
+across stack restarts; the wrapper monitors its health and reports readiness.
+The shared model-server stack reuses a healthy instance and replaces one whose
+launch configuration changed.
 
 `vllm serve` uses `--tool-call-parser qwen3_coder` and
 `--reasoning-parser nemotron_v3`. The launcher selects NVFP4 on Blackwell and
@@ -132,7 +179,7 @@ Port 8103. NeMo ASR in-process. English-only, ~1.5 GB VRAM.
 
 ```
 LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceAgent
-  → VAD/STT
+  → VAD and STT
       pre-roll buffer    last 10 chunks (~320 ms) kept at all times;
                          prepended to the utterance buffer on speech onset
                          so the first word's attack isn't clipped
@@ -173,7 +220,7 @@ cancelled before its reply is published, so no partial stream is left open.
 ## Agent runtime and voice topology
 
 ```
-VoiceAgent → private media session → VAD/STT ─→ voice.transcript topic
+VoiceAgent → private media session → VAD and STT ─→ voice.transcript topic
                                   └→ VoiceGate ─┐
            → typed hub text ingress ────────────┴→ xr-render.user-query topic
   → RenderAgent → SceneSupervisor → five focused subagents → voice.output topic
@@ -281,14 +328,14 @@ CloudXR returns `XR_ERROR_FORM_FACTOR_UNAVAILABLE` from `xrGetSystem` until
 a streaming client connects. LOVR cannot start before then.
 
 ```
-1. User opens https://<host>:8080, grants mic + XR permissions
+1. User opens https://<host>:8080, grants microphone and XR permissions
 2. User clicks "Launch XR"
 3. Client sends `xr.session.started` data message → hub IPC → worker
 4. Worker invokes native `start_xr`
-   → scene process spawns LOVR + waits for CloudXR in a background task
+   → scene process spawns LOVR and waits for CloudXR in a background task
 5. Worker polls `get_health` every 500 ms (up to 120s)
    lovr_started: true  → send `render.ready` to client → XR session unlocked
-   spawn_error: "..."  → log + abort
+   spawn_error: "..."  → log and abort
 6. On reconnect or refresh: `xr.session.started` arrives again
    → `_xr_started` is already True → skip spawn, send `render.ready`
    immediately
@@ -296,16 +343,127 @@ a streaming client connects. LOVR cannot start before then.
 
 ## Eval harness
 
-Offline regression suite for the agentic loop, run against the live agent LLM.
-It derives schemas from the worker's native tools and evaluates tool
-effects against deterministic fixtures, so the live LOVR scene is not mutated.
-Refer to
-[`agent-samples/xr-render-demo/eval/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/agent-samples/xr-render-demo/eval/README.md)
-for the case format and the watch-mode loop. Run with:
+The evaluation project derives schemas from the worker's native tools. Offline
+tiers call the live agent LLM but apply tool effects to deterministic fixtures,
+so they do not mutate the LOVR scene.
+
+| Tier | Command | Runs against | Approximate cost |
+|---|---|---|---|
+| Supervisor routing | `xr_render_demo_eval_supervisor` | Fake subagents that record delegations | 15 seconds per case |
+| Subagent components | `xr_render_demo_eval_subagents` | One real subagent over fake leaf functions | 30 seconds per case |
+| End-to-end offline | `xr_render_demo_eval` | Supervisor and subagents over deterministic services | 30 minutes for the full corpus |
+| Live smoke | `xr_render_demo_live_smoke` | Running demo stack | Minutes |
+| Live pose matrix | `xr_render_demo_live_pose_matrix` | Running demo stack and simulated poses | Minutes |
+| Live manipulation | `xr_render_demo_live_manip` | Running demo stack and real scene state | Minutes |
+| Live speech noise | `xr_render_demo_live_garble` | Running demo stack with noisy utterances | Minutes |
+| Live exploration | `xr_render_demo_live_explore` | Running demo stack with novel prompts | Minutes |
+
+Run all commands from `agent-samples/xr-render-demo/eval/`:
 
 ```bash
-uv run --project agent-samples/xr-render-demo/eval xr_render_demo_eval
+uv sync
+
+# Full offline corpus, precision cases, and utterance battery
+uv run xr_render_demo_eval
+
+# Fast prompt-change gate
+uv run xr_render_demo_eval utterances
+
+# Filter by case name; unknown names fail
+uv run xr_render_demo_eval move_left_one_meter between_two_spheres
+
+# Routing and component tiers; the component command accepts an agent or case
+uv run xr_render_demo_eval_supervisor
+uv run xr_render_demo_eval_subagents placement
 ```
+
+The offline tiers require only the agent LLM, which defaults to
+`http://localhost:8108`. They do not require the demo stack, capability
+services, or LOVR.
+
+### Live drivers
+
+Start the demo stack and set `allow_sim_pose: true` in
+`../yaml/openxr_service.yaml` before running live evaluations:
+
+```bash
+uv run xr_render_demo_live_smoke
+uv run xr_render_demo_live_pose_matrix
+uv run xr_render_demo_live_manip
+uv run xr_render_demo_live_garble
+uv run xr_render_demo_live_explore
+```
+
+Live drivers join as synthetic participants, inject typed text, set simulated
+head pose, and score real scene state. Preserve these isolation rules:
+
+- Use a fresh participant ID for every case so transcript history cannot affect
+  later supervisor behavior.
+- Clear the scene through typed RPC between cases so stale objects cannot make
+  referents ambiguous.
+- Vary prompt phrasing across cases rather than building an artificial repeated
+  self-history.
+- Write the complete run log to a file, then filter that file. Do not filter the
+  live command's output pipeline.
+- Repeat each run three times before treating a near-tie result as a regression;
+  model choices can vary even at temperature zero.
+
+`xr_render_demo_live_garble` covers homophones, truncations, corrections, and
+stutters. Its restraint scoring fails incorrect mutations and accepts a
+clarifying response. `xr_render_demo_live_explore` sends novel conversational
+phrasing and scores intent invariants. Promote any violation into a permanent
+tier case before fixing it.
+
+### Add or change a case
+
+End-to-end cases are dictionaries in `cases.py`; use the existing cases for
+pose overrides, multi-turn `history`, and undo `recent_moves` examples.
+Precision and utterance cases are `Case` values in `harness.py`, routing cases
+are in `supervisor.py`, component cases are in `subagents.py`, and live cases
+are in the corresponding `live_*.py` module. A live manipulation case has this
+shape:
+
+```python
+{
+    "name": "my_case",
+    "fixtures": [("sphere", x, y, z, r, g, b, size)],
+    "prompt": "...",
+    "check": lambda ids, objects: ...,  # True means pass
+}
+```
+
+### Prompt-tuning loop
+
+The current model follows worked examples and contrast pairs more reliably than
+bare prohibitions. Pair every refusal example with a proceed example so the
+restriction does not contaminate neighboring behavior. When examples cannot
+produce reliable schema arguments, move deterministic resolution into code and
+name the parameter for the text the model can copy. The `anchor_words`
+parameter is the precedent: the model copies descriptors verbatim, and
+`spatial_ops` resolves shapes, damaged nouns, and colors against scene state.
+
+Run `uv run xr_render_demo_eval utterances` after every prompt or operations
+change. Its 35 cases take about three minutes. Run the longer scenario and
+precision tiers before completing a tuning round.
+
+(prompt-eval-overlap-audit)=
+
+### Prompt and evaluation overlap audit
+
+The harness audits every worker prompt against every tier's inputs at startup.
+It warns when:
+
+1. a case utterance appears verbatim in a prompt;
+2. a case fixture ID appears in a prompt;
+3. a quoted prompt example pairs an evaluation color with an evaluation shape.
+
+Fix overlap by changing the prompt, not the case. Use colors such as teal,
+lavender, magenta, or turquoise and shapes such as cone, cylinder, capsule, or
+torus in worked examples. A case that passes only while its vocabulary appears
+in the prompt measures recall rather than capability.
+
+Offline tiers do not cover the live worker's voice pipeline, real LOVR effects,
+or real camera perception. Use a live tier for those boundaries.
 
 ## Tracing and debugging
 
@@ -327,7 +485,7 @@ unavailable (e.g. in offline eval). Key log landmarks:
 | Subagent delegated | `xr_render_demo_worker.agents.*` | DEBUG |
 | Tool loop error | `xr_render_demo_worker.supervisor` | WARNING (ToolLoopError) |
 | Subagent tool loop error | `xr_render_demo_worker.agents.*` | WARNING (ToolLoopError) |
-| Turn failed | `xr_render_demo_worker.agent` | ERROR + traceback |
+| Turn failed | `xr_render_demo_worker.agent` | ERROR with traceback |
 
 **Error policy.** Expected degradation paths (camera unavailable, scene
 not started) surface as subagent result strings and reach the user as a
@@ -340,13 +498,3 @@ turn is recorded as failed in the runtime event log.
 the supervisor's per-participant lock, and a global scene lock serializes
 the snapshot, mutation, and verification window across participants, so scene
 turns from different participants queue rather than interleave.
-
-(prompt-eval-overlap-audit)=
-
-### Prompt and evaluation overlap audit
-
-Per `AGENTS.md` "Prompt-driven samples", the harness audits every worker
-prompt against every tier's case inputs at startup and warns on overlap:
-verbatim case utterances, case fixture ids, and any quoted prompt example
-pairing an eval-vocabulary color with an eval-vocabulary shape. Clearing a
-warning means changing the prompt, not the case.
