@@ -30,7 +30,7 @@ On first run the orchestrator auto-downloads LOVR v0.18.0 to deps/lovr/ inside
 the repo and, for WebRTC device profiles, builds the web vendor bundle
 (requires npm + network). Native CloudXR profiles never load the web page, so
 the vendor build is skipped and the hub serves only its signaling endpoints.
-Both steps are skipped once their outputs exist.
+Both steps are skipped once their current-version outputs exist.
 
 To use a custom LOVR build instead of the auto-downloaded one:
     export LOVR_BIN=/path/to/your/lovr      # or set lovr_bin: in scene/scene_service.yaml
@@ -196,33 +196,59 @@ def _ensure_lovr_bin() -> None:
 # ── Web vendor bundle ─────────────────────────────────────────────────────────
 
 def _ensure_web_vendor() -> None:
-    """Build the web vendor bundle (CloudXR + LiveKit ESM) if not already present.
+    """Build the web vendor bundle when outputs are missing or out of date.
 
     Runs client-samples/web-xr-build/build.sh, which downloads the CloudXR SDK
     from NGC and produces vendor/cloudxr-sdk.esm.mjs and livekit-client.esm.mjs.
-    Requires npm on PATH. Skipped when the output files already exist.
+    Requires npm on PATH. Skipped when both outputs carry the version selected
+    by web-xr-build/.sdk-version.
     """
     vendor_dir   = (_BASE / "../../client-samples/web-xr/vendor").resolve()
     cloudxr_out  = vendor_dir / "cloudxr-sdk.esm.mjs"
     livekit_out  = vendor_dir / "livekit-client.esm.mjs"
-    if cloudxr_out.exists() and livekit_out.exists():
-        return
-
     build_sh = (_BASE / "../../client-samples/web-xr-build/build.sh").resolve()
     if not build_sh.exists():
         logger.warning(
-            "web vendor bundle missing and {} not found — skipping", build_sh,
+            "web vendor bundle missing or stale and {} not found — skipping",
+            build_sh,
         )
+        return
+
+    sdk_version_path = build_sh.parent / ".sdk-version"
+    version_marker = vendor_dir / ".cloudxr-sdk-version"
+    try:
+        sdk_version = sdk_version_path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        sys.exit(f"\n  [setup] failed to read {sdk_version_path}: {exc}\n")
+    if not sdk_version:
+        sys.exit(f"\n  [setup] {sdk_version_path} is empty.\n")
+
+    try:
+        built_version = version_marker.read_text(encoding="utf-8").strip()
+    except OSError:
+        built_version = ""
+    if (
+        cloudxr_out.exists()
+        and livekit_out.exists()
+        and built_version == sdk_version
+    ):
         return
 
     if not shutil.which("npm"):
         sys.exit(
-            "\n  xr-render-demo: web vendor bundle missing and npm is not on PATH.\n"
+            "\n  xr-render-demo: web vendor bundle missing or stale and npm is "
+            "not on PATH.\n"
             "  Install Node.js (https://nodejs.org), then re-run, or build manually:\n"
             f"    cd {build_sh.parent} && ./build.sh\n"
         )
 
-    logger.info("Web vendor bundle not found — running build.sh: {}", build_sh)
+    logger.info(
+        "Web vendor bundle missing or stale (have={!r}, want={!r}) — "
+        "running build.sh: {}",
+        built_version or None,
+        sdk_version,
+        build_sh,
+    )
     result = subprocess.run([str(build_sh)], cwd=str(build_sh.parent))
     if result.returncode != 0:
         sys.exit(
@@ -235,6 +261,15 @@ def _ensure_web_vendor() -> None:
             "\n  [setup] build.sh completed without producing: "
             f"{', '.join(missing)}.\n"
             "  Check the output above, then re-run.\n"
+        )
+    try:
+        built_version = version_marker.read_text(encoding="utf-8").strip()
+    except OSError:
+        built_version = ""
+    if built_version != sdk_version:
+        sys.exit(
+            "\n  [setup] build.sh completed without recording CloudXR SDK "
+            f"version {sdk_version!r} in {version_marker}.\n"
         )
     logger.info("Web vendor bundle ready")
 

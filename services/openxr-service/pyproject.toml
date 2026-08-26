@@ -15,7 +15,7 @@ dependencies = [
     "xr-ai-logging",
     "xr-ai-tools[services]",
     "pyyaml>=6.0",
-    "isaacteleop",
+    "isaacteleop>=1.3.131",
 ]
 
 [tool.uv.sources]

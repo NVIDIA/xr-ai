@@ -199,7 +199,7 @@ change, even when an individual dependency publishes newer Python wheels.
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `isaacteleop[cloudxr]`
+  - `isaacteleop[cloudxr]>=1.3.131`
   - `pyyaml`
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
@@ -332,7 +332,7 @@ change, even when an individual dependency publishes newer Python wheels.
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-tools[services]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `pyyaml>=6.0`
-  - `isaacteleop`
+  - `isaacteleop>=1.3.131`
 - Optional dependency groups: none
 - Commands:
   - `openxr_service` → `openxr_service.__main__:run`
