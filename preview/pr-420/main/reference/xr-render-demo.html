@@ -452,7 +452,7 @@ mechanics shared with other samples, refer to
 <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a>.</p>
 <section id="process-stack">
 <h2>Process stack<a class="headerlink" href="#process-stack" title="Link to this heading">#</a></h2>
-<p>The orchestrator (<code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code>, stdlib-only via <code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code>) reuses all
+<p>The orchestrator (<code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code>, via <code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code>) reuses all
 model processes and starts its application processes serially; each owned
 process touches its ready file before the next starts. <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> is fail-fast:
 any owned process exit terminates the application stack.</p>
@@ -476,7 +476,7 @@ any owned process exit terminates the application stack.</p>
 <td><p>sample</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">services/cloudxr-runtime/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">cloudxr_runtime</span></code></p></td>
-<td><p>48322 (WSS proxy)</p></td>
+<td><p>48322 (WSS proxy for WebRTC profiles; unused by <code class="docutils literal notranslate"><span class="pre">auto-native</span></code>)</p></td>
 </tr>
 <tr class="row-even"><td><p>stt</p></td>
 <td><p>reused</p></td>
@@ -695,14 +695,12 @@ settled before LOVR starts its Vulkan device, preventing a transient OOM race.</
       accumulates        audio while speaking
       finalizes when     silence ≥ 0.8s AND speech ≥ 0.15s
                          OR max utterance length (30s) hit
-      filler filter      drops single- and multi-word filler utterances
-                         ("um", "uh", "yeah", "okay", "mm-hmm", etc.)
       STT call           POST multipart/form-data WAV → stt-server :8103
   → accepted participant query
 </pre></div>
 </div>
-<p>STT calls are serialized — an <code class="docutils literal notranslate"><span class="pre">stt_busy</span></code> flag prevents a new finalize while
-one is in-flight.</p>
+<p>The STT server serializes inference with a process-local lock because its shared
+NeMo model is not reentrant.</p>
 </section>
 <section id="tts-piper">
 <h2>TTS — Piper<a class="headerlink" href="#tts-piper" title="Link to this heading">#</a></h2>

@@ -493,9 +493,9 @@ their own participant state. Pipecat and the media session remain implementation
 details.</p>
 <p>Applications may publish selected compact payloads to <code class="docutils literal notranslate"><span class="pre">WEB_EVENT_TOPIC</span></code> for a
 <code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code> to display. The viewer owns only a bounded live history and a
-loopback HTTP listener. It is not persistence, does not inspect every runtime
-topic, and does not enter model, voice, media, or hub authentication paths. The
-application explicitly selects which typed events to forward.</p>
+loopback HTTP listener by default. It is not persistence, does not inspect every
+runtime topic, and does not enter model, voice, media, or hub authentication
+paths. The application explicitly selects which typed events to forward.</p>
 <p>Applications with multiple speech producers may place
 <code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code> before <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>. Producers publish candidate
 finite or incremental responses to <code class="docutils literal notranslate"><span class="pre">voice.contribution</span></code>; the aggregator owns

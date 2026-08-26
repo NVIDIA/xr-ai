@@ -452,9 +452,8 @@ customer-facing Markdown and reStructuredText. Refer to
 <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
 for the package dependency map.</p>
 <p>For a Python change:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>&lt;affected-project&gt;
-uv<span class="w"> </span>sync
-uv<span class="w"> </span>run<span class="w"> </span>pytest
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>&lt;affected-project&gt;
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>pytest<span class="w"> </span>&lt;affected-test-files&gt;
 uv<span class="w"> </span>tool<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>&lt;changed-python-files&gt;
 </pre></div>
 </div>

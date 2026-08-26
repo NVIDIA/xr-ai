@@ -1219,7 +1219,7 @@ workflow.</p></li>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
 <span class="c1"># Nemotron-3-Nano-Omni — DGX Spark (GB10).</span>
-<span class="c1"># The NVFP4 model shares physical HBM with STT and the runtime, so retain the</span>
+<span class="c1"># The NVFP4 model shares unified memory with STT and the runtime, so retain the</span>
 <span class="c1"># conservative allocation used by the standard Nano stack.</span>
 
 <span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
@@ -1376,7 +1376,7 @@ workflow.</p></li>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># VLM server — DGX Spark (GB10, ~120 GiB GPU-visible HBM).</span>
+<span class="c1"># VLM server — DGX Spark (GB10, ~120 GiB GPU-visible unified memory).</span>
 <span class="c1">#</span>
 <span class="c1"># vlm is THIRD in load order: STT → Omni → vlm.</span>
 <span class="c1"># free_at_startup ≈ 120 − 30 (Omni) − 2 (STT) ≈ 88 GiB.</span>

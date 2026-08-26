@@ -425,18 +425,20 @@
 <h1>Requirements<a class="headerlink" href="#requirements" title="Link to this heading">#</a></h1>
 <section id="hardware">
 <h2>Hardware<a class="headerlink" href="#hardware" title="Link to this heading">#</a></h2>
-<p>The bundled GPU profiles target a single NVIDIA RTX PRO 6000 Blackwell workstation
-GPU or an NVIDIA DGX Spark, both of which have enough VRAM to run the full model
-stack locally. These profiles are turnkey presets, not a hardware allowlist: you
-can run on other NVIDIA GPUs by tuning the per-server GPU-memory split. Refer to
-<a class="reference internal" href="#running-on-other-gpus">Running on other GPUs</a> below.</p>
-<p>If you prefer not to run models on local hardware, model endpoints are plain
-URLs: point the worker configuration at a cloud NIM or model endpoint and no
-local GPU is required for the agent or DeviceIOHub.</p>
+<p>The bundled GPU profiles target two 48 GB NVIDIA Ada GPUs, a single NVIDIA RTX PRO
+6000 Blackwell workstation GPU, or an NVIDIA DGX Spark. Each topology has enough
+GPU-visible memory to run the full model stack locally. These profiles are turnkey
+presets, not a hardware allowlist: you can run on other compatible NVIDIA GPUs by
+tuning the per-server GPU-memory split. Refer to <a class="reference internal" href="#running-on-other-gpus">Running on other
+GPUs</a> below.</p>
+<p>If you prefer not to run models on local hardware, point the worker configuration
+at cloud NIM or model endpoints. This removes the local model-service allocation,
+but the DeviceIOHub host still needs an NVIDIA GPU and driver that expose NVENC and
+NVDEC.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Sample</p></th>
-<th class="head"><p>Local VRAM needed</p></th>
+<th class="head"><p>Local GPU-visible memory needed</p></th>
 </tr>
 </thead>
 <tbody>
@@ -456,7 +458,7 @@ local GPU is required for the agent or DeviceIOHub.</p>
 <td><p>~55 GB for models and ~2 GB for CloudXR and the hub</p></td>
 </tr>
 <tr class="row-odd"><td><p>Hub only</p></td>
-<td><p>none</p></td>
+<td><p>No model allocation; NVENC and NVDEC are still required</p></td>
 </tr>
 </tbody>
 </table>
@@ -485,8 +487,8 @@ local GPU is required for the agent or DeviceIOHub.</p>
 <td><p>dependency manager used by all samples</p></td>
 </tr>
 <tr class="row-odd"><td><p>NVIDIA driver</p></td>
-<td><p>570+</p></td>
-<td><p>required for local model inference</p></td>
+<td><p>580+</p></td>
+<td><p>required for CUDA 13 model containers and DeviceIOHub hardware codecs</p></td>
 </tr>
 <tr class="row-even"><td><p>Docker</p></td>
 <td><p>24+</p></td>
@@ -494,11 +496,11 @@ local GPU is required for the agent or DeviceIOHub.</p>
 </tr>
 <tr class="row-odd"><td><p>NVIDIA Container Toolkit</p></td>
 <td><p>latest</p></td>
-<td><p>required: gives Docker access to the GPU. Without it, <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> fails with <code class="docutils literal notranslate"><span class="pre">failed</span> <span class="pre">to</span> <span class="pre">discover</span> <span class="pre">GPU</span> <span class="pre">vendor</span> <span class="pre">from</span> <span class="pre">CDI:</span> <span class="pre">no</span> <span class="pre">known</span> <span class="pre">GPU</span> <span class="pre">vendor</span> <span class="pre">found</span></code></p></td>
+<td><p>required: configures the <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime that gives Docker access to the GPU</p></td>
 </tr>
 <tr class="row-even"><td><p>Node.js</p></td>
 <td><p>18+ with npm</p></td>
-<td><p>required for xr-render-demo: the orchestrator builds the web vendor bundle on first run</p></td>
+<td><p>required for xr-render-demo’s default WebRTC profile: the orchestrator builds the web vendor bundle on first run</p></td>
 </tr>
 </tbody>
 </table>
@@ -514,7 +516,8 @@ install guide and run the CDI and runtime-configuration steps from there:</p>
 <div><p><a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html">https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html</a></p>
 </div></blockquote>
 <p>Quick smoke-test once installed:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>--gpus<span class="w"> </span>all<span class="w"> </span>nvidia/cuda:13.0.3-base-ubuntu24.04<span class="w"> </span>nvidia-smi
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>--runtime<span class="o">=</span>nvidia<span class="w"> </span>-e<span class="w"> </span><span class="nv">NVIDIA_VISIBLE_DEVICES</span><span class="o">=</span>all<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>nvidia/cuda:13.0.3-base-ubuntu24.04<span class="w"> </span>nvidia-smi
 </pre></div>
 </div>
 </section>
@@ -605,9 +608,9 @@ profile you have explicitly copied and tuned; it does not validate that the mode
 servers fit the selected devices.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>The model weights are independent of the GPU. Any NVIDIA GPU with enough VRAM for
-the models you load will run the stack; the profiles only encode where each server
-lands and how much memory it claims.</p>
+<p>The model weights are independent of the GPU. Any compatible NVIDIA GPU with
+enough memory for the models you load can run the stack; the profiles only encode
+where each server lands and how much memory it claims.</p>
 </div>
 </section>
 <section id="network">

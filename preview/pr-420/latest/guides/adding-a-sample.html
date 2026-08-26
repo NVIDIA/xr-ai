@@ -443,8 +443,8 @@ Derive all other names from it mechanically:</p>
 <td><p><code class="docutils literal notranslate"><span class="pre">simple-vlm-example/</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p>Orchestrator module</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">&lt;snake_name&gt;.py</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">simple_vlm_example.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">main.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">main.py</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p>Orchestrator entry point</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">&lt;snake_name&gt;</span></code></p></td>
@@ -556,7 +556,10 @@ Refer to <a class="reference internal" href="../reference/configuration.html"><s
 </section>
 <section id="orchestrator-pyproject-toml">
 <h2>Orchestrator <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code><a class="headerlink" href="#orchestrator-pyproject-toml" title="Link to this heading">#</a></h2>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[build-system]
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
@@ -564,10 +567,14 @@ build-backend = "hatchling.build"
 name = "&lt;kebab-name&gt;"
 version = "0.1.0"
 requires-python = "&gt;=3.11,&lt;3.13"
-dependencies = ["xr-ai-launcher"]
+dependencies = [
+    "xr-ai-launcher",
+    "xr-ai-logging",
+]
 
 [tool.uv.sources]
 xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
+xr-ai-logging  = { path = "../../utils/xr-ai-logging", editable = true }
 
 [project.scripts]
 &lt;snake_name&gt; = "main:run"
@@ -579,7 +586,10 @@ only-include = ["main.py"]
 </section>
 <section id="worker-pyproject-toml">
 <h2>Worker <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code><a class="headerlink" href="#worker-pyproject-toml" title="Link to this heading">#</a></h2>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[build-system]
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
@@ -608,7 +618,10 @@ packages = ["&lt;snake_name&gt;_worker"]
 <section id="orchestrator-main-py">
 <h2>Orchestrator <code class="docutils literal notranslate"><span class="pre">main.py</span></code><a class="headerlink" href="#orchestrator-main-py" title="Link to this heading">#</a></h2>
 <p>Exact boilerplate — do not add logic here:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">"""</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="sd">"""</span>
 <span class="sd">&lt;Name&gt; agent orchestrator.  Runs the process stack for this sample.</span>
 
 <span class="sd">How to run (from agent-samples/&lt;name&gt;/):</span>
@@ -617,16 +630,28 @@ packages = ["&lt;snake_name&gt;_worker"]
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_launcher</span><span class="w"> </span><span class="kn">import</span> <span class="n">Process</span><span class="p">,</span> <span class="n">run_stack</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_logging</span><span class="w"> </span><span class="kn">import</span> <span class="n">setup_logging</span>
 
 <span class="n">_BASE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span>
 
 <span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/device-io-hub"</span><span class="p">,</span> <span class="s2">"device_io_hub"</span><span class="p">),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span>               <span class="s2">"&lt;snake_name&gt;_worker"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span>
+        <span class="s2">"hub"</span><span class="p">,</span>
+        <span class="s2">"../../services/device-io-hub"</span><span class="p">,</span>
+        <span class="s2">"device_io_hub"</span><span class="p">,</span>
+        <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/device_io_hub.yaml"</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span>
+        <span class="s2">"worker"</span><span class="p">,</span>
+        <span class="s2">"worker"</span><span class="p">,</span>
+        <span class="s2">"&lt;snake_name&gt;_worker"</span><span class="p">,</span>
+        <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/&lt;snake_name&gt;_worker.yaml"</span><span class="p">,</span>
+    <span class="p">),</span>
 <span class="p">]</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">setup_logging</span><span class="p">(</span><span class="s2">"orchestrator"</span><span class="p">,</span> <span class="n">namespace</span><span class="o">=</span><span class="s2">"&lt;kebab-name&gt;"</span><span class="p">)</span>
     <span class="n">run_stack</span><span class="p">(</span><span class="n">PROCESSES</span><span class="p">,</span> <span class="n">_BASE</span><span class="p">)</span>
 
 
@@ -640,9 +665,12 @@ packages = ["&lt;snake_name&gt;_worker"]
 <p>Use this template when the worker talks directly to <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code>. Native
 voice workers keep argument parsing in <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code> and delegate composition
 to sibling <code class="docutils literal notranslate"><span class="pre">app.py</span></code> and <code class="docutils literal notranslate"><span class="pre">config.py</span></code> modules. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/242fc0f33999a9194d4878e18eb1bf8cc0591cd1/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/fd85c49ffae6f61cc288e5dacf822767dbe5c2ad/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
 for that shape. Fill in the sections marked <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">←</span> <span class="pre">FILL</span> <span class="pre">IN</span></code>.</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>"""
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""
 &lt;Name&gt; agent worker — &lt;one-line description&gt;.
 
 Launched as a subprocess by ``uv run &lt;snake_name&gt;`` (the orchestrator).

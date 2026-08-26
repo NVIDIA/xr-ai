@@ -429,9 +429,9 @@ Most tests are CPU-only and run without Docker or LiveKit. Node.js 24 is also
 required for the browser camera tests.</p>
 <section id="run-the-suite">
 <h2>Run the suite<a class="headerlink" href="#run-the-suite" title="Link to this heading">#</a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>tests
-uv<span class="w"> </span>sync
-uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-v
+<p>From the repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>tests
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>pytest<span class="w"> </span>-v
 </pre></div>
 </div>
 <p>CI runs the same project on Python 3.11 and 3.12 with:</p>
