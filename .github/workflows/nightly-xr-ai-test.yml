@@ -39,6 +39,12 @@ jobs:
     name: pytest (gpu)
     runs-on: gpu
     timeout-minutes: 60
+    # The vllm wrapper runs `docker login nvcr.io` when NGC_API_KEY is set.
+    # Isolate that login per run so the secret never sits in the runner-global
+    # ~/.docker/config.json, where it would outlive the run and, once rotated
+    # or revoked, break the anonymous nvcr.io pulls the whole job relies on.
+    env:
+      DOCKER_CONFIG: ${{ runner.temp }}/xr-ai-docker-config
 
     steps:
       - name: Checkout
@@ -193,6 +199,25 @@ jobs:
             docker rm -f $leftovers || true
           else
             echo "No xr-ai-vllm-* / xr-ai-nim-* containers to remove."
+          fi
+
+      - name: Remove nvcr.io docker logins
+        # Always-run so a failed or cancelled job never leaves this run's
+        # login behind on the shared runner.
+        if: always()
+        run: |
+          set -u
+          rm -rf -- "${RUNNER_TEMP:?}/xr-ai-docker-config"
+          # Point back at the runner-global config to catch logins that
+          # should not persist on the shared box. Warn if one is present;
+          # clear it on scheduled runs only, never out from under a human
+          # using the box mid-day.
+          export DOCKER_CONFIG="$HOME/.docker"
+          if grep -q '"nvcr.io"' "$HOME/.docker/config.json" 2>/dev/null; then
+            echo "::warning::runner-global docker config has an nvcr.io login"
+            if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+              docker logout nvcr.io || true
+            fi
           fi
 
   notify:
