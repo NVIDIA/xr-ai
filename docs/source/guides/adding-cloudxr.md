@@ -64,8 +64,10 @@ clients, not both. Change the profile and restart the stack when switching.
 The runtime also accepts the device-specific profiles `apple-vision-pro`,
 `ipad-pro`, and `quest3`. The static `quest3` profile is a valid alternative
 when fixed Quest 3 defaults are preferred. Use `auto-webrtc` for the general
-Quest 2/3/3S path so the runtime waits for the CloudXR.js client and discovers
-its device settings dynamically.
+Quest 2/3/3S path documented in the
+[CloudXR.js requirements](https://docs.nvidia.com/cloudxr-sdk/latest/requirement/cloudxrjs_req.html)
+so the runtime waits for the client and discovers its device settings
+dynamically.
 
 ## Notes
 

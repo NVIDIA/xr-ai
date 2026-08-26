@@ -54,8 +54,8 @@ def run() -> None:
 
 ## Rules
 
-- **Stack items start in declaration order** — members of a `Parallel` item
-  start concurrently, and the launcher waits for each `Process` or every
+- **Spawned stack items start in declaration order** — members of a `Parallel`
+  item start concurrently, and the launcher waits for each `Process` or every
   `Parallel` member to create its `--ready-file` before starting the next item.
   Declare items in dependency order (hub before workers and application
   processes after the services they call).
@@ -83,10 +83,19 @@ The stack is declared as a sequence of `Process` or `Parallel` items:
 
 ```python
 PROCESSES = [
-    Process("hub",    "../../services/device-io-hub", "device_io_hub"),
+    Process("vlm", "../../services/vlm-server", "vlm_server",
+            launch_mode="reuse"),
+    Process(
+        "embedding", "../../services/embedding-server", "embedding_server",
+        launch_mode="reuse",
+    ),
+    Process("hub", "../../services/device-io-hub", "device_io_hub",
+            config="yaml/device_io_hub.yaml"),
     Parallel([
-        Process("stt", "../../services/stt-server", "stt_server"),
-        Process("tts", "../../services/piper-tts",  "piper_tts_server"),
+        Process("video-memory", "../../services/video-memory-service",
+                "video_memory_service", config="yaml/video_memory_service.yaml"),
+        Process("rag", "../../services/rag-service", "rag_service",
+                config="yaml/rag_service.yaml"),
     ]),
     Process("worker", "worker", "my_agent_worker"),
 ]

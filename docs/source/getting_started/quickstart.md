@@ -301,9 +301,9 @@ additional host prerequisites:
 
 - **Vulkan loader + headers** — the CloudXR compositor and LOVR render through
   Vulkan, so install them before running the demo: `sudo apt install libvulkan-dev`
-- **Node.js 18+ with npm** on PATH for WebRTC profiles — the orchestrator builds
-  the web vendor bundle on first run (skipped for native profiles and on
-  subsequent runs).
+- **Node.js 20.19.0+ with npm** on PATH for WebRTC profiles — the orchestrator
+  builds the web vendor bundle on first run (skipped for native profiles and
+  on subsequent runs).
 
 Start XR Render:
 

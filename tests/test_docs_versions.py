@@ -409,6 +409,7 @@ def test_service_root_commands_declare_their_working_directory() -> None:
 
 
 def test_reworded_headings_keep_compatibility_anchors() -> None:
+    ai_services = (_ROOT / "docs/source/components/ai-services.md").read_text()
     clients = (_ROOT / "docs/source/getting_started/clients.md").read_text()
     hub = (_ROOT / "docs/source/reference/agent-sdk-hub.md").read_text()
     models = (_ROOT / "docs/source/reference/agent-sdk-models.md").read_text()
@@ -430,6 +431,7 @@ def test_reworded_headings_keep_compatibility_anchors() -> None:
     ):
         assert f"({anchor})=" in clients
     for page, anchors in (
+        (ai_services, ("adding-a-server-to-a-sample",)),
         (
             hub,
             (

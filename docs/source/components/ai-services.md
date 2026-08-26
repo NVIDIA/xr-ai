@@ -118,7 +118,9 @@ Process(
 
 The launcher skips reuse-only entries completely: it does not start, order, or
 readiness-check them. Start `model_servers` separately before the application
-sample. Application capability services such as RAG remain sample-owned and
+sample. At startup, the sample worker probes endpoints whose models JSON entry
+uses `readiness: health` and keeps waiting until those reused services are
+available. Application capability services such as RAG remain sample-owned and
 keep their configuration with the sample that launches them.
 
 ## Calling these from a worker
