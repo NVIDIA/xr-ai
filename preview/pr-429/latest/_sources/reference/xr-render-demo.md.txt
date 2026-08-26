@@ -12,7 +12,7 @@ mechanics shared with other samples, refer to
 
 ## Process stack
 
-The orchestrator (`xr_render_demo`, stdlib-only via `xr-ai-launcher`) reuses all
+The orchestrator (`xr_render_demo`, via `xr-ai-launcher`) reuses all
 model processes and starts its application processes serially; each owned
 process touches its ready file before the next starts. `run_stack` is fail-fast:
 any owned process exit terminates the application stack.
@@ -20,7 +20,7 @@ any owned process exit terminates the application stack.
 | Role | Ownership | Directory | Command | Port |
 |---|---|---|---|---|
 | hub | sample | `services/device-io-hub/` | `device_io_hub` | 8080 (HTTPS and `/rtc` WSS proxy); 7880 (plaintext LiveKit direct-debug path; firewall-restricted) |
-| cloudxr | sample | `services/cloudxr-runtime/` | `cloudxr_runtime` | 48322 (WSS proxy) |
+| cloudxr | sample | `services/cloudxr-runtime/` | `cloudxr_runtime` | 48322 (WSS proxy for WebRTC profiles; unused by `auto-native`) |
 | stt | reused | `services/stt-server/` | `stt_server` | 8103 |
 | tts | reused | `services/piper-tts/` | `piper_tts_server` | 8105 |
 | omni | reused | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 (LLM) |
@@ -188,14 +188,12 @@ LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceAgent
       accumulates        audio while speaking
       finalizes when     silence ≥ 0.8s AND speech ≥ 0.15s
                          OR max utterance length (30s) hit
-      filler filter      drops single- and multi-word filler utterances
-                         ("um", "uh", "yeah", "okay", "mm-hmm", etc.)
       STT call           POST multipart/form-data WAV → stt-server :8103
   → accepted participant query
 ```
 
-STT calls are serialized — an `stt_busy` flag prevents a new finalize while
-one is in-flight.
+The STT server serializes inference with a process-local lock because its shared
+NeMo model is not reentrant.
 
 ## TTS — Piper
 

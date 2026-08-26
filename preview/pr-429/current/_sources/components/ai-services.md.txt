@@ -92,6 +92,7 @@ verify free space first. Keep the old directories until the relocated services
 start successfully without network access. Recreate project environments with
 `uv sync`; do not copy `.venv` directories across the move.
 
+(adding-a-server-to-a-sample)=
 
 ## Connecting a sample to shared model services
 
@@ -117,7 +118,9 @@ Process(
 
 The launcher skips reuse-only entries completely: it does not start, order, or
 readiness-check them. Start `model_servers` separately before the application
-sample. Application capability services such as RAG remain sample-owned and
+sample. At startup, the sample worker probes endpoints whose models JSON entry
+uses `readiness: health` and keeps waiting until those reused services are
+available. Application capability services such as RAG remain sample-owned and
 keep their configuration with the sample that launches them.
 
 ## Calling these from a worker
@@ -271,9 +274,9 @@ Requirements: docker + NVIDIA Container Toolkit, `NGC_API_KEY` (used for the
 GPU-matched optimized engine from NGC on first start; multi-GB, cached
 under `models/nim/` for later runs), and GPU capacity for every container.
 `cuda_visible_devices` placement lives in the per-GPU-profile
-`nim_*_server.yaml` files (dual_48G_ada values are live-validated; the
-other profiles ship estimates). Readiness gates on each container's
-`/v1/health/ready`.
+`nim_*_server.yaml` files. Their adjacent comments record profile-specific
+validation status and hardware cautions; verify startup and capacity on the
+target host. Readiness gates on each container's `/v1/health/ready`.
 
 A NIM container serving something the samples don't ship is the same
 mechanism by hand: point an `openai_compat` entry's `base_url` at its port
@@ -357,7 +360,7 @@ All five vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
 | `vllm_backend` | Runtime | Code fallback | Shipped standalone YAMLs | Use when |
 |---|---|---|---|---|
 | `pip` | `vllm serve` from the wrapper's venv | yes | no | Developing the wrapper in its local environment or using a custom pip installation. |
-| `docker` | `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …` | no | yes | Running the pinned NVIDIA vLLM container used by the checked-in configurations. |
+| `docker` | `docker run <vllm_image> vllm serve …` | no | yes | Running the configured vLLM container used by the checked-in configurations. |
 
 Both modes honor identical configuration keys — same model, same port, same vLLM
 flags. The dispatcher lives in `utils/xr-ai-vllm/`. Switching is one YAML edit:
@@ -379,7 +382,8 @@ mirror, or a custom build.
   must succeed without `sudo`).
 - **NVIDIA Container Toolkit** so the `nvidia` runtime can expose GPUs:
   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
-- **NGC pull access** for `nvcr.io/nvidia/vllm`. The wrapper auto-runs
+- **NGC pull access**, when the configured `vllm_image` is restricted or
+  requires authentication on `nvcr.io`. The wrapper auto-runs
   `docker login nvcr.io` if `NGC_API_KEY` is in the environment (loaded by
   `load_credentials()` from `~/.config/xr-ai/credentials.json` per
   {doc}`/getting_started/credentials`). Otherwise, log in manually once:
@@ -480,7 +484,7 @@ cleanup.
 - **nemotron-omni-llm** is a vLLM-backed multimodal LLM serving
   `Nemotron-3-Nano-Omni-30B-A3B-Reasoning` (text + video input) at port 8108.
   The YAML auto-selects between three model variants by detected GPU compute
-  capability: NVFP4 on Blackwell (SM100+), FP8 on Ada and Hopper, BF16 forced via
+  capability: NVFP4 on Blackwell (SM100+), FP8 on Ada, Hopper, and Ampere, BF16 forced via
   `use_bf16: true` for highest quality at the largest VRAM cost. Same
   OpenAI-compatible HTTP contract as the other LLM servers — swap the port to
   swap backends. Hosting backend is selectable per YAML (refer to *Choosing the

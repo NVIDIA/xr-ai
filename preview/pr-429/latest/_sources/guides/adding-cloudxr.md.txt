@@ -7,7 +7,7 @@
 
 `services/cloudxr-runtime/` is the shared CloudXR service.
 Any sample can stream XR content to a device by adding one line to its
-orchestrator and a configuration file in the sample root. For the broader
+orchestrator and a configuration file under the sample's `yaml/` directory. For the broader
 orchestrator pattern, refer to {doc}`adding-a-sample <adding-a-sample>`.
 
 ## 1 — Add the process to the orchestrator
@@ -15,16 +15,21 @@ orchestrator pattern, refer to {doc}`adding-a-sample <adding-a-sample>`.
 ```python
 PROCESSES = [
     Process("hub",     "../../services/device-io-hub",  "device_io_hub"),
-    Process("cloudxr", "../../services/cloudxr-runtime", "cloudxr_runtime"),  # ← add this
+    Process("cloudxr", "../../services/cloudxr-runtime", "cloudxr_runtime",
+            config="yaml/cloudxr_runtime.yaml"),  # ← add this
     Process("worker",  "worker",                "my_agent_worker"),
 ]
 ```
 
-## 2 — Add `cloudxr_runtime.yaml` to the sample root
+(add-cloudxr-runtime-yaml-to-the-sample-root)=
+## 2 — Add `cloudxr_runtime.yaml` to the sample's `yaml/` directory
 
-The launcher auto-discovers this file and passes it as `--config`.
+The `Process.config` value above passes this file as `--config`.
 
 ```yaml
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # CloudXR runtime configuration.
 cloudxr_install_dir: ~/.cloudxr
 
@@ -53,13 +58,16 @@ clients, not both. Change the profile and restart the stack when switching.
 |---|---|---|
 | `client-samples/web-xr/` | `auto-webrtc` | used |
 | `client-samples/ios-visionos/` | `auto-native` | unused |
-| Meta Quest 2, 3, or 3S through CloudXR.js | `auto-webrtc` | used |
+| Other native CloudXR clients | `auto-native` | unused |
+| Meta Quest 3 with CloudXR.js | `quest3` | used |
 
 The runtime also accepts the device-specific profiles `apple-vision-pro`,
 `ipad-pro`, and `quest3`. The static `quest3` profile is a valid alternative
 when fixed Quest 3 defaults are preferred. Use `auto-webrtc` for the general
-Quest 2/3/3S path so the runtime waits for the CloudXR.js client and discovers
-its device settings dynamically.
+Quest 2/3/3S path documented in the
+[CloudXR.js requirements](https://docs.nvidia.com/cloudxr-sdk/latest/requirement/cloudxrjs_req.html)
+so the runtime waits for the client and discovers its device settings
+dynamically.
 
 ## Notes
 

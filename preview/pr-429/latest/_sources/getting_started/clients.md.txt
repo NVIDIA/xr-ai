@@ -5,7 +5,8 @@
 
 # Connecting clients
 
-Every sample starts DeviceIOHub and then accepts one or more platform clients.
+Every interactive agent sample starts DeviceIOHub and then accepts one or more
+platform clients.
 This client reference is the canonical build and connection guide for the
 clients under `client-samples/`. Refer to {doc}`quickstart` for starting an
 agent sample and {doc}`networking` for firewall and TLS configuration.
@@ -79,13 +80,13 @@ cd client-samples/web-xr-build
 ```
 
 The idempotent script reads the CloudXR version from `.sdk-version`, reuses a
-cached `sdk.tgz` when present, otherwise reuses the matching IsaacTeleop tarball
-at `~/hub/IsaacTeleop/deps/cloudxr/` when available, and finally downloads the
-public NGC tarball. It installs npm dependencies and writes both ESM bundles to
-`../web-xr/vendor/`.
-To bump CloudXR, edit `.sdk-version` and remove `sdk.tgz` plus `node_modules`.
-To bump LiveKit, edit `package.json` and remove `node_modules`. Re-run the script
-after either change.
+matching versioned tarball when present, otherwise reuses the matching
+IsaacTeleop tarball at `~/hub/IsaacTeleop/deps/cloudxr/` when available, and
+finally downloads the public NGC tarball. It installs npm dependencies, writes
+both ESM bundles to `../web-xr/vendor/`, and records the SDK version beside
+them. The orchestrator automatically rebuilds missing or stale bundles.
+To bump CloudXR, edit `.sdk-version` and re-run the script. To bump LiveKit,
+edit `package.json`, remove `node_modules`, and re-run the script.
 
 ## Android
 

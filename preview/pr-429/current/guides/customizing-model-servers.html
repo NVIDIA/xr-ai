@@ -476,6 +476,32 @@ Reasoner, and Nemotron embedding services.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code>: local STT, Piper TTS, and embedding plus self-hosted
 Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner NIM containers.</p></li>
 </ul>
+<section id="choose-piper-or-magpie-tts">
+<h3>Choose Piper or Magpie TTS<a class="headerlink" href="#choose-piper-or-magpie-tts" title="Link to this heading">#</a></h3>
+<p>The shipped profiles use Piper because it runs on CPU, avoids the NeMo
+dependency tree, and typically synthesizes a sentence in about 100 ms. Magpie
+uses about 1 GB of GPU memory and provides multilingual synthesis, with typical
+latency of about 2–5 seconds per sentence. These figures are operational
+guidance; hardware and text length affect them.</p>
+<p>To select Magpie in a custom deployment profile, replace the <code class="docutils literal notranslate"><span class="pre">tts</span></code> role with:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"tts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"magpie_tts"</span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8104"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tts-magpie"</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">tts-magpie</span></code> service selects <code class="docutils literal notranslate"><span class="pre">magpie_tts_server.yaml</span></code> from the active GPU
+profile. Update the sample’s reused <code class="docutils literal notranslate"><span class="pre">tts</span></code> entry to use the same adapter and
+endpoint, with <code class="docutils literal notranslate"><span class="pre">deployment.ownership</span></code> set to <code class="docutils literal notranslate"><span class="pre">reused</span></code>.</p>
 <p>Copy the closest profile under a new name:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cp<span class="w"> </span>agent-samples/model-servers/yaml/models.default.json<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>agent-samples/model-servers/yaml/models.my-stack.json
@@ -510,6 +536,7 @@ The profile must retain the wrapped JSON shape:</p>
 Roles may share a service; for example, <code class="docutils literal notranslate"><span class="pre">llm</span></code> and <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> can both name
 <code class="docutils literal notranslate"><span class="pre">omni</span></code>. A service name must have a corresponding row in <code class="docutils literal notranslate"><span class="pre">_MODEL_SERVICES</span></code> in
 <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/main.py</span></code>.</p>
+</section>
 </section>
 <section id="customize-a-hardware-specific-server">
 <h2>Customize a hardware-specific server<a class="headerlink" href="#customize-a-hardware-specific-server" title="Link to this heading">#</a></h2>
@@ -729,7 +756,10 @@ and NIM credentials, refer to <a class="reference internal" href="../components/
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration-layers">Configuration layers</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#start-from-a-shipped-deployment-profile">Start from a shipped deployment profile</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#start-from-a-shipped-deployment-profile">Start from a shipped deployment profile</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#choose-piper-or-magpie-tts">Choose Piper or Magpie TTS</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#customize-a-hardware-specific-server">Customize a hardware-specific server</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adapt-a-sample-to-the-shared-stack">Adapt a sample to the shared stack</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#use-an-endpoint-at-another-address">Use an endpoint at another address</a></li>

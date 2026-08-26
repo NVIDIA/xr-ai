@@ -579,7 +579,7 @@ start successfully without network access. Recreate project environments with
 <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code>; do not copy <code class="docutils literal notranslate"><span class="pre">.venv</span></code> directories across the move.</p>
 </section>
 <section id="connecting-a-sample-to-shared-model-services">
-<h2>Connecting a sample to shared model services<a class="headerlink" href="#connecting-a-sample-to-shared-model-services" title="Link to this heading">#</a></h2>
+<span id="adding-a-server-to-a-sample"></span><h2>Connecting a sample to shared model services<a class="headerlink" href="#connecting-a-sample-to-shared-model-services" title="Link to this heading">#</a></h2>
 <p>Model services are operator-owned by the persistent <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> stack.
 Application samples reuse those endpoints; they do not own model processes or
 copy server YAML into their own configuration directories. Follow
@@ -599,7 +599,9 @@ ownership to the sample:</p>
 </div>
 <p>The launcher skips reuse-only entries completely: it does not start, order, or
 readiness-check them. Start <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> separately before the application
-sample. Application capability services such as RAG remain sample-owned and
+sample. At startup, the sample worker probes endpoints whose models JSON entry
+uses <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">health</span></code> and keeps waiting until those reused services are
+available. Application capability services such as RAG remain sample-owned and
 keep their configuration with the sample that launches them.</p>
 </section>
 <section id="calling-these-from-a-worker">
@@ -739,9 +741,9 @@ probe. No shipped model-server profile or sample selects Riva speech.</p>
 GPU-matched optimized engine from NGC on first start; multi-GB, cached
 under <code class="docutils literal notranslate"><span class="pre">models/nim/</span></code> for later runs), and GPU capacity for every container.
 <code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> placement lives in the per-GPU-profile
-<code class="docutils literal notranslate"><span class="pre">nim_*_server.yaml</span></code> files (dual_48G_ada values are live-validated; the
-other profiles ship estimates). Readiness gates on each container’s
-<code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">nim_*_server.yaml</span></code> files. Their adjacent comments record profile-specific
+validation status and hardware cautions; verify startup and capacity on the
+target host. Readiness gates on each container’s <code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>.</p>
 <p>A NIM container serving something the samples don’t ship is the same
 mechanism by hand: point an <code class="docutils literal notranslate"><span class="pre">openai_compat</span></code> entry’s <code class="docutils literal notranslate"><span class="pre">base_url</span></code> at its port
 (its health route is <code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>, so keep <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">false</span></code> and
@@ -832,10 +834,10 @@ cleanup without sending a signal; absent servers are silently skipped.</p>
 <td><p>Developing the wrapper in its local environment or using a custom pip installation.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">docker</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span> <span class="pre">nvcr.io/nvidia/vllm:&lt;tag&gt;</span> <span class="pre">vllm</span> <span class="pre">serve</span> <span class="pre">…</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span> <span class="pre">&lt;vllm_image&gt;</span> <span class="pre">vllm</span> <span class="pre">serve</span> <span class="pre">…</span></code></p></td>
 <td><p>no</p></td>
 <td><p>yes</p></td>
-<td><p>Running the pinned NVIDIA vLLM container used by the checked-in configurations.</p></td>
+<td><p>Running the configured vLLM container used by the checked-in configurations.</p></td>
 </tr>
 </tbody>
 </table>
@@ -858,7 +860,8 @@ mirror, or a custom build.</p>
 must succeed without <code class="docutils literal notranslate"><span class="pre">sudo</span></code>).</p></li>
 <li><p><strong>NVIDIA Container Toolkit</strong> so the <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime can expose GPUs:
 <a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html">https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html</a></p></li>
-<li><p><strong>NGC pull access</strong> for <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm</span></code>. The wrapper auto-runs
+<li><p><strong>NGC pull access</strong>, when the configured <code class="docutils literal notranslate"><span class="pre">vllm_image</span></code> is restricted or
+requires authentication on <code class="docutils literal notranslate"><span class="pre">nvcr.io</span></code>. The wrapper auto-runs
 <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">login</span> <span class="pre">nvcr.io</span></code> if <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is in the environment (loaded by
 <code class="docutils literal notranslate"><span class="pre">load_credentials()</span></code> from <code class="docutils literal notranslate"><span class="pre">~/.config/xr-ai/credentials.json</span></code> per
 <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>). Otherwise, log in manually once:</p>
@@ -962,7 +965,7 @@ as ready for commercial use under the
 <li><p><strong>nemotron-omni-llm</strong> is a vLLM-backed multimodal LLM serving
 <code class="docutils literal notranslate"><span class="pre">Nemotron-3-Nano-Omni-30B-A3B-Reasoning</span></code> (text + video input) at port 8108.
 The YAML auto-selects between three model variants by detected GPU compute
-capability: NVFP4 on Blackwell (SM100+), FP8 on Ada and Hopper, BF16 forced via
+capability: NVFP4 on Blackwell (SM100+), FP8 on Ada, Hopper, and Ampere, BF16 forced via
 <code class="docutils literal notranslate"><span class="pre">use_bf16:</span> <span class="pre">true</span></code> for highest quality at the largest VRAM cost. Same
 OpenAI-compatible HTTP contract as the other LLM servers — swap the port to
 swap backends. Hosting backend is selectable per YAML (refer to <em>Choosing the

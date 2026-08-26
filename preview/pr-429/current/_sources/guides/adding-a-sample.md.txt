@@ -17,7 +17,7 @@ Derive all other names from it mechanically:
 | Thing | Convention | Example |
 |---|---|---|
 | Sample directory | `agent-samples/<kebab-name>/` | `simple-vlm-example/` |
-| Orchestrator module | `<snake_name>.py` | `simple_vlm_example.py` |
+| Orchestrator module | `main.py` | `main.py` |
 | Orchestrator entry point | `<snake_name>` | `simple_vlm_example` |
 | Worker package | `<snake_name>_worker/` | `simple_vlm_example_worker/` |
 | Worker entry point | `<snake_name>_worker` | `simple_vlm_example_worker` |
@@ -94,6 +94,9 @@ Refer to {doc}`/reference/configuration` for the rendered reference.
 ## Orchestrator `pyproject.toml`
 
 ```text
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -102,10 +105,14 @@ build-backend = "hatchling.build"
 name = "<kebab-name>"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
-dependencies = ["xr-ai-launcher"]
+dependencies = [
+    "xr-ai-launcher",
+    "xr-ai-logging",
+]
 
 [tool.uv.sources]
 xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
+xr-ai-logging  = { path = "../../utils/xr-ai-logging", editable = true }
 
 [project.scripts]
 <snake_name> = "main:run"
@@ -117,6 +124,9 @@ only-include = ["main.py"]
 ## Worker `pyproject.toml`
 
 ```text
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -149,6 +159,9 @@ packages = ["<snake_name>_worker"]
 Exact boilerplate — do not add logic here:
 
 ```python
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """
 <Name> agent orchestrator.  Runs the process stack for this sample.
 
@@ -158,16 +171,28 @@ How to run (from agent-samples/<name>/):
 from pathlib import Path
 
 from xr_ai_launcher import Process, run_stack
+from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
 
 PROCESSES = [
-    Process("hub",    "../../services/device-io-hub", "device_io_hub"),
-    Process("worker", "worker",               "<snake_name>_worker"),
+    Process(
+        "hub",
+        "../../services/device-io-hub",
+        "device_io_hub",
+        config="yaml/device_io_hub.yaml",
+    ),
+    Process(
+        "worker",
+        "worker",
+        "<snake_name>_worker",
+        config="yaml/<snake_name>_worker.yaml",
+    ),
 ]
 
 
 def run() -> None:
+    setup_logging("orchestrator", namespace="<kebab-name>")
     run_stack(PROCESSES, _BASE)
 
 
@@ -184,6 +209,9 @@ to sibling `app.py` and `config.py` modules. Refer to
 for that shape. Fill in the sections marked `# ← FILL IN`.
 
 ```text
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """
 <Name> agent worker — <one-line description>.
 

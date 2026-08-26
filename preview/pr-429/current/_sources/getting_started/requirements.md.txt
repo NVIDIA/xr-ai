@@ -7,24 +7,26 @@
 
 ## Hardware
 
-The bundled GPU profiles target a single NVIDIA RTX PRO 6000 Blackwell workstation
-GPU or an NVIDIA DGX Spark, both of which have enough VRAM to run the full model
-stack locally. These profiles are turnkey presets, not a hardware allowlist: you
-can run on other NVIDIA GPUs by tuning the per-server GPU-memory split. Refer to
-[Running on other GPUs](#running-on-other-gpus) below.
+The bundled GPU profiles target two 48 GB NVIDIA Ada GPUs, a single NVIDIA RTX PRO
+6000 Blackwell workstation GPU, or an NVIDIA DGX Spark. Each topology has enough
+GPU-visible memory to run the full model stack locally. These profiles are turnkey
+presets, not a hardware allowlist: you can run on other compatible NVIDIA GPUs by
+tuning the per-server GPU-memory split. Refer to [Running on other
+GPUs](#running-on-other-gpus) below.
 
-If you prefer not to run models on local hardware, model endpoints are plain
-URLs: point the worker configuration at a cloud NIM or model endpoint and no
-local GPU is required for the agent or DeviceIOHub.
+If you prefer not to run models on local hardware, point the worker configuration
+at cloud NIM or model endpoints. This removes the local model-service allocation,
+but the DeviceIOHub host still needs an NVIDIA GPU and driver that expose NVENC and
+NVDEC.
 
-| Sample | Local VRAM needed |
+| Sample | Local GPU-visible memory needed |
 |---|---|
 | model-servers (all models) | ~55 GB |
 | simple-vlm-example (requires model services) | Uses the model-services allocation |
 | lab-instrument-monitoring (requires model services) | Uses the model-services allocation |
 | tea-making-sample (requires model services) | Uses the model-services allocation |
 | xr-render-demo (requires model-servers) | ~55 GB for models and ~2 GB for CloudXR and the hub |
-| Hub only | none |
+| Hub only | No model allocation; NVENC and NVDEC are still required |
 
 ## Software
 
@@ -33,10 +35,10 @@ local GPU is required for the agent or DeviceIOHub.
 | OS | Linux | Ubuntu 22.04 or 24.04 recommended; WSL2 is not officially supported (refer to [Windows (WSL2)](#windows-wsl2) below) |
 | Python | 3.11 or 3.12 | 3.10 and 3.13 are not supported |
 | [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
-| NVIDIA driver | 570+ | required for local model inference |
+| NVIDIA driver | 580+ | required for CUDA 13 model containers and DeviceIOHub hardware codecs |
 | Docker | 24+ | required by the checked-in model-server profiles, which use vLLM containers from NGC and Docker Hub |
-| NVIDIA Container Toolkit | latest | required: gives Docker access to the GPU. Without it, `model_servers` fails with `failed to discover GPU vendor from CDI: no known GPU vendor found` |
-| Node.js | 18+ with npm | required for xr-render-demo: the orchestrator builds the web vendor bundle on first run |
+| NVIDIA Container Toolkit | latest | required: configures the `nvidia` runtime that gives Docker access to the GPU |
+| Node.js | 18+ with npm | required for xr-render-demo's default WebRTC profile: the orchestrator builds the web vendor bundle on first run |
 
 `uv` handles all Python dependencies per-sample — no global `pip install` or
 virtual-environment setup needed. If you do not have it:
@@ -53,7 +55,8 @@ install guide and run the CDI and runtime-configuration steps from there:
 Quick smoke-test once installed:
 
 ```bash
-docker run --rm --gpus all nvidia/cuda:13.0.3-base-ubuntu24.04 nvidia-smi
+docker run --rm --runtime=nvidia -e NVIDIA_VISIBLE_DEVICES=all \
+  nvidia/cuda:13.0.3-base-ubuntu24.04 nvidia-smi
 ```
 
 ## GPU-profile prerequisites
@@ -145,9 +148,9 @@ profile you have explicitly copied and tuned; it does not validate that the mode
 servers fit the selected devices.
 
 ```{note}
-The model weights are independent of the GPU. Any NVIDIA GPU with enough VRAM for
-the models you load will run the stack; the profiles only encode where each server
-lands and how much memory it claims.
+The model weights are independent of the GPU. Any compatible NVIDIA GPU with
+enough memory for the models you load can run the stack; the profiles only encode
+where each server lands and how much memory it claims.
 ```
 
 ## Network

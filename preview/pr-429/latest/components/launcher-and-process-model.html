@@ -423,9 +423,10 @@
 -->
 <section id="launcher-and-process-model">
 <h1>Launcher and process model<a class="headerlink" href="#launcher-and-process-model" title="Link to this heading">#</a></h1>
-<p>Every sample is self-contained: running it starts the DeviceIOHub and all required
-processes automatically. No separate server launch step.</p>
-<p>Each sample has <strong>two sub-projects</strong>:</p>
+<p>Application samples own their DeviceIOHub and worker processes. Model services may
+instead be declared with <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;reuse&quot;</span></code> and started separately through the
+shared <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> stack.</p>
+<p>An application sample has at least these two sub-projects:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Sub-project</p></th>
@@ -435,8 +436,8 @@ processes automatically. No separate server launch step.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">&lt;sample&gt;/</span></code></p></td>
-<td><p>Orchestrator — declares process list in code, launches all</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code> only (stdlib)</p></td>
+<td><p>Orchestrator — declares owned and reused processes in code</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code>, <code class="docutils literal notranslate"><span class="pre">xr-ai-logging</span></code>, and sample-specific orchestration dependencies</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">&lt;sample&gt;/worker/</span></code></p></td>
 <td><p>Agent worker — connects to hub via IPC, runs agent logic</p></td>
@@ -445,10 +446,14 @@ processes automatically. No separate server launch step.</p>
 </tbody>
 </table>
 </div>
+<p>Samples may add capability or eval sub-projects. <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> is a dedicated
+orchestrator and has no worker sub-project.</p>
 <p><strong>Configuration convention</strong> — the YAML configuration path for each process is declared
 explicitly in the orchestrator’s <code class="docutils literal notranslate"><span class="pre">PROCESSES</span></code> list via the <code class="docutils literal notranslate"><span class="pre">config=</span></code> field of
 <code class="docutils literal notranslate"><span class="pre">Process</span></code>. The launcher passes it as <code class="docutils literal notranslate"><span class="pre">--config</span> <span class="pre">&lt;path&gt;</span></code> to the subprocess.
-All sample configuration files live in the <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory. Omit <code class="docutils literal notranslate"><span class="pre">config=</span></code> for
+Application and service configuration normally lives in the sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code>
+directory. A capability sub-project may keep its configuration beside that
+project, such as <code class="docutils literal notranslate"><span class="pre">xr-render-demo/scene/scene_service.yaml</span></code>. Omit <code class="docutils literal notranslate"><span class="pre">config=</span></code> for
 processes that use their own internal defaults.</p>
 <p>Samples that support interchangeable local and hosted models may set
 <code class="docutils literal notranslate"><span class="pre">models_config</span></code> in the worker YAML. <code class="docutils literal notranslate"><span class="pre">load_model_deployment()</span></code> reads the selected
@@ -475,12 +480,12 @@ file is loaded by the worker through <code class="docutils literal notranslate">
 <section id="rules">
 <h2>Rules<a class="headerlink" href="#rules" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><strong>Stack items start in declaration order</strong> — members of a <code class="docutils literal notranslate"><span class="pre">Parallel</span></code> item
-start concurrently, and the launcher waits for each <code class="docutils literal notranslate"><span class="pre">Process</span></code> or every
+<li><p><strong>Spawned stack items start in declaration order</strong> — members of a <code class="docutils literal notranslate"><span class="pre">Parallel</span></code>
+item start concurrently, and the launcher waits for each <code class="docutils literal notranslate"><span class="pre">Process</span></code> or every
 <code class="docutils literal notranslate"><span class="pre">Parallel</span></code> member to create its <code class="docutils literal notranslate"><span class="pre">--ready-file</span></code> before starting the next item.
 Declare items in dependency order (hub before workers and application
 processes after the services they call).</p></li>
-<li><p><strong>Every process accepts <code class="docutils literal notranslate"><span class="pre">--ready-file</span> <span class="pre">&lt;path&gt;</span></code></strong> and must <code class="docutils literal notranslate"><span class="pre">Path(path).touch()</span></code>
+<li><p><strong>Every spawned process accepts <code class="docutils literal notranslate"><span class="pre">--ready-file</span> <span class="pre">&lt;path&gt;</span></code></strong> and must <code class="docutils literal notranslate"><span class="pre">Path(path).touch()</span></code>
 when it is fully initialized and ready to serve requests.</p></li>
 <li><p><strong>Native voice workers</strong> pass the ready file to <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>; its private
 media session touches it only after the input transport’s hub IPC
@@ -488,7 +493,8 @@ receive loop has started.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">device_io_hub</span></code> always runs as its own process — never embedded in-process.</p></li>
 <li><p>The worker never imports anything from <code class="docutils literal notranslate"><span class="pre">device_io_hub</span></code> or <code class="docutils literal notranslate"><span class="pre">xr_ai_launcher</span></code>.</p></li>
 <li><p>Process management lives in <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-launcher/</span></code>, not inside any process it manages.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">run_stack</span></code> is fail-fast: if any process exits, the rest are terminated.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">run_stack</span></code> is fail-fast while monitoring: if any spawned process exits, the
+rest are terminated.</p></li>
 </ul>
 </section>
 <section id="serial-and-parallel-items">
@@ -503,10 +509,19 @@ in the sequence begins. If any member exits before signaling ready, the
 launcher shuts everything down, just as it would for a serial process.</p></li>
 </ul>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/device-io-hub"</span><span class="p">,</span> <span class="s2">"device_io_hub"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"vlm"</span><span class="p">,</span> <span class="s2">"../../services/vlm-server"</span><span class="p">,</span> <span class="s2">"vlm_server"</span><span class="p">,</span>
+            <span class="n">launch_mode</span><span class="o">=</span><span class="s2">"reuse"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span>
+        <span class="s2">"embedding"</span><span class="p">,</span> <span class="s2">"../../services/embedding-server"</span><span class="p">,</span> <span class="s2">"embedding_server"</span><span class="p">,</span>
+        <span class="n">launch_mode</span><span class="o">=</span><span class="s2">"reuse"</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span> <span class="s2">"../../services/device-io-hub"</span><span class="p">,</span> <span class="s2">"device_io_hub"</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/device_io_hub.yaml"</span><span class="p">),</span>
     <span class="n">Parallel</span><span class="p">([</span>
-        <span class="n">Process</span><span class="p">(</span><span class="s2">"stt"</span><span class="p">,</span> <span class="s2">"../../services/stt-server"</span><span class="p">,</span> <span class="s2">"stt_server"</span><span class="p">),</span>
-        <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span> <span class="s2">"../../services/piper-tts"</span><span class="p">,</span>  <span class="s2">"piper_tts_server"</span><span class="p">),</span>
+        <span class="n">Process</span><span class="p">(</span><span class="s2">"video-memory"</span><span class="p">,</span> <span class="s2">"../../services/video-memory-service"</span><span class="p">,</span>
+                <span class="s2">"video_memory_service"</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/video_memory_service.yaml"</span><span class="p">),</span>
+        <span class="n">Process</span><span class="p">(</span><span class="s2">"rag"</span><span class="p">,</span> <span class="s2">"../../services/rag-service"</span><span class="p">,</span> <span class="s2">"rag_service"</span><span class="p">,</span>
+                <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/rag_service.yaml"</span><span class="p">),</span>
     <span class="p">]),</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"my_agent_worker"</span><span class="p">),</span>
 <span class="p">]</span>
@@ -523,8 +538,9 @@ against it).</p></li>
 <li><p>Spawns <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--project</span> <span class="pre">&lt;dir&gt;</span> <span class="pre">&lt;command&gt;</span> <span class="pre">--config</span> <span class="pre">&lt;yaml&gt;</span> <span class="pre">--ready-file</span> <span class="pre">&lt;f&gt;</span></code>
 in a new process group, so the whole group (<code class="docutils literal notranslate"><span class="pre">uv</span></code> plus its children) can be
 torn down together rather than leaving orphans.</p></li>
-<li><p>Waits for the process to create <em><f></em> (the ready file), printing a progress
-line every five seconds so slow starts remain visible.</p></li>
+<li><p>Waits for the process to create <em><f></em> (the ready file), recording a DEBUG
+progress line every five seconds. It is visible with <code class="docutils literal notranslate"><span class="pre">XR_AI_VERBOSE</span></code> and in
+the per-run log.</p></li>
 <li><p>Once all processes are ready, monitors them: any exit triggers a graceful
 shutdown of the rest (SIGTERM, escalating to SIGKILL after a timeout).</p></li>
 </ol>
@@ -554,7 +570,8 @@ shutdown.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;persist&quot;</span></code> — the launcher spawns this process but leaves it running on
 shutdown. Use for heavy model servers that need to survive stack restarts
 (e.g. vLLM containers). Cleanup is the caller’s responsibility. The optional
-<code class="docutils literal notranslate"><span class="pre">port</span></code> field is used to stop such persistent services.</p></li>
+<code class="docutils literal notranslate"><span class="pre">port</span></code> field is metadata; <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> uses it to select cleanup targets,
+while generic <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> does not inspect it.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;reuse&quot;</span></code> — the launcher does <strong>not</strong> spawn this process; it is assumed to be
 already running (e.g. started by <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>). The entry in the process
 list documents the dependency; the launcher skips it entirely and does not
@@ -610,9 +627,9 @@ and the participant-joined greeting hook. Workers feed STT transcripts via
 drop, participant-joined).</p>
 <p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-vllm</span></code></strong> — pluggable vLLM backend for inference services. Each
 vLLM-backed service can host vllm via <code class="docutils literal notranslate"><span class="pre">pip</span></code> (the pip-installed <code class="docutils literal notranslate"><span class="pre">vllm</span></code> CLI in
-the wrapper’s venv, the default) or <code class="docutils literal notranslate"><span class="pre">docker</span></code> (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span> <span class="pre">nvcr.io/nvidia/vllm</span></code>,
-an NGC container), chosen per-server via <code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">pip|docker</span></code> in the
-service YAML. Both paths honor identical configuration keys; only the runtime hosting
+the wrapper’s venv, the default) or <code class="docutils literal notranslate"><span class="pre">docker</span></code> (the image selected by
+<code class="docutils literal notranslate"><span class="pre">vllm_image</span></code>), chosen per-server via <code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">pip|docker</span></code> in the service
+YAML. Both paths honor identical configuration keys; only the runtime hosting
 vllm differs. Stdlib-only by contract, so the docker path stays light even when
 pip vllm is not installed.</p>
 </section>

@@ -606,20 +606,27 @@ start successfully without network access. Recreate project environments with
 <p><strong>1 — Add the process to the orchestrator:</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/device-io-hub"</span><span class="p">,</span>                    <span class="s2">"device_io_hub"</span><span class="p">),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"vlm"</span><span class="p">,</span>    <span class="s2">"../../services/vlm-server"</span><span class="p">,</span>               <span class="s2">"vlm_server"</span><span class="p">),</span>   <span class="c1"># ← add as needed</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"vlm"</span><span class="p">,</span>    <span class="s2">"../../services/vlm-server"</span><span class="p">,</span>               <span class="s2">"vlm_server"</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/vlm_server.yaml"</span><span class="p">),</span>   <span class="c1"># ← add as needed</span>
     <span class="c1"># Pick ONE LLM backend per sample — they bind different default ports</span>
     <span class="c1"># (8106 or 8107) so running more than one at once is allowed but</span>
     <span class="c1"># usually unnecessary.</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"llm"</span><span class="p">,</span>    <span class="s2">"../../services/llama-nemotron-llm"</span><span class="p">,</span>       <span class="s2">"llama_nemotron_llm_server"</span><span class="p">),</span>
-    <span class="c1"># Process("llm",  "../../services/nemotron3-nano-llm",       "nemotron3_nano_llm_server"),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"stt"</span><span class="p">,</span>    <span class="s2">"../../services/stt-server"</span><span class="p">,</span>               <span class="s2">"stt_server"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"llm"</span><span class="p">,</span>    <span class="s2">"../../services/llama-nemotron-llm"</span><span class="p">,</span>       <span class="s2">"llama_nemotron_llm_server"</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/llama_nemotron_llm_server.yaml"</span><span class="p">),</span>
+    <span class="c1"># Process("llm",  "../../services/nemotron3-nano-llm",       "nemotron3_nano_llm_server",</span>
+    <span class="c1">#         config="yaml/nemotron3_nano_llm_server.yaml"),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"stt"</span><span class="p">,</span>    <span class="s2">"../../services/stt-server"</span><span class="p">,</span>               <span class="s2">"stt_server"</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/stt_server.yaml"</span><span class="p">),</span>
     <span class="c1"># Add these together when the application uses native document retrieval.</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"embedding"</span><span class="p">,</span> <span class="s2">"../../services/embedding-server"</span><span class="p">,</span>      <span class="s2">"embedding_server"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"embedding"</span><span class="p">,</span> <span class="s2">"../../services/embedding-server"</span><span class="p">,</span>      <span class="s2">"embedding_server"</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/embedding_server.yaml"</span><span class="p">),</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"rag"</span><span class="p">,</span>    <span class="s2">"../../services/rag-service"</span><span class="p">,</span>               <span class="s2">"rag_service"</span><span class="p">,</span>
             <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/rag_service.yaml"</span><span class="p">),</span>
     <span class="c1"># Pick one TTS server</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span>    <span class="s2">"../../services/piper-tts"</span><span class="p">,</span>                 <span class="s2">"piper_tts_server"</span><span class="p">),</span>
-    <span class="c1"># Process("tts",  "../../services/magpie-tts",                "magpie_tts_server"),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span>    <span class="s2">"../../services/piper-tts"</span><span class="p">,</span>                 <span class="s2">"piper_tts_server"</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/piper_tts_server.yaml"</span><span class="p">),</span>
+    <span class="c1"># Process("tts",  "../../services/magpie-tts",                "magpie_tts_server",</span>
+    <span class="c1">#         config="yaml/magpie_tts_server.yaml"),</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span>                                   <span class="s2">"my_agent_worker"</span><span class="p">),</span>
 <span class="p">]</span>
 </pre></div>
@@ -652,8 +659,9 @@ and capability configurations without a <code class="docutils literal notranslat
 <p><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code> does not copy model-service YAML or launch model servers.
 Its fixed <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> points at operator-owned STT, VLM, and TTS
 endpoints; the sample orchestrator only launches its hub and worker.</p>
-<p>Edit the YAML as needed (model, port, device, etc.). The launcher auto-discovers
-<code class="docutils literal notranslate"><span class="pre">yaml/&lt;command&gt;.yaml</span></code> in the sample root and passes it as <code class="docutils literal notranslate"><span class="pre">--config</span></code>.
+<p>Edit the YAML as needed (model, port, device, etc.). Set every copied path
+explicitly with <code class="docutils literal notranslate"><span class="pre">Process(config=...)</span></code>; the launcher does not discover files by
+command name.
 For RAG, also point <code class="docutils literal notranslate"><span class="pre">rag_service.yaml</span></code> at an application-owned document
 directory and a model profile containing an <code class="docutils literal notranslate"><span class="pre">embedding</span></code> role.</p>
 </section>
@@ -794,9 +802,9 @@ probe. No shipped model-server profile or sample selects Riva speech.</p>
 GPU-matched optimized engine from NGC on first start; multi-GB, cached
 under <code class="docutils literal notranslate"><span class="pre">models/nim/</span></code> for later runs), and GPU capacity for every container.
 <code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> placement lives in the per-GPU-profile
-<code class="docutils literal notranslate"><span class="pre">nim_*_server.yaml</span></code> files (dual_48G_ada values are live-validated; the
-other profiles ship estimates). Readiness gates on each container’s
-<code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">nim_*_server.yaml</span></code> files. Their adjacent comments record profile-specific
+validation status and hardware cautions; verify startup and capacity on the
+target host. Readiness gates on each container’s <code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>.</p>
 <p>A NIM container serving something the samples don’t ship is the same
 mechanism by hand: point an <code class="docutils literal notranslate"><span class="pre">openai_compat</span></code> entry’s <code class="docutils literal notranslate"><span class="pre">base_url</span></code> at its port
 (its health route is <code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>, so keep <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">false</span></code> and
@@ -887,10 +895,10 @@ cleanup without sending a signal; absent servers are silently skipped.</p>
 <td><p>Developing the wrapper in its local environment or using a custom pip installation.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">docker</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span> <span class="pre">nvcr.io/nvidia/vllm:&lt;tag&gt;</span> <span class="pre">vllm</span> <span class="pre">serve</span> <span class="pre">…</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span> <span class="pre">&lt;vllm_image&gt;</span> <span class="pre">vllm</span> <span class="pre">serve</span> <span class="pre">…</span></code></p></td>
 <td><p>no</p></td>
 <td><p>yes</p></td>
-<td><p>Running the pinned NVIDIA vLLM container used by the checked-in configurations.</p></td>
+<td><p>Running the configured vLLM container used by the checked-in configurations.</p></td>
 </tr>
 </tbody>
 </table>
@@ -913,7 +921,8 @@ mirror, or a custom build.</p>
 must succeed without <code class="docutils literal notranslate"><span class="pre">sudo</span></code>).</p></li>
 <li><p><strong>NVIDIA Container Toolkit</strong> so the <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime can expose GPUs:
 <a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html">https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html</a></p></li>
-<li><p><strong>NGC pull access</strong> for <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm</span></code>. The wrapper auto-runs
+<li><p><strong>NGC pull access</strong>, when the configured <code class="docutils literal notranslate"><span class="pre">vllm_image</span></code> is restricted or
+requires authentication on <code class="docutils literal notranslate"><span class="pre">nvcr.io</span></code>. The wrapper auto-runs
 <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">login</span> <span class="pre">nvcr.io</span></code> if <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is in the environment (loaded by
 <code class="docutils literal notranslate"><span class="pre">load_credentials()</span></code> from <code class="docutils literal notranslate"><span class="pre">~/.config/xr-ai/credentials.json</span></code> per
 <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>). Otherwise, log in manually once:</p>
@@ -1017,7 +1026,7 @@ as ready for commercial use under the
 <li><p><strong>nemotron-omni-llm</strong> is a vLLM-backed multimodal LLM serving
 <code class="docutils literal notranslate"><span class="pre">Nemotron-3-Nano-Omni-30B-A3B-Reasoning</span></code> (text + video input) at port 8108.
 The YAML auto-selects between three model variants by detected GPU compute
-capability: NVFP4 on Blackwell (SM100+), FP8 on Ada and Hopper, BF16 forced via
+capability: NVFP4 on Blackwell (SM100+), FP8 on Ada, Hopper, and Ampere, BF16 forced via
 <code class="docutils literal notranslate"><span class="pre">use_bf16:</span> <span class="pre">true</span></code> for highest quality at the largest VRAM cost. Same
 OpenAI-compatible HTTP contract as the other LLM servers — swap the port to
 swap backends. Hosting backend is selectable per YAML (refer to <em>Choosing the

@@ -5,20 +5,26 @@
 
 # Launcher and process model
 
-Every sample is self-contained: running it starts the DeviceIOHub and all required
-processes automatically. No separate server launch step.
+Application samples own their DeviceIOHub and worker processes. Model services may
+instead be declared with `launch_mode="reuse"` and started separately through the
+shared `model-servers` stack.
 
-Each sample has **two sub-projects**:
+An application sample has at least these two sub-projects:
 
 | Sub-project | Role | Dependencies |
 |---|---|---|
-| `<sample>/` | Orchestrator — declares process list in code, launches all | `xr-ai-launcher` only (stdlib) |
+| `<sample>/` | Orchestrator — declares owned and reused processes in code | `xr-ai-launcher`, `xr-ai-logging`, and sample-specific orchestration dependencies |
 | `<sample>/worker/` | Agent worker — connects to hub via IPC, runs agent logic | `xr-ai-hub-client`, numpy, etc. |
+
+Samples may add capability or eval sub-projects. `model-servers` is a dedicated
+orchestrator and has no worker sub-project.
 
 **Configuration convention** — the YAML configuration path for each process is declared
 explicitly in the orchestrator's `PROCESSES` list via the `config=` field of
 `Process`. The launcher passes it as `--config <path>` to the subprocess.
-All sample configuration files live in the `yaml/` directory. Omit `config=` for
+Application and service configuration normally lives in the sample's `yaml/`
+directory. A capability sub-project may keep its configuration beside that
+project, such as `xr-render-demo/scene/scene_service.yaml`. Omit `config=` for
 processes that use their own internal defaults.
 
 Samples that support interchangeable local and hosted models may set
@@ -48,12 +54,12 @@ def run() -> None:
 
 ## Rules
 
-- **Stack items start in declaration order** — members of a `Parallel` item
-  start concurrently, and the launcher waits for each `Process` or every
+- **Spawned stack items start in declaration order** — members of a `Parallel`
+  item start concurrently, and the launcher waits for each `Process` or every
   `Parallel` member to create its `--ready-file` before starting the next item.
   Declare items in dependency order (hub before workers and application
   processes after the services they call).
-- **Every process accepts `--ready-file <path>`** and must `Path(path).touch()`
+- **Every spawned process accepts `--ready-file <path>`** and must `Path(path).touch()`
   when it is fully initialized and ready to serve requests.
 - **Native voice workers** pass the ready file to `VoiceAgent`; its private
   media session touches it only after the input transport's hub IPC
@@ -61,7 +67,8 @@ def run() -> None:
 - `device_io_hub` always runs as its own process — never embedded in-process.
 - The worker never imports anything from `device_io_hub` or `xr_ai_launcher`.
 - Process management lives in `utils/xr-ai-launcher/`, not inside any process it manages.
-- `run_stack` is fail-fast: if any process exits, the rest are terminated.
+- `run_stack` is fail-fast while monitoring: if any spawned process exits, the
+  rest are terminated.
 
 ## Serial and parallel items
 
@@ -76,10 +83,19 @@ The stack is declared as a sequence of `Process` or `Parallel` items:
 
 ```python
 PROCESSES = [
-    Process("hub",    "../../services/device-io-hub", "device_io_hub"),
+    Process("vlm", "../../services/vlm-server", "vlm_server",
+            launch_mode="reuse"),
+    Process(
+        "embedding", "../../services/embedding-server", "embedding_server",
+        launch_mode="reuse",
+    ),
+    Process("hub", "../../services/device-io-hub", "device_io_hub",
+            config="yaml/device_io_hub.yaml"),
     Parallel([
-        Process("stt", "../../services/stt-server", "stt_server"),
-        Process("tts", "../../services/piper-tts",  "piper_tts_server"),
+        Process("video-memory", "../../services/video-memory-service",
+                "video_memory_service", config="yaml/video_memory_service.yaml"),
+        Process("rag", "../../services/rag-service", "rag_service",
+                config="yaml/rag_service.yaml"),
     ]),
     Process("worker", "worker", "my_agent_worker"),
 ]
@@ -95,8 +111,9 @@ For each process the launcher:
 2. Spawns `uv run --project <dir> <command> --config <yaml> --ready-file <f>`
    in a new process group, so the whole group (`uv` plus its children) can be
    torn down together rather than leaving orphans.
-3. Waits for the process to create *<f>* (the ready file), printing a progress
-   line every five seconds so slow starts remain visible.
+3. Waits for the process to create *<f>* (the ready file), recording a DEBUG
+   progress line every five seconds. It is visible with `XR_AI_VERBOSE` and in
+   the per-run log.
 4. Once all processes are ready, monitors them: any exit triggers a graceful
    shutdown of the rest (SIGTERM, escalating to SIGKILL after a timeout).
 
@@ -128,7 +145,8 @@ its IPC receive loop is active.
 - `"persist"` — the launcher spawns this process but leaves it running on
   shutdown. Use for heavy model servers that need to survive stack restarts
   (e.g. vLLM containers). Cleanup is the caller's responsibility. The optional
-  `port` field is used to stop such persistent services.
+  `port` field is metadata; `model-servers` uses it to select cleanup targets,
+  while generic `run_stack` does not inspect it.
 - `"reuse"` — the launcher does **not** spawn this process; it is assumed to be
   already running (e.g. started by `model-servers`). The entry in the process
   list documents the dependency; the launcher skips it entirely and does not
@@ -187,8 +205,8 @@ drop, participant-joined).
 
 **`xr-ai-vllm`** — pluggable vLLM backend for inference services. Each
 vLLM-backed service can host vllm via `pip` (the pip-installed `vllm` CLI in
-the wrapper's venv, the default) or `docker` (`docker run nvcr.io/nvidia/vllm`,
-an NGC container), chosen per-server via `vllm_backend: pip|docker` in the
-service YAML. Both paths honor identical configuration keys; only the runtime hosting
+the wrapper's venv, the default) or `docker` (the image selected by
+`vllm_image`), chosen per-server via `vllm_backend: pip|docker` in the service
+YAML. Both paths honor identical configuration keys; only the runtime hosting
 vllm differs. Stdlib-only by contract, so the docker path stays light even when
 pip vllm is not installed.
