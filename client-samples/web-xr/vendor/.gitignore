@@ -3,3 +3,4 @@
 
 # Output of client-samples/web-xr-build/build.sh — gitignored, fetched per host.
 *.mjs
+.cloudxr-sdk-version

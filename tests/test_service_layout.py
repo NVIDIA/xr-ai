@@ -219,6 +219,8 @@ def test_xr_render_repairs_an_incomplete_web_xr_vendor_bundle(
     ).resolve()
     build_script.parent.mkdir(parents=True)
     build_script.write_text("#!/bin/sh\n")
+    (build_script.parent / ".sdk-version").write_text("6.2.0\n")
+    version_marker = vendor_dir / ".cloudxr-sdk-version"
     calls: list[list[str]] = []
     produce_livekit = True
 
@@ -226,6 +228,7 @@ def test_xr_render_repairs_an_incomplete_web_xr_vendor_bundle(
         calls.append(command)
         if produce_livekit:
             (vendor_dir / "livekit-client.esm.mjs").write_text("livekit")
+            version_marker.write_text("6.2.0\n")
         return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(sample, "_BASE", sample_root)
@@ -244,6 +247,95 @@ def test_xr_render_repairs_an_incomplete_web_xr_vendor_bundle(
     with pytest.raises(SystemExit, match="completed without producing"):
         sample._ensure_web_vendor()
     assert calls == [[str(build_script)]]
+
+
+def test_xr_render_rebuilds_stale_web_xr_vendor_bundle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sample = _load_module(
+        "service_layout_render_stale_vendor_bundle",
+        "agent-samples/xr-render-demo/main.py",
+    )
+    sample_root = tmp_path / "agent-samples" / "xr-render-demo"
+    sample_root.mkdir(parents=True)
+    vendor_dir = (sample_root / "../../client-samples/web-xr/vendor").resolve()
+    vendor_dir.mkdir(parents=True)
+    (vendor_dir / "cloudxr-sdk.esm.mjs").write_text("cloudxr-6.1")
+    (vendor_dir / "livekit-client.esm.mjs").write_text("livekit")
+    version_marker = vendor_dir / ".cloudxr-sdk-version"
+    version_marker.write_text("6.1.0\n")
+    build_script = (
+        sample_root / "../../client-samples/web-xr-build/build.sh"
+    ).resolve()
+    build_script.parent.mkdir(parents=True)
+    build_script.write_text("#!/bin/sh\n")
+    (build_script.parent / ".sdk-version").write_text("6.2.0\n")
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], *, cwd: str) -> subprocess.CompletedProcess:
+        calls.append(command)
+        version_marker.write_text("6.2.0\n")
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(sample, "_BASE", sample_root)
+    monkeypatch.setattr(sample.shutil, "which", lambda _command: "/usr/bin/npm")
+    monkeypatch.setattr(sample.subprocess, "run", fake_run)
+
+    sample._ensure_web_vendor()
+
+    assert calls == [[str(build_script)]]
+    assert version_marker.read_text().strip() == "6.2.0"
+
+    calls.clear()
+    sample._ensure_web_vendor()
+    assert calls == []
+
+
+def test_web_xr_build_replaces_stale_sdk_tarball(tmp_path: Path) -> None:
+    build_dir = tmp_path / "web-xr-build"
+    vendor_dir = tmp_path / "web-xr" / "vendor"
+    fake_bin = tmp_path / "bin"
+    build_dir.mkdir()
+    vendor_dir.mkdir(parents=True)
+    fake_bin.mkdir()
+    build_script = build_dir / "build.sh"
+    build_script.write_text(
+        (_ROOT / "client-samples/web-xr-build/build.sh").read_text()
+    )
+    build_script.chmod(0o755)
+    (build_dir / ".sdk-version").write_text("6.2.0\n")
+    (build_dir / "nvidia-cloudxr-6.2.0.tgz").write_bytes(b"cloudxr-6.2")
+    (build_dir / "sdk.tgz").write_bytes(b"cloudxr-6.1")
+    stale_package = build_dir / "node_modules" / "@nvidia" / "cloudxr"
+    stale_package.mkdir(parents=True)
+    (stale_package / "stale").write_text("6.1")
+    (build_dir / "package-lock.json").write_text("stale")
+    (vendor_dir / "cloudxr-sdk.esm.mjs").write_text("cloudxr-6.1")
+    (vendor_dir / "livekit-client.esm.mjs").write_text("livekit")
+    (vendor_dir / ".cloudxr-sdk-version").write_text("6.1.0\n")
+    fake_npm = fake_bin / "npm"
+    fake_npm.write_text(
+        "#!/bin/sh\n"
+        "set -eu\n"
+        "if [ \"$1\" = install ]; then\n"
+        "  test ! -e node_modules/@nvidia/cloudxr\n"
+        "  mkdir -p node_modules/livekit-client/dist\n"
+        "  printf livekit > node_modules/livekit-client/dist/livekit-client.esm.mjs\n"
+        "elif [ \"$1\" = run ]; then\n"
+        "  mkdir -p ../web-xr/vendor\n"
+        "  printf cloudxr-6.2 > ../web-xr/vendor/cloudxr-sdk.esm.mjs\n"
+        "fi\n"
+    )
+    fake_npm.chmod(0o755)
+    env = {**os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}"}
+
+    subprocess.run([str(build_script)], cwd=build_dir, env=env, check=True)
+
+    assert (build_dir / "sdk.tgz").read_bytes() == b"cloudxr-6.2"
+    assert not (build_dir / "package-lock.json").exists()
+    assert (vendor_dir / ".cloudxr-sdk-version").read_text().strip() == "6.2.0"
+    assert (vendor_dir / "cloudxr-sdk.esm.mjs").read_text() == "cloudxr-6.2"
 
 
 def test_every_service_editable_source_path_resolves() -> None:
