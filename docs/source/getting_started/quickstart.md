@@ -275,8 +275,9 @@ dev.
 Under the hood, the orchestrator launches the hub, CloudXR runtime, typed
 capability processes, and the worker alongside the reused model endpoints. The
 worker calls those processes through Relay-managed native tools. The voice
-runtime runs quick-acks and a Nemotron-30B agentic tool-calling loop over scene,
-tracking, spatial math, vision, and video-memory tools. Refer to the
+runtime runs quick-acks and a Nemotron-3-Nano-Omni-30B-A3B-Reasoning agentic
+tool-calling loop over scene, tracking, spatial math, vision, and video-memory
+tools. Refer to the
 {doc}`xr-render-demo reference </reference/xr-render-demo>` for the full process
 map, agentic-loop details, and XR session lifecycle.
 
@@ -300,8 +301,9 @@ additional host prerequisites:
 
 - **Vulkan loader + headers** — the CloudXR compositor and LOVR render through
   Vulkan, so install them before running the demo: `sudo apt install libvulkan-dev`
-- **Node.js 18+ with npm** on PATH — the orchestrator builds the web vendor
-  bundle on first run (skipped on subsequent runs).
+- **Node.js 20.19.0+ with npm** on PATH for WebRTC profiles — the orchestrator
+  builds the web vendor bundle on first run (skipped for native profiles and
+  on subsequent runs).
 
 Start XR Render:
 
@@ -317,8 +319,9 @@ uv run main.py
 ```
 
 On first run the orchestrator automatically downloads the pinned LOVR version to
-`deps/lovr/` inside the repository and builds the web vendor bundle (requires npm
-and network access). Both steps are skipped on subsequent runs.
+`deps/lovr/` inside the repository. For WebRTC profiles it also builds the web
+vendor bundle, which requires npm and network access. Existing artifacts are
+reused on subsequent runs.
 
 ```{note}
 On **DGX Spark** (aarch64), LOVR does not publish a prebuilt aarch64 Linux

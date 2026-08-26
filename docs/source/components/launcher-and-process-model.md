@@ -54,11 +54,11 @@ def run() -> None:
 
 ## Rules
 
-- **Stack items start in declaration order** — members of a `Parallel` item
-  start concurrently, and the launcher waits for each `Process` or every
-  `Parallel` member to create its `--ready-file` before starting the next item.
-  Declare items in dependency order (hub before workers and application
-  processes after the services they call).
+- **Spawned stack items start in declaration order** — non-`reuse` members of a
+  `Parallel` item start concurrently, and the launcher waits for each spawned
+  `Process` or `Parallel` member to create its `--ready-file` before starting
+  the next item. Declare items in dependency order (hub before workers and
+  application processes after the services they call).
 - **Every spawned process accepts `--ready-file <path>`** and must `Path(path).touch()`
   when it is fully initialized and ready to serve requests.
 - **Native voice workers** pass the ready file to `VoiceAgent`; its private
@@ -74,19 +74,29 @@ def run() -> None:
 
 The stack is declared as a sequence of `Process` or `Parallel` items:
 
-- `Process` — started alone; the launcher waits for it to signal ready before
-  moving on.
-- `Parallel([p1, p2, ...])` — all processes in the group are started at once;
-  the launcher waits for *every* member to signal ready before the next item
-  in the sequence begins. If any member exits before signaling ready, the
-  launcher shuts everything down, just as it would for a serial process.
+- `Process` — when not configured with `launch_mode="reuse"`, started alone;
+  the launcher waits for it to signal ready before moving on.
+- `Parallel([p1, p2, ...])` — all non-`reuse` processes in the group are started
+  at once; the launcher waits for every spawned member to signal ready before
+  the next item in the sequence begins. If any spawned member exits before
+  signaling ready, the launcher shuts everything down, just as it would for a
+  serial process.
 
 ```python
 PROCESSES = [
-    Process("hub",    "../../services/device-io-hub", "device_io_hub"),
+    Process("vlm", "../../services/vlm-server", "vlm_server",
+            launch_mode="reuse"),
+    Process(
+        "embedding", "../../services/embedding-server", "embedding_server",
+        launch_mode="reuse",
+    ),
+    Process("hub", "../../services/device-io-hub", "device_io_hub",
+            config="yaml/device_io_hub.yaml"),
     Parallel([
-        Process("stt", "../../services/stt-server", "stt_server"),
-        Process("tts", "../../services/piper-tts",  "piper_tts_server"),
+        Process("video-memory", "../../services/video-memory-service",
+                "video_memory_service", config="yaml/video_memory_service.yaml"),
+        Process("rag", "../../services/rag-service", "rag_service",
+                config="yaml/rag_service.yaml"),
     ]),
     Process("worker", "worker", "my_agent_worker"),
 ]
@@ -94,7 +104,8 @@ PROCESSES = [
 
 ## How `run_stack` works
 
-For each process the launcher:
+For each spawned process (an entry not configured with `launch_mode="reuse"`),
+the launcher:
 
 1. Resolves the project directory and YAML configuration from the sample root (`base`
    — all relative paths in `Process.project` and `Process.config` are resolved
@@ -108,9 +119,9 @@ For each process the launcher:
 4. Once all processes are ready, monitors them: any exit triggers a graceful
    shutdown of the rest (SIGTERM, escalating to SIGKILL after a timeout).
 
-Each process is responsible for creating its own ready file at the moment it
-is fully initialized and able to serve requests — after model warm-up, after
-the IPC socket connects, after the HTTP server starts listening, etc.
+Each spawned process is responsible for creating its own ready file at the
+moment it is fully initialized and able to serve requests — after model warm-up,
+after the IPC socket connects, after the HTTP server starts listening, etc.
 
 Pass `exit_after_ready=True` to `run_stack` to return immediately once
 everything is ready instead of monitoring — useful for launchers whose

@@ -132,6 +132,9 @@ class TestIsNativeProfile:
     def test_webrtc_profile_is_not_native(self):
         assert is_native_profile("auto-webrtc") is False
 
+    def test_quest3_profile_is_not_native(self):
+        assert is_native_profile("quest3") is False
+
     def test_empty_string_is_not_native(self):
         assert is_native_profile("") is False
 
