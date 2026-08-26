@@ -537,13 +537,13 @@ bundles automatically when <code class="docutils literal notranslate"><span clas
 </pre></div>
 </div>
 <p>The idempotent script reads the CloudXR version from <code class="docutils literal notranslate"><span class="pre">.sdk-version</span></code>, reuses a
-cached <code class="docutils literal notranslate"><span class="pre">sdk.tgz</span></code> when present, otherwise reuses the matching IsaacTeleop tarball
-at <code class="docutils literal notranslate"><span class="pre">~/hub/IsaacTeleop/deps/cloudxr/</span></code> when available, and finally downloads the
-public NGC tarball. It installs npm dependencies and writes both ESM bundles to
-<code class="docutils literal notranslate"><span class="pre">../web-xr/vendor/</span></code>.
-To bump CloudXR, edit <code class="docutils literal notranslate"><span class="pre">.sdk-version</span></code> and remove <code class="docutils literal notranslate"><span class="pre">sdk.tgz</span></code> plus <code class="docutils literal notranslate"><span class="pre">node_modules</span></code>.
-To bump LiveKit, edit <code class="docutils literal notranslate"><span class="pre">package.json</span></code> and remove <code class="docutils literal notranslate"><span class="pre">node_modules</span></code>. Re-run the script
-after either change.</p>
+matching versioned tarball when present, otherwise reuses the matching
+IsaacTeleop tarball at <code class="docutils literal notranslate"><span class="pre">~/hub/IsaacTeleop/deps/cloudxr/</span></code> when available, and
+finally downloads the public NGC tarball. It installs npm dependencies, writes
+both ESM bundles to <code class="docutils literal notranslate"><span class="pre">../web-xr/vendor/</span></code>, and records the SDK version beside
+them. The orchestrator automatically rebuilds missing or stale bundles.
+To bump CloudXR, edit <code class="docutils literal notranslate"><span class="pre">.sdk-version</span></code> and re-run the script. To bump LiveKit,
+edit <code class="docutils literal notranslate"><span class="pre">package.json</span></code>, remove <code class="docutils literal notranslate"><span class="pre">node_modules</span></code>, and re-run the script.</p>
 </section>
 <section id="android">
 <h2>Android<a class="headerlink" href="#android" title="Link to this heading">#</a></h2>
