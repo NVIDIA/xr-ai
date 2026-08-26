@@ -43,7 +43,7 @@ skipped when one is unavailable.
 
 Language-specific toolchains are pinned in each client project:
 
-- Python supports 3.11 and 3.12, uses type annotations, and is formatted and
+- Python supports 3.11 through 3.14, uses type annotations, and is formatted and
   linted with Ruff.
 - Swift uses the `swift-tools-version` pinned by each `Package.swift` and
   Xcode's default formatting.

@@ -8,7 +8,7 @@ build-backend = "hatchling.build"
 [project]
 name = "xr-ai-logging"
 version = "0.1.0"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11,<3.15"
 # Single shared logging stack for the xr-ai monorepo.  Adds loguru as the
 # only runtime dep; consumers call ``setup_logging(name, namespace=...)``
 # at process startup to install the unified stderr + file sinks plus a

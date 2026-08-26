@@ -21,12 +21,12 @@ derived from project metadata.
 
 ## Python version
 
-Repository Python projects conventionally require Python 3.11 or 3.12. A project
-may declare a different range when its dependencies require it. The generated
+Repository Python projects conventionally require Python 3.11 through 3.14. A
+project may declare a different range when its dependencies require it. The generated
 inventory records each declaration, while `.github/workflows/lock-check.yml`
 runs `uv lock` on every project to prove its complete declared range resolves.
 
-The pytest matrix in `.github/workflows/tests.yml` covers Python 3.11 and 3.12.
+The pytest matrix in `.github/workflows/tests.yml` covers Python 3.11 through 3.14.
 Loosening the repository-wide upper bound requires a coordinated qualification
 change, even when an individual dependency publishes newer Python wheels.
 
@@ -107,7 +107,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-hub-client` — [`agent-sdk/xr-ai-hub/`](agent-sdk/xr-ai-hub/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -118,7 +118,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-models` — [`agent-sdk/xr-ai-models/`](agent-sdk/xr-ai-models/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -132,7 +132,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-agent-runtime` — [`agent-sdk/xr-ai-runtime/`](agent-sdk/xr-ai-runtime/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -144,7 +144,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-tools` — [`agent-sdk/xr-ai-tools/`](agent-sdk/xr-ai-tools/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -176,7 +176,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-voice` — [`agent-sdk/xr-ai-voice/`](agent-sdk/xr-ai-voice/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -197,7 +197,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-web-events` — [`agent-sdk/xr-ai-web-events/`](agent-sdk/xr-ai-web-events/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -210,7 +210,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-launcher` — [`utils/xr-ai-launcher/`](utils/xr-ai-launcher/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies: none
@@ -219,7 +219,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-logging` — [`utils/xr-ai-logging/`](utils/xr-ai-logging/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -229,10 +229,11 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-vad` — [`utils/xr-ai-vad/`](utils/xr-ai-vad/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `importlib-resources>=6.5`
   - `numpy>=1.24`
   - `silero-vad>=5.1`
   - `onnxruntime>=1.17`
@@ -242,7 +243,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-vllm` — [`utils/xr-ai-vllm/`](utils/xr-ai-vllm/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies: none
@@ -251,7 +252,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-voicegate` — [`utils/xr-ai-voicegate/`](utils/xr-ai-voicegate/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -264,7 +265,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `cloudxr-runtime` — [`services/cloudxr-runtime/`](services/cloudxr-runtime/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -278,7 +279,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `device-io-hub` — [`services/device-io-hub/`](services/device-io-hub/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -303,7 +304,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `embedding-server` — [`services/embedding-server/`](services/embedding-server/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -320,7 +321,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `llama-nemotron-llm-server` — [`services/llama-nemotron-llm/`](services/llama-nemotron-llm/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -337,7 +338,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `magpie-nim-tts` — [`services/magpie-nim-tts/`](services/magpie-nim-tts/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -355,7 +356,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `magpie-tts-server` — [`services/magpie-tts/`](services/magpie-tts/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -376,7 +377,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `nemotron-omni-llm-server` — [`services/nemotron-omni-llm/`](services/nemotron-omni-llm/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -393,7 +394,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `nemotron3-nano-llm-server` — [`services/nemotron3-nano-llm/`](services/nemotron3-nano-llm/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -410,7 +411,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `nim-server` — [`services/nim-server/`](services/nim-server/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -423,7 +424,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-openxr-service` — [`services/openxr-service/`](services/openxr-service/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -438,7 +439,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `pocket-tts-server` — [`services/pocket-tts/`](services/pocket-tts/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -457,7 +458,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-rag-service` — [`services/rag-service/`](services/rag-service/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -472,7 +473,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `stt-server` — [`services/stt-server/`](services/stt-server/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -492,7 +493,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-video-memory-service` — [`services/video-memory-service/`](services/video-memory-service/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -508,7 +509,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `vlm-server` — [`services/vlm-server/`](services/vlm-server/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -527,7 +528,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `lab-instrument-monitoring` — [`agent-samples/lab-instrument-monitoring/`](agent-samples/lab-instrument-monitoring/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -539,7 +540,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `lab-instrument-monitoring-worker` — [`agent-samples/lab-instrument-monitoring/worker/`](agent-samples/lab-instrument-monitoring/worker/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -562,7 +563,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `simple-vlm-example` — [`agent-samples/simple-vlm-example/`](agent-samples/simple-vlm-example/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -574,7 +575,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `simple-vlm-example-worker` — [`agent-samples/simple-vlm-example/worker/`](agent-samples/simple-vlm-example/worker/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -594,7 +595,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `tea-making-sample` — [`agent-samples/tea-making-sample/`](agent-samples/tea-making-sample/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -606,7 +607,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `tea-making-worker` — [`agent-samples/tea-making-sample/worker/`](agent-samples/tea-making-sample/worker/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -628,7 +629,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-render-demo` — [`agent-samples/xr-render-demo/`](agent-samples/xr-render-demo/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -641,7 +642,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-render-demo-eval` — [`agent-samples/xr-render-demo/eval/`](agent-samples/xr-render-demo/eval/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -664,7 +665,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-render-scene` — [`agent-samples/xr-render-demo/scene/`](agent-samples/xr-render-demo/scene/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -680,7 +681,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-render-demo-worker` — [`agent-samples/xr-render-demo/worker/`](agent-samples/xr-render-demo/worker/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -702,7 +703,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `model-servers` — [`model-server-samples/model-servers/`](model-server-samples/model-servers/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -715,7 +716,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `model-servers-nim` — [`model-server-samples/model-servers-nim/`](model-server-samples/model-servers-nim/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -728,7 +729,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `nim-model-adapter` — [`model-server-samples/model-servers-nim/compatibility-adapter/`](model-server-samples/model-servers-nim/compatibility-adapter/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -747,7 +748,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `nim-riva-server` — [`model-server-samples/model-servers-nim/riva-server/`](model-server-samples/model-servers-nim/riva-server/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -761,7 +762,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-tests` — [`tests/`](tests/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -798,7 +799,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-dependency-manifest` — [`dependency-manifest/`](dependency-manifest/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies: none
 - Runtime dependencies: none
 - Optional dependency groups:
