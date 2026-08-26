@@ -59,7 +59,8 @@ clients, not both. Change the profile and restart the stack when switching.
 | `client-samples/web-xr/` | `auto-webrtc` | used |
 | `client-samples/ios-visionos/` | `auto-native` | unused |
 | Other native CloudXR clients | `auto-native` | unused |
-| Meta Quest 3 with CloudXR.js | `quest3` | used |
+| Meta Quest 2/3/3S with CloudXR.js | `auto-webrtc` | used |
+| Meta Quest 3 with fixed device defaults | `quest3` | used |
 
 The runtime also accepts the device-specific profiles `apple-vision-pro`,
 `ipad-pro`, and `quest3`. The static `quest3` profile is a valid alternative
