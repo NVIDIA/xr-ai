@@ -39,35 +39,8 @@ The shipped profiles are:
 - `vlm_llm_nim`: local STT, Piper TTS, and embedding plus self-hosted
   Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner NIM containers.
 
-### Choose Piper or Magpie TTS
-
-The shipped profiles use Piper because it runs on CPU, avoids the NeMo
-dependency tree, and typically synthesizes a sentence in about 100 ms. Magpie
-uses about 1 GB of GPU memory and provides multilingual synthesis, with typical
-latency of about 2–5 seconds per sentence. These figures are operational
-guidance; hardware and text length affect them.
-
-To select Magpie in a custom deployment profile, replace the `tts` role with:
-
-```json
-{
-  "tts": {
-    "adapter": {"preset": "magpie_tts"},
-    "endpoint": {
-      "base_url": "http://localhost:8104",
-      "readiness": "health"
-    },
-    "deployment": {
-      "ownership": "managed",
-      "service": "tts-magpie"
-    }
-  }
-}
-```
-
-The `tts-magpie` service selects `magpie_tts_server.yaml` from the active GPU
-profile. Update the sample's reused `tts` entry to use the same adapter and
-endpoint, with `deployment.ownership` set to `reused`.
+The shared profiles use Piper TTS. Magpie remains available as a standalone
+service, but is not integrated into the persistent model stack.
 
 Copy the closest profile under a new name:
 
