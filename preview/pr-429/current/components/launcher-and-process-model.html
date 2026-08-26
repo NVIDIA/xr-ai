@@ -480,11 +480,11 @@ file is loaded by the worker through <code class="docutils literal notranslate">
 <section id="rules">
 <h2>Rules<a class="headerlink" href="#rules" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><strong>Spawned stack items start in declaration order</strong> — members of a <code class="docutils literal notranslate"><span class="pre">Parallel</span></code>
-item start concurrently, and the launcher waits for each <code class="docutils literal notranslate"><span class="pre">Process</span></code> or every
-<code class="docutils literal notranslate"><span class="pre">Parallel</span></code> member to create its <code class="docutils literal notranslate"><span class="pre">--ready-file</span></code> before starting the next item.
-Declare items in dependency order (hub before workers and application
-processes after the services they call).</p></li>
+<li><p><strong>Spawned stack items start in declaration order</strong> — non-<code class="docutils literal notranslate"><span class="pre">reuse</span></code> members of a
+<code class="docutils literal notranslate"><span class="pre">Parallel</span></code> item start concurrently, and the launcher waits for each spawned
+<code class="docutils literal notranslate"><span class="pre">Process</span></code> or <code class="docutils literal notranslate"><span class="pre">Parallel</span></code> member to create its <code class="docutils literal notranslate"><span class="pre">--ready-file</span></code> before starting
+the next item. Declare items in dependency order (hub before workers and
+application processes after the services they call).</p></li>
 <li><p><strong>Every spawned process accepts <code class="docutils literal notranslate"><span class="pre">--ready-file</span> <span class="pre">&lt;path&gt;</span></code></strong> and must <code class="docutils literal notranslate"><span class="pre">Path(path).touch()</span></code>
 when it is fully initialized and ready to serve requests.</p></li>
 <li><p><strong>Native voice workers</strong> pass the ready file to <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>; its private
@@ -501,12 +501,13 @@ rest are terminated.</p></li>
 <h2>Serial and parallel items<a class="headerlink" href="#serial-and-parallel-items" title="Link to this heading">#</a></h2>
 <p>The stack is declared as a sequence of <code class="docutils literal notranslate"><span class="pre">Process</span></code> or <code class="docutils literal notranslate"><span class="pre">Parallel</span></code> items:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">Process</span></code> — started alone; the launcher waits for it to signal ready before
-moving on.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Parallel([p1,</span> <span class="pre">p2,</span> <span class="pre">...])</span></code> — all processes in the group are started at once;
-the launcher waits for <em>every</em> member to signal ready before the next item
-in the sequence begins. If any member exits before signaling ready, the
-launcher shuts everything down, just as it would for a serial process.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Process</span></code> — when not configured with <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;reuse&quot;</span></code>, started alone;
+the launcher waits for it to signal ready before moving on.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Parallel([p1,</span> <span class="pre">p2,</span> <span class="pre">...])</span></code> — all non-<code class="docutils literal notranslate"><span class="pre">reuse</span></code> processes in the group are started
+at once; the launcher waits for every spawned member to signal ready before
+the next item in the sequence begins. If any spawned member exits before
+signaling ready, the launcher shuts everything down, just as it would for a
+serial process.</p></li>
 </ul>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"vlm"</span><span class="p">,</span> <span class="s2">"../../services/vlm-server"</span><span class="p">,</span> <span class="s2">"vlm_server"</span><span class="p">,</span>
@@ -530,7 +531,8 @@ launcher shuts everything down, just as it would for a serial process.</p></li>
 </section>
 <section id="how-run-stack-works">
 <h2>How <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> works<a class="headerlink" href="#how-run-stack-works" title="Link to this heading">#</a></h2>
-<p>For each process the launcher:</p>
+<p>For each spawned process (an entry not configured with <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;reuse&quot;</span></code>),
+the launcher:</p>
 <ol class="arabic simple">
 <li><p>Resolves the project directory and YAML configuration from the sample root (<code class="docutils literal notranslate"><span class="pre">base</span></code>
 — all relative paths in <code class="docutils literal notranslate"><span class="pre">Process.project</span></code> and <code class="docutils literal notranslate"><span class="pre">Process.config</span></code> are resolved
@@ -544,9 +546,9 @@ the per-run log.</p></li>
 <li><p>Once all processes are ready, monitors them: any exit triggers a graceful
 shutdown of the rest (SIGTERM, escalating to SIGKILL after a timeout).</p></li>
 </ol>
-<p>Each process is responsible for creating its own ready file at the moment it
-is fully initialized and able to serve requests — after model warm-up, after
-the IPC socket connects, after the HTTP server starts listening, etc.</p>
+<p>Each spawned process is responsible for creating its own ready file at the
+moment it is fully initialized and able to serve requests — after model warm-up,
+after the IPC socket connects, after the HTTP server starts listening, etc.</p>
 <p>Pass <code class="docutils literal notranslate"><span class="pre">exit_after_ready=True</span></code> to <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> to return immediately once
 everything is ready instead of monitoring — useful for launchers whose
 processes are all <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;persist&quot;</span></code> and are designed to outlive the
