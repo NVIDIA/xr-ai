@@ -578,69 +578,31 @@ verify free space first. Keep the old directories until the relocated services
 start successfully without network access. Recreate project environments with
 <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code>; do not copy <code class="docutils literal notranslate"><span class="pre">.venv</span></code> directories across the move.</p>
 </section>
-<section id="adding-a-server-to-a-sample">
-<h2>Adding a server to a sample<a class="headerlink" href="#adding-a-server-to-a-sample" title="Link to this heading">#</a></h2>
-<p><strong>1 — Add the process to the orchestrator:</strong></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/device-io-hub"</span><span class="p">,</span>                    <span class="s2">"device_io_hub"</span><span class="p">),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"vlm"</span><span class="p">,</span>    <span class="s2">"../../services/vlm-server"</span><span class="p">,</span>               <span class="s2">"vlm_server"</span><span class="p">,</span>
-            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/vlm_server.yaml"</span><span class="p">),</span>   <span class="c1"># ← add as needed</span>
-    <span class="c1"># Pick ONE LLM backend per sample — they bind different default ports</span>
-    <span class="c1"># (8106 or 8107) so running more than one at once is allowed but</span>
-    <span class="c1"># usually unnecessary.</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"llm"</span><span class="p">,</span>    <span class="s2">"../../services/llama-nemotron-llm"</span><span class="p">,</span>       <span class="s2">"llama_nemotron_llm_server"</span><span class="p">,</span>
-            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/llama_nemotron_llm_server.yaml"</span><span class="p">),</span>
-    <span class="c1"># Process("llm",  "../../services/nemotron3-nano-llm",       "nemotron3_nano_llm_server",</span>
-    <span class="c1">#         config="yaml/nemotron3_nano_llm_server.yaml"),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"stt"</span><span class="p">,</span>    <span class="s2">"../../services/stt-server"</span><span class="p">,</span>               <span class="s2">"stt_server"</span><span class="p">,</span>
-            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/stt_server.yaml"</span><span class="p">),</span>
-    <span class="c1"># Add these together when the application uses native document retrieval.</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"embedding"</span><span class="p">,</span> <span class="s2">"../../services/embedding-server"</span><span class="p">,</span>      <span class="s2">"embedding_server"</span><span class="p">,</span>
-            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/embedding_server.yaml"</span><span class="p">),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"rag"</span><span class="p">,</span>    <span class="s2">"../../services/rag-service"</span><span class="p">,</span>               <span class="s2">"rag_service"</span><span class="p">,</span>
-            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/rag_service.yaml"</span><span class="p">),</span>
-    <span class="c1"># Pick one TTS server</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span>    <span class="s2">"../../services/piper-tts"</span><span class="p">,</span>                 <span class="s2">"piper_tts_server"</span><span class="p">,</span>
-            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/piper_tts_server.yaml"</span><span class="p">),</span>
-    <span class="c1"># Process("tts",  "../../services/magpie-tts",                "magpie_tts_server",</span>
-    <span class="c1">#         config="yaml/magpie_tts_server.yaml"),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span>                                   <span class="s2">"my_agent_worker"</span><span class="p">),</span>
-<span class="p">]</span>
+<section id="connecting-a-sample-to-shared-model-services">
+<span id="adding-a-server-to-a-sample"></span><h2>Connecting a sample to shared model services<a class="headerlink" href="#connecting-a-sample-to-shared-model-services" title="Link to this heading">#</a></h2>
+<p>Model services are operator-owned by the persistent <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> stack.
+Application samples reuse those endpoints; they do not own model processes or
+copy server YAML into their own configuration directories. Follow
+<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> to select a deployment profile, tune
+its hardware-specific server YAML, and copy compatible endpoint entries into
+the sample’s models JSON with <code class="docutils literal notranslate"><span class="pre">deployment.ownership</span></code> set to <code class="docutils literal notranslate"><span class="pre">reused</span></code>.</p>
+<p>Declare each model dependency in the sample orchestrator as reuse-only so the
+process list records the external dependency without transferring lifecycle
+ownership to the sample:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">Process</span><span class="p">(</span>
+    <span class="s2">"vlm"</span><span class="p">,</span>
+    <span class="s2">"../../services/vlm-server"</span><span class="p">,</span>
+    <span class="s2">"vlm_server"</span><span class="p">,</span>
+    <span class="n">launch_mode</span><span class="o">=</span><span class="s2">"reuse"</span><span class="p">,</span>
+<span class="p">)</span>
 </pre></div>
 </div>
-<p>The agent samples in this repository (<code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code>,
-<code class="docutils literal notranslate"><span class="pre">tea-making-sample</span></code>, and <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>) support Piper TTS — it runs on CPU
-with ~100 ms/sentence latency and avoids the NeMo dep tree. Magpie is still a
-supported NVIDIA TTS option with better voice quality and multilingual support
-when GPU is available; samples that own TTS can select its process and YAML.</p>
-<p><strong>2 — Copy the reference YAML to your sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory:</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>-p<span class="w"> </span>yaml
-cp<span class="w"> </span>../../services/vlm-server/vlm_server.yaml<span class="w"> </span>./yaml/vlm_server.yaml
-<span class="c1"># Pick ONE LLM YAML — copy the one matching the Process you picked above.</span>
-cp<span class="w"> </span>../../services/llama-nemotron-llm/llama_nemotron_llm_server.yaml<span class="w"> </span>./yaml/llama_nemotron_llm_server.yaml
-<span class="c1"># cp ../../services/nemotron3-nano-llm/nemotron3_nano_llm_server.yaml ./yaml/nemotron3_nano_llm_server.yaml</span>
-cp<span class="w"> </span>../../services/stt-server/stt_server.yaml<span class="w"> </span>./yaml/stt_server.yaml
-cp<span class="w"> </span>../../services/embedding-server/embedding_server.yaml<span class="w"> </span>./yaml/embedding_server.yaml
-cp<span class="w"> </span>../../services/rag-service/rag_service.yaml<span class="w"> </span>./yaml/rag_service.yaml
-cp<span class="w"> </span>../../services/piper-tts/piper_tts_server.yaml<span class="w"> </span>./yaml/piper_tts_server.yaml
-<span class="c1"># Or for Magpie (multilingual, GPU, ~2-5 s/sentence):</span>
-cp<span class="w"> </span>../../services/magpie-tts/magpie_tts_server.yaml<span class="w"> </span>./yaml/magpie_tts_server.yaml
-cp<span class="w"> </span>../../services/video-memory-service/video_memory_service.yaml<span class="w"> </span>./yaml/video_memory_service.yaml
-</pre></div>
-</div>
-<p>The standalone model-service YAMLs contain <code class="docutils literal notranslate"><span class="pre">model_cache:</span> <span class="pre">../../models</span></code> for their
-original <code class="docutils literal notranslate"><span class="pre">services/&lt;project&gt;/</span></code> location. After copying them one level deeper
-into <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;name&gt;/yaml/</span></code>, change that value to <code class="docutils literal notranslate"><span class="pre">../../../models</span></code> so
-the cache still resolves to the repository-root <code class="docutils literal notranslate"><span class="pre">models/</span></code> directory. Capability
-and capability configurations without a <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> key need no change.</p>
-<p><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code> does not copy model-service YAML or launch model servers.
-Its fixed <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> points at operator-owned STT, VLM, and TTS
-endpoints; the sample orchestrator only launches its hub and worker.</p>
-<p>Edit the YAML as needed (model, port, device, etc.). Set every copied path
-explicitly with <code class="docutils literal notranslate"><span class="pre">Process(config=...)</span></code>; the launcher does not discover files by
-command name.
-For RAG, also point <code class="docutils literal notranslate"><span class="pre">rag_service.yaml</span></code> at an application-owned document
-directory and a model profile containing an <code class="docutils literal notranslate"><span class="pre">embedding</span></code> role.</p>
+<p>The launcher skips reuse-only entries completely: it does not start, order, or
+readiness-check them. Start <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> separately before the application
+sample. At startup, the sample worker probes endpoints whose models JSON entry
+uses <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">health</span></code> and keeps waiting until those reused services are
+available. Application capability services such as RAG remain sample-owned and
+keep their configuration with the sample that launches them.</p>
 </section>
 <section id="calling-these-from-a-worker">
 <h2>Calling these from a worker<a class="headerlink" href="#calling-these-from-a-worker" title="Link to this heading">#</a></h2>
@@ -980,7 +942,7 @@ greedy decoding with reasoning disabled. It identifies the model as ready
 for commercial use under the
 <a class="reference external" href="https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/">NVIDIA Open Model License</a>
 and the
-<a class="reference external" href="https://www.llama.com/llama3_1/license/">Llama 3.1 Community License</a>.</p></li>
+<a class="reference external" href="https://github.com/meta-llama/llama-models/blob/main/models/llama3_1/LICENSE">Llama 3.1 Community License</a>.</p></li>
 <li><p><strong>nemotron3-nano-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</span></code> (auto-selected by GPU compute
 capability). vLLM handles tool calling (<code class="docutils literal notranslate"><span class="pre">qwen3_coder</span></code> parser), reasoning
@@ -1042,10 +1004,11 @@ per inference request. Current frames stay with the caller’s hub client.
 When <code class="docutils literal notranslate"><span class="pre">recordings_dir</span></code> is empty, participant discovery returns an empty list
 and recorded-media operations return <code class="docutils literal notranslate"><span class="pre">recording_disabled</span></code>.</p></li>
 <li><p>Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).</p></li>
-<li><p>Standalone service YAMLs live beside the services that support direct local
-launch. When copying one into <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;name&gt;/yaml/</span></code>, set
-<code class="docutils literal notranslate"><span class="pre">model_cache</span></code> to <code class="docutils literal notranslate"><span class="pre">../../../models</span></code> so it still resolves to the repository’s
-<code class="docutils literal notranslate"><span class="pre">models/</span></code> directory.</p></li>
+<li><p>Standalone service YAMLs live beside services for direct single-service
+launches; they are not sample configuration. Shared deployments use the
+hardware-specific YAML under
+<code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code>, while samples reuse the
+resulting endpoints through their models JSON.</p></li>
 <li><p>The generic NIM wrapper has no service-local YAML. Use a hardware profile
 under <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code>; its
 <code class="docutils literal notranslate"><span class="pre">nim_&lt;role&gt;_server.yaml</span></code> files use <code class="docutils literal notranslate"><span class="pre">nim_cache</span></code>, normally
@@ -1105,7 +1068,7 @@ under <code class="docutils literal notranslate"><span class="pre">agent-samples
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#two-huggingface-cache-roots">Two HuggingFace cache roots</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#migrating-model-caches-from-ai-services">Migrating model caches from <code class="docutils literal notranslate"><span class="pre">ai-services/</span></code></a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-a-server-to-a-sample">Adding a server to a sample</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#connecting-a-sample-to-shared-model-services">Connecting a sample to shared model services</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#calling-these-from-a-worker">Calling these from a worker</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hosting-models-on-nvidia-nim">Hosting models on NVIDIA NIM</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#self-hosted-nim-containers-models-vlm-llm-nim-json">Self-hosted NIM containers (<code class="docutils literal notranslate"><span class="pre">models.vlm_llm_nim.json</span></code>)</a></li>

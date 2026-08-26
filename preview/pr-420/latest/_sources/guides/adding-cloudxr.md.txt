@@ -45,7 +45,7 @@ cloudxr_env:
 
 # ── Ports (do not conflict with LiveKit) ──────────────────────────────────────
 # CloudXR native service:  localhost:49100  (internal)
-# WSS proxy (TLS):         0.0.0.0:48322   (XR clients connect here; auto-webrtc only)
+# WSS proxy (TLS):         0.0.0.0:48322   (XR clients connect here; WebRTC profiles only)
 ```
 
 ## Select one client profile
@@ -58,20 +58,21 @@ clients, not both. Change the profile and restart the stack when switching.
 |---|---|---|
 | `client-samples/web-xr/` | `auto-webrtc` | used |
 | `client-samples/ios-visionos/` | `auto-native` | unused |
-| Other native CloudXR clients | `auto-native` | unused |
-| Meta Quest 3 with CloudXR.js | `quest3` | used |
 
-Device-specific profiles such as `apple-vision-pro`, `ipad-pro`, and `quest3`
-are also accepted when their fixed device defaults are preferred.
+The runtime also accepts the legacy device-specific profiles `apple-vision-pro`,
+`ipad-pro`, and `quest3`. Use `auto-webrtc` for the Quest 2/3/3S path documented in the
+[CloudXR.js requirements](https://docs.nvidia.com/cloudxr-sdk/latest/requirement/cloudxrjs_req.html)
+so the runtime waits for the client and discovers its device settings
+dynamically.
 
 ## Notes
 
 - CloudXR and the DeviceIOHub are **independent stacks**. CloudXR streams
   simulation and render content through the transport selected by the device
   profile; the hub handles agent media via LiveKit. They share no ports.
-- The `auto-webrtc` profile starts a WSS proxy on port 48322 for WebRTC
-  signaling. The `auto-native` profile uses a direct native transport and does
-  not need the proxy.
+- WebRTC profiles (`auto-webrtc` and `quest3`) start a WSS proxy on port 48322
+  for signaling. Native profiles use a direct native transport and do not need
+  the proxy.
 - After CloudXR is ready, activate its environment to run an OpenXR app against
   it. Run this in a separate terminal each time you start a new shell against a
   running stack:

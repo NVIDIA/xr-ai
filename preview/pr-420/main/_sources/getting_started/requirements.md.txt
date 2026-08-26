@@ -33,12 +33,12 @@ NVDEC.
 | Requirement | Version | Notes |
 |---|---|---|
 | OS | Linux | Ubuntu 22.04 or 24.04 recommended; WSL2 is not officially supported (refer to [Windows (WSL2)](#windows-wsl2) below) |
-| Python | 3.11 or 3.12 | 3.10 and 3.13 are not supported |
+| Python | 3.11 or 3.12 | tested and currently allowed; supporting other versions requires updating `requires-python` and CI |
 | [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
 | NVIDIA driver | 580+ | required for CUDA 13 model containers and DeviceIOHub hardware codecs |
 | Docker | 24+ | required by the checked-in model-server profiles, which use vLLM containers from NGC and Docker Hub |
 | NVIDIA Container Toolkit | latest | required: configures the `nvidia` runtime that gives Docker access to the GPU |
-| Node.js | 18+ with npm | required for xr-render-demo's default WebRTC profile: the orchestrator builds the web vendor bundle on first run |
+| Node.js | 20.19.0+ with npm | required for xr-render-demo's default WebRTC profile: the orchestrator builds the web vendor bundle on first run |
 
 `uv` handles all Python dependencies per-sample — no global `pip install` or
 virtual-environment setup needed. If you do not have it:
