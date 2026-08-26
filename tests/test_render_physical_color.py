@@ -85,6 +85,29 @@ async def test_resolver_returns_typed_color() -> None:
     assert (resolved.r, resolved.g, resolved.b) == (0.0, 0.4, 1.0)
 
 
+async def test_resolver_records_observation_evidence_only_on_success() -> None:
+    """Only a parsed VISIBLE answer counts as a camera observation; an outage
+    or an unparseable reply leaves the supervisor's perception gate unbacked."""
+    from xr_render_demo_worker._trace import TurnEvidence, current_turn_evidence
+
+    evidence = TurnEvidence()
+    token = current_turn_evidence.set(evidence)
+    try:
+        tool = make_physical_color_tool(_frame_tool(), _query_tool("VISIBLE 0.0 0.4 1.0"))
+        await tool.execute(ResolvePhysicalColorRequest(source_words="the lid"))
+        assert evidence.observed == 1
+
+        tool = make_physical_color_tool(_frame_tool(), _query_tool("no signal", available=False))
+        await _expect_rejection(tool, "the lid", "cannot currently see")
+        assert evidence.observed == 1
+
+        tool = make_physical_color_tool(_frame_tool(), _query_tool("UNKNOWN"))
+        await _expect_rejection(tool, "my shirt", "did not yield an observation")
+        assert evidence.observed == 1
+    finally:
+        current_turn_evidence.reset(token)
+
+
 async def test_resolver_caches_within_turn() -> None:
     query = _query_tool("VISIBLE 0.0 0.4 1.0")
     tool = make_physical_color_tool(_frame_tool(), query)

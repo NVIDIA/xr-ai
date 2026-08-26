@@ -21,7 +21,7 @@ from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult
 
 from ._tolerant import reraise_unavailable
-from ._trace import current_participant_id, current_trace_id
+from ._trace import current_participant_id, current_trace_id, record_evidence
 
 IMAGE_QUERY_SYSTEM_PROMPT = (
     'Reply with exactly "VISIBLE r g b", where r, g, b are numbers between 0 '
@@ -115,6 +115,7 @@ def make_physical_color_tool(
                 f"the camera view did not yield an observation of {source!r}: {result.text[:120]}"
             )
         logger.debug("physical color {!r} -> {}", source, resolved)
+        record_evidence("observed")
         if trace:
             cache[key] = resolved
         return ResolvedColor(r=resolved[0], g=resolved[1], b=resolved[2])

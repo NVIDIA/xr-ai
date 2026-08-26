@@ -15,7 +15,12 @@ from xr_ai_tools.video_memory import HistoricalFrameRequest, VideoMemoryTools
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult, ImageQueryTool
 
 from ..._tolerant import reraise_unavailable, tolerant_toolset
-from ..._trace import current_participant_id, current_reference_time_us, current_trace_id
+from ..._trace import (
+    current_participant_id,
+    current_reference_time_us,
+    current_trace_id,
+    record_evidence,
+)
 from ...models import SubagentResult, SubagentTask
 from ...scene import SceneContext
 
@@ -52,7 +57,10 @@ def make_vision_agent(
                 frame = await current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
             except Exception as error:
                 reraise_unavailable(error, "the current camera view")
-            return await image_query.execute(ImageQueryRequest(image=frame.image, query=req.question))
+            result = await image_query.execute(ImageQueryRequest(image=frame.image, query=req.question))
+            if result.available:
+                record_evidence("observed")
+            return result
 
         tools = [
             Tool(
@@ -75,7 +83,11 @@ def make_vision_agent(
                     )
                 except Exception as error:
                     reraise_unavailable(error, "recorded video")
-                return await image_query.execute(ImageQueryRequest(image=frame.image, query=req.question))
+                # No "observed" evidence: a recorded frame cannot support a
+                # claim about what the user holds or wears right now.
+                return await image_query.execute(
+                    ImageQueryRequest(image=frame.image, query=req.question)
+                )
 
             tools.append(Tool(
                 "look_at_past_frame",

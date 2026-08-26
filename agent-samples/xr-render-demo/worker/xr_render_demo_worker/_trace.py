@@ -11,22 +11,32 @@ read them when selecting participant-scoped frames, memory, and scene views.
 """
 
 from contextvars import ContextVar
+from typing import Literal
 
 current_trace_id: ContextVar[str] = ContextVar("current_trace_id", default="")
 current_participant_id: ContextVar[str] = ContextVar("current_participant_id", default="")
 current_reference_time_us: ContextVar[int] = ContextVar("current_reference_time_us", default=0)
 
+EvidenceField = Literal["applied", "satisfied", "observed"]
 
-class MutationEvidence:
-    """Count of scene writes actually applied (or found already satisfied)
-    this turn; the supervisor's success gate reads it instead of trusting
-    the model's wording."""
+
+class TurnEvidence:
+    """Per-turn evidence counters the supervisor's gates read instead of
+    trusting the model's wording: scene writes applied (or found already
+    satisfied) and camera observations actually made."""
 
     def __init__(self) -> None:
         self.applied = 0
         self.satisfied = 0
+        self.observed = 0
 
 
-current_mutation_evidence: ContextVar[MutationEvidence | None] = ContextVar(
-    "current_mutation_evidence", default=None
+current_turn_evidence: ContextVar[TurnEvidence | None] = ContextVar(
+    "current_turn_evidence", default=None
 )
+
+
+def record_evidence(field: EvidenceField) -> None:
+    evidence = current_turn_evidence.get()
+    if evidence is not None:
+        setattr(evidence, field, getattr(evidence, field) + 1)

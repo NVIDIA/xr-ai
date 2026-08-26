@@ -31,14 +31,7 @@ from xr_render_scene import (
     UpdatePrimitiveRequest,
 )
 
-from ._trace import current_mutation_evidence
-
-
-def _record(field: str) -> None:
-    evidence = current_mutation_evidence.get()
-    if evidence is not None:
-        setattr(evidence, field, getattr(evidence, field) + 1)
-
+from ._trace import record_evidence
 
 _UserDirection = Literal["front", "back", "left", "right", "above", "below"]
 _AnchorRelation = Literal["toward_user", "away_from_user", "left_of", "right_of", "above", "below"]
@@ -159,7 +152,7 @@ class _Leaves:
     def _confirm(result: MutationResult) -> MutationResult:
         if not result.ok:
             raise ValueError(f"the scene rejected the change: {result.reason or 'unknown reason'}")
-        _record("applied")
+        record_evidence("applied")
         return result
 
     async def update(self, arguments: dict) -> MutationResult:
@@ -358,7 +351,7 @@ class _Leaves:
             )
             if not result.ok:
                 raise ValueError(f"the scene rejected the creation: {result.reason or 'unknown reason'}")
-            _record("applied")
+            record_evidence("applied")
             created = CreatedObject(id=result.id, x=x, y=y, z=z)
             if self.ledger is not None:
                 self.ledger.count += 1
@@ -642,7 +635,7 @@ def make_appearance_tools(
         if all(abs(have - want) < 1e-6 for have, want in zip(current, (r, g, b))):
             # Requested state already holds; record it so the supervisor's
             # success gate accepts an "already that color" reply.
-            _record("satisfied")
+            record_evidence("satisfied")
             return RecoloredObject(obj_id=target.id, r=r, g=g, b=b)
         await leaves.update({"obj_id": target.id, "r": r, "g": g, "b": b})
         return RecoloredObject(obj_id=target.id, r=r, g=g, b=b)

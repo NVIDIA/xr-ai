@@ -120,7 +120,7 @@ def test_eval_case_filter_rejects_unknown_names_in_mixed_selection() -> None:
 def test_eval_utterances_alias_selects_the_complete_battery() -> None:
     from xr_render_demo_eval import harness
 
-    assert len(harness.UTTERANCES) == 35
+    assert len(harness.UTTERANCES) == 36
     assert harness._resolve_case_names(["utterances"]) == {
         case.name for case in harness.UTTERANCES
     }

@@ -787,6 +787,16 @@ UTTERANCES = (
         forbidden_tools=_FORBID_MUTATIONS,
     ),
     Case(
+        name="basics_bare_holding_question",
+        # The perception gate's live regression: a bare hands question got
+        # answered from the model's prior instead of the camera.
+        request="What am I holding right now?",
+        vision="A hand holding a stapler.",
+        required_tools=frozenset({"look_at_current_frame"}),
+        forbidden_tools=_FORBID_MUTATIONS,
+        reply_contains="stapler",
+    ),
+    Case(
         name="basics_look_for_yourself",
         # Answering a clarifying question with "go observe" must re-enter
         # the pending request through the camera, never echo those words.

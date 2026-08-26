@@ -204,12 +204,12 @@ def test_status_questions_are_not_mutation_intent() -> None:
 async def test_already_satisfied_reply_stands_on_evidence(monkeypatch) -> None:
     """A recolor that found the requested state already holding records
     satisfied evidence; the model's reply stands despite no scene diff."""
-    from xr_render_demo_worker._trace import current_mutation_evidence
+    from xr_render_demo_worker._trace import current_turn_evidence
 
     supervisor, _fake = _make_supervisor()
 
     async def fake_loop(messages, toolset, call_model, max_iterations=12):
-        current_mutation_evidence.get().satisfied += 1
+        current_turn_evidence.get().satisfied += 1
         return SimpleNamespace(
             content="The sphere is already green.",
             messages=list(messages),
@@ -281,6 +281,204 @@ async def test_verification_offers_repeat_after_mutating_delegation(monkeypatch)
         transcript="Paint the sphere crimson.", participant_id="alice"))
     assert len(nudges) == 1
     assert "repeat your final answer" in nudges[0]
+
+
+def test_perception_claim_patterns() -> None:
+    """The gate fires on the model's dominant hands-and-body register and
+    stays off questions, hedges, memory recall, and look-at answers."""
+    from xr_render_demo_worker.supervisor import _claims_perception
+
+    assert _claims_perception("You are holding a camera.")
+    assert _claims_perception("You're wearing a red scarf.")
+    assert _claims_perception("You’re holding a camera.")
+    assert _claims_perception("You are currently holding a camera.")
+    assert _claims_perception("You are still holding a camera.")
+    assert _claims_perception("You appear to be holding a camera.")
+    assert _claims_perception("You seem to be carrying a canvas bag.")
+    assert _claims_perception("The bottle in your hand is green.")
+    assert _claims_perception("It looks like a camera is in your right hand.")
+    assert _claims_perception("You have a stapler in your grasp.")
+    assert _claims_perception("You are holding a camera. Want me to recolor it?")
+
+    assert not _claims_perception("You are holding a camera?")
+    assert not _claims_perception("What are you holding?")
+    assert not _claims_perception("I can't tell what you're holding.")
+    assert not _claims_perception("I cannot see what you are holding right now.")
+    assert not _claims_perception("I don't know what you are wearing.")
+    assert not _claims_perception("The camera is unavailable, so you are holding something I can't name.")
+    assert not _claims_perception("You were holding a green mug.")
+    assert not _claims_perception("You are looking at the red cube.")
+    assert not _claims_perception("You are pointing at the sphere I created.")
+    assert not _claims_perception("The sphere is in front of you.")
+    assert not _claims_perception("I looked at the camera feed.")
+
+
+async def test_unobserved_claim_is_retried_then_replaced(monkeypatch) -> None:
+    """A hands claim with no camera observation is sent back to look once,
+    then replaced with the honest can't-say sentence."""
+    from xr_render_demo_worker.supervisor import _UNOBSERVED_REPLY
+
+    supervisor, _fake = _make_supervisor()
+    nudges: list[str] = []
+    iterations: list[int] = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        iterations.append(max_iterations)
+        nudges.extend(m.content for m in messages
+                      if m.role == "user" and "no camera observation" in m.content)
+        return SimpleNamespace(
+            content="You are holding a camera.",
+            messages=list(messages),
+            tool_calls=(),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="What am I holding?", participant_id="alice"))
+    assert len(nudges) == 1
+    assert iterations == [12, 6]
+    assert reply.response == _UNOBSERVED_REPLY
+
+
+async def test_observed_claim_stands(monkeypatch) -> None:
+    """A camera observation this turn backs the claim, so the reply stands
+    and no retry runs."""
+    from xr_render_demo_worker._trace import current_turn_evidence
+
+    supervisor, _fake = _make_supervisor()
+    calls = 0
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        nonlocal calls
+        calls += 1
+        current_turn_evidence.get().observed += 1
+        return SimpleNamespace(
+            content="You are holding a green mug.",
+            messages=list(messages),
+            tool_calls=(),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="What am I holding?", participant_id="alice"))
+    assert reply.response == "You are holding a green mug."
+    assert calls == 1
+
+
+async def test_retry_with_observation_stands(monkeypatch) -> None:
+    """The forced look supplies the missing evidence, so the retry's answer
+    replaces the guess and survives the gate."""
+    from xr_render_demo_worker._trace import current_turn_evidence
+
+    supervisor, _fake = _make_supervisor()
+    calls = 0
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return SimpleNamespace(
+                content="You are holding a camera.",
+                messages=list(messages),
+                tool_calls=(),
+            )
+        current_turn_evidence.get().observed += 1
+        return SimpleNamespace(
+            content="You are holding a boba milk.",
+            messages=list(messages),
+            tool_calls=(),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="What am I holding?", participant_id="alice"))
+    assert reply.response == "You are holding a boba milk."
+    assert calls == 2
+
+
+async def test_both_gates_apply_to_final_text(monkeypatch) -> None:
+    """A turn that trips the mutation gate and the perception gate keeps
+    both verdicts, and the perception retry threads from the latest loop."""
+    from xr_render_demo_worker.supervisor import _UNOBSERVED_REPLY
+
+    supervisor, _fake = _make_supervisor()
+    calls = 0
+    perception_context: list[list[str]] = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        nonlocal calls
+        calls += 1
+        asks = [m.content for m in messages if m.role == "user"]
+        if any("no camera observation" in ask for ask in asks):
+            perception_context.append(asks)
+        return SimpleNamespace(
+            content="Recolored the box to match what you are holding.",
+            messages=list(messages),
+            tool_calls=(SimpleNamespace(call=SimpleNamespace(name="appearance_agent")),),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="Make the box the color of the thing I'm holding.", participant_id="alice"))
+    assert calls == 3
+    assert reply.response == f"{_UNOBSERVED_REPLY} Nothing in the scene was changed."
+    assert any("Verified scene changes this turn" in ask for ask in perception_context[0])
+
+
+async def test_perception_retry_failure_falls_back(monkeypatch) -> None:
+    """A retry that never completes still fails honestly rather than
+    shipping the unbacked claim."""
+    from xr_ai_tools.tool_calling import ToolLoopError
+    from xr_render_demo_worker.supervisor import _UNOBSERVED_REPLY
+
+    supervisor, _fake = _make_supervisor()
+    calls = 0
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return SimpleNamespace(
+                content="You are holding a camera.",
+                messages=list(messages),
+                tool_calls=(),
+            )
+        raise ToolLoopError(
+            "vision unreachable", messages=(), tool_calls=(), iterations=6
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="What am I holding?", participant_id="alice"))
+    assert reply.response == _UNOBSERVED_REPLY
+
+
+async def test_empty_perception_retry_falls_back(monkeypatch) -> None:
+    """An empty retry reply must not degrade to the generic "Done."."""
+    from xr_render_demo_worker.supervisor import _UNOBSERVED_REPLY
+
+    supervisor, _fake = _make_supervisor()
+    calls = 0
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        nonlocal calls
+        calls += 1
+        return SimpleNamespace(
+            content="You are holding a camera." if calls == 1 else "",
+            messages=list(messages),
+            tool_calls=(),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="What am I holding?", participant_id="alice"))
+    assert reply.response == _UNOBSERVED_REPLY
 
 
 async def test_turn_tasks_run_in_forked_relay_context(monkeypatch) -> None:
