@@ -33,7 +33,7 @@ NVDEC.
 | Requirement | Version | Notes |
 |---|---|---|
 | OS | Linux | Ubuntu 22.04 or 24.04 recommended; WSL2 is not officially supported (refer to [Windows (WSL2)](#windows-wsl2) below) |
-| Python | 3.11 or 3.12 | 3.10 and 3.13 are not supported |
+| Python | 3.11 or 3.12 recommended | other versions are not officially supported |
 | [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
 | NVIDIA driver | 580+ | required for CUDA 13 model containers and DeviceIOHub hardware codecs |
 | Docker | 24+ | required by the checked-in model-server profiles, which use vLLM containers from NGC and Docker Hub |
