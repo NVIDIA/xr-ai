@@ -12,7 +12,7 @@
   - cleartextTrafficPermitted="true" — allow plain http://+ws:// for
     localhost-only dev and plain-HTTP token servers.
   - <certificates src="user"/> — the actual trust path: once the user
-    installs the hub's self-signed CA via the in-app "Install hub certificate"
+    installs the hub's development root CA via the in-app "Install hub certificate"
     button (or manually from https://<host>:<port>/cert), Android validates
     the hub's TLS cert against the user CA store automatically.
 -->

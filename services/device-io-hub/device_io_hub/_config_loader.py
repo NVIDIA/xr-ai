@@ -85,7 +85,7 @@ def load_config() -> LiveKitConnectorConfig:
         data["web_client_dir"] = ""
 
     # Resolve any relative path fields relative to the YAML file's directory.
-    for key in ("web_client_dir", "cert_file", "key_file"):
+    for key in ("web_client_dir", "cert_file", "key_file", "root_ca_file"):
         if data.get(key):
             data[key] = _resolve_path(data[key], base)
 

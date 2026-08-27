@@ -6,7 +6,7 @@ Web server — serves the standalone web client and a token endpoint.
 
 Serves:
   GET  /token           — signed LiveKit JWT; returns {token, url, room}
-  GET  /cert            — active TLS cert as an installable iOS profile
+  GET  /cert            — development root CA as an installable profile
   GET  /rtc[/*]/validate — proxied to LiveKit HTTP (token pre-check)
   WS   /rtc[/*]         — proxied to LiveKit WebSocket signaling
   GET  /*               — static files from web_client_dir (SPA fallback)
@@ -28,7 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
 from . import _lk_proxy
-from ._tls import ensure_self_signed_cert
+from ._tls import ensure_development_certificates, read_public_root_ca
 from ._token import make_client_token
 from ._token_server import _proxy_client_lifespan, serve_safe, wait_until_bound
 from .config import LiveKitConnectorConfig
@@ -54,7 +54,7 @@ def _build_app(cfg: LiveKitConnectorConfig, cert_bytes: bytes | None) -> FastAPI
 
     @app.get("/cert")
     async def get_cert() -> Response:
-        """Serve the self-signed cert as an installable iOS profile."""
+        """Serve only the public root CA as an installable profile."""
         if cert_bytes is None:
             raise HTTPException(status_code=404, detail="TLS disabled — no cert to serve")
         return Response(
@@ -110,20 +110,29 @@ class WebServer:
         if self._cfg.web_server_tls:
             cert = self._cfg.cert_file or None
             key  = self._cfg.key_file  or None
+            root_ca = self._cfg.root_ca_file or None
             if not cert or not key:
                 # Off-loop: cert generation does RSA keygen and network probes.
-                cert, key = await asyncio.to_thread(
-                    ensure_self_signed_cert, self._cfg.web_server_extra_sans
+                cert, key, root_ca = await asyncio.to_thread(
+                    ensure_development_certificates, self._cfg.web_server_extra_sans
                 )
-                logger.info("TLS: using auto-generated self-signed cert  {}", cert)
+                logger.info("TLS: using auto-generated server leaf {}", cert)
+            elif root_ca is None:
+                logger.info(
+                    "TLS: using externally supplied server certificate {}; /cert is disabled "
+                    "because root_ca_file is not configured",
+                    cert,
+                )
             ssl_kwargs = {"ssl_certfile": cert, "ssl_keyfile": key}
             scheme = "https"
             # Read once at startup so /cert serves from memory.
-            try:
-                with open(cert, "rb") as f:
-                    cert_bytes = f.read()
-            except OSError as exc:
-                logger.warning("TLS: cannot read cert at {} for /cert endpoint: {}", cert, exc)
+            if root_ca is not None:
+                try:
+                    cert_bytes = read_public_root_ca(root_ca)
+                except (OSError, ValueError) as exc:
+                    logger.warning(
+                        "TLS: cannot expose root CA at {} through /cert: {}", root_ca, exc
+                    )
 
         app = _build_app(self._cfg, cert_bytes)
 

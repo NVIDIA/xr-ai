@@ -42,18 +42,20 @@ web_server_host:   "0.0.0.0"
 web_server_port:   8080
 # Path is relative to this file's directory.
 web_client_dir:    ../../client-samples/web
-# HTTPS is on by default. A self-signed cert is auto-generated on first run
-# at ~/.local/share/xr-ai/web-server.crt. Browsers reach LiveKit via the
-# same-origin wss://<host>:web_server_port/rtc proxy this server exposes.
+# HTTPS is on by default. A stable development root CA and a signed server
+# leaf are auto-generated on first run under ~/.local/share/xr-ai/. Browsers
+# reach LiveKit via the same-origin wss://<host>:web_server_port/rtc proxy.
 # Set web_server_tls: false only when the hub should *not* terminate TLS
 # itself — either a TLS-terminating reverse proxy (nginx, Caddy, Cloudflare
 # Tunnel) sits in front and speaks plain http://+ws:// to the hub on the
 # loopback, or you're doing localhost-only dev where browsers grant
-# camera/mic on http://localhost. Supply your own cert/key with
-# cert_file / key_file:
-# cert_file: /path/to/cert.pem
-# key_file:  /path/to/key.pem
-# The auto-generated cert's SAN covers localhost, the hostname, and every
+# camera/mic on http://localhost. Supply your own server cert/key with
+# cert_file / key_file. To expose its public root CA at /cert for client
+# installation, also set root_ca_file:
+# cert_file:    /path/to/server.crt
+# key_file:     /path/to/server.key
+# root_ca_file: /path/to/root-ca.crt
+# The auto-generated leaf's SAN covers localhost, the hostname, and every
 # local interface IP. List here any address clients dial that is not on a
 # local interface (a NAT'd cloud VM's public IP, a forwarding proxy's
 # address, or a DNS name):
