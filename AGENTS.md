@@ -114,9 +114,11 @@ Refer to [Adding a sample](docs/source/guides/adding-a-sample.md) and the
 - The root `uv.toml` limits registry artifacts to the last dependency
   qualification timestamp. Advance it only in a dedicated dependency refresh,
   resolve every project's gitignored `uv.lock` with
-  `uv --config-file uv.toml lock --project <directory>` from the repository
-  root, and run the full test suite. Standalone nested projects do not inherit
-  the root config implicitly. Do not commit generated lockfiles.
+  `uv --config-file uv.toml lock --upgrade --project <directory>` from the
+  repository root, and run the full test suite. uv stops upward config discovery
+  at a nearer `[tool.uv]` table; most nested projects define one through
+  `[tool.uv.sources]`, so pass the root config explicitly. Do not commit
+  generated lockfiles.
 - Never put API keys or tokens in source files. Use environment variables or
   the credential store documented in `docs/source/getting_started/credentials.md`.
 - Do not add an abstraction until two concrete use cases need it.
