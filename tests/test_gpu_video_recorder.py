@@ -26,7 +26,7 @@ try:
 except (ImportError, RuntimeError, OSError) as exc:
     pytest.skip(f"PyNvVideoCodec unavailable: {exc}", allow_module_level=True)
 
-from xr_ai_hub import DataMessage, FrameData, FrameSignal, PixelFormat, SlotView  # noqa: E402
+from xr_ai_hub import AudioChunk, DataMessage, FrameData, FrameSignal, PixelFormat, SlotView  # noqa: E402
 
 from video_memory_service.frames import decode_h264  # noqa: E402
 from video_memory_service.service import VideoMemoryService  # noqa: E402
@@ -239,6 +239,20 @@ async def test_media_capture_composites_caption_with_real_nvenc():
                 track_id="camera",
             )
             recorder.record_video(frame)
+        samples = np.full(480, 0.25, dtype=np.float32)
+        for direction, value in (("device", samples), ("agent", -samples)):
+            recorder.record_audio(
+                direction,
+                AudioChunk(
+                    pts_us=1_000_000,
+                    sample_rate=48_000,
+                    channels=1,
+                    samples=samples.size,
+                    data=value.tobytes(),
+                    participant_id="gpu_capture",
+                    track_id=direction,
+                ),
+            )
         recorder.end_session("gpu_capture", 1_140_000)
 
         session = next(path for path in Path(out_dir).iterdir() if path.is_dir())
@@ -246,7 +260,18 @@ async def test_media_capture_composites_caption_with_real_nvenc():
         segment = manifest["video_tracks"]["camera"][0]
         assert segment["width"] == width
         assert segment["height"] > height
-        encoded = (session / segment["path"]).read_bytes()
+        assert segment["audio_embedded"] is True
+        demuxer = PyNvVideoCodec.CreateDemuxer(str(session / segment["path"]))
+        assert demuxer.GetVideoStreamId() >= 0
+        assert demuxer.GetAudioStreamId() >= 0
+        packet_types = set()
+        while True:
+            packet = demuxer.DemuxNoSkipAudio()
+            if packet.bsl == 0:
+                break
+            packet_types.add("video" if packet.is_video else "audio")
+        assert packet_types == {"video", "audio"}
+        encoded = (session / segment["raw_path"]).read_bytes()
         frames = decode_h264(encoded, gpu_id=0)
         assert frames
         assert frames[0].shape == (segment["height"] * 3 // 2, width)
