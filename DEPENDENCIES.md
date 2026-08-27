@@ -39,12 +39,14 @@ without publishing repository policy as artificial upper bounds in library
 metadata. Fresh CI runs therefore resolve the same qualified package set
 instead of silently admitting newly published artifacts.
 
-Advance the timestamp only in a dedicated dependency refresh. Resolve every
-project from the repository root with
-`uv --config-file uv.toml lock --project <directory>`, inspect the version
-changes, and run the full test suite. Standalone nested projects do not inherit
-the root config implicitly. All generated `uv.lock` files remain gitignored
-validation artifacts; do not commit them.
+Advance the timestamp only in a dedicated dependency refresh; it never updates
+automatically. Set `exclude-newer` to the current UTC value from
+`date -u +%Y-%m-%dT%H:%M:%SZ`, then resolve every project from the repository
+root with `uv --config-file uv.toml lock --project <directory>`. Inspect the
+resolved version changes and run the full CPU and GPU test suites before
+merging. Standalone nested projects do not inherit the root config implicitly.
+All generated `uv.lock` files remain gitignored validation artifacts; do not
+commit them.
 
 ## Generated Python project inventory
 

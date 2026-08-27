@@ -25,6 +25,7 @@ on:
   pull_request:
     paths:
       - .github/workflows/nightly-xr-ai-test.yml
+      - uv.toml
 
 # Queue overlapping runs instead of cancelling; the previous nightly
 # may still be running when the next cron fires on a busy GPU host.
