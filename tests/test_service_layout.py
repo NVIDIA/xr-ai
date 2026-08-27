@@ -436,6 +436,22 @@ def test_simple_vlm_reuses_every_model_process() -> None:
     } == {"stt": "reuse", "vlm": "reuse", "tts": "reuse"}
 
 
+def test_samples_start_capture_immediately_after_hub() -> None:
+    simple = _load_module(
+        "service_layout_simple_vlm_capture",
+        "agent-samples/simple-vlm-example/main.py",
+    )
+    render = _load_module(
+        "service_layout_render_capture",
+        "agent-samples/xr-render-demo/main.py",
+    )
+
+    for processes in (simple.PROCESSES, render._build_processes()):
+        names = [process.name for process in processes]
+        hub_index = names.index("hub")
+        assert names[hub_index + 1] == "capture"
+
+
 def test_render_demo_reuses_every_model_process() -> None:
     sample = _load_module(
         "service_layout_render_reuse",

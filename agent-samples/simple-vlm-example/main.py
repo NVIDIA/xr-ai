@@ -34,6 +34,12 @@ PROCESSES = [
         config="yaml/device_io_hub.yaml",
     ),
     Process(
+        "capture",
+        "../../services/device-io-hub",
+        "device_io_capture",
+        config="yaml/media_capture.yaml",
+    ),
+    Process(
         "stt",
         "../../services/stt-server",
         "stt_server",
