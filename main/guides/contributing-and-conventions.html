@@ -452,8 +452,8 @@ customer-facing Markdown and reStructuredText. Refer to
 <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
 for the package dependency map.</p>
 <p>For a Python change:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>&lt;affected-project&gt;
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>pytest<span class="w"> </span>&lt;affected-test-files&gt;
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>&lt;affected-project&gt;
+uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>pytest<span class="w"> </span>&lt;affected-test-files&gt;
 uv<span class="w"> </span>tool<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>&lt;changed-python-files&gt;
 </pre></div>
 </div>
@@ -482,6 +482,17 @@ normally regenerates the Python inventory in <code class="docutils literal notra
 and CI rejects drift. Do not edit that generated section by hand. Regenerate the
 affected project’s gitignored <code class="docutils literal notranslate"><span class="pre">uv.lock</span></code> locally. New source files require an
 SPDX header; refer to <a class="reference internal" href="spdx-headers.html"><span class="doc">SPDX headers</span></a>.</p>
+<p>The root <code class="docutils literal notranslate"><span class="pre">uv.toml</span></code> records the repository’s dependency qualification cutoff.
+Repository CI passes it explicitly to uv, so fresh resolutions ignore
+package-index artifacts uploaded after that timestamp while normal
+compatibility ranges stay in package metadata. Standalone nested projects do
+not always inherit the root file: uv stops upward config discovery at a nearer
+<code class="docutils literal notranslate"><span class="pre">[tool.uv]</span></code> table, and most projects define <code class="docutils literal notranslate"><span class="pre">[tool.uv.sources]</span></code>. Run uv from the
+repository root with <code class="docutils literal notranslate"><span class="pre">--config-file</span> <span class="pre">uv.toml</span></code> as shown above. To qualify newer
+dependencies, advance the cutoff in a dedicated change, resolve every project
+with <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">--config-file</span> <span class="pre">uv.toml</span> <span class="pre">lock</span> <span class="pre">--upgrade</span> <span class="pre">--project</span> <span class="pre">&lt;directory&gt;</span></code>, and run
+the full test suite. The generated lockfiles are validation artifacts and remain
+gitignored.</p>
 </section>
 
 
