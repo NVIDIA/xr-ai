@@ -36,6 +36,7 @@ dependencies = [
 
 [project.scripts]
 device_io_hub = "device_io_hub.__main__:run"
+device_io_capture = "device_io_hub.capture.__main__:run"
 
 [tool.uv.sources]
 xr-ai-hub-client = { path = "../../agent-sdk/xr-ai-hub", editable = true }

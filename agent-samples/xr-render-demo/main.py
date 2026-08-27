@@ -7,6 +7,7 @@ xr-render-demo orchestrator. Runs the process stack for this sample.
 Architecture (per AGENTS.md + the Agentic AI for XR design doc):
 
   Web client ── LiveKit ──► DeviceIOHub ──IPC──► worker (this sample's agent)
+                                      └─IPC──► capture (video, audio, data)
   Web client ── WebRTC ──► cloudxr-runtime
                         worker ──native tool──► scene ──► LOVR (OpenXR)
 
@@ -96,6 +97,8 @@ def _build_processes() -> list[Process]:
         *_MODEL_PROCESSES,
         Process("hub",        "../../services/device-io-hub",                "device_io_hub",
                 config="yaml/device_io_hub.yaml"),
+        Process("capture",    "../../services/device-io-hub",             "device_io_capture",
+                config="yaml/media_capture.yaml"),
         Process("cloudxr",    "../../services/cloudxr-runtime",               "cloudxr_runtime",
                 config="yaml/cloudxr_runtime.yaml"),
         Process("video-memory", "../../services/video-memory-service", "video_memory_service",
