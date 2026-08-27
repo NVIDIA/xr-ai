@@ -28,7 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
 from . import _lk_proxy
-from ._tls import ensure_development_certificates, read_public_root_ca
+from ._tls import _read_public_root_ca, ensure_development_certificates
 from ._token import make_client_token
 from ._token_server import _proxy_client_lifespan, serve_safe, wait_until_bound
 from .config import LiveKitConnectorConfig
@@ -56,7 +56,7 @@ def _build_app(cfg: LiveKitConnectorConfig, cert_bytes: bytes | None) -> FastAPI
     async def get_cert() -> Response:
         """Serve only the public root CA as an installable profile."""
         if cert_bytes is None:
-            raise HTTPException(status_code=404, detail="TLS disabled — no cert to serve")
+            raise HTTPException(status_code=404, detail="No root CA available")
         return Response(
             content=cert_bytes,
             media_type="application/x-x509-ca-cert",
@@ -110,17 +110,17 @@ class WebServer:
         if self._cfg.web_server_tls:
             cert = self._cfg.cert_file or None
             key  = self._cfg.key_file  or None
-            root_ca = self._cfg.root_ca_file or None
+            root_ca: str | None = None
             if not cert or not key:
                 # Off-loop: cert generation does RSA keygen and network probes.
                 cert, key, root_ca = await asyncio.to_thread(
                     ensure_development_certificates, self._cfg.web_server_extra_sans
                 )
                 logger.info("TLS: using auto-generated server leaf {}", cert)
-            elif root_ca is None:
+            else:
                 logger.info(
                     "TLS: using externally supplied server certificate {}; /cert is disabled "
-                    "because root_ca_file is not configured",
+                    "because DeviceIOHub does not own its root CA",
                     cert,
                 )
             ssl_kwargs = {"ssl_certfile": cert, "ssl_keyfile": key}
@@ -128,8 +128,8 @@ class WebServer:
             # Read once at startup so /cert serves from memory.
             if root_ca is not None:
                 try:
-                    cert_bytes = read_public_root_ca(root_ca)
-                except (OSError, ValueError) as exc:
+                    cert_bytes = _read_public_root_ca(root_ca)
+                except ValueError as exc:
                     logger.warning(
                         "TLS: cannot expose root CA at {} through /cert: {}", root_ca, exc
                     )

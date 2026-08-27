@@ -152,9 +152,8 @@ leaf signed by that root under `~/.local/share/xr-ai/`:
   private key. The web server presents this leaf for HTTPS and WSS.
 
 To use your own certificate, set `cert_file` and `key_file` in
-`device_io_hub.yaml`. Set `root_ca_file` as well when `/cert` should offer its
-public root CA for installation. Without `root_ca_file`, externally managed TLS
-continues to work and `/cert` returns 404.
+`device_io_hub.yaml`. Externally managed TLS continues to work unchanged;
+`/cert` returns 404 because DeviceIOHub does not own that certificate's root.
 
 The generated leaf covers `localhost`, the hostname, and automatically
 discovered local IPv4 addresses. When clients dial an address that discovery
@@ -226,5 +225,4 @@ only the server leaf and do not require another trust installation.
 
 For production deployments on any platform, replace the auto-generated
 certificate with one from a public CA by setting `cert_file` and `key_file` in
-`device_io_hub.yaml`. Optionally set `root_ca_file` if clients install a private
-or enterprise root through `/cert`.
+`device_io_hub.yaml`.

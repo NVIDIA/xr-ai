@@ -12,11 +12,10 @@ from pathlib import Path
 
 import pytest
 from cryptography import x509
-from cryptography.x509.oid import ExtendedKeyUsageOID
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 from device_io_hub.transport.livekit import _tls
-from device_io_hub.transport.livekit._web_server import _build_app
-from device_io_hub.transport.livekit.config import LiveKitConnectorConfig
-from fastapi.testclient import TestClient
 from loguru import logger
 
 
@@ -151,7 +150,40 @@ def test_missing_local_ip_rotates_only_leaf(
 
 def test_legacy_ca_as_leaf_is_migrated_with_clear_log(cert_env: Path) -> None:
     now = datetime.datetime.now(datetime.timezone.utc)
-    legacy_cert, legacy_key = _tls._generate_root(now)
+    legacy_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    legacy_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "XR AI Experiences")])
+    legacy_cert = (
+        x509.CertificateBuilder()
+        .subject_name(legacy_name)
+        .issuer_name(legacy_name)
+        .public_key(legacy_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - datetime.timedelta(days=1))
+        .not_valid_after(now + datetime.timedelta(days=3650))
+        .add_extension(
+            x509.SubjectAlternativeName([x509.DNSName("legacy.example.com")]),
+            critical=False,
+        )
+        .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=True,
+                content_commitment=False,
+                key_encipherment=True,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=True,
+                crl_sign=False,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
+        .add_extension(
+            x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False
+        )
+        .sign(legacy_key, hashes.SHA256())
+    )
     _tls._write_cert(_tls._CERT_FILE, legacy_cert)
     _tls._write_private_key(_tls._KEY_FILE, legacy_key)
     messages: list[str] = []
@@ -164,6 +196,7 @@ def test_legacy_ca_as_leaf_is_migrated_with_clear_log(cert_env: Path) -> None:
     assert _tls._is_server_leaf(_cert(leaf_path))
     assert _tls._is_development_root(_cert(root_path))
     assert _tls._is_signed_by(_cert(leaf_path), _cert(root_path))
+    assert "legacy.example.com" in _tls._cert_san_entries(_cert(leaf_path))
     assert any("migrating legacy CA-as-server certificate" in message for message in messages)
     assert any("Install root-ca.crt" in message for message in messages)
 
@@ -178,39 +211,15 @@ def test_generated_file_permissions_are_restrictive(cert_env: Path) -> None:
     assert _mode(root_path) == 0o644
 
 
-def test_public_root_reader_never_returns_appended_private_key(cert_env: Path) -> None:
+def test_public_root_reader_never_returns_private_key(cert_env: Path) -> None:
     _, _, root_path = _tls.ensure_development_certificates()
     root_pem = Path(root_path).read_bytes()
     root_key_pem = Path(_tls._ROOT_KEY_FILE).read_bytes()
     Path(root_path).write_bytes(root_pem + root_key_pem)
-
-    exposed = _tls.read_public_root_ca(root_path)
+    exposed = _tls._read_public_root_ca(root_path)
 
     assert exposed == root_pem
     assert b"PRIVATE KEY" not in exposed
-
-
-def test_cert_endpoint_returns_root_not_leaf_or_private_key(cert_env: Path) -> None:
-    leaf_path, _, root_path = _tls.ensure_development_certificates()
-    root_bytes = _tls.read_public_root_ca(root_path)
-    cfg = LiveKitConnectorConfig(api_key="key", api_secret="secret")
-
-    with TestClient(_build_app(cfg, root_bytes)) as client:
-        response = client.get("/cert")
-
-    assert response.status_code == 200
-    assert response.content == root_bytes
-    assert response.content != Path(leaf_path).read_bytes()
-    assert b"PRIVATE KEY" not in response.content
-
-
-def test_cert_endpoint_is_disabled_without_a_root() -> None:
-    cfg = LiveKitConnectorConfig(api_key="key", api_secret="secret")
-
-    with TestClient(_build_app(cfg, None)) as client:
-        response = client.get("/cert")
-
-    assert response.status_code == 404
 
 
 def test_invalid_extras_are_skipped_not_fatal(cert_env: Path) -> None:
@@ -252,17 +261,3 @@ def test_loader_coerces_extra_sans(
     monkeypatch.setattr("sys.argv", ["prog", "--config", str(cfg_file)])
 
     assert load_config().web_server_extra_sans == expected
-
-
-def test_loader_resolves_external_root_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from device_io_hub._config_loader import load_config
-
-    cfg_file = tmp_path / "device_io_hub.yaml"
-    cfg_file.write_text(
-        "api_key: devkey\napi_secret: secret\nroot_ca_file: certs/root-ca.crt\n"
-    )
-    monkeypatch.setattr("sys.argv", ["prog", "--config", str(cfg_file)])
-
-    assert load_config().root_ca_file == str(tmp_path / "certs" / "root-ca.crt")

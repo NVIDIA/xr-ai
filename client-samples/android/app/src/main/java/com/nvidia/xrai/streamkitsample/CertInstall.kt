@@ -16,7 +16,7 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.X509TrustManager
 
 /**
- * Fetches the hub's development root CA and returns a [KeyChain] install [Intent], or null on
+ * Fetches the hub's self-signed CA cert and returns a [KeyChain] install [Intent], or null on
  * failure. The fetch uses a single-connection trust-all SSLSocketFactory because the cert being
  * downloaded is the one that is not yet trusted.
  */

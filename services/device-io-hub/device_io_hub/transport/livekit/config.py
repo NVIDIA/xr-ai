@@ -64,9 +64,6 @@ class LiveKitConnectorConfig:
     # Leave empty for plain HTTP (camera blocked on remote without HTTPS).
     cert_file: str = ""
     key_file:  str = ""
-    # Public root CA returned by /cert for externally supplied certificates.
-    # Private keys are never returned by the web server.
-    root_ca_file: str = ""
     # Absolute path to browser static files. Empty = no static serving.
     browser_dir: str = ""
 
@@ -90,8 +87,7 @@ class LiveKitConnectorConfig:
     # LiveKit signaling as wss:// without browser mixed-content blocks.
     # A development root CA and signed server leaf are auto-generated in
     # ~/.local/share/xr-ai/ on first run. Supply cert_file/key_file to use your
-    # own, and optionally root_ca_file to make its public root available at
-    # /cert for client installation.
+    # own; /cert is disabled when DeviceIOHub does not own the root CA.
     # Set to False for the two cases where the hub should *not* terminate TLS
     # itself: (a) a TLS-terminating reverse proxy (nginx, Caddy, Cloudflare
     # Tunnel) sits in front and speaks plain http:// + ws:// to the hub on the

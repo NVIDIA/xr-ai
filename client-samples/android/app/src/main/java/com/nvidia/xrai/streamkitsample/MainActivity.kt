@@ -404,7 +404,7 @@ private fun ConnectionSection(vm: AppViewModel) {
         )
 
         // Cert install — shown in the disconnected state so the user can trust
-        // the hub's development root CA before the first connection attempt.
+        // the hub's self-signed CA before the first connection attempt.
         if (isDisconnected) {
             CardRow(showDivider = true) {
                 TextButton(

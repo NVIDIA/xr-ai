@@ -574,7 +574,7 @@
         </div>
 
         <!-- Cert-accept hint. services/cloudxr-runtime serves the WSS proxy with a
-             development cert; the browser must accept it once before Launch
+             self-signed cert; the browser must accept it once before Launch
              XR can complete. The link opens in a new tab; on returning
              (window focus) we re-fetch the cert URL and flip the label to
              a green "accepted" state if it now succeeds. Mirrors the

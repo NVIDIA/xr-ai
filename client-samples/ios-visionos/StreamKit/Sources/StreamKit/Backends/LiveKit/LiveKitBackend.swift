@@ -669,7 +669,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
 
         guard let url = components?.url else { throw StreamError.tokenFetchFailed(base) }
 
-        // Use a session that accepts development / untrusted certificates.
+        // Use a session that accepts self-signed / untrusted certificates.
         // StreamKit is a developer tool that connects to operator-controlled LAN servers;
         // NSAllowsArbitraryLoads in Info.plist covers the LiveKit WSS connection, while
         // this delegate covers the token endpoint (belt-and-suspenders).
@@ -839,7 +839,7 @@ private extension CameraConfig {
 
 /// URLSession delegate that accepts any server certificate. Used only for
 /// the /token fetch — the LiveKit Swift SDK owns its own URLSession, so
-/// the wss handshake to a development certificate still requires a trusted root
+/// the wss handshake to a self-signed cert still requires a trusted
 /// profile on the device.
 private final class TrustingSessionDelegate: NSObject, URLSessionDelegate, @unchecked Sendable {
     func urlSession(

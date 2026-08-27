@@ -11,9 +11,8 @@ import socket
 from collections.abc import Sequence
 
 from cryptography import x509
-from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 from loguru import logger
 
@@ -163,16 +162,9 @@ def _is_current(
 
 
 def _is_signed_by(cert: x509.Certificate, issuer: x509.Certificate) -> bool:
-    if cert.issuer != issuer.subject:
-        return False
     try:
-        issuer.public_key().verify(
-            cert.signature,
-            cert.tbs_certificate_bytes,
-            padding.PKCS1v15(),
-            cert.signature_hash_algorithm,
-        )
-    except (InvalidSignature, TypeError, ValueError):
+        cert.verify_directly_issued_by(issuer)
+    except ValueError:
         return False
     return True
 
@@ -193,10 +185,15 @@ def _write_cert(path: pathlib.Path, cert: x509.Certificate) -> None:
     path.chmod(0o644)
 
 
-def read_public_root_ca(cert_path: str) -> bytes:
+def _read_public_root_ca(cert_path: str) -> bytes:
     """Return one public root certificate, never other PEM material."""
     cert = _load_cert(pathlib.Path(cert_path))
-    if cert is None or not _is_ca_cert(cert) or cert.subject != cert.issuer:
+    if (
+        cert is None
+        or not _is_ca_cert(cert)
+        or cert.subject != cert.issuer
+        or not _is_signed_by(cert, cert)
+    ):
         raise ValueError(f"{cert_path} is not a self-signed root CA certificate")
     return cert.public_bytes(serialization.Encoding.PEM)
 

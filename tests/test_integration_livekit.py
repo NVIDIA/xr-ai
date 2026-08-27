@@ -225,17 +225,12 @@ async def test_livekit_rust_tls_accepts_generated_leaf(
     monkeypatch.setattr(_tls_mod, "_CERT_FILE", tmp_path / "web-server.crt")
     monkeypatch.setattr(_tls_mod, "_KEY_FILE", tmp_path / "web-server.key")
     monkeypatch.setattr(_tls_mod, "_local_ipv4_addrs", lambda: {"127.0.0.1"})
-    leaf_path, leaf_key_path, root_path = _tls_mod.ensure_development_certificates()
-
     port = pick_free_port(8080)
     cfg = replace(
         live_docker,
         web_server_host="127.0.0.1",
         web_server_port=port,
         web_server_tls=True,
-        cert_file=leaf_path,
-        key_file=leaf_key_path,
-        root_ca_file=root_path,
     )
     token = make_client_token(cfg, identity=f"rust-tls-{uuid.uuid4().hex[:6]}", ttl=None)
     web_server = WebServer(cfg)
@@ -245,34 +240,51 @@ async def test_livekit_rust_tls_accepts_generated_leaf(
         # initializes its rustls root store.
         script = """
 import asyncio
+import ssl
 import sys
+import urllib.request
+from pathlib import Path
 from livekit import rtc
 
 async def main():
+    endpoint = sys.argv[1]
+    root_path = sys.argv[3]
+    context = ssl.create_default_context(cafile=root_path)
+    with urllib.request.urlopen(f"https://{endpoint}/cert", context=context) as response:
+        cert = response.read()
+    assert cert == Path(root_path).read_bytes()
+    assert cert != Path(sys.argv[4]).read_bytes()
+    assert b"PRIVATE KEY" not in cert
+
     room = rtc.Room()
-    await room.connect(sys.argv[1], sys.argv[2])
+    await room.connect(f"wss://{endpoint}", sys.argv[2])
     assert room.connection_state == rtc.ConnectionState.CONN_CONNECTED
     await room.disconnect()
 
 asyncio.run(main())
 """
         env = os.environ.copy()
-        env["SSL_CERT_FILE"] = root_path
-        proc = await asyncio.create_subprocess_exec(
-            sys.executable,
-            "-c",
-            script,
-            f"wss://localhost:{port}",
-            token,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+        env["SSL_CERT_FILE"] = str(_tls_mod._ROOT_CERT_FILE)
+        result = await asyncio.to_thread(
+            subprocess.run,
+            [
+                sys.executable,
+                "-c",
+                script,
+                f"localhost:{port}",
+                token,
+                str(_tls_mod._ROOT_CERT_FILE),
+                str(_tls_mod._CERT_FILE),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30.0,
             env=env,
         )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30.0)
     finally:
         await web_server.stop()
 
-    assert proc.returncode == 0, (
+    assert result.returncode == 0, (
         f"LiveKit Python/Rust TLS connection failed\n"
-        f"stdout:\n{stdout.decode()}\nstderr:\n{stderr.decode()}"
+        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )

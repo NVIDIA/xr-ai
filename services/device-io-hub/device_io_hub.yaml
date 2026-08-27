@@ -50,11 +50,10 @@ web_client_dir:    ../../client-samples/web
 # Tunnel) sits in front and speaks plain http://+ws:// to the hub on the
 # loopback, or you're doing localhost-only dev where browsers grant
 # camera/mic on http://localhost. Supply your own server cert/key with
-# cert_file / key_file. To expose its public root CA at /cert for client
-# installation, also set root_ca_file:
-# cert_file:    /path/to/server.crt
-# key_file:     /path/to/server.key
-# root_ca_file: /path/to/root-ca.crt
+# cert_file / key_file. /cert is disabled when DeviceIOHub does not own the
+# root CA:
+# cert_file: /path/to/server.crt
+# key_file:  /path/to/server.key
 # The auto-generated leaf's SAN covers localhost, the hostname, and every
 # local interface IP. List here any address clients dial that is not on a
 # local interface (a NAT'd cloud VM's public IP, a forwarding proxy's
