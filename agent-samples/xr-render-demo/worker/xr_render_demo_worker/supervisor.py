@@ -25,11 +25,11 @@ from xr_render_scene import SceneTools
 
 from ._physical_color import IMAGE_QUERY_SYSTEM_PROMPT, make_physical_color_tool
 from ._trace import (
-    MutationEvidence,
-    current_mutation_evidence,
+    TurnEvidence,
     current_participant_id,
     current_reference_time_us,
     current_trace_id,
+    current_turn_evidence,
 )
 from .agents import (
     make_appearance_agent,
@@ -66,6 +66,13 @@ _PROGRESSIVE_SUBJECTS = frozenset(
 )
 
 _TRUNCATED_ASK = "I think I missed the end of that."
+
+_UNOBSERVED_REPLY = "I haven't been able to observe that, so I can't say."
+
+_RECORDED_ONLY_REPLY = (
+    "I could only check a recorded frame, not your current view, so I can't"
+    " say what you're holding right now."
+)
 
 _CANCEL_PHRASES = frozenset({
     "never mind", "nevermind", "forget it", "forget that", "cancel", "cancel that", "no", "stop",
@@ -112,6 +119,45 @@ def _claims_completion(text: str) -> bool:
 
 def _is_question(text: str) -> bool:
     return text.rstrip().rstrip("\"'”’)").rstrip().endswith("?")
+
+
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+# Hands-and-body claims in our own reply: the only family a camera alone can
+# settle, since look-at and point-at answers come from tracking or scene data
+# and past tense from memory. Defense in depth over the model's dominant
+# register, not a paraphrase parser.
+_PERCEPTION_CLAIMS = re.compile(
+    r"\byou\s*(?:['’]re|\s+are|\s+(?:appears?|seems?)\s+to\s+be)"
+    r"(?:\s+\w+){0,2}\s+(?:holding|carrying|wearing|gripping)\b"
+    r"|\bin\s+your(?:\s+\w+){0,2}\s+(?:hands?|grasp|grip)\b",
+    re.IGNORECASE,
+)
+
+# An honest "I can't see" is the answer the gate wants, so it must survive it.
+_PERCEPTION_HEDGES = re.compile(
+    r"\bcan(?:['’]t|not)\b|\bcould(?:n['’]t|\s+not)\b|\bunable\b|\bnot\s+sure\b"
+    r"|\b(?:do|does|did)(?:n['’]t|\s+not)\s+know\b|\bno\s+camera\b|\bunavailable\b"
+    r"|\bhave(?:n['’]t|\s+not)\b",
+    re.IGNORECASE,
+)
+
+
+# A hedge exempts only its own clause: "I can't see clearly, but you are
+# holding a camera" still claims.
+_CLAUSE_SPLIT = re.compile(
+    r"[,;:]|\bbut\b|\band\b|\bhowever\b|\byet\b|\balthough\b|—|–|\s-\s",
+    re.IGNORECASE,
+)
+
+
+def _claims_perception(text: str) -> bool:
+    return any(
+        _PERCEPTION_CLAIMS.search(clause) and not _PERCEPTION_HEDGES.search(clause)
+        for sentence in _SENTENCE_SPLIT.split(text)
+        if not _is_question(sentence)
+        for clause in _CLAUSE_SPLIT.split(sentence)
+    )
 
 
 def _is_truncated(transcript: str) -> bool:
@@ -294,8 +340,8 @@ class SceneSupervisor:
     async def _handle_scene(
         self, request: SceneRequest, transcript: str, conversation: str
     ) -> SceneReply:
-        evidence = MutationEvidence()
-        current_mutation_evidence.set(evidence)
+        evidence = TurnEvidence()
+        current_turn_evidence.set(evidence)
         before = await self._context.snapshot()
 
         user_message = (
@@ -331,7 +377,11 @@ class SceneSupervisor:
         needs_verification = bool(delegated & _MUTATING_AGENTS) or _wants_mutation(transcript)
 
         await asyncio.sleep(_SCENE_SETTLE_S)
-        if needs_verification and not SceneContext.changes(before, await self._context.snapshot()):
+        latest = result
+        verify_no_change = needs_verification and not SceneContext.changes(
+            before, await self._context.snapshot()
+        )
+        if verify_no_change:
             if delegated & _MUTATING_AGENTS:
                 nudge = (
                     "Verified scene changes this turn: none. If the request needed a"
@@ -348,7 +398,7 @@ class SceneSupervisor:
                     " be done, say plainly that nothing was changed and why; never"
                     " reply that a change was made."
                 )
-            verification_messages = list(result.messages) + [
+            verification_messages = list(latest.messages) + [
                 ChatMessage(role="user", content=nudge),
             ]
             try:
@@ -359,7 +409,61 @@ class SceneSupervisor:
                 logger.warning("supervisor verification failed ({})", exc)
             else:
                 output = result2.content
+                latest = result2
             await asyncio.sleep(_SCENE_SETTLE_S)
+
+        perception_retried = False
+        if output and evidence.observed == 0 and _claims_perception(output):
+            logger.warning(
+                "perception claim without live observation"
+                " (observed_recorded={}): {!r}",
+                evidence.observed_recorded, output[:80],
+            )
+            perception_retried = True
+            if evidence.observed_recorded > 0:
+                perception_nudge = (
+                    "Your reply asserts what the user is holding, carrying, or"
+                    " wearing right now, but this turn only consulted a"
+                    " recorded frame. Restate your answer explicitly about"
+                    " that recorded moment in past tense, or delegate"
+                    " vision_agent to look at the current view first."
+                )
+            else:
+                perception_nudge = (
+                    "Your reply asserts what the user is holding, carrying, or"
+                    " wearing, but no camera observation was made this turn."
+                    " Delegate vision_agent now with that exact question and"
+                    " answer only from its result; if it cannot see, say so."
+                )
+            perception_messages = list(latest.messages) + [
+                ChatMessage(role="user", content=perception_nudge),
+            ]
+            try:
+                perception_result = await run_tool_loop(
+                    perception_messages, self._toolset, _call_model, max_iterations=6
+                )
+            except ToolLoopError as exc:
+                logger.warning("perception retry failed ({})", exc)
+                output = ""
+            else:
+                output = perception_result.content
+            await asyncio.sleep(_SCENE_SETTLE_S)
+
+        # One text policy over the final reply, whichever loop produced it.
+        # Perception replaces before the mutation gate appends, so a turn that
+        # trips both keeps the no-change fact.
+        if evidence.observed == 0 and (
+            (perception_retried and not output) or (output and _claims_perception(output))
+        ):
+            logger.warning(
+                "unobserved perception claim persisted"
+                " (observed_recorded={}); replacing reply {!r}",
+                evidence.observed_recorded, (output or "")[:80],
+            )
+            output = (
+                _RECORDED_ONLY_REPLY if evidence.observed_recorded > 0 else _UNOBSERVED_REPLY
+            )
+        if verify_no_change:
             # Success is evidence-backed: a completion claim may stand only
             # when a scene write was applied (or the requested state already
             # held), never on the model's wording alone. A claim-free

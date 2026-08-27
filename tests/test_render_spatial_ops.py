@@ -324,13 +324,13 @@ async def test_empty_value_required_for_non_literal_kinds():
 
 
 async def test_recolor_records_applied_and_satisfied_evidence():
-    from xr_render_demo_worker._trace import MutationEvidence, current_mutation_evidence
+    from xr_render_demo_worker._trace import TurnEvidence, current_turn_evidence
     from xr_render_demo_worker.spatial_ops import _RecolorRequest, make_appearance_tools
 
     fake = _FakeScene([_obj("cone-0", "cone", (0, 0.8, 0))])
     tools = {tool.name: tool for tool in make_appearance_tools(_FakeSceneTools(fake))}
-    evidence = MutationEvidence()
-    token = current_mutation_evidence.set(evidence)
+    evidence = TurnEvidence()
+    token = current_turn_evidence.set(evidence)
     try:
         await tools["recolor"].execute(_RecolorRequest(
             object_words="cone-0", color_kind="literal", color_value="green"))
@@ -340,4 +340,4 @@ async def test_recolor_records_applied_and_satisfied_evidence():
             object_words="cone-0", color_kind="literal", color_value="red"))
         assert (evidence.applied, evidence.satisfied) == (1, 1)
     finally:
-        current_mutation_evidence.reset(token)
+        current_turn_evidence.reset(token)

@@ -303,8 +303,11 @@ CASES = (
     Case(
         name="historical_vision",
         request="What color was the object I held ten seconds ago?",
-        vision="The previously held object was purple.",
+        # Phrased to lure a present-tense reply; the gate must steer the
+        # historical answer into past tense, never swallow it.
+        vision="In the recorded frame, the user is holding a purple mug.",
         required_tools=frozenset({"look_at_past_frame"}),
+        reply_contains="purple",
         # The supervisor's own conversation recall is the single expected
         # call; the camera's past is video, never the transcript.
         expected_call_counts=(("recall_conversation", 1),),
@@ -785,6 +788,16 @@ UTTERANCES = (
         ),
         required_tools=frozenset({"look_at_current_frame"}),
         forbidden_tools=_FORBID_MUTATIONS,
+    ),
+    Case(
+        name="basics_bare_holding_question",
+        # The perception gate's live regression: a bare hands question got
+        # answered from the model's prior instead of the camera.
+        request="What am I holding right now?",
+        vision="A hand holding a stapler.",
+        required_tools=frozenset({"look_at_current_frame"}),
+        forbidden_tools=_FORBID_MUTATIONS,
+        reply_contains="stapler",
     ),
     Case(
         name="basics_look_for_yourself",
