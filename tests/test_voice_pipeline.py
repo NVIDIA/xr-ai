@@ -3836,7 +3836,9 @@ async def test_output_transport_release_cancels_active_preroll(monkeypatch):
 @pytest.mark.asyncio
 async def test_preroll_cancellation_keeps_default_media_sender_alive(monkeypatch):
     """Participant cleanup cannot cancel Pipecat's shared audio task."""
+    from pipecat.clocks.system_clock import SystemClock
     from pipecat.frames.frames import CancelFrame, StartFrame
+    from pipecat.processors.frame_processor import FrameProcessorSetup
     from pipecat.transports.base_transport import TransportParams
     from pipecat.utils.asyncio.task_manager import TaskManager
     from xr_ai_voice import _transport as transport_module
@@ -3866,11 +3868,17 @@ async def test_preroll_cancellation_keeps_default_media_sender_alive(monkeypatch
         audio_out_end_silence_secs=0,
     )
     endpoint = _StubEndpoint()
+    task_manager = TaskManager()
     transport = DeviceIOHubOutputTransport(
         endpoint,
         params,
-        task_manager=TaskManager(),
+        task_manager=task_manager,
     )
+    await transport.setup(FrameProcessorSetup(
+        clock=SystemClock(),
+        task_manager=task_manager,
+        pipeline_worker=None,
+    ))
     await transport.process_frame(StartFrame(), FrameDirection.DOWNSTREAM)
     default_sender = transport._media_senders[None]  # noqa: SLF001
     original_wait = transport._wait_return_audio_preroll  # noqa: SLF001
