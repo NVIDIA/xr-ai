@@ -14,10 +14,10 @@ sample's design and operational details.
 
 ## Composition
 
-The orchestrator starts only DeviceIOHub and the worker. The fixed
-`yaml/models.json` profile marks Parakeet STT, Cosmos3 Nano, and Piper TTS as
-reused services. Start those endpoints together with the shared model-server
-stack.
+The orchestrator starts DeviceIOHub, passive session capture, and the worker.
+The fixed `yaml/models.json` profile marks Parakeet STT, Cosmos3 Nano, and
+Piper TTS as reused services. Start those endpoints together with the shared
+model-server stack.
 
 `VoiceAgent` owns service readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
@@ -66,6 +66,7 @@ layout works without command-line configuration arguments.
 | `yaml/voice_gate.yaml` | Wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | Model adapters, endpoints, readiness, and reuse declarations |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
+| `yaml/media_capture.yaml` | Automatic media-hub capture, NVENC output, `vlm.response` captions, and retention |
 | `worker/simple_vlm_example_worker/prompts/system.txt` | Default VLM instruction |
 
 Edit the owning file, preserve the field's YAML type, and restart
@@ -83,6 +84,20 @@ persistent stack, and start it again before restarting this sample.
 
 Refer to the generated {doc}`configuration <configuration>` reference for exact
 fields, checked-in values, and adjacent YAML comments.
+
+## Automatic session capture
+
+`device_io_capture` starts immediately after DeviceIOHub and records normalized
+hub media without joining the LiveKit room. Each participant connection creates
+a bundle under `~/.local/share/xr-ai/captures/simple-vlm-example/` containing
+captioned NVENC H.264 video, timestamp-aligned device/agent audio, exact raw
+audio chunks, inbound and outbound data, and a manifest. Text returned on
+`vlm.response` appears in the video caption panel.
+
+Encoding and file writes run in the separate capture process behind bounded
+queues. If recording falls behind, it drops pending capture frames rather than
+backpressuring the hub or worker. Remove the `capture` process from `main.py`
+when a deployment must not retain device media.
 
 Wake phrases match at the start of a final transcript or after sentence-final
 `.`, `?`, or `!` punctuation followed by whitespace or a closing quote. Text

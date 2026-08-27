@@ -10,10 +10,11 @@ repository. A participant can ask a spoken or typed question about the latest
 camera frame. The response streams to Piper TTS and to the `vlm.response` data
 topic.
 
-The sample launches DeviceIOHub and its worker. It reuses Parakeet STT,
-Cosmos3 Nano Reasoner, and Piper TTS from the shared model stack. Before the
-agent reports ready, the worker sends a representative image request through
-the VLM so the first user query does not pay the multimodal warmup cost.
+The sample launches DeviceIOHub, automatic session capture, and its worker. It
+reuses Parakeet STT, Cosmos3 Nano Reasoner, and Piper TTS from the shared model
+stack. Before the agent reports ready, the worker sends a representative image
+request through the VLM so the first user query does not pay the multimodal
+warmup cost.
 
 ## Configure
 
@@ -26,6 +27,7 @@ files before starting the sample:
 | `yaml/voice_gate.yaml` | Wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | Reused model adapters and endpoint addresses |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
+| `yaml/media_capture.yaml` | Automatic capture output, NVENC, audio, captions, and retention |
 
 For example, change `followup_grace_s` in `yaml/voice_gate.yaml` to control how
 long a second utterance can omit “Hey Agent”:
@@ -66,7 +68,9 @@ uv run main.py
 
 Open the authenticated web-client URL printed by DeviceIOHub, allow microphone
 and camera access, and connect. Speak or type a question after the agent reports
-ready.
+ready. Each connection is recorded under
+`~/.local/share/xr-ai/captures/simple-vlm-example/` and finalized when the
+participant disconnects or the stack stops.
 
 The shared models remain running after the sample stops. From this directory,
 stop them with `uv run --project ../model-servers model_servers --stop`.
