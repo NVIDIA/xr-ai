@@ -4,6 +4,7 @@
 """Tests for the development root CA and signed server leaf."""
 from __future__ import annotations
 
+import asyncio
 import datetime
 import shutil
 import ssl
@@ -206,6 +207,22 @@ def test_legacy_ca_as_leaf_is_migrated_with_clear_log(cert_env: Path) -> None:
     assert any("Install root-ca.crt" in message for message in messages)
 
 
+def test_replaced_root_warns_clients_to_reinstall(cert_env: Path) -> None:
+    _, _, root_path = _tls.ensure_development_certificates()
+    root_serial = _cert(root_path).serial_number
+    Path(_tls._ROOT_KEY_FILE).write_text("corrupt")
+    messages: list[str] = []
+    sink = logger.add(messages.append, format="{message}")
+    try:
+        _, _, root_path = _tls.ensure_development_certificates()
+    finally:
+        logger.remove(sink)
+
+    assert _cert(root_path).serial_number != root_serial
+    assert any("Previously enrolled clients will reject" in message for message in messages)
+    assert any("reinstall the new root-ca.crt" in message for message in messages)
+
+
 def test_generated_file_permissions_are_restrictive(cert_env: Path) -> None:
     leaf_path, leaf_key_path, root_path = _tls.ensure_development_certificates()
 
@@ -261,6 +278,89 @@ async def test_external_certificates_terminate_https_without_exposing_leaf(
 
     assert token_response.status_code == 200
     assert cert_response.status_code == 404
+
+
+async def test_running_server_reloads_renewed_development_leaf(
+    cert_env: Path,
+) -> None:
+    port = pick_free_port(8080)
+    cfg = LiveKitConnectorConfig(
+        api_key="devkey",
+        api_secret="test-secret-at-least-32-bytes-long",
+        web_server_host="127.0.0.1",
+        web_server_port=port,
+    )
+    server = _web_server.WebServer(cfg)
+    await server.start()
+    root_path = str(_tls._ROOT_CERT_FILE)
+
+    async def served_leaf() -> x509.Certificate:
+        context = ssl.create_default_context(cafile=root_path)
+        _, writer = await asyncio.open_connection(
+            "127.0.0.1", port, ssl=context, server_hostname="localhost"
+        )
+        try:
+            ssl_object = writer.get_extra_info("ssl_object")
+            return x509.load_der_x509_certificate(ssl_object.getpeercert(binary_form=True))
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    try:
+        first_leaf = await served_leaf()
+        first_root = Path(root_path).read_bytes()
+        root = _cert(root_path)
+        root_key = _tls._load_private_key(_tls._ROOT_KEY_FILE)
+        assert root_key is not None
+        expiring_leaf, expiring_key = _tls._generate_leaf(
+            root,
+            root_key,
+            _tls._cert_san_entries(first_leaf),
+            datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=380),
+        )
+        _tls._write_cert(_tls._CERT_FILE, expiring_leaf)
+        _tls._write_private_key(_tls._KEY_FILE, expiring_key)
+
+        await server._refresh_development_certificates()
+        second_leaf = await served_leaf()
+        context = ssl.create_default_context(cafile=root_path)
+        async with httpx.AsyncClient(verify=context) as client:
+            cert_response = await client.get(f"https://localhost:{port}/cert")
+    finally:
+        await server.stop()
+
+    assert second_leaf.serial_number != first_leaf.serial_number
+    assert second_leaf.serial_number != expiring_leaf.serial_number
+    assert cert_response.content == first_root
+
+
+async def test_running_server_exposes_replaced_development_root(
+    cert_env: Path,
+) -> None:
+    port = pick_free_port(8080)
+    cfg = LiveKitConnectorConfig(
+        api_key="devkey",
+        api_secret="test-secret-at-least-32-bytes-long",
+        web_server_host="127.0.0.1",
+        web_server_port=port,
+    )
+    server = _web_server.WebServer(cfg)
+    await server.start()
+    root_path = str(_tls._ROOT_CERT_FILE)
+    old_root = Path(root_path).read_bytes()
+    Path(_tls._ROOT_KEY_FILE).write_text("corrupt")
+
+    try:
+        await server._refresh_development_certificates()
+        new_root = Path(root_path).read_bytes()
+        context = ssl.create_default_context(cafile=root_path)
+        async with httpx.AsyncClient(verify=context) as client:
+            cert_response = await client.get(f"https://localhost:{port}/cert")
+    finally:
+        await server.stop()
+
+    assert new_root != old_root
+    assert cert_response.content == new_root
 
 
 def test_invalid_extras_are_skipped_not_fatal(cert_env: Path) -> None:

@@ -170,6 +170,17 @@ web_server_extra_sans:
 Changing these addresses never rotates `root-ca.crt`, so clients do not need to
 reinstall the root after a Brev public-IP change.
 
+DeviceIOHub checks the generated certificates daily. It renews the server leaf
+30 days before expiration and reloads it for new HTTPS and WSS connections
+without restarting the hub; the root CA remains unchanged. Existing connections
+can finish using the certificate negotiated when they connected.
+
+If `root-ca.crt` or `root-ca.key` is missing, unreadable, mismatched, or within
+30 days of expiration, DeviceIOHub replaces the root and server leaf and logs a
+warning. Previously enrolled clients reject the new chain. Reinstall the new
+`root-ca.crt` on every client using the platform-specific steps below; `/cert`
+serves the current root after the replacement.
+
 To **disable** TLS for `localhost`-only dev where the certificate warning is
 noise, set `web_server_tls: false`. With TLS off, the same-origin proxy
 serves plain `ws://` instead of `wss://`, and `localhost` is the only

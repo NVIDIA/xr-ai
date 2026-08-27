@@ -18,6 +18,7 @@ internal plaintext LiveKit signaling port.
 from __future__ import annotations
 
 import asyncio
+import pathlib
 
 import httpx
 import uvicorn
@@ -33,6 +34,10 @@ from ._token import make_client_token
 from ._token_server import _proxy_client_lifespan, serve_safe, wait_until_bound
 from .config import LiveKitConnectorConfig
 
+# The generated leaf is renewed 30 days before expiry. A daily check leaves
+# ample margin without putting certificate and interface probes on a hot path.
+_DEVELOPMENT_CERTIFICATE_CHECK_INTERVAL_S = 24 * 60 * 60
+
 
 def _build_app(cfg: LiveKitConnectorConfig, cert_bytes: bytes | None) -> FastAPI:
     lk_internal_http = f"http://127.0.0.1:{cfg.lk_port_ws}"
@@ -45,6 +50,7 @@ def _build_app(cfg: LiveKitConnectorConfig, cert_bytes: bytes | None) -> FastAPI
         title="DeviceIOHub Web Server", docs_url=None, redoc_url=None,
         lifespan=_proxy_client_lifespan(proxy_client),
     )
+    app.state.development_root_ca = cert_bytes
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -55,10 +61,11 @@ def _build_app(cfg: LiveKitConnectorConfig, cert_bytes: bytes | None) -> FastAPI
     @app.get("/cert")
     async def get_cert() -> Response:
         """Serve only the public root CA as an installable profile."""
-        if cert_bytes is None:
+        root_ca = app.state.development_root_ca
+        if root_ca is None:
             raise HTTPException(status_code=404, detail="No root CA available")
         return Response(
-            content=cert_bytes,
+            content=root_ca,
             media_type="application/x-x509-ca-cert",
             headers={"Content-Disposition": 'attachment; filename="xr-ai-hub.crt"'},
         )
@@ -99,6 +106,9 @@ class WebServer:
         self._cfg = cfg
         self._server: uvicorn.Server | None = None
         self._task: asyncio.Task | None = None
+        self._certificate_task: asyncio.Task | None = None
+        self._app: FastAPI | None = None
+        self._served_development_leaf: bytes | None = None
         # Startup failure captured by _serve_safe so start() can surface the
         # real cause (and so the serve task's exception is always retrieved).
         self._serve_error: BaseException | None = None
@@ -106,16 +116,17 @@ class WebServer:
     async def start(self) -> None:
         ssl_kwargs: dict = {}
         cert_bytes: bytes | None = None
+        root_ca: str | None = None
         scheme = "http"
         if self._cfg.web_server_tls:
             cert = self._cfg.cert_file or None
             key  = self._cfg.key_file  or None
-            root_ca: str | None = None
             if not cert or not key:
                 # Off-loop: cert generation does RSA keygen and network probes.
                 cert, key, root_ca = await asyncio.to_thread(
                     ensure_development_certificates, self._cfg.web_server_extra_sans
                 )
+                self._served_development_leaf = pathlib.Path(cert).read_bytes()
                 logger.info("TLS: using auto-generated server leaf {}", cert)
             else:
                 logger.info(
@@ -125,7 +136,8 @@ class WebServer:
                 )
             ssl_kwargs = {"ssl_certfile": cert, "ssl_keyfile": key}
             scheme = "https"
-            # Read once at startup so /cert serves from memory.
+            # Serve from memory; the renewal task refreshes this state if the
+            # development root ever has to be replaced.
             if root_ca is not None:
                 try:
                     cert_bytes = _read_public_root_ca(root_ca)
@@ -135,6 +147,7 @@ class WebServer:
                     )
 
         app = _build_app(self._cfg, cert_bytes)
+        self._app = app
 
         uv_cfg = uvicorn.Config(
             app=app,
@@ -164,14 +177,56 @@ class WebServer:
             scheme, self._cfg.web_server_host, port,
             self._cfg.web_client_dir or "<no static dir>",
         )
+        if root_ca is not None:
+            self._certificate_task = asyncio.create_task(
+                self._monitor_development_certificates(),
+                name="web-server-certificate-renewal",
+            )
 
     async def _serve_safe(self, port: int) -> None:
         self._serve_error = await serve_safe(self._server, port, "Web server")
 
+    async def _monitor_development_certificates(self) -> None:
+        while True:
+            await asyncio.sleep(_DEVELOPMENT_CERTIFICATE_CHECK_INTERVAL_S)
+            try:
+                await self._refresh_development_certificates()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.warning(
+                    "TLS: failed to check or reload development certificates: {!r}", exc
+                )
+
+    async def _refresh_development_certificates(self) -> None:
+        cert, key, root_ca = await asyncio.to_thread(
+            ensure_development_certificates, self._cfg.web_server_extra_sans
+        )
+        leaf_bytes = pathlib.Path(cert).read_bytes()
+        root_bytes = _read_public_root_ca(root_ca)
+        if leaf_bytes != self._served_development_leaf:
+            ssl_context = self._server.config.ssl if self._server is not None else None
+            if ssl_context is None:
+                raise RuntimeError("web server TLS context is unavailable")
+            ssl_context.load_cert_chain(cert, key)
+            self._served_development_leaf = leaf_bytes
+            logger.info("TLS: reloaded renewed development server leaf {}", cert)
+        if self._app is not None:
+            self._app.state.development_root_ca = root_bytes
+
     async def stop(self) -> None:
+        if self._certificate_task:
+            self._certificate_task.cancel()
+            try:
+                await self._certificate_task
+            except asyncio.CancelledError:
+                pass
+            self._certificate_task = None
         if self._server:
             self._server.should_exit = True
         if self._task:
             await self._task
             self._task = None
         self._server = None
+        self._app = None
+        self._served_development_leaf = None

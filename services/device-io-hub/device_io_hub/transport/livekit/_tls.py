@@ -11,6 +11,7 @@ import socket
 from collections.abc import Sequence
 
 from cryptography import x509
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
@@ -23,9 +24,13 @@ _CERT_FILE = _CERT_DIR / "web-server.crt"
 _KEY_FILE = _CERT_DIR / "web-server.key"
 
 _ROOT_COMMON_NAME = "XR AI Development Root CA"
-_REINSTALL_PROFILE_MSG = (
+_INSTALL_PROFILE_MSG = (
     "Install root-ca.crt on each client once; the root remains stable when "
     "server addresses change."
+)
+_ROOT_REPLACEMENT_MSG = (
+    "Previously enrolled clients will reject certificates signed by the new root; "
+    "reinstall the new root-ca.crt on every client before reconnecting."
 )
 
 
@@ -164,7 +169,7 @@ def _is_current(
 def _is_signed_by(cert: x509.Certificate, issuer: x509.Certificate) -> bool:
     try:
         cert.verify_directly_issued_by(issuer)
-    except ValueError:
+    except (InvalidSignature, ValueError):
         return False
     return True
 
@@ -309,8 +314,15 @@ def ensure_development_certificates(
         and _is_current(root, now, datetime.timedelta(days=30))
     )
     if not root_valid:
-        if _ROOT_CERT_FILE.exists() or _ROOT_KEY_FILE.exists():
-            logger.warning("TLS: cached development root is incomplete or invalid; replacing it")
+        existing_tls_material = any(
+            path.exists()
+            for path in (_ROOT_CERT_FILE, _ROOT_KEY_FILE, _CERT_FILE, _KEY_FILE)
+        )
+        if existing_tls_material:
+            logger.warning(
+                "TLS: cached development root is incomplete or invalid; replacing it. {}",
+                _ROOT_REPLACEMENT_MSG,
+            )
         root, root_key = _generate_root(now)
         _write_private_key(_ROOT_KEY_FILE, root_key)
         _write_cert(_ROOT_CERT_FILE, root)
@@ -327,7 +339,7 @@ def ensure_development_certificates(
             "TLS: migrating legacy CA-as-server certificate at {} to a signed CA:FALSE "
             "server leaf. {}",
             _CERT_FILE,
-            _REINSTALL_PROFILE_MSG,
+            _INSTALL_PROFILE_MSG,
         )
         reasons.append("legacy CA-as-server certificate")
     elif cached is None or cached_key is None:
