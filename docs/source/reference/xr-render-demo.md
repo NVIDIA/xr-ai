@@ -114,7 +114,7 @@ restart `xr_render_demo` to apply a change.
 | `yaml/voice_gate.yaml` | Always-on speech or wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | Reused model adapters, endpoints, and readiness checks |
 | `yaml/device_io_hub.yaml` | LiveKit, web and token servers, networking, and video recording |
-| `yaml/media_capture.yaml` | Automatic media-hub capture, NVENC output, caption topics, and retention |
+| `yaml/media_capture.yaml` | Automatic media-hub capture, NVENC output, caption layout, and retention |
 | `yaml/video_memory_service.yaml` | Recorded-query endpoint, output directory, and GPU |
 | `yaml/openxr_service.yaml` | OpenXR endpoint, CloudXR environment, and eval-only simulated pose |
 | `scene/scene_service.yaml` | LOVR binary and app, scene endpoint, and CloudXR environment |
@@ -148,9 +148,10 @@ Each participant connection creates a timestamped directory under
 `~/.local/share/xr-ai/captures/xr-render-demo/` containing:
 
 - Playable `.mkv` segments under `video/`, with NVENC H.264 video and stereo
-  audio embedded. A fixed lower panel is appended outside the sensor image and
-  displays recent `agent.response` text without replacing camera pixels. The
-  source `.264` segment is retained beside each `.mkv`.
+  audio embedded. Final STT and spoken TTS text use the large lower caption;
+  all UTF-8 data-channel messages scroll in a smaller right-side panel. Both
+  panels are outside the sensor image. The source `.264` segment is retained
+  beside each `.mkv`.
 - `audio/conversation.wav`, with device input on the left and agent output on
   the right, aligned by hub timestamps. Exact float32 chunks remain in
   `device.f32le` and `agent.f32le`, indexed by `chunks.jsonl`.

@@ -66,7 +66,7 @@ layout works without command-line configuration arguments.
 | `yaml/voice_gate.yaml` | Wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | Model adapters, endpoints, readiness, and reuse declarations |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
-| `yaml/media_capture.yaml` | Automatic media-hub capture, NVENC output, `vlm.response` captions, and retention |
+| `yaml/media_capture.yaml` | Automatic media-hub capture, NVENC output, caption layout, and retention |
 | `worker/simple_vlm_example_worker/prompts/system.txt` | Default VLM instruction |
 
 Edit the owning file, preserve the field's YAML type, and restart
@@ -93,7 +93,8 @@ a bundle under `~/.local/share/xr-ai/captures/simple-vlm-example/` containing
 captioned NVENC H.264 video in playable `.mkv` segments with timestamp-aligned
 device/agent audio embedded, retained source H.264 and WAV tracks, exact raw
 audio chunks, inbound and outbound data, and a manifest. Text returned on
-`vlm.response` appears in the video caption panel.
+`vlm.response` appears in the scrolling data panel; final STT and text sent to
+TTS use the larger primary caption.
 
 Encoding and file writes run in the separate capture process behind bounded
 queues. If recording falls behind, it drops pending capture frames rather than

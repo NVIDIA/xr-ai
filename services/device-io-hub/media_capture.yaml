@@ -24,11 +24,9 @@ encoder_workers: 2
 # float32 chunks and timing remain in the raw audio artifacts.
 audio_sample_rate: 48000
 
-# UTF-8 agent return data on these topics is rendered into the fixed video
-# caption panel. All inbound and outbound data is retained in events.jsonl.
-overlay_topics:
-  - agent.response
-  - vlm.response
+# Final STT and spoken TTS text use the large lower caption. Every UTF-8 data
+# message in either direction scrolls through the smaller right-side panel.
+# All inbound and outbound data is also retained in events.jsonl.
 overlay_seconds: 12.0
 overlay_lines: 4
 

@@ -179,13 +179,19 @@ class _H264TrackWriter:
         self._submitted_pts: deque[int] = deque()
         self.segments: list[dict] = []
 
-    def write(self, frame: FrameData, caption: str) -> None:
+    def write(
+        self,
+        frame: FrameData,
+        caption: str,
+        data_feed: tuple[str, ...],
+    ) -> None:
         min_interval_us = round(1_000_000 / self._config.sample_fps)
         if self._last_pts_us and frame.pts_us - self._last_pts_us < min_interval_us:
             return
         nv12, width, height = compose_caption(
             frame,
             caption,
+            data_feed=data_feed,
             max_lines=self._config.overlay_lines,
         )
         if self._encoder is None or (width, height) != (self._width, self._height):
@@ -297,6 +303,7 @@ class _ParticipantSession:
     video: dict[str, _H264TrackWriter] = field(default_factory=dict)
     caption: str = ""
     caption_expires_us: int = 0
+    data_feed: deque[str] = field(default_factory=lambda: deque(maxlen=64))
     dropped_video_frames: int = 0
     lock: threading.RLock = field(default_factory=threading.RLock)
 
@@ -396,30 +403,29 @@ class SessionRecorder:
             topic=message.topic,
             **payload,
         )
-        if direction == "agent" and message.topic in self._config.overlay_topics:
-            caption = self._caption_text(text)
+        if text.strip():
+            normalized = " ".join(text.split())
             with session.lock:
-                session.caption = f"AGENT: {caption}" if caption else ""
-                session.caption_expires_us = (
-                    message.pts_us + round(self._config.overlay_seconds * 1_000_000)
+                session.data_feed.append(
+                    f"{direction.upper()} {message.topic}: {normalized}"
                 )
 
-    @staticmethod
-    def _caption_text(text: str) -> str:
-        stripped = text.strip()
-        if not stripped:
-            return ""
-        try:
-            value = json.loads(stripped)
-        except (json.JSONDecodeError, TypeError):
-            return stripped
-        if isinstance(value, dict):
-            for key in ("text", "message", "content", "title"):
-                if isinstance(value.get(key), str):
-                    return value[key].strip()
-        if isinstance(value, str):
-            return value.strip()
-        return stripped
+    def record_voice_caption(self, source: str, message: DataMessage) -> None:
+        session = self._session(message.participant_id, message.pts_us)
+        text = message.data.decode("utf-8", errors="replace").strip()
+        self._event(
+            session,
+            "voice_caption",
+            message.pts_us,
+            source=source,
+            text=text,
+        )
+        with session.lock:
+            session.caption = f"{source.upper()}: {text}" if text else ""
+            session.caption_expires_us = (
+                max(message.pts_us, time.time_ns() // 1_000)
+                + round(self._config.overlay_seconds * 1_000_000)
+            )
 
     def record_flush(self, participant_id: str, pts_us: int) -> None:
         session = self._session(participant_id, pts_us)
@@ -445,7 +451,8 @@ class SessionRecorder:
                 )
                 session.video[frame.track_id] = writer
             caption = "" if frame.pts_us > session.caption_expires_us else session.caption
-        writer.write(frame, caption)
+            data_feed = tuple(session.data_feed)
+        writer.write(frame, caption, data_feed)
 
     def note_video_drop(self, participant_id: str, pts_us: int) -> None:
         session = self._session(participant_id, pts_us)
