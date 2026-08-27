@@ -77,6 +77,40 @@ def test_stereo_wave_aligns_device_left_and_agent_right(tmp_path: Path) -> None:
     assert np.all(samples[:, 1] < 0)
 
 
+def test_stereo_wave_ignores_arrival_jitter_and_bursts(tmp_path: Path) -> None:
+    path = tmp_path / "conversation.wav"
+    writer = _StereoWaveWriter(path, start_us=1_000_000, sample_rate=48_000)
+    device = _audio("device")
+    agent = _audio("agent")
+    writer.add("device", device)
+    writer.add("device", _audio("device", pts_us=1_510_900))
+    writer.add("agent", agent)
+    writer.add("agent", _audio("agent", pts_us=1_000_100))
+    writer.close()
+
+    with wave.open(str(path), "rb") as stream:
+        samples = np.frombuffer(stream.readframes(stream.getnframes()), dtype="<i2").reshape(-1, 2)
+
+    assert samples.shape == (960, 2)
+    assert np.all(samples[:, 0] > 0)
+    assert np.all(samples[:, 1] < 0)
+
+
+def test_stereo_wave_retains_real_conversation_gap(tmp_path: Path) -> None:
+    path = tmp_path / "conversation.wav"
+    writer = _StereoWaveWriter(path, start_us=1_000_000, sample_rate=48_000)
+    writer.add("agent", _audio("agent"))
+    writer.add("agent", _audio("agent", pts_us=1_510_000))
+    writer.close()
+
+    with wave.open(str(path), "rb") as stream:
+        samples = np.frombuffer(stream.readframes(stream.getnframes()), dtype="<i2").reshape(-1, 2)
+
+    assert np.all(samples[:480, 1] < 0)
+    assert np.all(samples[480:24_480, 1] == 0)
+    assert np.all(samples[24_480:, 1] < 0)
+
+
 def test_capture_config_resolves_output_and_normalizes_topics(tmp_path: Path) -> None:
     path = tmp_path / "capture.yaml"
     path.write_text(
