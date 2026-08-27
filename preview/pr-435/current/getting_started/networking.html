@@ -577,9 +577,8 @@ certificate is available from <code class="docutils literal notranslate"><span c
 private key. The web server presents this leaf for HTTPS and WSS.</p></li>
 </ul>
 <p>To use your own certificate, set <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in
-<code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>. Set <code class="docutils literal notranslate"><span class="pre">root_ca_file</span></code> as well when <code class="docutils literal notranslate"><span class="pre">/cert</span></code> should offer its
-public root CA for installation. Without <code class="docutils literal notranslate"><span class="pre">root_ca_file</span></code>, externally managed TLS
-continues to work and <code class="docutils literal notranslate"><span class="pre">/cert</span></code> returns 404.</p>
+<code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>. Externally managed TLS continues to work unchanged;
+<code class="docutils literal notranslate"><span class="pre">/cert</span></code> returns 404 because DeviceIOHub does not own that certificate’s root.</p>
 <p>The generated leaf covers <code class="docutils literal notranslate"><span class="pre">localhost</span></code>, the hostname, and automatically
 discovered local IPv4 addresses. When clients dial an address that discovery
 misses, or one that is not local (the public IP of a NAT’d cloud VM such as Brev,
@@ -640,8 +639,7 @@ sudo<span class="w"> </span>update-ca-certificates
 only the server leaf and do not require another trust installation.</p>
 <p>For production deployments on any platform, replace the auto-generated
 certificate with one from a public CA by setting <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in
-<code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>. Optionally set <code class="docutils literal notranslate"><span class="pre">root_ca_file</span></code> if clients install a private
-or enterprise root through <code class="docutils literal notranslate"><span class="pre">/cert</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>.</p>
 </section>
 </section>
 </section>

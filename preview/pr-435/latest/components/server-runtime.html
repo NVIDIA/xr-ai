@@ -658,8 +658,8 @@ versioned (<code class="docutils literal notranslate"><span class="pre">/rtc/v1<
 <p>The web server’s <code class="docutils literal notranslate"><span class="pre">/token</span></code> endpoint returns a signed LiveKit JWT together with
 the client connection URL. With TLS on, that URL is the same-origin
 <code class="docutils literal notranslate"><span class="pre">wss://&lt;host&gt;:&lt;web_server_port&gt;</span></code> — so the client SDK never needs a
-per-deployment toggle. A <code class="docutils literal notranslate"><span class="pre">/cert</span></code> endpoint serves only the public root CA as an
-installable client profile; neither private key is exposed.</p>
+per-deployment toggle. A <code class="docutils literal notranslate"><span class="pre">/cert</span></code> endpoint serves only the auto-generated public
+root CA as an installable client profile; neither private key is exposed.</p>
 <p>Set <code class="docutils literal notranslate"><span class="pre">web_server_tls:</span> <span class="pre">false</span></code> for the two cases where the hub does not
 terminate TLS itself: a TLS-terminating reverse proxy (nginx, Caddy,
 Cloudflare Tunnel) sits in front and speaks plain <code class="docutils literal notranslate"><span class="pre">http://</span></code> + <code class="docutils literal notranslate"><span class="pre">ws://</span></code> to the

@@ -242,8 +242,8 @@ versioned (`/rtc/v1`) and legacy (`/rtc`) signaling paths.
 The web server's `/token` endpoint returns a signed LiveKit JWT together with
 the client connection URL. With TLS on, that URL is the same-origin
 `wss://<host>:<web_server_port>` — so the client SDK never needs a
-per-deployment toggle. A `/cert` endpoint serves only the public root CA as an
-installable client profile; neither private key is exposed.
+per-deployment toggle. A `/cert` endpoint serves only the auto-generated public
+root CA as an installable client profile; neither private key is exposed.
 
 Set `web_server_tls: false` for the two cases where the hub does not
 terminate TLS itself: a TLS-terminating reverse proxy (nginx, Caddy,
