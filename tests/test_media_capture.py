@@ -131,14 +131,25 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
     encoded_inputs: list[np.ndarray] = []
 
     class FakeEncoder:
-        def Encode(self, frame):
+        def Encode(self, frame, _params):
             encoded_inputs.append(frame.copy())
-            return [{"data": b"\x00\x00\x00\x01frame", "timestamp": 0}]
+            return [
+                {
+                    "data": (
+                        b"\x00\x00\x00\x01\x67\x64\x00\x1f\xac\x00\x00\x00\x01\x68\xee\x3c\x80\x00\x00\x00\x01\x65frame"
+                    ),
+                    "timestamp": 1_000_000,
+                    "picture_type": 3,
+                }
+            ]
 
         def EndEncode(self):
-            return [{"data": b"tail", "timestamp": 1}]
+            return []
 
-    fake_module = types.SimpleNamespace(CreateEncoder=lambda *_args, **_kwargs: FakeEncoder())
+    fake_module = types.SimpleNamespace(
+        CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
+        NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
+    )
     monkeypatch.setitem(sys.modules, "PyNvVideoCodec", fake_module)
     config = CaptureConfig(
         out_dir=str(tmp_path),
@@ -162,9 +173,14 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
     assert manifest["participant_id"] == "alice"
     assert manifest["audio"]["channels"] == {"left": "device", "right": "agent"}
     assert manifest["video_tracks"]["camera"][0]["num_frames"] == 1
-    assert (session / manifest["video_tracks"]["camera"][0]["path"]).read_bytes().startswith(
-        b"\x00\x00\x00\x01"
-    )
+    segment = manifest["video_tracks"]["camera"][0]
+    assert segment["path"].endswith(".mkv")
+    assert segment["audio_embedded"] is True
+    muxed = (session / segment["path"]).read_bytes()
+    assert muxed.startswith(b"\x1a\x45\xdf\xa3")
+    assert b"V_MPEG4/ISO/AVC" in muxed
+    assert b"A_PCM/INT/LIT" in muxed
+    assert (session / segment["raw_path"]).read_bytes().startswith(b"\x00\x00\x00\x01")
     assert (session / "audio" / "device.f32le").read_bytes() == _audio("device").data
     assert (session / "audio" / "agent.f32le").read_bytes() == _audio("agent").data
     events = [json.loads(line) for line in (session / "events.jsonl").read_text().splitlines()]
@@ -185,9 +201,17 @@ async def test_capture_service_observes_both_sides_of_media_hub(
     encoded_inputs: list[np.ndarray] = []
 
     class FakeEncoder:
-        def Encode(self, frame):
+        def Encode(self, frame, _params):
             encoded_inputs.append(frame.copy())
-            return [{"data": b"\x00\x00\x00\x01frame"}]
+            return [
+                {
+                    "data": (
+                        b"\x00\x00\x00\x01\x67\x64\x00\x1f\xac\x00\x00\x00\x01\x68\xee\x3c\x80\x00\x00\x00\x01\x65frame"
+                    ),
+                    "timestamp": 1_000_000,
+                    "picture_type": 3,
+                }
+            ]
 
         def EndEncode(self):
             return []
@@ -195,7 +219,10 @@ async def test_capture_service_observes_both_sides_of_media_hub(
     monkeypatch.setitem(
         sys.modules,
         "PyNvVideoCodec",
-        types.SimpleNamespace(CreateEncoder=lambda *_args, **_kwargs: FakeEncoder()),
+        types.SimpleNamespace(
+            CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
+            NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
+        ),
     )
     pull, publish = hub_addrs
     service = CaptureService(CaptureConfig(
