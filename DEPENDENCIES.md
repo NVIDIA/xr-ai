@@ -289,6 +289,7 @@ drift:
   - `PyNvVideoCodec>=2.2`
 - Optional dependency groups: none
 - Commands:
+  - `device_io_capture` → `device_io_hub.capture.__main__:run`
   - `device_io_hub` → `device_io_hub.__main__:run`
 
 #### `embedding-server` — [`services/embedding-server/`](services/embedding-server/)

@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Media-hub capture reference configuration. Run from services/device-io-hub:
+#   uv run device_io_capture --config media_capture.yaml
+
+hub_sub_addr: ipc:///tmp/xr_hub_pub
+hub_push_addr: ipc:///tmp/xr_hub_in
+
+# Each participant connection creates one timestamped capture bundle here.
+out_dir: ~/.local/share/xr-ai/captures
+
+# Video pixels are requested after the media hub has normalized the transport.
+# NVENC runs in bounded worker threads; if capture falls behind, old capture
+# requests are dropped without delaying the hub, client, or agent.
+sample_fps: 30.0
+bitrate: 6000000
+gpu_id: 0
+frame_queue_size: 2
+encoder_workers: 2
+
+# conversation.wav is stereo: device input on the left, agent output on the
+# right. Exact float32 chunks and timing remain in the raw audio artifacts.
+audio_sample_rate: 48000
+
+# UTF-8 agent return data on these topics is rendered into the fixed video
+# caption panel. All inbound and outbound data is retained in events.jsonl.
+overlay_topics:
+  - agent.response
+  - vlm.response
+overlay_seconds: 12.0
+overlay_lines: 4
+
+# Oldest completed capture bundles are removed when the total exceeds 10 GiB.
+# Active sessions are never removed. Set to 0 for unlimited retention.
+max_total_bytes: 10737418240
