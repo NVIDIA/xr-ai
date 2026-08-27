@@ -25,7 +25,6 @@ class CaptureConfig:
     frame_queue_size: int = 2
     encoder_workers: int = 2
     audio_sample_rate: int = 48_000
-    overlay_topics: tuple[str, ...] = ("agent.response", "vlm.response")
     overlay_seconds: float = 12.0
     overlay_lines: int = 4
     max_total_bytes: int = 10 * 1024 * 1024 * 1024
@@ -49,8 +48,6 @@ class CaptureConfig:
             raise ValueError("overlay_lines must be between 1 and 12")
         if self.max_total_bytes < 0:
             raise ValueError("max_total_bytes must be non-negative")
-        if not all(isinstance(topic, str) and topic for topic in self.overlay_topics):
-            raise ValueError("overlay_topics must contain non-empty strings")
 
 
 def load_capture_config(path: Path) -> CaptureConfig:
@@ -63,12 +60,6 @@ def load_capture_config(path: Path) -> CaptureConfig:
         raise ValueError("capture config must be a YAML mapping")
 
     values = dict(raw)
-    topics = values.get("overlay_topics")
-    if topics is not None:
-        if not isinstance(topics, list):
-            raise ValueError("overlay_topics must be a list")
-        values["overlay_topics"] = tuple(topics)
-
     out_dir = Path(str(values.get("out_dir", _DEFAULT_OUT_DIR))).expanduser()
     if not out_dir.is_absolute():
         out_dir = (path.parent / out_dir).resolve()

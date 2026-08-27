@@ -17,6 +17,7 @@ from xr_ai_hub import (
     ProcessorEndpoint,
     Subscribe,
 )
+from xr_ai_hub._capture import CAPTURE_STT_TOPIC, CAPTURE_TTS_TOPIC
 
 from ._recorder import SessionRecorder
 from ._return_subscriber import ReturnTrafficSubscriber
@@ -217,6 +218,12 @@ class CaptureService:
 
     async def _on_agent_data(self, message: DataMessage) -> None:
         if message.participant_id in self._departed_participants:
+            return
+        if message.topic == CAPTURE_STT_TOPIC:
+            await self._write(self._recorder.record_voice_caption, "user", message)
+            return
+        if message.topic == CAPTURE_TTS_TOPIC:
+            await self._write(self._recorder.record_voice_caption, "agent", message)
             return
         await self._write(self._recorder.record_data, "agent", message)
 

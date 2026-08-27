@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable
 import zmq
 import zmq.asyncio
 from xr_ai_hub import AudioChunk, DataMessage, MsgType, ReturnAudioFlush, decode
+from xr_ai_hub._capture import CAPTURE_PUBLISH_PREFIX
 
 AudioCallback = Callable[[AudioChunk], Awaitable[None]]
 DataCallback = Callable[[DataMessage], Awaitable[None]]
@@ -21,7 +22,12 @@ class ReturnTrafficSubscriber:
     def __init__(self, sub_addr: str) -> None:
         self._socket: zmq.asyncio.Socket = zmq.asyncio.Context.instance().socket(zmq.SUB)
         self._socket.connect(sub_addr)
-        for prefix in (b"return_audio.", b"return_data.", b"return_audio_flush."):
+        for prefix in (
+            b"return_audio.",
+            b"return_data.",
+            b"return_audio_flush.",
+            CAPTURE_PUBLISH_PREFIX,
+        ):
             self._socket.setsockopt(zmq.SUBSCRIBE, prefix)
         self._audio_callbacks: list[AudioCallback] = []
         self._data_callbacks: list[DataCallback] = []
