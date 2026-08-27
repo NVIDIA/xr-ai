@@ -3,6 +3,9 @@
 
 name: nightly XR AI test
 
+env:
+  UV_CONFIG_FILE: ${{ github.workspace }}/uv.toml
+
 # Runs the `gpu`-marked pytest suite on a self-hosted GPU runner — these
 # tests need real GPU / Docker / NVENC hardware, so they're filtered out of
 # the default `tests` workflow (ubuntu-latest). Mirrors the local
@@ -22,6 +25,7 @@ on:
   pull_request:
     paths:
       - .github/workflows/nightly-xr-ai-test.yml
+      - uv.toml
 
 # Queue overlapping runs instead of cancelling; the previous nightly
 # may still be running when the next cron fires on a busy GPU host.
@@ -91,8 +95,8 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: |
+            uv.toml
             tests/pyproject.toml
-            tests/uv.lock
             agent-sdk/xr-ai-hub/pyproject.toml
             services/device-io-hub/pyproject.toml
 
