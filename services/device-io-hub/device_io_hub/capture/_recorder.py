@@ -10,6 +10,7 @@ import shutil
 import struct
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -175,6 +176,7 @@ class _H264TrackWriter:
         self._segment_index = 0
         self._active: dict | None = None
         self._packets: list[VideoPacket] = []
+        self._submitted_pts: deque[int] = deque()
         self.segments: list[dict] = []
 
     def write(self, frame: FrameData, caption: str) -> None:
@@ -190,8 +192,9 @@ class _H264TrackWriter:
             self._start_segment(width, height, frame.pts_us)
         picture_params = self._nvc.NV_ENC_PIC_PARAMS()
         picture_params.inputTimeStamp = frame.pts_us
+        self._submitted_pts.append(frame.pts_us)
         for packet in _encoded_packets(self._encoder.Encode(nv12, picture_params)):
-            self._write_packet(packet, fallback_pts_us=frame.pts_us)
+            self._write_packet(packet)
         self._last_pts_us = frame.pts_us
         self._active["end_us"] = frame.pts_us
         self._active["num_frames"] += 1
@@ -235,17 +238,20 @@ class _H264TrackWriter:
             "fps": self._config.sample_fps,
         }
         self._packets = []
+        self._submitted_pts.clear()
 
-    def _write_packet(self, packet: dict, *, fallback_pts_us: int) -> None:
+    def _write_packet(self, packet: dict) -> None:
         payload = packet["data"]
         offset = self._stream.tell()
         self._stream.write(payload)
         picture_type = int(packet.get("picture_type", 0))
+        if not self._submitted_pts:
+            raise ValueError("NVENC emitted more packets than submitted frames")
         self._packets.append(
             VideoPacket(
                 offset=offset,
                 size=len(payload),
-                pts_us=int(packet.get("timestamp", fallback_pts_us)),
+                pts_us=self._submitted_pts.popleft(),
                 key_frame=picture_type in (2, 3),
             )
         )
@@ -255,7 +261,11 @@ class _H264TrackWriter:
             return
         try:
             for packet in _encoded_packets(self._encoder.EndEncode()):
-                self._write_packet(packet, fallback_pts_us=self._last_pts_us)
+                self._write_packet(packet)
+            if self._submitted_pts:
+                raise ValueError(
+                    f"NVENC omitted {len(self._submitted_pts)} submitted frames"
+                )
         except Exception as exc:
             logger.warning("media capture NVENC flush failed track={!r}: {}", self._track_id, exc)
         finally:
@@ -269,6 +279,7 @@ class _H264TrackWriter:
             self.segments.append(self._active)
             self._active = None
             self._packets = []
+            self._submitted_pts.clear()
 
     def close(self) -> None:
         self._finish_segment()
