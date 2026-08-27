@@ -7,5 +7,5 @@
 
 set -euo pipefail
 cd "$(dirname "$0")"
-uv sync
-uv run pytest -v --tb=short --color=yes -m gpu "$@"
+uv --config-file ../uv.toml sync
+uv --config-file ../uv.toml run pytest -v --tb=short --color=yes -m gpu "$@"
