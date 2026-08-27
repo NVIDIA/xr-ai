@@ -6,17 +6,22 @@ from __future__ import annotations
 
 import datetime
 import shutil
+import ssl
 import stat
 import subprocess
 from pathlib import Path
 
+import httpx
 import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
-from device_io_hub.transport.livekit import _tls
+from device_io_hub.transport.livekit import _tls, _web_server
+from device_io_hub.transport.livekit.config import LiveKitConnectorConfig
 from loguru import logger
+
+from _helpers_subprocess import pick_free_port
 
 
 @pytest.fixture()
@@ -220,6 +225,42 @@ def test_public_root_reader_never_returns_private_key(cert_env: Path) -> None:
 
     assert exposed == root_pem
     assert b"PRIVATE KEY" not in exposed
+
+
+async def test_external_certificates_terminate_https_without_exposing_leaf(
+    cert_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    leaf_path, leaf_key_path, root_path = _tls.ensure_development_certificates()
+    external_cert = cert_env / "external-server.crt"
+    external_key = cert_env / "external-server.key"
+    shutil.copyfile(leaf_path, external_cert)
+    shutil.copyfile(leaf_key_path, external_key)
+    monkeypatch.setattr(
+        _web_server,
+        "ensure_development_certificates",
+        lambda *_: pytest.fail("external TLS must not auto-generate certificates"),
+    )
+    port = pick_free_port(8080)
+    cfg = LiveKitConnectorConfig(
+        api_key="devkey",
+        api_secret="test-secret-at-least-32-bytes-long",
+        web_server_host="127.0.0.1",
+        web_server_port=port,
+        cert_file=str(external_cert),
+        key_file=str(external_key),
+    )
+    server = _web_server.WebServer(cfg)
+    await server.start()
+    try:
+        context = ssl.create_default_context(cafile=root_path)
+        async with httpx.AsyncClient(verify=context) as client:
+            token_response = await client.get(f"https://localhost:{port}/token")
+            cert_response = await client.get(f"https://localhost:{port}/cert")
+    finally:
+        await server.stop()
+
+    assert token_response.status_code == 200
+    assert cert_response.status_code == 404
 
 
 def test_invalid_extras_are_skipped_not_fatal(cert_env: Path) -> None:
