@@ -3,6 +3,9 @@
 
 name: tests
 
+env:
+  UV_CONFIG_FILE: ${{ github.workspace }}/uv.toml
+
 # Runs the IPC + multi-client / multi-agent suite under tests/.
 # The suite is hub-on-loopback only — it does not need Docker, LiveKit,
 # or NVENC, so it runs cleanly on a stock ubuntu-latest runner.
@@ -43,8 +46,8 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: |
+            uv.toml
             tests/pyproject.toml
-            tests/uv.lock
             agent-sdk/xr-ai-hub/pyproject.toml
             services/device-io-hub/pyproject.toml
 

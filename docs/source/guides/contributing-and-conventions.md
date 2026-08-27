@@ -18,8 +18,8 @@ for the package dependency map.
 For a Python change:
 
 ```bash
-uv sync --project <affected-project>
-uv run --project tests pytest <affected-test-files>
+uv --config-file uv.toml sync --project <affected-project>
+uv --config-file uv.toml run --project tests pytest <affected-test-files>
 uv tool run ruff check <changed-python-files>
 ```
 
@@ -52,3 +52,12 @@ normally regenerates the Python inventory in `DEPENDENCIES.md` automatically,
 and CI rejects drift. Do not edit that generated section by hand. Regenerate the
 affected project's gitignored `uv.lock` locally. New source files require an
 SPDX header; refer to {doc}`SPDX headers <spdx-headers>`.
+
+The root `uv.toml` records the repository's dependency qualification cutoff.
+Repository CI passes it explicitly to uv, so fresh resolutions ignore
+package-index artifacts uploaded after that timestamp while normal
+compatibility ranges stay in package metadata. Standalone nested projects do
+not inherit the root file implicitly; run uv from the repository root with
+`--config-file uv.toml` as shown above. To qualify newer dependencies, advance
+the cutoff in a dedicated change, resolve every project, and run the full test
+suite. The generated lockfiles are validation artifacts and remain gitignored.

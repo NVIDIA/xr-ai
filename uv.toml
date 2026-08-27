@@ -1,0 +1,5 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Advance only as part of a repository-wide dependency qualification change.
+exclude-newer = "2026-08-27T17:15:48Z"

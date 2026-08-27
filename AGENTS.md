@@ -111,6 +111,12 @@ Refer to [Adding a sample](docs/source/guides/adding-a-sample.md) and the
   normally regenerates the Python inventory automatically and CI rejects drift.
   Do not hand-edit the generated section in `DEPENDENCIES.md`. Regenerate the
   affected project's gitignored `uv.lock` locally to verify resolution.
+- The root `uv.toml` limits registry artifacts to the last dependency
+  qualification timestamp. Advance it only in a dedicated dependency refresh,
+  resolve every project's gitignored `uv.lock` with
+  `uv --config-file uv.toml lock --project <directory>` from the repository
+  root, and run the full test suite. Standalone nested projects do not inherit
+  the root config implicitly. Do not commit generated lockfiles.
 - Never put API keys or tokens in source files. Use environment variables or
   the credential store documented in `docs/source/getting_started/credentials.md`.
 - Do not add an abstraction until two concrete use cases need it.

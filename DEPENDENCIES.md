@@ -30,6 +30,22 @@ The pytest matrix in `.github/workflows/tests.yml` covers Python 3.11 and 3.12.
 Loosening the repository-wide upper bound requires a coordinated qualification
 change, even when an individual dependency publishes newer Python wheels.
 
+## Dependency qualification
+
+The root `uv.toml` limits package-index candidates to artifacts uploaded by the
+last repository-wide qualification timestamp. Repository CI supplies that file
+to every uv command. This applies to direct, transitive, and build dependencies
+without publishing repository policy as artificial upper bounds in library
+metadata. Fresh CI runs therefore resolve the same qualified package set
+instead of silently admitting newly published artifacts.
+
+Advance the timestamp only in a dedicated dependency refresh. Resolve every
+project from the repository root with
+`uv --config-file uv.toml lock --project <directory>`, inspect the version
+changes, and run the full test suite. Standalone nested projects do not inherit
+the root config implicitly. All generated `uv.lock` files remain gitignored
+validation artifacts; do not commit them.
+
 ## Generated Python project inventory
 
 <!-- BEGIN GENERATED PYTHON DEPENDENCY MAP -->

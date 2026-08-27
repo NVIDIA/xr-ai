@@ -9,9 +9,11 @@ name: lock-check
 # so a single `uv lock` per project covers every supported interpreter
 # without needing a Python-version matrix here.
 #
-# This is the repo-wide check on Python-version + dependency consistency:
-# a project bumping `requires-python` (or pinning a dep that drops a
-# Python version) only passes if the constraints stay jointly satisfiable.
+# The root uv.toml limits package-index candidates to the last repository-wide
+# qualification point. This is the repo-wide check on Python-version +
+# dependency consistency: a project bumping `requires-python`, advancing that
+# cutoff, or pinning a dependency that drops a Python version only passes if
+# the constraints stay jointly satisfiable.
 
 on:
   push:
@@ -21,6 +23,9 @@ on:
 concurrency:
   group: lock-check-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  UV_CONFIG_FILE: ${{ github.workspace }}/uv.toml
 
 jobs:
   dependency-map:
@@ -53,9 +58,10 @@ jobs:
           enable-cache: true
           # Lockfiles are gitignored repo-wide, so the default `**/uv.lock`
           # cache-dependency-glob matches nothing in CI. Key the cache off
-          # every committed pyproject.toml instead.
+          # every committed pyproject.toml and the shared resolution policy.
           cache-dependency-glob: |
             **/pyproject.toml
+            uv.toml
 
       - name: Resolve every pyproject.toml
         run: |
