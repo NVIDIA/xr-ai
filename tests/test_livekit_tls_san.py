@@ -201,7 +201,7 @@ def test_legacy_ca_as_leaf_is_migrated_with_clear_log(cert_env: Path) -> None:
     assert _tls._is_server_leaf(_cert(leaf_path))
     assert _tls._is_development_root(_cert(root_path))
     assert _tls._is_signed_by(_cert(leaf_path), _cert(root_path))
-    assert "legacy.example.com" in _tls._cert_san_entries(_cert(leaf_path))
+    assert {"legacy.example.com"} <= _tls._cert_san_entries(_cert(leaf_path))
     assert any("migrating legacy CA-as-server certificate" in message for message in messages)
     assert any("Install root-ca.crt" in message for message in messages)
 
