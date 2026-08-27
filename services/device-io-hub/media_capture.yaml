@@ -19,8 +19,9 @@ gpu_id: 0
 frame_queue_size: 2
 encoder_workers: 2
 
-# conversation.wav is stereo: device input on the left, agent output on the
-# right. Exact float32 chunks and timing remain in the raw audio artifacts.
+# Each finalized .mkv embeds this stereo mix: device input on the left, agent
+# output on the right. The same mix remains in conversation.wav, and exact
+# float32 chunks and timing remain in the raw audio artifacts.
 audio_sample_rate: 48000
 
 # UTF-8 agent return data on these topics is rendered into the fixed video

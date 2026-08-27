@@ -90,7 +90,8 @@ fields, checked-in values, and adjacent YAML comments.
 `device_io_capture` starts immediately after DeviceIOHub and records normalized
 hub media without joining the LiveKit room. Each participant connection creates
 a bundle under `~/.local/share/xr-ai/captures/simple-vlm-example/` containing
-captioned NVENC H.264 video, timestamp-aligned device/agent audio, exact raw
+captioned NVENC H.264 video in playable `.mkv` segments with timestamp-aligned
+device/agent audio embedded, retained source H.264 and WAV tracks, exact raw
 audio chunks, inbound and outbound data, and a manifest. Text returned on
 `vlm.response` appears in the video caption panel.
 
