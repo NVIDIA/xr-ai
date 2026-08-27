@@ -374,12 +374,14 @@ def test_device_io_hub_preserves_its_package_and_command() -> None:
 
     assert metadata["project"]["name"] == "device-io-hub"
     assert metadata["project"]["scripts"] == {
-        "device_io_hub": "device_io_hub.__main__:run"
+        "device_io_capture": "device_io_hub.capture.__main__:run",
+        "device_io_hub": "device_io_hub.__main__:run",
     }
     assert metadata["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == [
         "device_io_hub"
     ]
     assert (_HUB_PROJECT / "device_io_hub" / "__main__.py").is_file()
+    assert (_HUB_PROJECT / "device_io_hub" / "capture" / "__main__.py").is_file()
 
 
 def test_sample_process_projects_resolve(monkeypatch) -> None:
