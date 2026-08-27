@@ -9,9 +9,11 @@ name: lock-check
 # so a single `uv lock` per project covers every supported interpreter
 # without needing a Python-version matrix here.
 #
-# This is the repo-wide check on Python-version + dependency consistency:
-# a project bumping `requires-python` (or pinning a dep that drops a
-# Python version) only passes if the constraints stay jointly satisfiable.
+# The root uv.toml limits package-index candidates to the last repository-wide
+# qualification point. This is the repo-wide check on Python-version +
+# dependency consistency: a project bumping `requires-python`, advancing that
+# cutoff, or pinning a dependency that drops a Python version only passes if
+# the constraints stay jointly satisfiable.
 
 on:
   push:
@@ -21,6 +23,9 @@ on:
 concurrency:
   group: lock-check-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  UV_CONFIG_FILE: ${{ github.workspace }}/uv.toml
 
 jobs:
   dependency-map:
@@ -47,15 +52,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate dependency cutoff
+        run: |
+          cutoff=$(sed -nE 's/^exclude-newer = "([^"]+)"$/\1/p' uv.toml)
+          if [[ -z "$cutoff" ]] || ! cutoff_epoch=$(date -u -d "$cutoff" +%s); then
+            echo "::error file=uv.toml::exclude-newer must be a valid timestamp"
+            exit 1
+          fi
+          if (( cutoff_epoch > $(date -u +%s) )); then
+            echo "::error file=uv.toml::exclude-newer is in the future: $cutoff"
+            exit 1
+          fi
+
       - name: Install uv
         uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3.2.4
         with:
           enable-cache: true
           # Lockfiles are gitignored repo-wide, so the default `**/uv.lock`
           # cache-dependency-glob matches nothing in CI. Key the cache off
-          # every committed pyproject.toml instead.
+          # every committed pyproject.toml and the shared resolution policy.
           cache-dependency-glob: |
             **/pyproject.toml
+            uv.toml
 
       - name: Resolve every pyproject.toml
         run: |

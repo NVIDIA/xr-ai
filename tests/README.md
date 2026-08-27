@@ -10,8 +10,8 @@ and multi-client and multi-agent routing.
 
 ```bash
 cd tests
-uv sync
-uv run pytest -v
+uv --config-file ../uv.toml sync
+uv --config-file ../uv.toml run pytest -v
 ```
 
 GPU-, Docker-, and NVENC-dependent tests are excluded from CI and can be run

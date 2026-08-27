@@ -15,14 +15,17 @@ required for the browser camera tests.
 From the repository root:
 
 ```bash
-uv sync --project tests
-uv run --project tests pytest -v
+uv --config-file uv.toml sync --project tests
+uv --config-file uv.toml run --project tests pytest -v
 ```
 
-CI runs the same project on Python 3.11 and 3.12 with:
+CI runs the same selection on Python 3.11 and 3.12 from `tests/`, with the
+project environment at the repository root for nltk compatibility. The
+equivalent repository-root command is:
 
 ```bash
-uv run pytest -v --tb=short --color=yes -m "not gpu"
+uv --config-file uv.toml run --project tests \
+  pytest -v --tb=short --color=yes -m "not gpu"
 ```
 
 Tests marked `integration` may start real CPU subprocesses and still run in CI.
@@ -30,7 +33,7 @@ Tests that require a real GPU, Docker, or NVENC use the `gpu` marker and run
 only on a suitably configured developer host:
 
 ```bash
-bash run_local_gpu_tests.sh
+bash tests/run_local_gpu_tests.sh
 ```
 
 Pass extra pytest arguments after the script name to select a file or test.
