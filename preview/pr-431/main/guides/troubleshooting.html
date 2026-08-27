@@ -662,13 +662,14 @@ iOS, and visionOS use wss only; there is no <code class="docutils literal notran
 <h3>Android — connection fails with TLS or certificate errors<a class="headerlink" href="#android-connection-fails-with-tls-or-certificate-errors" title="Link to this heading">#</a></h3>
 <p><strong>Symptom:</strong> the Android sample fails to connect; the error shows an
 <code class="docutils literal notranslate"><span class="pre">SSLHandshakeException</span></code> or similar TLS error.</p>
-<p><strong>Cause:</strong> the hub uses a self-signed certificate by default. The Android sample
-validates against the system and user CA store, the same as iOS.</p>
+<p><strong>Cause:</strong> the hub uses a development root CA by default. The Android sample
+validates the signed server leaf against the system and user CA store, the same
+as iOS.</p>
 <p><strong>Fix:</strong> install the hub’s certificate via the in-app button before connecting:</p>
 <ol class="arabic simple">
 <li><p>In the <strong>Connection</strong> section, tap <strong>Install hub certificate</strong> (enabled once
 <strong>Host</strong> is non-empty).</p></li>
-<li><p>The app fetches the certificate from <code class="docutils literal notranslate"><span class="pre">https://&lt;host&gt;:&lt;port&gt;/cert</span></code> and opens
+<li><p>The app fetches the public root CA from <code class="docutils literal notranslate"><span class="pre">https://&lt;host&gt;:&lt;port&gt;/cert</span></code> and opens
 the system certificate-install dialog.</p></li>
 <li><p>Confirm the install. After install, tap <strong>Connect</strong> — validation succeeds
 automatically.</p></li>
@@ -683,7 +684,7 @@ production.</p>
 WebSocket reports a TLS error (e.g. <code class="docutils literal notranslate"><span class="pre">NSURLErrorServerCertificateUntrusted</span></code>,
 <code class="docutils literal notranslate"><span class="pre">-1202</span></code>, “The certificate for this server is invalid”).</p>
 <p><strong>Cause:</strong> the LiveKit Swift SDK cannot bypass certificate validation, so the
-hub’s self-signed certificate must be trusted at the OS level.</p>
+hub’s development root CA must be trusted at the OS level.</p>
 <p><strong>Fix:</strong> install the hub’s certificate as a trusted profile on the device:</p>
 <ol class="arabic simple">
 <li><p>In Safari on the device, open <code class="docutils literal notranslate"><span class="pre">https://&lt;host&gt;:8080/cert</span></code> and tap
@@ -693,22 +694,26 @@ hub’s self-signed certificate must be trusted at the OS level.</p>
 <li><p>Toggle <strong>Settings → General → About → Certificate Trust Settings →
 Enable Full Trust</strong> for the new certificate.</p></li>
 </ol>
-<p>If step 4 shows no toggle, the cached certificate on the hub is from an older
-xr-ai build that wrote <code class="docutils literal notranslate"><span class="pre">BasicConstraints</span> <span class="pre">CA:FALSE</span></code> and iOS will not
-expose the trust toggle for it. Remove the installed profile via
-<strong>VPN &amp; Device Management</strong> and restart the hub — it auto-detects the
-stale certificate and regenerates it as a self-signed CA (logged as <code class="docutils literal notranslate"><span class="pre">TLS:</span> <span class="pre">cached</span> <span class="pre">cert</span> <span class="pre">is</span> <span class="pre">not</span> <span class="pre">a</span> <span class="pre">CA</span> <span class="pre">cert</span> <span class="pre">—</span> <span class="pre">regenerating…</span></code>).</p>
+<p>If step 4 shows no toggle, remove the installed profile via <strong>VPN &amp; Device
+Management</strong>, restart the hub, and install <code class="docutils literal notranslate"><span class="pre">/cert</span></code> again. Older xr-ai builds
+used <code class="docutils literal notranslate"><span class="pre">web-server.crt</span></code> itself as the trust profile. DeviceIOHub detects that
+legacy CA-as-server certificate and migrates it to <code class="docutils literal notranslate"><span class="pre">root-ca.crt</span></code> plus a signed
+<code class="docutils literal notranslate"><span class="pre">CA:FALSE</span></code> server leaf with a clear <code class="docutils literal notranslate"><span class="pre">TLS:</span> <span class="pre">migrating</span> <span class="pre">legacy</span> <span class="pre">CA-as-server</span></code>
+message. This migration requires one root reinstall; later server-leaf changes
+do not.</p>
 <p>If the toggle was enabled but the wss handshake still fails with
 <code class="docutils literal notranslate"><span class="pre">errSSLBadCert</span></code> or NSURLErrorDomain <code class="docutils literal notranslate"><span class="pre">-1202</span></code> and a message like <em>“pretending
 to be 192.168.1.42”</em> (that is, the IP you typed into the app), the
-certificate’s SubjectAlternativeName doesn’t cover that IP. The hub detects
-local IPv4 addresses via a UDP-connect probe and auto-regenerates the
-certificate whenever the SAN is missing one (logged as <code class="docutils literal notranslate"><span class="pre">TLS:</span> <span class="pre">cached</span> <span class="pre">cert</span> <span class="pre">SAN</span> <span class="pre">is</span> <span class="pre">missing</span> <span class="pre">…;</span> <span class="pre">regenerating…</span></code>); just restart the hub and re-install the
-profile on the device. If the dialed address is absent from the certificate,
+server leaf’s SubjectAlternativeName doesn’t cover that IP. The hub detects
+local IPv4 addresses via a UDP-connect probe and auto-regenerates only the leaf
+whenever the SAN is missing one (logged as <code class="docutils literal notranslate"><span class="pre">TLS:</span> <span class="pre">generated</span> <span class="pre">server</span> <span class="pre">leaf</span> <span class="pre">…</span></code>); just
+restart the hub. The already installed root remains valid. If the dialed address
+is absent from the leaf,
 add it to <code class="docutils literal notranslate"><span class="pre">web_server_extra_sans</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> and restart. Refer to
 <a class="reference internal" href="../getting_started/networking.html"><span class="doc">Networking</span></a> for details.
-To force regeneration, delete <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code> and
-<code class="docutils literal notranslate"><span class="pre">web-server.key</span></code> before restarting.</p>
+To force leaf regeneration, delete <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code> and
+<code class="docutils literal notranslate"><span class="pre">web-server.key</span></code> before restarting. Do not delete <code class="docutils literal notranslate"><span class="pre">root-ca.crt</span></code> or <code class="docutils literal notranslate"><span class="pre">root-ca.key</span></code>
+unless you intend to reinstall the root on every client.</p>
 <p>If the certificate is trusted (no <code class="docutils literal notranslate"><span class="pre">-1202</span></code>) but the room connection still fails
 with HTTP 401 or “no permissions to access the room”, the hub’s <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> WSS
 proxy is dropping the <code class="docutils literal notranslate"><span class="pre">Authorization:</span> <span class="pre">Bearer</span> <span class="pre">&lt;token&gt;</span></code> header the Swift

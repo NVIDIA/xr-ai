@@ -599,12 +599,14 @@ version = "0.1.0"
 requires-python = "&gt;=3.11,&lt;3.15"
 dependencies = [
     "xr-ai-hub-client",
+    "xr-ai-logging",
     "xr-ai-models",
     # add task-specific deps here: numpy, torch, etc.
 ]
 
 [tool.uv.sources]
 xr-ai-hub-client  = { path = "../../../agent-sdk/xr-ai-hub", editable = true }
+xr-ai-logging = { path = "../../../utils/xr-ai-logging", editable = true }
 xr-ai-models = { path = "../../../agent-sdk/xr-ai-models", editable = true }
 
 [project.scripts]
@@ -665,7 +667,7 @@ packages = ["&lt;snake_name&gt;_worker"]
 <p>Use this template when the worker talks directly to <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code>. Native
 voice workers keep argument parsing in <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code> and delegate composition
 to sibling <code class="docutils literal notranslate"><span class="pre">app.py</span></code> and <code class="docutils literal notranslate"><span class="pre">config.py</span></code> modules. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/257b8199d7c4cc275450e3353a7369edc8d0b9dc/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/96d94203db135a236185525e9393ad920b45802b/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
 for that shape. Fill in the sections marked <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">←</span> <span class="pre">FILL</span> <span class="pre">IN</span></code>.</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
@@ -700,6 +702,7 @@ from xr_ai_hub import (          # ← import only what you use
     AudioChunk, DataMessage, FrameSignal, ParticipantEvent, ProcessorEndpoint,
     Subscribe,                     # ← only needed when scoping subscriptions
 )
+from xr_ai_logging import setup_logging
 
 log = logging.getLogger("&lt;snake_name&gt;")
 
@@ -711,6 +714,7 @@ class &lt;CamelName&gt;Agent:            # ← FILL IN agent logic
 
     def __init__(self) -&gt; None:
         self._ep = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
+        self._ep_task: asyncio.Task[None] | None = None
         self._ep.on_frame(self._on_frame)       # ← remove callbacks you don't use
         self._ep.on_audio(self._on_audio)
         self._ep.on_data(self._on_data)
@@ -725,20 +729,29 @@ class &lt;CamelName&gt;Agent:            # ← FILL IN agent logic
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
-    async def run(self) -&gt; None:
-        await self._ep.run()        # ← start any background tasks before this line
+    async def run(self, ready_file: Path | None = None) -&gt; None:
+        # ← start any application background tasks before the endpoint task
+        self._ep_task = asyncio.create_task(self._ep.run(), name="hub-endpoint")
+        await self._ep.wait_until_running()
+        if ready_file:
+            ready_file.touch()
+        try:
+            await self._ep_task
+        except asyncio.CancelledError:
+            pass
+        finally:
+            self._ep_task = None
 
     def shutdown(self) -&gt; None:
         # ← cancel any background tasks here first
+        if self._ep_task:
+            self._ep_task.cancel()
         self._ep.stop()
         self._ep.close()
 
 
 async def main(ready_file: Path | None = None) -&gt; None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
-    )
+    setup_logging("worker")
 
     agent = &lt;CamelName&gt;Agent()
 
@@ -746,12 +759,9 @@ async def main(ready_file: Path | None = None) -&gt; None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, agent.shutdown)
 
-    if ready_file:
-        ready_file.touch()
-
     log.info("&lt;snake_name&gt; connecting  sub=%s  push=%s", _HUB_PUB, _HUB_PUSH)
     try:
-        await agent.run()
+        await agent.run(ready_file=ready_file)
     finally:
         agent.shutdown()
 

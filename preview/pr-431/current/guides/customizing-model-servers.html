@@ -476,6 +476,8 @@ Reasoner, and Nemotron embedding services.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code>: local STT, Piper TTS, and embedding plus self-hosted
 Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner NIM containers.</p></li>
 </ul>
+<p>The shared profiles use Piper TTS. Magpie remains available as a standalone
+service, but is not integrated into the persistent model stack.</p>
 <p>Copy the closest profile under a new name:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cp<span class="w"> </span>agent-samples/model-servers/yaml/models.default.json<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>agent-samples/model-servers/yaml/models.my-stack.json

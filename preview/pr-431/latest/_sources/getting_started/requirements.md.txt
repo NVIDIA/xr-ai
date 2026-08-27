@@ -33,12 +33,12 @@ NVDEC.
 | Requirement | Version | Notes |
 |---|---|---|
 | OS | Linux | Ubuntu 22.04 or 24.04 recommended; WSL2 is not officially supported (refer to [Windows (WSL2)](#windows-wsl2) below) |
-| Python | 3.11 through 3.14 | Other versions are not supported |
+| Python | 3.11 through 3.14 | tested and currently allowed; supporting other versions requires updating `requires-python` and CI |
 | [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
 | NVIDIA driver | 580+ | required for CUDA 13 model containers and DeviceIOHub hardware codecs |
 | Docker | 24+ | required by the checked-in model-server profiles, which use vLLM containers from NGC and Docker Hub |
 | NVIDIA Container Toolkit | latest | required: configures the `nvidia` runtime that gives Docker access to the GPU |
-| Node.js | 18+ with npm | required for xr-render-demo's default WebRTC profile: the orchestrator builds the web vendor bundle on first run |
+| Node.js | 20.19.0+ with npm | required for xr-render-demo's default WebRTC profile: the orchestrator builds the web vendor bundle on first run |
 
 `uv` handles all Python dependencies per-sample — no global `pip install` or
 virtual-environment setup needed. If you do not have it:
@@ -100,9 +100,9 @@ setups:
   Open the web client at the WSL distribution's `eth0` address instead (note
   it can change across reboots). Microphone capture needs a secure context.
   Prefer the hub's default HTTPS web server (`https://<eth0-ip>:8080`): an HTTPS
-  origin is a secure context once you trust the hub's self-signed certificate
+  origin is a secure context once you trust the hub's development root CA
   (download it from `https://<eth0-ip>:8080/cert`, or copy
-  `~/.local/share/xr-ai/web-server.crt` out of the WSL filesystem via
+  `~/.local/share/xr-ai/root-ca.crt` out of the WSL filesystem via
   `\\wsl$\`, then install it into the Windows certificate store) or click through
   the browser warning. On a plain-HTTP path (the legacy token server, or
   `web_server_tls: false`), the report's verified workaround is

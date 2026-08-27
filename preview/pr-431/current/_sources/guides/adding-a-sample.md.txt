@@ -137,12 +137,14 @@ version = "0.1.0"
 requires-python = ">=3.11,<3.15"
 dependencies = [
     "xr-ai-hub-client",
+    "xr-ai-logging",
     "xr-ai-models",
     # add task-specific deps here: numpy, torch, etc.
 ]
 
 [tool.uv.sources]
 xr-ai-hub-client  = { path = "../../../agent-sdk/xr-ai-hub", editable = true }
+xr-ai-logging = { path = "../../../utils/xr-ai-logging", editable = true }
 xr-ai-models = { path = "../../../agent-sdk/xr-ai-models", editable = true }
 
 [project.scripts]
@@ -240,6 +242,7 @@ from xr_ai_hub import (          # ← import only what you use
     AudioChunk, DataMessage, FrameSignal, ParticipantEvent, ProcessorEndpoint,
     Subscribe,                     # ← only needed when scoping subscriptions
 )
+from xr_ai_logging import setup_logging
 
 log = logging.getLogger("<snake_name>")
 
@@ -251,6 +254,7 @@ class <CamelName>Agent:            # ← FILL IN agent logic
 
     def __init__(self) -> None:
         self._ep = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
+        self._ep_task: asyncio.Task[None] | None = None
         self._ep.on_frame(self._on_frame)       # ← remove callbacks you don't use
         self._ep.on_audio(self._on_audio)
         self._ep.on_data(self._on_data)
@@ -265,20 +269,29 @@ class <CamelName>Agent:            # ← FILL IN agent logic
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
-    async def run(self) -> None:
-        await self._ep.run()        # ← start any background tasks before this line
+    async def run(self, ready_file: Path | None = None) -> None:
+        # ← start any application background tasks before the endpoint task
+        self._ep_task = asyncio.create_task(self._ep.run(), name="hub-endpoint")
+        await self._ep.wait_until_running()
+        if ready_file:
+            ready_file.touch()
+        try:
+            await self._ep_task
+        except asyncio.CancelledError:
+            pass
+        finally:
+            self._ep_task = None
 
     def shutdown(self) -> None:
         # ← cancel any background tasks here first
+        if self._ep_task:
+            self._ep_task.cancel()
         self._ep.stop()
         self._ep.close()
 
 
 async def main(ready_file: Path | None = None) -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
-    )
+    setup_logging("worker")
 
     agent = <CamelName>Agent()
 
@@ -286,12 +299,9 @@ async def main(ready_file: Path | None = None) -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, agent.shutdown)
 
-    if ready_file:
-        ready_file.touch()
-
     log.info("<snake_name> connecting  sub=%s  push=%s", _HUB_PUB, _HUB_PUSH)
     try:
-        await agent.run()
+        await agent.run(ready_file=ready_file)
     finally:
         agent.shutdown()
 

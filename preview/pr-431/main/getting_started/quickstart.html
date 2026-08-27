@@ -567,8 +567,8 @@ appears, but the agent answers queries only after the launcher prints its
 <section id="step-2-connect-a-client">
 <h3>Step 2 — Connect a client<a class="headerlink" href="#step-2-connect-a-client" title="Link to this heading">#</a></h3>
 <p>Open <code class="docutils literal notranslate"><span class="pre">https://localhost:8080</span></code> in a browser. The samples ship with HTTPS on by
-default (a self-signed certificate is generated on first run at
-<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code>), so you’ll see a “Your connection is not
+default (a development root CA and signed server leaf are generated on first
+run under <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/</span></code>), so you’ll see a “Your connection is not
 private” warning the first time — click <strong>Advanced → Proceed</strong> (Chrome or Edge) or
 <strong>Accept the Risk and Continue</strong> (Firefox). Refer to the networking guide for
 trusting the certificate permanently or running over plain HTTP instead.</p>
@@ -650,7 +650,7 @@ uv<span class="w"> </span>run<span class="w"> </span>tea_making_sample
 </pre></div>
 </div>
 <p>Open the DeviceIOHub connection page at <code class="docutils literal notranslate"><span class="pre">https://localhost:8080</span></code>, accept the
-self-signed certificate on first use, allow camera and microphone access, and
+development certificate on first use, allow camera and microphone access, and
 connect. The checked-in voice-gate YAML requires “Agent” or “Hey Agent.” Set
 <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml:</span> <span class="pre">voice_gate.always-on.yaml</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/tea_making_worker.yaml</span></code>
 to dispatch every finalized utterance without a wake phrase.</p>
@@ -675,8 +675,9 @@ dev.</p>
 <p>Under the hood, the orchestrator launches the hub, CloudXR runtime, typed
 capability processes, and the worker alongside the reused model endpoints. The
 worker calls those processes through Relay-managed native tools. The voice
-runtime runs quick-acks and a Nemotron-30B agentic tool-calling loop over scene,
-tracking, spatial math, vision, and video-memory tools. Refer to the
+runtime runs quick-acks and a Nemotron-3-Nano-Omni-30B-A3B-Reasoning agentic
+tool-calling loop over scene, tracking, spatial math, vision, and video-memory
+tools. Refer to the
 <a class="reference internal" href="../reference/xr-render-demo.html"><span class="doc">xr-render-demo reference</span></a> for the full process
 map, agentic-loop details, and XR session lifecycle.</p>
 <p><strong>Requires <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> to be running first</strong> — the demo does not start its
@@ -697,8 +698,9 @@ additional host prerequisites:</p>
 <ul class="simple">
 <li><p><strong>Vulkan loader + headers</strong> — the CloudXR compositor and LOVR render through
 Vulkan, so install them before running the demo: <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">apt</span> <span class="pre">install</span> <span class="pre">libvulkan-dev</span></code></p></li>
-<li><p><strong>Node.js 18+ with npm</strong> on PATH — the orchestrator builds the web vendor
-bundle on first run (skipped on subsequent runs).</p></li>
+<li><p><strong>Node.js 20.19.0+ with npm</strong> on PATH for WebRTC profiles — the orchestrator
+builds the web vendor bundle on first run (skipped for native profiles and
+on subsequent runs).</p></li>
 </ul>
 <p>Start XR Render:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync
@@ -710,8 +712,9 @@ uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo
 </pre></div>
 </div>
 <p>On first run the orchestrator automatically downloads the pinned LOVR version to
-<code class="docutils literal notranslate"><span class="pre">deps/lovr/</span></code> inside the repository and builds the web vendor bundle (requires npm
-and network access). Both steps are skipped on subsequent runs.</p>
+<code class="docutils literal notranslate"><span class="pre">deps/lovr/</span></code> inside the repository. For WebRTC profiles it also builds the web
+vendor bundle, which requires npm and network access. Existing artifacts are
+reused on subsequent runs.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>On <strong>DGX Spark</strong> (aarch64), LOVR does not publish a prebuilt aarch64 Linux

@@ -503,7 +503,7 @@ NVDEC.</p>
 </tr>
 <tr class="row-odd"><td><p>Python</p></td>
 <td><p>3.11 or 3.12</p></td>
-<td><p>3.10 and 3.13 are not supported</p></td>
+<td><p>tested and currently allowed; supporting other versions requires updating <code class="docutils literal notranslate"><span class="pre">requires-python</span></code> and CI</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference external" href="https://docs.astral.sh/uv/">uv</a></p></td>
 <td><p>latest</p></td>
@@ -522,7 +522,7 @@ NVDEC.</p>
 <td><p>required: configures the <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime that gives Docker access to the GPU</p></td>
 </tr>
 <tr class="row-even"><td><p>Node.js</p></td>
-<td><p>18+ with npm</p></td>
+<td><p>20.19.0+ with npm</p></td>
 <td><p>required for xr-render-demo’s default WebRTC profile: the orchestrator builds the web vendor bundle on first run</p></td>
 </tr>
 </tbody>
@@ -584,9 +584,9 @@ only</strong>: signaling works via <code class="docutils literal notranslate"><s
 Open the web client at the WSL distribution’s <code class="docutils literal notranslate"><span class="pre">eth0</span></code> address instead (note
 it can change across reboots). Microphone capture needs a secure context.
 Prefer the hub’s default HTTPS web server (<code class="docutils literal notranslate"><span class="pre">https://&lt;eth0-ip&gt;:8080</span></code>): an HTTPS
-origin is a secure context once you trust the hub’s self-signed certificate
+origin is a secure context once you trust the hub’s development root CA
 (download it from <code class="docutils literal notranslate"><span class="pre">https://&lt;eth0-ip&gt;:8080/cert</span></code>, or copy
-<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code> out of the WSL filesystem via
+<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/root-ca.crt</span></code> out of the WSL filesystem via
 <code class="docutils literal notranslate"><span class="pre">\\wsl$\</span></code>, then install it into the Windows certificate store) or click through
 the browser warning. On a plain-HTTP path (the legacy token server, or
 <code class="docutils literal notranslate"><span class="pre">web_server_tls:</span> <span class="pre">false</span></code>), the report’s verified workaround is

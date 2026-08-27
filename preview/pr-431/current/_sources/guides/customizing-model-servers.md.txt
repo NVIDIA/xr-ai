@@ -39,6 +39,9 @@ The shipped profiles are:
 - `vlm_llm_nim`: local STT, Piper TTS, and embedding plus self-hosted
   Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner NIM containers.
 
+The shared profiles use Piper TTS. Magpie remains available as a standalone
+service, but is not integrated into the persistent model stack.
+
 Copy the closest profile under a new name:
 
 ```bash
