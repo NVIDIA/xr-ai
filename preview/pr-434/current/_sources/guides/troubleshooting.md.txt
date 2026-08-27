@@ -263,14 +263,15 @@ iOS, and visionOS use wss only; there is no `secure` toggle.
 **Symptom:** the Android sample fails to connect; the error shows an
 `SSLHandshakeException` or similar TLS error.
 
-**Cause:** the hub uses a self-signed certificate by default. The Android sample
-validates against the system and user CA store, the same as iOS.
+**Cause:** the hub uses a development root CA by default. The Android sample
+validates the signed server leaf against the system and user CA store, the same
+as iOS.
 
 **Fix:** install the hub's certificate via the in-app button before connecting:
 
 1. In the **Connection** section, tap **Install hub certificate** (enabled once
    **Host** is non-empty).
-2. The app fetches the certificate from `https://<host>:<port>/cert` and opens
+2. The app fetches the public root CA from `https://<host>:<port>/cert` and opens
    the system certificate-install dialog.
 3. Confirm the install. After install, tap **Connect** — validation succeeds
    automatically.
@@ -286,7 +287,7 @@ WebSocket reports a TLS error (e.g. `NSURLErrorServerCertificateUntrusted`,
 `-1202`, "The certificate for this server is invalid").
 
 **Cause:** the LiveKit Swift SDK cannot bypass certificate validation, so the
-hub's self-signed certificate must be trusted at the OS level.
+hub's development root CA must be trusted at the OS level.
 
 **Fix:** install the hub's certificate as a trusted profile on the device:
 
@@ -297,25 +298,27 @@ hub's self-signed certificate must be trusted at the OS level.
 4. Toggle **Settings → General → About → Certificate Trust Settings →
    Enable Full Trust** for the new certificate.
 
-If step 4 shows no toggle, the cached certificate on the hub is from an older
-xr-ai build that wrote `BasicConstraints CA:FALSE` and iOS will not
-expose the trust toggle for it. Remove the installed profile via
-**VPN & Device Management** and restart the hub — it auto-detects the
-stale certificate and regenerates it as a self-signed CA (logged as `TLS: cached
-cert is not a CA cert — regenerating…`).
+If step 4 shows no toggle, remove the installed profile via **VPN & Device
+Management**, restart the hub, and install `/cert` again. Older xr-ai builds
+used `web-server.crt` itself as the trust profile. DeviceIOHub detects that
+legacy CA-as-server certificate and migrates it to `root-ca.crt` plus a signed
+`CA:FALSE` server leaf with a clear `TLS: migrating legacy CA-as-server`
+message. This migration requires one root reinstall; later server-leaf changes
+do not.
 
 If the toggle was enabled but the wss handshake still fails with
 `errSSLBadCert` or NSURLErrorDomain `-1202` and a message like *"pretending
 to be 192.168.1.42"* (that is, the IP you typed into the app), the
-certificate's SubjectAlternativeName doesn't cover that IP. The hub detects
-local IPv4 addresses via a UDP-connect probe and auto-regenerates the
-certificate whenever the SAN is missing one (logged as `TLS: cached cert
-SAN is missing …; regenerating…`); just restart the hub and re-install the
-profile on the device. If the dialed address is absent from the certificate,
+server leaf's SubjectAlternativeName doesn't cover that IP. The hub detects
+local IPv4 addresses via a UDP-connect probe and auto-regenerates only the leaf
+whenever the SAN is missing one (logged as `TLS: generated server leaf …`); just
+restart the hub. The already installed root remains valid. If the dialed address
+is absent from the leaf,
 add it to `web_server_extra_sans` in `device_io_hub.yaml` and restart. Refer to
 {doc}`Networking </getting_started/networking>` for details.
-To force regeneration, delete `~/.local/share/xr-ai/web-server.crt` and
-`web-server.key` before restarting.
+To force leaf regeneration, delete `~/.local/share/xr-ai/web-server.crt` and
+`web-server.key` before restarting. Do not delete `root-ca.crt` or `root-ca.key`
+unless you intend to reinstall the root on every client.
 
 If the certificate is trusted (no `-1202`) but the room connection still fails
 with HTTP 401 or "no permissions to access the room", the hub's `/rtc` WSS

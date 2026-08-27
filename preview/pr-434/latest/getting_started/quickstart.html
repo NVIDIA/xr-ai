@@ -544,8 +544,8 @@ appears, but the agent answers queries only after the launcher prints its
 <section id="step-2-connect-a-client">
 <h3>Step 2 — Connect a client<a class="headerlink" href="#step-2-connect-a-client" title="Link to this heading">#</a></h3>
 <p>Open <code class="docutils literal notranslate"><span class="pre">https://localhost:8080</span></code> in a browser. The samples ship with HTTPS on by
-default (a self-signed certificate is generated on first run at
-<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code>), so you’ll see a “Your connection is not
+default (a development root CA and signed server leaf are generated on first
+run under <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/</span></code>), so you’ll see a “Your connection is not
 private” warning the first time — click <strong>Advanced → Proceed</strong> (Chrome or Edge) or
 <strong>Accept the Risk and Continue</strong> (Firefox). Refer to the networking guide for
 trusting the certificate permanently or running over plain HTTP instead.</p>
@@ -627,7 +627,7 @@ uv<span class="w"> </span>run<span class="w"> </span>tea_making_sample
 </pre></div>
 </div>
 <p>Open the DeviceIOHub connection page at <code class="docutils literal notranslate"><span class="pre">https://localhost:8080</span></code>, accept the
-self-signed certificate on first use, allow camera and microphone access, and
+development certificate on first use, allow camera and microphone access, and
 connect. The checked-in voice-gate YAML requires “Agent” or “Hey Agent.” Set
 <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml:</span> <span class="pre">voice_gate.always-on.yaml</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/tea_making_worker.yaml</span></code>
 to dispatch every finalized utterance without a wake phrase.</p>
