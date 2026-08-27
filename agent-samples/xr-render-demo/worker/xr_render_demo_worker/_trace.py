@@ -17,18 +17,21 @@ current_trace_id: ContextVar[str] = ContextVar("current_trace_id", default="")
 current_participant_id: ContextVar[str] = ContextVar("current_participant_id", default="")
 current_reference_time_us: ContextVar[int] = ContextVar("current_reference_time_us", default=0)
 
-EvidenceField = Literal["applied", "satisfied", "observed"]
+EvidenceField = Literal["applied", "satisfied", "observed", "observed_recorded"]
 
 
 class TurnEvidence:
     """Per-turn evidence counters the supervisor's gates read instead of
     trusting the model's wording: scene writes applied (or found already
-    satisfied) and camera observations actually made."""
+    satisfied), live camera observations made (`observed`), and recorded-frame
+    observations made (`observed_recorded`); only `observed` licenses a
+    present-tense perception claim."""
 
     def __init__(self) -> None:
         self.applied = 0
         self.satisfied = 0
         self.observed = 0
+        self.observed_recorded = 0
 
 
 current_turn_evidence: ContextVar[TurnEvidence | None] = ContextVar(

@@ -57,7 +57,12 @@ def make_vision_agent(
                 frame = await current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
             except Exception as error:
                 reraise_unavailable(error, "the current camera view")
-            result = await image_query.execute(ImageQueryRequest(image=frame.image, query=req.question))
+            try:
+                result = await image_query.execute(
+                    ImageQueryRequest(image=frame.image, query=req.question)
+                )
+            except Exception as error:
+                reraise_unavailable(error, "image analysis")
             if result.available:
                 record_evidence("observed")
             return result
@@ -83,11 +88,18 @@ def make_vision_agent(
                     )
                 except Exception as error:
                     reraise_unavailable(error, "recorded video")
-                # No "observed" evidence: a recorded frame cannot support a
-                # claim about what the user holds or wears right now.
-                return await image_query.execute(
-                    ImageQueryRequest(image=frame.image, query=req.question)
-                )
+                # A recorded observation never licenses a present-tense claim;
+                # the supervisor's gate uses it only to steer the reply toward
+                # the recorded moment.
+                try:
+                    result = await image_query.execute(
+                        ImageQueryRequest(image=frame.image, query=req.question)
+                    )
+                except Exception as error:
+                    reraise_unavailable(error, "image analysis")
+                if result.available:
+                    record_evidence("observed_recorded")
+                return result
 
             tools.append(Tool(
                 "look_at_past_frame",

@@ -303,8 +303,11 @@ CASES = (
     Case(
         name="historical_vision",
         request="What color was the object I held ten seconds ago?",
-        vision="The previously held object was purple.",
+        # Phrased to lure a present-tense reply; the gate must steer the
+        # historical answer into past tense, never swallow it.
+        vision="In the recorded frame, the user is holding a purple mug.",
         required_tools=frozenset({"look_at_past_frame"}),
+        reply_contains="purple",
         # The supervisor's own conversation recall is the single expected
         # call; the camera's past is video, never the transcript.
         expected_call_counts=(("recall_conversation", 1),),

@@ -69,6 +69,11 @@ _TRUNCATED_ASK = "I think I missed the end of that."
 
 _UNOBSERVED_REPLY = "I haven't been able to observe that, so I can't say."
 
+_RECORDED_ONLY_REPLY = (
+    "I could only check a recorded frame, not your current view, so I can't"
+    " say what you're holding right now."
+)
+
 _CANCEL_PHRASES = frozenset({
     "never mind", "nevermind", "forget it", "forget that", "cancel", "cancel that", "no", "stop",
 })
@@ -138,12 +143,20 @@ _PERCEPTION_HEDGES = re.compile(
 )
 
 
+# A hedge exempts only its own clause: "I can't see clearly, but you are
+# holding a camera" still claims.
+_CLAUSE_SPLIT = re.compile(
+    r"[,;:]|\bbut\b|\band\b|\bhowever\b|\byet\b|\balthough\b|—|–|\s-\s",
+    re.IGNORECASE,
+)
+
+
 def _claims_perception(text: str) -> bool:
     return any(
-        _PERCEPTION_CLAIMS.search(sentence)
-        and not _is_question(sentence)
-        and not _PERCEPTION_HEDGES.search(sentence)
+        _PERCEPTION_CLAIMS.search(clause) and not _PERCEPTION_HEDGES.search(clause)
         for sentence in _SENTENCE_SPLIT.split(text)
+        if not _is_question(sentence)
+        for clause in _CLAUSE_SPLIT.split(sentence)
     )
 
 
@@ -400,15 +413,28 @@ class SceneSupervisor:
             await asyncio.sleep(_SCENE_SETTLE_S)
 
         perception_retried = False
-        if output and _claims_perception(output) and evidence.observed == 0:
-            logger.warning("perception claim without observation: {!r}", output[:80])
-            perception_retried = True
-            perception_nudge = (
-                "Your reply asserts what the user is holding, carrying, or"
-                " wearing, but no camera observation was made this turn."
-                " Delegate vision_agent now with that exact question and"
-                " answer only from its result; if it cannot see, say so."
+        if output and evidence.observed == 0 and _claims_perception(output):
+            logger.warning(
+                "perception claim without live observation"
+                " (observed_recorded={}): {!r}",
+                evidence.observed_recorded, output[:80],
             )
+            perception_retried = True
+            if evidence.observed_recorded > 0:
+                perception_nudge = (
+                    "Your reply asserts what the user is holding, carrying, or"
+                    " wearing right now, but this turn only consulted a"
+                    " recorded frame. Restate your answer explicitly about"
+                    " that recorded moment in past tense, or delegate"
+                    " vision_agent to look at the current view first."
+                )
+            else:
+                perception_nudge = (
+                    "Your reply asserts what the user is holding, carrying, or"
+                    " wearing, but no camera observation was made this turn."
+                    " Delegate vision_agent now with that exact question and"
+                    " answer only from its result; if it cannot see, say so."
+                )
             perception_messages = list(latest.messages) + [
                 ChatMessage(role="user", content=perception_nudge),
             ]
@@ -429,7 +455,14 @@ class SceneSupervisor:
         if evidence.observed == 0 and (
             (perception_retried and not output) or (output and _claims_perception(output))
         ):
-            output = _UNOBSERVED_REPLY
+            logger.warning(
+                "unobserved perception claim persisted"
+                " (observed_recorded={}); replacing reply {!r}",
+                evidence.observed_recorded, (output or "")[:80],
+            )
+            output = (
+                _RECORDED_ONLY_REPLY if evidence.observed_recorded > 0 else _UNOBSERVED_REPLY
+            )
         if verify_no_change:
             # Success is evidence-backed: a completion claim may stand only
             # when a scene write was applied (or the requested state already

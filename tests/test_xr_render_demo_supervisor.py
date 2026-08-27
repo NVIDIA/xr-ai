@@ -311,6 +311,109 @@ def test_perception_claim_patterns() -> None:
     assert not _claims_perception("You are pointing at the sphere I created.")
     assert not _claims_perception("The sphere is in front of you.")
     assert not _claims_perception("I looked at the camera feed.")
+    assert not _claims_perception("")
+
+    assert _claims_perception("I can't see clearly, but you are holding a camera.")
+    assert _claims_perception("I can't see the color, you are holding a camera.")
+    assert _claims_perception("I can't see the feed and you are holding a camera.")
+    assert _claims_perception("I can't see clearly — you are holding a camera.")
+    assert _claims_perception("Here's what I found: you are holding a camera.")
+    assert _claims_perception("I can't be certain; however you are holding a camera.")
+    assert _claims_perception("I can't be sure, yet you are holding a camera.")
+    assert _claims_perception("Although I can't see well, you are holding a camera.")
+    assert _claims_perception("You are holding a camera, not sure of the color.")
+
+    # Historic-present recorded phrasing still counts as a claim; the gate
+    # steers it toward past tense instead of exempting it.
+    assert _claims_perception("In the recorded frame, you are holding a purple mug.")
+    assert _claims_perception("A moment ago you were near the desk; you are holding a mug.")
+
+
+async def test_recorded_only_claim_is_steered_then_replaced(monkeypatch) -> None:
+    """With only a recorded-frame observation, a present-tense claim gets the
+    recorded-moment nudge, and a persisting claim is replaced with the honest
+    recorded-only sentence."""
+    from xr_render_demo_worker._trace import current_turn_evidence
+    from xr_render_demo_worker.supervisor import _RECORDED_ONLY_REPLY
+
+    supervisor, _fake = _make_supervisor()
+    nudges: list[str] = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        current_turn_evidence.get().observed_recorded = 1
+        nudges.extend(m.content for m in messages
+                      if m.role == "user" and "past tense" in m.content)
+        return SimpleNamespace(
+            content="In the recorded frame, you are holding a purple mug.",
+            messages=list(messages),
+            tool_calls=(),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="What was I holding ten seconds ago?", participant_id="alice"))
+    assert len(nudges) == 1
+    assert reply.response == _RECORDED_ONLY_REPLY
+
+
+async def test_recorded_claim_rephrased_stands(monkeypatch) -> None:
+    """The recorded-moment nudge that yields a past-tense answer ships."""
+    from xr_render_demo_worker._trace import current_turn_evidence
+
+    supervisor, _fake = _make_supervisor()
+    calls = 0
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        nonlocal calls
+        calls += 1
+        current_turn_evidence.get().observed_recorded = 1
+        if calls == 1:
+            return SimpleNamespace(
+                content="In the recorded frame, you are holding a purple mug.",
+                messages=list(messages),
+                tool_calls=(),
+            )
+        return SimpleNamespace(
+            content="Ten seconds ago you were holding a purple mug.",
+            messages=list(messages),
+            tool_calls=(),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="What was I holding ten seconds ago?", participant_id="alice"))
+    assert reply.response == "Ten seconds ago you were holding a purple mug."
+    assert calls == 2
+
+
+async def test_observed_empty_retry_keeps_done(monkeypatch) -> None:
+    """A retry that observes but returns no text must not be replaced with
+    the can't-say sentence; the observation happened."""
+    from xr_render_demo_worker._trace import current_turn_evidence
+
+    supervisor, _fake = _make_supervisor()
+    calls = 0
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return SimpleNamespace(
+                content="You are holding a camera.",
+                messages=list(messages),
+                tool_calls=(),
+            )
+        current_turn_evidence.get().observed += 1
+        return SimpleNamespace(content="", messages=list(messages), tool_calls=())
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="What am I holding?", participant_id="alice"))
+    assert calls == 2
+    assert reply.response == "Done."
 
 
 async def test_unobserved_claim_is_retried_then_replaced(monkeypatch) -> None:
