@@ -734,14 +734,17 @@ the turn (or a recolor found the requested color already in place), a
 completion claim is replaced with a fixed honest no-change sentence and
 any other non-question reply gets the no-change fact appended. Evidence
 is counted per turn, not per delegated task.</p></li>
-<li><p><strong>Perception gate</strong> — on every turn, not just mutating ones. A sentence
+<li><p><strong>Perception gate</strong> — on every turn, not just mutating ones. A clause
 in the reply asserting what the user is holding, carrying, wearing, or
 gripping needs a live camera observation this turn (<code class="docutils literal notranslate"><span class="pre">look_at_current_frame</span></code>
-or <code class="docutils literal notranslate"><span class="pre">resolve_physical_color</span></code>; a recorded frame does not count). Without
-one, the supervisor is sent back to look once, and a still-unobserved
-claim is replaced, never appended to, with a fixed honest can’t-say
-sentence. Questions and hedged sentences (“I can’t tell what you’re
-holding”) are left alone.</p></li>
+or <code class="docutils literal notranslate"><span class="pre">resolve_physical_color</span></code>; a recorded frame never licenses a
+present-tense claim). Without one, the supervisor is sent back once —
+steered to restate the answer about the recorded moment in past tense
+when only <code class="docutils literal notranslate"><span class="pre">look_at_past_frame</span></code> ran this turn, to look otherwise — and a
+still-unobserved claim is replaced, never appended to, with a fixed
+honest sentence saying what could not be seen. Questions and hedged
+clauses (“I can’t tell what you’re holding”) are left alone; a hedge
+exempts only its own clause.</p></li>
 <li><p><strong>Conversation history persisted</strong> — the user utterance and agent reply
 are written to <code class="docutils literal notranslate"><span class="pre">TextMemoryTools</span></code> under <code class="docutils literal notranslate"><span class="pre">{participant_id}:user</span></code> and
 <code class="docutils literal notranslate"><span class="pre">{participant_id}:agent</span></code> source keys.</p></li>

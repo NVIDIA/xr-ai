@@ -92,77 +92,36 @@ verify free space first. Keep the old directories until the relocated services
 start successfully without network access. Recreate project environments with
 `uv sync`; do not copy `.venv` directories across the move.
 
+(adding-a-server-to-a-sample)=
 
-## Adding a server to a sample
+## Connecting a sample to shared model services
 
-**1 — Add the process to the orchestrator:**
+Model services are operator-owned by the persistent `model-servers` stack.
+Application samples reuse those endpoints; they do not own model processes or
+copy server YAML into their own configuration directories. Follow
+{doc}`/guides/customizing-model-servers` to select a deployment profile, tune
+its hardware-specific server YAML, and copy compatible endpoint entries into
+the sample's models JSON with `deployment.ownership` set to `reused`.
+
+Declare each model dependency in the sample orchestrator as reuse-only so the
+process list records the external dependency without transferring lifecycle
+ownership to the sample:
 
 ```python
-PROCESSES = [
-    Process("hub",    "../../services/device-io-hub",                    "device_io_hub"),
-    Process("vlm",    "../../services/vlm-server",               "vlm_server",
-            config="yaml/vlm_server.yaml"),   # ← add as needed
-    # Pick ONE LLM backend per sample — they bind different default ports
-    # (8106 or 8107) so running more than one at once is allowed but
-    # usually unnecessary.
-    Process("llm",    "../../services/llama-nemotron-llm",       "llama_nemotron_llm_server",
-            config="yaml/llama_nemotron_llm_server.yaml"),
-    # Process("llm",  "../../services/nemotron3-nano-llm",       "nemotron3_nano_llm_server",
-    #         config="yaml/nemotron3_nano_llm_server.yaml"),
-    Process("stt",    "../../services/stt-server",               "stt_server",
-            config="yaml/stt_server.yaml"),
-    # Add these together when the application uses native document retrieval.
-    Process("embedding", "../../services/embedding-server",      "embedding_server",
-            config="yaml/embedding_server.yaml"),
-    Process("rag",    "../../services/rag-service",               "rag_service",
-            config="yaml/rag_service.yaml"),
-    # Pick one TTS server
-    Process("tts",    "../../services/piper-tts",                 "piper_tts_server",
-            config="yaml/piper_tts_server.yaml"),
-    # Process("tts",  "../../services/magpie-tts",                "magpie_tts_server",
-    #         config="yaml/magpie_tts_server.yaml"),
-    Process("worker", "worker",                                   "my_agent_worker"),
-]
+Process(
+    "vlm",
+    "../../services/vlm-server",
+    "vlm_server",
+    launch_mode="reuse",
+)
 ```
 
-The agent samples in this repository (`simple-vlm-example`,
-`tea-making-sample`, and `xr-render-demo`) support Piper TTS — it runs on CPU
-with ~100 ms/sentence latency and avoids the NeMo dep tree. Magpie is still a
-supported NVIDIA TTS option with better voice quality and multilingual support
-when GPU is available; samples that own TTS can select its process and YAML.
-
-**2 — Copy the reference YAML to your sample's `yaml/` directory:**
-
-```bash
-mkdir -p yaml
-cp ../../services/vlm-server/vlm_server.yaml ./yaml/vlm_server.yaml
-# Pick ONE LLM YAML — copy the one matching the Process you picked above.
-cp ../../services/llama-nemotron-llm/llama_nemotron_llm_server.yaml ./yaml/llama_nemotron_llm_server.yaml
-# cp ../../services/nemotron3-nano-llm/nemotron3_nano_llm_server.yaml ./yaml/nemotron3_nano_llm_server.yaml
-cp ../../services/stt-server/stt_server.yaml ./yaml/stt_server.yaml
-cp ../../services/embedding-server/embedding_server.yaml ./yaml/embedding_server.yaml
-cp ../../services/rag-service/rag_service.yaml ./yaml/rag_service.yaml
-cp ../../services/piper-tts/piper_tts_server.yaml ./yaml/piper_tts_server.yaml
-# Or for Magpie (multilingual, GPU, ~2-5 s/sentence):
-cp ../../services/magpie-tts/magpie_tts_server.yaml ./yaml/magpie_tts_server.yaml
-cp ../../services/video-memory-service/video_memory_service.yaml ./yaml/video_memory_service.yaml
-```
-
-The standalone model-service YAMLs contain `model_cache: ../../models` for their
-original `services/<project>/` location. After copying them one level deeper
-into `agent-samples/<name>/yaml/`, change that value to `../../../models` so
-the cache still resolves to the repository-root `models/` directory. Capability
-and capability configurations without a `model_cache` key need no change.
-
-`simple-vlm-example` does not copy model-service YAML or launch model servers.
-Its fixed `yaml/models.json` points at operator-owned STT, VLM, and TTS
-endpoints; the sample orchestrator only launches its hub and worker.
-
-Edit the YAML as needed (model, port, device, etc.). Set every copied path
-explicitly with `Process(config=...)`; the launcher does not discover files by
-command name.
-For RAG, also point `rag_service.yaml` at an application-owned document
-directory and a model profile containing an `embedding` role.
+The launcher skips reuse-only entries completely: it does not start, order, or
+readiness-check them. Start `model_servers` separately before the application
+sample. At startup, the sample worker probes endpoints whose models JSON entry
+uses `readiness: health` and keeps waiting until those reused services are
+available. Application capability services such as RAG remain sample-owned and
+keep their configuration with the sample that launches them.
 
 ## Calling these from a worker
 
@@ -502,7 +461,7 @@ cleanup.
   for commercial use under the
   [NVIDIA Open Model License](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/)
   and the
-  [Llama 3.1 Community License](https://www.llama.com/llama3_1/license/).
+  [Llama 3.1 Community License](https://github.com/meta-llama/llama-models/blob/main/models/llama3_1/LICENSE).
 - **nemotron3-nano-llm** is a thin wrapper around `vllm serve` for
   `NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}` (auto-selected by GPU compute
   capability). vLLM handles tool calling (`qwen3_coder` parser), reasoning
@@ -564,10 +523,11 @@ cleanup.
   When `recordings_dir` is empty, participant discovery returns an empty list
   and recorded-media operations return `recording_disabled`.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
-- Standalone service YAMLs live beside the services that support direct local
-  launch. When copying one into `agent-samples/<name>/yaml/`, set
-  `model_cache` to `../../../models` so it still resolves to the repository's
-  `models/` directory.
+- Standalone service YAMLs live beside services for direct single-service
+  launches; they are not sample configuration. Shared deployments use the
+  hardware-specific YAML under
+  `agent-samples/model-servers/yaml/<gpu-profile>/`, while samples reuse the
+  resulting endpoints through their models JSON.
 - The generic NIM wrapper has no service-local YAML. Use a hardware profile
   under `agent-samples/model-servers/yaml/<gpu-profile>/`; its
   `nim_<role>_server.yaml` files use `nim_cache`, normally

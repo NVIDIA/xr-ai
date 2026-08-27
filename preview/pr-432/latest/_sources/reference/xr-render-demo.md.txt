@@ -253,14 +253,17 @@ services. On each accepted `xr-render.user-query` event:
    completion claim is replaced with a fixed honest no-change sentence and
    any other non-question reply gets the no-change fact appended. Evidence
    is counted per turn, not per delegated task.
-4. **Perception gate** — on every turn, not just mutating ones. A sentence
+4. **Perception gate** — on every turn, not just mutating ones. A clause
    in the reply asserting what the user is holding, carrying, wearing, or
    gripping needs a live camera observation this turn (`look_at_current_frame`
-   or `resolve_physical_color`; a recorded frame does not count). Without
-   one, the supervisor is sent back to look once, and a still-unobserved
-   claim is replaced, never appended to, with a fixed honest can't-say
-   sentence. Questions and hedged sentences ("I can't tell what you're
-   holding") are left alone.
+   or `resolve_physical_color`; a recorded frame never licenses a
+   present-tense claim). Without one, the supervisor is sent back once —
+   steered to restate the answer about the recorded moment in past tense
+   when only `look_at_past_frame` ran this turn, to look otherwise — and a
+   still-unobserved claim is replaced, never appended to, with a fixed
+   honest sentence saying what could not be seen. Questions and hedged
+   clauses ("I can't tell what you're holding") are left alone; a hedge
+   exempts only its own clause.
 5. **Conversation history persisted** — the user utterance and agent reply
    are written to `TextMemoryTools` under `{participant_id}:user` and
    `{participant_id}:agent` source keys.
