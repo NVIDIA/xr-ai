@@ -591,6 +591,15 @@ the leaf is regenerated to include it on the next hub start:</p>
 </div>
 <p>Changing these addresses never rotates <code class="docutils literal notranslate"><span class="pre">root-ca.crt</span></code>, so clients do not need to
 reinstall the root after a Brev public-IP change.</p>
+<p>DeviceIOHub checks the generated certificates daily. It renews the server leaf
+30 days before expiration and reloads it for new HTTPS and WSS connections
+without restarting the hub; the root CA remains unchanged. Existing connections
+can finish using the certificate negotiated when they connected.</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">root-ca.crt</span></code> or <code class="docutils literal notranslate"><span class="pre">root-ca.key</span></code> is missing, unreadable, mismatched, or within
+30 days of expiration, DeviceIOHub replaces the root and server leaf and logs a
+warning. Previously enrolled clients reject the new chain. Reinstall the new
+<code class="docutils literal notranslate"><span class="pre">root-ca.crt</span></code> on every client using the platform-specific steps below; <code class="docutils literal notranslate"><span class="pre">/cert</span></code>
+serves the current root after the replacement.</p>
 <p>To <strong>disable</strong> TLS for <code class="docutils literal notranslate"><span class="pre">localhost</span></code>-only dev where the certificate warning is
 noise, set <code class="docutils literal notranslate"><span class="pre">web_server_tls:</span> <span class="pre">false</span></code>. With TLS off, the same-origin proxy
 serves plain <code class="docutils literal notranslate"><span class="pre">ws://</span></code> instead of <code class="docutils literal notranslate"><span class="pre">wss://</span></code>, and <code class="docutils literal notranslate"><span class="pre">localhost</span></code> is the only
