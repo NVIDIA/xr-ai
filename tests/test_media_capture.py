@@ -166,13 +166,16 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
     recorder.record_audio("device", _audio("device"))
     recorder.record_audio("agent", _audio("agent"))
     recorder.record_video(_frame())
+    recorder.record_video(_frame(pts_us=1_050_000))
+    packets = recorder._sessions["alice"].video["camera"]._packets
+    assert [packet.pts_us for packet in packets] == [1_000_000, 1_050_000]
     recorder.end_session("alice", 1_100_000)
 
     session = next(path for path in tmp_path.iterdir() if path.is_dir())
     manifest = json.loads((session / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["participant_id"] == "alice"
     assert manifest["audio"]["channels"] == {"left": "device", "right": "agent"}
-    assert manifest["video_tracks"]["camera"][0]["num_frames"] == 1
+    assert manifest["video_tracks"]["camera"][0]["num_frames"] == 2
     segment = manifest["video_tracks"]["camera"][0]
     assert segment["path"].endswith(".mkv")
     assert segment["audio_embedded"] is True
