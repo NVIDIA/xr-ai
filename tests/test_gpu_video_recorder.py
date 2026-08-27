@@ -265,12 +265,16 @@ async def test_media_capture_composites_caption_with_real_nvenc():
         assert demuxer.GetVideoStreamId() >= 0
         assert demuxer.GetAudioStreamId() >= 0
         packet_types = set()
+        video_pts = set()
         while True:
             packet = demuxer.DemuxNoSkipAudio()
             if packet.bsl == 0:
                 break
             packet_types.add("video" if packet.is_video else "audio")
+            if packet.is_video:
+                video_pts.add(packet.pts)
         assert packet_types == {"video", "audio"}
+        assert len(video_pts) > 1
         encoded = (session / segment["raw_path"]).read_bytes()
         frames = decode_h264(encoded, gpu_id=0)
         assert frames
