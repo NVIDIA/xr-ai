@@ -46,6 +46,10 @@ class _StereoWaveWriter:
     """Random-access stereo PCM writer aligned to the participant clock."""
 
     _HEADER_BYTES = 44
+    # AudioChunk timestamps are wall-clock arrival times, not sample-clock
+    # positions. Ignore scheduler jitter and short producer stalls, but retain
+    # pauses long enough to represent a genuine break in a conversation.
+    _REAL_GAP_US = 250_000
 
     def __init__(self, path: Path, *, start_us: int, sample_rate: int) -> None:
         self.path = path
@@ -54,6 +58,7 @@ class _StereoWaveWriter:
         self._stream = path.open("w+b")
         self._stream.write(b"\0" * self._HEADER_BYTES)
         self._max_frames = 0
+        self._timeline: dict[str, _AudioTimeline] = {}
 
     def add(self, direction: str, chunk: AudioChunk) -> None:
         channel_index = 0 if direction == "device" else 1
@@ -77,9 +82,25 @@ class _StereoWaveWriter:
                     mono,
                 )
         pcm = (np.clip(mono, -1.0, 1.0) * 32767).astype("<i2")
-        frame_offset = max(
-            0,
-            round((chunk.pts_us - self.start_us) * self.sample_rate / 1_000_000),
+        timeline = self._timeline.get(direction)
+        if timeline is None:
+            frame_offset = max(
+                0,
+                round((chunk.pts_us - self.start_us) * self.sample_rate / 1_000_000),
+            )
+        else:
+            frame_offset = timeline.next_frame
+            gap_us = chunk.pts_us - timeline.source_end_us
+            # Device timestamps are decoder-arrival times; even a long event-
+            # loop stall can be followed by queued, sample-contiguous frames.
+            # Agent chunks, however, stop between responses, so retain only
+            # their clearly non-jitter-sized gaps.
+            if direction == "agent" and gap_us >= self._REAL_GAP_US:
+                frame_offset += round(gap_us * self.sample_rate / 1_000_000)
+        source_duration_us = round(chunk.samples * 1_000_000 / chunk.sample_rate)
+        self._timeline[direction] = _AudioTimeline(
+            source_end_us=chunk.pts_us + source_duration_us,
+            next_frame=frame_offset + pcm.size,
         )
         byte_offset = self._HEADER_BYTES + frame_offset * 4
         byte_count = pcm.size * 4
@@ -122,6 +143,12 @@ class _StereoWaveWriter:
         self._stream.write(header)
         self._stream.truncate(self._HEADER_BYTES + data_bytes)
         self._stream.close()
+
+
+@dataclass(frozen=True, slots=True)
+class _AudioTimeline:
+    source_end_us: int
+    next_frame: int
 
 
 class _H264TrackWriter:
