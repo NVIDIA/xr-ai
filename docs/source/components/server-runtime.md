@@ -57,8 +57,9 @@ This is enforced at several layers:
   validate that the target participant is currently connected; messages for
   unknown participants are dropped with a warning.
 - Return-traffic topics (`return_audio.*`, `return_audio_flush.*`,
-  `return_data.*`) are connector-only — an agent's default subscription
-  excludes them.
+  `return_data.*`) are transport-infrastructure-only. Connectors consume them
+  for delivery and the optional capture process observes them read-only; an
+  agent's default subscription excludes them.
 - On the LiveKit side, return audio is published as one track per participant
   with subscribe permissions restricted to that participant, and return data
   is addressed with `destination_identities` (refer to
@@ -158,6 +159,44 @@ avoids pulling in the full DeviceIOHub dependency tree (LiveKit, FastAPI,
 uvicorn, GPU codecs). `device_io_hub.ipc` re-exports the same names for the
 server side.
 ```
+
+## Media-hub session capture
+
+`device_io_capture` is an optional process from the DeviceIOHub package. It
+sits downstream of `HubEndpoint`, not inside the LiveKit connector:
+
+```
+device transport → connector → HubEndpoint → agents
+                                  └────────→ capture
+                         agent return media ─┘
+```
+
+This boundary is transport-independent. Incoming camera, microphone, and data
+have already been decoded, timestamped, and tagged with participant and track
+identities. The capture process uses a normal `ProcessorEndpoint` for that
+stream and a private read-only subscription to the hub's routed return topics
+for agent audio and data. It does not expose return traffic to agent APIs.
+
+Run the hub first, then start capture from the repository root:
+
+```
+uv run --project services/device-io-hub device_io_capture \
+  --config services/device-io-hub/media_capture.yaml
+```
+
+One connection produces one participant-scoped capture bundle: captioned H.264
+video, a timestamp-aligned stereo PCM WAV (device left, agent right), exact raw
+float32 audio chunks, the complete directional data timeline, and a manifest.
+The caption panel is appended below the sensor image so composition does not
+replace camera pixels. Only configured outbound text topics appear in the
+panel; every data payload remains in `events.jsonl`.
+
+Capture frame requests are coalesced in a bounded queue, and NVENC work runs in
+dedicated threads in the capture process. Recorder overload therefore drops
+capture frames without delaying the hub's publish path. PyNvVideoCodec receives
+contiguous NV12 CPU input and emits H.264 Annex B segments with repeated
+parameter sets and no B-frames. No FFmpeg process or additional media library
+is involved.
 
 ## Per-participant return path
 
