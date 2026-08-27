@@ -91,6 +91,22 @@ def test_fresh_chain_has_required_extensions_and_sans(cert_env: Path) -> None:
     assert Path(leaf_key_path).exists()
 
 
+def test_leaf_validity_does_not_exceed_root(cert_env: Path) -> None:
+    now = datetime.datetime.now(datetime.timezone.utc)
+    root, root_key = _tls._generate_root(
+        now - datetime.timedelta(days=3650 - 45)
+    )
+    _tls._write_cert(_tls._ROOT_CERT_FILE, root)
+    _tls._write_private_key(_tls._ROOT_KEY_FILE, root_key)
+
+    leaf_path, _, root_path = _tls.ensure_development_certificates()
+    cached_root = _cert(root_path)
+    leaf = _cert(leaf_path)
+
+    assert cached_root.serial_number == root.serial_number
+    assert leaf.not_valid_after_utc == cached_root.not_valid_after_utc
+
+
 def test_openssl_verifies_leaf_against_root(cert_env: Path) -> None:
     if shutil.which("openssl") is None:
         pytest.skip("openssl not installed")

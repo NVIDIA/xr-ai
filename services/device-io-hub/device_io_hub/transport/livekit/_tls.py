@@ -248,6 +248,10 @@ def _generate_leaf(
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     public_key = key.public_key()
     san = [_san_general_name(entry) for entry in sorted(san_entries)]
+    not_after = min(
+        now + datetime.timedelta(days=397),
+        root.not_valid_after_utc,
+    )
     cert = (
         x509.CertificateBuilder()
         .subject_name(
@@ -257,7 +261,7 @@ def _generate_leaf(
         .public_key(public_key)
         .serial_number(x509.random_serial_number())
         .not_valid_before(now - datetime.timedelta(minutes=5))
-        .not_valid_after(now + datetime.timedelta(days=397))
+        .not_valid_after(not_after)
         .add_extension(
             x509.SubjectAlternativeName([name for name in san if name is not None]),
             critical=False,
