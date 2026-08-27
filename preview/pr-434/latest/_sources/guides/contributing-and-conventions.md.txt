@@ -57,7 +57,10 @@ The root `uv.toml` records the repository's dependency qualification cutoff.
 Repository CI passes it explicitly to uv, so fresh resolutions ignore
 package-index artifacts uploaded after that timestamp while normal
 compatibility ranges stay in package metadata. Standalone nested projects do
-not inherit the root file implicitly; run uv from the repository root with
-`--config-file uv.toml` as shown above. To qualify newer dependencies, advance
-the cutoff in a dedicated change, resolve every project, and run the full test
-suite. The generated lockfiles are validation artifacts and remain gitignored.
+not always inherit the root file: uv stops upward config discovery at a nearer
+`[tool.uv]` table, and most projects define `[tool.uv.sources]`. Run uv from the
+repository root with `--config-file uv.toml` as shown above. To qualify newer
+dependencies, advance the cutoff in a dedicated change, resolve every project
+with `uv --config-file uv.toml lock --upgrade --project <directory>`, and run
+the full test suite. The generated lockfiles are validation artifacts and remain
+gitignored.

@@ -434,7 +434,9 @@ required for the browser camera tests.</p>
 uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>pytest<span class="w"> </span>-v
 </pre></div>
 </div>
-<p>CI runs the same project on Python 3.11 and 3.12 with:</p>
+<p>CI runs the same selection on Python 3.11 and 3.12 from <code class="docutils literal notranslate"><span class="pre">tests/</span></code>, with the
+project environment at the repository root for nltk compatibility. The
+equivalent repository-root command is:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>pytest<span class="w"> </span>-v<span class="w"> </span>--tb<span class="o">=</span>short<span class="w"> </span>--color<span class="o">=</span>yes<span class="w"> </span>-m<span class="w"> </span><span class="s2">"not gpu"</span>
 </pre></div>
