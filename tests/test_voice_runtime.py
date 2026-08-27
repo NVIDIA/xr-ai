@@ -17,6 +17,7 @@ import nemo_relay
 import pytest
 from pydantic import ValidationError
 from xr_ai_hub import DataMessage
+from xr_ai_hub._capture import CAPTURE_STT_TOPIC
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_voice import (
     VOICE_OUTPUT_TOPIC,
@@ -39,6 +40,9 @@ PARTICIPANT_LEFT_TOPIC = Topic("test.participant-left", VoiceParticipantLeft)
 INTERRUPTED_TOPIC = Topic("test.interrupted", VoiceInterrupted)
 
 class _Endpoint:
+    def __init__(self) -> None:
+        self.return_data: list[DataMessage] = []
+
     def on_audio(self, callback):
         self.audio_callback = callback
 
@@ -55,6 +59,9 @@ class _Endpoint:
 
         return unsubscribe
 
+    async def send_return_data(self, message: DataMessage) -> None:
+        self.return_data.append(message)
+
 
 class _Transport:
     def __init__(self) -> None:
@@ -63,6 +70,9 @@ class _Transport:
 
     def set_target_participant(self, participant_id: str) -> None:
         self.target_participant = participant_id
+
+    async def send_return_data(self, message: DataMessage) -> None:
+        await self.endpoint.send_return_data(message)
 
 
 class _Session:
@@ -392,6 +402,9 @@ async def test_voice_agent_publishes_final_transcript_before_query_gating() -> N
         )
     ]
     assert queries.messages == []
+    assert session.endpoint.return_data == [
+        DataMessage("alice", CAPTURE_STT_TOPIC, 123, b"background conversation")
+    ]
     assert VOICE_TRANSCRIPT_TOPIC.telemetry == "full"
 
 

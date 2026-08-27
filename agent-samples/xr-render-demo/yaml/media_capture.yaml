@@ -15,8 +15,6 @@ frame_queue_size: 2
 encoder_workers: 2
 audio_sample_rate: 48000
 
-overlay_topics:
-  - agent.response
 overlay_seconds: 12.0
 overlay_lines: 4
 max_total_bytes: 10737418240

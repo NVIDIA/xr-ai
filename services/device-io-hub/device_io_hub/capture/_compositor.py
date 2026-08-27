@@ -60,30 +60,37 @@ def compose_caption(
     frame: FrameData,
     caption: str,
     *,
+    data_feed: tuple[str, ...] = (),
     max_lines: int,
 ) -> tuple[np.ndarray, int, int]:
-    """Append a stable caption panel while preserving every sensor pixel."""
+    """Add a primary caption below the sensor and a scrolling data panel."""
     if frame.width % 2 or frame.height % 2:
         raise ValueError("NV12 capture requires even video dimensions")
     source = _to_nv12(frame.data, frame.width, frame.height, frame.fmt)
     if source is None:
         raise ValueError(f"unsupported capture pixel format: {frame.fmt!r}")
 
-    scale = max(1, min(4, frame.width // 480 + 1))
-    padding = 4 * scale
-    line_height = 8 * scale
-    panel_height = padding * 2 + max_lines * line_height
+    main_scale = max(2, min(4, frame.width // 480 + 1))
+    main_padding = 4 * main_scale
+    main_line_height = 8 * main_scale
+    panel_height = main_padding * 2 + max_lines * main_line_height
     panel_height += panel_height % 2
     output_height = frame.height + panel_height
+    side_width = max(160, frame.width * 2 // 5)
+    side_width += side_width % 2
+    output_width = frame.width + side_width
 
-    output = np.empty((output_height * 3 // 2, frame.width), dtype=np.uint8)
-    output[:output_height] = 16
-    output[output_height:] = 128
-    output[:frame.height] = source[:frame.height]
-    output[output_height:output_height + frame.height // 2] = source[frame.height:]
-    output[frame.height:frame.height + 2] = 96
+    output = np.empty((output_height * 3 // 2, output_width), dtype=np.uint8)
+    luma = output[:output_height]
+    chroma = output[output_height:]
+    luma[:] = 16
+    chroma[:] = 128
+    luma[:frame.height, :frame.width] = source[:frame.height]
+    chroma[:frame.height // 2, :frame.width] = source[frame.height:]
+    luma[frame.height:frame.height + 2, :frame.width] = 96
+    luma[:, frame.width:frame.width + 2] = 96
 
-    max_chars = max(1, (frame.width - 2 * padding) // (6 * scale))
+    max_chars = max(1, (frame.width - 2 * main_padding) // (6 * main_scale))
     normalized = " ".join(caption.split())
     lines = textwrap.wrap(
         normalized,
@@ -95,8 +102,30 @@ def compose_caption(
         _draw_line(
             output[:output_height],
             line,
-            padding,
-            frame.height + padding + index * line_height,
-            scale,
+            main_padding,
+            frame.height + main_padding + index * main_line_height,
+            main_scale,
         )
-    return np.ascontiguousarray(output), frame.width, output_height
+
+    data_scale = max(1, main_scale - 1)
+    data_padding = 4 * data_scale
+    data_line_height = 8 * data_scale
+    data_max_chars = max(1, (side_width - 2 * data_padding) // (6 * data_scale))
+    data_capacity = max(1, (output_height - 2 * data_padding) // data_line_height)
+    data_lines: list[str] = []
+    for item in data_feed:
+        data_lines.extend(textwrap.wrap(
+            " ".join(item.split()),
+            width=data_max_chars,
+            replace_whitespace=True,
+            drop_whitespace=True,
+        ))
+    for index, line in enumerate(data_lines[-data_capacity:]):
+        _draw_line(
+            luma,
+            line,
+            frame.width + data_padding,
+            data_padding + index * data_line_height,
+            data_scale,
+        )
+    return np.ascontiguousarray(output), output_width, output_height

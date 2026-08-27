@@ -31,6 +31,7 @@ from __future__ import annotations
 import asyncio
 import io
 import re
+import time
 import wave
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -49,6 +50,7 @@ from pipecat.frames.frames import (
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from xr_ai_hub import DataMessage
+from xr_ai_hub._capture import CAPTURE_TTS_TOPIC
 from xr_ai_models import TTSService
 from xr_ai_models._protocols import _StreamingTTSService, _TTSChunk
 from xr_ai_voicegate import VoiceGate
@@ -132,6 +134,7 @@ class StreamingTtsProcessor(FrameProcessor):
         self._text_topic = text_topic
         # Per-participant streaming state, keyed by pid.
         self._by_pid: dict[str, _TtsPidState] = {}
+        self._capture_tasks: set[asyncio.Task[None]] = set()
 
     # ── pipecat frame entrypoint ──────────────────────────────────────────────
 
@@ -293,11 +296,19 @@ class StreamingTtsProcessor(FrameProcessor):
             await queue.put(_TtsStreamRequest(sentence, pid))
         else:
             task = asyncio.create_task(
-                self._synthesize(sentence, pid=pid),
+                self._synthesize_with_caption(sentence, pid=pid),
                 name=f"tts-synth-{pid}-{st.synth_seq}",
                 context=nemo_relay.fork_asyncio_context(),
             )
             await queue.put((task, pid))
+
+    async def _synthesize_with_caption(
+        self,
+        text: str,
+        *,
+        pid: str,
+    ) -> tuple[bytes, str]:
+        return await self._synthesize(text, pid=pid), text
 
     async def _synthesize(self, text: str, *, pid: str) -> bytes:
         with nemo_relay.scope.scope(
@@ -334,7 +345,7 @@ class StreamingTtsProcessor(FrameProcessor):
                     continue
                 task, pid = item
                 try:
-                    wav = await task
+                    wav, text = await task
                 except asyncio.CancelledError:
                     raise
                 except Exception:
@@ -348,6 +359,7 @@ class StreamingTtsProcessor(FrameProcessor):
                     self._voice_gate.observe_tts_wav(wav)
                 except Exception:
                     logger.exception("observe_tts_wav raised pid={!r}", pid)
+                self._schedule_capture_caption(pid, text)
                 await self._push_wav(wav, pid=pid)
         except asyncio.CancelledError:
             return
@@ -367,6 +379,7 @@ class StreamingTtsProcessor(FrameProcessor):
                         self._observe_pcm(chunk)
                     except Exception:
                         logger.exception("observe streaming TTS PCM raised pid={!r}", pid)
+                    self._schedule_capture_caption(pid, text)
                     first = False
                 out = OutputAudioRawFrame(
                     audio=chunk.data,
@@ -393,6 +406,41 @@ class StreamingTtsProcessor(FrameProcessor):
             return
         for out in frames:
             await self.push_frame(out)
+
+    async def _publish_capture_caption(self, pid: str, text: str) -> None:
+        if not pid or self._transport is None:
+            return
+        sender = getattr(self._transport, "send_return_data", None)
+        if sender is None:
+            return
+        try:
+            await sender(DataMessage(
+                participant_id=pid,
+                topic=CAPTURE_TTS_TOPIC,
+                pts_us=time.time_ns() // 1_000,
+                data=text.encode(),
+            ))
+        except Exception:
+            logger.opt(exception=True).debug(
+                "capture TTS caption failed pid={!r}", pid,
+            )
+
+    def _schedule_capture_caption(self, pid: str, text: str) -> None:
+        if not pid or self._transport is None:
+            return
+        task = asyncio.create_task(
+            self._publish_capture_caption(pid, text),
+            name=f"capture-tts-caption-{pid}",
+        )
+        self._capture_tasks.add(task)
+        task.add_done_callback(self._capture_tasks.discard)
+
+    async def _stop_capture_tasks(self) -> None:
+        tasks = tuple(self._capture_tasks)
+        self._capture_tasks.clear()
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _teardown_sender(self, st: _TtsPidState) -> None:
         """Cancel one participant's sender task and drop any parked synth tasks."""
@@ -479,3 +527,4 @@ class StreamingTtsProcessor(FrameProcessor):
         for pid in list(self._by_pid):
             st = self._by_pid.pop(pid)
             await self._teardown_sender(st)
+        await self._stop_capture_tasks()
