@@ -9,19 +9,21 @@ connect a real :class:`RoomClient` to it. They are tagged ``gpu`` so they
 only run on a developer box where Docker is available — GitHub CI skips
 the marker entirely.
 
-The first test exercises :class:`LiveKitDocker` end-to-end (start, port
-opens, stop, port closes, container gone). The second reuses a live
-container via a module-scoped fixture and verifies that
-``RoomClient.connect()`` reaches the ``CONN_CONNECTED`` state and that
-``disconnect()`` tears down cleanly.
+The suite exercises :class:`LiveKitDocker` end-to-end, verifies that
+``RoomClient.connect()`` reaches the ``CONN_CONNECTED`` state, and runs a
+fresh LiveKit Python process through DeviceIOHub's generated TLS chain and WSS
+proxy. That final path executes LiveKit's native Rust TLS verifier.
 """
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
 import subprocess
+import sys
 import uuid
 from dataclasses import replace
+from pathlib import Path
 from typing import AsyncIterator
 
 import pytest
@@ -30,8 +32,11 @@ from livekit import rtc
 from _helpers_subprocess import pick_free_port
 from device_io_hub.ipc                       import ConnectorEndpoint
 from device_io_hub.transport.livekit         import _docker as _docker_mod
+from device_io_hub.transport.livekit         import _tls as _tls_mod
 from device_io_hub.transport.livekit._docker import LiveKitDocker
 from device_io_hub.transport.livekit._room_client import RoomClient
+from device_io_hub.transport.livekit._token import make_client_token
+from device_io_hub.transport.livekit._web_server import WebServer
 from device_io_hub.transport.livekit.config       import LiveKitConnectorConfig
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
@@ -205,4 +210,81 @@ async def test_room_client_connect(
 
     assert client._room.connection_state != rtc.ConnectionState.CONN_CONNECTED, (
         "room still reports CONN_CONNECTED after disconnect()"
+    )
+
+
+async def test_livekit_rust_tls_accepts_generated_leaf(
+    live_docker: LiveKitConnectorConfig,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """Regress CaUsedAsEndEntity in LiveKit Python's Rust TLS verifier."""
+    monkeypatch.setattr(_tls_mod, "_CERT_DIR", tmp_path)
+    monkeypatch.setattr(_tls_mod, "_ROOT_CERT_FILE", tmp_path / "root-ca.crt")
+    monkeypatch.setattr(_tls_mod, "_ROOT_KEY_FILE", tmp_path / "root-ca.key")
+    monkeypatch.setattr(_tls_mod, "_CERT_FILE", tmp_path / "web-server.crt")
+    monkeypatch.setattr(_tls_mod, "_KEY_FILE", tmp_path / "web-server.key")
+    monkeypatch.setattr(_tls_mod, "_local_ipv4_addrs", lambda: {"127.0.0.1"})
+    port = pick_free_port(8080)
+    cfg = replace(
+        live_docker,
+        web_server_host="127.0.0.1",
+        web_server_port=port,
+        web_server_tls=True,
+    )
+    token = make_client_token(cfg, identity=f"rust-tls-{uuid.uuid4().hex[:6]}", ttl=None)
+    web_server = WebServer(cfg)
+    await web_server.start()
+    try:
+        # A subprocess ensures SSL_CERT_FILE is set before the LiveKit FFI
+        # initializes its rustls root store.
+        script = """
+import asyncio
+import ssl
+import sys
+import urllib.request
+from pathlib import Path
+from livekit import rtc
+
+async def main():
+    endpoint = sys.argv[1]
+    root_path = sys.argv[3]
+    context = ssl.create_default_context(cafile=root_path)
+    with urllib.request.urlopen(f"https://{endpoint}/cert", context=context) as response:
+        cert = response.read()
+    assert cert == Path(root_path).read_bytes()
+    assert cert != Path(sys.argv[4]).read_bytes()
+    assert b"PRIVATE KEY" not in cert
+
+    room = rtc.Room()
+    await room.connect(f"wss://{endpoint}", sys.argv[2])
+    assert room.connection_state == rtc.ConnectionState.CONN_CONNECTED
+    await room.disconnect()
+
+asyncio.run(main())
+"""
+        env = os.environ.copy()
+        env["SSL_CERT_FILE"] = str(_tls_mod._ROOT_CERT_FILE)
+        result = await asyncio.to_thread(
+            subprocess.run,
+            [
+                sys.executable,
+                "-c",
+                script,
+                f"localhost:{port}",
+                token,
+                str(_tls_mod._ROOT_CERT_FILE),
+                str(_tls_mod._CERT_FILE),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30.0,
+            env=env,
+        )
+    finally:
+        await web_server.stop()
+
+    assert result.returncode == 0, (
+        f"LiveKit Python/Rust TLS connection failed\n"
+        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
