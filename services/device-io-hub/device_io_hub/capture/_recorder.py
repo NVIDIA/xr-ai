@@ -18,6 +18,7 @@ from loguru import logger
 from xr_ai_hub import AudioChunk, DataMessage, FrameData
 
 from ._compositor import compose_caption
+from ._matroska import VideoPacket, mux_h264_pcm
 from .config import CaptureConfig
 
 
@@ -31,14 +32,14 @@ def _write_json_line(stream, value: dict) -> None:
     stream.flush()
 
 
-def _packet_data(packets: object) -> list[bytes]:
+def _encoded_packets(packets: object) -> list[dict]:
     if not isinstance(packets, list):
         raise TypeError(f"unexpected PyNvVideoCodec packet collection: {type(packets).__name__}")
-    output: list[bytes] = []
+    output: list[dict] = []
     for packet in packets:
         if not isinstance(packet, dict) or not isinstance(packet.get("data"), bytes):
             raise TypeError(f"unexpected PyNvVideoCodec encoded packet: {packet!r}")
-        output.append(packet["data"])
+        output.append(packet)
     return output
 
 
@@ -173,6 +174,7 @@ class _H264TrackWriter:
         self._last_pts_us = 0
         self._segment_index = 0
         self._active: dict | None = None
+        self._packets: list[VideoPacket] = []
         self.segments: list[dict] = []
 
     def write(self, frame: FrameData, caption: str) -> None:
@@ -186,8 +188,10 @@ class _H264TrackWriter:
         )
         if self._encoder is None or (width, height) != (self._width, self._height):
             self._start_segment(width, height, frame.pts_us)
-        for payload in _packet_data(self._encoder.Encode(nv12)):
-            self._stream.write(payload)
+        picture_params = self._nvc.NV_ENC_PIC_PARAMS()
+        picture_params.inputTimeStamp = frame.pts_us
+        for packet in _encoded_packets(self._encoder.Encode(nv12, picture_params)):
+            self._write_packet(packet, fallback_pts_us=frame.pts_us)
         self._last_pts_us = frame.pts_us
         self._active["end_us"] = frame.pts_us
         self._active["num_frames"] += 1
@@ -230,13 +234,28 @@ class _H264TrackWriter:
             "height": height,
             "fps": self._config.sample_fps,
         }
+        self._packets = []
+
+    def _write_packet(self, packet: dict, *, fallback_pts_us: int) -> None:
+        payload = packet["data"]
+        offset = self._stream.tell()
+        self._stream.write(payload)
+        picture_type = int(packet.get("picture_type", 0))
+        self._packets.append(
+            VideoPacket(
+                offset=offset,
+                size=len(payload),
+                pts_us=int(packet.get("timestamp", fallback_pts_us)),
+                key_frame=picture_type in (2, 3),
+            )
+        )
 
     def _finish_segment(self) -> None:
         if self._encoder is None:
             return
         try:
-            for payload in _packet_data(self._encoder.EndEncode()):
-                self._stream.write(payload)
+            for packet in _encoded_packets(self._encoder.EndEncode()):
+                self._write_packet(packet, fallback_pts_us=self._last_pts_us)
         except Exception as exc:
             logger.warning("media capture NVENC flush failed track={!r}: {}", self._track_id, exc)
         finally:
@@ -246,8 +265,10 @@ class _H264TrackWriter:
         if self._active is not None:
             path = self._root.parent / self._active["path"]
             self._active["size_bytes"] = path.stat().st_size
+            self._active["_packets"] = self._packets
             self.segments.append(self._active)
             self._active = None
+            self._packets = []
 
     def close(self) -> None:
         self._finish_segment()
@@ -441,6 +462,7 @@ class SessionRecorder:
             for writer in session.video.values():
                 writer.close()
             session.conversation.close()
+            self._mux_video(session, pts_us)
             for stream in session.raw_audio.values():
                 stream.close()
             session.audio_index.close()
@@ -471,6 +493,52 @@ class SessionRecorder:
             )
         logger.info("media capture completed participant={!r} path={}", participant_id, session.root)
         self._prune_completed()
+
+    def _mux_video(self, session: _ParticipantSession, end_us: int) -> None:
+        wave_path = session.root / "audio" / "conversation.wav"
+        sample_rate = self._config.audio_sample_rate
+        for writer in session.video.values():
+            for index, segment in enumerate(writer.segments):
+                raw_path = session.root / segment["path"]
+                muxed_path = raw_path.with_suffix(".mkv")
+                next_start_us = (
+                    writer.segments[index + 1]["start_us"]
+                    if index + 1 < len(writer.segments)
+                    else end_us
+                )
+                start_frame = round(
+                    (segment["start_us"] - session.start_us)
+                    * sample_rate
+                    / 1_000_000
+                )
+                end_frame = round(
+                    (next_start_us - session.start_us)
+                    * sample_rate
+                    / 1_000_000
+                )
+                packets = segment.pop("_packets")
+                try:
+                    mux_h264_pcm(
+                        output_path=muxed_path,
+                        h264_path=raw_path,
+                        packets=packets,
+                        wave_path=wave_path,
+                        audio_start_frame=start_frame,
+                        audio_end_frame=end_frame,
+                        width=segment["width"],
+                        height=segment["height"],
+                        fps=segment["fps"],
+                    )
+                except Exception as exc:
+                    muxed_path.unlink(missing_ok=True)
+                    logger.warning("media capture A/V mux failed path={}: {}", raw_path, exc)
+                    segment["audio_embedded"] = False
+                    continue
+                segment["raw_path"] = segment["path"]
+                segment["raw_size_bytes"] = segment["size_bytes"]
+                segment["path"] = str(muxed_path.relative_to(session.root))
+                segment["size_bytes"] = muxed_path.stat().st_size
+                segment["audio_embedded"] = True
 
     def _event(self, session: _ParticipantSession, kind: str, pts_us: int, **fields) -> None:
         with session.lock:

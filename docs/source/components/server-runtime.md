@@ -184,9 +184,10 @@ uv run --project services/device-io-hub device_io_capture \
   --config services/device-io-hub/media_capture.yaml
 ```
 
-One connection produces one participant-scoped capture bundle: captioned H.264
-video, a timestamp-aligned stereo PCM WAV (device left, agent right), exact raw
-float32 audio chunks, the complete directional data timeline, and a manifest.
+One connection produces one participant-scoped capture bundle: playable
+Matroska video with timestamp-aligned stereo PCM embedded (device left, agent
+right), the source H.264 and WAV tracks, exact raw float32 audio chunks, the
+complete directional data timeline, and a manifest.
 The caption panel is appended below the sensor image so composition does not
 replace camera pixels. Only configured outbound text topics appear in the
 panel; every data payload remains in `events.jsonl`.
@@ -195,8 +196,10 @@ Capture frame requests are coalesced in a bounded queue, and NVENC work runs in
 dedicated threads in the capture process. Recorder overload therefore drops
 capture frames without delaying the hub's publish path. PyNvVideoCodec receives
 contiguous NV12 CPU input and emits H.264 Annex B segments with repeated
-parameter sets and no B-frames. No FFmpeg process or additional media library
-is involved.
+parameter sets and no B-frames. At session finalization, a private lightweight
+muxer packages each H.264 segment and its matching PCM window into `.mkv`; this
+does not affect the live path. No FFmpeg process or additional media library is
+involved.
 
 ## Per-participant return path
 

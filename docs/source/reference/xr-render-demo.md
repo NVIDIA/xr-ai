@@ -147,9 +147,10 @@ return audio and data on the hub publisher. It never joins the LiveKit room.
 Each participant connection creates a timestamped directory under
 `~/.local/share/xr-ai/captures/xr-render-demo/` containing:
 
-- NVENC H.264 segments under `video/`. A fixed lower panel is appended outside
-  the sensor image and displays recent `agent.response` text without replacing
-  camera pixels.
+- Playable `.mkv` segments under `video/`, with NVENC H.264 video and stereo
+  audio embedded. A fixed lower panel is appended outside the sensor image and
+  displays recent `agent.response` text without replacing camera pixels. The
+  source `.264` segment is retained beside each `.mkv`.
 - `audio/conversation.wav`, with device input on the left and agent output on
   the right, aligned by hub timestamps. Exact float32 chunks remain in
   `device.f32le` and `agent.f32le`, indexed by `chunks.jsonl`.
@@ -162,9 +163,9 @@ NVENC work runs behind a bounded queue in the capture process. When capture is
 slower than the live stream, it replaces old pending frame requests and records
 the drop count rather than adding latency to DeviceIOHub or the agent. The
 process uses DeviceIOHub's existing NumPy, ZMQ, and PyNvVideoCodec dependencies;
-it does not require FFmpeg or a media-container library. Remove the `capture`
-entry from `main.py` when recording is prohibited, and treat the output as
-sensitive device data.
+it finalizes the `.mkv` locally and does not require FFmpeg or a media-container
+library. Remove the `capture` entry from `main.py` when recording is prohibited,
+and treat the output as sensitive device data.
 
 ## The LLM server
 
