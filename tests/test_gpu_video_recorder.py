@@ -258,7 +258,7 @@ async def test_media_capture_composites_caption_with_real_nvenc():
         session = next(path for path in Path(out_dir).iterdir() if path.is_dir())
         manifest = json.loads((session / "manifest.json").read_text())
         segment = manifest["video_tracks"]["camera"][0]
-        assert segment["width"] == width
+        assert segment["width"] > width
         assert segment["height"] > height
         assert segment["audio_embedded"] is True
         demuxer = PyNvVideoCodec.CreateDemuxer(str(session / segment["path"]))
@@ -278,4 +278,7 @@ async def test_media_capture_composites_caption_with_real_nvenc():
         encoded = (session / segment["raw_path"]).read_bytes()
         frames = decode_h264(encoded, gpu_id=0)
         assert frames
-        assert frames[0].shape == (segment["height"] * 3 // 2, width)
+        assert frames[0].shape == (
+            segment["height"] * 3 // 2,
+            segment["width"],
+        )

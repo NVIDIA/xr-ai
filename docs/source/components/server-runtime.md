@@ -188,9 +188,13 @@ One connection produces one participant-scoped capture bundle: playable
 Matroska video with timestamp-aligned stereo PCM embedded (device left, agent
 right), the source H.264 and WAV tracks, exact raw float32 audio chunks, the
 complete directional data timeline, and a manifest.
-The caption panel is appended below the sensor image so composition does not
-replace camera pixels. Only configured outbound text topics appear in the
-panel; every data payload remains in `events.jsonl`.
+Final STT and the text actually sent to TTS appear as the large primary caption
+below the sensor image. Every UTF-8 data-channel message, inbound or outbound,
+scrolls through a smaller right-side panel with its direction and topic. Binary
+data is not rendered, but every data payload remains in `events.jsonl`. Both
+panels sit outside the sensor image, so composition never replaces camera
+pixels. Reserved speech-caption metadata stays inside hub IPC and is never
+forwarded to the client data channel.
 
 Capture frame requests are coalesced in a bounded queue, and NVENC work runs in
 dedicated threads in the capture process. Recorder overload therefore drops

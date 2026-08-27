@@ -3097,6 +3097,42 @@ class _RecordingTransport:
 
 
 @pytest.mark.asyncio
+async def test_streaming_tts_publishes_spoken_capture_caption():
+    from xr_ai_hub._capture import CAPTURE_TTS_TOPIC
+
+    tts = _FakeTts()
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    transport = _RecordingTransport()
+    proc = StreamingTtsProcessor(
+        tts=tts,
+        voice_gate=gate,
+        transport=transport,
+    )
+    text = TextFrame(text="Spoken sentence.")
+    text.transport_destination = "alice"
+
+    await _run_chain(
+        proc,
+        sends=[
+            text,
+            AssistantResponseEndFrame(
+                pid="alice",
+                text="Spoken sentence.",
+                pts_us=1,
+            ),
+        ],
+        per_send_delay_s=0.5,
+    )
+
+    assert len(transport.sends) == 1
+    message = transport.sends[0]
+    assert message.participant_id == "alice"
+    assert message.topic == CAPTURE_TTS_TOPIC
+    assert message.data == b"Spoken sentence."
+    assert message.pts_us > 0
+
+
+@pytest.mark.asyncio
 async def test_streaming_tts_echoes_data_when_topic_set():
     tts  = _FakeTts()
     gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)

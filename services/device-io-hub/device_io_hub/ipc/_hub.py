@@ -49,6 +49,7 @@ from xr_ai_hub import (AGENT_STATUS_TOPIC, AudioChunk, ConnectorRegistration,
                        ControlMessage, DataMessage, FrameData, MsgType,
                        ParticipantEvent, ReturnAudioFlush, ShmRingBuffer, SlotView,
                        decode, encode)
+from xr_ai_hub._capture import CAPTURE_PUBLISH_PREFIX, CAPTURE_TOPICS
 
 
 def _now_us() -> int:
@@ -200,6 +201,13 @@ class HubEndpoint:
             )
             return
         topic = f"return_data.{msg.participant_id}.{msg.topic}".encode()
+        await self._pub.send_multipart([topic, encode(MsgType.RETURN_DATA, msg)])
+
+    async def _send_capture_data(self, msg: DataMessage) -> None:
+        """Publish reserved capture metadata without forwarding it to clients."""
+        if not self._is_connected(msg.participant_id):
+            return
+        topic = CAPTURE_PUBLISH_PREFIX + f"{msg.participant_id}.{msg.topic}".encode()
         await self._pub.send_multipart([topic, encode(MsgType.RETURN_DATA, msg)])
 
     async def send_return_audio_flush(self, flush: ReturnAudioFlush) -> None:
@@ -479,6 +487,9 @@ class HubEndpoint:
             await self.send_return_audio(msg)
 
         elif type_id == MsgType.RETURN_DATA:
+            if msg.topic in CAPTURE_TOPICS:
+                await self._send_capture_data(msg)
+                return
             # Agent status is per-agent state; the client's is the aggregate,
             # so it is folded here rather than forwarded straight through.
             if msg.topic == AGENT_STATUS_TOPIC:
