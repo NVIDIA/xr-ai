@@ -3098,7 +3098,7 @@ class _RecordingTransport:
 
 @pytest.mark.asyncio
 async def test_streaming_tts_publishes_spoken_capture_caption():
-    from xr_ai_hub._capture import CAPTURE_TTS_TOPIC
+    from xr_ai_voice._capture_frames import _CaptureTtsCaptionFrame
 
     tts = _FakeTts()
     gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
@@ -3111,7 +3111,7 @@ async def test_streaming_tts_publishes_spoken_capture_caption():
     text = TextFrame(text="Spoken sentence.")
     text.transport_destination = "alice"
 
-    await _run_chain(
+    sink = await _run_chain(
         proc,
         sends=[
             text,
@@ -3124,12 +3124,19 @@ async def test_streaming_tts_publishes_spoken_capture_caption():
         per_send_delay_s=0.5,
     )
 
-    assert len(transport.sends) == 1
-    message = transport.sends[0]
-    assert message.participant_id == "alice"
-    assert message.topic == CAPTURE_TTS_TOPIC
-    assert message.data == b"Spoken sentence."
-    assert message.pts_us > 0
+    markers = [
+        frame
+        for frame in sink.frames
+        if isinstance(frame, _CaptureTtsCaptionFrame)
+    ]
+    assert [marker.text for marker in markers] == ["Spoken sentence."]
+    assert markers[0].transport_destination == "alice"
+    assert sink.frames.index(markers[0]) < next(
+        index
+        for index, frame in enumerate(sink.frames)
+        if isinstance(frame, OutputAudioRawFrame)
+    )
+    assert transport.sends == []
 
 
 @pytest.mark.asyncio
@@ -3500,6 +3507,70 @@ async def test_output_transport_writes_audio_to_target_participant():
     assert captured[0].participant_id == "web-client"
     assert captured[0].track_id       == "tts"
     assert captured[0].sample_rate    == TTS_NATIVE_SAMPLE_RATE
+
+
+@pytest.mark.asyncio
+async def test_output_transport_publishes_caption_with_first_paced_audio_chunk():
+    from pipecat.transports.base_transport import TransportParams
+    from xr_ai_hub import AudioChunk, DataMessage
+    from xr_ai_hub._capture import CAPTURE_TTS_TOPIC
+    from xr_ai_voice._capture_frames import _CaptureTtsCaptionFrame
+    from xr_ai_voice._transport import DeviceIOHubOutputTransport
+
+    events: list[tuple[str, AudioChunk | DataMessage]] = []
+
+    class _StubEndpoint:
+        async def send_return_audio(self, chunk: AudioChunk) -> None:
+            events.append(("audio", chunk))
+
+        async def send_return_data(self, message: DataMessage) -> None:
+            events.append(("caption", message))
+
+    transport = DeviceIOHubOutputTransport(_StubEndpoint(), TransportParams())
+    transport.set_target_participant("alice")
+    marker = _CaptureTtsCaptionFrame("First sentence.")
+    marker.transport_destination = "alice"
+
+    await transport.write_transport_frame(marker)
+    assert events == []
+
+    audio = OutputAudioRawFrame(
+        audio=b"\x00\x00" * 320,
+        sample_rate=16_000,
+        num_channels=1,
+    )
+    assert await transport.write_audio_frame(audio) is True
+    await asyncio.gather(*tuple(transport._capture_caption_tasks))  # noqa: SLF001
+
+    assert [kind for kind, _ in events] == ["audio", "caption"]
+    chunk = events[0][1]
+    caption = events[1][1]
+    assert isinstance(chunk, AudioChunk)
+    assert isinstance(caption, DataMessage)
+    assert caption.participant_id == "alice"
+    assert caption.topic == CAPTURE_TTS_TOPIC
+    assert caption.data == b"First sentence."
+    assert caption.pts_us == chunk.pts_us
+
+    next_marker = _CaptureTtsCaptionFrame("Second sentence.")
+    next_marker.transport_destination = "alice"
+    await transport.write_transport_frame(next_marker)
+    assert [kind for kind, _ in events] == ["audio", "caption"]
+
+    assert await transport.write_audio_frame(audio) is True
+    await asyncio.gather(*tuple(transport._capture_caption_tasks))  # noqa: SLF001
+    assert [kind for kind, _ in events] == [
+        "audio",
+        "caption",
+        "audio",
+        "caption",
+    ]
+    second_chunk = events[2][1]
+    second_caption = events[3][1]
+    assert isinstance(second_chunk, AudioChunk)
+    assert isinstance(second_caption, DataMessage)
+    assert second_caption.data == b"Second sentence."
+    assert second_caption.pts_us == second_chunk.pts_us
 
 
 @pytest.mark.asyncio

@@ -189,10 +189,13 @@ Matroska video with timestamp-aligned stereo PCM embedded (device left, agent
 right), the source H.264 and WAV tracks, exact raw float32 audio chunks, the
 complete directional data timeline, and a manifest.
 Final STT and the text actually sent to TTS appear as the large primary caption
-below the sensor image. Every UTF-8 data-channel message, inbound or outbound,
-scrolls through a smaller right-side panel with its direction and topic. Binary
-data is not rendered, but every data payload remains in `events.jsonl`. Both
-panels sit outside the sensor image, so composition never replaces camera
+below the sensor image. Each TTS sentence travels through the paced media queue,
+so its caption is timestamped from the first corresponding audio chunk rather
+than from synthesis completion. Every UTF-8 data-channel message, inbound or
+outbound, scrolls through a smaller right-side panel with its direction and
+topic. Binary data is not rendered, but every data payload remains in
+`events.jsonl`. Both panels sit outside the sensor image, so composition
+never replaces camera
 pixels. Reserved speech-caption metadata stays inside hub IPC and is never
 forwarded to the client data channel.
 
