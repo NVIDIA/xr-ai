@@ -554,6 +554,16 @@ CASES = (
         answer_contains="blue",
     ),
     SubagentCase(
+        # Pins the relay of a not-visible VLM answer; whether the VLM
+        # produces one is live-only behavior the fixture cannot score.
+        name="holding_question_relays_not_visible",
+        agent="vision",
+        instruction="Identify the object in the user's hand.",
+        vision_answer="The user's hands are not visible in the image.",
+        required_tools=("look_at_current_frame",),
+        answer_contains="not visible",
+    ),
+    SubagentCase(
         name="camera_transport_failure_degrades",
         agent="vision",
         instruction="Describe the real surface just left of the user.",

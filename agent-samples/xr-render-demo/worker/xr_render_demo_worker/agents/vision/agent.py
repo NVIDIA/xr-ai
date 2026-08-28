@@ -52,7 +52,9 @@ def make_vision_agent(
                 frame = await current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
             except Exception as error:
                 reraise_unavailable(error, "the current camera view")
-            return await image_query.execute(ImageQueryRequest(image=frame.image, query=req.question))
+            result = await image_query.execute(ImageQueryRequest(image=frame.image, query=req.question))
+            logger.debug("look result available={} text={!r}", result.available, result.text[:120])
+            return result
 
         tools = [
             Tool(
@@ -75,7 +77,9 @@ def make_vision_agent(
                     )
                 except Exception as error:
                     reraise_unavailable(error, "recorded video")
-                return await image_query.execute(ImageQueryRequest(image=frame.image, query=req.question))
+                result = await image_query.execute(ImageQueryRequest(image=frame.image, query=req.question))
+                logger.debug("look_past result available={} text={!r}", result.available, result.text[:120])
+                return result
 
             tools.append(Tool(
                 "look_at_past_frame",

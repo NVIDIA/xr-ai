@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Supervisor turn-lifecycle tests: scene-lock serialization, failure
-publishing, and two-turn memory persistence — all over fakes, no LLM."""
+publishing, memory persistence, and vision-reply redaction, all over fakes
+(plus the real transcript store for restart survival), no LLM."""
 from __future__ import annotations
 
 import asyncio
@@ -12,8 +13,11 @@ from xr_ai_tools import Tool
 from xr_ai_tools.text_memory import (
     AddTranscriptRequest,
     ConversationEntry,
+    QueryTranscriptsRequest,
+    QueryTranscriptsResult,
     RecallConversationRequest,
     RecallConversationResult,
+    TranscriptSegment,
 )
 from xr_ai_voice import UserQuery
 from xr_render_demo_eval import harness
@@ -32,21 +36,36 @@ class _RecordingMemory:
         self.recall_conversation = Tool(
             "recall_conversation", "Recall.", RecallConversationRequest,
             RecallConversationResult, self._recall)
+        self.query_transcripts = Tool(
+            "query_transcripts", "Query.", QueryTranscriptsRequest,
+            QueryTranscriptsResult, self._query)
 
     async def _add(self, req: AddTranscriptRequest) -> None:
         self.records.append(req)
 
     async def _recall(self, req: RecallConversationRequest) -> RecallConversationResult:
+        # Mirrors the real text_memory._recall contract: exactly the :user
+        # and :agent sources with stored timestamps; append order is
+        # chronological here.
         entries = [
             ConversationEntry(
-                timestamp_us=index,
+                timestamp_us=record.timestamp_us,
                 role=record.source_id.rsplit(":", 1)[1],
                 text=record.text,
             )
-            for index, record in enumerate(self.records)
-            if record.source_id.startswith(f"{req.participant_id}:")
+            for record in self.records
+            if record.source_id in (f"{req.participant_id}:user", f"{req.participant_id}:agent")
         ]
         return RecallConversationResult(entries=entries)
+
+    async def _query(self, req: QueryTranscriptsRequest) -> QueryTranscriptsResult:
+        segments = [
+            TranscriptSegment(timestamp_us=record.timestamp_us, text=record.text)
+            for record in self.records
+            if record.source_id == req.source_id
+            and req.start_us <= record.timestamp_us <= req.end_us
+        ]
+        return QueryTranscriptsResult(segments=segments)
 
 
 def _make_supervisor(memory: _RecordingMemory | None = None) -> tuple[SceneSupervisor, harness.FakeScene]:
@@ -362,3 +381,383 @@ async def test_failing_supervisor_publishes_failure_notice() -> None:
     assert published[0].text == "Something went wrong. Please try again."
     assert published[0].final is True
     assert published[0].response_id == "trace-1"
+
+
+async def test_vision_reply_redacted_from_inline_context(monkeypatch) -> None:
+    """A vision turn's reply is redacted from the next turn's inline history
+    while text memory keeps the original for explicit recall."""
+    memory = _RecordingMemory()
+    supervisor, _fake = _make_supervisor(memory)
+    contexts: list[str] = []
+    turn = 0
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        nonlocal turn
+        turn += 1
+        contexts.append(messages[1].content)
+        if turn == 1:
+            return SimpleNamespace(
+                content="You are holding a red notebook.",
+                messages=list(messages),
+                tool_calls=(SimpleNamespace(call=SimpleNamespace(name="vision_agent")),),
+            )
+        return SimpleNamespace(
+            content="You are holding a blue mug.",
+            messages=list(messages),
+            tool_calls=(SimpleNamespace(call=SimpleNamespace(name="vision_agent")),),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await supervisor.handle(SceneRequest(
+        transcript="What am I holding?", participant_id="alice"))
+    reply = await supervisor.handle(SceneRequest(
+        transcript="What am I holding now?", participant_id="alice"))
+
+    assert "notebook" not in contexts[1]
+    assert "[reported what the camera showed at that moment]" in contexts[1]
+    assert reply.response == "You are holding a blue mug."
+    recalled = await memory.recall_conversation.execute(
+        RecallConversationRequest(participant_id="alice"))
+    assert any(
+        entry.role == "agent" and "notebook" in entry.text for entry in recalled.entries
+    )
+
+
+async def test_vision_redaction_survives_supervisor_restart(monkeypatch, tmp_path) -> None:
+    """Provenance lives in the transcript store, so a recycled worker still
+    redacts sightings recorded by its predecessor."""
+    from xr_ai_tools.text_memory import TextMemoryTools
+
+    memory = TextMemoryTools(tmp_path)
+    first, _fake1 = _make_supervisor(memory)
+    contexts: list[str] = []
+    turn = 0
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        nonlocal turn
+        turn += 1
+        contexts.append(messages[1].content)
+        if turn == 1:
+            return SimpleNamespace(
+                content="You are holding a red notebook.",
+                messages=list(messages),
+                tool_calls=(SimpleNamespace(call=SimpleNamespace(name="vision_agent")),),
+            )
+        return SimpleNamespace(
+            content="You are holding a blue mug.",
+            messages=list(messages),
+            tool_calls=(SimpleNamespace(call=SimpleNamespace(name="vision_agent")),),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await first.handle(SceneRequest(
+        transcript="What am I holding?", participant_id="alice", timestamp_us=1_000_000))
+
+    second, _fake2 = _make_supervisor(memory)
+    reply = await second.handle(SceneRequest(
+        transcript="What am I holding now?", participant_id="alice", timestamp_us=2_000_000))
+
+    assert "notebook" not in contexts[1]
+    assert "[reported what the camera showed at that moment]" in contexts[1]
+    assert reply.response == "You are holding a blue mug."
+
+
+async def test_non_vision_replies_survive_redaction(monkeypatch) -> None:
+    """Only vision turns are redacted: a non-vision reply shows verbatim in
+    later inline history, and one participant's sightings never touch
+    another's entries."""
+    memory = _RecordingMemory()
+    supervisor, _fake = _make_supervisor(memory)
+    contexts: list[str] = []
+    scripted = [
+        ("You are holding a red notebook.", True),
+        ("The scene has one sphere.", False),
+        ("You are holding a red notebook.", False),
+        ("Okay.", False),
+        ("Okay.", False),
+    ]
+    turn = 0
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        nonlocal turn
+        contexts.append(messages[1].content)
+        content, vision = scripted[turn]
+        turn += 1
+        calls = (SimpleNamespace(call=SimpleNamespace(name="vision_agent")),) if vision else ()
+        return SimpleNamespace(content=content, messages=list(messages), tool_calls=calls)
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await supervisor.handle(SceneRequest(
+        transcript="What am I holding?", participant_id="alice"))
+    await supervisor.handle(SceneRequest(
+        transcript="Describe the scene.", participant_id="alice"))
+    await supervisor.handle(SceneRequest(
+        transcript="Guess what I am holding.", participant_id="bob"))
+    await supervisor.handle(SceneRequest(
+        transcript="Thanks.", participant_id="alice"))
+    await supervisor.handle(SceneRequest(
+        transcript="Thanks.", participant_id="bob"))
+
+    alice_context = contexts[3]
+    assert "[reported what the camera showed at that moment]" in alice_context
+    assert "The scene has one sphere." in alice_context
+    assert "notebook" not in alice_context
+    # bob's identical reply was produced without a look: alice's tag must not
+    # redact it in bob's history.
+    bob_context = contexts[4]
+    assert "You are holding a red notebook." in bob_context
+
+
+async def test_untagged_legacy_history_does_not_break_turns(monkeypatch, tmp_path) -> None:
+    """An agent-vision tag whose timestamp matches no agent entry leaves
+    that history inline unredacted; the turn itself proceeds normally."""
+    from xr_ai_tools.text_memory import TextMemoryTools
+
+    memory = TextMemoryTools(tmp_path)
+    await memory.add_transcript.execute(AddTranscriptRequest(
+        source_id="alice:user", timestamp_us=1_000_000, text="What am I holding?"))
+    await memory.add_transcript.execute(AddTranscriptRequest(
+        source_id="alice:agent", timestamp_us=2_000_000,
+        text="You are holding a red notebook."))
+    await memory.add_transcript.execute(AddTranscriptRequest(
+        source_id="alice:agent-vision", timestamp_us=1_000_000,
+        text="You are holding a red notebook."))
+
+    supervisor, _fake = _make_supervisor(memory)
+    contexts: list[str] = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        contexts.append(messages[1].content)
+        return SimpleNamespace(
+            content="You are holding a blue mug.",
+            messages=list(messages),
+            tool_calls=(SimpleNamespace(call=SimpleNamespace(name="vision_agent")),),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="What am I holding now?", participant_id="alice", timestamp_us=3_000_000))
+
+    assert reply.response == "You are holding a blue mug."
+    assert "You are holding a red notebook." in contexts[0]
+    assert "What am I holding?" in contexts[0]
+
+
+async def test_retry_loop_vision_reply_is_tagged(monkeypatch) -> None:
+    """A sighting produced by the verification retry is tagged like one from
+    the first loop."""
+    from xr_render_demo_worker._trace import current_mutation_evidence
+
+    memory = _RecordingMemory()
+    supervisor, _fake = _make_supervisor(memory)
+    calls = 0
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return SimpleNamespace(content="Checking.", messages=list(messages), tool_calls=())
+        current_mutation_evidence.get().satisfied += 1
+        return SimpleNamespace(
+            content="You are holding a mug.",
+            messages=list(messages),
+            tool_calls=(SimpleNamespace(call=SimpleNamespace(name="vision_agent")),),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await supervisor.handle(SceneRequest(
+        transcript="Change the wall and tell me what I am holding.", participant_id="alice"))
+    assert calls == 2
+    assert any(r.source_id == "alice:agent-vision" for r in memory.records)
+
+
+async def test_replaced_reply_is_not_tagged(monkeypatch) -> None:
+    """A canned no-change replacement is not a sighting, even when vision ran;
+    it must show verbatim in the next turn's history."""
+    memory = _RecordingMemory()
+    supervisor, _fake = _make_supervisor(memory)
+    contexts: list[str] = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        contexts.append(messages[1].content)
+        return SimpleNamespace(
+            content="Recolored the wall to match what you are holding.",
+            messages=list(messages),
+            tool_calls=(SimpleNamespace(call=SimpleNamespace(name="vision_agent")),),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await supervisor.handle(SceneRequest(
+        transcript="Recolor the wall to match my mug.", participant_id="alice"))
+    assert not any(r.source_id == "alice:agent-vision" for r in memory.records)
+
+    await supervisor.handle(SceneRequest(
+        transcript="Did anything change?", participant_id="alice"))
+    assert "I couldn't make that change" in contexts[-1]
+
+
+async def test_mixed_vision_and_mutation_reply_stays_inline(monkeypatch) -> None:
+    """A turn that both looked and mutated keeps its reply verbatim in
+    history; redacting it would erase the confirmation later turns resolve
+    references against."""
+    from xr_render_demo_worker._trace import current_mutation_evidence
+
+    memory = _RecordingMemory()
+    supervisor, _fake = _make_supervisor(memory)
+    contexts: list[str] = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        contexts.append(messages[1].content)
+        current_mutation_evidence.get().satisfied += 1
+        return SimpleNamespace(
+            content="Added a cone; you are holding a mug.",
+            messages=list(messages),
+            tool_calls=(
+                SimpleNamespace(call=SimpleNamespace(name="vision_agent")),
+                SimpleNamespace(call=SimpleNamespace(name="object_agent")),
+            ),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await supervisor.handle(SceneRequest(
+        transcript="Add a cone and tell me what I am holding.", participant_id="alice"))
+    assert not any(r.source_id == "alice:agent-vision" for r in memory.records)
+
+    await supervisor.handle(SceneRequest(
+        transcript="Make it bigger.", participant_id="alice"))
+    assert "Added a cone; you are holding a mug." in contexts[-1]
+
+
+async def test_same_participant_duplicate_text_not_cross_redacted(monkeypatch) -> None:
+    """Timestamp keying: a later non-vision reply with text identical to a
+    tagged sighting stays inline verbatim."""
+    memory = _RecordingMemory()
+    supervisor, _fake = _make_supervisor(memory)
+    contexts: list[str] = []
+    scripted = [
+        ("You are holding a red notebook.", True),
+        ("You are holding a red notebook.", False),
+        ("Okay.", False),
+    ]
+    turn = 0
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        nonlocal turn
+        contexts.append(messages[1].content)
+        content, vision = scripted[turn]
+        turn += 1
+        calls = (SimpleNamespace(call=SimpleNamespace(name="vision_agent")),) if vision else ()
+        return SimpleNamespace(content=content, messages=list(messages), tool_calls=calls)
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await supervisor.handle(SceneRequest(
+        transcript="What am I holding?", participant_id="alice"))
+    await supervisor.handle(SceneRequest(
+        transcript="Say that again.", participant_id="alice"))
+    await supervisor.handle(SceneRequest(
+        transcript="Thanks.", participant_id="alice"))
+
+    final_context = contexts[-1]
+    assert final_context.count("You are holding a red notebook.") == 1
+    assert final_context.count("[reported what the camera showed at that moment]") == 1
+
+
+async def test_vision_plus_memory_reply_stays_inline(monkeypatch) -> None:
+    """A turn that also recalled memory keeps its reply verbatim; redaction
+    would erase stable recalled facts along with the sighting."""
+    memory = _RecordingMemory()
+    supervisor, _fake = _make_supervisor(memory)
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        return SimpleNamespace(
+            content="You asked for a mug earlier; you are holding one now.",
+            messages=list(messages),
+            tool_calls=(
+                SimpleNamespace(call=SimpleNamespace(name="vision_agent")),
+                SimpleNamespace(call=SimpleNamespace(name="memory_agent")),
+            ),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await supervisor.handle(SceneRequest(
+        transcript="Am I holding what I asked for?", participant_id="alice"))
+    assert not any(r.source_id == "alice:agent-vision" for r in memory.records)
+
+
+async def test_tag_lookup_failure_redacts_all_agent_history(monkeypatch) -> None:
+    """With provenance unknown, every agent entry is treated as a possible
+    stale sighting."""
+    memory = _RecordingMemory()
+    supervisor, _fake = _make_supervisor(memory)
+    contexts: list[str] = []
+
+    async def failing_query(req):
+        raise RuntimeError("store offline")
+
+    memory.query_transcripts = Tool(
+        "query_transcripts", "Query.", QueryTranscriptsRequest,
+        QueryTranscriptsResult, failing_query)
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        contexts.append(messages[1].content)
+        return SimpleNamespace(content="Hello there.", messages=list(messages), tool_calls=())
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await supervisor.handle(SceneRequest(transcript="Hi.", participant_id="alice"))
+    await supervisor.handle(SceneRequest(transcript="Hi again.", participant_id="alice"))
+
+    assert "Hello there." not in contexts[1]
+    assert "[reported what the camera showed at that moment]" in contexts[1]
+    assert "Hi." in contexts[1]
+
+
+async def test_failed_tag_write_skips_reply_persist(monkeypatch) -> None:
+    """A sighting whose tag write fails is dropped from recall entirely; an
+    untagged sighting must never land in the :agent source."""
+    memory = _RecordingMemory()
+    original_add = memory._add
+
+    async def add(req: AddTranscriptRequest) -> None:
+        if req.source_id.endswith(":agent-vision"):
+            raise RuntimeError("store offline")
+        await original_add(req)
+
+    memory.add_transcript = Tool("add_transcript", "Store.", AddTranscriptRequest, None, add)
+    supervisor, _fake = _make_supervisor(memory)
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        return SimpleNamespace(
+            content="You are holding a mug.",
+            messages=list(messages),
+            tool_calls=(SimpleNamespace(call=SimpleNamespace(name="vision_agent")),),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="What am I holding?", participant_id="alice"))
+    assert reply.response == "You are holding a mug."
+    assert [r.source_id for r in memory.records] == ["alice:user"]
+
+
+def test_clear_transcript_artifacts_leaves_unrelated_files(tmp_path) -> None:
+    """Startup cleanup removes only the store's own files."""
+    from xr_render_demo_worker.app import _clear_transcript_artifacts
+
+    (tmp_path / "alice_agent.jsonl").write_text("{}")
+    (tmp_path / "alice_agent.identity").write_text("alice:agent")
+    (tmp_path / "notes.txt").write_text("keep me")
+    _clear_transcript_artifacts(tmp_path)
+    assert not (tmp_path / "alice_agent.jsonl").exists()
+    assert not (tmp_path / "alice_agent.identity").exists()
+    assert (tmp_path / "notes.txt").read_text() == "keep me"

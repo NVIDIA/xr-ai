@@ -16,7 +16,13 @@ from xr_ai_models import ChatMessage, LLMService, VLMService
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
-from xr_ai_tools.text_memory import AddTranscriptRequest, RecallConversationRequest, TextMemoryTools
+from xr_ai_tools.text_memory import (
+    AddTranscriptRequest,
+    ConversationEntry,
+    QueryTranscriptsRequest,
+    RecallConversationRequest,
+    TextMemoryTools,
+)
 from xr_ai_tools.tool_calling import ToolLoopError, run_tool_loop
 from xr_ai_tools.tracking import TrackingTools
 from xr_ai_tools.video_memory import VideoMemoryTools
@@ -79,6 +85,7 @@ _ACTION_VERBS = frozenset(
 
 
 _MUTATING_AGENTS = frozenset({"placement_agent", "appearance_agent", "object_agent"})
+_PERCEPTION_AGENTS = frozenset({"vision_agent"})
 
 # Seconds to let a scene RPC propagate before diffing snapshots.
 _SCENE_SETTLE_S = 0.15
@@ -193,7 +200,11 @@ class SceneSupervisor:
             image_query = ImageQueryTool(
                 images=images,
                 vlm=vlm,
-                system_prompt="Answer directly from the visible camera image in one short plain-English sentence.",
+                system_prompt=(
+                    "Answer directly from the visible camera image in one short"
+                    " plain-English sentence. If what the question asks about is"
+                    " not visible in the image, say exactly that; never guess."
+                ),
             )
 
             physical_color = make_physical_color_tool(
@@ -217,7 +228,9 @@ class SceneSupervisor:
         self._scene_lock: asyncio.Lock = asyncio.Lock()
 
     def forget_participant(self, participant_id: str) -> None:
-        """Drop per-participant state after departure; a reconnecting id starts clean."""
+        """Drop per-participant in-process state after departure.
+
+        Transcript history persists in the store for the run's lifetime."""
         self._participant_locks.pop(participant_id, None)
         self._context.forget_participant(participant_id)
 
@@ -236,28 +249,78 @@ class SceneSupervisor:
             and entries[-2].role == "user"
         ):
             pending = entries[-2].text
-        lines = [f"  {'User' if e.role == 'user' else 'Agent'}: {e.text}" for e in entries]
+        # A perception answer goes stale the moment the user moves, and
+        # leaving it inline invites answering the next look question from
+        # recall. A failed lookup costs one turn of unredacted history,
+        # never the turn.
+        try:
+            tagged = await self._text_memory.query_transcripts.execute(
+                QueryTranscriptsRequest(
+                    source_id=f"{participant_id}:agent-vision",
+                    start_us=entries[0].timestamp_us,
+                    end_us=entries[-1].timestamp_us,
+                )
+            )
+            perception_stamps = {segment.timestamp_us for segment in tagged.segments}
+        except Exception as error:
+            # Fail closed: with provenance unknown, every agent entry could
+            # be a stale sighting.
+            logger.warning("perception tag lookup failed; redacting agent history ({})", error)
+            perception_stamps = None
+
+        def _redact(entry: ConversationEntry) -> bool:
+            return entry.role == "agent" and (
+                perception_stamps is None or entry.timestamp_us in perception_stamps
+            )
+
+        lines = [
+            "  Agent: [reported what the camera showed at that moment]"
+            if _redact(e)
+            else f"  {'User' if e.role == 'user' else 'Agent'}: {e.text}"
+            for e in entries
+        ]
+        redacted = sum(1 for e in entries if _redact(e))
+        logger.debug("inline context: {} entries, {} redacted", len(entries), redacted)
         block = (
             "[Recent conversation] (already handled; never a source of new work)\n"
             + "\n".join(lines) + "\n\n"
         )
         return block, pending
 
-    async def _persist_turn(self, request: SceneRequest, user_text: str, reply_text: str) -> None:
-        await self._text_memory.add_transcript.execute(
-            AddTranscriptRequest(
-                source_id=f"{request.participant_id}:user",
-                timestamp_us=request.timestamp_us,
-                text=user_text,
+    async def _persist_turn(
+        self, request: SceneRequest, user_text: str, reply_text: str, *, vision: bool = False
+    ) -> None:
+        # Best-effort as a unit: the reply is already final, so a store
+        # failure costs memory of this turn, never the turn itself.
+        try:
+            await self._text_memory.add_transcript.execute(
+                AddTranscriptRequest(
+                    source_id=f"{request.participant_id}:user",
+                    timestamp_us=request.timestamp_us,
+                    text=user_text,
+                )
             )
-        )
-        await self._text_memory.add_transcript.execute(
-            AddTranscriptRequest(
-                source_id=f"{request.participant_id}:agent",
-                timestamp_us=time.time_ns() // 1_000,
-                text=reply_text,
+            agent_timestamp_us = time.time_ns() // 1_000
+            if vision:
+                # Shadow source recall_conversation never surfaces, written
+                # before the reply so a failed tag skips the reply write and
+                # an untagged sighting can never reach recall.
+                await self._text_memory.add_transcript.execute(
+                    AddTranscriptRequest(
+                        source_id=f"{request.participant_id}:agent-vision",
+                        timestamp_us=agent_timestamp_us,
+                        text=reply_text,
+                    )
+                )
+            await self._text_memory.add_transcript.execute(
+                AddTranscriptRequest(
+                    source_id=f"{request.participant_id}:agent",
+                    timestamp_us=agent_timestamp_us,
+                    text=reply_text,
+                )
             )
-        )
+        except Exception as error:
+            logger.warning("transcript persist failed ({})", error)
 
     async def handle(self, request: SceneRequest) -> SceneReply:
         current_trace_id.set(request.trace_id)
@@ -328,6 +391,8 @@ class SceneSupervisor:
         # was delegated, or the utterance itself requests a change (which
         # also catches mixed requests where only vision or memory ran).
         delegated = {record.call.name for record in result.tool_calls}
+        delegates = set(delegated)
+        rewritten = False
         needs_verification = bool(delegated & _MUTATING_AGENTS) or _wants_mutation(transcript)
 
         await asyncio.sleep(_SCENE_SETTLE_S)
@@ -359,6 +424,7 @@ class SceneSupervisor:
                 logger.warning("supervisor verification failed ({})", exc)
             else:
                 output = result2.content
+                delegates |= {record.call.name for record in result2.tool_calls}
             await asyncio.sleep(_SCENE_SETTLE_S)
             # Success is evidence-backed: a completion claim may stand only
             # when a scene write was applied (or the requested state already
@@ -372,12 +438,23 @@ class SceneSupervisor:
             if no_evidence and (not output or _claims_completion(output)):
                 logger.warning("no mutation evidence; replacing reply {!r}", (output or "")[:80])
                 output = "I couldn't make that change; nothing in the scene was changed."
+                rewritten = True
             elif no_evidence and not _is_question(output):
                 output = output.rstrip() + " Nothing in the scene was changed."
+                rewritten = True
 
         await self._context.record_moves(request.participant_id, before)
         reply_text = output or "Done."
-        await self._persist_turn(request, transcript, reply_text)
+        # A mixed turn's reply also carries confirmations and recalled facts
+        # later turns resolve references against, so only pure perception
+        # turns are tagged for redaction.
+        vision_reply = (
+            bool(delegates)
+            and delegates <= _PERCEPTION_AGENTS
+            and not rewritten
+            and bool(output)
+        )
+        await self._persist_turn(request, transcript, reply_text, vision=vision_reply)
         return SceneReply(response=reply_text)
 
 

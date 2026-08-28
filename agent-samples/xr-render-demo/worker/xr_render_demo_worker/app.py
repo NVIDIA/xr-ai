@@ -31,6 +31,17 @@ from .supervisor import SceneSupervisor
 from .xr_session import XRSessionController
 
 
+def _clear_transcript_artifacts(store_dir: Path) -> None:
+    """Remove the transcript store's own files so recalled conversation never
+    outlives the run; anything else in the directory is left alone."""
+    if not store_dir.is_dir():
+        return
+    for artifact in (*store_dir.glob("*.jsonl"), *store_dir.glob("*.identity")):
+        artifact.unlink(missing_ok=True)
+
+
+
+
 async def run_app(
     config: WorkerConfig,
     *,
@@ -71,6 +82,7 @@ async def run_app(
     transport = HubVoiceTransport()
     scene = SceneTools(config.scene_endpoint)
     tracking = TrackingTools(config.openxr_endpoint)
+    _clear_transcript_artifacts(Path(config.text_memory_dir))
     text_memory = TextMemoryTools(config.text_memory_dir)
     video = VideoMemoryTools(config.video_memory_endpoint)
     images = ImageRegistry(allow_external=True)
