@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections import deque
 from collections.abc import Awaitable, Callable
 
 import numpy as np
@@ -41,8 +42,10 @@ from xr_ai_hub import (
     ProcessorEndpoint,
     Subscribe,
 )
+from xr_ai_hub._capture import CAPTURE_TTS_TOPIC
 
 from ._audio import float32_to_int16, int16_to_float32
+from ._capture_frames import _CaptureTtsCaptionFrame
 from ._frames import ParticipantJoinedFrame, ParticipantLeftFrame
 
 _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
@@ -260,6 +263,8 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
         self._return_audio_deadline_s: dict[str, float] = {}
         self._return_audio_locks: dict[str, asyncio.Lock] = {}
         self._return_audio_preroll_tasks: dict[str, asyncio.Task[None]] = {}
+        self._pending_capture_captions: dict[str, deque[str]] = {}
+        self._capture_caption_tasks: set[asyncio.Task[None]] = set()
 
     @property
     def target_participant(self) -> str:
@@ -462,6 +467,7 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
                         "media sender cancel failed pid={!r}", pid,
                     )
             self._return_audio_deadline_s.pop(pid, None)
+            self._pending_capture_captions.pop(pid, None)
         if self._return_audio_locks.get(pid) is lock:
             self._return_audio_locks.pop(pid, None)
         if self._target_participant == pid:
@@ -472,12 +478,15 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
         self._return_audio_deadline_s.clear()
         self._return_audio_locks.clear()
         await super().stop(frame)
+        await self._finish_capture_caption_tasks()
 
     async def cancel(self, frame: CancelFrame):
         await self._cancel_all_return_audio_prerolls()
         self._return_audio_deadline_s.clear()
         self._return_audio_locks.clear()
+        self._pending_capture_captions.clear()
         await super().cancel(frame)
+        await self._cancel_capture_caption_tasks()
 
     async def _handle_frame(self, frame: Frame) -> None:
         """Funnel every output frame through the default media sender.
@@ -508,6 +517,7 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
                 lock = self._return_audio_locks.setdefault(pid, asyncio.Lock())
                 async with lock:
                     self._return_audio_deadline_s.pop(pid, None)
+                    self._pending_capture_captions.pop(pid, None)
             else:
                 for sender in list(self._media_senders.values()):
                     await sender.handle_interruptions(frame)
@@ -515,6 +525,7 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
                     async with lock:
                         self._return_audio_deadline_s.pop(reset_pid, None)
                 self._return_audio_deadline_s.clear()
+                self._pending_capture_captions.clear()
             return
 
         pid = frame.transport_destination
@@ -581,7 +592,65 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
                 chunk,
                 target_buffer_s=_RETURN_AUDIO_TARGET_BUFFER_S,
             )
+            self._publish_next_capture_caption(pid, chunk.pts_us)
         return True
+
+    async def write_transport_frame(self, frame: Frame) -> None:
+        if isinstance(frame, _CaptureTtsCaptionFrame):
+            pid = frame.transport_destination or self._target_participant
+            if pid:
+                self._pending_capture_captions.setdefault(pid, deque()).append(
+                    frame.text
+                )
+            return
+        await super().write_transport_frame(frame)
+
+    def _publish_next_capture_caption(self, pid: str, pts_us: int) -> None:
+        captions = self._pending_capture_captions.get(pid)
+        if not captions:
+            return
+        text = captions.popleft()
+        if not captions:
+            self._pending_capture_captions.pop(pid, None)
+        task = asyncio.create_task(
+            self._send_capture_caption(pid, pts_us, text),
+            name=f"capture-tts-caption-{pid}",
+        )
+        self._capture_caption_tasks.add(task)
+        task.add_done_callback(self._capture_caption_tasks.discard)
+
+    async def _send_capture_caption(
+        self,
+        pid: str,
+        pts_us: int,
+        text: str,
+    ) -> None:
+        try:
+            await self._ep.send_return_data(DataMessage(
+                participant_id=pid,
+                topic=CAPTURE_TTS_TOPIC,
+                pts_us=pts_us,
+                data=text.encode(),
+            ))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.opt(exception=True).debug(
+                "capture TTS caption failed pid={!r}", pid,
+            )
+
+    async def _finish_capture_caption_tasks(self) -> None:
+        tasks = tuple(self._capture_caption_tasks)
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _cancel_capture_caption_tasks(self) -> None:
+        tasks = tuple(self._capture_caption_tasks)
+        self._capture_caption_tasks.clear()
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 
 # ── Transport wrapper ─────────────────────────────────────────────────────────
