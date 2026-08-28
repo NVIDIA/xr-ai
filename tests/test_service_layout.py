@@ -424,15 +424,15 @@ def test_sample_process_projects_resolve(monkeypatch) -> None:
             )
 
 
-def test_simple_vlm_declares_only_its_hub_capture_and_worker() -> None:
+def test_simple_vlm_declares_only_its_hub_and_worker() -> None:
     sample = _load_module(
         "service_layout_simple_vlm",
         "agent-samples/simple-vlm-example/main.py",
     )
-    assert [process.name for process in sample.PROCESSES] == ["hub", "capture", "worker"]
+    assert [process.name for process in sample.PROCESSES] == ["hub", "worker"]
 
 
-def test_samples_start_capture_immediately_after_hub() -> None:
+def test_sample_capture_is_opt_in_and_starts_immediately_after_hub() -> None:
     simple = _load_module(
         "service_layout_simple_vlm_capture",
         "agent-samples/simple-vlm-example/main.py",
@@ -442,7 +442,17 @@ def test_samples_start_capture_immediately_after_hub() -> None:
         "agent-samples/xr-render-demo/main.py",
     )
 
-    for processes in (simple.PROCESSES, render._build_processes()):
+    assert simple._parse_args([]).capture is False
+    assert render._parse_args([]).capture is False
+    assert "capture" not in [process.name for process in simple.PROCESSES]
+    assert "capture" not in [process.name for process in render._build_processes()]
+
+    assert simple._parse_args(["--capture"]).capture is True
+    assert render._parse_args(["--capture"]).capture is True
+    for processes in (
+        simple._build_processes(capture=True),
+        render._build_processes(capture=True),
+    ):
         names = [process.name for process in processes]
         hub_index = names.index("hub")
         assert names[hub_index + 1] == "capture"
@@ -454,8 +464,7 @@ def test_render_demo_declares_only_application_processes() -> None:
         "agent-samples/xr-render-demo/main.py",
     )
     assert [process.name for process in sample._build_processes()] == [
-        "hub", "capture", "cloudxr", "video-memory", "scene", "openxr-service",
-        "worker",
+        "hub", "cloudxr", "video-memory", "scene", "openxr-service", "worker",
     ]
 
 
