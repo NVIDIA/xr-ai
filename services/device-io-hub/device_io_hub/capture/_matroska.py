@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Minimal H.264/PCM Matroska muxing for finalized capture segments."""
+"""Minimal H.264/PCM Matroska muxing for finalized captures."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ def mux_h264_pcm(
     height: int,
     fps: float,
 ) -> None:
-    """Mux one H.264 segment and its matching stereo PCM window."""
+    """Mux one H.264 stream and its matching stereo PCM window."""
     packet_list = list(packets)
     if not packet_list:
         raise ValueError("cannot mux a video segment without packets")
@@ -49,8 +49,6 @@ def mux_h264_pcm(
                 nal_type = nal[0] & 0x1F
                 if nal_type in (7, 8):
                     parameter_sets[nal_type] = nal
-            if 7 in parameter_sets and 8 in parameter_sets:
-                break
     try:
         codec_private = _avc_decoder_configuration_record(parameter_sets[7], parameter_sets[8])
     except KeyError as exc:

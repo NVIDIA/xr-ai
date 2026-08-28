@@ -207,7 +207,7 @@ async def test_resolution_change_surfaces_error():
 
 
 async def test_media_capture_composites_caption_with_real_nvenc():
-    """The session-capture path must feed valid contiguous NV12 into NVENC."""
+    """Capture must join NVENC resolution chunks into one playable session."""
     width, height = 640, 480
     with tempfile.TemporaryDirectory() as out_dir:
         _make_recorder(out_dir)  # pre-flight NVENC and skip only for unavailable hardware
@@ -227,14 +227,15 @@ async def test_media_capture_composites_caption_with_real_nvenc():
                 b"NVENC caption test",
             ),
         )
-        for index in range(4):
+        frame_specs = [(160, 120), (160, 120), *((width, height),) * 4]
+        for index, (frame_width, frame_height) in enumerate(frame_specs):
             frame = FrameData(
                 seq=index,
                 pts_us=1_000_000 + index * 34_000,
-                width=width,
-                height=height,
+                width=frame_width,
+                height=frame_height,
                 fmt=PixelFormat.NV12,
-                data=_nv12_gradient(width, height, seed=index),
+                data=_nv12_gradient(frame_width, frame_height, seed=index),
                 participant_id="gpu_capture",
                 track_id="camera",
             )
@@ -258,8 +259,11 @@ async def test_media_capture_composites_caption_with_real_nvenc():
         session = next(path for path in Path(out_dir).iterdir() if path.is_dir())
         manifest = json.loads((session / "manifest.json").read_text())
         segment = manifest["video_tracks"]["camera"][0]
+        assert len(manifest["video_tracks"]["camera"]) == 1
+        assert len(list((session / "video").glob("*.mkv"))) == 1
         assert segment["width"] > width
         assert segment["height"] > height
+        assert len(segment["encoded_dimensions"]) == 2
         assert segment["audio_embedded"] is True
         demuxer = PyNvVideoCodec.CreateDemuxer(str(session / segment["path"]))
         assert demuxer.GetVideoStreamId() >= 0
@@ -277,8 +281,8 @@ async def test_media_capture_composites_caption_with_real_nvenc():
         assert len(video_pts) > 1
         encoded = (session / segment["raw_path"]).read_bytes()
         frames = decode_h264(encoded, gpu_id=0)
-        assert frames
-        assert frames[0].shape == (
+        assert len(frames) == len(frame_specs)
+        assert frames[-1].shape == (
             segment["height"] * 3 // 2,
             segment["width"],
         )
