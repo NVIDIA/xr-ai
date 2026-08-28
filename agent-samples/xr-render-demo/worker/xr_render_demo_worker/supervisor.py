@@ -18,6 +18,7 @@ from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.text_memory import (
     AddTranscriptRequest,
+    ConversationEntry,
     QueryTranscriptsRequest,
     RecallConversationRequest,
     TextMemoryTools,
@@ -262,17 +263,23 @@ class SceneSupervisor:
             )
             perception_stamps = {segment.timestamp_us for segment in tagged.segments}
         except Exception as error:
-            logger.warning("perception tag lookup failed ({})", error)
-            perception_stamps = set()
+            # Fail closed: with provenance unknown, every agent entry could
+            # be a stale sighting.
+            logger.warning("perception tag lookup failed; redacting agent history ({})", error)
+            perception_stamps = None
+
+        def _redact(entry: ConversationEntry) -> bool:
+            return entry.role == "agent" and (
+                perception_stamps is None or entry.timestamp_us in perception_stamps
+            )
+
         lines = [
             "  Agent: [reported what the camera showed at that moment]"
-            if e.role == "agent" and e.timestamp_us in perception_stamps
+            if _redact(e)
             else f"  {'User' if e.role == 'user' else 'Agent'}: {e.text}"
             for e in entries
         ]
-        redacted = sum(
-            1 for e in entries if e.role == "agent" and e.timestamp_us in perception_stamps
-        )
+        redacted = sum(1 for e in entries if _redact(e))
         logger.debug("inline context: {} entries, {} redacted", len(entries), redacted)
         block = (
             "[Recent conversation] (already handled; never a source of new work)\n"
@@ -294,15 +301,10 @@ class SceneSupervisor:
                 )
             )
             agent_timestamp_us = time.time_ns() // 1_000
-            await self._text_memory.add_transcript.execute(
-                AddTranscriptRequest(
-                    source_id=f"{request.participant_id}:agent",
-                    timestamp_us=agent_timestamp_us,
-                    text=reply_text,
-                )
-            )
             if vision:
-                # Shadow source recall_conversation never surfaces.
+                # Shadow source recall_conversation never surfaces, written
+                # before the reply so a failed tag skips the reply write and
+                # an untagged sighting can never reach recall.
                 await self._text_memory.add_transcript.execute(
                     AddTranscriptRequest(
                         source_id=f"{request.participant_id}:agent-vision",
@@ -310,6 +312,13 @@ class SceneSupervisor:
                         text=reply_text,
                     )
                 )
+            await self._text_memory.add_transcript.execute(
+                AddTranscriptRequest(
+                    source_id=f"{request.participant_id}:agent",
+                    timestamp_us=agent_timestamp_us,
+                    text=reply_text,
+                )
+            )
         except Exception as error:
             logger.warning("transcript persist failed ({})", error)
 
@@ -382,8 +391,7 @@ class SceneSupervisor:
         # was delegated, or the utterance itself requests a change (which
         # also catches mixed requests where only vision or memory ran).
         delegated = {record.call.name for record in result.tool_calls}
-        vision_ran = bool(delegated & _PERCEPTION_AGENTS)
-        mutation_ran = bool(delegated & _MUTATING_AGENTS)
+        delegates = set(delegated)
         rewritten = False
         needs_verification = bool(delegated & _MUTATING_AGENTS) or _wants_mutation(transcript)
 
@@ -416,9 +424,7 @@ class SceneSupervisor:
                 logger.warning("supervisor verification failed ({})", exc)
             else:
                 output = result2.content
-                retry_names = {record.call.name for record in result2.tool_calls}
-                vision_ran = vision_ran or bool(retry_names & _PERCEPTION_AGENTS)
-                mutation_ran = mutation_ran or bool(retry_names & _MUTATING_AGENTS)
+                delegates |= {record.call.name for record in result2.tool_calls}
             await asyncio.sleep(_SCENE_SETTLE_S)
             # Success is evidence-backed: a completion claim may stand only
             # when a scene write was applied (or the requested state already
@@ -439,10 +445,15 @@ class SceneSupervisor:
 
         await self._context.record_moves(request.participant_id, before)
         reply_text = output or "Done."
-        # A mixed turn's reply also carries the mutation confirmation later
-        # turns resolve references against, so only pure perception turns are
-        # tagged for redaction.
-        vision_reply = vision_ran and not mutation_ran and not rewritten and bool(output)
+        # A mixed turn's reply also carries confirmations and recalled facts
+        # later turns resolve references against, so only pure perception
+        # turns are tagged for redaction.
+        vision_reply = (
+            bool(delegates)
+            and delegates <= _PERCEPTION_AGENTS
+            and not rewritten
+            and bool(output)
+        )
         await self._persist_turn(request, transcript, reply_text, vision=vision_reply)
         return SceneReply(response=reply_text)
 

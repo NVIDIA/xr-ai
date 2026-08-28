@@ -668,3 +668,96 @@ async def test_same_participant_duplicate_text_not_cross_redacted(monkeypatch) -
     final_context = contexts[-1]
     assert final_context.count("You are holding a red notebook.") == 1
     assert final_context.count("[reported what the camera showed at that moment]") == 1
+
+
+async def test_vision_plus_memory_reply_stays_inline(monkeypatch) -> None:
+    """A turn that also recalled memory keeps its reply verbatim; redaction
+    would erase stable recalled facts along with the sighting."""
+    memory = _RecordingMemory()
+    supervisor, _fake = _make_supervisor(memory)
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        return SimpleNamespace(
+            content="You asked for a mug earlier; you are holding one now.",
+            messages=list(messages),
+            tool_calls=(
+                SimpleNamespace(call=SimpleNamespace(name="vision_agent")),
+                SimpleNamespace(call=SimpleNamespace(name="memory_agent")),
+            ),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await supervisor.handle(SceneRequest(
+        transcript="Am I holding what I asked for?", participant_id="alice"))
+    assert not any(r.source_id == "alice:agent-vision" for r in memory.records)
+
+
+async def test_tag_lookup_failure_redacts_all_agent_history(monkeypatch) -> None:
+    """With provenance unknown, every agent entry is treated as a possible
+    stale sighting."""
+    memory = _RecordingMemory()
+    supervisor, _fake = _make_supervisor(memory)
+    contexts: list[str] = []
+
+    async def failing_query(req):
+        raise RuntimeError("store offline")
+
+    memory.query_transcripts = Tool(
+        "query_transcripts", "Query.", QueryTranscriptsRequest,
+        QueryTranscriptsResult, failing_query)
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        contexts.append(messages[1].content)
+        return SimpleNamespace(content="Hello there.", messages=list(messages), tool_calls=())
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await supervisor.handle(SceneRequest(transcript="Hi.", participant_id="alice"))
+    await supervisor.handle(SceneRequest(transcript="Hi again.", participant_id="alice"))
+
+    assert "Hello there." not in contexts[1]
+    assert "[reported what the camera showed at that moment]" in contexts[1]
+    assert "Hi." in contexts[1]
+
+
+async def test_failed_tag_write_skips_reply_persist(monkeypatch) -> None:
+    """A sighting whose tag write fails is dropped from recall entirely; an
+    untagged sighting must never land in the :agent source."""
+    memory = _RecordingMemory()
+    original_add = memory._add
+
+    async def add(req: AddTranscriptRequest) -> None:
+        if req.source_id.endswith(":agent-vision"):
+            raise RuntimeError("store offline")
+        await original_add(req)
+
+    memory.add_transcript = Tool("add_transcript", "Store.", AddTranscriptRequest, None, add)
+    supervisor, _fake = _make_supervisor(memory)
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        return SimpleNamespace(
+            content="You are holding a mug.",
+            messages=list(messages),
+            tool_calls=(SimpleNamespace(call=SimpleNamespace(name="vision_agent")),),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="What am I holding?", participant_id="alice"))
+    assert reply.response == "You are holding a mug."
+    assert [r.source_id for r in memory.records] == ["alice:user"]
+
+
+def test_clear_transcript_artifacts_leaves_unrelated_files(tmp_path) -> None:
+    """Startup cleanup removes only the store's own files."""
+    from xr_render_demo_worker.app import _clear_transcript_artifacts
+
+    (tmp_path / "alice_agent.jsonl").write_text("{}")
+    (tmp_path / "alice_agent.identity").write_text("alice:agent")
+    (tmp_path / "notes.txt").write_text("keep me")
+    _clear_transcript_artifacts(tmp_path)
+    assert not (tmp_path / "alice_agent.jsonl").exists()
+    assert not (tmp_path / "alice_agent.identity").exists()
+    assert (tmp_path / "notes.txt").read_text() == "keep me"
