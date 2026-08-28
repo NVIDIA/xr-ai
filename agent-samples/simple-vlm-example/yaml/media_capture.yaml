@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Automatic server-side capture for Simple VLM. Each participant gets a
+# Opt-in server-side capture for Simple VLM. Each participant gets a
 # timestamped bundle with captioned H.264/PCM .mkv video, retained raw media,
 # and the exact inbound/outbound data timeline.
 hub_sub_addr: ipc:///tmp/xr_hub_pub
