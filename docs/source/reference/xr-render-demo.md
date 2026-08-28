@@ -147,17 +147,17 @@ return audio and data on the hub publisher. It never joins the LiveKit room.
 Each participant connection creates a timestamped directory under
 `~/.local/share/xr-ai/captures/xr-render-demo/` containing:
 
-- Playable `.mkv` segments under `video/`, with NVENC H.264 video and stereo
+- One playable `.mkv` under `video/`, with NVENC H.264 video and stereo
   audio embedded. Final STT and spoken TTS text use the large lower caption;
   all UTF-8 data-channel messages scroll in a smaller right-side panel. Both
-  panels are outside the sensor image. The source `.264` segment is retained
-  beside each `.mkv`.
+  panels are outside the sensor image. The joined source `.264` stream is
+  retained beside the `.mkv`.
 - `audio/conversation.wav`, with device input on the left and agent output on
   the right, aligned by hub timestamps. Exact float32 chunks remain in
   `device.f32le` and `agent.f32le`, indexed by `chunks.jsonl`.
 - `events.jsonl`, retaining inbound and outbound data with direction, topic,
   timestamp, and either UTF-8 text or base64 for binary payloads.
-- `manifest.json`, recording timing, track segments, audio layout, and capture
+- `manifest.json`, recording timing, source track metadata, audio layout, and capture
   frame drops.
 
 NVENC work runs behind a bounded queue in the capture process. When capture is
