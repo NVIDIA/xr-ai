@@ -450,7 +450,7 @@ any owned process exit terminates the application stack.</p>
 <td><p>8080 (HTTPS and <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> WSS proxy); 7880 (plaintext LiveKit direct-debug path; firewall-restricted)</p></td>
 </tr>
 <tr class="row-odd"><td><p>capture</p></td>
-<td><p>sample</p></td>
+<td><p>sample, opt-in</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">services/device-io-hub/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device_io_capture</span></code></p></td>
 <td><p>—</p></td>
@@ -603,7 +603,7 @@ restart <code class="docutils literal notranslate"><span class="pre">xr_render_d
 <td><p>LiveKit, web and token servers, networking, and video recording</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/media_capture.yaml</span></code></p></td>
-<td><p>Automatic media-hub capture, NVENC output, caption layout, and retention</p></td>
+<td><p>Opt-in media-hub capture, NVENC output, caption layout, and retention</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/video_memory_service.yaml</span></code></p></td>
 <td><p>Recorded-query endpoint, output directory, and GPU</p></td>
@@ -632,13 +632,14 @@ model stack.</p>
 <p>Refer to the generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference for exact
 fields, checked-in values, and adjacent YAML comments.</p>
 </section>
-<section id="automatic-session-capture">
-<h2>Automatic session capture<a class="headerlink" href="#automatic-session-capture" title="Link to this heading">#</a></h2>
-<p>The sample starts <code class="docutils literal notranslate"><span class="pre">device_io_capture</span></code> immediately after DeviceIOHub. Capture
-subscribes to normalized media-hub IPC rather than LiveKit, so the recording
-contract stays the same if the device transport changes. It requests video
-pixels through the hub’s on-demand frame path and observes already-routed
-return audio and data on the hub publisher. It never joins the LiveKit room.</p>
+<section id="opt-in-session-capture">
+<h2>Opt-in session capture<a class="headerlink" href="#opt-in-session-capture" title="Link to this heading">#</a></h2>
+<p>Capture is disabled by default. Run <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">xr_render_demo</span> <span class="pre">--capture</span></code> to start
+<code class="docutils literal notranslate"><span class="pre">device_io_capture</span></code> immediately after DeviceIOHub. Capture subscribes to
+normalized media-hub IPC rather than LiveKit, so the recording contract stays
+the same if the device transport changes. It requests video pixels through the
+hub’s on-demand frame path and observes already-routed return audio and data on
+the hub publisher. It never joins the LiveKit room.</p>
 <p>Each participant connection creates a timestamped directory under
 <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/captures/xr-render-demo/</span></code> containing:</p>
 <ul class="simple">
@@ -660,8 +661,8 @@ slower than the live stream, it replaces old pending frame requests and records
 the drop count rather than adding latency to DeviceIOHub or the agent. The
 process uses DeviceIOHub’s existing NumPy, ZMQ, and PyNvVideoCodec dependencies;
 it finalizes the <code class="docutils literal notranslate"><span class="pre">.mkv</span></code> locally and does not require FFmpeg or a media-container
-library. Remove the <code class="docutils literal notranslate"><span class="pre">capture</span></code> entry from <code class="docutils literal notranslate"><span class="pre">main.py</span></code> when recording is prohibited,
-and treat the output as sensitive device data.</p>
+library. Omit <code class="docutils literal notranslate"><span class="pre">--capture</span></code> when recording is prohibited, and treat the output as
+sensitive device data.</p>
 </section>
 <section id="the-llm-server">
 <h2>The LLM server<a class="headerlink" href="#the-llm-server" title="Link to this heading">#</a></h2>
@@ -1121,7 +1122,7 @@ turns from different participants queue rather than interleave.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#selecting-the-client-type-webrtc-vs-native">Selecting the client type (WebRTC vs native)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gpu-pinning-for-the-xr-side">GPU pinning for the XR side</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration">Configuration</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#automatic-session-capture">Automatic session capture</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#opt-in-session-capture">Opt-in session capture</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-llm-server">The LLM server</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemotron-3-nano-omni-30b-a3b-reasoning-port-8108">Nemotron-3-Nano-Omni-30B-A3B-Reasoning — port 8108</a></li>
 </ul>

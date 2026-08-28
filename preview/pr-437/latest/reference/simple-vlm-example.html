@@ -430,10 +430,11 @@ latest camera frame and streams the answer to both Piper TTS and the
 sample’s design and operational details.</p>
 <section id="composition">
 <h2>Composition<a class="headerlink" href="#composition" title="Link to this heading">#</a></h2>
-<p>The orchestrator starts DeviceIOHub, passive session capture, and the worker.
-The fixed <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> profile marks Parakeet STT, Cosmos3 Nano, and
-Piper TTS as reused services. Start those endpoints together with the shared
-model-server stack.</p>
+<p>The orchestrator starts DeviceIOHub and the worker. Passing <code class="docutils literal notranslate"><span class="pre">--capture</span></code> also
+starts passive session capture; capture is disabled by default. The fixed
+<code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> profile marks Parakeet STT, Cosmos3 Nano, and Piper TTS as
+reused services. Start those endpoints together with the shared model-server
+stack.</p>
 <p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns service readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
 <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>. <code class="docutils literal notranslate"><span class="pre">SimpleVlmAgent</span></code> selects the participant’s current image with
@@ -510,7 +511,7 @@ layout works without command-line configuration arguments.</p>
 <td><p>LiveKit room and ports, web and token servers, and network behavior</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/media_capture.yaml</span></code></p></td>
-<td><p>Automatic media-hub capture, NVENC output, caption layout, and retention</p></td>
+<td><p>Opt-in media-hub capture, NVENC output, caption layout, and retention</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">worker/simple_vlm_example_worker/prompts/system.txt</span></code></p></td>
 <td><p>Default VLM instruction</p></td>
@@ -532,20 +533,22 @@ persistent stack, and start it again before restarting this sample.</p>
 <p>Refer to the generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference for exact
 fields, checked-in values, and adjacent YAML comments.</p>
 </section>
-<section id="automatic-session-capture">
-<h2>Automatic session capture<a class="headerlink" href="#automatic-session-capture" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">device_io_capture</span></code> starts immediately after DeviceIOHub and records normalized
-hub media without joining the LiveKit room. Each participant connection creates
-a bundle under <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/captures/simple-vlm-example/</span></code> containing
-one captioned NVENC H.264 video in a playable <code class="docutils literal notranslate"><span class="pre">.mkv</span></code> with timestamp-aligned
-device/agent audio embedded, retained source H.264 and WAV tracks, exact raw
-audio chunks, inbound and outbound data, and a manifest. Text returned on
-<code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> appears in the scrolling data panel; final STT and text sent to
-TTS use the larger primary caption.</p>
+<section id="opt-in-session-capture">
+<h2>Opt-in session capture<a class="headerlink" href="#opt-in-session-capture" title="Link to this heading">#</a></h2>
+<p>Capture is disabled by default. Run <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">simple_vlm_example</span> <span class="pre">--capture</span></code> to
+start <code class="docutils literal notranslate"><span class="pre">device_io_capture</span></code> immediately after DeviceIOHub and record normalized
+hub media without joining the LiveKit room. Each participant connection then
+creates a bundle under
+<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/captures/simple-vlm-example/</span></code> containing one captioned
+NVENC H.264 video in a playable <code class="docutils literal notranslate"><span class="pre">.mkv</span></code> with timestamp-aligned device/agent
+audio embedded, retained source H.264 and WAV tracks, exact raw audio chunks,
+inbound and outbound data, and a manifest. Text returned on <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code>
+appears in the scrolling data panel; final STT and text sent to TTS use the
+larger primary caption.</p>
 <p>Encoding and file writes run in the separate capture process behind bounded
 queues. If recording falls behind, it drops pending capture frames rather than
-backpressuring the hub or worker. Remove the <code class="docutils literal notranslate"><span class="pre">capture</span></code> process from <code class="docutils literal notranslate"><span class="pre">main.py</span></code>
-when a deployment must not retain device media.</p>
+backpressuring the hub or worker. Omit <code class="docutils literal notranslate"><span class="pre">--capture</span></code> when a deployment must not
+retain device media.</p>
 <p>Wake phrases match at the start of a final transcript or after sentence-final
 <code class="docutils literal notranslate"><span class="pre">.</span></code>, <code class="docutils literal notranslate"><span class="pre">?</span></code>, or <code class="docutils literal notranslate"><span class="pre">!</span></code> punctuation followed by whitespace or a closing quote. Text
 before that boundary and the phrase itself are discarded before dispatch.</p>
@@ -621,7 +624,7 @@ sensitive. Inspect a running sample with:</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#source-map">Source map</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#readiness-and-warmup">Readiness and warmup</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration">Configuration</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#automatic-session-capture">Automatic session capture</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#opt-in-session-capture">Opt-in session capture</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#relay-output">Relay output</a></li>
 </ul>
   </nav></div>
