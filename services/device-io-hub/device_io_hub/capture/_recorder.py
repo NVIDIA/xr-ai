@@ -480,7 +480,7 @@ class SessionRecorder:
             for writer in session.video.values():
                 writer.close()
             session.conversation.close()
-            self._mux_video(session, pts_us)
+            video_tracks = self._mux_video(session, pts_us)
             for stream in session.raw_audio.values():
                 stream.close()
             session.audio_index.close()
@@ -490,10 +490,7 @@ class SessionRecorder:
                 "participant_id": participant_id,
                 "start_us": session.start_us,
                 "end_us": pts_us,
-                "video_tracks": {
-                    track_id: writer.segments
-                    for track_id, writer in session.video.items()
-                },
+                "video_tracks": video_tracks,
                 "audio": {
                     "conversation": "audio/conversation.wav",
                     "channels": {"left": "device", "right": "agent"},
@@ -512,51 +509,112 @@ class SessionRecorder:
         logger.info("media capture completed participant={!r} path={}", participant_id, session.root)
         self._prune_completed()
 
-    def _mux_video(self, session: _ParticipantSession, end_us: int) -> None:
+    def _mux_video(
+        self,
+        session: _ParticipantSession,
+        end_us: int,
+    ) -> dict[str, list[dict]]:
+        sources = sorted(
+            (
+                (track_id, segment)
+                for track_id, writer in session.video.items()
+                for segment in writer.segments
+            ),
+            key=lambda item: (item[1]["start_us"], item[0]),
+        )
+        if not sources:
+            return {}
+
+        raw_path = session.root / "video" / "session.264"
+        pending_path = raw_path.with_suffix(".264.pending")
+        packets: list[VideoPacket] = []
+        try:
+            with pending_path.open("wb") as output:
+                for _, segment in sources:
+                    source_path = session.root / segment["path"]
+                    offset = output.tell()
+                    with source_path.open("rb") as source:
+                        shutil.copyfileobj(source, output)
+                    packets.extend(
+                        VideoPacket(
+                            offset=offset + packet.offset,
+                            size=packet.size,
+                            pts_us=packet.pts_us,
+                            key_frame=packet.key_frame,
+                        )
+                        for packet in segment["_packets"]
+                    )
+            pending_path.replace(raw_path)
+        except Exception:
+            pending_path.unlink(missing_ok=True)
+            raise
+
+        for _, segment in sources:
+            (session.root / segment["path"]).unlink(missing_ok=True)
+
+        packets.sort(key=lambda packet: packet.pts_us)
+        dimensions = sorted({
+            (segment["width"], segment["height"])
+            for _, segment in sources
+        })
+        display_segment = max(
+            (segment for _, segment in sources),
+            key=lambda segment: segment["width"] * segment["height"],
+        )
+        track_ids = list(dict.fromkeys(track_id for track_id, _ in sources))
+        combined = {
+            "path": "video/session.mkv",
+            "start_us": min(segment["start_us"] for _, segment in sources),
+            "end_us": max(segment["end_us"] for _, segment in sources),
+            "num_frames": sum(segment["num_frames"] for _, segment in sources),
+            "width": display_segment["width"],
+            "height": display_segment["height"],
+            "fps": self._config.sample_fps,
+            "raw_path": "video/session.264",
+            "raw_size_bytes": raw_path.stat().st_size,
+            "source_track_ids": track_ids,
+            "encoded_dimensions": [
+                {"width": width, "height": height}
+                for width, height in dimensions
+            ],
+        }
+
         wave_path = session.root / "audio" / "conversation.wav"
         sample_rate = self._config.audio_sample_rate
-        for writer in session.video.values():
-            for index, segment in enumerate(writer.segments):
-                raw_path = session.root / segment["path"]
-                muxed_path = raw_path.with_suffix(".mkv")
-                next_start_us = (
-                    writer.segments[index + 1]["start_us"]
-                    if index + 1 < len(writer.segments)
-                    else end_us
-                )
-                start_frame = round(
-                    (segment["start_us"] - session.start_us)
-                    * sample_rate
-                    / 1_000_000
-                )
-                end_frame = round(
-                    (next_start_us - session.start_us)
-                    * sample_rate
-                    / 1_000_000
-                )
-                packets = segment.pop("_packets")
-                try:
-                    mux_h264_pcm(
-                        output_path=muxed_path,
-                        h264_path=raw_path,
-                        packets=packets,
-                        wave_path=wave_path,
-                        audio_start_frame=start_frame,
-                        audio_end_frame=end_frame,
-                        width=segment["width"],
-                        height=segment["height"],
-                        fps=segment["fps"],
-                    )
-                except Exception as exc:
-                    muxed_path.unlink(missing_ok=True)
-                    logger.warning("media capture A/V mux failed path={}: {}", raw_path, exc)
-                    segment["audio_embedded"] = False
-                    continue
-                segment["raw_path"] = segment["path"]
-                segment["raw_size_bytes"] = segment["size_bytes"]
-                segment["path"] = str(muxed_path.relative_to(session.root))
-                segment["size_bytes"] = muxed_path.stat().st_size
-                segment["audio_embedded"] = True
+        start_frame = round(
+            (combined["start_us"] - session.start_us)
+            * sample_rate
+            / 1_000_000
+        )
+        end_frame = round(
+            (end_us - session.start_us)
+            * sample_rate
+            / 1_000_000
+        )
+        muxed_path = session.root / combined["path"]
+        try:
+            mux_h264_pcm(
+                output_path=muxed_path,
+                h264_path=raw_path,
+                packets=packets,
+                wave_path=wave_path,
+                audio_start_frame=start_frame,
+                audio_end_frame=end_frame,
+                width=combined["width"],
+                height=combined["height"],
+                fps=combined["fps"],
+            )
+        except Exception as exc:
+            muxed_path.unlink(missing_ok=True)
+            logger.warning("media capture A/V mux failed path={}: {}", raw_path, exc)
+            combined["size_bytes"] = combined["raw_size_bytes"]
+            combined["audio_embedded"] = False
+        else:
+            combined["size_bytes"] = muxed_path.stat().st_size
+            combined["audio_embedded"] = True
+
+        manifest_track = track_ids[0] if len(track_ids) == 1 else "session"
+        return {manifest_track: [combined]}
 
     def _event(self, session: _ParticipantSession, kind: str, pts_us: int, **fields) -> None:
         with session.lock:
