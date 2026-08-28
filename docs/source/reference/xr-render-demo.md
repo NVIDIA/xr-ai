@@ -239,6 +239,8 @@ services. On each accepted `xr-render.user-query` event:
 
 1. **Recent conversation** is recalled from `TextMemoryTools` and injected
    as context so the model understands references like "fix that" or "undo".
+   Replies from vision turns appear as a fixed placeholder rather than
+   their text; the original stays in text memory for explicit recall.
 2. **Supervisor loop** (`run_tool_loop`, up to 12 iterations) — Nemotron-Omni
    :8108 routes the request to one or more subagent tools. Each subagent
    runs its own inner `run_tool_loop` (up to 4 iterations) against the
@@ -255,7 +257,12 @@ services. On each accepted `xr-render.user-query` event:
    is counted per turn, not per delegated task.
 4. **Conversation history persisted** — the user utterance and agent reply
    are written to `TextMemoryTools` under `{participant_id}:user` and
-   `{participant_id}:agent` source keys.
+   `{participant_id}:agent` source keys. A vision turn's reply is also
+   written under `{participant_id}:agent-vision`, a shadow source
+   `recall_conversation` never returns; its timestamps mark which recalled
+   replies to redact, surviving voice-pipeline recycles. The store is
+   cleared at worker startup, so recalled conversation never outlives the
+   run that produced it.
 5. **Final response** published as one complete `voice.output` message for
    the voice subscriber and TTS.
 

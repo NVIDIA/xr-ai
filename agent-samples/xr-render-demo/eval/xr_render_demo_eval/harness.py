@@ -14,8 +14,11 @@ from xr_ai_tools import Tool
 from xr_ai_tools.text_memory import (
     AddTranscriptRequest,
     ConversationEntry,
+    QueryTranscriptsRequest,
+    QueryTranscriptsResult,
     RecallConversationRequest,
     RecallConversationResult,
+    TranscriptSegment,
 )
 from xr_ai_tools.types import SpatialFrame, Vector3
 from xr_render_demo_worker.config import load_config
@@ -73,23 +76,54 @@ class _FakeTrackingTools:
         self.get_user_frame = Tool("get_user_frame", "User frame.", EmptyRequest, SpatialFrame, lambda _: pose)
 
 
+def _history_timestamps(index: int) -> tuple[int, int]:
+    """Fabricated (user, agent) timestamps for seeded history pair ``index``."""
+    return (index + 1) * 1_000_000, (index + 1) * 1_000_000 + 1
+
+
 class _FakeTextMemoryTools:
     def __init__(self, fake: "FakeScene") -> None:
         async def recall(req: RecallConversationRequest) -> RecallConversationResult:
             fake.calls.append(("recall_conversation", req.model_dump()))
             entries: list[ConversationEntry] = []
             for i, (user_text, agent_text) in enumerate(fake.history):
-                entries.append(ConversationEntry(timestamp_us=(i + 1) * 1_000_000, role="user", text=user_text))
-                entries.append(ConversationEntry(timestamp_us=(i + 1) * 1_000_000 + 1, role="agent", text=agent_text))
+                user_ts, agent_ts = _history_timestamps(i)
+                entries.append(ConversationEntry(timestamp_us=user_ts, role="user", text=user_text))
+                entries.append(ConversationEntry(timestamp_us=agent_ts, role="agent", text=agent_text))
             if fake.memory_answer:
                 entries.append(ConversationEntry(timestamp_us=1, role="agent", text=fake.memory_answer))
+            entries.sort(key=lambda entry: entry.timestamp_us)
             return RecallConversationResult(entries=entries)
 
         self.recall_conversation = Tool(
             "recall_conversation", "Recall.", RecallConversationRequest, RecallConversationResult, recall)
-        async def _noop_transcript(req: AddTranscriptRequest) -> None:
-            return None
-        self.add_transcript = Tool("add_transcript", "Add.", AddTranscriptRequest, None, _noop_transcript)
+        stored: list[AddTranscriptRequest] = []
+
+        async def _add_transcript(req: AddTranscriptRequest) -> None:
+            stored.append(req)
+
+        async def _query(req: QueryTranscriptsRequest) -> QueryTranscriptsResult:
+            fake.calls.append(("query_transcripts", req.model_dump()))
+            segments = [
+                TranscriptSegment(timestamp_us=r.timestamp_us, text=r.text)
+                for r in stored
+                if r.source_id == req.source_id
+                and req.start_us <= r.timestamp_us <= req.end_us
+            ]
+            if req.source_id.endswith(":agent-vision"):
+                segments.extend(
+                    TranscriptSegment(
+                        timestamp_us=_history_timestamps(i)[1],
+                        text=fake.history[i][1],
+                    )
+                    for i in fake.history_sightings
+                    if req.start_us <= _history_timestamps(i)[1] <= req.end_us
+                )
+            return QueryTranscriptsResult(segments=segments)
+
+        self.add_transcript = Tool("add_transcript", "Add.", AddTranscriptRequest, None, _add_transcript)
+        self.query_transcripts = Tool(
+            "query_transcripts", "Query.", QueryTranscriptsRequest, QueryTranscriptsResult, _query)
 
 
 class _FakeCurrentFrameTool:
@@ -206,7 +240,9 @@ class Case:
     expected_positions: tuple[tuple[str, tuple[float, float, float]], ...] = ()
     memory: str = ""
     history: tuple[tuple[str, str], ...] = ()
+    history_sightings: tuple[int, ...] = ()
     reply_contains: str = ""
+    reply_excludes: str = ""
     camera_error: str = ""
     physical_expect_source: str = ""
 
@@ -310,8 +346,30 @@ CASES = (
         expected_call_counts=(("recall_conversation", 1),),
     ),
     Case(
-        name="durable_memory",
-        request="What object did we discuss in the earlier session?",
+        name="stale_holding_fresh_look",
+        # A repeat ask must trigger a fresh look and track the changed world;
+        # the redacted prior sighting in history is the lure.
+        request="What am I holding now?",
+        history=(("What am I holding?", "You are holding a red notebook."),),
+        history_sightings=(0,),
+        vision="The user is holding a blue ceramic mug.",
+        required_tools=frozenset({"look_at_current_frame"}),
+        reply_contains="mug",
+        reply_excludes="notebook",
+    ),
+    Case(
+        name="recall_prior_sighting",
+        # The companion boundary: a transcript question is a memory answer,
+        # not a forced look ("what you saw" would be video, not transcript).
+        request="What did you tell me I was holding earlier?",
+        history=(("What am I holding?", "You are holding a red notebook."),),
+        history_sightings=(0,),
+        forbidden_tools=frozenset({"look_at_current_frame"}),
+        reply_contains="notebook",
+    ),
+    Case(
+        name="recall_prior_discussion",
+        request="What object did we discuss earlier?",
         memory="We discussed a small cyan sphere.",
         required_tools=frozenset({"recall_conversation"}),
     ),
@@ -450,6 +508,7 @@ class FakeScene:
     vision_error: str
     memory_answer: str
     history: tuple[tuple[str, str], ...] = ()
+    history_sightings: tuple[int, ...] = ()
     camera_error: str = ""
     physical_answer: str = ""
     physical_expect_source: str = ""
@@ -466,6 +525,7 @@ class FakeScene:
             case.vision_error,
             case.memory,
             case.history,
+            history_sightings=case.history_sightings,
             camera_error=case.camera_error,
             physical_expect_source=case.physical_expect_source,
         )
@@ -1149,6 +1209,8 @@ async def run_case(case: Case) -> bool:
     }
     wrong_reply = bool(
         case.reply_contains and case.reply_contains.lower() not in response.lower()
+    ) or bool(
+        case.reply_excludes and case.reply_excludes.lower() in response.lower()
     )
     passed = (
         not errored

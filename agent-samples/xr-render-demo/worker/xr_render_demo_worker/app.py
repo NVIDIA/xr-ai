@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from loguru import logger
@@ -71,6 +72,9 @@ async def run_app(
     transport = HubVoiceTransport()
     scene = SceneTools(config.scene_endpoint)
     tracking = TrackingTools(config.openxr_endpoint)
+    shutil.rmtree(config.text_memory_dir, ignore_errors=True)
+    if any(Path(config.text_memory_dir).glob("*")):
+        logger.warning("stale transcripts survived the startup wipe in {}", config.text_memory_dir)
     text_memory = TextMemoryTools(config.text_memory_dir)
     video = VideoMemoryTools(config.video_memory_endpoint)
     images = ImageRegistry(allow_external=True)
