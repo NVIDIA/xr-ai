@@ -35,7 +35,7 @@ passes each file to the process that owns it:
 | `yaml/voice_gate.yaml` | Always-on speech or wake phrases |
 | `yaml/models.json` | Reused model adapters and endpoint addresses |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, networking, and video recording |
-| `yaml/media_capture.yaml` | Automatic session-capture output, NVENC, audio, captions, and retention |
+| `yaml/media_capture.yaml` | Opt-in session-capture output, NVENC, audio, captions, and retention |
 | `yaml/video_memory_service.yaml` | Recorded-query output and GPU |
 | `yaml/openxr_service.yaml` | OpenXR endpoint and eval-only simulated pose |
 | `scene/scene_service.yaml` | LOVR binary, app directory, and scene endpoint |
@@ -79,11 +79,18 @@ Alternatively, run the source file directly after synchronization:
 uv run main.py
 ```
 
+Capture is disabled by default. To record participant video, bidirectional
+audio, and data-channel traffic, opt in explicitly:
+
+```bash
+uv run xr_render_demo --capture
+```
+
 Open the authenticated client URL printed by DeviceIOHub and connect. Press
 Ctrl+C to stop the demo stack; do not stop its individual child processes.
-Each connection is recorded automatically under
-`~/.local/share/xr-ai/captures/xr-render-demo/`; change or disable the
-`capture` process in `main.py` when a deployment must not retain device media.
+With `--capture`, each connection is recorded under
+`~/.local/share/xr-ai/captures/xr-render-demo/`. The normal command writes no
+capture.
 
 The shared models remain running after the sample stops. From this directory,
 stop them with `uv run --project ../model-servers model_servers --stop`.

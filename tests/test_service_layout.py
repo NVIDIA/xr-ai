@@ -436,7 +436,7 @@ def test_simple_vlm_reuses_every_model_process() -> None:
     } == {"stt": "reuse", "vlm": "reuse", "tts": "reuse"}
 
 
-def test_samples_start_capture_immediately_after_hub() -> None:
+def test_sample_capture_is_opt_in_and_starts_immediately_after_hub() -> None:
     simple = _load_module(
         "service_layout_simple_vlm_capture",
         "agent-samples/simple-vlm-example/main.py",
@@ -446,7 +446,17 @@ def test_samples_start_capture_immediately_after_hub() -> None:
         "agent-samples/xr-render-demo/main.py",
     )
 
-    for processes in (simple.PROCESSES, render._build_processes()):
+    assert simple._parse_args([]).capture is False
+    assert render._parse_args([]).capture is False
+    assert "capture" not in [process.name for process in simple.PROCESSES]
+    assert "capture" not in [process.name for process in render._build_processes()]
+
+    assert simple._parse_args(["--capture"]).capture is True
+    assert render._parse_args(["--capture"]).capture is True
+    for processes in (
+        simple._build_processes(capture=True),
+        render._build_processes(capture=True),
+    ):
         names = [process.name for process in processes]
         hub_index = names.index("hub")
         assert names[hub_index + 1] == "capture"
