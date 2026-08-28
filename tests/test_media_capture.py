@@ -25,6 +25,7 @@ def _frame(
     pts_us: int = 1_000_000,
     width: int = 64,
     height: int = 32,
+    track_id: str = "camera",
 ) -> FrameData:
     y = np.full(width * height, 96, dtype=np.uint8)
     u = np.full(width * height // 4, 128, dtype=np.uint8)
@@ -37,7 +38,7 @@ def _frame(
         fmt=PixelFormat.I420,
         data=np.concatenate((y, u, v)).tobytes(),
         participant_id="alice",
-        track_id="camera",
+        track_id=track_id,
     )
 
 
@@ -227,6 +228,67 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
     )
     assert encoded_inputs
     assert np.any(encoded_inputs[0][_frame().height:] == 235)
+
+
+def test_session_bundle_merges_resolution_and_track_segments_into_one_video(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    class FakeEncoder:
+        def Encode(self, _frame, _params):
+            return [{
+                "data": (
+                    b"\x00\x00\x00\x01\x67\x64\x00\x1f\xac"
+                    b"\x00\x00\x00\x01\x68\xee\x3c\x80"
+                    b"\x00\x00\x00\x01\x65frame"
+                ),
+                "picture_type": 3,
+            }]
+
+        def EndEncode(self):
+            return []
+
+    fake_module = types.SimpleNamespace(
+        CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
+        NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
+    )
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", fake_module)
+    recorder = SessionRecorder(CaptureConfig(
+        out_dir=str(tmp_path),
+        sample_fps=30,
+        max_total_bytes=0,
+    ))
+    recorder.begin_session("alice", 1_000_000)
+    recorder.record_video(_frame(pts_us=1_000_000, width=64, height=32))
+    recorder.record_video(_frame(pts_us=1_050_000, width=128, height=64))
+    recorder.record_video(_frame(
+        pts_us=1_100_000,
+        width=128,
+        height=64,
+        track_id="replacement-camera",
+    ))
+    recorder.end_session("alice", 1_150_000)
+
+    session = next(path for path in tmp_path.iterdir() if path.is_dir())
+    manifest = json.loads((session / "manifest.json").read_text())
+    videos = [
+        video
+        for track in manifest["video_tracks"].values()
+        for video in track
+    ]
+    assert len(videos) == 1
+    assert videos[0]["num_frames"] == 3
+    assert videos[0]["source_track_ids"] == ["camera", "replacement-camera"]
+    assert videos[0]["encoded_dimensions"] == [
+        {"width": 224, "height": 112},
+        {"width": 288, "height": 144},
+    ]
+    assert [path.name for path in (session / "video").glob("*.mkv")] == [
+        "session.mkv"
+    ]
+    assert [path.name for path in (session / "video").glob("*.264")] == [
+        "session.264"
+    ]
 
 
 @pytest.mark.asyncio
