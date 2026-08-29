@@ -100,12 +100,15 @@ Package Contents
    provided), ``HF_XET_HIGH_PERFORMANCE``, ``HF_HOME``, and
    ``TRANSFORMERS_CACHE``.
 
-   The Xet setting uses ``setdefault`` so callers can disable high-performance
-   mode explicitly. Both ``HF_HOME`` and ``TRANSFORMERS_CACHE`` also use
-   ``setdefault``, so an externally-set value wins over the YAML default. This
-   intentionally differs from the pre-consolidation per-server code where the
-   LLM wrappers used an unconditional assignment for ``HF_HOME``; callers that
-   need the YAML value to take priority must unset the env var before calling.
+   The deprecated ``HF_HUB_ENABLE_HF_TRANSFER`` setting is removed so it
+   cannot activate the uninstalled ``hf_transfer`` package on older supported
+   Hub releases. The Xet setting uses ``setdefault`` so callers can disable
+   high-performance mode explicitly. Both ``HF_HOME`` and
+   ``TRANSFORMERS_CACHE`` also use ``setdefault``, so an externally-set value
+   wins over the YAML default. This intentionally differs from the
+   pre-consolidation per-server code where the LLM wrappers used an
+   unconditional assignment for ``HF_HOME``; callers that need the YAML value
+   to take priority must unset the env var before calling.
    ``TRANSFORMERS_CACHE`` mirrors ``HF_HOME`` for Transformers <4.36 and
    third-party libraries that have not yet adopted the ``HF_HOME`` superset.
 

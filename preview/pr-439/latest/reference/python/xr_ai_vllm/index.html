@@ -541,12 +541,15 @@ used as the base for relative paths like <code class="docutils literal notransla
 <p>Sets <code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code> (when configured), <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> (when
 provided), <code class="docutils literal notranslate"><span class="pre">HF_XET_HIGH_PERFORMANCE</span></code>, <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code>, and
 <code class="docutils literal notranslate"><span class="pre">TRANSFORMERS_CACHE</span></code>.</p>
-<p>The Xet setting uses <code class="docutils literal notranslate"><span class="pre">setdefault</span></code> so callers can disable high-performance
-mode explicitly. Both <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> and <code class="docutils literal notranslate"><span class="pre">TRANSFORMERS_CACHE</span></code> also use
-<code class="docutils literal notranslate"><span class="pre">setdefault</span></code>, so an externally-set value wins over the YAML default. This
-intentionally differs from the pre-consolidation per-server code where the
-LLM wrappers used an unconditional assignment for <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code>; callers that
-need the YAML value to take priority must unset the env var before calling.
+<p>The deprecated <code class="docutils literal notranslate"><span class="pre">HF_HUB_ENABLE_HF_TRANSFER</span></code> setting is removed so it
+cannot activate the uninstalled <code class="docutils literal notranslate"><span class="pre">hf_transfer</span></code> package on older supported
+Hub releases. The Xet setting uses <code class="docutils literal notranslate"><span class="pre">setdefault</span></code> so callers can disable
+high-performance mode explicitly. Both <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> and
+<code class="docutils literal notranslate"><span class="pre">TRANSFORMERS_CACHE</span></code> also use <code class="docutils literal notranslate"><span class="pre">setdefault</span></code>, so an externally-set value
+wins over the YAML default. This intentionally differs from the
+pre-consolidation per-server code where the LLM wrappers used an
+unconditional assignment for <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code>; callers that need the YAML value
+to take priority must unset the env var before calling.
 <code class="docutils literal notranslate"><span class="pre">TRANSFORMERS_CACHE</span></code> mirrors <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> for Transformers &lt;4.36 and
 third-party libraries that have not yet adopted the <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> superset.</p>
 <p>Returns the resolved <code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> string (or <code class="docutils literal notranslate"><span class="pre">None</span></code>) so
