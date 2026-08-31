@@ -65,7 +65,9 @@ Language-specific toolchains are pinned in each client project:
   [SPDX headers](docs/source/guides/spdx-headers.md).
 - Complete the pull request template with the problem, solution, scope and
   follow-ups, and validation. Explain deliberate exclusions or tradeoffs, and
-  link and assign issues for later steps in a multi-pull-request change.
+  link and assign explicitly authorized issues for later steps in a
+  multi-pull-request change. Use `Large PR: yes` only after the large scope has
+  received the user confirmation required by `AGENTS.md`.
 - Perform an isolated review of the complete diff before requesting review.
   After feedback, fix scoped correctness problems without silently accepting an
   unrelated redesign. Post a complete disposition for the review round,
