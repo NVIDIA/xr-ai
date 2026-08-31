@@ -629,7 +629,7 @@ async def test_vad_stt_bare_partial_stop_preserves_scoped_final_command(
     await runner.add_workers(worker)
 
     async def drive() -> None:
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(1.0)
         await worker.queue_frame(frame)
         await asyncio.sleep(0.2)
         assert _StagedVad.instances
