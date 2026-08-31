@@ -439,6 +439,49 @@ headers.</p>
 </div>
 <p>This applies to the <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/spark/</span></code> profile.</p>
 </section>
+<section id="dgx-spark-vllm-fails-in-cudamemgetinfo-before-loading-weights">
+<h3>DGX Spark — vLLM fails in <code class="docutils literal notranslate"><span class="pre">cudaMemGetInfo</span></code> before loading weights<a class="headerlink" href="#dgx-spark-vllm-fails-in-cudamemgetinfo-before-loading-weights" title="Link to this heading">#</a></h3>
+<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> aborts while starting a vLLM service, often the
+embedding server after the larger services have started. The traceback reaches
+<code class="docutils literal notranslate"><span class="pre">MemorySnapshot.measure()</span></code>, then ends in <code class="docutils literal notranslate"><span class="pre">torch.cuda.mem_get_info()</span></code> or
+<code class="docutils literal notranslate"><span class="pre">cudaMemGetInfo</span></code> with a CUDA out-of-memory error. <code class="docutils literal notranslate"><span class="pre">htop</span></code> can still show tens of
+gigabytes of available memory.</p>
+<p><strong>Cause:</strong> this traceback is not a model-weight or KV-cache allocation failure.
+The CUDA memory snapshot fails before vLLM loads that service’s weights or
+checks its configured <code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code>.</p>
+<p>DGX Spark uses a unified memory architecture: the CPU, GPU, filesystem cache,
+and model servers share the same DRAM. Linux <code class="docutils literal notranslate"><span class="pre">MemAvailable</span></code> includes memory that
+the kernel can reclaim, while <code class="docutils literal notranslate"><span class="pre">cudaMemGetInfo</span></code> can report a smaller immediately
+free amount. NVIDIA documents this behavior in its <a class="reference external" href="https://docs.nvidia.com/dgx/dgx-spark/known-issues.html#guidance-for-reporting-memory-resources-with-unified-memory-architecture">DGX Spark unified-memory
+guidance</a>,
+and a <a class="reference external" href="https://github.com/vllm-project/vllm/issues/48140">related vLLM issue</a>
+describes how checkpoint reads held in the filesystem page cache can trigger a
+startup failure on UMA systems.</p>
+<p><strong>Diagnosis:</strong> inspect the host memory counters immediately after the failure:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>grep<span class="w"> </span>-E<span class="w"> </span><span class="s1">'^(MemTotal|MemFree|MemAvailable|Cached|SReclaimable|SwapFree):'</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/proc/meminfo
+</pre></div>
+</div>
+<p>If <code class="docutils literal notranslate"><span class="pre">MemAvailable</span></code> is much larger than <code class="docutils literal notranslate"><span class="pre">MemFree</span></code> and <code class="docutils literal notranslate"><span class="pre">Cached</span></code> is large, the
+failure is consistent with reclaimable-cache pressure rather than the next
+model being too large for the configured profile.</p>
+<p><strong>Fix:</strong> first install the current DGX OS and driver updates. The <a class="reference external" href="https://docs.nvidia.com/dgx/dgx-spark/release-notes.html">DGX Spark
+release notes</a>
+identify improved GB10 UMA out-of-memory handling in the July 2026 release.
+Stop unrelated memory-intensive workloads before retrying the stack.</p>
+<p>For diagnosis and recovery, NVIDIA recommends flushing clean filesystem caches
+and then restarting the application:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>sh<span class="w"> </span>-c<span class="w"> </span><span class="s1">'sync; echo 3 &gt; /proc/sys/vm/drop_caches'</span>
+</pre></div>
+</div>
+<p>The leading <code class="docutils literal notranslate"><span class="pre">sync</span></code> flushes dirty filesystem buffers. Dropping caches makes
+subsequent filesystem reads cold, so use this as a diagnostic workaround, not
+as routine launcher behavior.</p>
+<p>Do not lower <code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code> solely for this traceback. That setting
+cannot be evaluated when <code class="docutils literal notranslate"><span class="pre">cudaMemGetInfo</span></code> itself fails. Lower the setting only
+for later failures that report insufficient memory for the requested
+utilization or KV cache.</p>
+</section>
 <section id="dgx-spark-lovr-auto-download-is-not-supported">
 <h3>DGX Spark — LOVR auto-download is not supported<a class="headerlink" href="#dgx-spark-lovr-auto-download-is-not-supported" title="Link to this heading">#</a></h3>
 <p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--project</span> <span class="pre">agent-samples/xr-render-demo</span> <span class="pre">xr_render_demo</span></code>
@@ -639,14 +682,13 @@ iOS, and visionOS use wss only; there is no <code class="docutils literal notran
 <h3>Android — connection fails with TLS or certificate errors<a class="headerlink" href="#android-connection-fails-with-tls-or-certificate-errors" title="Link to this heading">#</a></h3>
 <p><strong>Symptom:</strong> the Android sample fails to connect; the error shows an
 <code class="docutils literal notranslate"><span class="pre">SSLHandshakeException</span></code> or similar TLS error.</p>
-<p><strong>Cause:</strong> the hub uses a development root CA by default. The Android sample
-validates the signed server leaf against the system and user CA store, the same
-as iOS.</p>
+<p><strong>Cause:</strong> the hub uses a self-signed certificate by default. The Android sample
+validates against the system and user CA store, the same as iOS.</p>
 <p><strong>Fix:</strong> install the hub’s certificate via the in-app button before connecting:</p>
 <ol class="arabic simple">
 <li><p>In the <strong>Connection</strong> section, tap <strong>Install hub certificate</strong> (enabled once
 <strong>Host</strong> is non-empty).</p></li>
-<li><p>The app fetches the public root CA from <code class="docutils literal notranslate"><span class="pre">https://&lt;host&gt;:&lt;port&gt;/cert</span></code> and opens
+<li><p>The app fetches the certificate from <code class="docutils literal notranslate"><span class="pre">https://&lt;host&gt;:&lt;port&gt;/cert</span></code> and opens
 the system certificate-install dialog.</p></li>
 <li><p>Confirm the install. After install, tap <strong>Connect</strong> — validation succeeds
 automatically.</p></li>
@@ -661,7 +703,7 @@ production.</p>
 WebSocket reports a TLS error (e.g. <code class="docutils literal notranslate"><span class="pre">NSURLErrorServerCertificateUntrusted</span></code>,
 <code class="docutils literal notranslate"><span class="pre">-1202</span></code>, “The certificate for this server is invalid”).</p>
 <p><strong>Cause:</strong> the LiveKit Swift SDK cannot bypass certificate validation, so the
-hub’s development root CA must be trusted at the OS level.</p>
+hub’s self-signed certificate must be trusted at the OS level.</p>
 <p><strong>Fix:</strong> install the hub’s certificate as a trusted profile on the device:</p>
 <ol class="arabic simple">
 <li><p>In Safari on the device, open <code class="docutils literal notranslate"><span class="pre">https://&lt;host&gt;:8080/cert</span></code> and tap
@@ -671,26 +713,22 @@ hub’s development root CA must be trusted at the OS level.</p>
 <li><p>Toggle <strong>Settings → General → About → Certificate Trust Settings →
 Enable Full Trust</strong> for the new certificate.</p></li>
 </ol>
-<p>If step 4 shows no toggle, remove the installed profile via <strong>VPN &amp; Device
-Management</strong>, restart the hub, and install <code class="docutils literal notranslate"><span class="pre">/cert</span></code> again. Older xr-ai builds
-used <code class="docutils literal notranslate"><span class="pre">web-server.crt</span></code> itself as the trust profile. DeviceIOHub detects that
-legacy CA-as-server certificate and migrates it to <code class="docutils literal notranslate"><span class="pre">root-ca.crt</span></code> plus a signed
-<code class="docutils literal notranslate"><span class="pre">CA:FALSE</span></code> server leaf with a clear <code class="docutils literal notranslate"><span class="pre">TLS:</span> <span class="pre">migrating</span> <span class="pre">legacy</span> <span class="pre">CA-as-server</span></code>
-message. This migration requires one root reinstall; later server-leaf changes
-do not.</p>
+<p>If step 4 shows no toggle, the cached certificate on the hub is from an older
+xr-ai build that wrote <code class="docutils literal notranslate"><span class="pre">BasicConstraints</span> <span class="pre">CA:FALSE</span></code> and iOS will not
+expose the trust toggle for it. Remove the installed profile via
+<strong>VPN &amp; Device Management</strong> and restart the hub — it auto-detects the
+stale certificate and regenerates it as a self-signed CA (logged as <code class="docutils literal notranslate"><span class="pre">TLS:</span> <span class="pre">cached</span> <span class="pre">cert</span> <span class="pre">is</span> <span class="pre">not</span> <span class="pre">a</span> <span class="pre">CA</span> <span class="pre">cert</span> <span class="pre">—</span> <span class="pre">regenerating…</span></code>).</p>
 <p>If the toggle was enabled but the wss handshake still fails with
 <code class="docutils literal notranslate"><span class="pre">errSSLBadCert</span></code> or NSURLErrorDomain <code class="docutils literal notranslate"><span class="pre">-1202</span></code> and a message like <em>“pretending
 to be 192.168.1.42”</em> (that is, the IP you typed into the app), the
-server leaf’s SubjectAlternativeName doesn’t cover that IP. The hub detects
-local IPv4 addresses via a UDP-connect probe and auto-regenerates only the leaf
-whenever the SAN is missing one (logged as <code class="docutils literal notranslate"><span class="pre">TLS:</span> <span class="pre">generated</span> <span class="pre">server</span> <span class="pre">leaf</span> <span class="pre">…</span></code>); just
-restart the hub. The already installed root remains valid. If the dialed address
-is absent from the leaf,
+certificate’s SubjectAlternativeName doesn’t cover that IP. The hub detects
+local IPv4 addresses via a UDP-connect probe and auto-regenerates the
+certificate whenever the SAN is missing one (logged as <code class="docutils literal notranslate"><span class="pre">TLS:</span> <span class="pre">cached</span> <span class="pre">cert</span> <span class="pre">SAN</span> <span class="pre">is</span> <span class="pre">missing</span> <span class="pre">…;</span> <span class="pre">regenerating…</span></code>); just restart the hub and re-install the
+profile on the device. If the dialed address is absent from the certificate,
 add it to <code class="docutils literal notranslate"><span class="pre">web_server_extra_sans</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> and restart. Refer to
 <a class="reference internal" href="../getting_started/networking.html"><span class="doc">Networking</span></a> for details.
-To force leaf regeneration, delete <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code> and
-<code class="docutils literal notranslate"><span class="pre">web-server.key</span></code> before restarting. Do not delete <code class="docutils literal notranslate"><span class="pre">root-ca.crt</span></code> or <code class="docutils literal notranslate"><span class="pre">root-ca.key</span></code>
-unless you intend to reinstall the root on every client.</p>
+To force regeneration, delete <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code> and
+<code class="docutils literal notranslate"><span class="pre">web-server.key</span></code> before restarting.</p>
 <p>If the certificate is trusted (no <code class="docutils literal notranslate"><span class="pre">-1202</span></code>) but the room connection still fails
 with HTTP 401 or “no permissions to access the room”, the hub’s <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> WSS
 proxy is dropping the <code class="docutils literal notranslate"><span class="pre">Authorization:</span> <span class="pre">Bearer</span> <span class="pre">&lt;token&gt;</span></code> header the Swift
@@ -828,6 +866,7 @@ stall indefinitely; set <code class="docutils literal notranslate"><span class="
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup-time-issues">Setup-time issues</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-uv-sync-fails-to-build-a-wheel">DGX Spark — <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> fails to build a wheel</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-vllm-fails-in-cudamemgetinfo-before-loading-weights">DGX Spark — vLLM fails in <code class="docutils literal notranslate"><span class="pre">cudaMemGetInfo</span></code> before loading weights</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-lovr-auto-download-is-not-supported">DGX Spark — LOVR auto-download is not supported</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#blackwell-gpus-b200-rtx-pro-6000-vlm-fails-to-start">Blackwell GPUs (B200, RTX PRO 6000) — VLM fails to start</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#gpu-service-aborts-with-cudnn-version-incompatibility">GPU service aborts with <code class="docutils literal notranslate"><span class="pre">cuDNN</span> <span class="pre">version</span> <span class="pre">incompatibility</span></code></a></li>
