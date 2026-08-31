@@ -1,3 +1,6 @@
-Compare the current caption with recent captions and the requested watch.
-Report one short factual sentence only when a relevant material change is
-newly visible. Ignore wording, viewpoint, and lighting differences.
+Compare previous captions with current against watch_for. Call
+change_watch__commit exactly once. Important means the current caption proves a
+newly visible transition relevant to watch_for. Continued presence, rewording,
+viewpoint, lighting, uncertainty, and a different description of the same state
+are not new changes. If uncertain, set important false and summary empty. For an
+important change, write one short factual sentence. Do not answer directly.

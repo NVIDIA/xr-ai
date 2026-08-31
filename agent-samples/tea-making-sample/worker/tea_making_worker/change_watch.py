@@ -21,10 +21,10 @@ from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef, VLMServ
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameRequest
-from xr_ai_tools.tool_calling import run_tool_loop
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 from xr_ai_voice import VoiceParticipantLeft
 
+from ._background_tools import RequiredToolCallError, run_required_tool
 from .events import (
     BACKGROUND_FACT_TOPIC,
     CHANGE_WATCH_RECORD_TOPIC,
@@ -364,6 +364,12 @@ class ChangeWatchAgent(Agent):
                 decision = await self._decide(state, caption)
             except asyncio.CancelledError:
                 raise
+            except RequiredToolCallError:
+                logger.debug(
+                    "change watch decision skipped pid={!r}: required commit missing",
+                    participant_id,
+                )
+                return
             except Exception as exc:
                 logger.opt(exception=True).warning(
                     "change watch decision failed pid={!r}", participant_id
@@ -428,17 +434,16 @@ class ChangeWatchAgent(Agent):
                 enable_thinking=False,
             )
 
-        result = await run_tool_loop(
+        content = await run_required_tool(
             (
                 ChatMessage(role="system", content=self._event_prompt),
                 ChatMessage(role="user", content=payload),
             ),
             tools,
             call_model,
-            max_iterations=3,
-            max_tool_calls=2,
+            required_tool="change_watch__commit",
         )
-        return ChangeDecision.model_validate_json(result.content)
+        return ChangeDecision.model_validate_json(content)
 
     async def _publish_error(
         self,

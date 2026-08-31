@@ -21,10 +21,10 @@ from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef, VLMServ
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameRequest
-from xr_ai_tools.tool_calling import run_tool_loop
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 from xr_ai_voice import VoiceParticipantLeft
 
+from ._background_tools import RequiredToolCallError, run_required_tool
 from .events import (
     BACKGROUND_FACT_TOPIC,
     PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
@@ -71,7 +71,10 @@ class _VideoState:
 
 
 def _is_no_change(delta: str) -> bool:
-    return delta.rstrip(". ").casefold() == _NO_CHANGE
+    normalized = delta.strip().casefold()
+    return normalized.startswith(_NO_CHANGE) or normalized.startswith(
+        f"there was {_NO_CHANGE}"
+    )
 
 
 class VideoLogAgent(Agent):
@@ -302,10 +305,28 @@ class VideoLogAgent(Agent):
                     ),
                 )
                 return
+            if not state.captions:
+                state.captions.append(caption)
+                await self._publish_record(
+                    participant_id,
+                    VideoLogRecord(
+                        timestamp_us=now_us,
+                        record_type="observation",
+                        caption=caption,
+                        delta="No meaningful visual change.",
+                    ),
+                )
+                return
             try:
                 delta = await self._generate_delta(state, caption)
             except asyncio.CancelledError:
                 raise
+            except RequiredToolCallError:
+                logger.debug(
+                    "video delta skipped pid={!r}: required commit missing",
+                    participant_id,
+                )
+                return
             except Exception as exc:
                 logger.opt(exception=True).warning(
                     "video delta failed pid={!r}", participant_id
@@ -370,17 +391,16 @@ class VideoLogAgent(Agent):
                 enable_thinking=False,
             )
 
-        result = await run_tool_loop(
+        content = await run_required_tool(
             (
                 ChatMessage(role="system", content=self._delta_prompt),
                 ChatMessage(role="user", content=payload),
             ),
             tools,
             call_model,
-            max_iterations=3,
-            max_tool_calls=2,
+            required_tool="video_log__commit",
         )
-        return VideoDelta.model_validate_json(result.content)
+        return VideoDelta.model_validate_json(content)
 
     async def _publish_error(
         self,

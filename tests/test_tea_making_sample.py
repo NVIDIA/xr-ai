@@ -72,7 +72,10 @@ from tea_making_worker.foreground import ForegroundAgent  # noqa: E402  # pyrigh
 from tea_making_worker.images import ParticipantImageAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.spec import load_workflow  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.transcript import TranscriptAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
-from tea_making_worker.video_log import VideoLogAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.video_log import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    VideoLogAgent,
+    _is_no_change,
+)
 from tea_making_worker.web_events import TeaWebEventsAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.workflow import GuidanceAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.workflow_state import WorkflowStore  # noqa: E402  # pyright: ignore[reportMissingImports]
@@ -224,20 +227,36 @@ async def test_typed_events_are_projected_to_web_topics() -> None:
             ),
         ),
         (
+            BACKGROUND_FACT_TOPIC,
+            BackgroundFact(
+                timestamp_us=5,
+                application="change_watch",
+                text="A hand was raised.",
+            ),
+        ),
+        (
+            BACKGROUND_FACT_TOPIC,
+            BackgroundFact(
+                timestamp_us=6,
+                application="video_log",
+                text="A person entered the room.",
+            ),
+        ),
+        (
             CHANGE_WATCH_RECORD_TOPIC,
-            ChangeWatchRecord(timestamp_us=5, record_type="started"),
+            ChangeWatchRecord(timestamp_us=7, record_type="started"),
         ),
         (
             TRANSCRIPT_RECORD_TOPIC,
             TranscriptRecord(
-                timestamp_us=6,
+                timestamp_us=8,
                 record_type="utterance",
                 text="Start steeping.",
             ),
         ),
         (
             VIDEO_LOG_RECORD_TOPIC,
-            VideoLogRecord(timestamp_us=7, record_type="observation", caption="A cup."),
+            VideoLogRecord(timestamp_us=9, record_type="observation", caption="A cup."),
         ),
         (PARTICIPANT_JOINED_TOPIC, VoiceParticipantJoined()),
         (PARTICIPANT_LEFT_TOPIC, VoiceParticipantLeft()),
@@ -251,16 +270,118 @@ async def test_typed_events_are_projected_to_web_topics() -> None:
         "foreground",
         "guidance.events",
         "guidance.notices",
-        "background.facts",
+        "background.change-watch",
+        "background.video-log",
         "background.change-watch",
         "background.transcript",
-        "background.video-log",
         "participant.lifecycle",
         "participant.lifecycle",
     ]
+    assert captured[3][0].payload == {"text": "A hand was raised."}
+    assert captured[4][0].payload == {"text": "A person entered the room."}
     assert {participant for _event, participant in captured} == {participant_id}
     assert captured[-2][0].payload == {"event": "joined"}
     assert captured[-1][0].payload == {"event": "left"}
+
+
+@pytest.mark.asyncio
+async def test_change_watch_retries_prose_with_required_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def execute(_name, arguments, handler, *_args, **_kwargs):
+        return await handler(arguments)
+
+    monkeypatch.setattr("xr_ai_tools.tools.typed.tool_execute", execute)
+    chat = AsyncMock(
+        side_effect=(
+            ChatResponse("The hand is raised.", None, None, "stop", {}),
+            ChatResponse(
+                "",
+                None,
+                [
+                    ToolCall(
+                        id="change-commit",
+                        name="change_watch__commit",
+                        arguments=json.dumps(
+                            {"important": True, "summary": "A hand was raised."}
+                        ),
+                    )
+                ],
+                "tool_calls",
+                {},
+            ),
+        )
+    )
+
+    agent = object.__new__(ChangeWatchAgent)
+    agent._llm = SimpleNamespace(chat=chat)  # type: ignore[attr-defined]
+    agent._event_prompt = "Compare and commit."  # type: ignore[attr-defined]
+
+    decision = await agent._decide(
+        SimpleNamespace(instruction="raised hands", captions=["Hands are down."]),
+        "A hand is raised.",
+    )
+
+    assert decision.important is True
+    assert decision.summary == "A hand was raised."
+    assert chat.await_count == 2
+    retry_messages = chat.await_args_list[1].args[0]
+    assert retry_messages[-1].role == "user"
+    assert "change_watch__commit" in retry_messages[-1].content
+
+
+@pytest.mark.asyncio
+async def test_video_log_retries_prose_with_required_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def execute(_name, arguments, handler, *_args, **_kwargs):
+        return await handler(arguments)
+
+    monkeypatch.setattr("xr_ai_tools.tools.typed.tool_execute", execute)
+    chat = AsyncMock(
+        side_effect=(
+            ChatResponse("A person entered.", None, None, "stop", {}),
+            ChatResponse(
+                "",
+                None,
+                [
+                    ToolCall(
+                        id="video-commit",
+                        name="video_log__commit",
+                        arguments=json.dumps({"delta": "A person entered."}),
+                    )
+                ],
+                "tool_calls",
+                {},
+            ),
+        )
+    )
+
+    agent = object.__new__(VideoLogAgent)
+    agent._llm = SimpleNamespace(chat=chat)  # type: ignore[attr-defined]
+    agent._delta_prompt = "Compare and commit."  # type: ignore[attr-defined]
+    agent._history_size = 5  # type: ignore[attr-defined]
+
+    delta = await agent._generate_delta(
+        SimpleNamespace(captions=["The room is empty."]),
+        "A person is in the room.",
+    )
+
+    assert delta.delta == "A person entered."
+    assert chat.await_count == 2
+
+
+@pytest.mark.parametrize(
+    "delta",
+    (
+        "No meaningful visual change.",
+        "No meaningful visual changes; the scene remains stable.",
+        "There was no meaningful visual change.",
+    ),
+)
+def test_video_log_recognizes_no_change_variants(delta: str) -> None:
+    assert _is_no_change(delta)
+    assert not _is_no_change("A person entered the room.")
 
 
 @pytest.mark.asyncio
@@ -1322,6 +1443,9 @@ def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:
         config.video_delta_prompt
         == (prompt_dir / "video_delta_prompt.txt").read_text().strip()
     )
+    assert "change_watch__commit exactly once" in config.change_watch_event_prompt
+    assert "Continued presence" in config.change_watch_event_prompt
+    assert "video_log__commit exactly once" in config.video_delta_prompt
 
     override = tmp_path / "worker.yaml"
     override.write_text("foreground_prompt: Explicit override\n")

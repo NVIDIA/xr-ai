@@ -1,3 +1,5 @@
-Compare the current caption with recent captions. State only material visible
-information unique to the current observation. If nothing material changed,
-say that there was no meaningful visual change.
+Compare current with the recent captions. Call video_log__commit exactly once.
+Commit only a concise material transition unique to current, not a scene
+description. Ignore wording, viewpoint, crop, lighting, gaze, expression, minor
+pose, and uncertain appearance details. If current does not prove a change, use
+"No meaningful visual change." Do not infer or answer directly.
