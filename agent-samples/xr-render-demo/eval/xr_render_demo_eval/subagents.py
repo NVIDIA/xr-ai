@@ -493,6 +493,14 @@ CASES = (
         ),
     ),
     SubagentCase(
+        name="recolor_reports_back",
+        agent="object",
+        instruction="Make cone-0 pink.",
+        scene=(_CONE,),
+        forbid_tools=("add_primitive", "update_primitive", "remove_primitive"),
+        answer_contains="recolor",
+    ),
+    SubagentCase(
         name="recolor_explicit_rgb",
         agent="appearance",
         instruction="Set cone-0 to the observed wall color: normalized RGB (1.0, 0.5, 0.0).",

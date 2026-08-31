@@ -310,8 +310,13 @@ in one place:
 
 Each agent has its own prompt file under
 `worker/xr_render_demo_worker/` (supervisor plus five subagents, six files total).
-The supervisor prompt routes requests to subagents; each subagent prompt
-is worked-example heavy and opens with pronoun and reference resolution.
+The supervisor prompt carries only cross-cutting turn discipline; the
+routing rules and ownership boundaries live in each subagent's tool
+`DESCRIPTION` constant (`agents/<name>/agent.py`), the surface the
+supervisor's model reads when selecting a tool. A few rules are stated in
+both places on purpose: descriptions alone are under-weighted mid-loop, so
+the supervisor prompt keeps a short backstop copy. Each subagent prompt is
+worked-example heavy and opens with pronoun and reference resolution.
 
 The placement agent's prompt maps utterance shapes to tools with contrast
 pairs: a stated distance is a shift (`nudge`); a user-anchored destination

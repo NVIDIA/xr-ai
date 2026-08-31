@@ -800,6 +800,57 @@ UTTERANCES = (
         expected_colors=(("sphere-0", (0.0, 0.4, 1.0)),),
     ),
     Case(
+        name="basics_describe_view_is_camera",
+        # A describe-the-view request means the physical world; reciting
+        # SCENE OBJECTS is never the answer.
+        request="Describe what you can see.",
+        scene=(
+            {"id": "sphere-0", "type": "sphere",
+             "position": {"x": 0.0, "y": 1.6, "z": -1.5},
+             "color": {"r": 0, "g": 0.8, "b": 0}, "size": 0.1},
+            {"id": "box-0", "type": "box",
+             "position": {"x": 0.5, "y": 1.4, "z": -1.2},
+             "color": {"r": 1, "g": 0.5, "b": 0}, "size": 0.1},
+        ),
+        vision="A cluttered desk with a laptop and a coffee mug.",
+        required_tools=frozenset({"look_at_current_frame"}),
+        forbidden_tools=_FORBID_MUTATIONS,
+        reply_contains="desk",
+    ),
+    Case(
+        name="basics_use_the_camera_imperative",
+        # Telling the agent to consult the camera re-enters the pending
+        # question; the literal words are never the delegation.
+        request="Use the camera.",
+        vision="A bookshelf against a white wall.",
+        history=(
+            ("What's behind me right now?",
+             "Could you say more about what you mean?"),
+        ),
+        required_tools=frozenset({"look_at_current_frame"}),
+        forbidden_tools=_FORBID_MUTATIONS,
+        reply_contains="bookshelf",
+    ),
+    Case(
+        name="basics_holding_after_scene_work",
+        # A perception question right after ordinary scene work is fresh;
+        # neither SCENE OBJECTS nor the transcript holds the answer.
+        request="What's in my hand right now?",
+        scene=(
+            {"id": "box-1", "type": "box",
+             "position": {"x": -0.5, "y": 1.6, "z": -1.5},
+             "color": {"r": 0, "g": 0.8, "b": 0}, "size": 0.1},
+        ),
+        history=(
+            ("Make a green box.", "Created a green box in front of you."),
+            ("Move it left.", "Moved the box to your left."),
+        ),
+        vision="A phone in the user's hand.",
+        required_tools=frozenset({"look_at_current_frame"}),
+        forbidden_tools=_FORBID_MUTATIONS,
+        reply_contains="phone",
+    ),
+    Case(
         name="basics_physical_source_camera_down",
         # The camera outage must degrade to an honest no-change reply: the
         # resolver was attempted, nothing mutated, no invented color.
