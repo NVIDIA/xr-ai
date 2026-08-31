@@ -21,8 +21,16 @@ from ...scene import SceneContext
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
 DESCRIPTION = (
-    "Answer a question about the physical world from the live or recorded camera; "
-    "never for XR scene state or placement."
+    "Answer a question about the user's physical surroundings from the live camera, or from "
+    "recorded video when the question is about a past moment: 'what am I looking at?' and 'what "
+    "was I holding a moment ago?' are always this agent, never answered from your own impression "
+    "of the camera. Never for facts about XR objects: "
+    "SCENE OBJECTS is always current and complete, tracking resolves user-relative placement, and "
+    "the mutating agents read the camera themselves for physical color sources. A new question "
+    "about what the user holds, wears, or sees is always a fresh delegation, whatever earlier "
+    "turns said about cameras; 'check the camera' as an answer to a clarifying question means "
+    "delegating the original pending question. If live vision is unavailable the agent reports "
+    "so; never redelegate with historical video substituted for the present."
 )
 
 

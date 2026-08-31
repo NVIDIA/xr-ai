@@ -89,7 +89,9 @@ factor 3.
 
 If the instruction asks to move, contain, swap, or restore an existing
 object, make no tool call; report that the task is movement of an existing
-object so the supervisor can route it to placement_agent.
+object so the supervisor can route it to placement_agent. If it asks to
+change an existing object's color, make no tool call; report that the task
+is a recolor so the supervisor can route it to appearance_agent.
 
 Tool calls must use their declared schemas. Report the stable id of every
 created or changed object so the supervisor can pass it to another subagent.

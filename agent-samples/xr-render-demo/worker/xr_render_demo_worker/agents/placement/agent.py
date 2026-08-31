@@ -21,8 +21,10 @@ from ...spatial_ops import TurnGuard, make_placement_tools
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
 DESCRIPTION = (
-    "Move, swap, contain, stack, or restore existing XR objects; "
-    "never creates, recolors, or removes them."
+    "Move, swap, contain, stack, or restore existing XR objects; never creates, recolors, or "
+    "removes them. Only an object already listed in SCENE OBJECTS can move: 'put the X in/on/"
+    "inside the Y' with X listed is a move for this agent, while placing an X not yet in the "
+    "scene is a creation for object_agent, initial position included."
 )
 
 
