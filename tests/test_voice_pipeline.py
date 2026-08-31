@@ -606,7 +606,32 @@ async def test_vad_stt_bare_partial_stop_preserves_scoped_final_command(
     monkeypatch,
 ):
     _StagedVad.instances.clear()
-    stt = _StagedStt(texts=["stop", "stop visual monitoring"])
+    monkeypatch.setattr("pipecat.pipeline.worker.warm_deferred_imports", lambda: None)
+
+    class _SignaledStt(_StagedStt):
+        def __init__(self) -> None:
+            super().__init__(texts=["stop", "stop visual monitoring"])
+            self.first_completed = asyncio.Event()
+
+        async def transcribe(
+            self,
+            audio: bytes,
+            *,
+            sample_rate: int | None = None,
+            channels: int = 1,
+            timeout: float | None = None,
+        ) -> str:
+            text = await super().transcribe(
+                audio,
+                sample_rate=sample_rate,
+                channels=channels,
+                timeout=timeout,
+            )
+            if len(self.calls) == 1:
+                self.first_completed.set()
+            return text
+
+    stt = _SignaledStt()
     monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
     vad_stt = VadSttProcessor(
         stt=stt,
@@ -629,12 +654,10 @@ async def test_vad_stt_bare_partial_stop_preserves_scoped_final_command(
     await runner.add_workers(worker)
 
     async def drive() -> None:
-        await asyncio.sleep(1.0)
         await worker.queue_frame(frame)
-        await asyncio.sleep(0.2)
+        await asyncio.wait_for(stt.first_completed.wait(), timeout=1.0)
         assert _StagedVad.instances
         await _StagedVad.instances[-1].trigger_utterance()
-        await asyncio.sleep(0.05)
         await worker.queue_frame(EndFrame())
 
     await asyncio.gather(runner.run(), drive())
