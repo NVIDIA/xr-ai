@@ -21,10 +21,10 @@ from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef, VLMServ
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameRequest
+from xr_ai_tools.tool_calling import run_tool_loop
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 from xr_ai_voice import VoiceParticipantLeft
 
-from ._background_tools import RequiredToolCallError, run_required_tool
 from .events import (
     BACKGROUND_FACT_TOPIC,
     PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
@@ -321,12 +321,6 @@ class VideoLogAgent(Agent):
                 delta = await self._generate_delta(state, caption)
             except asyncio.CancelledError:
                 raise
-            except RequiredToolCallError:
-                logger.debug(
-                    "video delta skipped pid={!r}: required commit missing",
-                    participant_id,
-                )
-                return
             except Exception as exc:
                 logger.opt(exception=True).warning(
                     "video delta failed pid={!r}", participant_id
@@ -336,6 +330,12 @@ class VideoLogAgent(Agent):
                     now_us,
                     str(exc),
                     caption=caption,
+                )
+                return
+            if delta is None:
+                logger.debug(
+                    "video delta skipped pid={!r}: required commit missing",
+                    participant_id,
                 )
                 return
 
@@ -356,7 +356,7 @@ class VideoLogAgent(Agent):
         self,
         state: _VideoState,
         caption: str,
-    ) -> VideoDelta:
+    ) -> VideoDelta | None:
         async def commit(request: VideoDelta) -> VideoDelta:
             return request
 
@@ -391,16 +391,23 @@ class VideoLogAgent(Agent):
                 enable_thinking=False,
             )
 
-        content = await run_required_tool(
+        result = await run_tool_loop(
             (
                 ChatMessage(role="system", content=self._delta_prompt),
                 ChatMessage(role="user", content=payload),
             ),
             tools,
             call_model,
-            required_tool="video_log__commit",
+            max_iterations=3,
+            max_tool_calls=2,
         )
-        return VideoDelta.model_validate_json(content)
+        if (
+            not result.return_direct
+            or not result.tool_calls
+            or result.tool_calls[-1].call.name != "video_log__commit"
+        ):
+            return None
+        return VideoDelta.model_validate_json(result.content)
 
     async def _publish_error(
         self,
