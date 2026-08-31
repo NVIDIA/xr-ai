@@ -1485,6 +1485,7 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
         None,
         "application_context__query",
         "change_watch__start",
+        "change_watch__stop",
         "current_view",
         "rag_lookup",
         "transcript__start",
