@@ -376,13 +376,6 @@ class ChangeWatchAgent(Agent):
                     caption=caption,
                 )
                 return
-            if decision is None:
-                logger.debug(
-                    "change watch decision skipped pid={!r}: required commit missing",
-                    participant_id,
-                )
-                return
-
             state.captions.append(caption)
             record = ChangeWatchRecord(
                 timestamp_us=now_us,
@@ -400,7 +393,7 @@ class ChangeWatchAgent(Agent):
         self,
         state: _WatchState,
         caption: str,
-    ) -> ChangeDecision | None:
+    ) -> ChangeDecision:
         async def commit(request: ChangeDecision) -> ChangeDecision:
             return request
 
@@ -448,12 +441,6 @@ class ChangeWatchAgent(Agent):
             max_iterations=3,
             max_tool_calls=2,
         )
-        if (
-            not result.return_direct
-            or not result.tool_calls
-            or result.tool_calls[-1].call.name != "change_watch__commit"
-        ):
-            return None
         return ChangeDecision.model_validate_json(result.content)
 
     async def _publish_error(

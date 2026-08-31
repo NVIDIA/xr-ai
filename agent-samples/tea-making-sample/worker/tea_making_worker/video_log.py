@@ -39,6 +39,13 @@ if TYPE_CHECKING:
     from .images import ParticipantImageAgent
 
 _NO_CHANGE = "no meaningful visual change"
+_NO_CHANGE_RESPONSES = frozenset(
+    {
+        _NO_CHANGE,
+        f"{_NO_CHANGE}s; the scene remains stable",
+        f"there was {_NO_CHANGE}",
+    }
+)
 
 
 class VideoLogControlRequest(BaseModel):
@@ -71,10 +78,7 @@ class _VideoState:
 
 
 def _is_no_change(delta: str) -> bool:
-    normalized = delta.strip().casefold()
-    return normalized.startswith(_NO_CHANGE) or normalized.startswith(
-        f"there was {_NO_CHANGE}"
-    )
+    return delta.strip().rstrip(".").casefold() in _NO_CHANGE_RESPONSES
 
 
 class VideoLogAgent(Agent):
@@ -313,7 +317,6 @@ class VideoLogAgent(Agent):
                         timestamp_us=now_us,
                         record_type="observation",
                         caption=caption,
-                        delta="No meaningful visual change.",
                     ),
                 )
                 return
@@ -332,13 +335,6 @@ class VideoLogAgent(Agent):
                     caption=caption,
                 )
                 return
-            if delta is None:
-                logger.debug(
-                    "video delta skipped pid={!r}: required commit missing",
-                    participant_id,
-                )
-                return
-
             state.captions.append(caption)
             await self._publish_record(
                 participant_id,
@@ -356,7 +352,7 @@ class VideoLogAgent(Agent):
         self,
         state: _VideoState,
         caption: str,
-    ) -> VideoDelta | None:
+    ) -> VideoDelta:
         async def commit(request: VideoDelta) -> VideoDelta:
             return request
 
@@ -401,12 +397,6 @@ class VideoLogAgent(Agent):
             max_iterations=3,
             max_tool_calls=2,
         )
-        if (
-            not result.return_direct
-            or not result.tool_calls
-            or result.tool_calls[-1].call.name != "video_log__commit"
-        ):
-            return None
         return VideoDelta.model_validate_json(result.content)
 
     async def _publish_error(

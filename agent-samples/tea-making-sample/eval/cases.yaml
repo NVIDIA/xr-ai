@@ -25,7 +25,7 @@
   query: Start watching for a spill near the kettle.
   expected_tool: change_watch__start
 - name: stop-change-watch
-  query: Stop visual monitoring.
+  query: Turn off the visual observer.
   expected_tool: change_watch__stop
 - name: start-transcript
   query: Start recording our conversation.

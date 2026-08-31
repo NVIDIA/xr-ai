@@ -220,6 +220,17 @@ def test_phrase_only_utterance_strips_to_empty_string():
     "be quiet",
     "shut up",
     "stop talking",
+    "stop it",
+    "stop that",
+    "stop this",
+    "wait, stop",
+    "no, stop",
+    "stop stop",
+    "stop stop stop",
+    "just stop",
+    "stop already",
+    "I said stop",
+    "please stop",
 ])
 def test_stop_regex_canonical_forms_match(text: str):
     """Case 9: all the canonical interruption phrases match."""

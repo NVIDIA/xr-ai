@@ -9,6 +9,7 @@ import asyncio
 import importlib.util
 import json
 import sys
+from collections import deque
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -247,16 +248,24 @@ async def test_typed_events_are_projected_to_web_topics() -> None:
             ChangeWatchRecord(timestamp_us=7, record_type="started"),
         ),
         (
+            CHANGE_WATCH_RECORD_TOPIC,
+            ChangeWatchRecord(
+                timestamp_us=8,
+                record_type="observation",
+                caption="A hand remains raised.",
+            ),
+        ),
+        (
             TRANSCRIPT_RECORD_TOPIC,
             TranscriptRecord(
-                timestamp_us=8,
+                timestamp_us=9,
                 record_type="utterance",
                 text="Start steeping.",
             ),
         ),
         (
             VIDEO_LOG_RECORD_TOPIC,
-            VideoLogRecord(timestamp_us=9, record_type="observation", caption="A cup."),
+            VideoLogRecord(timestamp_us=10, record_type="observation", caption="A cup."),
         ),
         (PARTICIPANT_JOINED_TOPIC, VoiceParticipantJoined()),
         (PARTICIPANT_LEFT_TOPIC, VoiceParticipantLeft()),
@@ -285,7 +294,7 @@ async def test_typed_events_are_projected_to_web_topics() -> None:
 
 
 @pytest.mark.asyncio
-async def test_change_watch_skips_prose_without_parsing_it_as_json() -> None:
+async def test_change_watch_rejects_prose_as_invalid_model_output() -> None:
     chat = AsyncMock(
         return_value=ChatResponse("The hand is raised.", None, None, "stop", {})
     )
@@ -294,12 +303,12 @@ async def test_change_watch_skips_prose_without_parsing_it_as_json() -> None:
     agent._llm = SimpleNamespace(chat=chat)  # type: ignore[attr-defined]
     agent._event_prompt = "Compare and commit."  # type: ignore[attr-defined]
 
-    decision = await agent._decide(
-        SimpleNamespace(instruction="raised hands", captions=["Hands are down."]),
-        "A hand is raised.",
-    )
+    with pytest.raises(ValueError):
+        await agent._decide(
+            SimpleNamespace(instruction="raised hands", captions=["Hands are down."]),
+            "A hand is raised.",
+        )
 
-    assert decision is None
     assert chat.await_count == 1
 
 
@@ -345,7 +354,7 @@ async def test_change_watch_accepts_typed_commit(
 
 
 @pytest.mark.asyncio
-async def test_video_log_skips_prose_without_parsing_it_as_json() -> None:
+async def test_video_log_rejects_prose_as_invalid_model_output() -> None:
     chat = AsyncMock(
         return_value=ChatResponse("A person entered.", None, None, "stop", {})
     )
@@ -355,12 +364,12 @@ async def test_video_log_skips_prose_without_parsing_it_as_json() -> None:
     agent._delta_prompt = "Compare and commit."  # type: ignore[attr-defined]
     agent._history_size = 5  # type: ignore[attr-defined]
 
-    delta = await agent._generate_delta(
-        SimpleNamespace(captions=["The room is empty."]),
-        "A person is in the room.",
-    )
+    with pytest.raises(ValueError):
+        await agent._generate_delta(
+            SimpleNamespace(captions=["The room is empty."]),
+            "A person is in the room.",
+        )
 
-    assert delta is None
     assert chat.await_count == 1
 
 
@@ -414,6 +423,116 @@ async def test_video_log_accepts_typed_commit(
 def test_video_log_recognizes_no_change_variants(delta: str) -> None:
     assert _is_no_change(delta)
     assert not _is_no_change("A person entered the room.")
+    assert not _is_no_change(
+        "No meaningful visual change, but a person entered the room."
+    )
+
+
+@pytest.mark.asyncio
+async def test_change_watch_records_classifier_failure_with_caption() -> None:
+    participant_id = "participant-change-error"
+    agent = object.__new__(ChangeWatchAgent)
+    agent._states = {
+        participant_id: SimpleNamespace(
+            instruction="raised hands",
+            captions=deque(["Hands are down."]),
+            lock=asyncio.Lock(),
+        )
+    }
+    agent._caption_prompt = "Describe the focused visual state."
+    agent._images = SimpleNamespace(
+        get_current_frame=SimpleNamespace(
+            execute=AsyncMock(
+                return_value=SimpleNamespace(image=ImageReference(uri="frame.jpg"))
+            )
+        )
+    )
+    agent._query_image = SimpleNamespace(
+        execute=AsyncMock(
+            return_value=ImageQueryResult(text="A hand is raised.", available=True)
+        )
+    )
+    agent._decide = AsyncMock(side_effect=ValueError("invalid classifier output"))
+    agent._publish_error = AsyncMock()
+
+    await agent._observe(participant_id)
+
+    error = agent._publish_error.await_args
+    assert error.args[0] == participant_id
+    assert error.args[1] is agent._states[participant_id]
+    assert error.args[3] == "invalid classifier output"
+    assert error.kwargs == {"caption": "A hand is raised."}
+
+
+@pytest.mark.asyncio
+async def test_video_log_records_classifier_failure_with_caption() -> None:
+    participant_id = "participant-video-error"
+    agent = object.__new__(VideoLogAgent)
+    agent._states = {
+        participant_id: SimpleNamespace(
+            captions=deque(["The room is empty."]),
+            lock=asyncio.Lock(),
+        )
+    }
+    agent._caption_prompt = "Describe the current scene."
+    agent._images = SimpleNamespace(
+        get_current_frame=SimpleNamespace(
+            execute=AsyncMock(
+                return_value=SimpleNamespace(image=ImageReference(uri="frame.jpg"))
+            )
+        )
+    )
+    agent._query_image = SimpleNamespace(
+        execute=AsyncMock(
+            return_value=ImageQueryResult(
+                text="A person entered the room.",
+                available=True,
+            )
+        )
+    )
+    agent._generate_delta = AsyncMock(
+        side_effect=ValueError("invalid classifier output")
+    )
+    agent._publish_error = AsyncMock()
+
+    await agent._observe(participant_id)
+
+    error = agent._publish_error.await_args
+    assert error.args[0] == participant_id
+    assert error.args[2] == "invalid classifier output"
+    assert error.kwargs == {"caption": "A person entered the room."}
+
+
+@pytest.mark.asyncio
+async def test_video_log_first_frame_is_a_baseline_observation() -> None:
+    participant_id = "participant-video-baseline"
+    state = SimpleNamespace(captions=deque(), lock=asyncio.Lock())
+    agent = object.__new__(VideoLogAgent)
+    agent._states = {participant_id: state}
+    agent._caption_prompt = "Describe the current scene."
+    agent._images = SimpleNamespace(
+        get_current_frame=SimpleNamespace(
+            execute=AsyncMock(
+                return_value=SimpleNamespace(image=ImageReference(uri="frame.jpg"))
+            )
+        )
+    )
+    agent._query_image = SimpleNamespace(
+        execute=AsyncMock(
+            return_value=ImageQueryResult(text="The room is empty.", available=True)
+        )
+    )
+    agent._generate_delta = AsyncMock()
+    agent._publish_record = AsyncMock()
+
+    await agent._observe(participant_id)
+
+    record = agent._publish_record.await_args.args[1]
+    assert record.record_type == "observation"
+    assert record.caption == "The room is empty."
+    assert record.delta == ""
+    assert list(state.captions) == ["The room is empty."]
+    agent._generate_delta.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -1482,6 +1601,7 @@ def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:
     assert "video_log__commit exactly once" in config.video_delta_prompt
     assert "tool-only visual-delta classifier" in config.video_delta_prompt
     assert "return no assistant text" in config.video_delta_prompt
+    assert "transcript__commit_summary exactly once" in config.transcript_summary_prompt
 
     override = tmp_path / "worker.yaml"
     override.write_text("foreground_prompt: Explicit override\n")
