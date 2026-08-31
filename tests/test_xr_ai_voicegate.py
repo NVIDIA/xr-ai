@@ -242,6 +242,17 @@ def test_stop_regex_mid_sentence_real_question_does_not_match():
     assert STOP_RE.match("what should we stop doing about climate change") is None
 
 
+@pytest.mark.parametrize("text", [
+    "stop visual monitoring.",
+    "stop transcript recording",
+    "stop video logging",
+    "stop the timer",
+])
+def test_stop_regex_application_commands_do_not_match(text: str):
+    """Application lifecycle commands must reach the agent's tools."""
+    assert STOP_RE.match(text) is None
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # 3. Chime synthesis (`_chime.py`)
 # ════════════════════════════════════════════════════════════════════════════
@@ -513,6 +524,24 @@ async def test_feed_stop_matched_on_magic_stripped_tail():
     await gate.feed("p1", "hey agent stop")
 
     assert events == [("stop", "p1")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("phrases,text", [
+    (("hey agent",), "hey agent stop visual monitoring."),
+    ((), "stop visual monitoring."),
+])
+async def test_feed_application_stop_command_dispatches_to_agent(
+    phrases: tuple[str, ...],
+    text: str,
+):
+    """A scoped stop request is an agent command, not a speech interrupt."""
+    gate, _, _ = _gate(phrases=phrases)
+    events = _recording_handlers(gate)
+
+    await gate.feed("p1", text)
+
+    assert events == [("query", "p1", "stop visual monitoring.", True)]
 
 
 @pytest.mark.asyncio

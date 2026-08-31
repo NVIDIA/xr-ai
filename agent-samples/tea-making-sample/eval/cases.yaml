@@ -24,6 +24,9 @@
 - name: start-change-watch
   query: Start watching for a spill near the kettle.
   expected_tool: change_watch__start
+- name: stop-change-watch
+  query: Stop visual monitoring.
+  expected_tool: change_watch__stop
 - name: start-transcript
   query: Start recording our conversation.
   expected_tool: transcript__start
