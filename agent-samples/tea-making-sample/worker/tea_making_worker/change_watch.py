@@ -21,10 +21,10 @@ from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef, VLMServ
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameRequest
+from xr_ai_tools.tool_calling import run_tool_loop
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 from xr_ai_voice import VoiceParticipantLeft
 
-from ._background_tools import RequiredToolCallError, run_required_tool
 from .events import (
     BACKGROUND_FACT_TOPIC,
     CHANGE_WATCH_RECORD_TOPIC,
@@ -364,12 +364,6 @@ class ChangeWatchAgent(Agent):
                 decision = await self._decide(state, caption)
             except asyncio.CancelledError:
                 raise
-            except RequiredToolCallError:
-                logger.debug(
-                    "change watch decision skipped pid={!r}: required commit missing",
-                    participant_id,
-                )
-                return
             except Exception as exc:
                 logger.opt(exception=True).warning(
                     "change watch decision failed pid={!r}", participant_id
@@ -380,6 +374,12 @@ class ChangeWatchAgent(Agent):
                     now_us,
                     str(exc),
                     caption=caption,
+                )
+                return
+            if decision is None:
+                logger.debug(
+                    "change watch decision skipped pid={!r}: required commit missing",
+                    participant_id,
                 )
                 return
 
@@ -396,7 +396,11 @@ class ChangeWatchAgent(Agent):
             if decision.important:
                 await self._publish_fact(participant_id, now_us, decision.summary)
 
-    async def _decide(self, state: _WatchState, caption: str) -> ChangeDecision:
+    async def _decide(
+        self,
+        state: _WatchState,
+        caption: str,
+    ) -> ChangeDecision | None:
         async def commit(request: ChangeDecision) -> ChangeDecision:
             return request
 
@@ -434,16 +438,23 @@ class ChangeWatchAgent(Agent):
                 enable_thinking=False,
             )
 
-        content = await run_required_tool(
+        result = await run_tool_loop(
             (
                 ChatMessage(role="system", content=self._event_prompt),
                 ChatMessage(role="user", content=payload),
             ),
             tools,
             call_model,
-            required_tool="change_watch__commit",
+            max_iterations=3,
+            max_tool_calls=2,
         )
-        return ChangeDecision.model_validate_json(content)
+        if (
+            not result.return_direct
+            or not result.tool_calls
+            or result.tool_calls[-1].call.name != "change_watch__commit"
+        ):
+            return None
+        return ChangeDecision.model_validate_json(result.content)
 
     async def _publish_error(
         self,
