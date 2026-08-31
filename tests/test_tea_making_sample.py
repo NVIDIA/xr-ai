@@ -1476,8 +1476,12 @@ def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:
         == (prompt_dir / "video_delta_prompt.txt").read_text().strip()
     )
     assert "change_watch__commit exactly once" in config.change_watch_event_prompt
+    assert "tool-only visual-change classifier" in config.change_watch_event_prompt
+    assert "return no assistant text" in config.change_watch_event_prompt
     assert "Continued presence" in config.change_watch_event_prompt
     assert "video_log__commit exactly once" in config.video_delta_prompt
+    assert "tool-only visual-delta classifier" in config.video_delta_prompt
+    assert "return no assistant text" in config.video_delta_prompt
 
     override = tmp_path / "worker.yaml"
     override.write_text("foreground_prompt: Explicit override\n")
