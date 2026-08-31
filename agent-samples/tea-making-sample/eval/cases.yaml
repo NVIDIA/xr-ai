@@ -12,6 +12,15 @@
   query: What color is the shirt?
   expected_tool: current_view
   forbidden_response: I can only help with the active tea guide right now.
+- name: idle-routes-open-ended-scene-question
+  query: What do you see?
+  expected_tool: current_view
+- name: idle-routes-visual-reference
+  query: What is this?
+  expected_tool: current_view
+- name: idle-routes-visible-background
+  query: What is in the background?
+  expected_tool: current_view
 - name: start-tea-guide
   query: Help me make a cup of tea.
   expected_tool: workflow__start
