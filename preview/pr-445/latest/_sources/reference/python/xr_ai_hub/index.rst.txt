@@ -36,7 +36,6 @@ Exceptions
 .. autoapisummary::
 
    xr_ai_hub.FrameUnavailable
-   xr_ai_hub.IncompatibleSharedMemoryError
 
 
 Classes
@@ -52,7 +51,6 @@ Classes
    xr_ai_hub.AgentPresence
    xr_ai_hub.AudioChunk
    xr_ai_hub.ConnectorRegistration
-   xr_ai_hub.ConnectorRegistrationAck
    xr_ai_hub.ControlMessage
    xr_ai_hub.DataMessage
    xr_ai_hub.FrameData
@@ -515,13 +513,6 @@ Package Contents
 
 
 
-.. py:exception:: IncompatibleSharedMemoryError
-
-
-
-   The named segment exists but is not a valid XR AI frame ring.
-
-
 .. py:class:: ShmRingBuffer(name: str, num_slots: int = 0, max_frame_bytes: int = 0, create: bool = False)
 
    Shared-memory ring buffer for raw video frames.
@@ -726,66 +717,6 @@ Package Contents
       :type:  str
 
       Name of the connector's shared-memory ring buffer.
-
-
-
-   .. py:attribute:: registration_id
-      :type:  str
-      :value: ''
-
-
-      Unique request identifier used to correlate the acknowledgement.
-
-
-
-.. py:class:: ConnectorRegistrationAck
-
-   Hub acknowledgement for a shared-memory registration request.
-
-
-   .. py:attribute:: connector_id
-      :type:  str
-
-      Identity of the connector that requested registration.
-
-
-
-   .. py:attribute:: shm_name
-      :type:  str
-
-      Shared-memory name that the hub attempted to attach.
-
-
-
-   .. py:attribute:: registration_id
-      :type:  str
-
-      Request identifier copied from :class:`ConnectorRegistration`.
-
-
-
-   .. py:attribute:: success
-      :type:  bool
-
-      Whether the hub attached and validated the shared-memory ring.
-
-
-
-   .. py:attribute:: error_code
-      :type:  str
-      :value: ''
-
-
-      Machine-readable failure code; empty on success.
-
-
-
-   .. py:attribute:: error_message
-      :type:  str
-      :value: ''
-
-
-      Human-readable failure detail; empty on success.
 
 
 
@@ -1121,14 +1052,6 @@ Package Contents
 
 
       Readiness-participating agent attachment or detachment.
-
-
-
-   .. py:attribute:: CONNECTOR_REGISTER_ACK
-      :value: 15
-
-
-      Result of a connector shared-memory registration request.
 
 
 

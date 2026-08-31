@@ -450,9 +450,6 @@ its LiveKit, FastAPI, and uvicorn dependencies are not included.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.FrameUnavailable" title="xr_ai_hub.FrameUnavailable"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameUnavailable</span></code></a></p></td>
 <td><p>Raised when a fresh camera frame cannot be obtained before the timeout.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.IncompatibleSharedMemoryError" title="xr_ai_hub.IncompatibleSharedMemoryError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IncompatibleSharedMemoryError</span></code></a></p></td>
-<td><p>The named segment exists but is not a valid XR AI frame ring.</p></td>
-</tr>
 </tbody>
 </table>
 </div>
@@ -485,40 +482,37 @@ its LiveKit, FastAPI, and uvicorn dependencies are not included.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.ConnectorRegistration" title="xr_ai_hub.ConnectorRegistration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConnectorRegistration</span></code></a></p></td>
 <td><p>Sent by a connector on startup so the hub can open its ring buffer.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.ConnectorRegistrationAck" title="xr_ai_hub.ConnectorRegistrationAck"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConnectorRegistrationAck</span></code></a></p></td>
-<td><p>Hub acknowledgement for a shared-memory registration request.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.ControlMessage" title="xr_ai_hub.ControlMessage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ControlMessage</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.ControlMessage" title="xr_ai_hub.ControlMessage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ControlMessage</span></code></a></p></td>
 <td><p>Extensible key/value control message (hub-internal, no track concept).</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.DataMessage" title="xr_ai_hub.DataMessage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DataMessage</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.DataMessage" title="xr_ai_hub.DataMessage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DataMessage</span></code></a></p></td>
 <td><p>Arbitrary binary/text payload from a LiveKit data channel.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.FrameData" title="xr_ai_hub.FrameData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameData</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.FrameData" title="xr_ai_hub.FrameData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameData</span></code></a></p></td>
 <td><p>Pixel data for the latest frame, published by the hub on <cite>video_data.&lt;pid&gt;.&lt;track&gt;</cite>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.FrameRequest" title="xr_ai_hub.FrameRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameRequest</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.FrameRequest" title="xr_ai_hub.FrameRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameRequest</span></code></a></p></td>
 <td><p>Sent by a processor to request a copy of the current latest frame.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.FrameSignal" title="xr_ai_hub.FrameSignal"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameSignal</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.FrameSignal" title="xr_ai_hub.FrameSignal"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameSignal</span></code></a></p></td>
 <td><p>Signals that a decoded frame has been written into the shared-memory ring buffer.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.MsgType" title="xr_ai_hub.MsgType"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MsgType</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.MsgType" title="xr_ai_hub.MsgType"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MsgType</span></code></a></p></td>
 <td><p>Wire-level message identifiers used by the hub IPC protocol.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.ParticipantEvent" title="xr_ai_hub.ParticipantEvent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ParticipantEvent</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.ParticipantEvent" title="xr_ai_hub.ParticipantEvent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ParticipantEvent</span></code></a></p></td>
 <td><p>A LiveKit participant has joined or left the room.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.PixelFormat" title="xr_ai_hub.PixelFormat"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PixelFormat</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.PixelFormat" title="xr_ai_hub.PixelFormat"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PixelFormat</span></code></a></p></td>
 <td><p>Pixel layouts supported by shared-memory video frames.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.ReturnAudioFlush" title="xr_ai_hub.ReturnAudioFlush"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReturnAudioFlush</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.ReturnAudioFlush" title="xr_ai_hub.ReturnAudioFlush"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReturnAudioFlush</span></code></a></p></td>
 <td><p>Drop any audio queued for <em>participant_id</em>'s return track.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.RosterRequest" title="xr_ai_hub.RosterRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RosterRequest</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.RosterRequest" title="xr_ai_hub.RosterRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RosterRequest</span></code></a></p></td>
 <td><p>Ask the hub to re-publish <code class="docutils literal notranslate"><span class="pre">PARTICIPANT_EVENT(joined=True)</span></code> on the</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.SubscriptionProbe" title="xr_ai_hub.SubscriptionProbe"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SubscriptionProbe</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.SubscriptionProbe" title="xr_ai_hub.SubscriptionProbe"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SubscriptionProbe</span></code></a></p></td>
 <td><p>Round-trip token echoed by the hub on <code class="docutils literal notranslate"><span class="pre">_probe.&lt;token&gt;</span></code>.</p></td>
 </tr>
 </tbody>
@@ -991,12 +985,6 @@ each subscribed participant; combine flags with <code class="docutils literal no
 </section>
 </dd></dl>
 
-<dl class="py exception">
-<dt class="sig sig-object py" id="xr_ai_hub.IncompatibleSharedMemoryError">
-<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">IncompatibleSharedMemoryError</span></span><a class="headerlink" href="#xr_ai_hub.IncompatibleSharedMemoryError" title="Link to this definition">#</a></dt>
-<dd><p>The named segment exists but is not a valid XR AI frame ring.</p>
-</dd></dl>
-
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_hub.ShmRingBuffer">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">ShmRingBuffer</span></span><span class="sig-paren">(</span>
@@ -1204,54 +1192,6 @@ agents whose scope covers it.</p>
 <dt class="sig sig-object py" id="xr_ai_hub.ConnectorRegistration.shm_name">
 <span class="sig-name descname"><span class="pre">shm_name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_hub.ConnectorRegistration.shm_name" title="Link to this definition">#</a></dt>
 <dd><p>Name of the connector’s shared-memory ring buffer.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_hub.ConnectorRegistration.registration_id">
-<span class="sig-name descname"><span class="pre">registration_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#xr_ai_hub.ConnectorRegistration.registration_id" title="Link to this definition">#</a></dt>
-<dd><p>Unique request identifier used to correlate the acknowledgement.</p>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="xr_ai_hub.ConnectorRegistrationAck">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">ConnectorRegistrationAck</span></span><a class="headerlink" href="#xr_ai_hub.ConnectorRegistrationAck" title="Link to this definition">#</a></dt>
-<dd><p>Hub acknowledgement for a shared-memory registration request.</p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_hub.ConnectorRegistrationAck.connector_id">
-<span class="sig-name descname"><span class="pre">connector_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_hub.ConnectorRegistrationAck.connector_id" title="Link to this definition">#</a></dt>
-<dd><p>Identity of the connector that requested registration.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_hub.ConnectorRegistrationAck.shm_name">
-<span class="sig-name descname"><span class="pre">shm_name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_hub.ConnectorRegistrationAck.shm_name" title="Link to this definition">#</a></dt>
-<dd><p>Shared-memory name that the hub attempted to attach.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_hub.ConnectorRegistrationAck.registration_id">
-<span class="sig-name descname"><span class="pre">registration_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_hub.ConnectorRegistrationAck.registration_id" title="Link to this definition">#</a></dt>
-<dd><p>Request identifier copied from <a class="reference internal" href="#xr_ai_hub.ConnectorRegistration" title="xr_ai_hub.ConnectorRegistration"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConnectorRegistration</span></code></a>.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_hub.ConnectorRegistrationAck.success">
-<span class="sig-name descname"><span class="pre">success</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#xr_ai_hub.ConnectorRegistrationAck.success" title="Link to this definition">#</a></dt>
-<dd><p>Whether the hub attached and validated the shared-memory ring.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_hub.ConnectorRegistrationAck.error_code">
-<span class="sig-name descname"><span class="pre">error_code</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#xr_ai_hub.ConnectorRegistrationAck.error_code" title="Link to this definition">#</a></dt>
-<dd><p>Machine-readable failure code; empty on success.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_hub.ConnectorRegistrationAck.error_message">
-<span class="sig-name descname"><span class="pre">error_message</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#xr_ai_hub.ConnectorRegistrationAck.error_message" title="Link to this definition">#</a></dt>
-<dd><p>Human-readable failure detail; empty on success.</p>
 </dd></dl>
 
 </dd></dl>
@@ -1530,12 +1470,6 @@ sampling rate. The hub only copies pixels when a request arrives.</p>
 <dd><p>Readiness-participating agent attachment or detachment.</p>
 </dd></dl>
 
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_hub.MsgType.CONNECTOR_REGISTER_ACK">
-<span class="sig-name descname"><span class="pre">CONNECTOR_REGISTER_ACK</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">15</span></em><a class="headerlink" href="#xr_ai_hub.MsgType.CONNECTOR_REGISTER_ACK" title="Link to this definition">#</a></dt>
-<dd><p>Result of a connector shared-memory registration request.</p>
-</dd></dl>
-
 </dd></dl>
 
 <dl class="py class">
@@ -1742,7 +1676,6 @@ proves every subscription issued before the probe is live on the hub.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.Subscribe.ALL"><code class="docutils literal notranslate"><span class="pre">ALL</span></code></a></li>
 </ul>
 </li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.IncompatibleSharedMemoryError"><code class="docutils literal notranslate"><span class="pre">IncompatibleSharedMemoryError</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ShmRingBuffer"><code class="docutils literal notranslate"><span class="pre">ShmRingBuffer</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ShmRingBuffer.write_frame"><code class="docutils literal notranslate"><span class="pre">write_frame()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ShmRingBuffer.read_slot"><code class="docutils literal notranslate"><span class="pre">read_slot()</span></code></a></li>
@@ -1775,16 +1708,6 @@ proves every subscription issued before the probe is live on the hub.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ConnectorRegistration"><code class="docutils literal notranslate"><span class="pre">ConnectorRegistration</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ConnectorRegistration.connector_id"><code class="docutils literal notranslate"><span class="pre">connector_id</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ConnectorRegistration.shm_name"><code class="docutils literal notranslate"><span class="pre">shm_name</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ConnectorRegistration.registration_id"><code class="docutils literal notranslate"><span class="pre">registration_id</span></code></a></li>
-</ul>
-</li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ConnectorRegistrationAck"><code class="docutils literal notranslate"><span class="pre">ConnectorRegistrationAck</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ConnectorRegistrationAck.connector_id"><code class="docutils literal notranslate"><span class="pre">connector_id</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ConnectorRegistrationAck.shm_name"><code class="docutils literal notranslate"><span class="pre">shm_name</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ConnectorRegistrationAck.registration_id"><code class="docutils literal notranslate"><span class="pre">registration_id</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ConnectorRegistrationAck.success"><code class="docutils literal notranslate"><span class="pre">success</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ConnectorRegistrationAck.error_code"><code class="docutils literal notranslate"><span class="pre">error_code</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ConnectorRegistrationAck.error_message"><code class="docutils literal notranslate"><span class="pre">error_message</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ControlMessage"><code class="docutils literal notranslate"><span class="pre">ControlMessage</span></code></a><ul class="nav section-nav flex-column">
@@ -1842,7 +1765,6 @@ proves every subscription issued before the probe is live on the hub.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.MsgType.ROSTER_REQUEST"><code class="docutils literal notranslate"><span class="pre">ROSTER_REQUEST</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.MsgType.SUBSCRIPTION_PROBE"><code class="docutils literal notranslate"><span class="pre">SUBSCRIPTION_PROBE</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.MsgType.AGENT_PRESENCE"><code class="docutils literal notranslate"><span class="pre">AGENT_PRESENCE</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.MsgType.CONNECTOR_REGISTER_ACK"><code class="docutils literal notranslate"><span class="pre">CONNECTOR_REGISTER_ACK</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ParticipantEvent"><code class="docutils literal notranslate"><span class="pre">ParticipantEvent</span></code></a><ul class="nav section-nav flex-column">
