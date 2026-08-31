@@ -15,11 +15,7 @@ from typing import Sequence
 STOP_RE: re.Pattern = re.compile(
     r"""
     ^\s*
-    (?:
-        (?:please|hey|okay|ok|uh|um|wait|no|just)[,\s]+
-        |i\s+said\s+
-        |(?:can|could|would|will)\s+you\s+
-    ){0,2}
+    (?:\S+[,\s]+){0,2}
     (?:
         stop
         (?:

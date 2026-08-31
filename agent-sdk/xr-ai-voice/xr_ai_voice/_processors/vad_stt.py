@@ -20,7 +20,6 @@ finishes the command. Normal query dispatch still uses the final transcript.
 from __future__ import annotations
 
 import asyncio
-import re
 import time
 from dataclasses import dataclass
 from typing import Awaitable, Callable
@@ -52,19 +51,15 @@ FinalTranscriptHandler = Callable[[str, str, int], Awaitable[None]]
 _MAX_PARTIAL_PROBES = 3
 _PARTIAL_PROBE_TAIL_S = 0.12
 _PARTIAL_PROBE_FINISH_GRACE_S = 0.15
-_AMBIGUOUS_PARTIAL_STOP_RE = re.compile(
-    r"^\s*"
-    r"(?:(?:please|hey|okay|ok|uh|um|wait|no|just)[,\s]+|"
-    r"i\s+said\s+|(?:can|could|would|will)\s+you\s+){0,2}"
-    r"stop\s*[.!?]?\s*$",
-    re.IGNORECASE,
-)
 
 
 def _is_unambiguous_partial_stop(text: str) -> bool:
     """Reserve an ambiguous bare STOP for final-transcript routing."""
 
-    return bool(STOP_RE.match(text)) and not _AMBIGUOUS_PARTIAL_STOP_RE.match(text)
+    if not STOP_RE.match(text):
+        return False
+    words = text.rstrip(" \t\r\n.!?").casefold().split()
+    return not (words[-1] == "stop" and words.count("stop") == 1)
 
 
 @dataclass(frozen=True)
