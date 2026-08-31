@@ -15,9 +15,19 @@ from typing import Sequence
 STOP_RE: re.Pattern = re.compile(
     r"""
     ^\s*
-    (?:(?:please|hey|okay|ok|uh|um)[,\s]+|(?:can|could|would|will)\s+you\s+){0,2}
     (?:
-        stop(?:\s+(?:please|now|(?:talking|speaking)(?:\s+(?:please|now))?))?
+        (?:please|hey|okay|ok|uh|um|wait|no|just)[,\s]+
+        |i\s+said\s+
+        |(?:can|could|would|will)\s+you\s+
+    ){0,2}
+    (?:
+        stop
+        (?:
+            (?:\s+stop)+(?:\s+(?:please|now))?
+            |\s+(?:it|that|this|already)(?:\s+(?:please|now))?
+            |\s+(?:please|now)
+            |\s+(?:talking|speaking)(?:\s+(?:please|now))?
+        )?
         |be\s+quiet(?:\s+please)?
         |quiet(?:\s+please)?
         |shut\s+up(?:\s+please)?

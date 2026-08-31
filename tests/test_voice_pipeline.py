@@ -558,12 +558,12 @@ async def test_vad_stt_retries_partial_probe_after_background_sentence(monkeypat
 
 @pytest.mark.asyncio
 async def test_vad_stt_stop_probe_emits_interruption_on_stop_match(monkeypatch):
-    """When the probe's partial transcript matches ``STOP_RE`` the
+    """When the probe's partial transcript is an unambiguous STOP the
     processor pushes ``InterruptionFrame`` + the matched
     ``TranscriptionFrame`` + ``UserStoppedSpeakingFrame`` downstream
     immediately — without waiting for VAD's silence-window finalize."""
     _StagedVad.instances.clear()
-    stt = _StagedStt(texts=["stop"])
+    stt = _StagedStt(texts=["stop it"])
     monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
     proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.05))
 
@@ -575,7 +575,7 @@ async def test_vad_stt_stop_probe_emits_interruption_on_stop_match(monkeypatch):
     assert "InterruptionFrame"        in kinds
     assert "UserStoppedSpeakingFrame" in kinds
     transcripts = [f for f in sink.frames if isinstance(f, TranscriptionFrame)]
-    assert [t.text for t in transcripts] == ["stop"]
+    assert [t.text for t in transcripts] == ["stop it"]
     # InterruptionFrame must arrive before the TranscriptionFrame so any
     # in-flight reasoning is cancelled before the gate sees STOP.
     int_idx = next(i for i, f in enumerate(sink.frames) if isinstance(f, InterruptionFrame))
@@ -599,6 +599,51 @@ async def test_vad_stt_stop_probe_silent_on_non_stop_match(monkeypatch):
 
     assert not any(isinstance(f, InterruptionFrame) for f in sink.frames)
     assert not any(isinstance(f, TranscriptionFrame) for f in sink.frames)
+
+
+@pytest.mark.asyncio
+async def test_vad_stt_bare_partial_stop_preserves_scoped_final_command(
+    monkeypatch,
+):
+    _StagedVad.instances.clear()
+    stt = _StagedStt(texts=["stop", "stop visual monitoring"])
+    monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
+    vad_stt = VadSttProcessor(
+        stt=stt,
+        vad_cfg=VadConfig(stop_probe_after_s=0.05),
+    )
+    frame = InputAudioRawFrame(
+        audio=b"\x00\x00" * 320,
+        sample_rate=16000,
+        num_channels=1,
+    )
+    frame.transport_source = "web-client"
+    sink = _CaptureSink()
+    pipeline = Pipeline([vad_stt, sink])
+    worker = PipelineWorker(
+        pipeline,
+        cancel_on_idle_timeout=False,
+        enable_rtvi=False,
+    )
+    runner = WorkerRunner()
+    await runner.add_workers(worker)
+
+    async def drive() -> None:
+        await asyncio.sleep(0.05)
+        await worker.queue_frame(frame)
+        await asyncio.sleep(0.2)
+        assert _StagedVad.instances
+        await _StagedVad.instances[-1].trigger_utterance()
+        await asyncio.sleep(0.05)
+        await worker.queue_frame(EndFrame())
+
+    await asyncio.gather(runner.run(), drive())
+
+    assert not any(isinstance(item, InterruptionFrame) for item in sink.frames)
+    transcripts = [
+        item for item in sink.frames if isinstance(item, TranscriptionFrame)
+    ]
+    assert [item.text for item in transcripts] == ["stop visual monitoring"]
 
 
 @pytest.mark.asyncio
@@ -787,10 +832,10 @@ async def test_vad_stt_stop_probe_suppresses_duplicate_vad_finalize(monkeypatch)
     second ``TranscriptionFrame`` — otherwise the gate would re-fire
     its canned "Okay, I will stop." ack TTS."""
     _StagedVad.instances.clear()
-    # Probe call returns "stop"; the eventual on_utterance call (if
+    # Probe call returns "stop it"; the eventual on_utterance call (if
     # the suppression failed) would return "stop now" — we must not see
     # that downstream.
-    stt = _StagedStt(texts=["stop", "stop now"])
+    stt = _StagedStt(texts=["stop it", "stop now"])
     monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
     proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.05))
 
@@ -818,7 +863,7 @@ async def test_vad_stt_stop_probe_suppresses_duplicate_vad_finalize(monkeypatch)
     await asyncio.gather(runner.run(), drive())
 
     transcripts = [f for f in sink.frames if isinstance(f, TranscriptionFrame)]
-    assert [t.text for t in transcripts] == ["stop"], (
+    assert [t.text for t in transcripts] == ["stop it"], (
         "duplicate transcription from VAD-finalize must be suppressed "
         "after the probe already fired STOP"
     )
@@ -895,7 +940,7 @@ async def test_vad_stt_stop_probe_no_unawaited_coroutine_under_finalize_race(mon
     """
     _StagedVad.instances.clear()
     # Probe sees STOP; finalize would see "stop now" if suppression failed.
-    stt = _StagedStt(texts=["stop", "stop now"])
+    stt = _StagedStt(texts=["stop it", "stop now"])
     monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
     proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.05))
 
