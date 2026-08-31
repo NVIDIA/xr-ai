@@ -26,6 +26,59 @@ sudo apt install python3-dev
 
 This applies to the `agent-samples/model-servers/yaml/spark/` profile.
 
+### DGX Spark — vLLM fails in `cudaMemGetInfo` before loading weights
+
+**Symptom:** `model_servers` aborts while starting a vLLM service, often the
+embedding server after the larger services have started. The traceback reaches
+`MemorySnapshot.measure()`, then ends in `torch.cuda.mem_get_info()` or
+`cudaMemGetInfo` with a CUDA out-of-memory error. `htop` can still show tens of
+gigabytes of available memory.
+
+**Cause:** this traceback is not a model-weight or KV-cache allocation failure.
+The CUDA memory snapshot fails before vLLM loads that service's weights or
+checks its configured `gpu_memory_utilization`.
+
+DGX Spark uses a unified memory architecture: the CPU, GPU, filesystem cache,
+and model servers share the same DRAM. Linux `MemAvailable` includes memory that
+the kernel can reclaim, while `cudaMemGetInfo` can report a smaller immediately
+free amount. NVIDIA documents this behavior in its [DGX Spark unified-memory
+guidance](https://docs.nvidia.com/dgx/dgx-spark/known-issues.html#guidance-for-reporting-memory-resources-with-unified-memory-architecture),
+and a [related vLLM issue](https://github.com/vllm-project/vllm/issues/48140)
+describes how checkpoint reads held in the filesystem page cache can trigger a
+startup failure on UMA systems.
+
+**Diagnosis:** inspect the host memory counters immediately after the failure:
+
+```bash
+grep -E '^(MemTotal|MemFree|MemAvailable|Cached|SReclaimable|SwapFree):' \
+  /proc/meminfo
+```
+
+If `MemAvailable` is much larger than `MemFree` and `Cached` is large, the
+failure is consistent with reclaimable-cache pressure rather than the next
+model being too large for the configured profile.
+
+**Fix:** first install the current DGX OS and driver updates. The [DGX Spark
+release notes](https://docs.nvidia.com/dgx/dgx-spark/release-notes.html)
+identify improved GB10 UMA out-of-memory handling in the July 2026 release.
+Stop unrelated memory-intensive workloads before retrying the stack.
+
+For diagnosis and recovery, NVIDIA recommends flushing clean filesystem caches
+and then restarting the application:
+
+```bash
+sudo sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches'
+```
+
+The leading `sync` flushes dirty filesystem buffers. Dropping caches makes
+subsequent filesystem reads cold, so use this as a diagnostic workaround, not
+as routine launcher behavior.
+
+Do not lower `gpu_memory_utilization` solely for this traceback. That setting
+cannot be evaluated when `cudaMemGetInfo` itself fails. Lower the setting only
+for later failures that report insufficient memory for the requested
+utilization or KV cache.
+
 ### DGX Spark — LOVR auto-download is not supported
 
 **Symptom:** `uv run --project agent-samples/xr-render-demo xr_render_demo`
