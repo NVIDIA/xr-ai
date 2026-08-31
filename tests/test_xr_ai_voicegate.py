@@ -231,6 +231,10 @@ def test_phrase_only_utterance_strips_to_empty_string():
     "stop already",
     "I said stop",
     "please stop",
+    "alright stop",
+    "sorry, stop",
+    "whoa stop",
+    "hang on stop",
 ])
 def test_stop_regex_canonical_forms_match(text: str):
     """Case 9: all the canonical interruption phrases match."""
