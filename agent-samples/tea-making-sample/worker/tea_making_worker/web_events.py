@@ -66,7 +66,14 @@ class TeaWebEventsAgent(Agent):
         fact: BackgroundFact,
         ctx: RuntimeContext,
     ) -> None:
-        await self._publish("background.facts", "Background facts", fact, ctx)
+        presentation = {
+            "change_watch": ("background.change-watch", "Visual change watch"),
+            "video_log": ("background.video-log", "Video log"),
+        }.get(fact.application)
+        if presentation is None:
+            return
+        topic, title = presentation
+        await self._publish_payload(topic, title, {"text": fact.text}, ctx)
 
     @subscribe(CHANGE_WATCH_RECORD_TOPIC)
     async def change_watch(
@@ -74,6 +81,8 @@ class TeaWebEventsAgent(Agent):
         record: ChangeWatchRecord,
         ctx: RuntimeContext,
     ) -> None:
+        if record.record_type not in {"started", "stopped"}:
+            return
         await self._publish(
             "background.change-watch",
             "Visual change watch",
@@ -95,6 +104,8 @@ class TeaWebEventsAgent(Agent):
         record: VideoLogRecord,
         ctx: RuntimeContext,
     ) -> None:
+        if record.record_type not in {"started", "stopped"}:
+            return
         await self._publish("background.video-log", "Video log", record, ctx)
 
     @subscribe(PARTICIPANT_JOINED_TOPIC)
