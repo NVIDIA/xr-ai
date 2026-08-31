@@ -468,12 +468,6 @@ class VoiceAgent(Agent):
         while True:
             participant_id, transcript = await queue.get()
             try:
-                await runtime.publish(
-                    VOICE_TRANSCRIPT_TOPIC,
-                    transcript,
-                    participant_id=participant_id,
-                    source=self._source,
-                )
                 sender = getattr(self._session.transport, "send_return_data", None)
                 if sender is not None:
                     try:
@@ -489,6 +483,12 @@ class VoiceAgent(Agent):
                         logger.opt(exception=True).debug(
                             "capture STT caption failed pid={!r}", participant_id,
                         )
+                await runtime.publish(
+                    VOICE_TRANSCRIPT_TOPIC,
+                    transcript,
+                    participant_id=participant_id,
+                    source=self._source,
+                )
             except asyncio.CancelledError:
                 raise
             except BaseExceptionGroup as error:

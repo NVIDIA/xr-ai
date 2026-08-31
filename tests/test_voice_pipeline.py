@@ -3796,6 +3796,39 @@ async def test_output_transport_publishes_caption_with_first_paced_audio_chunk()
 
 
 @pytest.mark.asyncio
+async def test_output_transport_preserves_capture_caption_order():
+    from pipecat.transports.base_transport import TransportParams
+    from xr_ai_hub import DataMessage
+    from xr_ai_voice._transport import DeviceIOHubOutputTransport
+
+    first_started = asyncio.Event()
+    release_first = asyncio.Event()
+    messages: list[DataMessage] = []
+
+    class _StubEndpoint:
+        async def send_return_data(self, message: DataMessage) -> None:
+            if message.data == b"first":
+                first_started.set()
+                await release_first.wait()
+            messages.append(message)
+
+    transport = DeviceIOHubOutputTransport(_StubEndpoint(), TransportParams())
+    first = asyncio.create_task(
+        transport._send_capture_caption("alice", 1, "first")  # noqa: SLF001
+    )
+    await asyncio.wait_for(first_started.wait(), 1.0)
+    second = asyncio.create_task(
+        transport._send_capture_caption("alice", 2, "second")  # noqa: SLF001
+    )
+    await asyncio.sleep(0)
+
+    assert messages == []
+    release_first.set()
+    await asyncio.gather(first, second)
+    assert [message.data for message in messages] == [b"first", b"second"]
+
+
+@pytest.mark.asyncio
 async def test_output_transport_paces_preroll_within_small_hub_buffer(monkeypatch):
     """The full pre-roll and following speech fit a 120 ms hub queue."""
     from collections import deque
