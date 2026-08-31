@@ -393,6 +393,8 @@ async def test_voice_agent_publishes_final_transcript_before_query_gating() -> N
             123,
         )
         await asyncio.wait_for(transcripts.changed.wait(), 1.0)
+        assert voice._transcript_queue is not None  # noqa: SLF001
+        await asyncio.wait_for(voice._transcript_queue.join(), 1.0)  # noqa: SLF001
 
     assert transcripts.messages == [
         (
