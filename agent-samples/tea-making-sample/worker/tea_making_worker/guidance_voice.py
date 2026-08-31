@@ -12,7 +12,7 @@ from .events import GUIDANCE_NOTICE_TOPIC, GuidanceNotice
 
 
 class GuidanceVoiceAgent(Agent):
-    """Speak workflow notices while background applications remain file-only."""
+    """Speak workflow notices without owning guidance decisions."""
 
     def __init__(self) -> None:
         super().__init__()

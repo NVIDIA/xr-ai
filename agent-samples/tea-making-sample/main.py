@@ -19,6 +19,13 @@ from xr_ai_logging import setup_logging
 _BASE = Path(__file__).resolve().parent
 _WORKER_CONFIG = _BASE / "yaml/tea_making_worker.yaml"
 
+_CAPTURE_PROCESS = Process(
+    "capture",
+    "../../services/device-io-hub",
+    "device_io_capture",
+    config="yaml/media_capture.yaml",
+)
+
 _MODEL_PROCESSES = [
     Process(
         "stt",
@@ -52,6 +59,14 @@ def _parser() -> argparse.ArgumentParser:
         description="Tea-making guidance with native XR agents.",
     )
     parser.add_argument(
+        "--capture",
+        action="store_true",
+        help=(
+            "record participant video, bidirectional audio, and data-channel "
+            "traffic"
+        ),
+    )
+    parser.add_argument(
         "--expose-web-events",
         action="store_true",
         help=(
@@ -66,8 +81,8 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return _parser().parse_args(sys.argv[1:] if argv is None else argv)
 
 
-def _build_processes(worker_config: Path) -> list[Process]:
-    return [
+def _build_processes(worker_config: Path, *, capture: bool = False) -> list[Process]:
+    processes = [
         Process(
             "hub",
             "../../services/device-io-hub",
@@ -88,6 +103,9 @@ def _build_processes(worker_config: Path) -> list[Process]:
             config=worker_config,
         ),
     ]
+    if capture:
+        processes.insert(1, _CAPTURE_PROCESS)
+    return processes
 
 
 def _write_config(
@@ -141,7 +159,8 @@ def run(argv: Sequence[str] | None = None) -> None:
     args = _parse_args(argv)
     setup_logging("orchestrator", namespace="tea-making-sample")
     logging.getLogger(__name__).info(
-        "launch selection expose_web_events=%s",
+        "launch selection capture=%s expose_web_events=%s",
+        args.capture,
         args.expose_web_events,
     )
     with tempfile.TemporaryDirectory(prefix="tea-making-config-") as directory:
@@ -149,7 +168,7 @@ def run(argv: Sequence[str] | None = None) -> None:
             Path(directory),
             expose_web_events=args.expose_web_events,
         )
-        run_stack(_build_processes(worker_config), _BASE)
+        run_stack(_build_processes(worker_config, capture=args.capture), _BASE)
 
 
 if __name__ == "__main__":

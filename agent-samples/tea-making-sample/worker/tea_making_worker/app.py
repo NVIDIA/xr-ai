@@ -27,6 +27,7 @@ from xr_ai_voice import (
 from xr_ai_voicegate import load_voice_gate_config
 from xr_ai_web_events import WebEventsAgent
 
+from ._change_watch_voice import _ChangeWatchVoiceAgent
 from .background_context import BackgroundContextAgent
 from .change_watch import ChangeWatchAgent
 from .config import WorkerConfig
@@ -239,6 +240,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         ),
     )
     runtime.register("guidance-voice", GuidanceVoiceAgent())
+    runtime.register("change-watch-voice", _ChangeWatchVoiceAgent())
     voice_aggregation = runtime.register(
         "voice-aggregation",
         _ParticipantVoiceAggregationAgent(llm=llm),

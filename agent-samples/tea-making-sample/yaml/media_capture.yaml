@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Opt-in server-side capture for the tea-making sample. Each participant gets a
+# timestamped bundle with captioned H.264/PCM .mkv video, retained raw media,
+# and the exact inbound/outbound data timeline.
+hub_sub_addr: ipc:///tmp/xr_hub_pub
+hub_push_addr: ipc:///tmp/xr_hub_in
+out_dir: ~/.local/share/xr-ai/captures/tea-making-sample
+
+sample_fps: 30.0
+bitrate: 6000000
+gpu_id: 0
+frame_queue_size: 2
+encoder_workers: 2
+audio_sample_rate: 48000
+
+overlay_seconds: 12.0
+overlay_lines: 4
+max_total_bytes: 10737418240
