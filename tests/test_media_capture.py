@@ -5,18 +5,29 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import stat
 import sys
 import types
 import wave
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
 import pytest
 from device_io_hub.capture._compositor import compose_caption
-from device_io_hub.capture._recorder import SessionRecorder, _StereoWaveWriter
-from device_io_hub.capture._service import CaptureService
+from device_io_hub.capture._recorder import (
+    SessionRecorder,
+    _safe_name,
+    _StereoWaveWriter,
+)
+from device_io_hub.capture._service import (
+    CaptureService,
+    _FrameWorker,
+    _invalid_audio_reason,
+)
 from device_io_hub.capture.config import CaptureConfig, load_capture_config
-from xr_ai_hub import AudioChunk, DataMessage, FrameData, PixelFormat
+from xr_ai_hub import AudioChunk, DataMessage, FrameData, FrameSignal, PixelFormat
 from xr_ai_hub._capture import CAPTURE_STT_TOPIC, CAPTURE_TTS_TOPIC
 
 
@@ -126,6 +137,67 @@ def test_stereo_wave_retains_real_conversation_gap(tmp_path: Path) -> None:
     assert np.all(samples[24_480:, 1] < 0)
 
 
+def test_capture_rejects_malformed_audio_before_recording() -> None:
+    valid = _audio("device")
+    invalid = _audio("device")
+    invalid.data = invalid.data[:-4]
+
+    assert _invalid_audio_reason(valid) is None
+    assert _invalid_audio_reason(invalid) == "expected 1920 PCM bytes, got 1916"
+
+
+@pytest.mark.asyncio
+async def test_frame_worker_samples_before_requesting_pixels() -> None:
+    class Endpoint:
+        def __init__(self) -> None:
+            self.requested: list[FrameSignal] = []
+            self.changed = asyncio.Event()
+
+        async def request_frame(self, signal: FrameSignal):
+            self.requested.append(signal)
+            if len(self.requested) == 2:
+                self.changed.set()
+            return None
+
+    class Recorder:
+        def __init__(self) -> None:
+            self.dropped: list[int] = []
+
+        def note_video_drop(self, _participant_id: str, pts_us: int) -> None:
+            self.dropped.append(pts_us)
+
+    endpoint = Endpoint()
+    recorder = Recorder()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        worker = _FrameWorker(
+            endpoint=endpoint,  # type: ignore[arg-type]
+            recorder=recorder,  # type: ignore[arg-type]
+            executor=executor,
+            participant_id="alice",
+            track_id="camera",
+            queue_size=4,
+            sample_fps=30,
+            on_failure=lambda _task: None,
+        )
+        for seq, pts_us in enumerate((1_000_000, 1_010_000, 1_040_000)):
+            worker.submit(FrameSignal(
+                slot=0,
+                seq=seq,
+                pts_us=pts_us,
+                width=64,
+                height=32,
+                fmt=PixelFormat.I420,
+                data_sz=3_072,
+                participant_id="alice",
+                track_id="camera",
+            ))
+        await asyncio.wait_for(endpoint.changed.wait(), 1.0)
+        await worker.close()
+
+    assert [signal.pts_us for signal in endpoint.requested] == [1_000_000, 1_040_000]
+    assert recorder.dropped == [1_000_000, 1_040_000]
+
+
 def test_capture_config_resolves_output_and_caption_duration(tmp_path: Path) -> None:
     path = tmp_path / "capture.yaml"
     path.write_text(
@@ -181,6 +253,10 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
         "device",
         DataMessage("alice", "sensor.state", 1_000_000, b"Door open"),
     )
+    recorder.record_data(
+        "agent",
+        DataMessage("alice", "agent.large", 1_000_000, b"x" * 4_096),
+    )
     recorder.record_voice_caption(
         "user",
         DataMessage("alice", CAPTURE_STT_TOPIC, 1_000_000, b"What is this?"),
@@ -194,16 +270,19 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
     )
     recorder.record_video(_frame(pts_us=1_050_000))
     session_state = recorder._sessions["alice"]
-    assert tuple(session_state.data_feed) == (
+    assert tuple(session_state.data_feed)[:2] == (
         "AGENT agent.response: Hello from the agent",
         "DEVICE sensor.state: Door open",
     )
+    assert session_state.data_feed[-1] == "AGENT agent.large: " + "x" * 1_024
     assert session_state.caption == "AGENT: This is a door."
     packets = recorder._sessions["alice"].video["camera"]._packets
     assert [packet.pts_us for packet in packets] == [1_000_000, 1_050_000]
     recorder.end_session("alice", 1_100_000)
 
     session = next(path for path in tmp_path.iterdir() if path.is_dir())
+    assert stat.S_IMODE(session.stat().st_mode) & 0o077 == 0
+    assert not list(session.rglob("*.pending"))
     manifest = json.loads((session / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["participant_id"] == "alice"
     assert manifest["audio"]["channels"] == {"left": "device", "right": "agent"}
@@ -228,6 +307,34 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
     )
     assert encoded_inputs
     assert np.any(encoded_inputs[0][_frame().height:] == 235)
+
+
+def test_safe_names_do_not_alias_distinct_track_ids() -> None:
+    assert _safe_name("cam/1") != _safe_name("cam_1")
+
+
+def test_retention_counts_incomplete_capture_directories(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    incomplete = tmp_path / "1_incomplete"
+    incomplete.mkdir()
+    (incomplete / "events.jsonl").write_bytes(b"x" * 100)
+    complete = tmp_path / "2_complete"
+    complete.mkdir()
+    (complete / "manifest.json").write_text("{}")
+    (complete / "payload").write_bytes(b"y" * 100)
+    os.utime(incomplete, ns=(1, 1))
+    os.utime(complete, ns=(2, 2))
+
+    SessionRecorder(CaptureConfig(
+        out_dir=str(tmp_path),
+        max_total_bytes=102,
+    ))
+
+    assert not incomplete.exists()
+    assert complete.exists()
 
 
 def test_session_bundle_merges_resolution_and_track_segments_into_one_video(

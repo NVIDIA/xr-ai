@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import shutil
 import struct
@@ -22,10 +23,17 @@ from ._compositor import compose_caption
 from ._matroska import VideoPacket, mux_h264_pcm
 from .config import CaptureConfig
 
+_MAX_SAFE_NAME = 96
+_MAX_DATA_FEED_TEXT = 1_024
+
 
 def _safe_name(value: str) -> str:
     cleaned = "".join(char if char.isalnum() or char in "-_." else "_" for char in value)
-    return cleaned or "unnamed"
+    if cleaned == value and 0 < len(cleaned) <= _MAX_SAFE_NAME:
+        return cleaned
+    digest = hashlib.sha256(value.encode()).hexdigest()[:8]
+    prefix = (cleaned or "unnamed")[:_MAX_SAFE_NAME - len(digest) - 1]
+    return f"{prefix}_{digest}"
 
 
 def _write_json_line(stream, value: dict) -> None:
@@ -322,6 +330,7 @@ class SessionRecorder:
         self._root.mkdir(parents=True, exist_ok=True)
         self._sessions: dict[str, _ParticipantSession] = {}
         self._lock = threading.RLock()
+        self._prune_artifacts()
 
     def begin_session(self, participant_id: str, pts_us: int) -> None:
         with self._lock:
@@ -334,8 +343,9 @@ class SessionRecorder:
             while root.exists():
                 root = Path(f"{base}_{suffix}")
                 suffix += 1
-            (root / "video").mkdir(parents=True)
-            (root / "audio").mkdir()
+            root.mkdir(mode=0o700)
+            (root / "video").mkdir(mode=0o700)
+            (root / "audio").mkdir(mode=0o700)
             events = (root / "events.jsonl").open("a", encoding="utf-8")
             audio_index = (root / "audio" / "chunks.jsonl").open("a", encoding="utf-8")
             raw_audio = {
@@ -404,7 +414,7 @@ class SessionRecorder:
             **payload,
         )
         if text.strip():
-            normalized = " ".join(text.split())
+            normalized = " ".join(text.split())[:_MAX_DATA_FEED_TEXT]
             with session.lock:
                 session.data_feed.append(
                     f"{direction.upper()} {message.topic}: {normalized}"
@@ -502,12 +512,19 @@ class SessionRecorder:
                 "events": "events.jsonl",
                 "dropped_video_frames": session.dropped_video_frames,
             }
-            (session.root / "manifest.json").write_text(
-                json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
-                encoding="utf-8",
-            )
+            manifest_path = session.root / "manifest.json"
+            pending_manifest = manifest_path.with_suffix(".json.pending")
+            try:
+                pending_manifest.write_text(
+                    json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+                    encoding="utf-8",
+                )
+                pending_manifest.replace(manifest_path)
+            except Exception:
+                pending_manifest.unlink(missing_ok=True)
+                raise
         logger.info("media capture completed participant={!r} path={}", participant_id, session.root)
-        self._prune_completed()
+        self._prune_artifacts()
 
     def _mux_video(
         self,
@@ -592,9 +609,10 @@ class SessionRecorder:
             / 1_000_000
         )
         muxed_path = session.root / combined["path"]
+        pending_muxed_path = muxed_path.with_suffix(".mkv.pending")
         try:
             mux_h264_pcm(
-                output_path=muxed_path,
+                output_path=pending_muxed_path,
                 h264_path=raw_path,
                 packets=packets,
                 wave_path=wave_path,
@@ -604,8 +622,9 @@ class SessionRecorder:
                 height=combined["height"],
                 fps=combined["fps"],
             )
+            pending_muxed_path.replace(muxed_path)
         except Exception as exc:
-            muxed_path.unlink(missing_ok=True)
+            pending_muxed_path.unlink(missing_ok=True)
             logger.warning("media capture A/V mux failed path={}: {}", raw_path, exc)
             combined["size_bytes"] = combined["raw_size_bytes"]
             combined["audio_embedded"] = False
@@ -625,22 +644,28 @@ class SessionRecorder:
         for participant_id in list(self._sessions):
             self.end_session(participant_id, end_us)
 
-    def _prune_completed(self) -> None:
+    def _prune_artifacts(self) -> None:
         cap = self._config.max_total_bytes
         if cap <= 0:
             return
-        completed = [
+        active = {session.root for session in self._sessions.values()}
+        artifacts = [
             path for path in self._root.iterdir()
-            if path.is_dir() and (path / "manifest.json").is_file()
+            if path.is_dir()
+            and path not in active
+            and (
+                (path / "manifest.json").is_file()
+                or (path / "events.jsonl").is_file()
+            )
         ]
         sizes = {
             path: sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
-            for path in completed
+            for path in artifacts
         }
         total = sum(sizes.values())
-        for path in sorted(completed, key=lambda item: item.stat().st_mtime_ns):
+        for path in sorted(artifacts, key=lambda item: item.stat().st_mtime_ns):
             if total <= cap:
                 break
             total -= sizes[path]
             shutil.rmtree(path)
-            logger.info("media capture evicted completed session {}", path)
+            logger.info("media capture evicted session artifact {}", path)

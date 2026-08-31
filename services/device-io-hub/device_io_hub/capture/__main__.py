@@ -36,7 +36,7 @@ async def main(*, config_path: Path, ready_file: Path | None = None) -> None:
             return_when=asyncio.FIRST_COMPLETED,
         )
         if run_task in done:
-            await run_task
+            run_task.result()
     finally:
         run_task.cancel()
         stop_task.cancel()

@@ -456,6 +456,10 @@ async def test_transcript_subscriber_failure_does_not_block_accepted_query() -> 
         "hey agent listen",
         "second utterance",
     ]
+    assert session.endpoint.return_data == [
+        DataMessage("alice", CAPTURE_STT_TOPIC, 7, b"hey agent listen"),
+        DataMessage("alice", CAPTURE_STT_TOPIC, 8, b"second utterance"),
+    ]
 
 
 async def test_blocked_transcript_subscriber_does_not_block_accepted_query() -> None:
@@ -474,6 +478,9 @@ async def test_blocked_transcript_subscriber_does_not_block_accepted_query() -> 
             0.1,
         )
         await asyncio.wait_for(blocker.started.wait(), 1.0)
+        assert session.endpoint.return_data == [
+            DataMessage("alice", CAPTURE_STT_TOPIC, 7, b"hey agent listen")
+        ]
         assert session.handler is not None
         await asyncio.wait_for(
             session.handler(
