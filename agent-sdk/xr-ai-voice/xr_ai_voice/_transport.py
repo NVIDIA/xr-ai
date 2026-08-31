@@ -265,6 +265,7 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
         self._return_audio_preroll_tasks: dict[str, asyncio.Task[None]] = {}
         self._pending_capture_captions: dict[str, deque[str]] = {}
         self._capture_caption_tasks: set[asyncio.Task[None]] = set()
+        self._capture_caption_lock = asyncio.Lock()
 
     @property
     def target_participant(self) -> str:
@@ -626,12 +627,13 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
         text: str,
     ) -> None:
         try:
-            await self._ep.send_return_data(DataMessage(
-                participant_id=pid,
-                topic=CAPTURE_TTS_TOPIC,
-                pts_us=pts_us,
-                data=text.encode(),
-            ))
+            async with self._capture_caption_lock:
+                await self._ep.send_return_data(DataMessage(
+                    participant_id=pid,
+                    topic=CAPTURE_TTS_TOPIC,
+                    pts_us=pts_us,
+                    data=text.encode(),
+                ))
         except asyncio.CancelledError:
             raise
         except Exception:

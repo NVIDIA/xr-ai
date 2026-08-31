@@ -14,7 +14,8 @@ Text in (data ch.) ─────→ text query ──┴→ latest video frame
 Model deployment
 ----------------
 STT, VLM, and TTS are reused from services started outside this sample. The
-sample launches only its hub and worker and never starts or stops model servers.
+sample launches its hub and worker, plus optional capture, and never starts or
+stops model servers.
 
 How to run (from agent-samples/simple-vlm-example/):
     uv sync && uv run simple_vlm_example

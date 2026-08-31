@@ -24,6 +24,17 @@ from ._return_subscriber import ReturnTrafficSubscriber
 from .config import CaptureConfig
 
 
+def _invalid_audio_reason(chunk: AudioChunk) -> str | None:
+    if chunk.sample_rate <= 0:
+        return "sample rate must be positive"
+    if chunk.samples <= 0 or chunk.channels <= 0:
+        return "sample and channel counts must be positive"
+    expected_bytes = chunk.samples * chunk.channels * 4
+    if len(chunk.data) != expected_bytes:
+        return f"expected {expected_bytes} PCM bytes, got {len(chunk.data)}"
+    return None
+
+
 class _FrameWorker:
     """Coalesce one video track before requesting pixels and invoking NVENC."""
 
@@ -36,6 +47,7 @@ class _FrameWorker:
         participant_id: str,
         track_id: str,
         queue_size: int,
+        sample_fps: float,
         on_failure,
     ) -> None:
         self.participant_id = participant_id
@@ -44,6 +56,8 @@ class _FrameWorker:
         self._recorder = recorder
         self._executor = executor
         self._queue: asyncio.Queue[FrameSignal | None] = asyncio.Queue(maxsize=queue_size)
+        self._min_interval_us = round(1_000_000 / sample_fps)
+        self._last_request_pts_us: int | None = None
         self._on_failure = on_failure
         self._task = asyncio.create_task(
             self._run(),
@@ -53,12 +67,9 @@ class _FrameWorker:
 
     def submit(self, signal: FrameSignal) -> None:
         if self._queue.full():
-            try:
-                dropped = self._queue.get_nowait()
-                if dropped is not None:
-                    self._recorder.note_video_drop(dropped.participant_id, dropped.pts_us)
-            except asyncio.QueueEmpty:
-                pass
+            dropped = self._queue.get_nowait()
+            if dropped is not None:
+                self._recorder.note_video_drop(dropped.participant_id, dropped.pts_us)
         self._queue.put_nowait(signal)
 
     async def _run(self) -> None:
@@ -67,6 +78,12 @@ class _FrameWorker:
             signal = await self._queue.get()
             if signal is None:
                 return
+            if (
+                self._last_request_pts_us is not None
+                and signal.pts_us - self._last_request_pts_us < self._min_interval_us
+            ):
+                continue
+            self._last_request_pts_us = signal.pts_us
             frame = await self._endpoint.request_frame(signal)
             if frame is None:
                 self._recorder.note_video_drop(signal.participant_id, signal.pts_us)
@@ -196,20 +213,31 @@ class CaptureService:
                 participant_id=signal.participant_id,
                 track_id=signal.track_id,
                 queue_size=self._config.frame_queue_size,
+                sample_fps=self._config.sample_fps,
                 on_failure=self._task_failed,
             )
             self._frame_workers[key] = worker
         worker.submit(signal)
 
     async def _on_device_audio(self, chunk: AudioChunk) -> None:
-        if chunk.participant_id in self._departed_participants:
-            return
-        await self._write(self._recorder.record_audio, "device", chunk)
+        await self._record_audio("device", chunk)
 
     async def _on_agent_audio(self, chunk: AudioChunk) -> None:
+        await self._record_audio("agent", chunk)
+
+    async def _record_audio(self, direction: str, chunk: AudioChunk) -> None:
         if chunk.participant_id in self._departed_participants:
             return
-        await self._write(self._recorder.record_audio, "agent", chunk)
+        reason = _invalid_audio_reason(chunk)
+        if reason is not None:
+            logger.warning(
+                "media capture dropped invalid {} audio pid={!r}: {}",
+                direction,
+                chunk.participant_id,
+                reason,
+            )
+            return
+        await self._write(self._recorder.record_audio, direction, chunk)
 
     async def _on_device_data(self, message: DataMessage) -> None:
         if message.participant_id in self._departed_participants:
