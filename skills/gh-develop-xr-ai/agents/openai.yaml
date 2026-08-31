@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+interface:
+  display_name: "Develop XR-AI Pull Requests"
+  short_description: "Build small, reviewable XR-AI pull requests"
+  default_prompt: "Use $gh-develop-xr-ai to implement this XR-AI change as a focused, self-contained pull request."

@@ -26,6 +26,7 @@ Prefer to do it by hand? Follow {doc}`/getting_started/quickstart`.
 | Skill | What it does |
 |---|---|
 | [`getting-started`](https://github.com/NVIDIA/xr-ai/blob/main/skills/getting-started/SKILL.md) | Sets an agent up to build on xr-ai: repo, working contract, docs, reference sample |
+| [`gh-develop-xr-ai`](https://github.com/NVIDIA/xr-ai/blob/main/skills/gh-develop-xr-ai/SKILL.md) | Develops small, self-contained XR-AI PRs and handles review feedback without scope creep |
 | [`gh-review-xr-ai`](https://github.com/NVIDIA/xr-ai/blob/main/skills/gh-review-xr-ai/SKILL.md) | Reviews xr-ai PRs with strict scope discipline and comment-only feedback |
 | [`gh-manage-xr-ai-reviews`](https://github.com/NVIDIA/xr-ai/blob/main/skills/gh-manage-xr-ai-reviews/SKILL.md) | Tracks an XR-AI review inbox with overall status, next actions, and safe batching |
 
@@ -47,9 +48,10 @@ curl -fsSL --create-dirs -o "$SKILLS_DIR/$SKILL/SKILL.md" \
 ```
 
 `gh-manage-xr-ai-reviews` composes `gh-review-xr-ai`; install both review
-skills together. The review skills also ship `agents/openai.yaml`, optional
-Codex interface metadata for their display name, short description, and default
-prompt. After setting `SKILL` to either review skill, install that metadata with:
+skills together. The GitHub workflow skills also ship `agents/openai.yaml`,
+optional Codex interface metadata for their display name, short description,
+and default prompt. After setting `SKILL` to a `gh-*` skill, install that
+metadata with:
 
 ```bash
 curl -fsSL --create-dirs -o "$SKILLS_DIR/$SKILL/agents/openai.yaml" \
