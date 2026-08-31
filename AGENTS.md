@@ -169,6 +169,32 @@ unless the user identifies the work as downstream-only.
   Refer to [Factual accuracy](docs/source/guides/documentation-style.md#factual-accuracy)
   for conditions and failure paths to cover.
 
+## Pull request development
+
+- Define the smallest independently useful outcome before editing. Keep the
+  implementation, tests, and documentation required for that outcome together,
+  but leave unrelated cleanup, redesigns, and adjacent improvements out.
+- When a pull request starts an intentional series, create one issue for each
+  remaining independently reviewable outcome, assign it to the authenticated
+  GitHub user, and link it from the pull request. Do not use future work to
+  excuse an incomplete current change.
+- Write the pull request description around four facts: the problem being
+  solved, the solution in this diff, deliberate scope boundaries and linked
+  follow-ups, and validation performed. Keep it current as the diff changes so
+  reviewers can distinguish an intentional tradeoff from an omission.
+- Before requesting review, perform at least one isolated self-review of the
+  complete merge-base diff. Re-read the stated outcome without relying on
+  implementation notes, inspect every changed line for unnecessary churn and
+  failure modes, and confirm that tests and documentation match the behavior.
+- Treat review feedback as evidence to understand, not an implementation order.
+  Reproduce the concern, apply the smallest correct high-value fix that fits the
+  pull request, and state the disposition. Decline unrelated work or a requested
+  redesign, or move it to a linked follow-up when it is accepted as planned
+  work, instead of silently expanding scope.
+
+The operational authoring workflow is in
+[`gh-develop-xr-ai`](skills/gh-develop-xr-ai/SKILL.md).
+
 ## Comments and documentation
 
 Comments explain a non-obvious invariant or failure mode. Do not narrate the
