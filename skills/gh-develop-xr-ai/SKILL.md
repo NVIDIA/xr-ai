@@ -99,8 +99,7 @@ each request:
    alternative implementation preference, or unrelated/follow-up work.
 3. Apply the smallest correct fix that preserves the PR's stated outcome.
 4. Rerun focused validation and inspect the resulting diff for new churn.
-5. Reply with a concise disposition: fixed and how, declined and why, or
-   deferred to accepted follow-up work with a linked issue.
+5. Reply with the disposition and supporting evidence.
 
 Do not implement a suggestion only because a reviewer prescribed it. Accept
 simple, high-value fixes that strengthen the current outcome. Do not turn the
@@ -110,3 +109,22 @@ split the PR rather than silently changing its purpose.
 
 Before requesting re-review, update the PR description and repeat the isolated
 self-review for the reviewer-driven diff.
+
+Post one concise review-round disposition that accounts for every substantive
+item. Use these statuses consistently:
+
+- **Addressed:** State the resulting behavior or file-level change and the
+  validation run. Link the commit when useful.
+- **Already satisfied:** Point to the code, test, documentation, or observed
+  behavior that resolves the concern without a change.
+- **Deferred:** Explain why it is outside the current outcome and link the
+  assigned issue that tracks the accepted follow-up.
+- **Declined:** Explain why the request is unnecessary, incorrect, or an
+  unsuitable redesign, with enough evidence for the reviewer to evaluate the
+  decision.
+- **Needs decision:** State the unresolved tradeoff and ask the user for the
+  smallest decision needed before continuing.
+
+Do not use a generic “done” or “fixed” summary, omit unresolved comments, or
+call accepted work deferred without a tracking issue. Distinguish the
+reviewer's underlying concern from the implementation chosen to address it.
