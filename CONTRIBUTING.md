@@ -68,7 +68,8 @@ Language-specific toolchains are pinned in each client project:
   link and assign issues for later steps in a multi-pull-request change.
 - Perform an isolated review of the complete diff before requesting review.
   After feedback, fix scoped correctness problems without silently accepting an
-  unrelated redesign.
+  unrelated redesign. Post a complete disposition for the review round,
+  including assigned issue links for accepted deferred work.
 - Keep commits focused and sign them with `git commit -s`.
 
 Coding agents should follow

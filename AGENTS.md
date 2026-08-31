@@ -152,6 +152,10 @@ Refer to [Adding a sample](docs/source/guides/adding-a-sample.md) and the
   pull request, and state the disposition. Decline unrelated work or a requested
   redesign, or move it to a linked follow-up when it is accepted as planned
   work, instead of silently expanding scope.
+- After each review round, post a disposition that accounts for every
+  substantive item: what was addressed and validated, what was already
+  satisfied and by what evidence, what was declined and why, and what was
+  deferred. Link the assigned issue for every accepted deferred item.
 
 The operational authoring workflow is in
 [`gh-develop-xr-ai`](skills/gh-develop-xr-ai/SKILL.md).
