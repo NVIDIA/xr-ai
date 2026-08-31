@@ -285,7 +285,26 @@ async def test_typed_events_are_projected_to_web_topics() -> None:
 
 
 @pytest.mark.asyncio
-async def test_change_watch_retries_prose_with_required_commit(
+async def test_change_watch_skips_prose_without_parsing_it_as_json() -> None:
+    chat = AsyncMock(
+        return_value=ChatResponse("The hand is raised.", None, None, "stop", {})
+    )
+
+    agent = object.__new__(ChangeWatchAgent)
+    agent._llm = SimpleNamespace(chat=chat)  # type: ignore[attr-defined]
+    agent._event_prompt = "Compare and commit."  # type: ignore[attr-defined]
+
+    decision = await agent._decide(
+        SimpleNamespace(instruction="raised hands", captions=["Hands are down."]),
+        "A hand is raised.",
+    )
+
+    assert decision is None
+    assert chat.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_change_watch_accepts_typed_commit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def execute(_name, arguments, handler, *_args, **_kwargs):
@@ -293,23 +312,20 @@ async def test_change_watch_retries_prose_with_required_commit(
 
     monkeypatch.setattr("xr_ai_tools.tools.typed.tool_execute", execute)
     chat = AsyncMock(
-        side_effect=(
-            ChatResponse("The hand is raised.", None, None, "stop", {}),
-            ChatResponse(
-                "",
-                None,
-                [
-                    ToolCall(
-                        id="change-commit",
-                        name="change_watch__commit",
-                        arguments=json.dumps(
-                            {"important": True, "summary": "A hand was raised."}
-                        ),
-                    )
-                ],
-                "tool_calls",
-                {},
-            ),
+        return_value=ChatResponse(
+            "",
+            None,
+            [
+                ToolCall(
+                    id="change-commit",
+                    name="change_watch__commit",
+                    arguments=json.dumps(
+                        {"important": True, "summary": "A hand was raised."}
+                    ),
+                )
+            ],
+            "tool_calls",
+            {},
         )
     )
 
@@ -322,16 +338,34 @@ async def test_change_watch_retries_prose_with_required_commit(
         "A hand is raised.",
     )
 
+    assert decision is not None
     assert decision.important is True
     assert decision.summary == "A hand was raised."
-    assert chat.await_count == 2
-    retry_messages = chat.await_args_list[1].args[0]
-    assert retry_messages[-1].role == "user"
-    assert "change_watch__commit" in retry_messages[-1].content
+    assert chat.await_count == 1
 
 
 @pytest.mark.asyncio
-async def test_video_log_retries_prose_with_required_commit(
+async def test_video_log_skips_prose_without_parsing_it_as_json() -> None:
+    chat = AsyncMock(
+        return_value=ChatResponse("A person entered.", None, None, "stop", {})
+    )
+
+    agent = object.__new__(VideoLogAgent)
+    agent._llm = SimpleNamespace(chat=chat)  # type: ignore[attr-defined]
+    agent._delta_prompt = "Compare and commit."  # type: ignore[attr-defined]
+    agent._history_size = 5  # type: ignore[attr-defined]
+
+    delta = await agent._generate_delta(
+        SimpleNamespace(captions=["The room is empty."]),
+        "A person is in the room.",
+    )
+
+    assert delta is None
+    assert chat.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_video_log_accepts_typed_commit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def execute(_name, arguments, handler, *_args, **_kwargs):
@@ -339,21 +373,18 @@ async def test_video_log_retries_prose_with_required_commit(
 
     monkeypatch.setattr("xr_ai_tools.tools.typed.tool_execute", execute)
     chat = AsyncMock(
-        side_effect=(
-            ChatResponse("A person entered.", None, None, "stop", {}),
-            ChatResponse(
-                "",
-                None,
-                [
-                    ToolCall(
-                        id="video-commit",
-                        name="video_log__commit",
-                        arguments=json.dumps({"delta": "A person entered."}),
-                    )
-                ],
-                "tool_calls",
-                {},
-            ),
+        return_value=ChatResponse(
+            "",
+            None,
+            [
+                ToolCall(
+                    id="video-commit",
+                    name="video_log__commit",
+                    arguments=json.dumps({"delta": "A person entered."}),
+                )
+            ],
+            "tool_calls",
+            {},
         )
     )
 
@@ -367,8 +398,9 @@ async def test_video_log_retries_prose_with_required_commit(
         "A person is in the room.",
     )
 
+    assert delta is not None
     assert delta.delta == "A person entered."
-    assert chat.await_count == 2
+    assert chat.await_count == 1
 
 
 @pytest.mark.parametrize(
