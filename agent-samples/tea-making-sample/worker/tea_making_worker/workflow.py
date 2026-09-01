@@ -151,19 +151,54 @@ class GuidanceAgent(Agent):
         return ToolSet(tools)
 
     def active_context(self, participant_id: str) -> str | None:
-        """Return current-step policy and sparse state without conversation history."""
+        """Return ordered public guide context and current-step response rules."""
 
         session = self.store.find(participant_id)
         if session is None or not session.active or session.step_id is None:
             return None
         step = self.workflow.step(session.step_id)
+        steps = tuple(self.workflow.steps.values())
+        index = steps.index(step)
+        step_complete = step.is_complete(session.state)
+
+        def describe(item: Step) -> dict[str, Any]:
+            try:
+                action = self.store._render_state(item.enter_message, session.state)
+            except ValueError:
+                action = item.title
+            return {"id": item.id, "title": item.title, "action": action}
+
+        recommended = step
+        if step_complete and step.next_step is not None:
+            recommended = self.workflow.step(step.next_step)
+
         return json.dumps(
             {
-                "workflow": self.workflow.foreground_prompt,
-                "voice_policy": self._voice_prompt,
-                "step": {"id": step.id, "title": step.title},
-                "instructions": step.voice.prompt,
-                "state": self.workflow.project(step, session.state),
+                "response_rules": self._voice_prompt,
+                "step_rules_for": recommended.id,
+                "step_rules": recommended.voice.prompt,
+                "public_guide": {
+                    "description": self.workflow.foreground_prompt,
+                    "steps": [describe(item) for item in steps],
+                    "current_step": {
+                        **describe(step),
+                        "complete": step_complete,
+                    },
+                    "recommended_action": (
+                        None
+                        if step_complete and step.next_step is None
+                        else describe(recommended)
+                    ),
+                    "previous_step": (
+                        None if index == 0 else describe(steps[index - 1])
+                    ),
+                    "next_step": (
+                        None
+                        if index + 1 == len(steps)
+                        else describe(steps[index + 1])
+                    ),
+                    "state": session.state,
+                },
             },
             ensure_ascii=False,
             separators=(",", ":"),
