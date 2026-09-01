@@ -13,7 +13,7 @@
   expected_tool: current_view
   forbidden_response: I can only help with the active tea guide right now.
 - name: idle-routes-open-ended-scene-question
-  query: What do you see?
+  query: Describe my surroundings.
   expected_tool: current_view
 - name: idle-routes-visual-reference
   query: What is this?
