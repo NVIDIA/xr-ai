@@ -42,6 +42,7 @@ _GROUPS = (
     ("services", "Services"),
     ("agent-samples", "Agent samples"),
     ("tests", "Tests"),
+    ("dependency-manifest", "Dependency manifest"),
 )
 
 
