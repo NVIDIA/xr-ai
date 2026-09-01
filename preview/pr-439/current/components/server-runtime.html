@@ -648,18 +648,18 @@ network debugging path. Refer to <a class="reference internal" href="../getting_
 <p>When <code class="docutils literal notranslate"><span class="pre">web_server_tls</span></code> is enabled (the default), the web server
 (<code class="docutils literal notranslate"><span class="pre">_web_server.py</span></code>) terminates TLS on <code class="docutils literal notranslate"><span class="pre">web_server_port</span></code> (8080 by default) and
 mounts a <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> route that proxies LiveKit signaling bidirectionally to the
-internal <code class="docutils literal notranslate"><span class="pre">ws://127.0.0.1:7880</span></code> (<code class="docutils literal notranslate"><span class="pre">_lk_proxy.py</span></code>). A stable development root CA
-and a signed <code class="docutils literal notranslate"><span class="pre">CA:FALSE</span></code> server leaf are auto-generated on first run (SAN
-coverage and rotation: <a class="reference internal" href="../getting_started/networking.html"><span class="std std-doc">Networking</span></a>); supply
-<code class="docutils literal notranslate"><span class="pre">cert_file</span></code> and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> to use your own.
+internal <code class="docutils literal notranslate"><span class="pre">ws://127.0.0.1:7880</span></code> (<code class="docutils literal notranslate"><span class="pre">_lk_proxy.py</span></code>). A self-signed certificate is
+auto-generated on first run (SAN coverage and regeneration:
+<a class="reference internal" href="../getting_started/networking.html"><span class="std std-doc">Networking</span></a>); supply <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> and
+<code class="docutils literal notranslate"><span class="pre">key_file</span></code> to use your own.
 The proxy forwards end-to-end headers so SDK authentication (such as the LiveKit
 Swift SDK’s <code class="docutils literal notranslate"><span class="pre">Authorization:</span> <span class="pre">Bearer</span></code>) reaches the server, and handles both the
 versioned (<code class="docutils literal notranslate"><span class="pre">/rtc/v1</span></code>) and legacy (<code class="docutils literal notranslate"><span class="pre">/rtc</span></code>) signaling paths.</p>
 <p>The web server’s <code class="docutils literal notranslate"><span class="pre">/token</span></code> endpoint returns a signed LiveKit JWT together with
 the client connection URL. With TLS on, that URL is the same-origin
 <code class="docutils literal notranslate"><span class="pre">wss://&lt;host&gt;:&lt;web_server_port&gt;</span></code> — so the client SDK never needs a
-per-deployment toggle. A <code class="docutils literal notranslate"><span class="pre">/cert</span></code> endpoint serves only the auto-generated public
-root CA as an installable client profile; neither private key is exposed.</p>
+per-deployment toggle. A <code class="docutils literal notranslate"><span class="pre">/cert</span></code> endpoint serves the active certificate as an
+installable iOS profile.</p>
 <p>Set <code class="docutils literal notranslate"><span class="pre">web_server_tls:</span> <span class="pre">false</span></code> for the two cases where the hub does not
 terminate TLS itself: a TLS-terminating reverse proxy (nginx, Caddy,
 Cloudflare Tunnel) sits in front and speaks plain <code class="docutils literal notranslate"><span class="pre">http://</span></code> + <code class="docutils literal notranslate"><span class="pre">ws://</span></code> to the

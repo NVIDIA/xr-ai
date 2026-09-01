@@ -430,21 +430,18 @@ required for the browser camera tests.</p>
 <section id="run-the-suite">
 <h2>Run the suite<a class="headerlink" href="#run-the-suite" title="Link to this heading">#</a></h2>
 <p>From the repository root:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>tests
-uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>pytest<span class="w"> </span>-v
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>tests
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>pytest<span class="w"> </span>-v
 </pre></div>
 </div>
-<p>CI runs the same selection on Python 3.11 and 3.12 from <code class="docutils literal notranslate"><span class="pre">tests/</span></code>, with the
-project environment at the repository root for nltk compatibility. The
-equivalent repository-root command is:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>pytest<span class="w"> </span>-v<span class="w"> </span>--tb<span class="o">=</span>short<span class="w"> </span>--color<span class="o">=</span>yes<span class="w"> </span>-m<span class="w"> </span><span class="s2">"not gpu"</span>
+<p>CI runs the same project on Python 3.11 and 3.12 with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-v<span class="w"> </span>--tb<span class="o">=</span>short<span class="w"> </span>--color<span class="o">=</span>yes<span class="w"> </span>-m<span class="w"> </span><span class="s2">"not gpu"</span>
 </pre></div>
 </div>
 <p>Tests marked <code class="docutils literal notranslate"><span class="pre">integration</span></code> may start real CPU subprocesses and still run in CI.
 Tests that require a real GPU, Docker, or NVENC use the <code class="docutils literal notranslate"><span class="pre">gpu</span></code> marker and run
 only on a suitably configured developer host:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>bash<span class="w"> </span>tests/run_local_gpu_tests.sh
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>bash<span class="w"> </span>run_local_gpu_tests.sh
 </pre></div>
 </div>
 <p>Pass extra pytest arguments after the script name to select a file or test.</p>

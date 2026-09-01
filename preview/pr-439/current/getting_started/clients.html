@@ -492,10 +492,10 @@ token from:</p>
 <p>The response is a JSON object containing <code class="docutils literal notranslate"><span class="pre">token</span></code>, <code class="docutils literal notranslate"><span class="pre">room</span></code>, and <code class="docutils literal notranslate"><span class="pre">url</span></code>. StreamKit
 token fetchers also accept a plain JWT response. The room is encoded in the
 token; clients do not send a separate room query parameter.</p>
-<p id="self-signed-certificate-trust">The default HTTPS server leaf is signed by a development root CA stored under
+<p id="self-signed-certificate-trust">The default HTTPS certificate is self-signed and stored under
 <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/</span></code>. Browsers allow a development click-through; Android
-and Apple devices install the public root from <code class="docutils literal notranslate"><span class="pre">/cert</span></code> using the platform trust
-procedures below. Use a public or managed certificate for production.</p>
+and Apple devices require the platform trust procedures below. Use a public or
+managed certificate for production.</p>
 </section>
 <section id="web">
 <span id="web-basic-sample"></span><h2>Web<a class="headerlink" href="#web" title="Link to this heading">#</a></h2>

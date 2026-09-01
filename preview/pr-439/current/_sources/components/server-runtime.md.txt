@@ -231,10 +231,10 @@ network debugging path. Refer to {doc}`/getting_started/networking`.
 When `web_server_tls` is enabled (the default), the web server
 (`_web_server.py`) terminates TLS on `web_server_port` (8080 by default) and
 mounts a `/rtc` route that proxies LiveKit signaling bidirectionally to the
-internal `ws://127.0.0.1:7880` (`_lk_proxy.py`). A stable development root CA
-and a signed `CA:FALSE` server leaf are auto-generated on first run (SAN
-coverage and rotation: [Networking](../getting_started/networking.md)); supply
-`cert_file` and `key_file` to use your own.
+internal `ws://127.0.0.1:7880` (`_lk_proxy.py`). A self-signed certificate is
+auto-generated on first run (SAN coverage and regeneration:
+[Networking](../getting_started/networking.md)); supply `cert_file` and
+`key_file` to use your own.
 The proxy forwards end-to-end headers so SDK authentication (such as the LiveKit
 Swift SDK's `Authorization: Bearer`) reaches the server, and handles both the
 versioned (`/rtc/v1`) and legacy (`/rtc`) signaling paths.
@@ -242,8 +242,8 @@ versioned (`/rtc/v1`) and legacy (`/rtc`) signaling paths.
 The web server's `/token` endpoint returns a signed LiveKit JWT together with
 the client connection URL. With TLS on, that URL is the same-origin
 `wss://<host>:<web_server_port>` — so the client SDK never needs a
-per-deployment toggle. A `/cert` endpoint serves only the auto-generated public
-root CA as an installable client profile; neither private key is exposed.
+per-deployment toggle. A `/cert` endpoint serves the active certificate as an
+installable iOS profile.
 
 Set `web_server_tls: false` for the two cases where the hub does not
 terminate TLS itself: a TLS-terminating reverse proxy (nginx, Caddy,

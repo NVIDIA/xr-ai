@@ -55,10 +55,10 @@ token fetchers also accept a plain JWT response. The room is encoded in the
 token; clients do not send a separate room query parameter.
 
 (self-signed-certificate-trust)=
-The default HTTPS server leaf is signed by a development root CA stored under
+The default HTTPS certificate is self-signed and stored under
 `~/.local/share/xr-ai/`. Browsers allow a development click-through; Android
-and Apple devices install the public root from `/cert` using the platform trust
-procedures below. Use a public or managed certificate for production.
+and Apple devices require the platform trust procedures below. Use a public or
+managed certificate for production.
 
 (web-basic-sample)=
 ## Web
