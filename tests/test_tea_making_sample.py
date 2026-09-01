@@ -730,6 +730,91 @@ def test_guidance_exposes_one_foreground_stack_at_a_time() -> None:
     assert "rag_lookup" not in fill_names
 
 
+def test_active_context_carries_ordered_guide_state() -> None:
+    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
+    guidance = GuidanceAgent(
+        workflow=workflow,
+        llm=SimpleNamespace(),  # type: ignore[arg-type]
+        current_frame=SimpleNamespace(),  # type: ignore[arg-type]
+        image_query=SimpleNamespace(),  # type: ignore[arg-type]
+        rag=SimpleNamespace(),  # type: ignore[arg-type]
+    )
+    session = guidance.store.get("participant-guide-context")
+    guidance.store.start(session)
+    guidance.store.advance(session, skip=True)
+
+    context = json.loads(guidance.active_context("participant-guide-context") or "{}")
+
+    guide = context["public_guide"]
+    assert guide["current_step"]["id"] == "fill_water"
+    assert guide["recommended_action"]["id"] == "fill_water"
+    assert guide["previous_step"]["id"] == "identify"
+    assert guide["next_step"]["id"] == "heat_water"
+    assert [step["id"] for step in guide["steps"]] == [
+        "identify",
+        "fill_water",
+        "heat_water",
+        "start_steeping",
+        "steep_timer",
+    ]
+    assert guide["state"]["steep_duration_s"] == 180
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        ("What are the instructions?", None),
+        ("What are the teammaking instructions?", None),
+        ("What is the next step?", None),
+        ("What's the next step?", None),
+        ("What was the previous step?", None),
+        ("Please stop monitoring the kettle.", None),
+        ("Next.", "workflow__advance"),
+        ("Move on to the following tea step.", "workflow__advance"),
+        ("End this tea-making session.", "workflow__reset"),
+        (
+            "Begin the tea instructions again from the first step.",
+            "workflow__restart",
+        ),
+        ("What is the status of my tea guide?", "workflow__status"),
+    ],
+)
+def test_workflow_controls_require_an_explicit_request(
+    query: str,
+    expected: str | None,
+) -> None:
+    assert foreground_module._requested_workflow_control(query) == expected
+
+
+def test_informational_request_cannot_receive_workflow_controls() -> None:
+    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
+    guidance = GuidanceAgent(
+        workflow=workflow,
+        llm=SimpleNamespace(),  # type: ignore[arg-type]
+        current_frame=SimpleNamespace(),  # type: ignore[arg-type]
+        image_query=SimpleNamespace(),  # type: ignore[arg-type]
+        rag=SimpleNamespace(),  # type: ignore[arg-type]
+    )
+    session = guidance.store.get("participant-tool-guard")
+    guidance.store.start(session)
+    tools = guidance.active_tools("participant-tool-guard")
+    assert tools is not None
+
+    question_tools = foreground_module._workflow_tools_for_query(
+        tools,
+        "What's the next step?",
+    )
+    question_names = {name for name, _tool in question_tools.items()}
+    assert not question_names & foreground_module._WORKFLOW_CONTROLS
+    assert {"current_view", "rag_lookup"} <= question_names
+
+    command_tools = foreground_module._workflow_tools_for_query(tools, "Next.")
+    command_names = {name for name, _tool in command_tools.items()}
+    assert command_names & foreground_module._WORKFLOW_CONTROLS == {
+        "workflow__advance"
+    }
+
+
 @pytest.mark.asyncio
 async def test_completed_step_does_not_invoke_trigger_or_model() -> None:
     workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
@@ -1641,7 +1726,7 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
         assert worked_example_term not in idle_model_prompt
         assert worked_example_term not in active_model_prompt
     assert "general-purpose assistant" in idle_prompt
-    assert "Answer anything relevant to tea making" in active_prompt
+    assert "attentive tea-making guide" in active_prompt
     assert "output only a brief refusal" in active_prompt
 
     root_cases = [case for case in cases if case.get("route", "root") == "root"]
@@ -1659,7 +1744,9 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     active_cases = [case for case in cases if case.get("route") == "active"]
     assert {case["expected_tool"] for case in active_cases} == {
         None,
+        "application_context__query",
         "change_watch__start",
+        "change_watch__stop",
         "clock__timer",
         "current_view",
         "workflow__advance",
@@ -1743,16 +1830,16 @@ def test_foreground_route_appends_policy_through_constructor() -> None:
     foreground = _foreground_for_route_test(config.foreground_prompt)
 
     idle_prompt, _, idle_route = foreground._prepare_route(
-        "idle", ctx=None, timestamp_us=None
+        "idle", query="Hello", ctx=None, timestamp_us=None
     )
     active_prompt, _, active_route = foreground._prepare_route(
-        "active", ctx=None, timestamp_us=None
+        "active", query="What should I do?", ctx=None, timestamp_us=None
     )
     assert idle_route == "root"
     assert "general-purpose assistant" in idle_prompt
     assert active_route == "tea"
     assert "general-purpose assistant" not in active_prompt
-    assert "Answer anything relevant to tea making" in active_prompt
+    assert "attentive tea-making guide" in active_prompt
     assert "output only a brief refusal" in active_prompt
 
 
@@ -1763,17 +1850,17 @@ def test_foreground_route_appends_policy_to_prompt_override(tmp_path: Path) -> N
     foreground = _foreground_for_route_test(config.foreground_prompt)
 
     idle_prompt, _, idle_route = foreground._prepare_route(
-        "idle", ctx=None, timestamp_us=None
+        "idle", query="Hello", ctx=None, timestamp_us=None
     )
     active_prompt, _, active_route = foreground._prepare_route(
-        "active", ctx=None, timestamp_us=None
+        "active", query="What should I do?", ctx=None, timestamp_us=None
     )
     assert idle_route == "root"
     assert idle_prompt.startswith("Explicit override\n\n")
     assert "general-purpose assistant" in idle_prompt
     assert active_route == "tea"
     assert active_prompt.startswith("Explicit override\n\n")
-    assert "Answer anything relevant to tea making" in active_prompt
+    assert "attentive tea-making guide" in active_prompt
     assert "output only a brief refusal" in active_prompt
     assert active_prompt.endswith(
         'Active tea guide:\n{"step":"fill_water"}'

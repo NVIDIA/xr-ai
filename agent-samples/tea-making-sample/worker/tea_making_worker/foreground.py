@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from contextlib import suppress
 from pathlib import Path
 
@@ -52,6 +53,63 @@ _MAX_TOOL_ROUNDS = 4
 _PROMPTS = Path(__file__).resolve().parent / "prompts"
 _IDLE_PROMPT = (_PROMPTS / "foreground_idle.txt").read_text(encoding="utf-8").strip()
 _ACTIVE_PROMPT = (_PROMPTS / "foreground_active.txt").read_text(encoding="utf-8").strip()
+_WORKFLOW_CONTROLS = frozenset(
+    {"workflow__advance", "workflow__reset", "workflow__restart", "workflow__status"}
+)
+
+
+def _requested_workflow_control(query: str) -> str | None:
+    """Return only a workflow control explicitly requested by the utterance."""
+
+    text = " ".join(query.casefold().strip(" .!?").split())
+    polite = r"(?:(?:please|kindly)\s+)?(?:(?:can|could|would)\s+you\s+)?"
+    if re.fullmatch(
+        polite
+        + r"(?:next|continue|advance|move on|go on)(?:\s+(?:to\s+)?(?:the\s+)?"
+        r"(?:next|following)?\s*(?:tea\s+)?(?:step|guide))?",
+        text,
+    ) or re.fullmatch(
+        polite + r"skip(?:\s+(?:(?:this|the|current|next)\s+)?(?:tea\s+)?step)?",
+        text,
+    ):
+        return "workflow__advance"
+    if re.fullmatch(
+        polite
+        + r"(?:end|exit|stop|reset|cancel)(?:\s+(?:(?:the|this|my)\s+)?"
+        r"(?:tea(?:-making)?\s+)?(?:guide|guidance|session|demo))",
+        text,
+    ):
+        return "workflow__reset"
+    if re.fullmatch(
+        polite
+        + r"(?:restart|start over|begin again)(?:\s+(?:the\s+)?(?:tea\s+)?"
+        r"(?:guide|guidance|instructions?))?",
+        text,
+    ) or re.fullmatch(
+        polite
+        + r"begin\s+(?:the\s+)?(?:tea\s+)?(?:guide|guidance|instructions?)"
+        r"\s+again(?:\s+from\s+(?:the\s+)?first\s+step)?",
+        text,
+    ):
+        return "workflow__restart"
+    if re.fullmatch(
+        polite
+        + r"(?:(?:what(?:'s| is)\s+)?(?:the\s+)?(?:tea\s+)?guide\s+status|"
+        r"(?:what(?:'s| is)\s+)?(?:the\s+)?status\s+of\s+(?:the|my)\s+tea\s+guide|"
+        r"report\s+(?:the\s+)?(?:tea\s+)?guide\s+status)",
+        text,
+    ):
+        return "workflow__status"
+    return None
+
+
+def _workflow_tools_for_query(tools: ToolSet, query: str) -> ToolSet:
+    requested = _requested_workflow_control(query)
+    return ToolSet(
+        tool
+        for name, tool in tools.items()
+        if name not in _WORKFLOW_CONTROLS or name == requested
+    )
 
 
 class ForegroundAgent(Agent):
@@ -197,6 +255,7 @@ class ForegroundAgent(Agent):
     ) -> tuple[str, list[str], bool]:
         system_prompt, tools, route = self._prepare_route(
             participant_id,
+            query=query,
             ctx=ctx,
             timestamp_us=timestamp_us,
         )
@@ -255,6 +314,7 @@ class ForegroundAgent(Agent):
         self,
         participant_id: str,
         *,
+        query: str,
         ctx: RuntimeContext | None,
         timestamp_us: int | None,
     ) -> tuple[str, ToolSet, str]:
@@ -273,9 +333,12 @@ class ForegroundAgent(Agent):
             active_tools = self._guidance.active_tools(participant_id)
             if active_tools is None:
                 raise RuntimeError("active tea context has no active tool set")
-            tools = _merge_tool_sets(
-                active_tools,
-                self._background_tools(participant_id),
+            tools = _workflow_tools_for_query(
+                _merge_tool_sets(
+                    active_tools,
+                    self._background_tools(participant_id),
+                ),
+                query,
             )
             system_prompt = (
                 f"{self._with_route_policy(_ACTIVE_PROMPT)}"

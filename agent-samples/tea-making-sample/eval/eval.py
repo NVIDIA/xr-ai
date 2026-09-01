@@ -122,6 +122,7 @@ async def main() -> None:
     llm = make_llm(load_models_config(_SAMPLE / "yaml" / "models.local.json"), "llm")
     foreground, guidance = _build_agents(llm)
     failures: list[str] = []
+    passed_count = 0
     try:
         for index, case in enumerate(cases):
             participant_id = f"tea-eval-{index}"
@@ -133,6 +134,7 @@ async def main() -> None:
                 )
             system_prompt, tools, route = foreground._prepare_route(
                 participant_id,
+                query=case["query"],
                 ctx=None,
                 timestamp_us=None,
             )
@@ -195,12 +197,15 @@ async def main() -> None:
             passed = actual_tools == expected_tools and not errors
             label = "PASS" if passed else "FAIL"
             print(f"{label} {case['name']}: tools={actual_tools!r} content={content!r}")
-            if not passed:
+            if passed:
+                passed_count += 1
+            else:
                 failures.append(
                     f"{case['name']}: expected {expected_tools!r}, received {actual_tools!r}; errors={errors!r}"
                 )
     finally:
         await llm.close()
+    print(f"RESULT {passed_count}/{len(cases)} cases passed")
     if failures:
         raise SystemExit("\n".join(failures))
 
