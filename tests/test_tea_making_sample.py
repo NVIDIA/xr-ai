@@ -973,20 +973,21 @@ async def test_active_workflow_keeps_background_stop_and_status_tools() -> None:
         prompt="Route.",
     )
 
-    await foreground._answer("Is recording running?", "participant-controls")
+    await foreground._answer(
+        "Is conversation recording running?",
+        "participant-controls",
+    )
 
     active_tools = guidance.active_tools("participant-controls")
     assert active_tools is not None
     current_view = active_tools.get("current_view")
 
-    assert {
-        "change_watch__stop",
-        "change_watch__status",
+    assert observed_tools == {
+        "application_context__query",
+        "transcript__start",
         "transcript__stop",
         "transcript__status",
-        "video_log__stop",
-        "video_log__status",
-    } <= observed_tools
+    }
     assert current_view is not None and current_view.return_direct is False
 
 
@@ -1070,9 +1071,12 @@ async def test_mixed_tool_turn_with_streamed_current_view_is_already_spoken(
 
     monkeypatch.setattr(foreground_module, "run_tool_loop", run_loop)
     foreground = object.__new__(ForegroundAgent)
-    foreground._guidance = SimpleNamespace(active_context=lambda _pid: None)
-    foreground._root_tools = lambda *_args, **_kwargs: ToolSet(())
-    foreground._prompt = "Route."
+    foreground._prepare_turn = lambda *_args, **_kwargs: SimpleNamespace(
+        agent=SimpleNamespace(system_prompt="Route.", name="foreground_root"),
+        user_message='{"request":"Use the reference, then tell me what you see."}',
+        tools=ToolSet(()),
+        route="root",
+    )
     foreground._llm = SimpleNamespace()
 
     response, calls, spoken = await foreground._answer(
@@ -1714,9 +1718,15 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     idle_prompt = (
         _WORKER / "tea_making_worker/prompts/foreground_idle.txt"
     ).read_text()
-    active_prompt = (
-        _WORKER / "tea_making_worker/prompts/foreground_active.txt"
-    ).read_text()
+    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
+    active_prompt = "\n".join(
+        (
+            foreground_module._TEA_PROMPT,
+            foreground_module._VOICE_PROMPT,
+            foreground_module._ACTIVE_POLICY,
+            *(step.voice.prompt for step in workflow.steps.values()),
+        )
+    )
     legacy_refusal = "I can only help with the active tea guide right now."
     idle_model_prompt = f"{common_prompt}\n\n{idle_prompt}".lower()
     active_model_prompt = f"{common_prompt}\n\n{active_prompt}".lower()
@@ -1726,8 +1736,8 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
         assert worked_example_term not in idle_model_prompt
         assert worked_example_term not in active_model_prompt
     assert "general-purpose assistant" in idle_prompt
-    assert "attentive tea-making guide" in active_prompt
-    assert "output only a brief refusal" in active_prompt
+    assert "answer tea-making questions" in active_prompt
+    assert "decline every unrelated request" in active_prompt
 
     root_cases = [case for case in cases if case.get("route", "root") == "root"]
     assert {case["expected_tool"] for case in root_cases} == {
@@ -1802,18 +1812,24 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
 
 
 def _foreground_for_route_test(prompt: str) -> ForegroundAgent:
-    images = SimpleNamespace(images=ImageRegistry())
+    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
+    guidance = GuidanceAgent(
+        workflow=workflow,
+        llm=SimpleNamespace(),  # type: ignore[arg-type]
+        current_frame=SimpleNamespace(),  # type: ignore[arg-type]
+        image_query=SimpleNamespace(),  # type: ignore[arg-type]
+        rag=SimpleNamespace(),  # type: ignore[arg-type]
+    )
+    session = guidance.store.get("active")
+    guidance.store.start(session)
+    guidance.store.advance(session, skip=True)
+    images = SimpleNamespace(images=ImageRegistry(), get_current_frame=SimpleNamespace())
     foreground = ForegroundAgent(
         llm=SimpleNamespace(),  # type: ignore[arg-type]
         images=images,  # type: ignore[arg-type]
         vlm=SimpleNamespace(),  # type: ignore[arg-type]
         rag=SimpleNamespace(),  # type: ignore[arg-type]
-        guidance=SimpleNamespace(
-            active_context=lambda participant_id: (
-                None if participant_id == "idle" else '{"step":"fill_water"}'
-            ),
-            active_tools=lambda _participant_id: ToolSet(()),
-        ),  # type: ignore[arg-type]
+        guidance=guidance,
         background_context=SimpleNamespace(),  # type: ignore[arg-type]
         change_watch=SimpleNamespace(),  # type: ignore[arg-type]
         transcript=SimpleNamespace(),  # type: ignore[arg-type]
@@ -1821,7 +1837,6 @@ def _foreground_for_route_test(prompt: str) -> ForegroundAgent:
         prompt=prompt,
     )
     foreground._root_tools = lambda *_args, **_kwargs: ToolSet(())
-    foreground._background_tools = lambda *_args, **_kwargs: ToolSet(())
     return foreground
 
 
@@ -1832,15 +1847,25 @@ def test_foreground_route_appends_policy_through_constructor() -> None:
     idle_prompt, _, idle_route = foreground._prepare_route(
         "idle", query="Hello", ctx=None, timestamp_us=None
     )
-    active_prompt, _, active_route = foreground._prepare_route(
+    active_turn = foreground._prepare_turn(
         "active", query="What should I do?", ctx=None, timestamp_us=None
     )
     assert idle_route == "root"
     assert "general-purpose assistant" in idle_prompt
-    assert active_route == "tea"
-    assert "general-purpose assistant" not in active_prompt
-    assert "attentive tea-making guide" in active_prompt
-    assert "output only a brief refusal" in active_prompt
+    assert active_turn.route == "tea"
+    assert active_turn.agent.name == "foreground_tea_fill_water"
+    assert "general-purpose assistant" not in active_turn.agent.system_prompt
+    assert "Give instructions or verify with current_view" in active_turn.agent.system_prompt
+    assert json.loads(active_turn.user_message) == {
+        "request": "What should I do?",
+        "state": {
+            "tea_name": "generic tea",
+            "target_temperature_c": 93,
+            "steep_duration_s": 180,
+            "water_filled": False,
+        },
+    }
+    assert not tuple(active_turn.tools.items())
 
 
 def test_foreground_route_appends_policy_to_prompt_override(tmp_path: Path) -> None:
@@ -1852,16 +1877,12 @@ def test_foreground_route_appends_policy_to_prompt_override(tmp_path: Path) -> N
     idle_prompt, _, idle_route = foreground._prepare_route(
         "idle", query="Hello", ctx=None, timestamp_us=None
     )
-    active_prompt, _, active_route = foreground._prepare_route(
+    active_turn = foreground._prepare_turn(
         "active", query="What should I do?", ctx=None, timestamp_us=None
     )
     assert idle_route == "root"
     assert idle_prompt.startswith("Explicit override\n\n")
     assert "general-purpose assistant" in idle_prompt
-    assert active_route == "tea"
-    assert active_prompt.startswith("Explicit override\n\n")
-    assert "attentive tea-making guide" in active_prompt
-    assert "output only a brief refusal" in active_prompt
-    assert active_prompt.endswith(
-        'Active tea guide:\n{"step":"fill_water"}'
-    )
+    assert active_turn.route == "tea"
+    assert not active_turn.agent.system_prompt.startswith("Explicit override")
+    assert active_turn.agent.name == "foreground_tea_fill_water"
