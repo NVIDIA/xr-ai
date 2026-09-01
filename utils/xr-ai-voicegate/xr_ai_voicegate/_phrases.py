@@ -9,8 +9,8 @@ from typing import Sequence
 
 
 # Speech-interruption phrases matching this pattern bypass the magic-phrase
-# gate so the user can interrupt a response mid-flight without starting with
-# the configured phrase. Scoped application commands such as "stop recording"
+# gate. Classification tests raw text and, when a phrase is configured, its
+# wake-stripped tail. Scoped application commands such as "stop recording"
 # must not match: they need to reach the agent and its lifecycle tools.
 STOP_RE: re.Pattern = re.compile(
     r"""
@@ -18,8 +18,8 @@ STOP_RE: re.Pattern = re.compile(
     (?:
         (?:please|hey|okay|ok|uh|um|wait|no|just|alright|sorry|whoa)[,\s]+
         |hang\s+on[,\s]+
-        |i\s+said\s+
-        |(?:can|could|would|will)\s+you\s+
+        |i\s+said[,\s]+
+        |(?:can|could|would|will)\s+you[,\s]+
     ){0,2}
     (?:
         stop

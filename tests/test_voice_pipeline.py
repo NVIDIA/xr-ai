@@ -687,6 +687,120 @@ async def test_vad_stt_bare_partial_stop_interrupts_and_preserves_scoped_final_c
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("partial", "final", "expected_query", "chime"), [
+    ("agent stop", "agent stop", None, False),
+    ("hey agent stop", "hey agent stop", None, True),
+    (
+        "hey agent stop",
+        "hey agent stop monitoring xyz",
+        "stop monitoring xyz",
+        True,
+    ),
+])
+async def test_vad_stt_gate_aware_stop_probe_preserves_final_intent(
+    monkeypatch,
+    partial: str,
+    final: str,
+    expected_query: str | None,
+    chime: bool,
+):
+    """Wake-prefixed STOP interrupts early; final STT remains authoritative."""
+    _StagedVad.instances.clear()
+    monkeypatch.setattr("pipecat.pipeline.worker.warm_deferred_imports", lambda: None)
+
+    class _SignaledStt(_StagedStt):
+        def __init__(self) -> None:
+            super().__init__(texts=[partial, final])
+            self.first_completed = asyncio.Event()
+
+        async def transcribe(
+            self,
+            audio: bytes,
+            *,
+            sample_rate: int | None = None,
+            channels: int = 1,
+            timeout: float | None = None,
+        ) -> str:
+            text = await super().transcribe(
+                audio,
+                sample_rate=sample_rate,
+                channels=channels,
+                timeout=timeout,
+            )
+            if len(self.calls) == 1:
+                self.first_completed.set()
+            return text
+
+    class _SignalSink(_CaptureSink):
+        def __init__(self) -> None:
+            super().__init__()
+            self.interrupted = asyncio.Event()
+
+        async def process_frame(self, item: Frame, direction: FrameDirection) -> None:
+            await super().process_frame(item, direction)
+            if isinstance(item, InterruptionFrame):
+                self.interrupted.set()
+
+    stt = _SignaledStt()
+    gate = VoiceGateProcessor(
+        cfg=VoiceGateConfig(
+            magic_phrases=("agent", "hey agent"),
+            listening_chime=chime,
+        ),
+        tts=_FakeTts(),
+    )
+    monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
+    vad_stt = VadSttProcessor(
+        stt=stt,
+        vad_cfg=VadConfig(stop_probe_after_s=0.05),
+        on_partial_transcript=gate.handle_partial_transcript,
+    )
+    frame = InputAudioRawFrame(
+        audio=b"\x00\x00" * 320,
+        sample_rate=16000,
+        num_channels=1,
+    )
+    frame.transport_source = "web-client"
+    sink = _SignalSink()
+    worker = PipelineWorker(
+        Pipeline([vad_stt, gate, sink]),
+        cancel_on_idle_timeout=False,
+        enable_rtvi=False,
+    )
+    runner = WorkerRunner()
+    await runner.add_workers(worker)
+
+    async def drive() -> None:
+        await worker.queue_frame(frame)
+        await asyncio.wait_for(stt.first_completed.wait(), timeout=1.0)
+        await asyncio.wait_for(sink.interrupted.wait(), timeout=1.0)
+        assert not any(
+            isinstance(item, UserStoppedSpeakingFrame) for item in sink.frames
+        )
+        assert not any(isinstance(item, OutputAudioRawFrame) for item in sink.frames)
+        assert _StagedVad.instances
+        await _StagedVad.instances[-1].trigger_utterance()
+        await worker.queue_frame(EndFrame())
+
+    await asyncio.gather(runner.run(), drive())
+
+    queries = [item for item in sink.frames if isinstance(item, GatedQueryFrame)]
+    assert [item.text for item in queries] == (
+        [] if expected_query is None else [expected_query]
+    )
+    interruptions = sum(
+        isinstance(item, InterruptionFrame) for item in sink.frames
+    )
+    assert interruptions == (2 if expected_query is None else 1)
+    stop_acks = [
+        item.text for item in sink.frames
+        if isinstance(item, TextFrame) and item.text == "Okay, I will stop."
+    ]
+    assert stop_acks == (["Okay, I will stop."] if expected_query is None else [])
+    assert len(stt.calls) == 2
+
+
+@pytest.mark.asyncio
 async def test_vad_stt_stop_probe_cancelled_when_vad_finalizes_first(monkeypatch):
     """If VAD finalizes the utterance before the probe timer fires, the
     pending probe task is cancelled — STT is called exactly once (by
@@ -970,12 +1084,8 @@ async def test_vad_stt_stop_probe_disabled_when_setting_zero(monkeypatch):
     assert len(stt.calls) == 1
     transcripts = [f for f in sink.frames if isinstance(f, TranscriptionFrame)]
     assert [t.text for t in transcripts] == ["stop"]
-    # The discriminating signal: with the probe disabled, the
-    # InterruptionFrame the probe normally pushes on STOP-match must NOT
-    # appear. (Without this assertion, the call-count check above would
-    # pass even if the probe ran — its STT call and the on_utterance one
-    # would either way total exactly one because the suppression flag
-    # would gate out the duplicate.)
+    # With the probe disabled, final STT still routes "stop" normally but no
+    # early InterruptionFrame can appear.
     assert not any(isinstance(f, InterruptionFrame) for f in sink.frames), (
         "probe must not push InterruptionFrame when stop_probe_after_s=0"
     )
@@ -996,7 +1106,7 @@ async def test_vad_stt_stop_probe_no_unawaited_coroutine_under_finalize_race(mon
     finalizer fires before the assertion runs.
     """
     _StagedVad.instances.clear()
-    # Probe sees STOP; finalize would see "stop now" if suppression failed.
+    # Probe sees STOP; finalization intentionally transcribes the utterance again.
     stt = _StagedStt(texts=["stop it", "stop now"])
     monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
     proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.05))
@@ -1278,23 +1388,7 @@ async def test_voice_gate_processor_synthetic_query_chimes_after_empty_speech_tu
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("partial", "final", "expected_query"), [
-    (
-        "hey agent place a blue sphere",
-        "hey agent place a blue sphere",
-        "place a blue sphere",
-    ),
-    (
-        "hey agent stop",
-        "hey agent stop monitoring xyz",
-        "stop monitoring xyz",
-    ),
-])
-async def test_voice_gate_processor_chimes_on_partial_wake_without_dispatching_early(
-    partial: str,
-    final: str,
-    expected_query: str,
-):
+async def test_voice_gate_processor_chimes_on_partial_wake_without_dispatching_early():
     cfg = VoiceGateConfig(
         magic_phrases=("agent", "hey agent"),
         listening_chime=True,
@@ -1317,7 +1411,7 @@ async def test_voice_gate_processor_chimes_on_partial_wake_without_dispatching_e
         nonlocal early_audio_count
         await asyncio.sleep(0.05)
         acknowledged = await proc.handle_partial_transcript(
-            "pid-1", partial,
+            "pid-1", "hey agent place a blue sphere",
         )
         assert acknowledged is True
         early_audio_count = sum(
@@ -1325,7 +1419,7 @@ async def test_voice_gate_processor_chimes_on_partial_wake_without_dispatching_e
         )
         assert not any(isinstance(frame, GatedQueryFrame) for frame in sink.frames)
         transcript = TranscriptionFrame(
-            text=final,
+            text="hey agent place a blue sphere",
             user_id="pid-1",
             timestamp="t",
         )
@@ -1342,7 +1436,7 @@ async def test_voice_gate_processor_chimes_on_partial_wake_without_dispatching_e
     queries = [frame for frame in sink.frames if isinstance(frame, GatedQueryFrame)]
     assert early_audio_count > 0
     assert audio_count == early_audio_count
-    assert [query.text for query in queries] == [expected_query]
+    assert [query.text for query in queries] == ["place a blue sphere"]
     assert not any(isinstance(frame, InterruptionFrame) for frame in sink.frames)
 
 
@@ -3006,7 +3100,7 @@ async def test_private_pipeline_assembly_connects_audio_in_to_audio_out(monkeypa
     assert tts.calls == ["echo hi pipeline."]
 
 
-def test_private_pipeline_assembly_wires_early_wake_ack_for_chime_config():
+def test_private_pipeline_assembly_wires_partial_handler_for_magic_phrases():
     from xr_ai_voice._transport import HubVoiceTransport
 
     transport = HubVoiceTransport()
@@ -3019,7 +3113,7 @@ def test_private_pipeline_assembly_wires_early_wake_ack_for_chime_config():
             vad_cfg=VadConfig(),
             voice_gate_cfg=VoiceGateConfig(
                 magic_phrases=("hey agent",),
-                listening_chime=True,
+                listening_chime=False,
             ),
         )
         vad_stt = next(
