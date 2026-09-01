@@ -15,7 +15,7 @@ import yaml
 from tea_making_worker.background_context import BackgroundContextAgent
 from tea_making_worker.change_watch import ChangeWatchAgent
 from tea_making_worker.config import load_config
-from tea_making_worker.foreground import ForegroundAgent, _requested_workflow_control
+from tea_making_worker.foreground import ForegroundAgent
 from tea_making_worker.spec import load_workflow
 from tea_making_worker.transcript import TranscriptAgent
 from tea_making_worker.video_log import VideoLogAgent
@@ -133,7 +133,6 @@ async def main() -> None:
                 )
             system_prompt, tools, route = foreground._prepare_route(
                 participant_id,
-                query=case["query"],
                 ctx=None,
                 timestamp_us=None,
             )
@@ -142,30 +141,18 @@ async def main() -> None:
                 raise ValueError(
                     f"case {case['name']!r} prepared route {route!r}, expected {expected_route!r}"
                 )
-            readonly_answer = (
-                None
-                if _requested_workflow_control(case["query"]) is not None
-                else guidance._active_readonly_answer(
-                    participant_id,
-                    case["query"],
-                )
+            response = await llm.chat(
+                (
+                    ChatMessage(role="system", content=system_prompt),
+                    ChatMessage(role="user", content=case["query"]),
+                ),
+                tools=tool_definitions(tools),
+                max_tokens=512,
+                temperature=0.0,
+                enable_thinking=False,
             )
-            if readonly_answer is None:
-                response = await llm.chat(
-                    (
-                        ChatMessage(role="system", content=system_prompt),
-                        ChatMessage(role="user", content=case["query"]),
-                    ),
-                    tools=tool_definitions(tools),
-                    max_tokens=512,
-                    temperature=0.0,
-                    enable_thinking=False,
-                )
-                calls = response.tool_calls or []
-                content = response.content or ""
-            else:
-                calls = []
-                content = readonly_answer
+            calls = response.tool_calls or []
+            content = response.content or ""
             actual_tools = [call.name for call in calls]
             expected_tool = case["expected_tool"]
             expected_tools = [] if expected_tool is None else [expected_tool]

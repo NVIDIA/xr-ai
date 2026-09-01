@@ -132,16 +132,13 @@ class GuidanceAgent(Agent):
         )
 
     def active_tools(self, participant_id: str) -> ToolSet | None:
-        """Return management, tea-query, and current-step tools for active guidance."""
+        """Return management plus current-step tools for active guidance."""
 
         session = self.store.find(participant_id)
         if session is None or not session.active or session.step_id is None:
             return None
         step = self.workflow.step(session.step_id)
-        quick_names = tuple(
-            dict.fromkeys((*step.voice.tools, "current_view", "rag_lookup"))
-        )
-        quick = self._named_tools(session, quick_names)
+        quick = self._named_tools(session, step.voice.tools)
         tools: dict[str, Tool[Any, Any]] = {
             tool.name: tool
             for tool in workflow_management_tools(
@@ -149,7 +146,6 @@ class GuidanceAgent(Agent):
                 session,
                 lambda: self._flush(session),
             )
-            if tool.name != "workflow__status"
         }
         tools.update(dict(quick.items()))
         return ToolSet(tools)
@@ -166,95 +162,12 @@ class GuidanceAgent(Agent):
                 "workflow": self.workflow.foreground_prompt,
                 "voice_policy": self._voice_prompt,
                 "step": {"id": step.id, "title": step.title},
-                "step_policy": step.voice.prompt,
+                "instructions": step.voice.prompt,
                 "state": self.workflow.project(step, session.state),
             },
             ensure_ascii=False,
             separators=(",", ":"),
         )
-
-    def _active_readonly_answer(self, participant_id: str, query: str) -> str | None:
-        """Answer structural guide questions without exposing mutation tools."""
-
-        session = self.store.find(participant_id)
-        if session is None or not session.active or session.step_id is None:
-            return None
-        normalized = " ".join(query.casefold().replace("’", "'").split())
-        question = normalized.strip(" .!?")
-        step = self.workflow.step(session.step_id)
-        if "instruction" in normalized:
-            return self._remaining_instructions(session, step)
-        if "next step" in question or question in {
-            "what's next",
-            "what is next",
-            "what comes next",
-        }:
-            if step.next_step is None:
-                return (
-                    "The tea-making guide is complete."
-                    if step.is_complete(session.state)
-                    else "This is the final tea-making step."
-                )
-            next_step = self.workflow.step(step.next_step)
-            try:
-                return self.store._render_state(next_step.enter_message, session.state)
-            except ValueError:
-                return f"The next step is {next_step.title.lower()}."
-        if any(phrase in question for phrase in ("current step", "this step")) or question in {
-            "what do i do now",
-            "what should i do now",
-            "what now",
-        }:
-            if step.is_complete(session.state) and step.next_step is None:
-                return "The tea-making guide is complete."
-            if step.is_complete(session.state) and step.next_step is not None:
-                step = self.workflow.step(step.next_step)
-            try:
-                return self.store._render_state(step.enter_message, session.state)
-            except ValueError:
-                return f"The current step is {step.title.lower()}."
-        if "status" in normalized and "guide" in normalized:
-            return self.store.status(session)
-        return None
-
-    def _remaining_instructions(
-        self,
-        session: WorkflowSession,
-        current: Step,
-    ) -> str:
-        steps = tuple(self.workflow.steps.values())
-        start = next(index for index, item in enumerate(steps) if item.id == current.id)
-        if current.is_complete(session.state):
-            if current.next_step is None:
-                return "The tea-making guide is complete."
-            start += 1
-        remaining = steps[start:]
-        if not remaining:
-            return "The tea-making guide is complete."
-        titles = [item.title.lower() for item in remaining]
-        if len(titles) == 1:
-            sequence = titles[0]
-        else:
-            sequence = f"{', '.join(titles[:-1])}, then {titles[-1]}"
-        summary = f"Next, {sequence}."
-        reads = {field for item in remaining for field in item.reads}
-        details: list[str] = []
-        if "target_temperature_c" in reads and "target_temperature_c" in session.state:
-            details.append(
-                self.store._render_state(
-                    "{{ target_temperature_c | temperature_c }}",
-                    session.state,
-                )
-            )
-        if "steep_duration_s" in reads and "steep_duration_s" in session.state:
-            duration = self.store._render_state(
-                "{{ steep_duration_s | duration }}",
-                session.state,
-            )
-            details.append(f"steep for {duration}")
-        if not details:
-            return summary
-        return f"{summary} Use {' and '.join(details)}."
 
     def status(self, participant_id: str) -> str:
         """Return deterministic guidance status without a model call."""
