@@ -74,6 +74,8 @@ steps:
     voice:
       prompt: >-
         Tea identity comes only from state tea_name or current_view, never RAG.
+        tea_ready means the tea instructions were identified, not that the
+        drink has been prepared.
         If the exact name is unknown, inspect the current frame. Retrieve only
         missing temperature or duration after the exact name is known. Never
         replace package values. Answer only what was asked.
@@ -93,7 +95,7 @@ steps:
 
   - id: fill_water
     title: Fill the heating vessel
-    reads: []
+    reads: [tea_name, target_temperature_c, steep_duration_s]
     writes: [water_filled]
     trigger:
       function: current_view
@@ -132,7 +134,7 @@ steps:
 
   - id: heat_water
     title: Heat the water
-    reads: [target_temperature_c]
+    reads: [tea_name, target_temperature_c, steep_duration_s]
     writes: [heating_started]
     trigger:
       function: current_view
@@ -172,7 +174,7 @@ steps:
 
   - id: start_steeping
     title: Start steeping
-    reads: [steep_duration_s]
+    reads: [tea_name, target_temperature_c, steep_duration_s]
     writes: [steeping_started_at_us, steeping_started]
     trigger:
       function: current_view
@@ -214,7 +216,8 @@ steps:
 
   - id: steep_timer
     title: Wait for steeping
-    reads: [steeping_started_at_us, steep_duration_s]
+    reads:
+      [tea_name, target_temperature_c, steeping_started_at_us, steep_duration_s]
     writes: [steeping_complete]
     trigger:
       function: clock__timer
