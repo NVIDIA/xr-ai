@@ -578,6 +578,12 @@ utterance dispatches straight to <code class="docutils literal notranslate"><spa
 <code class="docutils literal notranslate"><span class="pre">fresh_match=True</span></code>. The follow-up / phrase-only / drop branches
 are inert in this mode — they only make sense once a phrase exists
 to gate against.</p>
+<p>STOP is a closed imperative grammar: direct requests such as <code class="docutils literal notranslate"><span class="pre">stop</span></code>,
+<code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">it</span></code>, <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">talking</span></code>, <code class="docutils literal notranslate"><span class="pre">be</span> <span class="pre">quiet</span></code>, and <code class="docutils literal notranslate"><span class="pre">shut</span> <span class="pre">up</span></code> may use a
+bounded set of conversational prefixes and punctuation. Negations,
+questions, reported speech, unconfigured arbitrary prefixes, and scoped or
+multi-action commands such as <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">monitoring</span></code> are ordinary queries,
+not global stops.</p>
 <p>Handler exceptions are logged and swallowed so one bad handler does
 not kill the gate.</p>
 <dl class="py method">
