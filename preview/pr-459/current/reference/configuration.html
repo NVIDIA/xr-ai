@@ -1638,8 +1638,8 @@ workflow.</p></li>
 <span class="nt">workflow_config</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workflow.yaml</span>
 <span class="nt">voice_gate_yaml</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">voice_gate.yaml</span>
 
-<span class="c1"># Choose one to replace the shared foreground instructions. The packaged idle</span>
-<span class="c1"># or active route policy is always appended after the configured shared prompt.</span>
+<span class="c1"># Choose one to replace the idle and explicit background-action instructions.</span>
+<span class="c1"># Active tea guidance comes from the focused step policies in workflow.yaml.</span>
 <span class="c1"># foreground_prompt: &lt;inline shared foreground instructions&gt;</span>
 <span class="c1"># foreground_prompt_file: ../worker/tea_making_worker/prompts/foreground_prompt.txt</span>
 
@@ -1771,6 +1771,8 @@ workflow.</p></li>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
 <span class="w">        </span><span class="no">Tea identity comes only from state tea_name or current_view, never RAG.</span>
+<span class="w">        </span><span class="no">tea_ready means the tea instructions were identified, not that the</span>
+<span class="w">        </span><span class="no">drink has been prepared.</span>
 <span class="w">        </span><span class="no">If the exact name is unknown, inspect the current frame. Retrieve only</span>
 <span class="w">        </span><span class="no">missing temperature or duration after the exact name is known. Never</span>
 <span class="w">        </span><span class="no">replace package values. Answer only what was asked.</span>
@@ -1790,7 +1792,7 @@ workflow.</p></li>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fill_water</span>
 <span class="w">    </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Fill the heating vessel</span>
-<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">tea_name</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">target_temperature_c</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">writes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">water_filled</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">trigger</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">current_view</span>
@@ -1829,7 +1831,7 @@ workflow.</p></li>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">heat_water</span>
 <span class="w">    </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Heat the water</span>
-<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">target_temperature_c</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">tea_name</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">target_temperature_c</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">writes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">heating_started</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">trigger</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">current_view</span>
@@ -1869,7 +1871,7 @@ workflow.</p></li>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">start_steeping</span>
 <span class="w">    </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Start steeping</span>
-<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">tea_name</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">target_temperature_c</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">writes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">steeping_started_at_us</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steeping_started</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">trigger</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">current_view</span>
@@ -1911,7 +1913,8 @@ workflow.</p></li>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">steep_timer</span>
 <span class="w">    </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Wait for steeping</span>
-<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">steeping_started_at_us</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">reads</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">[</span><span class="nv">tea_name</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">target_temperature_c</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steeping_started_at_us</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">writes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">steeping_complete</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">trigger</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">clock__timer</span>
