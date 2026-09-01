@@ -840,11 +840,8 @@ readiness. Open <code class="docutils literal notranslate"><span class="pre">htt
 <code class="docutils literal notranslate"><span class="pre">http://&lt;xr-host&gt;:8092</span></code> from a trusted development network.
 <code class="docutils literal notranslate"><span class="pre">TeaWebEventsAgent</span></code> explicitly subscribes to the
 foreground, guidance, background, transcript, video-log, and participant
-lifecycle topics and publishes compact <code class="docutils literal notranslate"><span class="pre">WebEvent</span></code> payloads. Visual panes show
-only application lifecycle and material <code class="docutils literal notranslate"><span class="pre">BackgroundFact</span></code> results; every-frame
-captions, no-change observations, unavailable frames, and errors remain in the
-durable records and worker log. There is no runtime wildcard subscription and
-no file tailing.</p>
+lifecycle topics and publishes compact <code class="docutils literal notranslate"><span class="pre">WebEvent</span></code> payloads. There is no runtime
+wildcard subscription and no file tailing.</p>
 <p>The viewer keeps only a bounded in-memory history for the current process. The
 participant JSONL files under <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code> remain the durable record and include
 events that may not be selected for live presentation. The listener is

@@ -100,9 +100,9 @@ setups:
   Open the web client at the WSL distribution's `eth0` address instead (note
   it can change across reboots). Microphone capture needs a secure context.
   Prefer the hub's default HTTPS web server (`https://<eth0-ip>:8080`): an HTTPS
-  origin is a secure context once you trust the hub's self-signed certificate
+  origin is a secure context once you trust the hub's development root CA
   (download it from `https://<eth0-ip>:8080/cert`, or copy
-  `~/.local/share/xr-ai/web-server.crt` out of the WSL filesystem via
+  `~/.local/share/xr-ai/root-ca.crt` out of the WSL filesystem via
   `\\wsl$\`, then install it into the Windows certificate store) or click through
   the browser warning. On a plain-HTTP path (the legacy token server, or
   `web_server_tls: false`), the report's verified workaround is

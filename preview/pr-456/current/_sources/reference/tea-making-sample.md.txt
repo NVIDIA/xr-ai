@@ -309,11 +309,8 @@ readiness. Open `http://127.0.0.1:8092` on the XR-AI host, or pass
 `http://<xr-host>:8092` from a trusted development network.
 `TeaWebEventsAgent` explicitly subscribes to the
 foreground, guidance, background, transcript, video-log, and participant
-lifecycle topics and publishes compact `WebEvent` payloads. Visual panes show
-only application lifecycle and material `BackgroundFact` results; every-frame
-captions, no-change observations, unavailable frames, and errors remain in the
-durable records and worker log. There is no runtime wildcard subscription and
-no file tailing.
+lifecycle topics and publishes compact `WebEvent` payloads. There is no runtime
+wildcard subscription and no file tailing.
 
 The viewer keeps only a bounded in-memory history for the current process. The
 participant JSONL files under `artifacts/` remain the durable record and include

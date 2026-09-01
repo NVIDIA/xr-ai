@@ -145,8 +145,8 @@ appears, but the agent answers queries only after the launcher prints its
 ### Step 2 — Connect a client
 
 Open `https://localhost:8080` in a browser. The samples ship with HTTPS on by
-default (a self-signed certificate is generated on first run at
-`~/.local/share/xr-ai/web-server.crt`), so you'll see a "Your connection is not
+default (a development root CA and signed server leaf are generated on first
+run under `~/.local/share/xr-ai/`), so you'll see a "Your connection is not
 private" warning the first time — click **Advanced → Proceed** (Chrome or Edge) or
 **Accept the Risk and Continue** (Firefox). Refer to the networking guide for
 trusting the certificate permanently or running over plain HTTP instead.
@@ -247,7 +247,7 @@ uv run main.py
 ```
 
 Open the DeviceIOHub connection page at `https://localhost:8080`, accept the
-self-signed certificate on first use, allow camera and microphone access, and
+development certificate on first use, allow camera and microphone access, and
 connect. The checked-in voice-gate YAML requires “Agent” or “Hey Agent.” Set
 `voice_gate_yaml: voice_gate.always-on.yaml` in `yaml/tea_making_worker.yaml`
 to dispatch every finalized utterance without a wake phrase.

@@ -26,59 +26,6 @@ sudo apt install python3-dev
 
 This applies to the `agent-samples/model-servers/yaml/spark/` profile.
 
-### DGX Spark — vLLM fails in `cudaMemGetInfo` before loading weights
-
-**Symptom:** `model_servers` aborts while starting a vLLM service, often the
-embedding server after the larger services have started. The traceback reaches
-`MemorySnapshot.measure()`, then ends in `torch.cuda.mem_get_info()` or
-`cudaMemGetInfo` with a CUDA out-of-memory error. `htop` can still show tens of
-gigabytes of available memory.
-
-**Cause:** this traceback is not a model-weight or KV-cache allocation failure.
-The CUDA memory snapshot fails before vLLM loads that service's weights or
-checks its configured `gpu_memory_utilization`.
-
-DGX Spark uses a unified memory architecture: the CPU, GPU, filesystem cache,
-and model servers share the same DRAM. Linux `MemAvailable` includes memory that
-the kernel can reclaim, while `cudaMemGetInfo` can report a smaller immediately
-free amount. NVIDIA documents this behavior in its [DGX Spark unified-memory
-guidance](https://docs.nvidia.com/dgx/dgx-spark/known-issues.html#guidance-for-reporting-memory-resources-with-unified-memory-architecture),
-and a [related vLLM issue](https://github.com/vllm-project/vllm/issues/48140)
-describes how checkpoint reads held in the filesystem page cache can trigger a
-startup failure on UMA systems.
-
-**Diagnosis:** inspect the host memory counters immediately after the failure:
-
-```bash
-grep -E '^(MemTotal|MemFree|MemAvailable|Cached|SReclaimable|SwapFree):' \
-  /proc/meminfo
-```
-
-If `MemAvailable` is much larger than `MemFree` and `Cached` is large, the
-failure is consistent with reclaimable-cache pressure rather than the next
-model being too large for the configured profile.
-
-**Fix:** first install the current DGX OS and driver updates. The [DGX Spark
-release notes](https://docs.nvidia.com/dgx/dgx-spark/release-notes.html)
-identify improved GB10 UMA out-of-memory handling in the July 2026 release.
-Stop unrelated memory-intensive workloads before retrying the stack.
-
-For diagnosis and recovery, NVIDIA recommends flushing clean filesystem caches
-and then restarting the application:
-
-```bash
-sudo sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches'
-```
-
-The leading `sync` flushes dirty filesystem buffers. Dropping caches makes
-subsequent filesystem reads cold, so use this as a diagnostic workaround, not
-as routine launcher behavior.
-
-Do not lower `gpu_memory_utilization` solely for this traceback. That setting
-cannot be evaluated when `cudaMemGetInfo` itself fails. Lower the setting only
-for later failures that report insufficient memory for the requested
-utilization or KV cache.
-
 ### DGX Spark — LOVR auto-download is not supported
 
 **Symptom:** `uv run --project agent-samples/xr-render-demo xr_render_demo`
@@ -316,14 +263,15 @@ iOS, and visionOS use wss only; there is no `secure` toggle.
 **Symptom:** the Android sample fails to connect; the error shows an
 `SSLHandshakeException` or similar TLS error.
 
-**Cause:** the hub uses a self-signed certificate by default. The Android sample
-validates against the system and user CA store, the same as iOS.
+**Cause:** the hub uses a development root CA by default. The Android sample
+validates the signed server leaf against the system and user CA store, the same
+as iOS.
 
 **Fix:** install the hub's certificate via the in-app button before connecting:
 
 1. In the **Connection** section, tap **Install hub certificate** (enabled once
    **Host** is non-empty).
-2. The app fetches the certificate from `https://<host>:<port>/cert` and opens
+2. The app fetches the public root CA from `https://<host>:<port>/cert` and opens
    the system certificate-install dialog.
 3. Confirm the install. After install, tap **Connect** — validation succeeds
    automatically.
@@ -339,7 +287,7 @@ WebSocket reports a TLS error (e.g. `NSURLErrorServerCertificateUntrusted`,
 `-1202`, "The certificate for this server is invalid").
 
 **Cause:** the LiveKit Swift SDK cannot bypass certificate validation, so the
-hub's self-signed certificate must be trusted at the OS level.
+hub's development root CA must be trusted at the OS level.
 
 **Fix:** install the hub's certificate as a trusted profile on the device:
 
@@ -350,25 +298,27 @@ hub's self-signed certificate must be trusted at the OS level.
 4. Toggle **Settings → General → About → Certificate Trust Settings →
    Enable Full Trust** for the new certificate.
 
-If step 4 shows no toggle, the cached certificate on the hub is from an older
-xr-ai build that wrote `BasicConstraints CA:FALSE` and iOS will not
-expose the trust toggle for it. Remove the installed profile via
-**VPN & Device Management** and restart the hub — it auto-detects the
-stale certificate and regenerates it as a self-signed CA (logged as `TLS: cached
-cert is not a CA cert — regenerating…`).
+If step 4 shows no toggle, remove the installed profile via **VPN & Device
+Management**, restart the hub, and install `/cert` again. Older xr-ai builds
+used `web-server.crt` itself as the trust profile. DeviceIOHub detects that
+legacy CA-as-server certificate and migrates it to `root-ca.crt` plus a signed
+`CA:FALSE` server leaf with a clear `TLS: migrating legacy CA-as-server`
+message. This migration requires one root reinstall; later server-leaf changes
+do not.
 
 If the toggle was enabled but the wss handshake still fails with
 `errSSLBadCert` or NSURLErrorDomain `-1202` and a message like *"pretending
 to be 192.168.1.42"* (that is, the IP you typed into the app), the
-certificate's SubjectAlternativeName doesn't cover that IP. The hub detects
-local IPv4 addresses via a UDP-connect probe and auto-regenerates the
-certificate whenever the SAN is missing one (logged as `TLS: cached cert
-SAN is missing …; regenerating…`); just restart the hub and re-install the
-profile on the device. If the dialed address is absent from the certificate,
+server leaf's SubjectAlternativeName doesn't cover that IP. The hub detects
+local IPv4 addresses via a UDP-connect probe and auto-regenerates only the leaf
+whenever the SAN is missing one (logged as `TLS: generated server leaf …`); just
+restart the hub. The already installed root remains valid. If the dialed address
+is absent from the leaf,
 add it to `web_server_extra_sans` in `device_io_hub.yaml` and restart. Refer to
 {doc}`Networking </getting_started/networking>` for details.
-To force regeneration, delete `~/.local/share/xr-ai/web-server.crt` and
-`web-server.key` before restarting.
+To force leaf regeneration, delete `~/.local/share/xr-ai/web-server.crt` and
+`web-server.key` before restarting. Do not delete `root-ca.crt` or `root-ca.key`
+unless you intend to reinstall the root on every client.
 
 If the certificate is trusted (no `-1202`) but the room connection still fails
 with HTTP 401 or "no permissions to access the room", the hub's `/rtc` WSS
