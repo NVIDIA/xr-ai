@@ -50,6 +50,8 @@ two separate trees under the service's resolved `model_cache`:
 | STT and Magpie TTS (NeMo host processes) | `<model_cache>/huggingface/` | `<model_cache>/huggingface/hub/` |
 
 (The NeMo servers additionally cache non-HF artifacts under `<model_cache>/nemo/`.)
+Piper TTS passes `<model_cache>/piper/` directly as its Hub cache and defaults
+`HF_XET_CACHE` to `<model_cache>/piper/xet/` for its Xet cache.
 
 `model_cache` itself is set per YAML and resolved relative to the YAML file.
 Both the model-servers profiles and the standalone service YAMLs resolve it to
@@ -411,11 +413,12 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
   back to plain HTTPS.
 - `HF_XET_HIGH_PERFORMANCE=1` is the default in pip and docker modes. Setting
   it to `0` disables high-performance tuning, not Xet itself. Set
-  `HF_HUB_DISABLE_XET=1` to disable Xet. An explicit
-  `HF_HUB_ENABLE_HF_TRANSFER` is preserved and forwarded for compatible Hub
-  versions where operators install `hf_transfer` as a fallback. These values
-  are part of the container fingerprint, so changing one recreates a
-  persistent container.
+  `HF_HUB_DISABLE_XET=1` to disable Xet. To use legacy `hf_transfer` with a
+  compatible Hub version, install the `hf_transfer` package and set both
+  `HF_HUB_DISABLE_XET=1` and `HF_HUB_ENABLE_HF_TRANSFER=1`; Xet-backed files
+  continue to use Xet when it remains enabled. These values are preserved,
+  forwarded, and included in the container fingerprint, so changing one
+  recreates a persistent container.
 
 The shipped image pins were qualified with these in-container versions:
 
