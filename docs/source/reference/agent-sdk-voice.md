@@ -130,6 +130,9 @@ audio includes a silent tail so offline STT can finalize a phrase. A partial
 global-STOP match interrupts active output immediately, but it does not commit
 the user's intent: final STT remains authoritative for global-stop versus query
 routing. A slow probe receives a short grace period and is then cancelled.
+With wake phrases configured, one utterance can make up to three bounded partial
+STT requests plus the authoritative final request. Set `stop_probe_after_s` to
+zero to disable the additional requests and early interruption path.
 
 A wake phrase is accepted at the beginning of a transcript or after
 sentence-final `.`, `?`, or `!` punctuation followed by whitespace or a closing
@@ -148,7 +151,9 @@ stop?`), reported speech (`you said stop`), unconfigured arbitrary prefixes,
 and scoped or multi-action commands (`stop monitoring xyz`) are not global
 stops. They follow the ordinary gate rules.
 
-The early path emits only an interruption, not a chime or stop acknowledgement.
+A partial STOP match emits only an interruption, not a chime or stop
+acknowledgement. Wake recognition may independently emit the optional chime,
+but chime configuration, initialization, or playback does not control probing.
 If the final transcript remains a global stop, normal stop handling emits the
 acknowledgement. If STT revises partial `hey agent stop` to final `hey agent stop
 monitoring xyz`, the final transcript instead dispatches `stop monitoring xyz`

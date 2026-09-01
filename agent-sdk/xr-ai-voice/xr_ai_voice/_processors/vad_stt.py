@@ -46,7 +46,7 @@ from xr_ai_voicegate._phrases import STOP_RE
 from .._frames import ParticipantLeftFrame
 
 
-# True means the gate handled the partial; False requests another bounded probe.
+# True means the gate matched STOP; False requests another bounded probe.
 PartialTranscriptHandler = Callable[[str, str], Awaitable[bool]]
 FinalTranscriptHandler = Callable[[str, str, int], Awaitable[None]]
 _MAX_PARTIAL_PROBES = 3
@@ -64,8 +64,9 @@ class VadConfig:
     ``stop_probe_after_s`` — cadence in seconds for up to three STT probes of
     the partial audio buffer. This gives STOP commands a fast interruption path
     without replacing final transcription, and lets a configured wake phrase
-    be acknowledged before the utterance ends. Set to ``0`` or negative to
-    disable probes.
+    be acknowledged before the utterance ends. A phrase-gated utterance can
+    make up to three partial STT requests plus the final request. Set to ``0``
+    or negative to disable probes.
     """
     silence_duration:   float = 0.8
     """Seconds of silence that finalize an utterance."""
@@ -339,7 +340,8 @@ class VadSttProcessor(FrameProcessor):
                         logger.exception("partial-transcript handler failed pid={!r}", pid)
                         return
                     if decision is True:
-                        logger.info("early partial transcript handled pid={!r}", pid)
+                        logger.info("gate-aware partial STOP matched pid={!r}", pid)
+                        await self._emit_early_interruption(pid, text)
                         return
             finally:
                 self._probe_inflight.discard(pid)
