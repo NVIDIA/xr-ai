@@ -7,9 +7,16 @@
 
 <!-- What concrete problem does this PR solve, and why does it matter now? -->
 
-## Solution
+## Solution and design decisions
 
-<!-- Describe what this diff does. Keep this aligned with the current head. -->
+<!--
+Describe what this diff does and the important choices or tradeoffs that shaped
+it. Keep this aligned with the current head.
+-->
+
+## Related issues
+
+<!-- Link the current and approved follow-up issues, or write "None". -->
 
 ## Scope and follow-ups
 
@@ -20,9 +27,10 @@ State deliberate exclusions, constraints, and tradeoffs so they are not
 mistaken for omissions. For a multi-PR change, explain this PR's place in the
 series and link the assigned issues for remaining work. Write "None" when this
 PR is self-contained and has no planned follow-up. Leave `Large PR: no` for a
-normal PR. Set it to the standalone marker `Large PR: yes` only after the
-required design iterations and explicit user confirmation; then explain why
-the final scope cannot be split and map its major change groups to the goal.
+normal PR. Use `Large PR: yes` only after the author and maintainers agree the
+coherent change cannot be split; then explain why and map its major change
+groups to the goal. Document any explicit maintainer override to the normal
+review-readiness gates.
 -->
 
 ## Validation
