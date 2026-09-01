@@ -743,11 +743,22 @@ def test_guidance_answers_active_structure_without_tools() -> None:
         "participant-readonly",
         "What is the next step?",
     )
+    current = guidance._active_readonly_answer(
+        "participant-readonly",
+        "What do I do now?",
+    )
+    natural_next = guidance._active_readonly_answer(
+        "participant-readonly",
+        "What's next?",
+    )
 
-    assert instructions is not None
-    assert "Fill a kettle" in instructions
-    assert "Heat the water to 93 degrees Celsius" in instructions
+    assert instructions == (
+        "Next, fill the heating vessel, heat the water, start steeping, then wait "
+        "for steeping. Use 93 degrees Celsius and steep for 3 minutes."
+    )
     assert next_step == "Heat the water to 93 degrees Celsius."
+    assert current == "Fill a kettle or pot with fresh water and keep it in view."
+    assert natural_next == "Heat the water to 93 degrees Celsius."
 
 
 @pytest.mark.parametrize(
