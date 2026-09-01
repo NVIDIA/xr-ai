@@ -8,7 +8,9 @@
 # with one of these or contain one after '.', '?', or '!' followed by
 # whitespace or a closing quote. Matching is case-insensitive. Text through
 # the matched phrase is stripped before the agent sees the query; commas and
-# other mid-sentence mentions do not match.
+# other mid-sentence mentions do not match. The same stripped tail is used for
+# early global-STOP detection; the complete final transcript still determines
+# whether a stop-like opening is a global stop or a scoped agent command.
 magic_phrases:
   - "agent"
   - "hey agent"

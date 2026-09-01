@@ -63,6 +63,13 @@ class VoiceGate:
     are inert in this mode — they only make sense once a phrase exists
     to gate against.
 
+    STOP is a closed imperative grammar: direct requests such as ``stop``,
+    ``stop it``, ``stop talking``, ``be quiet``, and ``shut up`` may use a
+    bounded set of conversational prefixes and punctuation. Negations,
+    questions, reported speech, unconfigured arbitrary prefixes, and scoped or
+    multi-action commands such as ``stop monitoring`` are ordinary queries,
+    not global stops.
+
     Handler exceptions are logged and swallowed so one bad handler does
     not kill the gate.
     """
@@ -172,6 +179,12 @@ class VoiceGate:
     def matches_magic_phrase(self, text: str) -> bool:
         """Return whether *text* has a phrase at a sentence boundary."""
         return self._magic_re is not None and strip_magic(self._magic_re, text) is not None
+
+    def _matches_partial_stop(self, text: str) -> bool:
+        """Match a partial STOP on raw text or its wake-stripped tail."""
+        stripped = strip_magic(self._magic_re, text)
+        candidate = stripped if stripped else text
+        return STOP_RE.match(candidate) is not None
 
     def could_match_magic_phrase(self, text: str) -> bool:
         """Return whether the current partial sentence can become a match."""

@@ -78,7 +78,7 @@ def _build_voice_pipeline(
         vad_cfg=vad_cfg,
         on_partial_transcript=(
             voice_gate_proc.handle_partial_transcript
-            if voice_gate_proc.early_wake_ack_enabled
+            if voice_gate_cfg.magic_phrases
             else None
         ),
         on_final_transcript=on_final_transcript,
