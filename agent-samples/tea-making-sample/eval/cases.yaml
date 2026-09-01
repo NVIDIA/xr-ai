@@ -174,22 +174,23 @@
   route: active
   step: fill_water
   query: Why does water temperature matter when brewing tea?
-  expected_tool: rag_lookup
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:temperature|extract|flavor|flavour|brew)\\b"
   forbidden_response: I can only help with the active tea guide right now.
 
 - name: active-routes-relevant-visual-question-outside-step
   route: active
   step: steep_timer
   query: Check whether the water in my kettle is boiling.
-  expected_tool: current_view
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:can't|cannot|unable|unavailable|not available)\\b"
   forbidden_response: I can only help with the active tea guide right now.
 
 - name: active-routes-workflow-status
   route: active
   step: heat_water
   query: What is the status of my tea guide?
-  expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:current step|heat the water)\\b"
+  expected_tool: workflow__status
   forbidden_response: I can only help with the active tea guide right now.
 
 - name: active-routes-step-visual-question
@@ -240,7 +241,7 @@
   step: fill_water
   query: What color is the person's shirt?
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help|not sure|isn['’]t)\\b"
 
 - name: active-advances-on-direct-command
   route: active

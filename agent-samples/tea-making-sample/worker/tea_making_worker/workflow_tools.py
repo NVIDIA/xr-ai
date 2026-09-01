@@ -306,8 +306,8 @@ def workflow_management_tools(
         _control_tool(
             "workflow__advance",
             (
-                "Move the guide forward only after a direct imperative command. "
-                "Set skip true only for an explicit skip command."
+                "Advance after an explicit next or continue command. Set "
+                "skip true only for an explicit skip command."
             ),
             AdvanceRequest,
             advance,

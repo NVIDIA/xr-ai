@@ -716,67 +716,18 @@ def test_guidance_exposes_one_foreground_stack_at_a_time() -> None:
         "workflow__advance",
         "workflow__reset",
         "workflow__restart",
+        "workflow__status",
         "current_view",
         "rag_lookup",
     } <= active_names
     assert guidance.active_context("participant-3") is not None
 
-
-def test_guidance_answers_active_structure_without_tools() -> None:
-    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
-    guidance = GuidanceAgent(
-        workflow=workflow,
-        llm=SimpleNamespace(),  # type: ignore[arg-type]
-        current_frame=SimpleNamespace(),  # type: ignore[arg-type]
-        image_query=SimpleNamespace(),  # type: ignore[arg-type]
-        rag=SimpleNamespace(),  # type: ignore[arg-type]
-    )
-    session = guidance.store.get("participant-readonly")
-    guidance.store.start(session)
     guidance.store.advance(session, skip=True)
-
-    instructions = guidance._active_readonly_answer(
-        "participant-readonly",
-        "What are the tea instructions?",
-    )
-    next_step = guidance._active_readonly_answer(
-        "participant-readonly",
-        "What is the next step?",
-    )
-    current = guidance._active_readonly_answer(
-        "participant-readonly",
-        "What do I do now?",
-    )
-    natural_next = guidance._active_readonly_answer(
-        "participant-readonly",
-        "What's next?",
-    )
-
-    assert instructions == (
-        "Next, fill the heating vessel, heat the water, start steeping, then wait "
-        "for steeping. Use 93 degrees Celsius and steep for 3 minutes."
-    )
-    assert next_step == "Heat the water to 93 degrees Celsius."
-    assert current == "Fill a kettle or pot with fresh water and keep it in view."
-    assert natural_next == "Heat the water to 93 degrees Celsius."
-
-
-@pytest.mark.parametrize(
-    ("query", "expected"),
-    [
-        ("Move on to the following tea step.", "workflow__advance"),
-        ("End this tea-making session.", "workflow__reset"),
-        ("Begin the tea instructions again from the first step.", "workflow__restart"),
-        ("What is the next step?", None),
-        ("Please stop monitoring tea in the background.", None),
-        ("Advance my career.", None),
-    ],
-)
-def test_workflow_controls_require_a_direct_guide_command(
-    query: str,
-    expected: str | None,
-) -> None:
-    assert foreground_module._requested_workflow_control(query) == expected
+    fill_tools = guidance.active_tools("participant-3")
+    assert fill_tools is not None
+    fill_names = {name for name, _tool in fill_tools.items()}
+    assert "current_view" in fill_names
+    assert "rag_lookup" not in fill_names
 
 
 @pytest.mark.asyncio
@@ -1034,10 +985,7 @@ async def test_mixed_tool_turn_with_streamed_current_view_is_already_spoken(
 
     monkeypatch.setattr(foreground_module, "run_tool_loop", run_loop)
     foreground = object.__new__(ForegroundAgent)
-    foreground._guidance = SimpleNamespace(
-        active_context=lambda _pid: None,
-        _active_readonly_answer=lambda _pid, _query: None,
-    )
+    foreground._guidance = SimpleNamespace(active_context=lambda _pid: None)
     foreground._root_tools = lambda *_args, **_kwargs: ToolSet(())
     foreground._prompt = "Route."
     foreground._llm = SimpleNamespace()
@@ -1714,10 +1662,10 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
         "change_watch__start",
         "clock__timer",
         "current_view",
-        "rag_lookup",
         "workflow__advance",
         "workflow__reset",
         "workflow__restart",
+        "workflow__status",
     }
     unrelated_cases = [
         case for case in active_cases if case["name"].startswith("active-rejects-")
@@ -1733,6 +1681,7 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
         or case["expected_tool"] in {
             "change_watch__start",
             "current_view",
+            "workflow__status",
         }
     }
     assert {
