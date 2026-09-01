@@ -39,7 +39,21 @@ log = logging.getLogger(__name__)
 _DOCKER_CONFIG = Path.home() / ".docker" / "config.json"
 _LOGIN_DONE: set[str] = set()
 _CONFIG_LABEL = "xr-ai-vllm.config"
-_LAUNCH_CONTRACT_VERSION = 1
+_LAUNCH_CONTRACT_VERSION = 2
+_HF_DOWNLOAD_ENV_KEYS = (
+    "HF_XET_HIGH_PERFORMANCE",
+    "HF_HUB_DISABLE_XET",
+    "HF_HUB_ENABLE_HF_TRANSFER",
+)
+_HF_XET_VERSION_SPEC = ">=1.1.2,<2.0.0"
+_HF_XET_REQUIREMENT = f"hf-xet{_HF_XET_VERSION_SPEC}"
+_HF_XET_IMPORT_CHECK = (
+    "import hf_xet; "
+    "from huggingface_hub.file_download import xet_get; "
+    "from importlib.metadata import version; "
+    "from packaging.specifiers import SpecifierSet; "
+    f"assert SpecifierSet({_HF_XET_VERSION_SPEC!r}).contains(version('hf-xet'))"
+)
 
 
 # ── docker run argv builder ──────────────────────────────────────────────────
@@ -95,6 +109,18 @@ def build_run_argv(
     as pip-mode vLLM.  With --network host the vLLM process is visible to
     ss(8) on the host, so no docker-specific stop logic is needed.
     """
+    env_vars: dict[str, str] = {
+        "HF_HOME": str(model_cache),
+        "HF_XET_HIGH_PERFORMANCE": os.environ.get(
+            "HF_XET_HIGH_PERFORMANCE", "1"
+        ),
+    }
+    for key in _HF_DOWNLOAD_ENV_KEYS[1:]:
+        if key in os.environ:
+            env_vars[key] = os.environ[key]
+    if extra_env:
+        env_vars.update(extra_env)
+
     argv: list[str] = ["docker", "run"]
     argv += ["--name", container_name]
     # Label lets container_on_port find this container by port without the
@@ -106,7 +132,7 @@ def build_run_argv(
         "port": port,
         "model_cache": str(model_cache),
         "cuda_visible_devices": cuda_visible_devices,
-        "extra_env": extra_env or {},
+        "env_vars": env_vars,
         "extra_pip": extra_pip or [],
         "vllm_argv": vllm_argv,
     }
@@ -137,28 +163,36 @@ def build_run_argv(
     # non-NGC image (or one with a narrower default) still gets CUDA compute.
     argv += ["-e", "NVIDIA_DRIVER_CAPABILITIES=compute,utility"]
 
-    env_vars: dict[str, str] = {
-        "HF_HOME": str(model_cache),
-        "HF_HUB_ENABLE_HF_TRANSFER": "1",
-    }
     if hf_token:
         # Name-only passthrough keeps the token off the ps-visible argv;
         # docker reads the value from this process's environment (run()
         # exports it before spawning).
         argv += ["-e", "HF_TOKEN"]
-    if extra_env:
-        env_vars.update(extra_env)
     for key, val in env_vars.items():
         argv += ["-e", f"{key}={val}"]
 
     argv += ["-v", f"{model_cache}:{model_cache}"]
 
     # Some vLLM images default to `vllm serve`; override the entrypoint so
-    # setup installs run in a shell before the server starts.
+    # dependency checks and optional setup installs run before the server.
     argv += ["--entrypoint", "/bin/bash", image]
-    # Install hf_transfer before starting vLLM — the NGC image doesn't ship it
-    # but HF_HUB_ENABLE_HF_TRANSFER=1 will error if it's missing.
-    install_cmds = ["pip install -q hf_transfer"]
+    xet_check = shlex.join(["python3", "-c", _HF_XET_IMPORT_CHECK])
+    xet_install = shlex.join(
+        ["python3", "-m", "pip", "install", "-q", _HF_XET_REQUIREMENT]
+    )
+    commands: list[str] = []
+    xet_disabled = env_vars.get("HF_HUB_DISABLE_XET", "").upper() in {
+        "1",
+        "ON",
+        "YES",
+        "TRUE",
+    }
+    if not xet_disabled:
+        # Images vary in their Hub/Xet stack. Repair a missing or incompatible
+        # hf-xet wheel, then re-check the complete Hub integration so an
+        # incapable Hub or install failure stops startup instead of falling
+        # back to HTTPS.
+        commands.extend([f"( {xet_check} || {xet_install} )", xet_check])
     if extra_pip:
         # extra_pip is the seam for models whose architecture needs a wheel
         # the NGC image doesn't bundle (e.g. mamba-ssm for Nemotron-Omni's
@@ -166,11 +200,11 @@ def build_run_argv(
         # can see the container's pre-installed torch — mamba-ssm and its
         # causal_conv1d peer both `import torch` from setup.py at config
         # time, and pip's default isolated build env doesn't have it.
-        install_cmds.append(
+        commands.append(
             f"pip install -q --no-build-isolation {shlex.join(extra_pip)}"
         )
-    install_cmds.append(shlex.join(vllm_argv))
-    argv += ["-c", " && ".join(install_cmds)]
+    commands.append(shlex.join(vllm_argv))
+    argv += ["-c", " && ".join(commands)]
     return argv
 
 

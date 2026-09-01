@@ -80,6 +80,31 @@ async def test_piper_config_rejects_unknown_use_cuda_string() -> None:
         module._parse_config_bool("sometimes", "use_cuda")
 
 
+async def test_piper_scopes_xet_cache_to_model_cache(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_piper_main_module()
+    model_cache = tmp_path / "models"
+    monkeypatch.delenv("HF_XET_CACHE", raising=False)
+    monkeypatch.delenv("HF_XET_HIGH_PERFORMANCE", raising=False)
+    monkeypatch.setitem(module.sys.modules, "uvicorn", Mock())
+
+    def check_environment(_cfg: dict, resolved_cache: Path) -> None:
+        assert resolved_cache == model_cache
+        assert os.environ["HF_XET_CACHE"] == str(model_cache / "piper" / "xet")
+        assert os.environ["HF_XET_HIGH_PERFORMANCE"] == "1"
+        raise RuntimeError("environment checked")
+
+    monkeypatch.setattr(module, "_build_app", check_environment)
+
+    with pytest.raises(RuntimeError, match="environment checked"):
+        await module._run(
+            {"voice": "en_US-lessac-medium", "model_cache": str(model_cache)},
+            tmp_path,
+        )
+
+
 @pytest.mark.parametrize("config_path", _PIPER_CONFIGS)
 async def test_piper_configs_allow_cold_start(config_path: Path) -> None:
     module = _load_piper_main_module()
