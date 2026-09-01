@@ -53,6 +53,20 @@
   expected_tool: null
   forbidden_response: I can only help with the active tea guide right now.
 
+- name: active-answers-tea-instructions-question
+  route: active
+  step: fill_water
+  query: What are the tea instructions?
+  expected_tool: workflow__status
+  forbidden_response: I can only help with the active tea guide right now.
+
+- name: active-answers-next-step-question
+  route: active
+  step: fill_water
+  query: What is the next step?
+  expected_tool: workflow__status
+  forbidden_response: I can only help with the active tea guide right now.
+
 - name: active-routes-workflow-status
   route: active
   step: heat_water
