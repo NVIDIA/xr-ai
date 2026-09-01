@@ -328,6 +328,8 @@ async def _run(cfg: dict, yaml_dir: Path) -> None:
         sys.exit(1)
 
     model_cache = _resolve_model_cache(cfg, yaml_dir)
+    os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
+    os.environ.setdefault("HF_XET_CACHE", str(model_cache / "piper" / "xet"))
     port = int(cfg.get("port", _DEFAULT_PORT))
     host = cfg.get("host", "0.0.0.0")
 

@@ -105,13 +105,13 @@ def serve(
     service-specific name (e.g. ``xr-ai-vllm-<entry-point>``) so the stop
     helper can find it.
 
-    *extra_pip* is docker-mode only: a list of pip-installable package
-    specs that get installed into the container right before ``vllm
-    serve`` runs (same shell line that already installs ``hf_transfer``).
-    Use it for models whose architecture imports a wheel the NGC image
-    doesn't bundle — e.g. ``["mamba-ssm", "causal-conv1d"]`` for
-    Nemotron-Omni's hybrid SSM backbone. Silently ignored in pip mode
-    (deps belong in the wrapper's pyproject.toml there).
+    Docker mode verifies a Xet-capable Hub inside the container and repairs a
+    missing or incompatible ``hf-xet`` wheel. *extra_pip* is an additional
+    docker-only list of pip-installable package specs for model architectures
+    whose wheels the image doesn't bundle — e.g.
+    ``["mamba-ssm", "causal-conv1d"]`` for Nemotron-Omni's hybrid SSM
+    backbone. Silently ignored in pip mode (deps belong in the wrapper's
+    pyproject.toml there).
     """
     vllm_argv: list[str] = [
         "vllm", "serve", model,
@@ -188,10 +188,10 @@ def stop_persistent_servers(
                 # argv — stale --limit-mm-per-prompt, extra_pip, etc.).
                 #
                 # Tradeoff acknowledged: `_docker.run`'s start-on-existing path
-                # skipped `pip install` (hf_transfer, plus any extra_pip like
-                # mamba-ssm / causal-conv1d for Nemotron-Omni). Forcing rm means
-                # those reinstall on every restart — a few-second extra cost on
-                # warm cache, in exchange for config edits actually applying.
+                # skipped bootstrap installs, including any extra_pip such as
+                # mamba-ssm / causal-conv1d for Nemotron-Omni. Forcing rm means
+                # those rerun on every restart — a small extra cost on warm
+                # caches, in exchange for config edits actually applying.
                 # Acceptable: persistent-servers exists to skip MODEL reloads,
                 # not pip reinstalls.
                 if _docker.remove_container(container_name):
