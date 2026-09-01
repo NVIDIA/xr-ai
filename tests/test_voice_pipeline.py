@@ -558,29 +558,46 @@ async def test_vad_stt_retries_partial_probe_after_background_sentence(monkeypat
 
 @pytest.mark.asyncio
 async def test_vad_stt_stop_probe_emits_interruption_on_stop_match(monkeypatch):
-    """When the probe's partial transcript is an unambiguous STOP the
-    processor pushes ``InterruptionFrame`` + the matched
-    ``TranscriptionFrame`` + ``UserStoppedSpeakingFrame`` downstream
-    immediately — without waiting for VAD's silence-window finalize."""
+    """A stop-like partial cancels output without committing user intent."""
     _StagedVad.instances.clear()
+    monkeypatch.setattr("pipecat.pipeline.worker.warm_deferred_imports", lambda: None)
     stt = _StagedStt(texts=["stop it"])
     monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
     proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.05))
 
     frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
     frame.transport_source = "web-client"
-    sink = await _run_chain(proc, sends=[frame], settle_s=0.2)
+
+    class _SignalSink(_CaptureSink):
+        def __init__(self) -> None:
+            super().__init__()
+            self.interrupted = asyncio.Event()
+
+        async def process_frame(self, item: Frame, direction: FrameDirection) -> None:
+            await super().process_frame(item, direction)
+            if isinstance(item, InterruptionFrame):
+                self.interrupted.set()
+
+    sink = _SignalSink()
+    worker = PipelineWorker(
+        Pipeline([proc, sink]),
+        cancel_on_idle_timeout=False,
+        enable_rtvi=False,
+    )
+    runner = WorkerRunner()
+    await runner.add_workers(worker)
+
+    async def drive() -> None:
+        await worker.queue_frame(frame)
+        await asyncio.wait_for(sink.interrupted.wait(), timeout=1.0)
+        await worker.queue_frame(EndFrame())
+
+    await asyncio.gather(runner.run(), drive())
 
     kinds = [type(f).__name__ for f in sink.frames]
-    assert "InterruptionFrame"        in kinds
-    assert "UserStoppedSpeakingFrame" in kinds
-    transcripts = [f for f in sink.frames if isinstance(f, TranscriptionFrame)]
-    assert [t.text for t in transcripts] == ["stop it"]
-    # InterruptionFrame must arrive before the TranscriptionFrame so any
-    # in-flight reasoning is cancelled before the gate sees STOP.
-    int_idx = next(i for i, f in enumerate(sink.frames) if isinstance(f, InterruptionFrame))
-    tf_idx  = next(i for i, f in enumerate(sink.frames) if isinstance(f, TranscriptionFrame))
-    assert int_idx < tf_idx
+    assert "InterruptionFrame" in kinds
+    assert "UserStoppedSpeakingFrame" not in kinds
+    assert not any(isinstance(f, TranscriptionFrame) for f in sink.frames)
 
 
 @pytest.mark.asyncio
@@ -602,7 +619,7 @@ async def test_vad_stt_stop_probe_silent_on_non_stop_match(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_vad_stt_bare_partial_stop_preserves_scoped_final_command(
+async def test_vad_stt_bare_partial_stop_interrupts_and_preserves_scoped_final_command(
     monkeypatch,
 ):
     _StagedVad.instances.clear()
@@ -662,7 +679,7 @@ async def test_vad_stt_bare_partial_stop_preserves_scoped_final_command(
 
     await asyncio.gather(runner.run(), drive())
 
-    assert not any(isinstance(item, InterruptionFrame) for item in sink.frames)
+    assert sum(isinstance(item, InterruptionFrame) for item in sink.frames) == 1
     transcripts = [
         item for item in sink.frames if isinstance(item, TranscriptionFrame)
     ]
@@ -849,16 +866,45 @@ async def test_vad_stt_final_transcription_cancels_stalled_probe(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_vad_stt_stop_probe_suppresses_duplicate_vad_finalize(monkeypatch):
-    """After the probe fires STOP, the eventual VAD-finalize for the
-    same utterance must NOT re-emit ``UserStoppedSpeakingFrame`` + a
-    second ``TranscriptionFrame`` — otherwise the gate would re-fire
-    its canned "Okay, I will stop." ack TTS."""
+@pytest.mark.parametrize(("partial", "final"), [
+    ("stop it", "stop it from monitoring the kettle"),
+    ("stop talking", "stop talking about the timer and start monitoring"),
+    ("stop now", "stop now and start the change watcher"),
+    ("stop, stop", "stop, stop visual monitoring"),
+])
+async def test_vad_stt_stop_probe_preserves_revised_final_transcript(
+    monkeypatch,
+    partial: str,
+    final: str,
+):
+    """A revisable stop-like partial must never replace the final transcript."""
     _StagedVad.instances.clear()
-    # Probe call returns "stop it"; the eventual on_utterance call (if
-    # the suppression failed) would return "stop now" — we must not see
-    # that downstream.
-    stt = _StagedStt(texts=["stop it", "stop now"])
+    monkeypatch.setattr("pipecat.pipeline.worker.warm_deferred_imports", lambda: None)
+
+    class _SignaledStt(_StagedStt):
+        def __init__(self) -> None:
+            super().__init__(texts=[partial, final])
+            self.first_completed = asyncio.Event()
+
+        async def transcribe(
+            self,
+            audio: bytes,
+            *,
+            sample_rate: int | None = None,
+            channels: int = 1,
+            timeout: float | None = None,
+        ) -> str:
+            text = await super().transcribe(
+                audio,
+                sample_rate=sample_rate,
+                channels=channels,
+                timeout=timeout,
+            )
+            if len(self.calls) == 1:
+                self.first_completed.set()
+            return text
+
+    stt = _SignaledStt()
     monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
     proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.05))
 
@@ -872,32 +918,20 @@ async def test_vad_stt_stop_probe_suppresses_duplicate_vad_finalize(monkeypatch)
     await runner.add_workers(worker)
 
     async def drive() -> None:
-        await asyncio.sleep(0.05)
         await worker.queue_frame(frame)
-        # Wait for the probe to fire (>= stop_probe_after_s).
-        await asyncio.sleep(0.2)
-        # VAD now finalizes after silence — would normally push a fresh
-        # UserStoppedSpeakingFrame + TranscriptionFrame.
+        await asyncio.wait_for(stt.first_completed.wait(), timeout=1.0)
         assert _StagedVad.instances
         await _StagedVad.instances[-1].trigger_utterance()
-        await asyncio.sleep(0.1)
         await worker.queue_frame(EndFrame())
 
     await asyncio.gather(runner.run(), drive())
 
     transcripts = [f for f in sink.frames if isinstance(f, TranscriptionFrame)]
-    assert [t.text for t in transcripts] == ["stop it"], (
-        "duplicate transcription from VAD-finalize must be suppressed "
-        "after the probe already fired STOP"
-    )
-    # The probe's stop-emit ends with UserStoppedSpeakingFrame; VAD's
-    # finalize would re-push one. With suppression we should see exactly
-    # one of each.
+    assert [t.text for t in transcripts] == [final]
     stops = [f for f in sink.frames if isinstance(f, UserStoppedSpeakingFrame)]
     assert len(stops) == 1
-    # Only the probe-side STT call should have happened — the on_utterance
-    # path bailed before its own STT call.
-    assert len(stt.calls) == 1
+    assert sum(isinstance(f, InterruptionFrame) for f in sink.frames) == 1
+    assert len(stt.calls) == 2
 
 
 @pytest.mark.asyncio
@@ -1244,7 +1278,23 @@ async def test_voice_gate_processor_synthetic_query_chimes_after_empty_speech_tu
 
 
 @pytest.mark.asyncio
-async def test_voice_gate_processor_chimes_on_partial_wake_without_dispatching_early():
+@pytest.mark.parametrize(("partial", "final", "expected_query"), [
+    (
+        "hey agent place a blue sphere",
+        "hey agent place a blue sphere",
+        "place a blue sphere",
+    ),
+    (
+        "hey agent stop",
+        "hey agent stop monitoring xyz",
+        "stop monitoring xyz",
+    ),
+])
+async def test_voice_gate_processor_chimes_on_partial_wake_without_dispatching_early(
+    partial: str,
+    final: str,
+    expected_query: str,
+):
     cfg = VoiceGateConfig(
         magic_phrases=("agent", "hey agent"),
         listening_chime=True,
@@ -1267,18 +1317,20 @@ async def test_voice_gate_processor_chimes_on_partial_wake_without_dispatching_e
         nonlocal early_audio_count
         await asyncio.sleep(0.05)
         acknowledged = await proc.handle_partial_transcript(
-            "pid-1", "hey agent place a blue sphere",
+            "pid-1", partial,
         )
         assert acknowledged is True
         early_audio_count = sum(
             isinstance(frame, OutputAudioRawFrame) for frame in sink.frames
         )
         assert not any(isinstance(frame, GatedQueryFrame) for frame in sink.frames)
-        await worker.queue_frame(TranscriptionFrame(
-            text="hey agent place a blue sphere",
+        transcript = TranscriptionFrame(
+            text=final,
             user_id="pid-1",
             timestamp="t",
-        ))
+        )
+        transcript.transport_source = "pid-1"
+        await worker.queue_frame(transcript)
         await asyncio.sleep(0.05)
         await worker.queue_frame(EndFrame())
 
@@ -1290,7 +1342,8 @@ async def test_voice_gate_processor_chimes_on_partial_wake_without_dispatching_e
     queries = [frame for frame in sink.frames if isinstance(frame, GatedQueryFrame)]
     assert early_audio_count > 0
     assert audio_count == early_audio_count
-    assert [query.text for query in queries] == ["place a blue sphere"]
+    assert [query.text for query in queries] == [expected_query]
+    assert not any(isinstance(frame, InterruptionFrame) for frame in sink.frames)
 
 
 @pytest.mark.asyncio
