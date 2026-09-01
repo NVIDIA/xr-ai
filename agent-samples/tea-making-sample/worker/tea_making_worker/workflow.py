@@ -149,6 +149,7 @@ class GuidanceAgent(Agent):
                 session,
                 lambda: self._flush(session),
             )
+            if tool.name != "workflow__status"
         }
         tools.update(dict(quick.items()))
         return ToolSet(tools)
@@ -165,12 +166,49 @@ class GuidanceAgent(Agent):
                 "workflow": self.workflow.foreground_prompt,
                 "voice_policy": self._voice_prompt,
                 "step": {"id": step.id, "title": step.title},
-                "instructions": step.voice.prompt,
+                "step_policy": step.voice.prompt,
                 "state": self.workflow.project(step, session.state),
             },
             ensure_ascii=False,
             separators=(",", ":"),
         )
+
+    def _active_readonly_answer(self, participant_id: str, query: str) -> str | None:
+        """Answer structural guide questions without exposing mutation tools."""
+
+        session = self.store.find(participant_id)
+        if session is None or not session.active or session.step_id is None:
+            return None
+        normalized = " ".join(query.casefold().split())
+        step = self.workflow.step(session.step_id)
+        if "instruction" in normalized:
+            messages: list[str] = []
+            for item in self.workflow.steps.values():
+                try:
+                    message = self.store._render_state(
+                        item.enter_message,
+                        session.state,
+                    )
+                except ValueError:
+                    message = item.title
+                messages.append(message.rstrip("."))
+            return "; then ".join(messages) + "."
+        if "next step" in normalized:
+            if step.next_step is None:
+                return "This is the final tea-making step."
+            next_step = self.workflow.step(step.next_step)
+            try:
+                return self.store._render_state(next_step.enter_message, session.state)
+            except ValueError:
+                return f"The next step is {next_step.title.lower()}."
+        if any(phrase in normalized for phrase in ("current step", "this step")):
+            try:
+                return self.store._render_state(step.enter_message, session.state)
+            except ValueError:
+                return f"The current step is {step.title.lower()}."
+        if "status" in normalized and "guide" in normalized:
+            return self.store.status(session)
+        return None
 
     def status(self, participant_id: str) -> str:
         """Return deterministic guidance status without a model call."""
