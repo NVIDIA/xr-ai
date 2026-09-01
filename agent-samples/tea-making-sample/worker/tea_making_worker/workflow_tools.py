@@ -339,14 +339,9 @@ def workflow_status_tool(
             message = store.status(session)
         return WorkflowControlResult(message=message)
 
-    description = (
-        "Read the current tea instruction or the next step without changing guide state."
-        if session.active
-        else "Report whether tea guidance is idle or its current step and readiness."
-    )
     return _control_tool(
         "workflow__status",
-        description,
+        "Report whether tea guidance is idle or its current step and readiness.",
         EmptyRequest,
         status,
     )

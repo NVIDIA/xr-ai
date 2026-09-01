@@ -51,20 +51,23 @@
   step: fill_water
   query: What should I do at this step?
   expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:fill|water|vessel)\\b"
   forbidden_response: I can only help with the active tea guide right now.
 
 - name: active-answers-tea-instructions-question
   route: active
   step: fill_water
   query: What are the tea instructions?
-  expected_tool: workflow__status
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:fill|water|vessel)\\b"
   forbidden_response: I can only help with the active tea guide right now.
 
 - name: active-answers-next-step-question
   route: active
   step: fill_water
   query: What is the next step?
-  expected_tool: workflow__status
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:heat|water)\\b"
   forbidden_response: I can only help with the active tea guide right now.
 
 - name: completed-identification-answers-transcribed-instructions-question
@@ -79,7 +82,8 @@
     guidance_source: package
     tea_ready: true
   query: What are the T instructions?
-  expected_tool: workflow__status
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:fill|water|heat|steep)\\b"
   forbidden_response: I can only help with the active tea guide right now.
 
 - name: completed-identification-answers-next-step-question
@@ -94,7 +98,40 @@
     guidance_source: package
     tea_ready: true
   query: What is the next step?
-  expected_tool: workflow__status
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:fill|water|vessel)\\b"
+  forbidden_response: I can only help with the active tea guide right now.
+
+- name: completed-identification-answers-specific-tea-instructions-question
+  route: active
+  step: identify
+  observations:
+    - Twinings English Breakfast tea label, 93 Celsius, 3 minutes.
+  state_updates:
+    tea_name: English breakfast tea
+    target_temperature_c: 93
+    steep_duration_s: 180
+    guidance_source: package
+    tea_ready: true
+  query: What are the instructions for making this tea?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:fill|water|heat|steep)\\b"
+  forbidden_response: I can only help with the active tea guide right now.
+
+- name: completed-identification-summarizes-guide
+  route: active
+  step: identify
+  observations:
+    - Twinings English Breakfast tea label, 93 Celsius, 3 minutes.
+  state_updates:
+    tea_name: English breakfast tea
+    target_temperature_c: 93
+    steep_duration_s: 180
+    guidance_source: package
+    tea_ready: true
+  query: Can you summarize all the instructions required?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:fill|water|heat|steep)\\b"
   forbidden_response: I can only help with the active tea guide right now.
 
 - name: active-routes-relevant-tea-making-question
@@ -115,7 +152,9 @@
   route: active
   step: heat_water
   query: What is the status of my tea guide?
-  expected_tool: workflow__status
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:current step|heat the water)\\b"
+  forbidden_response: I can only help with the active tea guide right now.
 
 - name: active-routes-step-visual-question
   route: active
