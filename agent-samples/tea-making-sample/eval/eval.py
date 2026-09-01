@@ -192,6 +192,14 @@ async def main() -> None:
                 errors.append(
                     f"response did not match {expected_response_pattern!r}"
                 )
+            max_response_chars = case.get("max_response_chars")
+            if max_response_chars is not None and len(normalized_content) > int(
+                max_response_chars
+            ):
+                errors.append(
+                    f"response exceeded {max_response_chars} characters: "
+                    f"{len(normalized_content)}"
+                )
             forbidden_response = case.get("forbidden_response")
             if forbidden_response is not None and _normalize_response(
                 str(forbidden_response)

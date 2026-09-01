@@ -179,29 +179,36 @@ class GuidanceAgent(Agent):
         session = self.store.find(participant_id)
         if session is None or not session.active or session.step_id is None:
             return None
-        normalized = " ".join(query.casefold().split())
+        normalized = " ".join(query.casefold().replace("’", "'").split())
+        question = normalized.strip(" .!?")
         step = self.workflow.step(session.step_id)
         if "instruction" in normalized:
-            messages: list[str] = []
-            for item in self.workflow.steps.values():
-                try:
-                    message = self.store._render_state(
-                        item.enter_message,
-                        session.state,
-                    )
-                except ValueError:
-                    message = item.title
-                messages.append(message.rstrip("."))
-            return "; then ".join(messages) + "."
-        if "next step" in normalized:
+            return self._remaining_instructions(session, step)
+        if "next step" in question or question in {
+            "what's next",
+            "what is next",
+            "what comes next",
+        }:
             if step.next_step is None:
-                return "This is the final tea-making step."
+                return (
+                    "The tea-making guide is complete."
+                    if step.is_complete(session.state)
+                    else "This is the final tea-making step."
+                )
             next_step = self.workflow.step(step.next_step)
             try:
                 return self.store._render_state(next_step.enter_message, session.state)
             except ValueError:
                 return f"The next step is {next_step.title.lower()}."
-        if any(phrase in normalized for phrase in ("current step", "this step")):
+        if any(phrase in question for phrase in ("current step", "this step")) or question in {
+            "what do i do now",
+            "what should i do now",
+            "what now",
+        }:
+            if step.is_complete(session.state) and step.next_step is None:
+                return "The tea-making guide is complete."
+            if step.is_complete(session.state) and step.next_step is not None:
+                step = self.workflow.step(step.next_step)
             try:
                 return self.store._render_state(step.enter_message, session.state)
             except ValueError:
@@ -209,6 +216,45 @@ class GuidanceAgent(Agent):
         if "status" in normalized and "guide" in normalized:
             return self.store.status(session)
         return None
+
+    def _remaining_instructions(
+        self,
+        session: WorkflowSession,
+        current: Step,
+    ) -> str:
+        steps = tuple(self.workflow.steps.values())
+        start = next(index for index, item in enumerate(steps) if item.id == current.id)
+        if current.is_complete(session.state):
+            if current.next_step is None:
+                return "The tea-making guide is complete."
+            start += 1
+        remaining = steps[start:]
+        if not remaining:
+            return "The tea-making guide is complete."
+        titles = [item.title.lower() for item in remaining]
+        if len(titles) == 1:
+            sequence = titles[0]
+        else:
+            sequence = f"{', '.join(titles[:-1])}, then {titles[-1]}"
+        summary = f"Next, {sequence}."
+        reads = {field for item in remaining for field in item.reads}
+        details: list[str] = []
+        if "target_temperature_c" in reads and "target_temperature_c" in session.state:
+            details.append(
+                self.store._render_state(
+                    "{{ target_temperature_c | temperature_c }}",
+                    session.state,
+                )
+            )
+        if "steep_duration_s" in reads and "steep_duration_s" in session.state:
+            duration = self.store._render_state(
+                "{{ steep_duration_s | duration }}",
+                session.state,
+            )
+            details.append(f"steep for {duration}")
+        if not details:
+            return summary
+        return f"{summary} Use {' and '.join(details)}."
 
     def status(self, participant_id: str) -> str:
         """Return deterministic guidance status without a model call."""
