@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -103,6 +104,8 @@ def _active_route(
             guidance.store.advance(session, skip=True)
     state_updates = dict(case.get("state_updates", {}))
     if state_updates:
+        for observation in case.get("observations", []):
+            guidance.store.observe(session, observation)
         result = guidance.store.commit(session, state_updates, "")
         if not result.accepted:
             raise ValueError(f"state updates for {case['name']!r} were rejected: {state_updates!r}")
@@ -169,6 +172,13 @@ async def main() -> None:
                 str(expected_response)
             ):
                 errors.append(f"response did not equal {expected_response!r}")
+            expected_response_pattern = case.get("expected_response_pattern")
+            if expected_response_pattern is not None and re.search(
+                str(expected_response_pattern), normalized_content
+            ) is None:
+                errors.append(
+                    f"response did not match {expected_response_pattern!r}"
+                )
             forbidden_response = case.get("forbidden_response")
             if forbidden_response is not None and _normalize_response(
                 str(forbidden_response)
