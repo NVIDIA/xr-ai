@@ -132,23 +132,23 @@ async def main() -> None:
                     case,
                     participant_id,
                 )
-            system_prompt, tools, route = foreground._prepare_route(
+            turn = foreground._prepare_turn(
                 participant_id,
                 query=case["query"],
                 ctx=None,
                 timestamp_us=None,
             )
             expected_route = "tea" if case.get("route", "root") == "active" else "root"
-            if route != expected_route:
+            if turn.route != expected_route:
                 raise ValueError(
-                    f"case {case['name']!r} prepared route {route!r}, expected {expected_route!r}"
+                    f"case {case['name']!r} prepared route {turn.route!r}, expected {expected_route!r}"
                 )
             response = await llm.chat(
                 (
-                    ChatMessage(role="system", content=system_prompt),
-                    ChatMessage(role="user", content=case["query"]),
+                    ChatMessage(role="system", content=turn.agent.system_prompt),
+                    ChatMessage(role="user", content=turn.user_message),
                 ),
-                tools=tool_definitions(tools),
+                tools=tool_definitions(turn.tools),
                 max_tokens=512,
                 temperature=0.0,
                 enable_thinking=False,
@@ -160,7 +160,7 @@ async def main() -> None:
             expected_tools = [] if expected_tool is None else [expected_tool]
             errors: list[str] = []
             for call in calls:
-                tool = tools.get(call.name)
+                tool = turn.tools.get(call.name)
                 if tool is None:
                     errors.append(f"unknown tool {call.name!r}")
                     continue
