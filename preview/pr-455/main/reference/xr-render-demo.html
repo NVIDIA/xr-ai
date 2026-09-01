@@ -1,0 +1,1226 @@
+
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>xr-render-demo — architecture &#8212; XR AI</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=a95f357e85573c9b56d5"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5" />
+
+
+
+    <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/xr-render-demo';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+
+    <link rel="icon" href="../_static/favicon.png"/>
+
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="API Reference" href="python/index.html" />
+    <link rel="prev" title="Tea-making guidance — building deterministic visual workflows" href="tea-making-sample.html" />
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+
+
+  </head>
+
+  <body data-default-mode="">
+
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="XR AI - Home"/>
+    <img src="../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="XR AI - Home"/>
+  
+  
+    <p class="title logo__title">XR AI</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="XR AI - Home"/>
+    <img src="../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="XR AI - Home"/>
+  
+  
+    <p class="title logo__title">XR AI</p>
+  
+</a>
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item"><!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+
+
+<div class="version-switcher">
+  <label for="version-select" class="version-switcher__label">Version</label>
+  <select id="version-select" class="version-switcher__select">
+    <option value="0" >v0.1.0-beta</option>
+    <option value="1" selected>main (development)</option>
+  </select>
+</div>
+<script>
+  (function () {
+    // Navigate by index into a build-time list, never by reading the URL back
+    // out of the DOM, so page text can never become a navigation target.
+    var urls = ["../../v0.1.0-beta/reference/xr-render-demo.html", "xr-render-demo.html"];
+    var select = document.getElementById("version-select");
+    select.addEventListener("change", function () {
+      var url = urls[select.selectedIndex];
+      if (url) {
+        window.location.assign(url);
+      }
+    });
+  })();
+</script>
+</div>
+        <div class="sidebar-primary-item">
+
+
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Table of Contents">
+  <p class="bd-links__title" role="heading" aria-level="1">Table of Contents</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../overview/architecture.html">Architecture</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../getting_started/index.html">Getting Started</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../components/index.html">Components</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../components/agent-sdk.html">Agent SDK</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../components/ai-services.html">AI inference servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../components/launcher-and-process-model.html">Launcher and process model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../components/server-runtime.html">Server runtime</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">xr-render-demo — architecture</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+</ul>
+</details></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Reference</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">xr-render-demo — architecture</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+<section id="xr-render-demo-architecture">
+<h1>xr-render-demo — architecture<a class="headerlink" href="#xr-render-demo-architecture" title="Link to this heading">#</a></h1>
+<p>This architecture reference describes the xr-render-demo sample. Refer to
+<a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">Quickstart</span></a> to run the sample. For inference-server
+mechanics shared with other samples, refer to
+<a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a>.</p>
+<section id="process-stack">
+<h2>Process stack<a class="headerlink" href="#process-stack" title="Link to this heading">#</a></h2>
+<p>The orchestrator (<code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code>, via <code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code>) reuses all
+model processes and starts its application processes serially; each owned
+process touches its ready file before the next starts. <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> is fail-fast:
+any owned process exit terminates the application stack.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Role</p></th>
+<th class="head"><p>Ownership</p></th>
+<th class="head"><p>Directory</p></th>
+<th class="head"><p>Command</p></th>
+<th class="head"><p>Port</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>hub</p></td>
+<td><p>sample</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">services/device-io-hub/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device_io_hub</span></code></p></td>
+<td><p>8080 (HTTPS and <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> WSS proxy); 7880 (plaintext LiveKit direct-debug path; firewall-restricted)</p></td>
+</tr>
+<tr class="row-odd"><td><p>cloudxr</p></td>
+<td><p>sample</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">services/cloudxr-runtime/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cloudxr_runtime</span></code></p></td>
+<td><p>48322 (WSS proxy for WebRTC profiles; unused by <code class="docutils literal notranslate"><span class="pre">auto-native</span></code>)</p></td>
+</tr>
+<tr class="row-even"><td><p>stt</p></td>
+<td><p>reused</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">services/stt-server/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">stt_server</span></code></p></td>
+<td><p>8103</p></td>
+</tr>
+<tr class="row-odd"><td><p>tts</p></td>
+<td><p>reused</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">services/piper-tts/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">piper_tts_server</span></code></p></td>
+<td><p>8105</p></td>
+</tr>
+<tr class="row-even"><td><p>omni</p></td>
+<td><p>reused</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron-omni-llm/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code></p></td>
+<td><p>8108 (LLM)</p></td>
+</tr>
+<tr class="row-odd"><td><p>vlm</p></td>
+<td><p>reused</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">services/vlm-server/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">vlm_server</span></code></p></td>
+<td><p>8100 (Cosmos VLM)</p></td>
+</tr>
+<tr class="row-even"><td><p>video-memory</p></td>
+<td><p>sample</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">video_memory_service</span></code></p></td>
+<td><p>8310 (recorded-video typed RPC)</p></td>
+</tr>
+<tr class="row-odd"><td><p>scene</p></td>
+<td><p>sample</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/scene/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_scene</span></code></p></td>
+<td><p>8320 (typed RPC)</p></td>
+</tr>
+<tr class="row-even"><td><p>openxr-service</p></td>
+<td><p>sample</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">services/openxr-service/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">openxr_service</span></code></p></td>
+<td><p>8330 (typed RPC)</p></td>
+</tr>
+<tr class="row-odd"><td><p>worker</p></td>
+<td><p>sample</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/worker/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker</span></code></p></td>
+<td><p>—</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Before starting the stack, the orchestrator runs two setup steps:</p>
+<ul class="simple">
+<li><p><strong>Web vendor bundle</strong> — builds the CloudXR and LiveKit ESM bundle via
+<code class="docutils literal notranslate"><span class="pre">client-samples/web-xr-build/build.sh</span></code> (skipped if already present;
+requires <code class="docutils literal notranslate"><span class="pre">npm</span></code>). Built only for WebRTC device profiles; native profiles
+never serve the web page, so the build (and its npm dependency) is skipped.</p></li>
+<li><p><strong>LOVR binary</strong> — auto-downloads LOVR v0.18.0 AppImage to <code class="docutils literal notranslate"><span class="pre">deps/lovr/</span></code> if
+not present and sets <code class="docutils literal notranslate"><span class="pre">$LOVR_BIN</span></code>. Resolution order: <code class="docutils literal notranslate"><span class="pre">$LOVR_BIN</span></code> env var →
+<code class="docutils literal notranslate"><span class="pre">lovr_bin:</span></code> in <code class="docutils literal notranslate"><span class="pre">scene/scene_service.yaml</span></code> → cached AppImage → fresh download.</p></li>
+</ul>
+</section>
+<section id="source-map-and-extension-points">
+<h2>Source map and extension points<a class="headerlink" href="#source-map-and-extension-points" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">main.py</span></code> is the orchestrator. <code class="docutils literal notranslate"><span class="pre">worker/xr_render_demo_worker/app.py</span></code> composes
+the SDK tools and <code class="docutils literal notranslate"><span class="pre">RenderAgent</span></code>; <code class="docutils literal notranslate"><span class="pre">agent.py</span></code> receives participant turns;
+<code class="docutils literal notranslate"><span class="pre">supervisor.py</span></code> owns the top-level tool loop; and <code class="docutils literal notranslate"><span class="pre">scene.py</span></code> owns snapshots,
+diffs, and move history. The <code class="docutils literal notranslate"><span class="pre">agents/</span></code> packages contain placement, appearance,
+object, vision, and memory subagents. The separately packaged <code class="docutils literal notranslate"><span class="pre">scene/</span></code> process
+owns LOVR and scene state, while <code class="docutils literal notranslate"><span class="pre">eval/</span></code> owns offline and live regression tiers.</p>
+<p>To add a subagent, create a package under <code class="docutils literal notranslate"><span class="pre">agents/</span></code>, return its model-visible
+<code class="docutils literal notranslate"><span class="pre">Tool</span></code> from a <code class="docutils literal notranslate"><span class="pre">make_&lt;name&gt;_agent()</span></code> factory, export it, compose it into the
+supervisor, and add component eval cases. Add shared capability groups to
+<code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code> once two applications need them; otherwise keep a sample-specific
+group with the worker and inject it into the relevant subagent.</p>
+<p>Prompt-only changes need no rebuild. Edit the supervisor or subagent prompt in
+place and add a corresponding eval case without copying the worked example’s
+specific vocabulary into the fixture.</p>
+</section>
+<section id="selecting-the-client-type-webrtc-vs-native">
+<h2>Selecting the client type (WebRTC vs native)<a class="headerlink" href="#selecting-the-client-type-webrtc-vs-native" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">NV_DEVICE_PROFILE</span></code> selects which XR clients can connect. For the native iOS
+and visionOS apps, set it to <code class="docutils literal notranslate"><span class="pre">auto-native</span></code>. Run from
+<code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">NV_DEVICE_PROFILE</span><span class="o">=</span>auto-native<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo
+</pre></div>
+</div>
+<p>The environment value takes precedence over YAML. The <code class="docutils literal notranslate"><span class="pre">cloudxr_env</span></code> value in
+<code class="docutils literal notranslate"><span class="pre">yaml/cloudxr_runtime.yaml</span></code> supplies the default only when the variable is
+unset; <code class="docutils literal notranslate"><span class="pre">auto-webrtc</span></code> serves WebRTC and web XR clients. Native profiles omit the
+static web page and its npm build but keep <code class="docutils literal notranslate"><span class="pre">/token</span></code>, <code class="docutils literal notranslate"><span class="pre">/cert</span></code>, and <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> on the
+hub, so the Apple Vision Pro app’s default
+<code class="docutils literal notranslate"><span class="pre">https://&lt;host&gt;:8080/token</span></code> request continues to work.</p>
+</section>
+<section id="gpu-pinning-for-the-xr-side">
+<h2>GPU pinning for the XR side<a class="headerlink" href="#gpu-pinning-for-the-xr-side" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">gpu_index</span></code> (int) in <code class="docutils literal notranslate"><span class="pre">yaml/cloudxr_runtime.yaml</span></code> selects the physical GPU
+that the CloudXR compositor pins to. The cloudxr-runtime wrapper translates
+the index to a PCI bus address via <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code> and sets three selectors
+(<code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code>, <code class="docutils literal notranslate"><span class="pre">VK_LOADER_DEVICE_SELECT</span></code>, <code class="docutils literal notranslate"><span class="pre">DRI_PRIME</span></code>) on its own
+environment before spawning the native service. All three are required: the
+compositor runs on Vulkan and needs the matching CUDA device for interop,
+so on a multi-GPU host Vulkan and CUDA can otherwise land on different
+physical GPUs.</p>
+<p>The same three selectors are appended to <code class="docutils literal notranslate"><span class="pre">cloudxr.env</span></code> (under
+<code class="docutils literal notranslate"><span class="pre">~/.cloudxr/run/</span></code>). The scene process sources that file when it spawns LOVR, so
+LOVR inherits the pin; <code class="docutils literal notranslate"><span class="pre">openxr-service</span></code> picks it up the same way.</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code> is missing, fails, reports no GPUs, or does not list the
+requested index, the wrapper logs a warning and skips pinning rather than
+failing startup.</p>
+<p>The model-side fields live under <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/</span></code>. Set them
+to different GPUs so
+the XR compositor and the agentic LLM do not share a card.</p>
+</section>
+<section id="configuration">
+<span id="worker-configuration"></span><h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h2>
+<p>Run and edit the sample from <code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/</span></code>. Each process
+receives its checked-in configuration directly. Edit the owning file and
+restart <code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code> to apply a change.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>File</p></th>
+<th class="head"><p>Owns</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/cloudxr_runtime.yaml</span></code></p></td>
+<td><p>CloudXR install state, EULA acceptance, client profile, compositor GPU, and environment overrides</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/xr_render_demo_worker.yaml</span></code></p></td>
+<td><p>Native capability endpoints, text-memory directory, VAD, idle timeout, and voice-gate selection</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code></p></td>
+<td><p>Always-on speech or wake phrases, listening chime, and follow-up window</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
+<td><p>Reused model adapters, endpoints, and readiness checks</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code></p></td>
+<td><p>LiveKit, web and token servers, networking, and video recording</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/video_memory_service.yaml</span></code></p></td>
+<td><p>Recorded-query endpoint, output directory, and GPU</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/openxr_service.yaml</span></code></p></td>
+<td><p>OpenXR endpoint, CloudXR environment, and eval-only simulated pose</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">scene/scene_service.yaml</span></code></p></td>
+<td><p>LOVR binary and app, scene endpoint, and CloudXR environment</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">NV_DEVICE_PROFILE</span></code> in the environment overrides
+<code class="docutils literal notranslate"><span class="pre">cloudxr_env.NV_DEVICE_PROFILE</span></code> in <code class="docutils literal notranslate"><span class="pre">cloudxr_runtime.yaml</span></code>. <code class="docutils literal notranslate"><span class="pre">LOVR_BIN</span></code> similarly
+overrides <code class="docutils literal notranslate"><span class="pre">lovr_bin</span></code> in <code class="docutils literal notranslate"><span class="pre">scene/scene_service.yaml</span></code>. Use a GPU index reported by
+<code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code> for <code class="docutils literal notranslate"><span class="pre">gpu_index</span></code>; the CloudXR, video-memory, and model-server GPU
+settings are independent and must be planned together. Keep
+<code class="docutils literal notranslate"><span class="pre">allow_sim_pose:</span> <span class="pre">false</span></code> outside the live eval harness.</p>
+<p>Each <code class="docutils literal notranslate"><span class="pre">models.json</span></code> entry maps a logical role (<code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>,
+or <code class="docutils literal notranslate"><span class="pre">vlm</span></code>) to an adapter, endpoint, and deployment. Editing it changes which
+operator-owned endpoint the demo consumes; it does not reconfigure or restart
+the shared model. Refer to <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for
+server-side model, port, GPU, or memory changes, then restart the persistent
+model stack.</p>
+<p>Refer to the generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference for exact
+fields, checked-in values, and adjacent YAML comments.</p>
+</section>
+<section id="the-llm-server">
+<h2>The LLM server<a class="headerlink" href="#the-llm-server" title="Link to this heading">#</a></h2>
+<section id="nemotron-3-nano-omni-30b-a3b-reasoning-port-8108">
+<h3>Nemotron-3-Nano-Omni-30B-A3B-Reasoning — port 8108<a class="headerlink" href="#nemotron-3-nano-omni-30b-a3b-reasoning-port-8108" title="Link to this heading">#</a></h3>
+<p>A small Python wrapper reads YAML configuration, sets the model environment,
+and starts vLLM through the selected <code class="docutils literal notranslate"><span class="pre">pip</span></code> or Docker backend. The vLLM process
+or container runs in a separate session so the shared model remains available
+across stack restarts; the wrapper monitors its health and reports readiness.
+The shared model-server stack reuses a healthy instance and replaces one whose
+launch configuration changed.</p>
+<p><code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> uses <code class="docutils literal notranslate"><span class="pre">--tool-call-parser</span> <span class="pre">qwen3_coder</span></code> and
+<code class="docutils literal notranslate"><span class="pre">--reasoning-parser</span> <span class="pre">nemotron_v3</span></code>. The launcher selects NVFP4 on Blackwell and
+FP8 on Ada, Hopper, or Ampere, with BF16 available as an explicit fallback.</p>
+<p>One server backs both LLM roles in <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>: <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> runs the
+supervisor and subagent tool-calling loops, and <code class="docutils literal notranslate"><span class="pre">llm</span></code> remains available for
+untooled chat calls. Thinking stays off unless a call explicitly enables it.</p>
+</section>
+</section>
+<section id="vlm-cosmos3-nano-reasoner">
+<h2>VLM — Cosmos3 Nano Reasoner<a class="headerlink" href="#vlm-cosmos3-nano-reasoner" title="Link to this heading">#</a></h2>
+<p>Port 8100 (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>).</p>
+<p>The render agent first selects a current or recorded frame and passes its
+<code class="docutils literal notranslate"><span class="pre">ImageReference</span></code> to <code class="docutils literal notranslate"><span class="pre">query_image</span></code>. Its native capability set also
+includes <code class="docutils literal notranslate"><span class="pre">query_images</span></code> for ordered collections and <code class="docutils literal notranslate"><span class="pre">query_video</span></code> for
+timestamped frame sequences; all use the same <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> multi-image VLM
+path. These raw
+selectors and query tools are internal composition primitives; the reasoning
+model sees only participant-safe perception facades. Recorded selection is
+grouped into latest tools, whose windows end at the newest recording, and
+historical tools, whose frame or video window begins at one absolute <code class="docutils literal notranslate"><span class="pre">start_us</span></code>.
+Recorded-frame timestamps are estimates interpolated from chunk metadata.</p>
+<p>There is a deliberate startup ordering constraint: <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> readiness
+blocks on the VLM’s <code class="docutils literal notranslate"><span class="pre">/health</span></code> endpoint, which
+returns 200 only after weights are fully loaded. This ensures model memory has
+settled before LOVR starts its Vulkan device, preventing a transient OOM race.</p>
+</section>
+<section id="stt-parakeet-tdt-0-6b-v3">
+<h2>STT — parakeet-tdt-0.6b-v3<a class="headerlink" href="#stt-parakeet-tdt-0-6b-v3" title="Link to this heading">#</a></h2>
+<p>Port 8103. NeMo ASR in-process. English-only, ~1.5 GB VRAM.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceAgent
+  → VAD and STT
+      pre-roll buffer    last 10 chunks (~320 ms) kept at all times;
+                         prepended to the utterance buffer on speech onset
+                         so the first word's attack isn't clipped
+      VAD                Silero ONNX (512 samples per 32 ms window,
+                         probability threshold) via shared xr-ai-vad util
+      accumulates        audio while speaking
+      finalizes when     silence ≥ 0.8s AND speech ≥ 0.15s
+                         OR max utterance length (30s) hit
+      STT call           POST multipart/form-data WAV → stt-server :8103
+  → accepted participant query
+</pre></div>
+</div>
+<p>The STT server serializes inference with a process-local lock because its shared
+NeMo model is not reentrant.</p>
+</section>
+<section id="tts-piper">
+<h2>TTS — Piper<a class="headerlink" href="#tts-piper" title="Link to this heading">#</a></h2>
+<p>Served on port 8105. The voice runtime streams the supervisor’s final
+reply to Piper and returns the audio to the participant.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>voice.output topic (final response)
+  → VoiceAgent → private media-session TTS
+      sentence-batched synthesis
+      POST text → tts-server :8105 → WAV bytes
+      RETURN_AUDIO IPC → hub → LiveKit → participant's headphones
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns interruption handling. A new utterance while TTS is playing
+triggers <code class="docutils literal notranslate"><span class="pre">ReturnAudioFlush</span></code>, so the hub clears the LiveKit audio queue for that
+participant. Its interruption callback also cancels the participant’s active
+render-agent task without waiting on its cleanup in the media processor. Each
+turn publishes one complete <code class="docutils literal notranslate"><span class="pre">voice.output</span></code> message; a superseded turn is
+cancelled before its reply is published, so no partial stream is left open.</p>
+</section>
+<section id="agent-runtime-and-voice-topology">
+<h2>Agent runtime and voice topology<a class="headerlink" href="#agent-runtime-and-voice-topology" title="Link to this heading">#</a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>VoiceAgent → private media session → VAD and STT ─→ voice.transcript topic
+                                  └→ VoiceGate ─┐
+           → typed hub text ingress ────────────┴→ xr-render.user-query topic
+  → RenderAgent → SceneSupervisor → five focused subagents → voice.output topic
+  → VoiceAgent → private media-session TTS → hub return audio
+</pre></div>
+</div>
+<p>Pipecat is an internal implementation detail of <code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code>; application
+input, participant-scoped agent execution, and voice output use public SDK contracts.
+An XR start failure sends <code class="docutils literal notranslate"><span class="pre">render.failed</span></code> (with the reason) on the data
+channel and speaks a short failure notice through <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>.</p>
+</section>
+<section id="agentic-loop">
+<h2>Agentic loop<a class="headerlink" href="#agentic-loop" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">SceneSupervisor</span></code> coordinates five focused subagent tools (placement,
+appearance, object, vision, memory) over <code class="docutils literal notranslate"><span class="pre">xr_ai_tools.tool_calling.run_tool_loop</span></code>.
+Each subagent runs its own inner tool loop against the scene and tracking
+services. On each accepted <code class="docutils literal notranslate"><span class="pre">xr-render.user-query</span></code> event:</p>
+<ol class="arabic simple">
+<li><p><strong>Recent conversation</strong> is recalled from <code class="docutils literal notranslate"><span class="pre">TextMemoryTools</span></code> and injected
+as context so the model understands references like “fix that” or “undo”.</p></li>
+<li><p><strong>Supervisor loop</strong> (<code class="docutils literal notranslate"><span class="pre">run_tool_loop</span></code>, up to 12 iterations) — Nemotron-Omni
+:8108 routes the request to one or more subagent tools. Each subagent
+runs its own inner <code class="docutils literal notranslate"><span class="pre">run_tool_loop</span></code> (up to 4 iterations) against the
+scene, XR-tracking, and vision services.</p></li>
+<li><p><strong>Verification pass</strong> — only for turns with mutation intent (a
+mutating subagent was delegated, or a non-question utterance contains a
+change-requesting verb): if no scene change is observed within 150 ms
+of the loop completing, a second <code class="docutils literal notranslate"><span class="pre">run_tool_loop</span></code> call is made so the
+supervisor can delegate remaining work or confirm a no-op turn. Success
+is then evidence-backed: unless a scene write was applied somewhere in
+the turn (or a recolor found the requested color already in place), a
+completion claim is replaced with a fixed honest no-change sentence and
+any other non-question reply gets the no-change fact appended. Evidence
+is counted per turn, not per delegated task.</p></li>
+<li><p><strong>Conversation history persisted</strong> — the user utterance and agent reply
+are written to <code class="docutils literal notranslate"><span class="pre">TextMemoryTools</span></code> under <code class="docutils literal notranslate"><span class="pre">{participant_id}:user</span></code> and
+<code class="docutils literal notranslate"><span class="pre">{participant_id}:agent</span></code> source keys.</p></li>
+<li><p><strong>Final response</strong> published as one complete <code class="docutils literal notranslate"><span class="pre">voice.output</span></code> message for
+the voice subscriber and TTS.</p></li>
+</ol>
+<p>Mutation intent is read from the supervisor loop’s own tool-call record
+(which subagents were delegated) and the utterance’s action verbs; the
+scene diff decides whether the verification pass runs.</p>
+<p>At worker startup, <code class="docutils literal notranslate"><span class="pre">app.py</span></code> composes the five subagent tools from the scene,
+XR-tracking, spatial-math, vision, video-memory, and text-memory <code class="docutils literal notranslate"><span class="pre">Tool</span></code>
+instances provided by <code class="docutils literal notranslate"><span class="pre">xr_ai_tools</span></code>. Lifecycle tools (<code class="docutils literal notranslate"><span class="pre">start_xr</span></code>,
+<code class="docutils literal notranslate"><span class="pre">get_health</span></code>) remain worker-managed and are not exposed to the supervisor.</p>
+<p>Final messages are also persisted through native
+text memory without model scratch output or tool traces.</p>
+</section>
+<section id="native-capability-composition">
+<h2>Native capability composition<a class="headerlink" href="#native-capability-composition" title="Link to this heading">#</a></h2>
+<p>The sample-local scene process owns scene state and LOVR. <code class="docutils literal notranslate"><span class="pre">openxr-service</span></code>
+owns the headless tracking session, and <code class="docutils literal notranslate"><span class="pre">video-memory-service</span></code> owns recorded
+video decoding. <code class="docutils literal notranslate"><span class="pre">LiveFrameSource</span></code> supplies current-frame requests. Relay-managed
+native tools provide the typed surface over those services; the demo does
+not launch or call MCP adapters.</p>
+<section id="spatial-tool-surface">
+<h3>Spatial tool surface<a class="headerlink" href="#spatial-tool-surface" title="Link to this heading">#</a></h3>
+<p>The worker composes XR tracking with shared spatial-math tools. This
+offloads vector arithmetic the LLM is bad at while keeping pose-dependent math
+in one place:</p>
+<ul class="simple">
+<li><p><strong>Placement tools</strong> move existing objects: <code class="docutils literal notranslate"><span class="pre">nudge</span></code> (signed user-frame
+offsets), <code class="docutils literal notranslate"><span class="pre">move_user_relative</span></code> (named direction from the user),
+<code class="docutils literal notranslate"><span class="pre">move_object_relative</span></code> (named relation to an anchor object),
+<code class="docutils literal notranslate"><span class="pre">move_inside</span></code>, <code class="docutils literal notranslate"><span class="pre">move_between</span></code>, <code class="docutils literal notranslate"><span class="pre">move_toward</span></code>, <code class="docutils literal notranslate"><span class="pre">move_toward_user</span></code>,
+<code class="docutils literal notranslate"><span class="pre">swap_positions</span></code>, and <code class="docutils literal notranslate"><span class="pre">move_to</span></code> (explicit coordinates). Every tool takes
+the instruction’s exact words for each object, resolves them against the
+scene, performs the move itself, and returns the final position; the LLM
+never applies signs to user-frame axes or copies coordinates.</p></li>
+<li><p><strong>Appearance tool</strong>: <code class="docutils literal notranslate"><span class="pre">recolor</span></code> takes a discriminated color source the
+model selects through the tool schema — <code class="docutils literal notranslate"><span class="pre">literal</span></code> (stated color words or
+numbers, garbles repaired), <code class="docutils literal notranslate"><span class="pre">scene_object</span></code> (copy an XR object), or
+<code class="docutils literal notranslate"><span class="pre">physical</span></code> (observe a real-world thing). The code dispatches on the
+variant without reinterpreting the phrase; the <code class="docutils literal notranslate"><span class="pre">physical</span></code> variant runs
+one camera query through <code class="docutils literal notranslate"><span class="pre">resolve_physical_color</span></code>, whose VLM answers in
+a closed grammar (<code class="docutils literal notranslate"><span class="pre">VISIBLE</span> <span class="pre">r</span> <span class="pre">g</span> <span class="pre">b</span></code> or <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code>) and fails closed on
+anything else. The same source type drives the object tools’ creations.</p></li>
+<li><p><strong>Object tools</strong> create and retire objects: <code class="docutils literal notranslate"><span class="pre">create_user_relative</span></code>,
+<code class="docutils literal notranslate"><span class="pre">create_object_relative</span></code> (one anchor, or the midpoint of two),
+<code class="docutils literal notranslate"><span class="pre">create_at</span></code>, <code class="docutils literal notranslate"><span class="pre">change_shape</span></code> (the scene replaces the object and returns
+its new id), <code class="docutils literal notranslate"><span class="pre">resize_object</span></code>, and <code class="docutils literal notranslate"><span class="pre">remove_object</span></code>.</p></li>
+</ul>
+</section>
+</section>
+<section id="prompt-structure">
+<h2>Prompt structure<a class="headerlink" href="#prompt-structure" title="Link to this heading">#</a></h2>
+<p>Each agent has its own prompt file under
+<code class="docutils literal notranslate"><span class="pre">worker/xr_render_demo_worker/</span></code> (supervisor plus five subagents, six files total).
+The supervisor prompt routes requests to subagents; each subagent prompt
+is worked-example heavy and opens with pronoun and reference resolution.</p>
+<p>The placement agent’s prompt maps utterance shapes to tools with contrast
+pairs: a stated distance is a shift (<code class="docutils literal notranslate"><span class="pre">nudge</span></code>); a user-anchored destination
+uses <code class="docutils literal notranslate"><span class="pre">move_user_relative</span></code>; a destination anchored on another object uses
+<code class="docutils literal notranslate"><span class="pre">move_object_relative</span></code> (stacking is relation <code class="docutils literal notranslate"><span class="pre">above</span></code>); “into/inside” is
+containment (<code class="docutils literal notranslate"><span class="pre">move_inside</span></code>). Every rule has a paired worked example, and
+the highest-leakage failure modes carry explicit contrast examples.</p>
+</section>
+<section id="xr-session-lifecycle">
+<h2>XR session lifecycle<a class="headerlink" href="#xr-session-lifecycle" title="Link to this heading">#</a></h2>
+<p>CloudXR returns <code class="docutils literal notranslate"><span class="pre">XR_ERROR_FORM_FACTOR_UNAVAILABLE</span></code> from <code class="docutils literal notranslate"><span class="pre">xrGetSystem</span></code> until
+a streaming client connects. LOVR cannot start before then.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>1. User opens https://&lt;host&gt;:8080, grants microphone and XR permissions
+2. User clicks "Launch XR"
+3. Client sends `xr.session.started` data message → hub IPC → worker
+4. Worker invokes native `start_xr`
+   → scene process spawns LOVR and waits for CloudXR in a background task
+5. Worker polls `get_health` every 500 ms (up to 120s)
+   lovr_started: true  → send `render.ready` to client → XR session unlocked
+   spawn_error: "..."  → log and abort
+6. On reconnect or refresh: `xr.session.started` arrives again
+   → `_xr_started` is already True → skip spawn, send `render.ready`
+   immediately
+</pre></div>
+</div>
+</section>
+<section id="eval-harness">
+<h2>Eval harness<a class="headerlink" href="#eval-harness" title="Link to this heading">#</a></h2>
+<p>The evaluation project derives schemas from the worker’s native tools. Offline
+tiers call the live agent LLM but apply tool effects to deterministic fixtures,
+so they do not mutate the LOVR scene.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Tier</p></th>
+<th class="head"><p>Command</p></th>
+<th class="head"><p>Runs against</p></th>
+<th class="head"><p>Approximate cost</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Supervisor routing</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_eval_supervisor</span></code></p></td>
+<td><p>Fake subagents that record delegations</p></td>
+<td><p>15 seconds per case</p></td>
+</tr>
+<tr class="row-odd"><td><p>Subagent components</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_eval_subagents</span></code></p></td>
+<td><p>One real subagent over fake leaf functions</p></td>
+<td><p>30 seconds per case</p></td>
+</tr>
+<tr class="row-even"><td><p>End-to-end offline</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_eval</span></code></p></td>
+<td><p>Supervisor and subagents over deterministic services</p></td>
+<td><p>30 minutes for the full corpus</p></td>
+</tr>
+<tr class="row-odd"><td><p>Live smoke</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_live_smoke</span></code></p></td>
+<td><p>Running demo stack</p></td>
+<td><p>Minutes</p></td>
+</tr>
+<tr class="row-even"><td><p>Live pose matrix</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_live_pose_matrix</span></code></p></td>
+<td><p>Running demo stack and simulated poses</p></td>
+<td><p>Minutes</p></td>
+</tr>
+<tr class="row-odd"><td><p>Live manipulation</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_live_manip</span></code></p></td>
+<td><p>Running demo stack and real scene state</p></td>
+<td><p>Minutes</p></td>
+</tr>
+<tr class="row-even"><td><p>Live speech noise</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_live_garble</span></code></p></td>
+<td><p>Running demo stack with noisy utterances</p></td>
+<td><p>Minutes</p></td>
+</tr>
+<tr class="row-odd"><td><p>Live exploration</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_live_explore</span></code></p></td>
+<td><p>Running demo stack with novel prompts</p></td>
+<td><p>Minutes</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Run all commands from <code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync
+
+<span class="c1"># Full offline corpus, precision cases, and utterance battery</span>
+uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo_eval
+
+<span class="c1"># Fast prompt-change gate</span>
+uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo_eval<span class="w"> </span>utterances
+
+<span class="c1"># Filter by case name; unknown names fail</span>
+uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo_eval<span class="w"> </span>move_left_one_meter<span class="w"> </span>between_two_spheres
+
+<span class="c1"># Routing and component tiers; the component command accepts an agent or case</span>
+uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo_eval_supervisor
+uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo_eval_subagents<span class="w"> </span>placement
+</pre></div>
+</div>
+<p>The offline tiers require only the agent LLM, which defaults to
+<code class="docutils literal notranslate"><span class="pre">http://localhost:8108</span></code>. They do not require the demo stack, capability
+services, or LOVR.</p>
+<section id="live-drivers">
+<h3>Live drivers<a class="headerlink" href="#live-drivers" title="Link to this heading">#</a></h3>
+<p>Start the demo stack and set <code class="docutils literal notranslate"><span class="pre">allow_sim_pose:</span> <span class="pre">true</span></code> in
+<code class="docutils literal notranslate"><span class="pre">../yaml/openxr_service.yaml</span></code> before running live evaluations:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo_live_smoke
+uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo_live_pose_matrix
+uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo_live_manip
+uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo_live_garble
+uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo_live_explore
+</pre></div>
+</div>
+<p>Live drivers join as synthetic participants, inject typed text, set simulated
+head pose, and score real scene state. Preserve these isolation rules:</p>
+<ul class="simple">
+<li><p>Use a fresh participant ID for every case so transcript history cannot affect
+later supervisor behavior.</p></li>
+<li><p>Clear the scene through typed RPC between cases so stale objects cannot make
+referents ambiguous.</p></li>
+<li><p>Vary prompt phrasing across cases rather than building an artificial repeated
+self-history.</p></li>
+<li><p>Write the complete run log to a file, then filter that file. Do not filter the
+live command’s output pipeline.</p></li>
+<li><p>Repeat each run three times before treating a near-tie result as a regression;
+model choices can vary even at temperature zero.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_live_garble</span></code> covers homophones, truncations, corrections, and
+stutters. Its restraint scoring fails incorrect mutations and accepts a
+clarifying response. <code class="docutils literal notranslate"><span class="pre">xr_render_demo_live_explore</span></code> sends novel conversational
+phrasing and scores intent invariants. Promote any violation into a permanent
+tier case before fixing it.</p>
+</section>
+<section id="add-or-change-a-case">
+<h3>Add or change a case<a class="headerlink" href="#add-or-change-a-case" title="Link to this heading">#</a></h3>
+<p>End-to-end cases are dictionaries in <code class="docutils literal notranslate"><span class="pre">cases.py</span></code>; use the existing cases for
+pose overrides, multi-turn <code class="docutils literal notranslate"><span class="pre">history</span></code>, and undo <code class="docutils literal notranslate"><span class="pre">recent_moves</span></code> examples.
+Precision and utterance cases are <code class="docutils literal notranslate"><span class="pre">Case</span></code> values in <code class="docutils literal notranslate"><span class="pre">harness.py</span></code>, routing cases
+are in <code class="docutils literal notranslate"><span class="pre">supervisor.py</span></code>, component cases are in <code class="docutils literal notranslate"><span class="pre">subagents.py</span></code>, and live cases
+are in the corresponding <code class="docutils literal notranslate"><span class="pre">live_*.py</span></code> module. A live manipulation case has this
+shape:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"my_case"</span><span class="p">,</span>
+    <span class="s2">"fixtures"</span><span class="p">:</span> <span class="p">[(</span><span class="s2">"sphere"</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">g</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">size</span><span class="p">)],</span>
+    <span class="s2">"prompt"</span><span class="p">:</span> <span class="s2">"..."</span><span class="p">,</span>
+    <span class="s2">"check"</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">ids</span><span class="p">,</span> <span class="n">objects</span><span class="p">:</span> <span class="o">...</span><span class="p">,</span>  <span class="c1"># True means pass</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="prompt-tuning-loop">
+<h3>Prompt-tuning loop<a class="headerlink" href="#prompt-tuning-loop" title="Link to this heading">#</a></h3>
+<p>The current model follows worked examples and contrast pairs more reliably than
+bare prohibitions. Pair every refusal example with a proceed example so the
+restriction does not contaminate neighboring behavior. When examples cannot
+produce reliable schema arguments, move deterministic resolution into code and
+name the parameter for the text the model can copy. The <code class="docutils literal notranslate"><span class="pre">anchor_words</span></code>
+parameter is the precedent: the model copies descriptors verbatim, and
+<code class="docutils literal notranslate"><span class="pre">spatial_ops</span></code> resolves shapes, damaged nouns, and colors against scene state.</p>
+<p>Run <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">xr_render_demo_eval</span> <span class="pre">utterances</span></code> after every prompt or operations
+change. Its 35 cases take about three minutes. Run the longer scenario and
+precision tiers before completing a tuning round.</p>
+</section>
+<section id="prompt-and-evaluation-overlap-audit">
+<span id="prompt-eval-overlap-audit"></span><h3>Prompt and evaluation overlap audit<a class="headerlink" href="#prompt-and-evaluation-overlap-audit" title="Link to this heading">#</a></h3>
+<p>The harness audits every worker prompt against every tier’s inputs at startup.
+It warns when:</p>
+<ol class="arabic simple">
+<li><p>a case utterance appears verbatim in a prompt;</p></li>
+<li><p>a case fixture ID appears in a prompt;</p></li>
+<li><p>a quoted prompt example pairs an evaluation color with an evaluation shape.</p></li>
+</ol>
+<p>Fix overlap by changing the prompt, not the case. Use colors such as teal,
+lavender, magenta, or turquoise and shapes such as cone, cylinder, capsule, or
+torus in worked examples. A case that passes only while its vocabulary appears
+in the prompt measures recall rather than capability.</p>
+<p>Offline tiers do not cover the live worker’s voice pipeline, real LOVR effects,
+or real camera perception. Use a live tier for those boundaries.</p>
+</section>
+</section>
+<section id="tracing-and-debugging">
+<h2>Tracing and debugging<a class="headerlink" href="#tracing-and-debugging" title="Link to this heading">#</a></h2>
+<p>Every turn carries a <code class="docutils literal notranslate"><span class="pre">trace_id</span></code> derived from the runtime’s <code class="docutils literal notranslate"><span class="pre">message_id</span></code>
+(set by <code class="docutils literal notranslate"><span class="pre">xr-ai-runtime</span></code> when it dispatches the <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>). The id is
+logged at supervisor entry:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">worker</span><span class="p">]</span> <span class="n">DEBUG</span> <span class="n">supervisor</span> <span class="n">turn</span> <span class="n">participant</span><span class="o">=</span><span class="n">alice</span> <span class="n">trace</span><span class="o">=&lt;</span><span class="n">uuid</span><span class="o">&gt;</span> <span class="n">transcript</span><span class="o">=</span><span class="s2">"make a red sphere"</span>
+</pre></div>
+</div>
+<p>To trace one complete turn, filter worker logs by <code class="docutils literal notranslate"><span class="pre">trace=&lt;uuid&gt;</span></code> or by
+<code class="docutils literal notranslate"><span class="pre">participant=&lt;id&gt;</span></code> and <code class="docutils literal notranslate"><span class="pre">timestamp_us=&lt;value&gt;</span></code> when the trace id is
+unavailable (e.g. in offline eval). Key log landmarks:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Event</p></th>
+<th class="head"><p>Logger</p></th>
+<th class="head"><p>Level</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Turn received</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.supervisor</span></code></p></td>
+<td><p>DEBUG</p></td>
+</tr>
+<tr class="row-odd"><td><p>Subagent delegated</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.agents.*</span></code></p></td>
+<td><p>DEBUG</p></td>
+</tr>
+<tr class="row-even"><td><p>Tool loop error</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.supervisor</span></code></p></td>
+<td><p>WARNING (ToolLoopError)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Subagent tool loop error</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.agents.*</span></code></p></td>
+<td><p>WARNING (ToolLoopError)</p></td>
+</tr>
+<tr class="row-even"><td><p>Turn failed</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.agent</span></code></p></td>
+<td><p>ERROR with traceback</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>Error policy.</strong> Expected degradation paths (camera unavailable, scene
+not started) surface as subagent result strings and reach the user as a
+clarifying reply. Unexpected exceptions (<code class="docutils literal notranslate"><span class="pre">ValueError</span></code> on bad tool input
+logs at DEBUG; all other exceptions log at ERROR with full traceback via
+<code class="docutils literal notranslate"><span class="pre">logger.exception</span></code>) propagate so the runtime remains fail-fast and the
+turn is recorded as failed in the runtime event log.</p>
+<p><strong>Concurrent participants.</strong> Each participant’s turns are serialized by
+the supervisor’s per-participant lock, and a global scene lock serializes
+the snapshot, mutation, and verification window across participants, so scene
+turns from different participants queue rather than interleave.</p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="tea-making-sample.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Tea-making guidance — building deterministic visual workflows</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="python/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">API Reference</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+
+
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#process-stack">Process stack</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#source-map-and-extension-points">Source map and extension points</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#selecting-the-client-type-webrtc-vs-native">Selecting the client type (WebRTC vs native)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gpu-pinning-for-the-xr-side">GPU pinning for the XR side</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration">Configuration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-llm-server">The LLM server</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemotron-3-nano-omni-30b-a3b-reasoning-port-8108">Nemotron-3-Nano-Omni-30B-A3B-Reasoning — port 8108</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vlm-cosmos3-nano-reasoner">VLM — Cosmos3 Nano Reasoner</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stt-parakeet-tdt-0-6b-v3">STT — parakeet-tdt-0.6b-v3</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tts-piper">TTS — Piper</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-runtime-and-voice-topology">Agent runtime and voice topology</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agentic-loop">Agentic loop</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-capability-composition">Native capability composition</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#spatial-tool-surface">Spatial tool surface</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prompt-structure">Prompt structure</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-session-lifecycle">XR session lifecycle</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#eval-harness">Eval harness</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#live-drivers">Live drivers</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#add-or-change-a-case">Add or change a case</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#prompt-tuning-loop">Prompt-tuning loop</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#prompt-and-evaluation-overlap-audit">Prompt and evaluation overlap audit</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tracing-and-debugging">Tracing and debugging</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5"></script>
+
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+<a class="footer-brand logo" href="https://www.nvidia.com">
+  <img src="../_static/nvidia-logo-horiz-rgb-1c-blk-for-screen.svg" class="logo__image only-light" alt="NVIDIA"/>
+  <img src="../_static/nvidia-logo-horiz-rgb-1c-wht-for-screen.svg" class="logo__image only-dark" alt="NVIDIA"/>
+</a></div>
+      
+        <div class="footer-item">
+
+<div class="footer-links">
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/privacy-policy/">Privacy Policy</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/privacy-center/">Your Privacy Choices</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/terms-of-service/">Terms of Service</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/accessibility/">Accessibility</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/company-policies/">Corporate Policies</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/product-security/">Product Security</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/contact/">Contact</a>
+  
+  
+  
+</div>
+</div>
+      
+        <div class="footer-item">
+
+
+
+
+  <p class="copyright">
+    
+      Copyright © 2026, NVIDIA CORPORATION &amp; AFFILIATES.
+      <br/>
+    
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+  </body>
+</html>
