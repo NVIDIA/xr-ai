@@ -306,8 +306,8 @@ def workflow_management_tools(
         _control_tool(
             "workflow__advance",
             (
-                "Advance after an explicit next or continue command. Set "
-                "skip true only for an explicit skip command."
+                "Move the guide forward only after a direct imperative command. "
+                "Set skip true only for an explicit skip command."
             ),
             AdvanceRequest,
             advance,
@@ -339,9 +339,14 @@ def workflow_status_tool(
             message = store.status(session)
         return WorkflowControlResult(message=message)
 
+    description = (
+        "Read the current tea instruction or the next step without changing guide state."
+        if session.active
+        else "Report whether tea guidance is idle or its current step and readiness."
+    )
     return _control_tool(
         "workflow__status",
-        "Report whether tea guidance is idle or its current step and readiness.",
+        description,
         EmptyRequest,
         status,
     )
