@@ -60,6 +60,7 @@
   query: What are the tea instructions?
   expected_tool: null
   expected_response_pattern: "(?i)\\b(?:fill|water|vessel)\\b"
+  max_response_chars: 180
   forbidden_response: I can only help with the active tea guide right now.
 
 - name: active-answers-next-step-question
@@ -84,6 +85,7 @@
   query: What are the T instructions?
   expected_tool: null
   expected_response_pattern: "(?i)\\b(?:fill|water|heat|steep)\\b"
+  max_response_chars: 180
   forbidden_response: I can only help with the active tea guide right now.
 
 - name: completed-identification-answers-next-step-question
@@ -102,6 +104,38 @@
   expected_response_pattern: "(?i)\\b(?:fill|water|vessel)\\b"
   forbidden_response: I can only help with the active tea guide right now.
 
+- name: completed-identification-answers-what-to-do-now
+  route: active
+  step: identify
+  observations:
+    - Twinings English Breakfast tea label, 93 Celsius, 3 minutes.
+  state_updates:
+    tea_name: English breakfast tea
+    target_temperature_c: 93
+    steep_duration_s: 180
+    guidance_source: package
+    tea_ready: true
+  query: What do I do now?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:fill|water|vessel)\\b"
+  max_response_chars: 80
+
+- name: completed-identification-answers-whats-next
+  route: active
+  step: identify
+  observations:
+    - Twinings English Breakfast tea label, 93 Celsius, 3 minutes.
+  state_updates:
+    tea_name: English breakfast tea
+    target_temperature_c: 93
+    steep_duration_s: 180
+    guidance_source: package
+    tea_ready: true
+  query: What's next?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:fill|water|vessel)\\b"
+  max_response_chars: 80
+
 - name: completed-identification-answers-specific-tea-instructions-question
   route: active
   step: identify
@@ -116,6 +150,7 @@
   query: What are the instructions for making this tea?
   expected_tool: null
   expected_response_pattern: "(?i)\\b(?:fill|water|heat|steep)\\b"
+  max_response_chars: 180
   forbidden_response: I can only help with the active tea guide right now.
 
 - name: completed-identification-summarizes-guide
@@ -132,6 +167,7 @@
   query: Can you summarize all the instructions required?
   expected_tool: null
   expected_response_pattern: "(?i)\\b(?:fill|water|heat|steep)\\b"
+  max_response_chars: 180
   forbidden_response: I can only help with the active tea guide right now.
 
 - name: active-routes-relevant-tea-making-question
