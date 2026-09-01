@@ -2,3 +2,4 @@
 # SPDX-License-Identifier: Apache-2.0
 
 *.gif filter=lfs diff=lfs merge=lfs -text
+dependency-manifest/uv.lock linguist-generated=true
