@@ -132,13 +132,16 @@ class GuidanceAgent(Agent):
         )
 
     def active_tools(self, participant_id: str) -> ToolSet | None:
-        """Return management plus current-step tools for active guidance."""
+        """Return management, tea-query, and current-step tools for active guidance."""
 
         session = self.store.find(participant_id)
         if session is None or not session.active or session.step_id is None:
             return None
         step = self.workflow.step(session.step_id)
-        quick = self._named_tools(session, step.voice.tools)
+        quick_names = tuple(
+            dict.fromkeys((*step.voice.tools, "current_view", "rag_lookup"))
+        )
+        quick = self._named_tools(session, quick_names)
         tools: dict[str, Tool[Any, Any]] = {
             tool.name: tool
             for tool in workflow_management_tools(
