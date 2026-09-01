@@ -974,6 +974,11 @@ def is_xr_ai_server_process(pid: int, label: str, port: int) -> bool:
     }
     if expected_command := in_process_servers.get(label):
         return expected_command in command
+    return has_xr_ai_ownership_marker(pid, port)
+
+
+def has_xr_ai_ownership_marker(pid: int, port: int) -> bool:
+    """Return whether *pid* carries xr-ai's matching managed-port marker."""
     try:
         environment = Path(f"/proc/{pid}/environ").read_bytes()
     except OSError:
@@ -982,3 +987,39 @@ def is_xr_ai_server_process(pid: int, label: str, port: int) -> bool:
         b"XR_AI_VLLM_MANAGED=1\0" in environment
         and f"XR_AI_VLLM_PORT={port}\0".encode() in environment
     )
+
+
+def process_group_alive(pgid: int, proc_root: Path = Path("/proc")) -> bool:
+    """Return whether *pgid* contains any live, non-zombie process."""
+    try:
+        entries = list(proc_root.iterdir())
+    except OSError:
+        return True
+
+    saw_group = False
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            stat = (entry / "stat").read_text()
+            # ``comm`` is parenthesized and may contain spaces or parentheses.
+            fields = stat.rsplit(")", 1)[1].split()
+            state = fields[0]
+            process_group = int(fields[2])
+        except (IndexError, OSError, ValueError):
+            continue
+        if process_group != pgid:
+            continue
+        saw_group = True
+        if state != "Z":
+            return True
+    if saw_group:
+        return False
+
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True
+    return True

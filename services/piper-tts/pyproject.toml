@@ -17,6 +17,7 @@ dependencies = [
     "uvicorn[standard]>=0.29",
     "pyyaml>=6.0",
     "xr-ai-logging",
+    "xr-ai-vllm",
 ]
 
 [project.scripts]
@@ -24,6 +25,7 @@ piper_tts_server = "piper_tts_server.__main__:run"
 
 [tool.uv.sources]
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
+xr-ai-vllm = { path = "../../utils/xr-ai-vllm", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["piper_tts_server"]

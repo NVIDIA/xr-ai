@@ -4,6 +4,9 @@
 """Safety tests for persistent-server cleanup discovery."""
 from __future__ import annotations
 
+import signal
+import time
+
 import xr_ai_vllm
 
 
@@ -97,3 +100,78 @@ def test_piper_ownership_marker_matches_service_port(tmp_path, monkeypatch) -> N
 
     assert xr_ai_vllm._docker.is_xr_ai_server_process(1234, "tts", 8105)
     assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "tts", 8104)
+
+
+def test_managed_server_on_port_requires_owned_visible_listener(monkeypatch) -> None:
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "pid_on_port_checked",
+        lambda _port: (1234, True, True),
+    )
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "is_xr_ai_server_process",
+        lambda pid, label, port: (pid, label, port) == (1234, "tts", 8105),
+    )
+
+    assert xr_ai_vllm.managed_server_on_port("tts", 8105)
+    assert not xr_ai_vllm.managed_server_on_port("tts", 8104)
+
+
+def test_stop_signals_complete_managed_process_group(monkeypatch) -> None:
+    calls: list[tuple[int, int]] = []
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "container_on_port_checked",
+        lambda _port: (None, True),
+    )
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "pid_on_port_checked",
+        lambda _port: (1234, True, True),
+    )
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "is_xr_ai_server_process",
+        lambda *_args: True,
+    )
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "has_xr_ai_ownership_marker",
+        lambda *_args: True,
+    )
+    monkeypatch.setattr(xr_ai_vllm.os, "getpgid", lambda _pid: 4321)
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "process_group_alive",
+        lambda _pgid: False,
+    )
+    monkeypatch.setattr(
+        xr_ai_vllm.os,
+        "kill",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("must signal group")),
+    )
+    monkeypatch.setattr(time, "sleep", lambda _seconds: None)
+
+    def killpg(pgid: int, sig: int) -> None:
+        calls.append((pgid, sig))
+
+    monkeypatch.setattr(xr_ai_vllm.os, "killpg", killpg)
+
+    assert xr_ai_vllm.stop_persistent_servers([("tts", 8105)])
+    assert calls == [(4321, signal.SIGTERM)]
+
+
+def test_process_group_liveness_ignores_zombies(tmp_path) -> None:
+    proc_root = tmp_path / "proc"
+    zombie = proc_root / "1234"
+    zombie.mkdir(parents=True)
+    (zombie / "stat").write_text("1234 (piper worker) Z 1 4321 4321 0 0\n")
+
+    assert not xr_ai_vllm._docker.process_group_alive(4321, proc_root)
+
+    live = proc_root / "1235"
+    live.mkdir()
+    (live / "stat").write_text("1235 (piper worker) S 1 4321 4321 0 0\n")
+
+    assert xr_ai_vllm._docker.process_group_alive(4321, proc_root)
