@@ -104,22 +104,16 @@ class VoiceGateProcessor(FrameProcessor):
         self._tts_response_active = probe
 
     async def handle_partial_transcript(self, pid: str, text: str) -> bool:
-        """Handle a gate-aware STOP or acknowledge a complete wake phrase.
+        """Return whether a partial contains a gate-aware STOP.
 
-        True means the partial was handled and False means the probe needs more
-        audio. A STOP only interrupts active output; the final transcript still
-        decides whether the utterance is a global stop or an application query.
-        A later sentence can introduce a wake phrase even when the current
-        partial transcript is not a phrase prefix.
+        Wake acknowledgement may emit the optional chime but never ends bounded
+        probing. The caller owns interruption; final STT still decides whether
+        the utterance is a global stop or an application query.
         """
         if self._gate._matches_partial_stop(text):
-            frame = InterruptionFrame()
-            frame.transport_source = pid
-            await self.push_frame(frame)
             return True
         if self._gate.matches_magic_phrase(text):
             await self._emit_chime(pid, early=True)
-            return True
         return False
 
     # ── AudioSink ─────────────────────────────────────────────────────────────
