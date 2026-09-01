@@ -67,6 +67,50 @@
   expected_tool: workflow__status
   forbidden_response: I can only help with the active tea guide right now.
 
+- name: completed-identification-answers-transcribed-instructions-question
+  route: active
+  step: identify
+  observations:
+    - Twinings English Breakfast tea label, 93 Celsius, 3 minutes.
+  state_updates:
+    tea_name: English breakfast tea
+    target_temperature_c: 93
+    steep_duration_s: 180
+    guidance_source: package
+    tea_ready: true
+  query: What are the T instructions?
+  expected_tool: workflow__status
+  forbidden_response: I can only help with the active tea guide right now.
+
+- name: completed-identification-answers-next-step-question
+  route: active
+  step: identify
+  observations:
+    - Twinings English Breakfast tea label, 93 Celsius, 3 minutes.
+  state_updates:
+    tea_name: English breakfast tea
+    target_temperature_c: 93
+    steep_duration_s: 180
+    guidance_source: package
+    tea_ready: true
+  query: What is the next step?
+  expected_tool: workflow__status
+  forbidden_response: I can only help with the active tea guide right now.
+
+- name: active-routes-relevant-tea-making-question
+  route: active
+  step: fill_water
+  query: Why does water temperature matter when brewing tea?
+  expected_tool: rag_lookup
+  forbidden_response: I can only help with the active tea guide right now.
+
+- name: active-routes-relevant-visual-question-outside-step
+  route: active
+  step: steep_timer
+  query: Check whether the water in my kettle is boiling.
+  expected_tool: current_view
+  forbidden_response: I can only help with the active tea guide right now.
+
 - name: active-routes-workflow-status
   route: active
   step: heat_water
@@ -91,35 +135,37 @@
   state_updates: {steeping_complete: true}
   query: What is the capital of France?
   expected_tool: null
-  expected_response: I can only help with the active tea guide right now.
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
+  forbidden_response: Paris
 
 - name: active-rejects-unrelated-explanation
   route: active
   step: heat_water
   query: Could you explain how eclipses happen?
   expected_tool: null
-  expected_response: I can only help with the active tea guide right now.
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
 
 - name: active-rejects-unrelated-control-word
   route: active
   step: fill_water
   query: My supervisor said I should advance my career. Any advice?
   expected_tool: null
-  expected_response: I can only help with the active tea guide right now.
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
 
 - name: active-rejects-unrelated-translation
   route: active
   step: start_steeping
   query: Please translate good morning into Japanese.
   expected_tool: null
-  expected_response: I can only help with the active tea guide right now.
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
+  forbidden_response: Ohayou
 
 - name: active-rejects-unrelated-visual-question
   route: active
   step: fill_water
   query: What color is the person's shirt?
   expected_tool: null
-  expected_response: I can only help with the active tea guide right now.
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
 
 - name: active-advances-on-direct-command
   route: active

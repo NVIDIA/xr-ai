@@ -1625,16 +1625,17 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     active_prompt = (
         _WORKER / "tea_making_worker/prompts/foreground_active.txt"
     ).read_text()
-    refusal = "I can only help with the active tea guide right now."
+    legacy_refusal = "I can only help with the active tea guide right now."
     idle_model_prompt = f"{common_prompt}\n\n{idle_prompt}".lower()
     active_model_prompt = f"{common_prompt}\n\n{active_prompt}".lower()
-    assert refusal not in common_prompt
-    assert refusal not in idle_prompt
+    assert legacy_refusal not in common_prompt
+    assert legacy_refusal not in idle_prompt
     for worked_example_term in ("holding", "color", "shirt", "clothing"):
         assert worked_example_term not in idle_model_prompt
         assert worked_example_term not in active_model_prompt
     assert "general-purpose assistant" in idle_prompt
-    assert f"reply exactly:\n{refusal}" in active_prompt
+    assert "Answer anything relevant to tea making" in active_prompt
+    assert "output only a brief refusal" in active_prompt
 
     root_cases = [case for case in cases if case.get("route", "root") == "root"]
     assert {case["expected_tool"] for case in root_cases} == {
@@ -1654,21 +1655,23 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
         "change_watch__start",
         "clock__timer",
         "current_view",
+        "rag_lookup",
         "workflow__advance",
         "workflow__reset",
         "workflow__restart",
         "workflow__status",
     }
-    unrelated_cases = [case for case in active_cases if "expected_response" in case]
+    unrelated_cases = [
+        case for case in active_cases if "expected_response_pattern" in case
+    ]
     assert len(unrelated_cases) >= 4
     assert all(case["expected_tool"] is None for case in unrelated_cases)
-    assert all(case["expected_response"] == refusal for case in unrelated_cases)
-    assert all("expected_response_pattern" not in case for case in cases)
+    assert all("expected_response" not in case for case in unrelated_cases)
 
     positive_active_names = {
         case["name"]
         for case in active_cases
-        if case.get("forbidden_response") == refusal
+        if case.get("forbidden_response") == legacy_refusal
         or case["expected_tool"] in {
             "change_watch__start",
             "current_view",
@@ -1687,21 +1690,22 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
         for case in root_cases
         if case["name"] == "idle-answers-unrelated-general-knowledge"
     )
-    assert idle_unrelated["forbidden_response"] == refusal
+    assert idle_unrelated["forbidden_response"] == legacy_refusal
     idle_visual = next(
         case
         for case in root_cases
         if case["name"] == "idle-routes-visible-shirt-color"
     )
     assert idle_visual["expected_tool"] == "current_view"
-    assert idle_visual["forbidden_response"] == refusal
+    assert idle_visual["forbidden_response"] == legacy_refusal
     active_visual = next(
         case
         for case in active_cases
         if case["name"] == "active-rejects-unrelated-visual-question"
     )
     assert active_visual["expected_tool"] is None
-    assert active_visual["expected_response"] == refusal
+    assert "expected_response_pattern" in active_visual
+    assert "expected_response" not in active_visual
 
 
 def _foreground_for_route_test(prompt: str) -> ForegroundAgent:
@@ -1738,14 +1742,12 @@ def test_foreground_route_appends_policy_through_constructor() -> None:
     active_prompt, _, active_route = foreground._prepare_route(
         "active", ctx=None, timestamp_us=None
     )
-    refusal = "I can only help with the active tea guide right now."
-
     assert idle_route == "root"
     assert "general-purpose assistant" in idle_prompt
-    assert refusal not in idle_prompt
     assert active_route == "tea"
     assert "general-purpose assistant" not in active_prompt
-    assert refusal in active_prompt
+    assert "Answer anything relevant to tea making" in active_prompt
+    assert "output only a brief refusal" in active_prompt
 
 
 def test_foreground_route_appends_policy_to_prompt_override(tmp_path: Path) -> None:
@@ -1760,15 +1762,13 @@ def test_foreground_route_appends_policy_to_prompt_override(tmp_path: Path) -> N
     active_prompt, _, active_route = foreground._prepare_route(
         "active", ctx=None, timestamp_us=None
     )
-    refusal = "I can only help with the active tea guide right now."
-
     assert idle_route == "root"
     assert idle_prompt.startswith("Explicit override\n\n")
     assert "general-purpose assistant" in idle_prompt
-    assert refusal not in idle_prompt
     assert active_route == "tea"
     assert active_prompt.startswith("Explicit override\n\n")
-    assert refusal in active_prompt
+    assert "Answer anything relevant to tea making" in active_prompt
+    assert "output only a brief refusal" in active_prompt
     assert active_prompt.endswith(
         'Active tea guide:\n{"step":"fill_water"}'
     )
