@@ -495,14 +495,14 @@ async def test_vad_stt_stop_probe_schedules_on_speech_start(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_vad_stt_retries_partial_probe_until_wake_phrase_is_recognized(monkeypatch):
+async def test_vad_stt_retries_partial_probe_until_gate_aware_stop_matches(monkeypatch):
     _StagedVad.instances.clear()
-    stt = _StagedStt(texts=["hey", "hey agent place a cube"])
+    stt = _StagedStt(texts=["hey", "hey agent stop"])
     partials: list[tuple[str, str]] = []
 
     async def on_partial(pid: str, text: str) -> bool:
         partials.append((pid, text))
-        return text.startswith("hey agent")
+        return text == "hey agent stop"
 
     monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
     proc = VadSttProcessor(
@@ -521,7 +521,7 @@ async def test_vad_stt_retries_partial_probe_until_wake_phrase_is_recognized(mon
 
     assert partials == [
         ("web-client", "hey"),
-        ("web-client", "hey agent place a cube"),
+        ("web-client", "hey agent stop"),
     ]
     assert len(stt.calls) == 2
 
@@ -553,7 +553,8 @@ async def test_vad_stt_retries_partial_probe_after_background_sentence(monkeypat
 
     await _run_chain(proc, sends=[frame], settle_s=0.25)
 
-    assert len(stt.calls) == 2
+    # Wake acknowledgement does not end the bounded probe sequence.
+    assert len(stt.calls) == 3
 
 
 @pytest.mark.asyncio
@@ -687,19 +688,23 @@ async def test_vad_stt_bare_partial_stop_interrupts_and_preserves_scoped_final_c
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("partial", "final", "expected_query", "chime"), [
-    ("agent stop", "agent stop", None, False),
-    ("hey agent stop", "hey agent stop", None, True),
+@pytest.mark.parametrize(("partials", "final", "expected_query", "chime"), [
+    (("agent stop",), "agent stop", None, False),
+    (("hey agent stop",), "hey agent stop", None, True),
     (
-        "hey agent stop",
+        ("hey agent stop",),
         "hey agent stop monitoring xyz",
         "stop monitoring xyz",
         True,
     ),
+    (("hey agent", "hey agent stop"), "hey agent stop", None, True),
+    (("hey agent", "hey agent stop"), "hey agent stop", None, False),
+    (("hey agent st", "hey agent stop"), "hey agent stop", None, True),
+    (("hey agent st", "hey agent stop"), "hey agent stop", None, False),
 ])
 async def test_vad_stt_gate_aware_stop_probe_preserves_final_intent(
     monkeypatch,
-    partial: str,
+    partials: tuple[str, ...],
     final: str,
     expected_query: str | None,
     chime: bool,
@@ -710,7 +715,7 @@ async def test_vad_stt_gate_aware_stop_probe_preserves_final_intent(
 
     class _SignaledStt(_StagedStt):
         def __init__(self) -> None:
-            super().__init__(texts=[partial, final])
+            super().__init__(texts=[*partials, final])
             self.first_completed = asyncio.Event()
 
         async def transcribe(
@@ -797,7 +802,7 @@ async def test_vad_stt_gate_aware_stop_probe_preserves_final_intent(
         if isinstance(item, TextFrame) and item.text == "Okay, I will stop."
     ]
     assert stop_acks == (["Okay, I will stop."] if expected_query is None else [])
-    assert len(stt.calls) == 2
+    assert len(stt.calls) == len(partials) + 1
 
 
 @pytest.mark.asyncio
@@ -1410,10 +1415,10 @@ async def test_voice_gate_processor_chimes_on_partial_wake_without_dispatching_e
     async def drive() -> None:
         nonlocal early_audio_count
         await asyncio.sleep(0.05)
-        acknowledged = await proc.handle_partial_transcript(
+        stop_matched = await proc.handle_partial_transcript(
             "pid-1", "hey agent place a blue sphere",
         )
-        assert acknowledged is True
+        assert stop_matched is False
         early_audio_count = sum(
             isinstance(frame, OutputAudioRawFrame) for frame in sink.frames
         )
@@ -1449,6 +1454,8 @@ async def test_voice_gate_processor_keeps_partial_wake_probes_open():
     proc = VoiceGateProcessor(cfg=cfg, tts=_FakeTts())
 
     assert await proc.handle_partial_transcript("pid-1", "hey") is False
+    assert await proc.handle_partial_transcript("pid-1", "hey agent") is False
+    assert await proc.handle_partial_transcript("pid-1", "hey agent st") is False
     assert await proc.handle_partial_transcript("pid-1", "room conversation") is False
     assert await proc.handle_partial_transcript("pid-1", "background.") is False
 
