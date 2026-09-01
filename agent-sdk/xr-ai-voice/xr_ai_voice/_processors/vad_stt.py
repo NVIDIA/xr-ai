@@ -12,10 +12,11 @@ VAD start/stop edges are forwarded as pipecat's built-in
 ``UserStartedSpeakingFrame`` / ``UserStoppedSpeakingFrame`` so the assistant
 can cancel in-flight work on the moment speech starts.
 
-Also runs bounded early STT probes shortly after speech-start. Brief STOP
-utterances interrupt without waiting for VAD finalization, while an optional
-partial-transcript callback can acknowledge a wake phrase before the user
-finishes the command. Normal query dispatch still uses the final transcript.
+Also runs bounded early STT probes shortly after speech-start. A stop-like
+partial interrupts without waiting for VAD finalization but does not commit the
+user's intent; final STT still decides between a global stop and an application
+query. An optional partial-transcript callback can apply configured wake-phrase
+rules and acknowledge a wake phrase before the user finishes the command.
 """
 from __future__ import annotations
 
@@ -45,7 +46,7 @@ from xr_ai_voicegate._phrases import STOP_RE
 from .._frames import ParticipantLeftFrame
 
 
-# True acknowledges and False requests another bounded probe.
+# True means the gate handled the partial; False requests another bounded probe.
 PartialTranscriptHandler = Callable[[str, str], Awaitable[bool]]
 FinalTranscriptHandler = Callable[[str, str, int], Awaitable[None]]
 _MAX_PARTIAL_PROBES = 3
@@ -61,9 +62,10 @@ class VadConfig:
     values match the in-tree samples' current behavior.
 
     ``stop_probe_after_s`` — cadence in seconds for up to three STT probes of
-    the partial audio buffer. This gives STOP commands a fast interrupt path
-    and lets a configured wake phrase be acknowledged before the utterance
-    ends. Set to ``0`` or negative to disable probes.
+    the partial audio buffer. This gives STOP commands a fast interruption path
+    without replacing final transcription, and lets a configured wake phrase
+    be acknowledged before the utterance ends. Set to ``0`` or negative to
+    disable probes.
     """
     silence_duration:   float = 0.8
     """Seconds of silence that finalize an utterance."""
@@ -337,7 +339,7 @@ class VadSttProcessor(FrameProcessor):
                         logger.exception("partial-transcript handler failed pid={!r}", pid)
                         return
                     if decision is True:
-                        logger.info("early wake phrase acknowledged pid={!r}", pid)
+                        logger.info("early partial transcript handled pid={!r}", pid)
                         return
             finally:
                 self._probe_inflight.discard(pid)
