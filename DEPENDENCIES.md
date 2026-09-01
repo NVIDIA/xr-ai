@@ -374,6 +374,7 @@ artifacts; do not commit them.
   - `uvicorn[standard]>=0.29`
   - `pyyaml>=6.0`
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
 - Optional dependency groups: none
 - Commands:
   - `piper_tts_server` → `piper_tts_server.__main__:run`
