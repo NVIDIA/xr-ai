@@ -100,15 +100,15 @@ Package Contents
    provided), ``HF_XET_HIGH_PERFORMANCE``, ``HF_HOME``, and
    ``TRANSFORMERS_CACHE``.
 
-   The deprecated ``HF_HUB_ENABLE_HF_TRANSFER`` setting is removed so it
-   cannot activate the uninstalled ``hf_transfer`` package on older supported
-   Hub releases. The Xet setting uses ``setdefault`` so callers can disable
-   high-performance mode explicitly. Both ``HF_HOME`` and
-   ``TRANSFORMERS_CACHE`` also use ``setdefault``, so an externally-set value
-   wins over the YAML default. This intentionally differs from the
-   pre-consolidation per-server code where the LLM wrappers used an
-   unconditional assignment for ``HF_HOME``; callers that need the YAML value
-   to take priority must unset the env var before calling.
+   The Xet setting uses ``setdefault`` so callers can disable high-performance
+   mode explicitly. ``HF_HUB_DISABLE_XET`` is the separate Xet off switch.
+   A deliberate ``HF_HUB_ENABLE_HF_TRANSFER`` opt-in is preserved for
+   environments where the operator installed ``hf_transfer`` as a fallback.
+   Both ``HF_HOME`` and ``TRANSFORMERS_CACHE`` also use ``setdefault``, so an
+   externally-set value wins over the YAML default. This intentionally
+   differs from the pre-consolidation per-server code where the LLM wrappers
+   used an unconditional assignment for ``HF_HOME``; callers that need the
+   YAML value to take priority must unset the env var before calling.
    ``TRANSFORMERS_CACHE`` mirrors ``HF_HOME`` for Transformers <4.36 and
    third-party libraries that have not yet adopted the ``HF_HOME`` superset.
 
@@ -160,12 +160,13 @@ Package Contents
    service-specific name (e.g. ``xr-ai-vllm-<entry-point>``) so the stop
    helper can find it.
 
-   *extra_pip* is docker-mode only: a list of pip-installable package
-   specs that get installed into the container right before ``vllm
-   serve`` runs. Use it for models whose architecture imports a wheel the
-   NGC image doesn't bundle — e.g. ``["mamba-ssm", "causal-conv1d"]``
-   for Nemotron-Omni's hybrid SSM backbone. Silently ignored in pip mode
-   (deps belong in the wrapper's pyproject.toml there).
+   Docker mode verifies a Xet-capable Hub inside the container and repairs a
+   missing or incompatible ``hf-xet`` wheel. *extra_pip* is an additional
+   docker-only list of pip-installable package specs for model architectures
+   whose wheels the image doesn't bundle — e.g.
+   ``["mamba-ssm", "causal-conv1d"]`` for Nemotron-Omni's hybrid SSM
+   backbone. Silently ignored in pip mode (deps belong in the wrapper's
+   pyproject.toml there).
 
 
 .. py:function:: stop_persistent_servers(services: list[tuple[str, int]]) -> bool
