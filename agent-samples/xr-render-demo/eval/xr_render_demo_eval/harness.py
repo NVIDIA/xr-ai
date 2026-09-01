@@ -851,6 +851,15 @@ UTTERANCES = (
         reply_contains="phone",
     ),
     Case(
+        name="basics_compound_one_part_blocked",
+        # One blocked part of a compound turn never blocks the others: the
+        # creation still lands while the perception part reports the outage.
+        request="Create a purple ring, then tell me what is printed on my shirt.",
+        camera_error="RPCError: camera feed unavailable",
+        required_tools=frozenset({"add_primitive"}),
+        expected_colors=(("ring-0", (0.6, 0.0, 1.0)),),
+    ),
+    Case(
         name="basics_physical_source_camera_down",
         # The camera outage must degrade to an honest no-change reply: the
         # resolver was attempted, nothing mutated, no invented color.
@@ -1241,7 +1250,8 @@ def audit_prompts() -> None:
     # Model-visible text lives in the prompt files and in the tool field
     # descriptions of spatial_ops.py; both shape the model's templates.
     prompts = (sorted(worker.rglob("*prompt*.txt"))
-               + [worker / "spatial_ops.py", worker / "_physical_color.py"]
+               + [worker / "spatial_ops.py", worker / "_physical_color.py",
+                  worker / "supervisor.py"]
                + sorted(worker.glob("agents/*/agent.py")))
     utterances = [case["user"] for case in CORPUS_CASES if case.get("user")]
     utterances += [case.request for case in (*CASES, *UTTERANCES)]
@@ -1289,6 +1299,21 @@ def audit_prompts() -> None:
             for text in turn
         ]
         fixture_ids |= {item["id"] for case in eval_supervisor.CASES for item in case.scene}
+    try:
+        from . import live_perception
+    except ImportError:
+        pass
+    else:
+        utterances += [case["prompt"] for case in live_perception.CASES]
+        utterances += [
+            turn for case in live_perception.CASES for turn in case.get("history", ())
+        ]
+        utterances += [case["pending"] for case in live_perception.CASES if "pending" in case]
+        eval_texts += [
+            text
+            for case in live_perception.CASES
+            for _role, text in case.get("poisoned", ())
+        ]
     for prompt_path in prompts:
         label = str(prompt_path.relative_to(worker))
         text = prompt_path.read_text(encoding="utf-8")

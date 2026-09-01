@@ -362,3 +362,119 @@ async def test_failing_supervisor_publishes_failure_notice() -> None:
     assert published[0].text == "Something went wrong. Please try again."
     assert published[0].final is True
     assert published[0].response_id == "trace-1"
+
+
+def _seed_turn(memory: _RecordingMemory, participant: str, user: str, agent: str) -> None:
+    memory.records.append(AddTranscriptRequest(
+        source_id=f"{participant}:user", timestamp_us=1, text=user))
+    memory.records.append(AddTranscriptRequest(
+        source_id=f"{participant}:agent", timestamp_us=2, text=agent))
+
+
+async def test_parrot_reply_is_renudged_and_speaks_subagent_evidence(monkeypatch) -> None:
+    """A no-tool reply that repeats a recalled turn answering a different
+    utterance gets one retry; a second parrot yields the retry's own
+    subagent result."""
+    memory = _RecordingMemory()
+    _seed_turn(memory, "alice", "What is in my hand?", "You are not holding anything.")
+    supervisor, _fake = _make_supervisor(memory)
+    calls = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        calls.append(messages)
+        if len(calls) == 1:
+            return SimpleNamespace(
+                content="You are not holding anything.", messages=list(messages), tool_calls=())
+        record = SimpleNamespace(
+            call=SimpleNamespace(name="vision_agent"),
+            message=SimpleNamespace(content='{"result": "The camera view is currently unavailable."}'),
+        )
+        return SimpleNamespace(
+            content="You are not holding anything.", messages=list(messages), tool_calls=(record,))
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(
+        SceneRequest(transcript="What am I holding?", participant_id="alice"))
+    assert len(calls) == 2
+    assert reply.response == "The camera view is currently unavailable."
+
+
+async def test_parrot_with_numeric_evidence_falls_back_to_honest_reply(monkeypatch) -> None:
+    """Subagent evidence carrying ids or numbers is never spoken; the
+    fallback keeps the TTS contract."""
+    memory = _RecordingMemory()
+    _seed_turn(memory, "alice", "What is in my hand?", "You are not holding anything.")
+    supervisor, _fake = _make_supervisor(memory)
+    calls = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        calls.append(messages)
+        record = SimpleNamespace(
+            call=SimpleNamespace(name="vision_agent"),
+            message=SimpleNamespace(content='{"result": "capsule-8 shows RGB (1.0, 0.0, 0.0)."}'),
+        )
+        return SimpleNamespace(
+            content="You are not holding anything.", messages=list(messages),
+            tool_calls=(record,) if len(calls) > 1 else ())
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(
+        SceneRequest(transcript="What am I holding?", participant_id="alice"))
+    assert len(calls) == 2
+    assert reply.response == "I can't check that right now."
+
+
+async def test_repeated_question_may_repeat_its_answer(monkeypatch) -> None:
+    """The same question honestly re-answered with the same words is not a
+    parrot; no retry runs."""
+    memory = _RecordingMemory()
+    _seed_turn(memory, "alice", "How many boxes are in the scene?",
+               "There are two boxes in the scene.")
+    supervisor, _fake = _make_supervisor(memory)
+    calls = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        calls.append(messages)
+        return SimpleNamespace(
+            content="There are two boxes in the scene.", messages=list(messages), tool_calls=())
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(
+        SceneRequest(transcript="How many boxes are in the scene?", participant_id="alice"))
+    assert len(calls) == 1
+    assert reply.response == "There are two boxes in the scene."
+
+
+def test_parrot_helpers_edge_cases() -> None:
+    from xr_render_demo_worker.supervisor import (
+        _is_parrot, _last_subagent_result, _normalize, _tts_safe,
+    )
+
+    recalled = {"you are not holding anything.": frozenset({"what is in my hand?"})}
+    assert _is_parrot("You are not holding anything.", "What am I holding?", recalled)
+    assert not _is_parrot("You are not holding anything.", "What is in my hand?", recalled)
+    assert not _is_parrot("Which capsule do you mean?", "What am I holding?", recalled)
+    assert not _is_parrot("", "What am I holding?", recalled)
+    assert not _is_parrot("Something new entirely.", "What am I holding?", recalled)
+
+    assert _normalize("You  AREN’T here") == "you aren't here"
+
+    assert _last_subagent_result(SimpleNamespace(tool_calls=())) == ""
+    bad = SimpleNamespace(tool_calls=(SimpleNamespace(message=SimpleNamespace(content="not json")),))
+    assert _last_subagent_result(bad) == ""
+    err = SimpleNamespace(tool_calls=(SimpleNamespace(
+        message=SimpleNamespace(content='{"error": "boom"}')),))
+    assert _last_subagent_result(err) == ""
+    none_content = SimpleNamespace(tool_calls=(SimpleNamespace(
+        message=SimpleNamespace(content=None)),))
+    assert _last_subagent_result(none_content) == ""
+    listy = SimpleNamespace(tool_calls=(SimpleNamespace(
+        message=SimpleNamespace(content='["a"]')),))
+    assert _last_subagent_result(listy) == ""
+
+    assert _tts_safe("The camera view is unavailable.")
+    assert not _tts_safe("capsule-8 is red")
+    assert not _tts_safe("")

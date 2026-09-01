@@ -27,8 +27,8 @@ DESCRIPTION = (
     "\"what did I ask you to build?\") routes here, even when [Recent conversation] seems to "
     "contain the answer; that block only resolves references, and guessing a history answer is "
     "always wrong. Never a source for present-day or physical-world facts, and what the camera "
-    "saw earlier belongs to vision_agent: the camera's past lives in recorded video, the "
-    "conversation's past in the transcript."
+    "saw earlier belongs to vision_agent, not memory: only the conversation's own turns live "
+    "in the transcript."
 )
 
 _MAX_END_US = RecallConversationRequest.model_fields["end_us"].default

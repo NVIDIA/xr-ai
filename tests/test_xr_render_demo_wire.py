@@ -120,7 +120,7 @@ def test_eval_case_filter_rejects_unknown_names_in_mixed_selection() -> None:
 def test_eval_utterances_alias_selects_the_complete_battery() -> None:
     from xr_render_demo_eval import harness
 
-    assert len(harness.UTTERANCES) == 35
+    assert len(harness.UTTERANCES) == 39
     assert harness._resolve_case_names(["utterances"]) == {
         case.name for case in harness.UTTERANCES
     }
@@ -460,3 +460,21 @@ def test_tool_def_to_openai_wire_shape() -> None:
             },
         },
     }
+
+
+def test_vision_description_matches_video_capability() -> None:
+    """The tool description offered to the supervisor must not advertise
+    recorded video when no video memory is wired."""
+    from xr_render_demo_worker.agents.vision import agent as vision
+
+    assert vision._SHARED_RULES in vision.DESCRIPTION
+    assert vision._SHARED_RULES in vision._LIVE_ONLY_DESCRIPTION
+    assert "recorded video when the question is about a past moment" in vision.DESCRIPTION
+    assert "Recorded video is not available" in vision._LIVE_ONLY_DESCRIPTION
+
+    with_video = vision.make_vision_agent(
+        llm=None, current_frame=None, image_query=None, video=object())
+    without_video = vision.make_vision_agent(
+        llm=None, current_frame=None, image_query=None, video=None)
+    assert with_video.description == vision.DESCRIPTION
+    assert without_video.description == vision._LIVE_ONLY_DESCRIPTION

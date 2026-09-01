@@ -23,6 +23,7 @@ uv run xr_render_demo_live_pose_matrix
 uv run xr_render_demo_live_manip
 uv run xr_render_demo_live_garble
 uv run xr_render_demo_live_explore
+uv run xr_render_demo_live_perception
 ```
 
 <!-- Compatibility anchors for headings consolidated into the documentation. -->

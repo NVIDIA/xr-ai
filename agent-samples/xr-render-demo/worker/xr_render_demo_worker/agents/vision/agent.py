@@ -20,16 +20,19 @@ from ...models import SubagentResult, SubagentTask
 from ...scene import SceneContext
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
-# The SCENE OBJECTS sentence deliberately restates a supervisor_prompt.txt rule:
-# tool descriptions alone are under-weighted mid-loop, so both copies are load-bearing.
+# The SCENE OBJECTS sentence intentionally duplicates supervisor_prompt.txt; see
+# docs/source/reference/xr-render-demo.md ("stated in both places on purpose").
+# _SHARED_RULES ends mid-sentence: each description completes it differently.
 _SHARED_RULES = (
-    "A user statement about the camera itself is not a perception request. Never for facts "
-    "about XR objects: SCENE OBJECTS is always current and complete, tracking resolves "
-    "user-relative placement, and the mutating agents read the camera themselves for physical "
-    "color sources. A new question about what the user holds, wears, or sees is always a fresh "
-    "delegation, whatever earlier turns said about cameras; \"check the camera\" as an answer "
-    "to a clarifying question means delegating the original pending question. If live vision "
-    "is unavailable this agent reports so"
+    "Any request to describe or survey what is visible also means the physical view, never a "
+    "recital of the XR scene. A user statement about the camera itself is not a perception "
+    "request. Never for facts about XR objects: SCENE OBJECTS is always current and complete, "
+    "tracking resolves user-relative placement, and the mutating agents read the camera "
+    "themselves for physical color sources. A new question about what the user holds, wears, "
+    "or sees is always a fresh delegation, every time it is asked, whatever earlier turns said "
+    "about cameras or showed as replies; \"check the camera\" or any telling you to look or "
+    "observe, as an answer to a clarifying question, means delegating the original pending "
+    "question, never those literal words. If live vision is unavailable this agent reports so"
 )
 
 DESCRIPTION = (

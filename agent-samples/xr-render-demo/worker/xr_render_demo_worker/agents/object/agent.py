@@ -20,8 +20,8 @@ from ...scene import SceneContext
 from ...spatial_ops import CreationLedger, TurnGuard, make_object_tools
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
-# The creation-always-new rule deliberately restates a supervisor_prompt.txt rule:
-# tool descriptions alone are under-weighted mid-loop, so both copies are load-bearing.
+# The creation-always-new rule intentionally duplicates supervisor_prompt.txt; see
+# docs/source/reference/xr-render-demo.md ("stated in both places on purpose").
 DESCRIPTION = (
     "Create new XR objects at their requested initial positions, and remove, resize, duplicate, "
     "or reshape existing ones; never moves or recolors an existing object. Moving includes "

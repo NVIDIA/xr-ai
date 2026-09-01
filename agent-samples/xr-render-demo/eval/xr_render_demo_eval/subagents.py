@@ -500,6 +500,13 @@ CASES = (
         forbid_tools=("add_primitive", "update_primitive", "remove_primitive"),
         answer_contains="recolor",
     ),
+    # Known limitation, deliberately untested here: a MIXED instruction that
+    # pairs a recolor with owned work ("make it pink and twice as big")
+    # cannot be handled reliably by this agent at temperature zero; every
+    # contract tried (execute owned parts, or refuse whole) reshaped the
+    # object or dropped the report. The supervisor's compound-splitting rule
+    # is the guarantee such instructions never reach this agent; it is
+    # covered end to end by three_actions_compound.
     SubagentCase(
         name="recolor_explicit_rgb",
         agent="appearance",

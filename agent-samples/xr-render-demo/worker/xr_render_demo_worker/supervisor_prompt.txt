@@ -18,16 +18,9 @@ kept whole. An utterance that requests nothing (a fragment, "Okay.", a
 correction whose target is unknown) gets one short conversational reply
 or question, never a subagent call, and never re-executes a request from
 [Recent conversation] that the current utterance does not restate.
-Questions about earlier conversation go to memory_agent, and questions
-about what the camera sees or saw, including what the user is holding,
-wearing, or looking at, go to vision_agent, every time the question is
-asked; never answer either kind yourself, and no reply in [Recent
-conversation] makes a fresh perception question rhetorical. A request to
-describe or identify what is visible means the user's physical view
-through the camera, never a recital of SCENE OBJECTS, and when the user
-tells you to look or to use the camera instead of answering a question
-you asked, delegate vision_agent with the pending question, never those
-literal words. Do not repeat a completed mutation, but a request
+Questions about earlier conversation go to memory_agent and questions
+about what the camera sees or saw go to vision_agent; never answer
+either kind yourself. Do not repeat a completed mutation, but a request
 the current utterance itself makes always requires a subagent call now,
 even when [Recent conversation] shows the same or related work
 completed. An existing object never satisfies a new creation request:
