@@ -68,9 +68,9 @@ jobs:
         uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3.2.4
         with:
           enable-cache: true
-          # Lockfiles are gitignored repo-wide, so the default `**/uv.lock`
-          # cache-dependency-glob matches nothing in CI. Key the cache off
-          # every committed pyproject.toml and the shared resolution policy.
+          # Per-project lockfiles are gitignored, so the default `**/uv.lock`
+          # cache-dependency-glob would miss them. Key the cache off every
+          # committed pyproject.toml and the shared resolution policy.
           cache-dependency-glob: |
             **/pyproject.toml
             uv.toml
@@ -95,6 +95,7 @@ jobs:
                           -not -path '*/.venv/*' \
                           -not -path '*/node_modules/*' \
                           -not -path '*/.git/*' \
+                          -not -path './dependency-manifest/*' \
                           -print0)
           if [ "${#failed[@]}" -gt 0 ]; then
             echo ""

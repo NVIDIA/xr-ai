@@ -49,6 +49,14 @@ most nested projects define one through `[tool.uv.sources]`, so pass the root
 config explicitly. All generated `uv.lock` files remain gitignored validation
 artifacts; do not commit them.
 
+The one committed lockfile is `dependency-manifest/uv.lock`. The
+`dependency-manifest/` project depends on every package in the repository, so
+its lock records the complete resolved dependency set at the qualification
+cutoff for dependency analysis tooling. Nothing else reads it and no CI check
+depends on it, so it is regenerated only as part of a dependency refresh: add any
+projects created since the last refresh to `dependency-manifest/pyproject.toml`,
+then run `uv --config-file uv.toml lock --upgrade --project dependency-manifest`.
+
 ## Generated Python project inventory
 
 <!-- BEGIN GENERATED PYTHON DEPENDENCY MAP -->
@@ -662,6 +670,53 @@ artifacts; do not commit them.
   - `Pillow>=10.0`
   - `python-multipart>=0.0.9`
   - `pyyaml>=6.0`
+- Optional dependency groups: none
+- Commands: none
+
+### Dependency manifest
+
+#### `xr-ai-dependency-manifest` — [`dependency-manifest/`](dependency-manifest/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies: none
+- Runtime dependencies:
+  - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
+  - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
+  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-tools[frames,image-editing,marker-tracking,relay,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
+  - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
+  - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+  - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
+  - `cloudxr-runtime` → [`cloudxr-runtime`](services/cloudxr-runtime/) (local, editable)
+  - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
+  - `embedding-server` → [`embedding-server`](services/embedding-server/) (local, editable)
+  - `llama-nemotron-llm-server` → [`llama-nemotron-llm-server`](services/llama-nemotron-llm/) (local, editable)
+  - `magpie-tts-server` → [`magpie-tts-server`](services/magpie-tts/) (local, editable)
+  - `nemotron-omni-llm-server` → [`nemotron-omni-llm-server`](services/nemotron-omni-llm/) (local, editable)
+  - `nemotron3-nano-llm-server` → [`nemotron3-nano-llm-server`](services/nemotron3-nano-llm/) (local, editable)
+  - `nim-server` → [`nim-server`](services/nim-server/) (local, editable)
+  - `piper-tts-server` → [`piper-tts-server`](services/piper-tts/) (local, editable)
+  - `stt-server` → [`stt-server`](services/stt-server/) (local, editable)
+  - `vlm-server` → [`vlm-server`](services/vlm-server/) (local, editable)
+  - `xr-openxr-service` → [`xr-openxr-service`](services/openxr-service/) (local, editable)
+  - `xr-rag-service` → [`xr-rag-service`](services/rag-service/) (local, editable)
+  - `xr-video-memory-service` → [`xr-video-memory-service`](services/video-memory-service/) (local, editable)
+  - `lab-instrument-monitoring` → [`lab-instrument-monitoring`](agent-samples/lab-instrument-monitoring/) (local, editable)
+  - `lab-instrument-monitoring-worker` → [`lab-instrument-monitoring-worker`](agent-samples/lab-instrument-monitoring/worker/) (local, editable)
+  - `model-servers` → [`model-servers`](agent-samples/model-servers/) (local, editable)
+  - `simple-vlm-example` → [`simple-vlm-example`](agent-samples/simple-vlm-example/) (local, editable)
+  - `simple-vlm-example-worker` → [`simple-vlm-example-worker`](agent-samples/simple-vlm-example/worker/) (local, editable)
+  - `tea-making-sample` → [`tea-making-sample`](agent-samples/tea-making-sample/) (local, editable)
+  - `tea-making-worker` → [`tea-making-worker`](agent-samples/tea-making-sample/worker/) (local, editable)
+  - `xr-render-demo` → [`xr-render-demo`](agent-samples/xr-render-demo/) (local, editable)
+  - `xr-render-demo-eval` → [`xr-render-demo-eval`](agent-samples/xr-render-demo/eval/) (local, editable)
+  - `xr-render-demo-worker` → [`xr-render-demo-worker`](agent-samples/xr-render-demo/worker/) (local, editable)
+  - `xr-render-scene` → [`xr-render-scene`](agent-samples/xr-render-demo/scene/) (local, editable)
+  - `xr-ai-tests` → [`xr-ai-tests`](tests/) (local, editable)
 - Optional dependency groups: none
 - Commands: none
 
