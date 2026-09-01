@@ -77,10 +77,15 @@ class _FakeTextMemoryTools:
     def __init__(self, fake: "FakeScene") -> None:
         async def recall(req: RecallConversationRequest) -> RecallConversationResult:
             fake.calls.append(("recall_conversation", req.model_dump()))
+            # History ends seconds before the case's request timestamp, so
+            # the recency window (and the pending-ask window, for truncation
+            # cases) treats it as part of this session.
+            base_us = EVAL_REFERENCE_US - 4_000_000 - max(len(fake.history) - 1, 0) * 2_000_000
             entries: list[ConversationEntry] = []
             for i, (user_text, agent_text) in enumerate(fake.history):
-                entries.append(ConversationEntry(timestamp_us=(i + 1) * 1_000_000, role="user", text=user_text))
-                entries.append(ConversationEntry(timestamp_us=(i + 1) * 1_000_000 + 1, role="agent", text=agent_text))
+                turn_us = base_us + i * 2_000_000
+                entries.append(ConversationEntry(timestamp_us=turn_us, role="user", text=user_text))
+                entries.append(ConversationEntry(timestamp_us=turn_us + 1, role="agent", text=agent_text))
             if fake.memory_answer:
                 entries.append(ConversationEntry(timestamp_us=1, role="agent", text=fake.memory_answer))
             return RecallConversationResult(entries=entries)
@@ -189,6 +194,10 @@ class _FakeImageQueryTool:
         )
 
 
+# One clock for eval requests and the fake recall entries windowed against them.
+EVAL_REFERENCE_US = 1_700_000_000_000_000
+
+
 @dataclass(frozen=True)
 class Case:
     name: str
@@ -207,6 +216,7 @@ class Case:
     memory: str = ""
     history: tuple[tuple[str, str], ...] = ()
     reply_contains: str = ""
+    reply_excludes: str = ""
     camera_error: str = ""
     physical_expect_source: str = ""
 
@@ -313,7 +323,10 @@ CASES = (
         name="durable_memory",
         request="What object did we discuss in the earlier session?",
         memory="We discussed a small cyan sphere.",
-        required_tools=frozenset({"recall_conversation"}),
+        # The supervisor's own block recall is call one; memory_agent's
+        # recall is the second.
+        expected_call_counts=(("recall_conversation", 2),),
+        reply_contains="cyan",
     ),
     Case(
         name="placement_despite_camera_off",
@@ -693,7 +706,7 @@ async def run_corpus_case(case: dict[str, Any]) -> bool:
                 SceneRequest(
                     transcript=case["user"],
                     participant_id=_PARTICIPANT,
-                    timestamp_us=1_700_000_000_000_000,
+                    timestamp_us=EVAL_REFERENCE_US,
                 )
             )
             response = reply.response
@@ -872,6 +885,19 @@ UTTERANCES = (
         camera_error="RPCError: camera feed unavailable",
         required_tools=frozenset({"current_frame"}),
         forbidden_tools=_FORBID_MUTATIONS,
+    ),
+    Case(
+        name="basics_stale_held_object_not_renamed",
+        # The user swapped objects between turns: the reply describes what
+        # this turn's camera read, never the object a recalled turn named.
+        # A guard for the supervisor prompt's reply rule; offline
+        # composition does not reproduce the failure, so this cannot catch
+        # the rule's removal.
+        request="Make a cube the color of what I'm holding.",
+        history=(("What am I holding?", "You are holding a red soda can."),),
+        vision="The item in the user's hand is gray.",
+        expected_colors=(("box-0", (0.5, 0.5, 0.5)),),
+        reply_excludes="soda",
     ),
     Case(
         name="basics_holding_color_with_history",
@@ -1162,7 +1188,7 @@ async def run_case(case: Case) -> bool:
                 SceneRequest(
                     transcript=case.request,
                     participant_id=_PARTICIPANT,
-                    timestamp_us=1_700_000_000_000_000,
+                    timestamp_us=EVAL_REFERENCE_US,
                 )
             )
             response = reply.response
@@ -1209,6 +1235,8 @@ async def run_case(case: Case) -> bool:
     }
     wrong_reply = bool(
         case.reply_contains and case.reply_contains.lower() not in response.lower()
+    ) or bool(
+        case.reply_excludes and case.reply_excludes.lower() in response.lower()
     )
     passed = (
         not errored

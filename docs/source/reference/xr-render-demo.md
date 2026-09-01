@@ -239,6 +239,9 @@ services. On each accepted `xr-render.user-query` event:
 
 1. **Recent conversation** is recalled from `TextMemoryTools` and injected
    as context so the model understands references like "fix that" or "undo".
+   The block is session-scoped: only the last eight turns since the
+   participant last departed, and within ten minutes of the request, are
+   injected; older history is memory_agent's to recall.
 2. **Supervisor loop** (`run_tool_loop`, up to 12 iterations) — Nemotron-Omni
    :8108 routes the request to one or more subagent tools. Each subagent
    runs its own inner `run_tool_loop` (up to 4 iterations) against the
@@ -426,10 +429,11 @@ tier case before fixing it.
 perception utterances and judges the reply text read back from the worker's
 transcript store. The live stack publishes no camera track, so a correctly
 routed perception turn must report an honest inability, recite no scene
-object, and leave the scene unchanged; one case also injects stale
-transcript turns to pin the supervisor's parrot guard. It catches routing
-misses the offline tiers cannot reproduce, whose recalled history is far
-shorter than a live session's.
+object, and leave the scene unchanged; one case also injects cross-session
+transcript turns to pin the supervisor's recall recency window, which keeps
+them out of [Recent conversation]. It catches routing misses the offline
+tiers cannot reproduce, whose recalled history is far shorter than a live
+session's.
 
 ### Add or change a case
 
@@ -460,7 +464,7 @@ parameter is the precedent: the model copies descriptors verbatim, and
 `spatial_ops` resolves shapes, damaged nouns, and colors against scene state.
 
 Run `uv run xr_render_demo_eval utterances` after every prompt or operations
-change. Its 35 cases take about three minutes. Run the longer scenario and
+change. Its cases take about three minutes. Run the longer scenario and
 precision tiers before completing a tuning round.
 
 (prompt-eval-overlap-audit)=

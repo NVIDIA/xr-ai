@@ -8,7 +8,9 @@ perception turn must come back as an honest inability report from
 vision_agent. That invariant catches the misses the offline tiers cannot
 reproduce (their [Recent conversation] is far shorter than a live one):
 a perception question answered from the transcript, or a describe-the-view
-request answered by reciting SCENE OBJECTS.
+request answered by reciting SCENE OBJECTS. Same-session turns inside the
+supervisor's recall window are out of scope here; diagnose those from the
+worker log and the transcript store.
 
 Run subsets: `live_perception.py [case-name ...]`.
 """
@@ -55,6 +57,8 @@ INABILITY_MARKERS = (
 # Words that appear in a reply only when the model recites the XR scene.
 SCENE_RECITAL_WORDS = ("cube", "box", "sphere", "ball", "cone", "capsule", "cylinder", "pyramid")
 
+_WORD_TYPES = {"cube": "box", "ball": "sphere", "donut": "torus"}
+
 # Each case: history prompts that must change the scene (real turns that
 # fill [Recent conversation]), then one perception prompt judged on the
 # reply text and on the scene staying unchanged.
@@ -97,7 +101,9 @@ CASES = [
 
 
 async def _inject_poisoned(memory, participant, turns):
-    base_us = time.time_ns() // 1_000 - 120_000_000
+    # Two hours old: unambiguously cross-session, the condition this eval
+    # reproduces.
+    base_us = time.time_ns() // 1_000 - 7_200_000_000
     for offset, (role, text) in enumerate(turns):
         await memory.add_transcript.execute(AddTranscriptRequest(
             source_id=f"{participant}:{role}",
@@ -137,13 +143,15 @@ async def _send_and_wait_reply(endpoint, memory, participant, prompt, timeout_s=
     return ""
 
 
-def _judge(reply, scene_unchanged):
+def _judge(reply, scene_unchanged, asked_words=()):
     lowered = reply.lower().replace("’", "'")
     if not reply:
         return False, "no reply within timeout"
     if not scene_unchanged:
         return False, "scene changed on a perception turn"
-    recited = [w for w in SCENE_RECITAL_WORDS if w in lowered]
+    # A shape word the case's own utterances used is the request echoed,
+    # not the scene recited.
+    recited = [w for w in SCENE_RECITAL_WORDS if w in lowered and w not in asked_words]
     if recited:
         return False, f"reply recites scene objects {recited}: {reply!r}"
     if not any(marker in lowered for marker in INABILITY_MARKERS):
@@ -194,7 +202,16 @@ async def main() -> None:
                     before = {i.id: i for i in (await scene.get_scene_state(EmptyRequest())).objects}
                     reply = await _send_and_wait_reply(endpoint, memory, participant, case["prompt"])
                     after = {i.id: i for i in (await scene.get_scene_state(EmptyRequest())).objects}
-                    ok, detail = _judge(reply, before == after)
+                    # Only the judged turn's own words are exempt, and only
+                    # while no scene object of that type exists; history
+                    # words must still count as recital.
+                    asked = f"{case['prompt']} {case.get('pending', '')}".lower()
+                    scene_types = {item.type for item in before.values()}
+                    asked_words = tuple(
+                        w for w in SCENE_RECITAL_WORDS
+                        if w in asked and _WORD_TYPES.get(w, w) not in scene_types
+                    )
+                    ok, detail = _judge(reply, before == after, asked_words)
             print(f"{'PASS' if ok else 'FAIL'} {case['name']:28s} {detail[:220]}", flush=True)
             passed += ok
             failed += not ok

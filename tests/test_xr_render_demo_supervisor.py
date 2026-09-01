@@ -39,11 +39,11 @@ class _RecordingMemory:
     async def _recall(self, req: RecallConversationRequest) -> RecallConversationResult:
         entries = [
             ConversationEntry(
-                timestamp_us=index,
+                timestamp_us=record.timestamp_us,
                 role=record.source_id.rsplit(":", 1)[1],
                 text=record.text,
             )
-            for index, record in enumerate(self.records)
+            for record in self.records
             if record.source_id.startswith(f"{req.participant_id}:")
         ]
         return RecallConversationResult(entries=entries)
@@ -364,117 +364,112 @@ async def test_failing_supervisor_publishes_failure_notice() -> None:
     assert published[0].response_id == "trace-1"
 
 
-def _seed_turn(memory: _RecordingMemory, participant: str, user: str, agent: str) -> None:
+_REF_US = harness.EVAL_REFERENCE_US
+
+
+def _seed_turn(memory: _RecordingMemory, participant: str, user: str, agent: str,
+               base_us: int = _REF_US - 30_000_000) -> None:
     memory.records.append(AddTranscriptRequest(
-        source_id=f"{participant}:user", timestamp_us=1, text=user))
+        source_id=f"{participant}:user", timestamp_us=base_us, text=user))
     memory.records.append(AddTranscriptRequest(
-        source_id=f"{participant}:agent", timestamp_us=2, text=agent))
+        source_id=f"{participant}:agent", timestamp_us=base_us + 1, text=agent))
 
 
-async def test_parrot_reply_is_renudged_and_speaks_subagent_evidence(monkeypatch) -> None:
-    """A no-tool reply that repeats a recalled turn answering a different
-    utterance gets one retry; a second parrot yields the retry's own
-    subagent result."""
+async def test_stale_recalled_turns_stay_out_of_recent_conversation(monkeypatch) -> None:
+    """Turns older than the recency window never enter [Recent conversation]."""
     memory = _RecordingMemory()
-    _seed_turn(memory, "alice", "What is in my hand?", "You are not holding anything.")
+    _seed_turn(memory, "alice", "What is in my hand?", "You are not holding anything.",
+               base_us=1)
     supervisor, _fake = _make_supervisor(memory)
-    calls = []
+    seen_user_messages: list[str] = []
 
     async def fake_loop(messages, toolset, call_model, max_iterations=12):
-        calls.append(messages)
-        if len(calls) == 1:
-            return SimpleNamespace(
-                content="You are not holding anything.", messages=list(messages), tool_calls=())
-        record = SimpleNamespace(
-            call=SimpleNamespace(name="vision_agent"),
-            message=SimpleNamespace(content='{"result": "The camera view is currently unavailable."}'),
-        )
-        return SimpleNamespace(
-            content="You are not holding anything.", messages=list(messages), tool_calls=(record,))
+        seen_user_messages.extend(m.content for m in messages if m.role == "user")
+        return SimpleNamespace(content="Okay.", messages=list(messages), tool_calls=())
 
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
 
-    reply = await supervisor.handle(
-        SceneRequest(transcript="What am I holding?", participant_id="alice"))
-    assert len(calls) == 2
-    assert reply.response == "The camera view is currently unavailable."
+    await supervisor.handle(SceneRequest(
+        transcript="What am I holding?", participant_id="alice",
+        timestamp_us=_REF_US))
+    assert seen_user_messages
+    assert all("[Recent conversation]" not in content for content in seen_user_messages)
+    assert all("not holding anything" not in content for content in seen_user_messages)
 
 
-async def test_parrot_with_numeric_evidence_falls_back_to_honest_reply(monkeypatch) -> None:
-    """Subagent evidence carrying ids or numbers is never spoken; the
-    fallback keeps the TTS contract."""
+async def test_recency_window_boundary_is_inclusive(monkeypatch) -> None:
+    """A turn exactly at the cutoff enters [Recent conversation]; one
+    microsecond older does not."""
+    from xr_render_demo_worker.supervisor import _RECENT_WINDOW_US
+
     memory = _RecordingMemory()
-    _seed_turn(memory, "alice", "What is in my hand?", "You are not holding anything.")
+    _seed_turn(memory, "alice", "Older question?", "Older answer.",
+               base_us=_REF_US - _RECENT_WINDOW_US - 2)
+    _seed_turn(memory, "alice", "Edge question?", "Edge answer.",
+               base_us=_REF_US - _RECENT_WINDOW_US)
     supervisor, _fake = _make_supervisor(memory)
-    calls = []
+    seen_user_messages: list[str] = []
 
     async def fake_loop(messages, toolset, call_model, max_iterations=12):
-        calls.append(messages)
-        record = SimpleNamespace(
-            call=SimpleNamespace(name="vision_agent"),
-            message=SimpleNamespace(content='{"result": "capsule-8 shows RGB (1.0, 0.0, 0.0)."}'),
-        )
-        return SimpleNamespace(
-            content="You are not holding anything.", messages=list(messages),
-            tool_calls=(record,) if len(calls) > 1 else ())
+        seen_user_messages.extend(m.content for m in messages if m.role == "user")
+        return SimpleNamespace(content="Okay.", messages=list(messages), tool_calls=())
 
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
 
-    reply = await supervisor.handle(
-        SceneRequest(transcript="What am I holding?", participant_id="alice"))
-    assert len(calls) == 2
-    assert reply.response == "I can't check that right now."
+    await supervisor.handle(SceneRequest(
+        transcript="What did I just say?", participant_id="alice", timestamp_us=_REF_US))
+    joined = "\n".join(seen_user_messages)
+    assert "Edge question?" in joined
+    assert "Edge answer." in joined
+    assert "Older answer." not in joined
 
 
-async def test_repeated_question_may_repeat_its_answer(monkeypatch) -> None:
-    """The same question honestly re-answered with the same words is not a
-    parrot; no retry runs."""
+async def test_unset_timestamp_still_excludes_stale_turns(monkeypatch) -> None:
+    """A request without a timestamp gets the wall clock, so the recency
+    window still applies."""
     memory = _RecordingMemory()
-    _seed_turn(memory, "alice", "How many boxes are in the scene?",
-               "There are two boxes in the scene.")
+    _seed_turn(memory, "alice", "What is in my hand?", "You are not holding anything.",
+               base_us=1)
     supervisor, _fake = _make_supervisor(memory)
-    calls = []
+    seen_user_messages: list[str] = []
 
     async def fake_loop(messages, toolset, call_model, max_iterations=12):
-        calls.append(messages)
-        return SimpleNamespace(
-            content="There are two boxes in the scene.", messages=list(messages), tool_calls=())
+        seen_user_messages.extend(m.content for m in messages if m.role == "user")
+        return SimpleNamespace(content="Okay.", messages=list(messages), tool_calls=())
 
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
 
-    reply = await supervisor.handle(
-        SceneRequest(transcript="How many boxes are in the scene?", participant_id="alice"))
-    assert len(calls) == 1
-    assert reply.response == "There are two boxes in the scene."
+    await supervisor.handle(SceneRequest(transcript="What am I holding?", participant_id="alice"))
+    assert seen_user_messages
+    assert all("not holding anything" not in content for content in seen_user_messages)
 
 
-def test_parrot_helpers_edge_cases() -> None:
-    from xr_render_demo_worker.supervisor import (
-        _is_parrot, _last_subagent_result, _normalize, _tts_safe,
-    )
+async def test_departure_ends_the_session_for_recall(monkeypatch) -> None:
+    """Turns before a participant's last departure never re-enter
+    [Recent conversation], however recent."""
+    import time as _time
 
-    recalled = {"you are not holding anything.": frozenset({"what is in my hand?"})}
-    assert _is_parrot("You are not holding anything.", "What am I holding?", recalled)
-    assert not _is_parrot("You are not holding anything.", "What is in my hand?", recalled)
-    assert not _is_parrot("Which capsule do you mean?", "What am I holding?", recalled)
-    assert not _is_parrot("", "What am I holding?", recalled)
-    assert not _is_parrot("Something new entirely.", "What am I holding?", recalled)
+    now_us = _time.time_ns() // 1_000
+    memory = _RecordingMemory()
+    _seed_turn(memory, "alice", "What is in my hand?", "You are holding a torch.",
+               base_us=now_us - 5_000_000)
+    supervisor, _fake = _make_supervisor(memory)
+    seen_user_messages: list[str] = []
 
-    assert _normalize("You  AREN’T here") == "you aren't here"
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        seen_user_messages.extend(m.content for m in messages if m.role == "user")
+        return SimpleNamespace(content="Okay.", messages=list(messages), tool_calls=())
 
-    assert _last_subagent_result(SimpleNamespace(tool_calls=())) == ""
-    bad = SimpleNamespace(tool_calls=(SimpleNamespace(message=SimpleNamespace(content="not json")),))
-    assert _last_subagent_result(bad) == ""
-    err = SimpleNamespace(tool_calls=(SimpleNamespace(
-        message=SimpleNamespace(content='{"error": "boom"}')),))
-    assert _last_subagent_result(err) == ""
-    none_content = SimpleNamespace(tool_calls=(SimpleNamespace(
-        message=SimpleNamespace(content=None)),))
-    assert _last_subagent_result(none_content) == ""
-    listy = SimpleNamespace(tool_calls=(SimpleNamespace(
-        message=SimpleNamespace(content='["a"]')),))
-    assert _last_subagent_result(listy) == ""
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
 
-    assert _tts_safe("The camera view is unavailable.")
-    assert not _tts_safe("capsule-8 is red")
-    assert not _tts_safe("")
+    await supervisor.handle(SceneRequest(
+        transcript="Hello again.", participant_id="alice", timestamp_us=now_us))
+    assert any("holding a torch" in content for content in seen_user_messages)
+
+    supervisor.forget_participant("alice")
+    seen_user_messages.clear()
+    await supervisor.handle(SceneRequest(
+        transcript="Hello once more.", participant_id="alice",
+        timestamp_us=_time.time_ns() // 1_000))
+    assert seen_user_messages
+    assert all("holding a torch" not in content for content in seen_user_messages)

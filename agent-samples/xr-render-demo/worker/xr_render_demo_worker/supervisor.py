@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 import time
 from collections import defaultdict
@@ -84,6 +83,13 @@ _MUTATING_AGENTS = frozenset({"placement_agent", "appearance_agent", "object_age
 # Seconds to let a scene RPC propagate before diffing snapshots.
 _SCENE_SETTLE_S = 0.15
 
+# [Recent conversation] means this conversation: the transcript store
+# persists across sessions, and older turns read as answers to new
+# questions. History beyond the window is memory_agent's to recall.
+_RECENT_WINDOW_US = 10 * 60 * 1_000_000
+
+_PENDING_ASK_WINDOW_US = 8 * 1_000_000
+
 
 # Leading words that mark a status question about past work ("Did you move
 # the cube?"); unlike can/could/will, they cannot open a polite command.
@@ -113,41 +119,6 @@ def _claims_completion(text: str) -> bool:
 
 def _is_question(text: str) -> bool:
     return text.rstrip().rstrip("\"'”’)").rstrip().endswith("?")
-
-
-def _normalize(text: str) -> str:
-    return " ".join(text.replace("’", "'").lower().split())
-
-
-def _is_parrot(reply: str, transcript: str, recalled: dict[str, frozenset[str]]) -> bool:
-    """A non-question reply repeating a recalled agent turn that answered a
-    DIFFERENT utterance is [Recent conversation] parroted as an answer; the
-    same question re-asked may honestly earn the same reply. Verbatim match
-    only: paraphrased parroting is a known residual gap.
-    """
-    if not reply or _is_question(reply):
-        return False
-    askers = recalled.get(_normalize(reply))
-    return askers is not None and _normalize(transcript) not in askers
-
-
-def _last_subagent_result(loop_result) -> str:
-    """Result text of the loop's final tool call, empty when absent."""
-    records = loop_result.tool_calls
-    if not records:
-        return ""
-    try:
-        payload = json.loads(records[-1].message.content or "")
-    except ValueError:
-        return ""
-    text = payload.get("result", "") if isinstance(payload, dict) else ""
-    return text.strip() if isinstance(text, str) else ""
-
-
-def _tts_safe(text: str) -> bool:
-    """Subagent results may carry ids and RGB numbers the spoken reply
-    contract forbids; digits mark them."""
-    return bool(text) and not any(ch.isdigit() for ch in text)
 
 
 def _is_truncated(transcript: str) -> bool:
@@ -251,45 +222,50 @@ class SceneSupervisor:
         self._prompt = _PROMPT.read_text(encoding="utf-8").strip()
         self._participant_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._scene_lock: asyncio.Lock = asyncio.Lock()
+        self._left_at_us: dict[str, int] = {}
 
     def forget_participant(self, participant_id: str) -> None:
         """Drop per-participant state after departure; a reconnecting id starts clean."""
         self._participant_locks.pop(participant_id, None)
         self._context.forget_participant(participant_id)
+        self._left_at_us[participant_id] = time.time_ns() // 1_000
 
     async def _recent_conversation(
-        self, participant_id: str
-    ) -> tuple[str, str, dict[str, frozenset[str]]]:
+        self, participant_id: str, reference_us: int
+    ) -> tuple[str, str]:
         recalled = await self._text_memory.recall_conversation.execute(
             RecallConversationRequest(participant_id=participant_id)
         )
-        entries = recalled.entries[-8:]
-        if not entries:
-            return "", "", {}
+        # A clipped utterance is completed within seconds or not at all; an
+        # older ask never splices into a new session's first words.
         pending = ""
+        tail = recalled.entries[-2:]
         if (
-            len(entries) >= 2
-            and entries[-1].role == "agent"
-            and entries[-1].text.startswith(_TRUNCATED_ASK)
-            and entries[-2].role == "user"
+            len(tail) == 2
+            and tail[1].role == "agent"
+            and tail[1].text.startswith(_TRUNCATED_ASK)
+            and tail[1].timestamp_us >= reference_us - _PENDING_ASK_WINDOW_US
+            and tail[0].role == "user"
         ):
-            pending = entries[-2].text
+            pending = tail[0].text
+        # User turns carry the hub's clock, agent turns the worker's; the
+        # window assumes both are wall-clock microseconds. A departure ends
+        # the session: turns before the last leave never re-enter the block,
+        # however recent; the age window covers worker restarts, which leave
+        # no departure record.
+        cutoff_us = max(
+            reference_us - _RECENT_WINDOW_US,
+            self._left_at_us.get(participant_id, 0),
+        )
+        entries = [e for e in recalled.entries if e.timestamp_us >= cutoff_us][-8:]
+        if not entries:
+            return "", pending
         lines = [f"  {'User' if e.role == 'user' else 'Agent'}: {e.text}" for e in entries]
         block = (
             "[Recent conversation] (already handled; never a source of new work)\n"
             + "\n".join(lines) + "\n\n"
         )
-        # Each agent reply keyed to the user turns it answered, so the parrot
-        # guard can exempt an identical question honestly re-answered.
-        replies: dict[str, set[str]] = {}
-        last_user = ""
-        for entry in entries:
-            if entry.role == "user":
-                last_user = _normalize(entry.text)
-            else:
-                replies.setdefault(_normalize(entry.text), set()).add(last_user)
-        pairs = {reply: frozenset(askers) for reply, askers in replies.items()}
-        return block, pending, pairs
+        return block, pending
 
     async def _persist_turn(self, request: SceneRequest, user_text: str, reply_text: str) -> None:
         await self._text_memory.add_transcript.execute(
@@ -308,6 +284,9 @@ class SceneSupervisor:
         )
 
     async def handle(self, request: SceneRequest) -> SceneReply:
+        if request.timestamp_us <= 0:
+            # An unset timestamp would disable the recall recency window.
+            request = request.model_copy(update={"timestamp_us": time.time_ns() // 1_000})
         current_trace_id.set(request.trace_id)
         current_participant_id.set(request.participant_id)
         current_reference_time_us.set(request.timestamp_us)
@@ -326,8 +305,8 @@ class SceneSupervisor:
             "supervisor turn participant={} trace={} transcript={!r}",
             request.participant_id, request.trace_id, request.transcript[:80],
         )
-        conversation, pending_truncation, recalled_replies = await self._recent_conversation(
-            request.participant_id
+        conversation, pending_truncation = await self._recent_conversation(
+            request.participant_id, request.timestamp_us
         )
         transcript = request.transcript
         if pending_truncation:
@@ -339,16 +318,11 @@ class SceneSupervisor:
             transcript = resolved
 
         async with self._scene_lock:
-            return await self._handle_scene(request, transcript, conversation, recalled_replies)
+            return await self._handle_scene(request, transcript, conversation)
 
     async def _handle_scene(
-        self,
-        request: SceneRequest,
-        transcript: str,
-        conversation: str,
-        recalled_replies: dict[str, frozenset[str]] | None = None,
+        self, request: SceneRequest, transcript: str, conversation: str
     ) -> SceneReply:
-        recalled_replies = recalled_replies or {}
         evidence = MutationEvidence()
         current_mutation_evidence.set(evidence)
         before = await self._context.snapshot()
@@ -378,37 +352,6 @@ class SceneSupervisor:
             await self._persist_turn(request, transcript, reply)
             return SceneReply(response=reply)
         output = result.content
-
-        # Stale cross-session transcripts made parroting the top live failure
-        # mode; _is_parrot documents the trigger and its residual gap. The
-        # nudge deliberately mirrors vision_agent's DESCRIPTION wording.
-        if not result.tool_calls and _is_parrot(output, transcript, recalled_replies):
-            logger.warning("parroted recalled reply; renudging {!r}", output[:80])
-            nudge = (
-                "That reply repeats an earlier turn from [Recent conversation]"
-                " verbatim, so it is not grounded in this turn. Handle the new"
-                " request itself: delegate the right subagent now (a question"
-                " about what the user holds, wears, or sees goes to"
-                " vision_agent), or answer only from this turn's own results."
-            )
-            retry_messages = list(result.messages) + [ChatMessage(role="user", content=nudge)]
-            try:
-                retry = await run_tool_loop(retry_messages, self._toolset, _call_model, max_iterations=6)
-            except ToolLoopError as exc:
-                logger.warning("parrot retry failed ({})", exc)
-            else:
-                result = retry
-                output = retry.content
-                if _is_parrot(output, transcript, recalled_replies):
-                    # A second parrot means the model will not ground itself:
-                    # answer from the retry's own subagent result, spoken only
-                    # when free of the ids and numbers TTS forbids.
-                    subagent_evidence = _last_subagent_result(retry)
-                    if _tts_safe(subagent_evidence):
-                        output = subagent_evidence
-                    else:
-                        output = "I can't check that right now."
-                    logger.warning("parrot persisted; replying {!r}", output[:80])
 
         # Verify only turns with actual mutation intent: a mutating subagent
         # was delegated, or the utterance itself requests a change (which
@@ -444,10 +387,7 @@ class SceneSupervisor:
             except ToolLoopError as exc:
                 logger.warning("supervisor verification failed ({})", exc)
             else:
-                if _is_parrot(result2.content, transcript, recalled_replies):
-                    logger.warning("verification reply parrots; keeping prior reply")
-                else:
-                    output = result2.content
+                output = result2.content
             await asyncio.sleep(_SCENE_SETTLE_S)
             # Success is evidence-backed: a completion claim may stand only
             # when a scene write was applied (or the requested state already
