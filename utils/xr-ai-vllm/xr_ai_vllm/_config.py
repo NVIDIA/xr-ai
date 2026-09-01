@@ -81,11 +81,15 @@ def setup_hf_env(cfg: dict, model_cache: Path) -> str | None:
     """Apply the shared HuggingFace / CUDA env block.
 
     Sets ``CUDA_VISIBLE_DEVICES`` (when configured), ``HF_TOKEN`` (when
-    provided), ``HF_HUB_ENABLE_HF_TRANSFER``, ``HF_HOME``, and
+    provided), ``HF_XET_HIGH_PERFORMANCE``, ``HF_HOME``, and
     ``TRANSFORMERS_CACHE``.
 
-    Both ``HF_HOME`` and ``TRANSFORMERS_CACHE`` are set via ``setdefault``, so
-    an externally-set value wins over the YAML default. This intentionally
+    The Xet setting uses ``setdefault`` so callers can disable high-performance
+    mode explicitly. ``HF_HUB_DISABLE_XET`` is the separate Xet off switch.
+    A deliberate ``HF_HUB_ENABLE_HF_TRANSFER`` opt-in is preserved for
+    environments where the operator installed ``hf_transfer`` as a fallback.
+    Both ``HF_HOME`` and ``TRANSFORMERS_CACHE`` also use ``setdefault``, so an
+    externally-set value wins over the YAML default. This intentionally
     differs from the pre-consolidation per-server code where the LLM wrappers
     used an unconditional assignment for ``HF_HOME``; callers that need the
     YAML value to take priority must unset the env var before calling.
@@ -105,7 +109,7 @@ def setup_hf_env(cfg: dict, model_cache: Path) -> str | None:
     hf_token = cfg.get("hf_token") or os.environ.get("HF_TOKEN", "")
     if hf_token:
         os.environ["HF_TOKEN"] = hf_token
-    os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
+    os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
     os.environ.setdefault("HF_HOME", str(model_cache))
     os.environ.setdefault("TRANSFORMERS_CACHE", str(model_cache))
 

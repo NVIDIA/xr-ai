@@ -12,7 +12,8 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "vllm>=0.23.0",
     "pyyaml>=6.0",
-    "hf-transfer>=0.1.4",
+    "huggingface-hub>=0.32.0",
+    "hf-xet>=1.1.2,<2.0.0",
     "xr-ai-logging",
     "xr-ai-vllm",
 ]

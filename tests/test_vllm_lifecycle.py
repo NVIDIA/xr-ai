@@ -1,14 +1,15 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for xr_ai_vllm._lifecycle pure helpers."""
+"""Unit tests for xr_ai_vllm configuration and lifecycle helpers."""
 from __future__ import annotations
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from xr_ai_vllm._config import parse_config_bool
+from xr_ai_vllm._config import parse_config_bool, setup_hf_env
 from xr_ai_vllm._lifecycle import health_ok, health_url, wait_until_healthy
 
 
@@ -35,6 +36,43 @@ class TestParseConfigBool:
     def test_rejects_other_values(self, value):
         with pytest.raises(ValueError, match="enforce_eager"):
             parse_config_bool(value, "enforce_eager")
+
+
+class TestSetupHfEnv:
+    @pytest.fixture(autouse=True)
+    def _guard_hf_environment(self, monkeypatch):
+        for key in (
+            "HF_XET_HIGH_PERFORMANCE",
+            "HF_HUB_DISABLE_XET",
+            "HF_HUB_ENABLE_HF_TRANSFER",
+            "HF_HOME",
+            "TRANSFORMERS_CACHE",
+        ):
+            monkeypatch.delenv(key, raising=False)
+
+    def test_preserves_legacy_transfer_opt_in(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HF_HUB_ENABLE_HF_TRANSFER", "1")
+
+        setup_hf_env({}, tmp_path)
+
+        assert os.environ["HF_XET_HIGH_PERFORMANCE"] == "1"
+        assert os.environ["HF_HUB_ENABLE_HF_TRANSFER"] == "1"
+        assert os.environ["HF_HOME"] == str(tmp_path)
+        assert os.environ["TRANSFORMERS_CACHE"] == str(tmp_path)
+
+    def test_preserves_xet_high_performance_override(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HF_XET_HIGH_PERFORMANCE", "0")
+
+        setup_hf_env({}, tmp_path)
+
+        assert os.environ["HF_XET_HIGH_PERFORMANCE"] == "0"
+
+    def test_preserves_xet_disable_override(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HF_HUB_DISABLE_XET", "1")
+
+        setup_hf_env({}, tmp_path)
+
+        assert os.environ["HF_HUB_DISABLE_XET"] == "1"
 
 
 class TestHealthUrl:

@@ -22,7 +22,6 @@ from xr_ai_vllm._docker import (
     container_exists,
     container_label,
     container_running,
-    launch_fingerprint,
     pid_on_port,
     run,
 )
@@ -128,7 +127,10 @@ class TestBuildRunArgv:
     ):
         kwargs = self._base_kwargs(tmp_path)
         first = build_run_argv(**kwargs)
-        monkeypatch.setattr("xr_ai_vllm._docker._LAUNCH_CONTRACT_VERSION", 2)
+        monkeypatch.setattr(
+            "xr_ai_vllm._docker._LAUNCH_CONTRACT_VERSION",
+            _docker._LAUNCH_CONTRACT_VERSION + 1,
+        )
         second = build_run_argv(**kwargs)
 
         def fingerprint(argv):
@@ -200,6 +202,68 @@ class TestBuildRunArgv:
         env_flags = [argv[i + 1] for i, a in enumerate(argv) if a == "-e"]
         assert any(f == "MY_VAR=my_val" for f in env_flags)
 
+    def test_xet_high_performance_enabled_by_default(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("HF_XET_HIGH_PERFORMANCE", raising=False)
+        monkeypatch.delenv("HF_HUB_DISABLE_XET", raising=False)
+        monkeypatch.delenv("HF_HUB_ENABLE_HF_TRANSFER", raising=False)
+        argv = build_run_argv(**self._base_kwargs(tmp_path))
+        env_flags = [argv[i + 1] for i, a in enumerate(argv) if a == "-e"]
+        assert "HF_XET_HIGH_PERFORMANCE=1" in env_flags
+        assert not any("HF_HUB_ENABLE_HF_TRANSFER" in flag for flag in env_flags)
+
+    def test_xet_high_performance_forwards_host_override(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HF_XET_HIGH_PERFORMANCE", "0")
+        argv = build_run_argv(**self._base_kwargs(tmp_path))
+        env_flags = [argv[i + 1] for i, a in enumerate(argv) if a == "-e"]
+        assert "HF_XET_HIGH_PERFORMANCE=0" in env_flags
+
+    @pytest.mark.parametrize(
+        ("name", "value"),
+        [
+            ("HF_HUB_DISABLE_XET", "1"),
+            ("HF_HUB_ENABLE_HF_TRANSFER", "1"),
+        ],
+    )
+    def test_forwards_host_download_override(
+        self, tmp_path, monkeypatch, name, value
+    ):
+        monkeypatch.setenv(name, value)
+        argv = build_run_argv(**self._base_kwargs(tmp_path))
+        env_flags = [argv[i + 1] for i, a in enumerate(argv) if a == "-e"]
+        assert f"{name}={value}" in env_flags
+
+    def test_extra_env_overrides_host_download_setting(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("HF_XET_HIGH_PERFORMANCE", "1")
+        kwargs = self._base_kwargs(tmp_path)
+        kwargs["extra_env"] = {"HF_XET_HIGH_PERFORMANCE": "0"}
+        argv = build_run_argv(**kwargs)
+        env_flags = [argv[i + 1] for i, a in enumerate(argv) if a == "-e"]
+        assert "HF_XET_HIGH_PERFORMANCE=0" in env_flags
+        assert "HF_XET_HIGH_PERFORMANCE=1" not in env_flags
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "HF_XET_HIGH_PERFORMANCE",
+            "HF_HUB_DISABLE_XET",
+            "HF_HUB_ENABLE_HF_TRANSFER",
+        ],
+    )
+    def test_download_override_changes_configuration_fingerprint(
+        self, tmp_path, monkeypatch, name
+    ):
+        monkeypatch.setenv(name, "0")
+        first = _fingerprint_from_argv(
+            build_run_argv(**self._base_kwargs(tmp_path))
+        )
+        monkeypatch.setenv(name, "1")
+        second = _fingerprint_from_argv(
+            build_run_argv(**self._base_kwargs(tmp_path))
+        )
+        assert first != second
+
     def test_model_cache_volume_mounted(self, tmp_path):
         kwargs = self._base_kwargs(tmp_path)
         argv = build_run_argv(**kwargs)
@@ -221,14 +285,26 @@ class TestBuildRunArgv:
         assert argv[image_index - 2 : image_index] == ["--entrypoint", "/bin/bash"]
         assert argv[image_index + 1] == "-c"
 
-    def test_no_extra_pip_runs_only_hf_transfer_install(self, tmp_path):
+    def test_bootstraps_xet_stack_before_starting_vllm(self, tmp_path):
         argv = build_run_argv(**self._base_kwargs(tmp_path))
-        # /bin/bash -c "<install>... && vllm serve ..." — the install is the last
-        # argv entry; with no extra_pip there must be exactly one pip line.
         bash_cmd = argv[-1]
-        assert bash_cmd.count("pip install ") == 1
-        assert "hf_transfer" in bash_cmd
-        assert "--no-build-isolation" not in bash_cmd
+        assert bash_cmd.count("import hf_xet") == 2
+        assert "huggingface_hub.file_download import xet_get" in bash_cmd
+        assert "python3 -m pip install -q" in bash_cmd
+        assert _docker._HF_XET_REQUIREMENT in bash_cmd
+        assert "huggingface-hub>=" not in bash_cmd
+        assert bash_cmd.endswith("vllm serve my-model --host 0.0.0.0 --port 8100")
+
+    def test_skips_xet_bootstrap_when_disabled_in_extra_env(self, tmp_path):
+        kwargs = self._base_kwargs(tmp_path)
+        kwargs["extra_env"] = {"HF_HUB_DISABLE_XET": "1"}
+        argv = build_run_argv(**kwargs)
+        env_flags = [argv[i + 1] for i, arg in enumerate(argv) if arg == "-e"]
+        bash_cmd = argv[-1]
+        assert "HF_HUB_DISABLE_XET=1" in env_flags
+        assert "import hf_xet" not in bash_cmd
+        assert _docker._HF_XET_REQUIREMENT not in bash_cmd
+        assert bash_cmd == "vllm serve my-model --host 0.0.0.0 --port 8100"
 
     def test_extra_pip_uses_no_build_isolation(self, tmp_path):
         # mamba-ssm and causal-conv1d both `import torch` from setup.py at
@@ -239,8 +315,11 @@ class TestBuildRunArgv:
         kwargs["extra_pip"] = ["mamba-ssm", "causal-conv1d"]
         argv = build_run_argv(**kwargs)
         bash_cmd = argv[-1]
-        assert "pip install -q hf_transfer" in bash_cmd
+        assert "python3 -m pip install -q" in bash_cmd
         assert "pip install -q --no-build-isolation mamba-ssm causal-conv1d" in bash_cmd
+        assert bash_cmd.index("python3 -m pip install -q") < bash_cmd.index(
+            "pip install -q --no-build-isolation"
+        )
 
 
 class _FakeLogProc:
@@ -418,18 +497,6 @@ def _fingerprint_from_argv(argv):
     labels = [argv[i + 1] for i, v in enumerate(argv) if v == "--label"]
     tagged = next(x for x in labels if x.startswith(f"{_CONFIG_LABEL}="))
     return tagged.split("=", 1)[1]
-
-
-def _expected_fingerprint(kwargs):
-    return launch_fingerprint({
-        "image": kwargs["image"],
-        "port": kwargs["port"],
-        "model_cache": str(kwargs["model_cache"]),
-        "cuda_visible_devices": kwargs["cuda_visible_devices"],
-        "extra_env": kwargs["extra_env"] or {},
-        "extra_pip": kwargs["extra_pip"] or [],
-        "vllm_argv": kwargs["vllm_argv"],
-    })
 
 
 class TestRun:
