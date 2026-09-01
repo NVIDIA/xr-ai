@@ -329,8 +329,14 @@ Either way vLLM keeps running after the orchestrator exits.
 The STT server follows the same pattern without Docker: `stt_server` spawns
 its persistent process with `start_new_session=True`, reuses a healthy server
 that survived a previous stack run, and is stopped by the same
-`model_servers --stop` cleanup. The CPU Piper server is also launched as a
-persistent shared service and is stopped by the same command.
+`model_servers --stop` cleanup.
+
+Piper uses the launcher's persistent process group directly. Its bootstrap
+validates that an existing healthy listener carries xr-ai's matching ownership
+markers; a listener without those markers fails startup instead of being
+silently adopted. When no server exists, the bootstrap replaces itself with
+the foreground Uvicorn and ONNX process. Repeated starts therefore do not leave
+idle Piper supervisor processes behind.
 
 Docker containers carry a fingerprint of their image, GPU assignment, model
 cache, environment, bootstrap packages, complete vLLM command, and a versioned
@@ -348,8 +354,11 @@ Cleanup locates labelled Docker containers before inspecting ports, then
 stops them with `docker stop` (escalating to `docker kill` after 20 s).
 Locally persisted processes (pip-mode vLLM and Piper) must carry the
 `XR_AI_VLLM_MANAGED` and `XR_AI_VLLM_PORT` ownership markers before cleanup
-sends `SIGTERM` or `SIGKILL`. Unknown listeners and failed inspection abort
-cleanup without sending a signal; absent servers are silently skipped.
+sends `SIGTERM` or `SIGKILL`. Marked local servers are stopped as complete
+process groups so their launcher and inference descendants cannot survive as
+orphans. Unknown listeners and failed inspection abort cleanup without sending
+a signal, and `model_servers --stop` exits nonzero if any target could not be
+stopped. Absent servers are silently skipped.
 
 The target ports and container names match the defaults in the per-profile YAML files.
 

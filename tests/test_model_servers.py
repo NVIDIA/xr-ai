@@ -280,6 +280,19 @@ def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
     }
 
 
+def test_stop_fails_when_any_service_remains(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        _model_servers,
+        "stop_persistent_servers",
+        lambda _services: False,
+    )
+
+    with pytest.raises(SystemExit, match="one or more persistent servers"):
+        _model_servers._stop_models()
+
+
 @pytest.mark.parametrize(
     ("selection", "expected_stopped_ports"),
     [

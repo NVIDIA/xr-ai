@@ -446,10 +446,11 @@ cd xr-ai
 uv run --project agent-samples/model-servers model_servers --stop
 ```
 
-For pip-mode servers this sends `SIGTERM` to each persisted process, waits up
-to 20 s, then `SIGKILL`s. For docker-mode servers it runs
+For marked local servers this sends `SIGTERM` to each persisted process group,
+waits up to 20 s, then sends `SIGKILL`. For docker-mode servers it runs
 `docker stop <container_name>` (escalating to `docker kill` after 20 s). Safe
-to run while the stack is down.
+to run while the stack is down. The command exits nonzero rather than reporting
+success if ownership cannot be verified or any target remains running.
 
 ### First run downloads models silently
 

@@ -171,9 +171,12 @@ def _stop_models() -> None:
     # Surface docker/ss/lsof failures so operators see why --stop aborted
     # instead of a silent traceback exit.
     try:
-        stop_persistent_servers(_known_service_ports())
+        if not stop_persistent_servers(_known_service_ports()):
+            raise RuntimeError("one or more persistent servers are still running")
     except Exception as exc:
-        print(f"model-servers: failed to stop persistent servers: {exc}", flush=True)
+        raise SystemExit(
+            f"model-servers: failed to stop persistent servers: {exc}"
+        ) from exc
 
 
 def _stop_unselected_services(processes: list[Process]) -> None:
