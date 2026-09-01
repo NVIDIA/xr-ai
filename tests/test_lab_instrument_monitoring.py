@@ -746,7 +746,13 @@ async def test_instrument_reader_queries_all_markers_once_and_maps_joint_result(
 
 
 @pytest.mark.asyncio
-async def test_instrument_monitor_emits_only_changes_lost_once_and_full_state() -> None:
+async def test_instrument_monitor_emits_only_changes_lost_once_and_full_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "lab_instrument_monitoring_worker.instrument_alerts._VOICE_INTERVAL_S",
+        0.05,
+    )
     read_started = asyncio.Event()
     blocked = asyncio.Event()
 
@@ -773,9 +779,23 @@ async def test_instrument_monitor_emits_only_changes_lost_once_and_full_state() 
         lost_after_s=10.0,
     )
     collector = _InstrumentEventCollector()
+    summary_requests: list[str] = []
+
+    class SummaryLlm:
+        async def chat(self, messages, **_kwargs):
+            summary_requests.append(messages[-1].content)
+            return ChatResponse(
+                content="Device1 briefly disappeared, then increased overall to 13.5 V.",
+                reasoning=None,
+                tool_calls=None,
+                finish_reason="stop",
+                raw={},
+            )
+
     runtime = AgentRuntime()
     runtime.register("instrument-monitor", monitor)
-    runtime.register("instrument-alerts", InstrumentAlertAgent())
+    alerts = runtime.register("instrument-alerts", InstrumentAlertAgent())
+    alerts._bind_llm(SummaryLlm())  # type: ignore[arg-type]
     runtime.register("collector", collector)
 
     async with runtime:
@@ -836,25 +856,58 @@ async def test_instrument_monitor_emits_only_changes_lost_once_and_full_state() 
             ],
             observed_at=114.0,
         )
+        await monitor._observe(
+            "participant-1",
+            [
+                InstrumentReading(
+                    timestamp_us=5,
+                    marker_type=MarkerType.QR_CODE,
+                    marker_id="meter-a",
+                    device_name="Device1",
+                    meter_reading="13.5",
+                )
+            ],
+            observed_at=114.5,
+        )
         await monitor._publish_snapshot("participant-1")
+        await asyncio.sleep(0.12)
+        await monitor._observe(
+            "participant-1",
+            [
+                InstrumentReading(
+                    timestamp_us=6,
+                    marker_type=MarkerType.QR_CODE,
+                    marker_id="meter-a",
+                    device_name="Device1",
+                    meter_reading="14",
+                )
+            ],
+            observed_at=115.0,
+        )
         await monitor.stop()
+        await alerts.stop()
 
     assert [event.change_type for event in collector.changes] == [
         "discovered",
         "reading_changed",
+        "reading_changed",
+        "reading_changed",
     ]
-    assert collector.changes[-1].previous_reading == "12 V"
-    assert collector.changes[-1].meter_reading == "13 V"
+    assert collector.changes[-3].previous_reading == "12 V"
+    assert collector.changes[-3].meter_reading == "13 V"
     assert len(collector.lost) == 1
-    assert collector.snapshots[-1].instruments[0].meter_reading == "13 V"
+    assert collector.snapshots[-1].instruments[0].meter_reading == "13.5 V"
     assert collector.snapshots[-1].instruments[0].marker_id == "meter-a"
     assert collector.snapshots[-1].instruments[0].device_name == "Device1"
     assert collector.snapshots[-1].instruments[0].tracking is True
     assert [output.text for output in collector.voice] == [
         "Now tracking Device1 at 12 V.",
-        "I am no longer tracking Device1. Its last reading was 12 V.",
-        "Device1 changed from 12 V to 13 V.",
+        "Device1 briefly disappeared, then increased overall to 13.5 V.",
+        "Device1 changed from 13.5 V to 14 V.",
     ]
+    assert len(summary_requests) == 1
+    assert '"reading": "13 V"' in summary_requests[0]
+    assert '"reading": "13.5 V"' in summary_requests[0]
 
 
 @pytest.mark.asyncio

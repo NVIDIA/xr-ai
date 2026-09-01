@@ -172,7 +172,12 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             lost_after_s=config.instrument_lost_after_s,
         ),
     )
-    runtime.register("instrument-alerts", InstrumentAlertAgent())
+    instrument_alerts = InstrumentAlertAgent()
+    instrument_alerts._bind_llm(llm)
+    instrument_alerts = runtime.register(
+        "instrument-alerts",
+        instrument_alerts,
+    )
     foreground = runtime.register(
         "foreground",
         ForegroundAgent(
@@ -208,6 +213,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                     await voice.run(runtime)
                 finally:
                     await foreground.stop()
+                    await instrument_alerts.stop()
                     await instrument_monitor.stop()
                     await monitor.stop()
                     await images.stop()
