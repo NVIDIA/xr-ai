@@ -50,6 +50,8 @@ two separate trees under the service's resolved `model_cache`:
 | STT and Magpie TTS (NeMo host processes) | `<model_cache>/huggingface/` | `<model_cache>/huggingface/hub/` |
 
 (The NeMo servers additionally cache non-HF artifacts under `<model_cache>/nemo/`.)
+Piper TTS passes `<model_cache>/piper/` directly as its Hub cache and defaults
+`HF_XET_CACHE` to `<model_cache>/piper/xet/` for its Xet cache.
 
 `model_cache` itself is set per YAML and resolved relative to the YAML file.
 Both the model-servers profiles and the standalone service YAMLs resolve it to
@@ -404,6 +406,28 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
 - The host `model_cache` is bind-mounted at the same path inside the
   container and `HF_HOME` is set to it, so weights cached by pip mode are
   reused by docker mode and vice versa.
+- Before `vllm serve` starts, the wrapper verifies that the image's Hub exposes
+  its Xet download path and has `hf-xet>=1.1.2,<2.0.0`. It repairs a missing or
+  incompatible `hf-xet` wheel and checks the complete integration again; an
+  unavailable accelerator therefore fails startup instead of silently falling
+  back to plain HTTPS.
+- `HF_XET_HIGH_PERFORMANCE=1` is the default in pip and docker modes. Setting
+  it to `0` disables high-performance tuning, not Xet itself. Set
+  `HF_HUB_DISABLE_XET=1` to disable Xet. To use legacy `hf_transfer` with a
+  compatible Hub version, install the `hf_transfer` package and set both
+  `HF_HUB_DISABLE_XET=1` and `HF_HUB_ENABLE_HF_TRANSFER=1`; Xet-backed files
+  continue to use Xet when it remains enabled. These values are preserved,
+  forwarded, and included in the container fingerprint, so changing one
+  recreates a persistent container.
+
+The shipped image pins were qualified with these in-container versions:
+
+| Image | `huggingface-hub` | `hf-xet` |
+|---|---:|---:|
+| `nvcr.io/nvidia/vllm:26.04-py3` | 0.36.2 | 1.4.3 |
+| `nvcr.io/nvidia/vllm:26.07-py3` | 1.24.0 | 1.5.2 |
+| `vllm/vllm-openai:v0.20.0` | 1.12.0 | 1.4.3 |
+
 - Container name is deterministic per service: `xr-ai-vllm-vlm-server`,
   `xr-ai-vllm-llama-nemotron-llm-server`,
   `xr-ai-vllm-nemotron3-nano-llm-server`,

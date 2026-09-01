@@ -542,7 +542,9 @@ two separate trees under the service’s resolved <code class="docutils literal 
 </tbody>
 </table>
 </div>
-<p>(The NeMo servers additionally cache non-HF artifacts under <code class="docutils literal notranslate"><span class="pre">&lt;model_cache&gt;/nemo/</span></code>.)</p>
+<p>(The NeMo servers additionally cache non-HF artifacts under <code class="docutils literal notranslate"><span class="pre">&lt;model_cache&gt;/nemo/</span></code>.)
+Piper TTS passes <code class="docutils literal notranslate"><span class="pre">&lt;model_cache&gt;/piper/</span></code> directly as its Hub cache and defaults
+<code class="docutils literal notranslate"><span class="pre">HF_XET_CACHE</span></code> to <code class="docutils literal notranslate"><span class="pre">&lt;model_cache&gt;/piper/xet/</span></code> for its Xet cache.</p>
 <p><code class="docutils literal notranslate"><span class="pre">model_cache</span></code> itself is set per YAML and resolved relative to the YAML file.
 Both the model-servers profiles and the standalone service YAMLs resolve it to
 <code class="docutils literal notranslate"><span class="pre">models/</span></code> at the repository root. For a manual <code class="docutils literal notranslate"><span class="pre">hf</span> <span class="pre">download</span></code>, set <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> to
@@ -883,6 +885,45 @@ recorded entrypoint or command.</p></li>
 <li><p>The host <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> is bind-mounted at the same path inside the
 container and <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> is set to it, so weights cached by pip mode are
 reused by docker mode and vice versa.</p></li>
+<li><p>Before <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> starts, the wrapper verifies that the image’s Hub exposes
+its Xet download path and has <code class="docutils literal notranslate"><span class="pre">hf-xet&gt;=1.1.2,&lt;2.0.0</span></code>. It repairs a missing or
+incompatible <code class="docutils literal notranslate"><span class="pre">hf-xet</span></code> wheel and checks the complete integration again; an
+unavailable accelerator therefore fails startup instead of silently falling
+back to plain HTTPS.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">HF_XET_HIGH_PERFORMANCE=1</span></code> is the default in pip and docker modes. Setting
+it to <code class="docutils literal notranslate"><span class="pre">0</span></code> disables high-performance tuning, not Xet itself. Set
+<code class="docutils literal notranslate"><span class="pre">HF_HUB_DISABLE_XET=1</span></code> to disable Xet. To use legacy <code class="docutils literal notranslate"><span class="pre">hf_transfer</span></code> with a
+compatible Hub version, install the <code class="docutils literal notranslate"><span class="pre">hf_transfer</span></code> package and set both
+<code class="docutils literal notranslate"><span class="pre">HF_HUB_DISABLE_XET=1</span></code> and <code class="docutils literal notranslate"><span class="pre">HF_HUB_ENABLE_HF_TRANSFER=1</span></code>; Xet-backed files
+continue to use Xet when it remains enabled. These values are preserved,
+forwarded, and included in the container fingerprint, so changing one
+recreates a persistent container.</p></li>
+</ul>
+<p>The shipped image pins were qualified with these in-container versions:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Image</p></th>
+<th class="head text-right"><p><code class="docutils literal notranslate"><span class="pre">huggingface-hub</span></code></p></th>
+<th class="head text-right"><p><code class="docutils literal notranslate"><span class="pre">hf-xet</span></code></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.04-py3</span></code></p></td>
+<td class="text-right"><p>0.36.2</p></td>
+<td class="text-right"><p>1.4.3</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.07-py3</span></code></p></td>
+<td class="text-right"><p>1.24.0</p></td>
+<td class="text-right"><p>1.5.2</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vllm/vllm-openai:v0.20.0</span></code></p></td>
+<td class="text-right"><p>1.12.0</p></td>
+<td class="text-right"><p>1.4.3</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<ul class="simple">
 <li><p>Container name is deterministic per service: <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm-vlm-server</span></code>,
 <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm-llama-nemotron-llm-server</span></code>,
 <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm-nemotron3-nano-llm-server</span></code>,
