@@ -235,6 +235,10 @@ def test_phrase_only_utterance_strips_to_empty_string():
     "sorry, stop",
     "whoa stop",
     "hang on stop",
+    "stop right now",
+    "stop doing that",
+    "stop for now",
+    "stop, stop",
 ])
 def test_stop_regex_canonical_forms_match(text: str):
     """Case 9: all the canonical interruption phrases match."""
@@ -242,12 +246,7 @@ def test_stop_regex_canonical_forms_match(text: str):
 
 
 def test_stop_regex_suffix_with_too_much_filler_does_not_match():
-    """Case 10 (locked to actual behavior): 'the agent told me to stop'
-    has 4 filler words before 'stop'; the regex allows {0,2} filler
-    words, so this does NOT match.
-
-    The original brief speculated this would match as a "suffix STOP" —
-    the impl says no. We lock the impl's behavior in as the contract."""
+    """Reported speech is not an imperative interruption."""
     assert STOP_RE.match("the agent told me to stop") is None
 
 
@@ -255,6 +254,25 @@ def test_stop_regex_mid_sentence_real_question_does_not_match():
     """Case 11: 'what should we stop doing about climate change' is a
     genuine question that mentions 'stop' mid-sentence; must not trigger."""
     assert STOP_RE.match("what should we stop doing about climate change") is None
+
+
+@pytest.mark.parametrize("text", [
+    "don't stop",
+    "do not stop",
+    "never stop",
+    "please don't stop",
+    "should I stop",
+    "we should stop",
+    "you said stop",
+    "the word stop",
+    "say stop",
+    "don't shut up",
+    "do not be quiet",
+    "not quiet",
+])
+def test_stop_regex_negations_and_questions_do_not_match(text: str):
+    """Agent requests mentioning STOP must not become global interruptions."""
+    assert STOP_RE.match(text) is None
 
 
 @pytest.mark.parametrize("text", [
@@ -544,6 +562,7 @@ async def test_feed_stop_matched_on_magic_stripped_tail():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("phrases,text", [
     (("hey agent",), "hey agent stop visual monitoring."),
+    (("hey agent",), "hey agent stop monitoring xyz"),
     ((), "stop visual monitoring."),
 ])
 async def test_feed_application_stop_command_dispatches_to_agent(
@@ -556,7 +575,22 @@ async def test_feed_application_stop_command_dispatches_to_agent(
 
     await gate.feed("p1", text)
 
-    assert events == [("query", "p1", "stop visual monitoring.", True)]
+    expected = text.removeprefix("hey agent ")
+    assert events == [("query", "p1", expected, True)]
+
+
+@pytest.mark.asyncio
+async def test_feed_stop_mention_in_followup_dispatches_as_query():
+    gate, _, _ = _gate(phrases=("agent",), followup_grace_s=5.0)
+    events = _recording_handlers(gate)
+
+    await gate.feed("p1", "agent")
+    await gate.feed("p1", "don't stop")
+
+    assert events == [
+        ("phrase_only", "p1"),
+        ("query", "p1", "don't stop", False),
+    ]
 
 
 @pytest.mark.asyncio
