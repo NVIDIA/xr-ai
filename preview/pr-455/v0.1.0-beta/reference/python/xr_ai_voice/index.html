@@ -572,9 +572,10 @@ interrupts the active output.</p>
 <p>Mirrors the constructor of <a class="reference internal" href="../xr_ai_vad/index.html#xr_ai_vad.VadDetector" title="xr_ai_vad.VadDetector"><code class="xref py py-class docutils literal notranslate"><span class="pre">xr_ai_vad.VadDetector</span></code></a>. Default
 values match the in-tree samples’ current behavior.</p>
 <p><code class="docutils literal notranslate"><span class="pre">stop_probe_after_s</span></code> — cadence in seconds for up to three STT probes of
-the partial audio buffer. This gives STOP commands a fast interrupt path
-and lets a configured wake phrase be acknowledged before the utterance
-ends. Set to <code class="docutils literal notranslate"><span class="pre">0</span></code> or negative to disable probes.</p>
+the partial audio buffer. This gives STOP commands a fast interruption path
+without replacing final transcription, and lets a configured wake phrase
+be acknowledged before the utterance ends. Set to <code class="docutils literal notranslate"><span class="pre">0</span></code> or negative to
+disable probes.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_voice.VadConfig.silence_duration">
 <span class="sig-name descname"><span class="pre">silence_duration</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.8</span></em><a class="headerlink" href="#xr_ai_voice.VadConfig.silence_duration" title="Link to this definition">#</a></dt>

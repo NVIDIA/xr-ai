@@ -125,16 +125,34 @@ release or shutdown.
 
 ## Voice gating and early probes
 
-When wake phrases and a listening chime are enabled, VAD and STT probe the opening
-audio while the user is still speaking. Probe audio includes a silent tail so
-offline STT can finalize a phrase. Only the final transcript is dispatched as a
-query; a slow probe receives a short grace period and is then cancelled.
+VAD and STT probe the opening audio while the user is still speaking. Probe
+audio includes a silent tail so offline STT can finalize a phrase. A partial
+global-STOP match interrupts active output immediately, but it does not commit
+the user's intent: final STT remains authoritative for global-stop versus query
+routing. A slow probe receives a short grace period and is then cancelled.
 
 A wake phrase is accepted at the beginning of a transcript or after
 sentence-final `.`, `?`, or `!` punctuation followed by whitespace or a closing
 quote. Text before the boundary and the phrase are removed. A phrase after a
-comma, semicolon, or inside ordinary prose does not activate the gate. STOP
-commands use the same early-probe path for prompt interruption.
+comma, semicolon, or inside ordinary prose does not activate the gate. Partial
+STOP classification checks both raw text and the tail after a configured wake
+phrase, so `stop` and `hey agent stop` interrupt equally early.
+
+Global STOP uses a closed imperative grammar for direct requests such as
+`stop`, `stop it`, `stop talking`, `be quiet`, and `shut up`, with a bounded set
+of conversational prefixes and punctuation. Up to two prefixes may be drawn
+from `please`, `hey`, `okay`, `ok`, `uh`, `um`, `wait`, `no`, `just`,
+`alright`, `sorry`, `whoa`, `hang on`, `I said`, or `can`, `could`, `would`,
+or `will` followed by `you`. Negations (`don't stop`), questions (`should I
+stop?`), reported speech (`you said stop`), unconfigured arbitrary prefixes,
+and scoped or multi-action commands (`stop monitoring xyz`) are not global
+stops. They follow the ordinary gate rules.
+
+The early path emits only an interruption, not a chime or stop acknowledgement.
+If the final transcript remains a global stop, normal stop handling emits the
+acknowledgement. If STT revises partial `hey agent stop` to final `hey agent stop
+monitoring xyz`, the final transcript instead dispatches `stop monitoring xyz`
+to the agent; the latency-saving interruption is not undone.
 
 ## Relay telemetry
 
