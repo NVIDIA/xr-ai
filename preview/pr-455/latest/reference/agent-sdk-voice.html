@@ -532,7 +532,10 @@ release or shutdown.</p>
 audio includes a silent tail so offline STT can finalize a phrase. A partial
 global-STOP match interrupts active output immediately, but it does not commit
 the user’s intent: final STT remains authoritative for global-stop versus query
-routing. A slow probe receives a short grace period and is then cancelled.</p>
+routing. A slow probe receives a short grace period and is then cancelled.
+With wake phrases configured, one utterance can make up to three bounded partial
+STT requests plus the authoritative final request. Set <code class="docutils literal notranslate"><span class="pre">stop_probe_after_s</span></code> to
+zero to disable the additional requests and early interruption path.</p>
 <p>A wake phrase is accepted at the beginning of a transcript or after
 sentence-final <code class="docutils literal notranslate"><span class="pre">.</span></code>, <code class="docutils literal notranslate"><span class="pre">?</span></code>, or <code class="docutils literal notranslate"><span class="pre">!</span></code> punctuation followed by whitespace or a closing
 quote. Text before the boundary and the phrase are removed. A phrase after a
@@ -547,7 +550,9 @@ from <code class="docutils literal notranslate"><span class="pre">please</span><
 or <code class="docutils literal notranslate"><span class="pre">will</span></code> followed by <code class="docutils literal notranslate"><span class="pre">you</span></code>. Negations (<code class="docutils literal notranslate"><span class="pre">don't</span> <span class="pre">stop</span></code>), questions (<code class="docutils literal notranslate"><span class="pre">should</span> <span class="pre">I</span> <span class="pre">stop?</span></code>), reported speech (<code class="docutils literal notranslate"><span class="pre">you</span> <span class="pre">said</span> <span class="pre">stop</span></code>), unconfigured arbitrary prefixes,
 and scoped or multi-action commands (<code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">monitoring</span> <span class="pre">xyz</span></code>) are not global
 stops. They follow the ordinary gate rules.</p>
-<p>The early path emits only an interruption, not a chime or stop acknowledgement.
+<p>A partial STOP match emits only an interruption, not a chime or stop
+acknowledgement. Wake recognition may independently emit the optional chime,
+but chime configuration, initialization, or playback does not control probing.
 If the final transcript remains a global stop, normal stop handling emits the
 acknowledgement. If STT revises partial <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span> <span class="pre">stop</span></code> to final <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span> <span class="pre">stop</span> <span class="pre">monitoring</span> <span class="pre">xyz</span></code>, the final transcript instead dispatches <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">monitoring</span> <span class="pre">xyz</span></code>
 to the agent; the latency-saving interruption is not undone.</p>

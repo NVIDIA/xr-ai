@@ -106,8 +106,9 @@ Package Contents
    ``stop_probe_after_s`` — cadence in seconds for up to three STT probes of
    the partial audio buffer. This gives STOP commands a fast interruption path
    without replacing final transcription, and lets a configured wake phrase
-   be acknowledged before the utterance ends. Set to ``0`` or negative to
-   disable probes.
+   be acknowledged before the utterance ends. A phrase-gated utterance can
+   make up to three partial STT requests plus the final request. Set to ``0``
+   or negative to disable probes.
 
 
    .. py:attribute:: silence_duration
