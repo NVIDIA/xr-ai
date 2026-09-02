@@ -1,0 +1,84 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+schema_version: 1
+task:
+  id: arrange_workpiece
+  name: Arrange a workpiece
+  version: 1
+  status: draft
+  source_session: example-session-id
+  start_step: clear_workspace
+  foreground_prompt: Guide the user through arranging one workpiece using only the recorded SOP.
+  complete_message: The workpiece arrangement SOP is complete.
+
+state:
+  workspace_clear:
+    type: boolean
+    description: The target work area is visibly clear.
+    initial: false
+  workpiece_positioned:
+    type: boolean
+    description: The workpiece is visibly centered in the target area.
+    initial: false
+
+steps:
+  - id: clear_workspace
+    title: Clear the workspace
+    reads: []
+    writes: [workspace_clear]
+    trigger:
+      function: current_view
+      interval_s: 3
+      arguments:
+        question: Answer exactly "workspace clear" or "workspace not clear". Is the target work area visibly clear?
+    agent:
+      prompt: Preserve the direct visual classification; do not infer off-camera conditions.
+      tools: []
+    voice:
+      prompt: Explain how to clear the target area and what visible result to check.
+      tools: [current_view]
+    evidence:
+      pattern: "(?i)workspace clear"
+      consecutive: 2
+      commit:
+        workspace_clear: true
+    complete_when:
+      workspace_clear: true
+    next: position_workpiece
+    complete_on_skip: false
+    state_on_skip: {}
+    messages:
+      enter: Clear the target work area, then keep it visible.
+      complete: The workspace looks clear. Say next when you are ready.
+      skip: Skipping the workspace check.
+
+  - id: position_workpiece
+    title: Position the workpiece
+    reads: [workspace_clear]
+    writes: [workpiece_positioned]
+    trigger:
+      function: current_view
+      interval_s: 3
+      arguments:
+        question: Answer exactly "workpiece positioned" or "workpiece not positioned". Is the workpiece visibly centered in the target area?
+    agent:
+      prompt: Preserve the direct visual classification; do not infer precision beyond the image.
+      tools: []
+    voice:
+      prompt: Explain where the guide says to place the workpiece and how to verify it visually.
+      tools: [current_view]
+    evidence:
+      pattern: "(?i)workpiece positioned"
+      consecutive: 2
+      commit:
+        workpiece_positioned: true
+    complete_when:
+      workpiece_positioned: true
+    next: null
+    complete_on_skip: false
+    state_on_skip: {}
+    messages:
+      enter: Center the workpiece in the target area and keep it visible.
+      complete: The workpiece looks positioned. Say next to finish.
+      skip: Skipping the positioning check.
