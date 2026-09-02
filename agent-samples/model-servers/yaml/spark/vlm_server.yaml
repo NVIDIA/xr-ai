@@ -8,6 +8,8 @@
 # Cosmos3 requires about 1.12 GiB of KV cache for the 8,192-token context.
 # Pin 1.5 GiB because vLLM's fractional memory profiler can misattribute
 # filesystem page-cache changes as model overhead on unified-memory systems.
+# The 0.20 utilization remains vLLM's startup admission threshold; the fixed
+# byte value controls the KV-cache allocation.
 # hf_overrides selects the Reasoner runtime; details are documented in
 # docs/source/components/ai-services.md#per-server-notes.
 
@@ -19,6 +21,7 @@ hf_token: ""
 port: 8100
 host: "0.0.0.0"
 model_cache: ../../../../models
+gpu_memory_utilization: 0.20
 kv_cache_memory_bytes: 1610612736
 max_num_seqs: 4
 enforce_eager: true
