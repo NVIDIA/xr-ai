@@ -26,17 +26,20 @@ sudo apt install python3-dev
 
 This applies to the `agent-samples/model-servers/yaml/spark/` profile.
 
-### DGX Spark — vLLM fails in `cudaMemGetInfo` before loading weights
+### DGX Spark — CUDA allocation fails during a vLLM cold start
 
 **Symptom:** `model_servers` aborts while starting a vLLM service, often the
 embedding server after the larger services have started. The traceback reaches
 `MemorySnapshot.measure()`, then ends in `torch.cuda.mem_get_info()` or
-`cudaMemGetInfo` with a CUDA out-of-memory error. `htop` can still show tens of
-gigabytes of available memory.
+`cudaMemGetInfo` with a CUDA out-of-memory error. Another form ends in
+`torch.AcceleratorError` and references `cudaErrorMemoryAllocation` after the
+kernel driver reports `NV_ERR_NO_MEMORY`. Docker reports that the container was
+not OOM-killed, and `htop` can still show tens of gigabytes of available memory.
 
-**Cause:** this traceback is not a model-weight or KV-cache allocation failure.
-The CUDA memory snapshot fails before vLLM loads that service's weights or
-checks its configured `gpu_memory_utilization`.
+**Cause:** these tracebacks are not model-weight or KV-cache allocation
+failures. The CUDA driver fails to obtain immediately usable memory before or
+during initialization. The `CUDA_LAUNCH_BLOCKING=1` line in the traceback is
+generic debugging advice, not the cause.
 
 DGX Spark uses a unified memory architecture: the CPU, GPU, filesystem cache,
 and model servers share the same DRAM. Linux `MemAvailable` includes memory that
@@ -58,10 +61,20 @@ If `MemAvailable` is much larger than `MemFree` and `Cached` is large, the
 failure is consistent with reclaimable-cache pressure rather than the next
 model being too large for the configured profile.
 
-**Fix:** first install the current DGX OS and driver updates. The [DGX Spark
-release notes](https://docs.nvidia.com/dgx/dgx-spark/release-notes.html)
-identify improved GB10 UMA out-of-memory handling in the July 2026 release.
-Stop unrelated memory-intensive workloads before retrying the stack.
+**Fix:** the bundled `spark` profile enables `spark_uma` for each Docker-backed
+vLLM service. The wrapper downloads and syncs the complete Hugging Face
+snapshot before vLLM initializes CUDA, so transfer, reconstruction, and dirty
+writeback allocations do not overlap the CUDA context allocation. If the
+driver allocation still fails, the wrapper waits for reclamation and restarts
+the stopped container once. The retry applies only when Docker reports that
+the container was not OOM-killed and the log has the DGX Spark driver-allocation
+signature; model-weight and KV-cache OOMs are not retried.
+
+If the retry is exhausted, first install the current DGX OS and driver updates.
+The [DGX Spark release
+notes](https://docs.nvidia.com/dgx/dgx-spark/release-notes.html) identify
+improved GB10 UMA out-of-memory handling in the July 2026 release. Stop
+unrelated memory-intensive workloads before retrying the stack.
 
 For diagnosis and recovery, NVIDIA recommends flushing clean filesystem caches
 and then restarting the application:
@@ -107,12 +120,12 @@ the unreliable profiling calculation, but vLLM still evaluates
 `gpu_memory_utilization` during its initial free-memory admission check. Do
 not remove the profile value and fall back to vLLM's higher default.
 
-Pre-download large checkpoints before starting a custom Spark profile when
-possible. Do not flush the filesystem cache routinely for this symptom: doing
-so makes the next checkpoint read cold and can reproduce the profiling
-variation. The cache-flush workaround in the previous section applies only
-when `cudaMemGetInfo` itself fails before weight loading. An explicit cache
-cannot bypass that earlier CUDA memory-snapshot call.
+Enable `spark_uma` on each Docker-backed vLLM service when copying the bundled
+settings into a custom Spark profile. Do not flush the filesystem cache
+routinely for this symptom: doing so makes the next checkpoint read cold and
+can reproduce the profiling variation. An explicit KV cache cannot bypass an
+earlier CUDA driver-allocation failure; the prefetch and bounded retry are
+separate safeguards for that stage.
 
 ### DGX Spark — LOVR auto-download is not supported
 

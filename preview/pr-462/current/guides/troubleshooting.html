@@ -439,16 +439,19 @@ headers.</p>
 </div>
 <p>This applies to the <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/spark/</span></code> profile.</p>
 </section>
-<section id="dgx-spark-vllm-fails-in-cudamemgetinfo-before-loading-weights">
-<h3>DGX Spark — vLLM fails in <code class="docutils literal notranslate"><span class="pre">cudaMemGetInfo</span></code> before loading weights<a class="headerlink" href="#dgx-spark-vllm-fails-in-cudamemgetinfo-before-loading-weights" title="Link to this heading">#</a></h3>
+<section id="dgx-spark-cuda-allocation-fails-during-a-vllm-cold-start">
+<h3>DGX Spark — CUDA allocation fails during a vLLM cold start<a class="headerlink" href="#dgx-spark-cuda-allocation-fails-during-a-vllm-cold-start" title="Link to this heading">#</a></h3>
 <p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> aborts while starting a vLLM service, often the
 embedding server after the larger services have started. The traceback reaches
 <code class="docutils literal notranslate"><span class="pre">MemorySnapshot.measure()</span></code>, then ends in <code class="docutils literal notranslate"><span class="pre">torch.cuda.mem_get_info()</span></code> or
-<code class="docutils literal notranslate"><span class="pre">cudaMemGetInfo</span></code> with a CUDA out-of-memory error. <code class="docutils literal notranslate"><span class="pre">htop</span></code> can still show tens of
-gigabytes of available memory.</p>
-<p><strong>Cause:</strong> this traceback is not a model-weight or KV-cache allocation failure.
-The CUDA memory snapshot fails before vLLM loads that service’s weights or
-checks its configured <code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">cudaMemGetInfo</span></code> with a CUDA out-of-memory error. Another form ends in
+<code class="docutils literal notranslate"><span class="pre">torch.AcceleratorError</span></code> and references <code class="docutils literal notranslate"><span class="pre">cudaErrorMemoryAllocation</span></code> after the
+kernel driver reports <code class="docutils literal notranslate"><span class="pre">NV_ERR_NO_MEMORY</span></code>. Docker reports that the container was
+not OOM-killed, and <code class="docutils literal notranslate"><span class="pre">htop</span></code> can still show tens of gigabytes of available memory.</p>
+<p><strong>Cause:</strong> these tracebacks are not model-weight or KV-cache allocation
+failures. The CUDA driver fails to obtain immediately usable memory before or
+during initialization. The <code class="docutils literal notranslate"><span class="pre">CUDA_LAUNCH_BLOCKING=1</span></code> line in the traceback is
+generic debugging advice, not the cause.</p>
 <p>DGX Spark uses a unified memory architecture: the CPU, GPU, filesystem cache,
 and model servers share the same DRAM. Linux <code class="docutils literal notranslate"><span class="pre">MemAvailable</span></code> includes memory that
 the kernel can reclaim, while <code class="docutils literal notranslate"><span class="pre">cudaMemGetInfo</span></code> can report a smaller immediately
@@ -465,10 +468,19 @@ startup failure on UMA systems.</p>
 <p>If <code class="docutils literal notranslate"><span class="pre">MemAvailable</span></code> is much larger than <code class="docutils literal notranslate"><span class="pre">MemFree</span></code> and <code class="docutils literal notranslate"><span class="pre">Cached</span></code> is large, the
 failure is consistent with reclaimable-cache pressure rather than the next
 model being too large for the configured profile.</p>
-<p><strong>Fix:</strong> first install the current DGX OS and driver updates. The <a class="reference external" href="https://docs.nvidia.com/dgx/dgx-spark/release-notes.html">DGX Spark
-release notes</a>
-identify improved GB10 UMA out-of-memory handling in the July 2026 release.
-Stop unrelated memory-intensive workloads before retrying the stack.</p>
+<p><strong>Fix:</strong> the bundled <code class="docutils literal notranslate"><span class="pre">spark</span></code> profile enables <code class="docutils literal notranslate"><span class="pre">spark_uma</span></code> for each Docker-backed
+vLLM service. The wrapper downloads and syncs the complete Hugging Face
+snapshot before vLLM initializes CUDA, so transfer, reconstruction, and dirty
+writeback allocations do not overlap the CUDA context allocation. If the
+driver allocation still fails, the wrapper waits for reclamation and restarts
+the stopped container once. The retry applies only when Docker reports that
+the container was not OOM-killed and the log has the DGX Spark driver-allocation
+signature; model-weight and KV-cache OOMs are not retried.</p>
+<p>If the retry is exhausted, first install the current DGX OS and driver updates.
+The <a class="reference external" href="https://docs.nvidia.com/dgx/dgx-spark/release-notes.html">DGX Spark release
+notes</a> identify
+improved GB10 UMA out-of-memory handling in the July 2026 release. Stop
+unrelated memory-intensive workloads before retrying the stack.</p>
 <p>For diagnosis and recovery, NVIDIA recommends flushing clean filesystem caches
 and then restarting the application:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>sh<span class="w"> </span>-c<span class="w"> </span><span class="s1">'sync; echo 3 &gt; /proc/sys/vm/drop_caches'</span>
@@ -506,12 +518,12 @@ vLLM versions, <code class="docutils literal notranslate"><span class="pre">kv_c
 the unreliable profiling calculation, but vLLM still evaluates
 <code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code> during its initial free-memory admission check. Do
 not remove the profile value and fall back to vLLM’s higher default.</p>
-<p>Pre-download large checkpoints before starting a custom Spark profile when
-possible. Do not flush the filesystem cache routinely for this symptom: doing
-so makes the next checkpoint read cold and can reproduce the profiling
-variation. The cache-flush workaround in the previous section applies only
-when <code class="docutils literal notranslate"><span class="pre">cudaMemGetInfo</span></code> itself fails before weight loading. An explicit cache
-cannot bypass that earlier CUDA memory-snapshot call.</p>
+<p>Enable <code class="docutils literal notranslate"><span class="pre">spark_uma</span></code> on each Docker-backed vLLM service when copying the bundled
+settings into a custom Spark profile. Do not flush the filesystem cache
+routinely for this symptom: doing so makes the next checkpoint read cold and
+can reproduce the profiling variation. An explicit KV cache cannot bypass an
+earlier CUDA driver-allocation failure; the prefetch and bounded retry are
+separate safeguards for that stage.</p>
 </section>
 <section id="dgx-spark-lovr-auto-download-is-not-supported">
 <h3>DGX Spark — LOVR auto-download is not supported<a class="headerlink" href="#dgx-spark-lovr-auto-download-is-not-supported" title="Link to this heading">#</a></h3>
@@ -897,7 +909,7 @@ stall indefinitely; set <code class="docutils literal notranslate"><span class="
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup-time-issues">Setup-time issues</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-uv-sync-fails-to-build-a-wheel">DGX Spark — <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> fails to build a wheel</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-vllm-fails-in-cudamemgetinfo-before-loading-weights">DGX Spark — vLLM fails in <code class="docutils literal notranslate"><span class="pre">cudaMemGetInfo</span></code> before loading weights</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-cuda-allocation-fails-during-a-vllm-cold-start">DGX Spark — CUDA allocation fails during a vLLM cold start</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-vllm-reports-insufficient-kv-cache-only-on-a-cold-start">DGX Spark — vLLM reports insufficient KV cache only on a cold start</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-lovr-auto-download-is-not-supported">DGX Spark — LOVR auto-download is not supported</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#blackwell-gpus-b200-rtx-pro-6000-vlm-fails-to-start">Blackwell GPUs (B200, RTX PRO 6000) — VLM fails to start</a></li>
