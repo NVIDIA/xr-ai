@@ -6,7 +6,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from xr_ai_vllm._diagnostics import classify_vllm_failure
+from xr_ai_vllm._diagnostics import (
+    classify_vllm_failure,
+    is_cuda_memory_allocation_failure,
+)
 
 
 def test_negative_kv_cache_is_classified_as_insufficient_gpu_memory(
@@ -36,6 +39,31 @@ def test_cuda_oom_is_classified(tmp_path: Path) -> None:
 
     assert diagnosis is not None
     assert diagnosis.startswith("INSUFFICIENT GPU MEMORY")
+
+
+def test_spark_driver_allocation_failure_has_uma_diagnosis(tmp_path: Path) -> None:
+    log = tmp_path / "vllm.log"
+    log.write_text(
+        "torch.AcceleratorError: CUDA error: out of memory\n"
+        "Search for `cudaErrorMemoryAllocation' in the CUDA runtime API\n"
+    )
+
+    assert is_cuda_memory_allocation_failure(log)
+    diagnosis = classify_vllm_failure(
+        log,
+        ["vllm", "serve", "model"],
+        spark_uma=True,
+    )
+
+    assert diagnosis is not None
+    assert diagnosis.startswith("DGX SPARK UMA ALLOCATION FAILURE")
+
+
+def test_torch_cuda_oom_is_not_driver_allocation_signature(tmp_path: Path) -> None:
+    log = tmp_path / "vllm.log"
+    log.write_text("torch.OutOfMemoryError: CUDA out of memory")
+
+    assert not is_cuda_memory_allocation_failure(log)
 
 
 def test_conflicting_process_memory_is_classified(tmp_path: Path) -> None:

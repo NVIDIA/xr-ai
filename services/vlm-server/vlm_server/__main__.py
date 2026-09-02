@@ -40,6 +40,8 @@ Config keys
     vllm_backend:            str    "pip" (default) or "docker".
     vllm_image:              str    NGC image when vllm_backend=docker
                                     (default: nvcr.io/nvidia/vllm:26.07-py3).
+    spark_uma:               bool   Enable DGX Spark cold-start safeguards
+                                    (docker backend only; default: false).
 """
 import json
 import os
@@ -116,6 +118,7 @@ def run() -> None:
     max_videos    = int(cfg.get("max_videos_per_prompt", _DEFAULT_MAX_VIDEOS))
     backend       = cfg.get("vllm_backend",         "pip")
     image         = cfg.get("vllm_image",           _DEFAULT_VLLM_IMAGE)
+    spark_uma     = parse_config_bool(cfg.get("spark_uma", False), "spark_uma")
 
     model_cache = resolve_model_cache(cfg, yaml_dir, default="../../models")
     cuda_devices = setup_hf_env(cfg, model_cache)
@@ -170,6 +173,7 @@ def run() -> None:
         hf_token=os.environ.get("HF_TOKEN") or None,
         cuda_visible_devices=cuda_devices,
         ready_file=ready_file,
+        spark_uma=spark_uma,
     )
 
 

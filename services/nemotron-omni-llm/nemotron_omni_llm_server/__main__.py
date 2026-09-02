@@ -41,6 +41,8 @@ Config keys (nemotron_omni_llm_server.yaml)
                                      ["mamba-ssm", "causal-conv1d"] since
                                      Nemotron-Omni's hybrid SSM backbone
                                      requires both at model-load time).
+    spark_uma:                bool   Enable DGX Spark cold-start safeguards
+                                     (docker backend only; default: false).
 """
 import json
 import os
@@ -133,6 +135,7 @@ def run() -> None:
     moe_backend   = cfg.get("moe_backend")
     backend       = cfg.get("vllm_backend",         "pip")
     image         = cfg.get("vllm_image",           DEFAULT_IMAGE)
+    spark_uma     = parse_config_bool(cfg.get("spark_uma", False), "spark_uma")
     # Nemotron-Omni's hybrid SSM/Transformer backbone imports `mamba_ssm`
     # at model-load time, and `causal_conv1d` is its required CUDA-kernel
     # peer dep. Neither ships in the NGC vLLM image, so we install both
@@ -182,6 +185,7 @@ def run() -> None:
         cuda_visible_devices=cuda_devices,
         extra_pip=extra_pip,
         ready_file=ready_file,
+        spark_uma=spark_uma,
     )
 
 

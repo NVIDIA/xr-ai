@@ -257,8 +257,10 @@ def test_omni_profiles_select_supported_vllm_configuration(profile_path: Path) -
     if profile_path.parent.name == "spark":
         assert config["gpu_memory_utilization"] == 0.25
         assert config["kv_cache_memory_bytes"] == 2147483648
+        assert config["spark_uma"] is True
     else:
         assert "kv_cache_memory_bytes" not in config
+        assert "spark_uma" not in config
 
 
 def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -567,6 +569,7 @@ def test_spark_omni_uses_explicit_kv_cache(
     memory_index = args.index("--gpu-memory-utilization")
     assert args[cache_index + 1] == "2147483648"
     assert args[memory_index + 1] == "0.25"
+    assert captured["spark_uma"] is True
 
 
 @pytest.mark.parametrize("value", [True, 0, -1, "invalid"])
@@ -608,6 +611,45 @@ def test_embedding_default_cache_tracks_service_depth(
     _embedding.run()
 
     assert resolved == [_REPO_ROOT / "models"]
+
+
+def test_spark_embedding_enables_uma_cold_start_safeguards(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    config_path = (
+        _REPO_ROOT / "agent-samples/model-servers/yaml/spark/embedding_server.yaml"
+    )
+    config = yaml.safe_load(config_path.read_text())
+    monkeypatch.setattr(_embedding, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        _embedding,
+        "load_config",
+        lambda: (config, config_path.parent, None),
+    )
+    monkeypatch.setattr(
+        _embedding,
+        "resolve_model_cache",
+        lambda *_a, **_k: Path("models"),
+    )
+    monkeypatch.setattr(_embedding, "setup_hf_env", lambda *_a, **_k: None)
+    monkeypatch.setattr(_embedding, "serve", lambda **kwargs: captured.update(kwargs))
+
+    _embedding.run()
+
+    assert captured["spark_uma"] is True
+
+
+def test_non_spark_embedding_profiles_do_not_enable_uma_safeguards() -> None:
+    for profile in ("96G_blackwell", "dual_48G_ada"):
+        config_path = (
+            _REPO_ROOT
+            / "agent-samples/model-servers/yaml"
+            / profile
+            / "embedding_server.yaml"
+        )
+        config = yaml.safe_load(config_path.read_text())
+        assert "spark_uma" not in config
 
 
 def test_stop_needs_no_stack_selection(monkeypatch: pytest.MonkeyPatch) -> None:
