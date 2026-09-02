@@ -27,7 +27,6 @@ from xr_ai_vllm._docker import (
     run,
 )
 
-
 _EARLY_CUDA_ALLOCATION_FAILURE = (
     'File "/opt/vllm/vllm/v1/worker/gpu_worker.py", line 282, in init_device\n'
     "  self.init_snapshot = MemorySnapshot(device=self.device)\n"
