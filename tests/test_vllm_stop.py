@@ -242,6 +242,54 @@ def test_stop_keeps_unverified_piper_process_pid_scoped(monkeypatch) -> None:
     assert calls == [(1234, signal.SIGTERM), (1234, 0)]
 
 
+def test_pid_cleanup_waits_for_exit_after_sigkill(monkeypatch) -> None:
+    signals: list[int] = []
+    probes_after_sigkill = 0
+    force_killed = False
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "container_on_port_checked",
+        lambda _port: (None, True),
+    )
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "pid_on_port_checked",
+        lambda _port: (1234, True, True),
+    )
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "is_xr_ai_server_process",
+        lambda *_args: True,
+    )
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "_piper_owned_process_group",
+        lambda *_args: None,
+    )
+    monkeypatch.setattr(time, "sleep", lambda _seconds: None)
+
+    def kill(_pid: int, sig: int) -> None:
+        nonlocal force_killed, probes_after_sigkill
+        if sig == signal.SIGKILL:
+            force_killed = True
+            signals.append(sig)
+            return
+        if sig == signal.SIGTERM:
+            signals.append(sig)
+            return
+        assert sig == 0
+        if force_killed:
+            probes_after_sigkill += 1
+            if probes_after_sigkill == 3:
+                raise ProcessLookupError
+
+    monkeypatch.setattr(xr_ai_vllm.os, "kill", kill)
+
+    assert xr_ai_vllm.stop_persistent_servers([("tts", 8105)])
+    assert signals == [signal.SIGTERM, signal.SIGKILL]
+    assert probes_after_sigkill == 3
+
+
 def test_stop_keeps_non_piper_managed_process_pid_scoped(monkeypatch) -> None:
     calls: list[tuple[int, int]] = []
     monkeypatch.setattr(
