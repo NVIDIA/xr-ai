@@ -881,6 +881,7 @@ def run_container(
         existing = running = False
 
     attempt_started_at = datetime.now(timezone.utc).isoformat()
+    owns_attempt = False
     if running and matching:
         # Running but not yet healthy — e.g. started by a wrapper that died,
         # or a NIM mid engine-download. Adopt it instead of a doomed
@@ -906,6 +907,7 @@ def run_container(
         if not start_container(container_name):
             log.error("could not restart container %s", container_name)
             sys.exit(1)
+        owns_attempt = True
         proc = None
     else:
         if existing:
@@ -925,6 +927,7 @@ def run_container(
         print(f"[{log_prefix}] {launch_banner}", flush=True)
         _state["cleanup_mode"] = "remove"
         proc = subprocess.Popen(argv, start_new_session=True)
+        owns_attempt = True
     _state["proc"] = proc
 
     log_path = _container_log_path(container_name)
@@ -935,6 +938,7 @@ def run_container(
     streamer = _LogStreamer(container_name, since=attempt_started_at)
     _state["streamer"] = streamer
     retry_remaining = 1 if spark_uma else 0
+    retry_started = False
     while True:
         try:
             _lifecycle.wait_until_healthy(
@@ -962,7 +966,8 @@ def run_container(
                 since=attempt_started_at,
             )
             retryable = (
-                retry_remaining > 0
+                owns_attempt
+                and retry_remaining > 0
                 and container_oom_killed(container_name) is False
                 and _diagnostics.is_cuda_memory_allocation_failure(
                     streamer.log_path,
@@ -994,6 +999,7 @@ def run_container(
                     except OSError:
                         retry_log_offset = attempt_log_offset
                     if start_container(container_name):
+                        retry_started = True
                         proc = None
                         _state["proc"] = None
                         attempt_started_at = retry_started_at
@@ -1015,6 +1021,7 @@ def run_container(
                     diagnostic_argv,
                     spark_uma=spark_uma,
                     start_offset=attempt_log_offset,
+                    retry_exhausted=retry_started,
                 )
                 if diagnostic_argv is not None else None
             )

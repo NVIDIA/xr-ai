@@ -31,18 +31,28 @@ def is_cuda_memory_allocation_failure(
 ) -> bool:
     """Return whether vLLM failed at the CUDA driver-allocation boundary.
 
-    This deliberately excludes ``torch.OutOfMemoryError`` and KV-cache
-    admission failures. On DGX Spark, ``torch.AcceleratorError`` paired with
-    ``cudaErrorMemoryAllocation`` identifies the transient UMA cold-start
-    failure for which one clean container restart is useful.
+    This deliberately excludes model-loading, ``torch.OutOfMemoryError``, and
+    KV-cache admission failures. The transient DGX Spark failure occurs while
+    ``init_device`` takes its initial ``MemorySnapshot`` through
+    ``mem_get_info``; the traceback context distinguishes that failure from a
+    later allocation error carrying the same generic CUDA text.
     """
     body = _read_log(log_path, start_offset)
     if body is None:
         return False
     lowered = body.lower()
-    return "torch.acceleratorerror" in lowered and (
-        "cudaerrormemoryallocation" in lowered
-        or "cuda error: out of memory" in lowered
+    initial_snapshot = (
+        "in init_device" in lowered
+        and "in measure" in lowered
+        and "mem_get_info" in lowered
+    )
+    return (
+        initial_snapshot
+        and "torch.acceleratorerror" in lowered
+        and (
+            "cudaerrormemoryallocation" in lowered
+            or "cuda error: out of memory" in lowered
+        )
     )
 
 
@@ -52,6 +62,7 @@ def classify_vllm_failure(
     *,
     spark_uma: bool = False,
     start_offset: int = 0,
+    retry_exhausted: bool = False,
 ) -> str | None:
     """Return a clear diagnosis when *log_path* contains a GPU-memory failure."""
     body = _read_log(log_path, start_offset)
@@ -68,10 +79,14 @@ def classify_vllm_failure(
         log_path,
         start_offset=start_offset,
     ):
+        retry_detail = (
+            "The automatic cold-start retry was exhausted. "
+            if retry_exhausted else ""
+        )
         return (
             "DGX SPARK UMA ALLOCATION FAILURE: the CUDA driver could not allocate "
             "startup memory even though Linux may still report reclaimable memory. "
-            "The automatic cold-start retry was exhausted. Stop unrelated "
+            f"{retry_detail}Stop unrelated "
             "memory-intensive workloads and verify the supported DGX OS and driver."
         )
 
@@ -93,7 +108,11 @@ def classify_vllm_failure(
             "model/context/concurrency, free GPU memory, or use a larger device."
         )
 
-    if "cuda out of memory" in lowered or "torch.outofmemoryerror" in lowered:
+    if (
+        "cuda out of memory" in lowered
+        or "cuda error: out of memory" in lowered
+        or "torch.outofmemoryerror" in lowered
+    ):
         return (
             "INSUFFICIENT GPU MEMORY: CUDA allocation failed during vLLM startup"
             f"{budget}. Free GPU memory, reduce the configured model/context/"

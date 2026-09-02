@@ -28,6 +28,16 @@ from xr_ai_vllm._docker import (
 )
 
 
+_EARLY_CUDA_ALLOCATION_FAILURE = (
+    'File "/opt/vllm/vllm/v1/worker/gpu_worker.py", line 282, in init_device\n'
+    "  self.init_snapshot = MemorySnapshot(device=self.device)\n"
+    'File "/opt/vllm/vllm/utils/mem_utils.py", line 108, in measure\n'
+    "  self.free_memory, self.total_memory = current_platform.mem_get_info(device)\n"
+    "torch.AcceleratorError: CUDA error: out of memory\n"
+    "cudaErrorMemoryAllocation\n"
+)
+
+
 class TestRegistryFor:
     def test_nvcr_registry(self):
         assert _registry_for("nvcr.io/nvidia/vllm:26.04-py3") == "nvcr.io"
@@ -1320,8 +1330,7 @@ class TestRunContainer:
             def __init__(self, _name, **_kwargs):
                 self.log_path = log_path
                 self.log_path.write_text(
-                    "torch.AcceleratorError: CUDA error: out of memory\n"
-                    "cudaErrorMemoryAllocation\n",
+                    _EARLY_CUDA_ALLOCATION_FAILURE,
                     encoding="utf-8",
                 )
 
@@ -1348,6 +1357,58 @@ class TestRunContainer:
         assert starts == ["xr-ai-test-ctr"]
         assert kwargs["ready_file"].exists()
 
+    def test_spark_does_not_retry_an_adopted_container(
+        self, monkeypatch, tmp_path,
+    ):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda *_a, **_k: False)
+        running = {"value": True}
+        monkeypatch.setattr(
+            _docker,
+            "container_running",
+            lambda _name: running["value"],
+        )
+        monkeypatch.setattr(_docker, "container_exists", lambda _name: True)
+
+        def _fail_adopted_attempt(*_args, **_kwargs):
+            running["value"] = False
+            raise SystemExit(1)
+
+        monkeypatch.setattr(
+            _docker._lifecycle,
+            "wait_until_healthy",
+            _fail_adopted_attempt,
+        )
+        log_path = tmp_path / "container.log"
+
+        class _Streamer:
+            def __init__(self, _name, **_kwargs):
+                self.log_path = log_path
+                self.log_path.write_text(
+                    _EARLY_CUDA_ALLOCATION_FAILURE,
+                    encoding="utf-8",
+                )
+
+            def stop(self):
+                pass
+
+        monkeypatch.setattr(_docker, "_LogStreamer", _Streamer)
+        monkeypatch.setattr(_docker, "_append_post_mortem", lambda *_a, **_kw: None)
+        monkeypatch.setattr(_docker.time, "sleep", lambda _seconds: None)
+        starts: list[str] = []
+        monkeypatch.setattr(
+            _docker,
+            "start_container",
+            lambda name: starts.append(name) or True,
+        )
+        kwargs = self._kwargs(tmp_path)
+        kwargs["spark_uma"] = True
+
+        with pytest.raises(SystemExit, match="1"):
+            _docker.run_container(**kwargs)
+
+        assert starts == []
+
     def test_spark_does_not_retry_an_old_attempt_allocation_failure(
         self, monkeypatch, tmp_path,
     ):
@@ -1365,8 +1426,7 @@ class TestRunContainer:
 
         log_path = tmp_path / "container.log"
         log_path.write_text(
-            "torch.AcceleratorError: CUDA error: out of memory\n"
-            "cudaErrorMemoryAllocation\n",
+            _EARLY_CUDA_ALLOCATION_FAILURE,
             encoding="utf-8",
         )
         monkeypatch.setattr(_docker, "_container_log_path", lambda _name: log_path)
@@ -1399,6 +1459,59 @@ class TestRunContainer:
 
         assert starts == []
 
+    @pytest.mark.parametrize("restart_succeeds", [False, True])
+    def test_retry_exhaustion_requires_a_successful_restart(
+        self, monkeypatch, tmp_path, restart_succeeds,
+    ):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda *_a, **_k: False)
+        monkeypatch.setattr(
+            _docker._lifecycle,
+            "wait_until_healthy",
+            lambda *_a, **_kw: (_ for _ in ()).throw(SystemExit(1)),
+        )
+
+        class _FakeProc:
+            def poll(self):
+                return 1
+
+        log_path = tmp_path / "container.log"
+
+        class _Streamer:
+            def __init__(self, _name, **_kwargs):
+                self.log_path = log_path
+                with self.log_path.open("a", encoding="utf-8") as stream:
+                    stream.write(_EARLY_CUDA_ALLOCATION_FAILURE)
+
+            def stop(self):
+                pass
+
+        monkeypatch.setattr(_docker.subprocess, "Popen", lambda *_a, **_kw: _FakeProc())
+        monkeypatch.setattr(_docker, "_LogStreamer", _Streamer)
+        monkeypatch.setattr(_docker, "_append_post_mortem", lambda *_a, **_kw: None)
+        monkeypatch.setattr(_docker, "container_oom_killed", lambda _name: False)
+        monkeypatch.setattr(_docker.time, "sleep", lambda _seconds: None)
+        monkeypatch.setattr(
+            _docker,
+            "start_container",
+            lambda _name: restart_succeeds,
+        )
+        exhausted: list[bool] = []
+        monkeypatch.setattr(
+            _docker._diagnostics,
+            "classify_vllm_failure",
+            lambda *_a, **kwargs: exhausted.append(kwargs["retry_exhausted"])
+            or "diagnosis",
+        )
+        kwargs = self._kwargs(tmp_path)
+        kwargs["spark_uma"] = True
+        kwargs["diagnostic_argv"] = ["vllm", "serve", "model"]
+
+        with pytest.raises(SystemExit, match="1"):
+            _docker.run_container(**kwargs)
+
+        assert exhausted == [restart_succeeds]
+
     @pytest.mark.parametrize(
         ("spark_uma", "oom_killed"),
         [(False, False), (True, True)],
@@ -1423,8 +1536,7 @@ class TestRunContainer:
 
             def __init__(self, _name, **_kwargs):
                 self.log_path.write_text(
-                    "torch.AcceleratorError: CUDA error: out of memory\n"
-                    "cudaErrorMemoryAllocation\n",
+                    _EARLY_CUDA_ALLOCATION_FAILURE,
                     encoding="utf-8",
                 )
 
