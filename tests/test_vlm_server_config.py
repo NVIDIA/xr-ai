@@ -66,6 +66,36 @@ def test_default_cosmos3_service_uses_reasoner_only_path(monkeypatch, tmp_path) 
     assert "--omni" not in args
     assert "--model-class-name" not in args
     assert "Cosmos3OmniDiffusersPipeline" not in args
+    assert "--gpu-memory-utilization" in args
+    assert "--kv-cache-memory-bytes" not in args
+
+
+def test_spark_profile_uses_explicit_kv_cache(monkeypatch, tmp_path) -> None:
+    server = _load_server_module()
+    spark_config = _MODEL_PROFILES / "spark" / "vlm_server.yaml"
+    cfg = yaml.safe_load(spark_config.read_text())
+    captured = {}
+
+    monkeypatch.setattr(server, "setup_logging", lambda _name: None)
+    monkeypatch.setattr(
+        server,
+        "load_config",
+        lambda: (cfg, spark_config.parent, None),
+    )
+    monkeypatch.setattr(
+        server,
+        "resolve_model_cache",
+        lambda *_args, **_kwargs: tmp_path,
+    )
+    monkeypatch.setattr(server, "setup_hf_env", lambda *_args: None)
+    monkeypatch.setattr(server, "serve", lambda **kwargs: captured.update(kwargs))
+
+    server.run()
+
+    args = captured["extra_serve_args"]
+    cache_index = args.index("--kv-cache-memory-bytes")
+    assert args[cache_index + 1] == "1610612736"
+    assert "--gpu-memory-utilization" not in args
 
 
 def test_all_local_profiles_select_cosmos3_reasoner_runtime() -> None:
@@ -87,9 +117,32 @@ def test_hardware_profiles_reserve_measured_reasoner_memory() -> None:
     dual_ada = yaml.safe_load(
         (_MODEL_PROFILES / "dual_48G_ada" / "vlm_server.yaml").read_text()
     )
+    spark = yaml.safe_load(
+        (_MODEL_PROFILES / "spark" / "vlm_server.yaml").read_text()
+    )
 
     assert blackwell["gpu_memory_utilization"] == 0.23
     assert dual_ada["gpu_memory_utilization"] == 0.47
+    assert "kv_cache_memory_bytes" not in blackwell
+    assert "kv_cache_memory_bytes" not in dual_ada
+    assert spark["kv_cache_memory_bytes"] == 1610612736
+    assert "gpu_memory_utilization" not in spark
+
+
+def test_vlm_memory_controls_are_mutually_exclusive(monkeypatch, tmp_path) -> None:
+    server = _load_server_module()
+    cfg = yaml.safe_load(_SERVER_YAML.read_text())
+    cfg["kv_cache_memory_bytes"] = 1610612736
+
+    monkeypatch.setattr(server, "setup_logging", lambda _name: None)
+    monkeypatch.setattr(
+        server,
+        "load_config",
+        lambda: (cfg, _SERVER_YAML.parent, None),
+    )
+
+    with pytest.raises(SystemExit, match="1"):
+        server.run()
 
 
 def test_cosmos3_rejects_missing_reasoner_override(monkeypatch, tmp_path) -> None:
