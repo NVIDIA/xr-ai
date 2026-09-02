@@ -51,8 +51,9 @@ artifacts; do not commit them.
 
 The one committed lockfile is `dependency-manifest/uv.lock`. The
 `dependency-manifest/` project depends on every package in the repository, so
-its lock records the complete resolved dependency set at the qualification
-cutoff for dependency analysis tooling. Nothing else reads it and no CI check
+its lock records the complete resolved runtime dependency set at the
+qualification cutoff for dependency analysis tooling; build-system requirements
+such as `hatchling` are not part of a uv lock. Nothing else reads it and no CI check
 depends on it, so it is regenerated only as part of a dependency refresh: add any
 projects created since the last refresh to `dependency-manifest/pyproject.toml`,
 then run `uv --config-file uv.toml lock --upgrade --project dependency-manifest`.
