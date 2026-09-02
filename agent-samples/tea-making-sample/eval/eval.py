@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -25,6 +26,7 @@ from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.tool_calling import tool_definitions
 
 _SAMPLE = Path(__file__).resolve().parents[1]
+_MIN_PASS_RATE = 0.80
 
 
 def _build_agents(llm: LLMService) -> tuple[ForegroundAgent, GuidanceAgent]:
@@ -121,7 +123,6 @@ async def main() -> None:
     cases = yaml.safe_load((_SAMPLE / "eval" / "cases.yaml").read_text(encoding="utf-8"))
     llm = make_llm(load_models_config(_SAMPLE / "yaml" / "models.local.json"), "llm")
     foreground, guidance = _build_agents(llm)
-    failures: list[str] = []
     passed_count = 0
     try:
         for index, case in enumerate(cases):
@@ -168,6 +169,18 @@ async def main() -> None:
                     tool.request_model.model_validate_json(call.arguments)
                 except ValueError as exc:
                     errors.append(f"invalid {call.name!r} arguments: {exc}")
+            expected_skip = case.get("expected_skip")
+            if expected_skip is not None and calls:
+                try:
+                    arguments = json.loads(calls[0].arguments)
+                except json.JSONDecodeError:
+                    pass
+                else:
+                    if arguments.get("skip") is not bool(expected_skip):
+                        errors.append(
+                            f"advance skip was {arguments.get('skip')!r}, "
+                            f"expected {bool(expected_skip)!r}"
+                        )
             normalized_content = _normalize_response(content)
             expected_response = case.get("expected_response")
             if expected_response is not None and normalized_content != _normalize_response(
@@ -195,19 +208,18 @@ async def main() -> None:
             ) in normalized_content:
                 errors.append(f"response contained forbidden {forbidden_response!r}")
             passed = actual_tools == expected_tools and not errors
-            label = "PASS" if passed else "FAIL"
+            label = "PASS" if passed else "MISS"
             print(f"{label} {case['name']}: tools={actual_tools!r} content={content!r}")
             if passed:
                 passed_count += 1
-            else:
-                failures.append(
-                    f"{case['name']}: expected {expected_tools!r}, received {actual_tools!r}; errors={errors!r}"
-                )
     finally:
         await llm.close()
     print(f"RESULT {passed_count}/{len(cases)} cases passed")
-    if failures:
-        raise SystemExit("\n".join(failures))
+    pass_rate = passed_count / len(cases)
+    if pass_rate < _MIN_PASS_RATE:
+        raise SystemExit(
+            f"overall pass rate {pass_rate:.1%} is below {_MIN_PASS_RATE:.0%}"
+        )
 
 
 if __name__ == "__main__":

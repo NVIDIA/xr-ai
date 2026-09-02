@@ -48,6 +48,7 @@ from .workflow_state import (
     monotonic_now,
 )
 from .workflow_tools import (
+    _NAMED_TOOL_NAMES,
     CurrentViewRequest,
     TimerRequest,
     clock_now_tool,
@@ -67,14 +68,28 @@ _OBSERVATION_PROMPT = _PROMPTS / "guidance_observation.txt"
 _VOICE_PROMPT = _PROMPTS / "guidance_voice.txt"
 _POLL_INTERVAL_S = 0.25
 _WATER_VISIBLE = re.compile(r"(?is)^water visible\s*:\s*(.+)$")
+_WATER_CUE = re.compile(
+    r"(?i)\b(?:"
+    r"(?:water|liquid|visible)\s+(?:surface|level)|"
+    r"(?:surface|level)\s+(?:of\s+)?(?:the\s+)?(?:water|liquid)|"
+    r"water\s*line|waterline|(?:side\s+)?gauge|"
+    r"(?:water\s+is\s+|actively\s+)?pouring\s+(?:in|into)|"
+    r"pouring\s+water|surface\s+reflection"
+    r")\b"
+)
 _TEMPERATURE = re.compile(
     r"(?i)(?<![\w.])(-?\d{1,3}(?:\.\d+)?)\s*"
     r"(?:°\s*|degrees?\s*)?(celsius|fahrenheit|c|f)\b"
 )
 _NEGATIVE_CUE = re.compile(
-    r"(?i)\b(?:ambiguous|cannot|can't|no|not|unclear|unable|unknown)\b"
+    r"(?i)\b(?:absent|ambiguous|cannot|can't|closed|dry|empty|no|not|"
+    r"obscured|unclear|unable|unknown)\b"
 )
 _NUMBER = re.compile(r"(?<![\w.])-?\d{1,3}(?:\.\d+)?(?![\w.])")
+_NO_READING = re.compile(
+    r"(?i)\b(?:no (?:current )?reading|reading (?:is )?"
+    r"(?:missing|not visible|unavailable))\b"
+)
 _HEATING_THRESHOLD_C = 50.0
 _AMBIGUOUS_RETRIES = 3
 
@@ -91,15 +106,20 @@ class _StaleObservation(RuntimeError):
 
 def _water_visible(observation: str) -> bool:
     match = _WATER_VISIBLE.fullmatch(observation.strip().strip("`'\" "))
-    return match is not None and _NEGATIVE_CUE.search(match.group(1)) is None
+    if match is None:
+        return False
+    cue = match.group(1)
+    return _NEGATIVE_CUE.search(cue) is None and _WATER_CUE.search(cue) is not None
 
 
 def _temperature_reading_c(observation: str) -> tuple[float | None, bool]:
-    text = observation.strip().strip("`'\" ")
-    matches = list(_TEMPERATURE.finditer(text))
-    if len(matches) == 1:
-        reading = float(matches[0].group(1))
-        unit = matches[0].group(2).casefold()
+    text = observation.strip().strip("`'\" ").rstrip(".")
+    if _NO_READING.search(text) is not None:
+        return None, False
+    match = _TEMPERATURE.fullmatch(text)
+    if match is not None:
+        reading = float(match.group(1))
+        unit = match.group(2).casefold()
         if unit in {"fahrenheit", "f"}:
             reading = (reading - 32.0) * 5.0 / 9.0
         return reading, False
@@ -141,6 +161,15 @@ class GuidanceAgent(Agent):
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._publish_locks: dict[str, asyncio.Lock] = {}
         self._temperature_ambiguity: dict[str, tuple[int, int, bool]] = {}
+        for step in workflow.steps.values():
+            unknown = (
+                set(step.agent.tools) | set(step.voice.tools)
+            ) - _NAMED_TOOL_NAMES
+            if unknown:
+                raise ValueError(
+                    f"workflow step {step.id!r} references unknown tools: "
+                    f"{sorted(unknown)}"
+                )
 
     def bind_runtime(self, runtime: AgentRuntime) -> None:
         """Bind runtime publication before participant work starts."""
@@ -184,54 +213,19 @@ class GuidanceAgent(Agent):
         return ToolSet(tools)
 
     def active_context(self, participant_id: str) -> str | None:
-        """Return ordered public guide context and current-step response rules."""
+        """Return current-step policy and sparse state without conversation history."""
 
         session = self.store.find(participant_id)
         if session is None or not session.active or session.step_id is None:
             return None
         step = self.workflow.step(session.step_id)
-        steps = tuple(self.workflow.steps.values())
-        index = steps.index(step)
-        step_complete = step.is_complete(session.state)
-
-        def describe(item: Step) -> dict[str, Any]:
-            try:
-                action = self.store._render_state(item.enter_message, session.state)
-            except ValueError:
-                action = item.title
-            return {"id": item.id, "title": item.title, "action": action}
-
-        recommended = step
-        if step_complete and step.next_step is not None:
-            recommended = self.workflow.step(step.next_step)
-
         return json.dumps(
             {
-                "response_rules": self._voice_prompt,
-                "step_rules_for": recommended.id,
-                "step_rules": recommended.voice.prompt,
-                "public_guide": {
-                    "description": self.workflow.foreground_prompt,
-                    "steps": [describe(item) for item in steps],
-                    "current_step": {
-                        **describe(step),
-                        "complete": step_complete,
-                    },
-                    "recommended_action": (
-                        None
-                        if step_complete and step.next_step is None
-                        else describe(recommended)
-                    ),
-                    "previous_step": (
-                        None if index == 0 else describe(steps[index - 1])
-                    ),
-                    "next_step": (
-                        None
-                        if index + 1 == len(steps)
-                        else describe(steps[index + 1])
-                    ),
-                    "state": session.state,
-                },
+                "workflow": self.workflow.foreground_prompt,
+                "voice_policy": self._voice_prompt,
+                "step": {"id": step.id, "title": step.title},
+                "instructions": step.voice.prompt,
+                "state": self.workflow.project(step, session.state),
             },
             ensure_ascii=False,
             separators=(",", ":"),
