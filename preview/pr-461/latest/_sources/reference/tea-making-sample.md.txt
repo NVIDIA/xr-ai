@@ -203,19 +203,22 @@ participant has an active step.
 
 - With no active workflow, the model receives root tools: start/status,
   current view, RAG, recent background facts, and background controls.
-- With an active workflow, it receives the current step's tools plus explicit
-  workflow controls and compact sparse state.
+- With an active workflow, it receives the focused current-step policy and
+  compact sparse state. Read-only step tools remain available unless the whole
+  utterance is a procedural guide question. A state-changing workflow tool is
+  exposed only for an explicit command, with advance-versus-skip arguments
+  fixed before the model call.
 
 Active turns may address the current step, guide status and controls, or the
 independent background applications. For a request unrelated to all of those,
-the model must call no tool, leave guide state unchanged, and reply exactly “I
-can only help with the active tea guide right now.” The rule is scoped to the
-active route; the idle root assistant can answer ordinary questions.
+the model must call no tool, leave guide state unchanged, and briefly decline.
+The wording is intentionally not fixed. The rule is scoped to the active route;
+the idle root assistant can answer ordinary questions.
 
-An inline `foreground_prompt` or `foreground_prompt_file` overrides only the
-shared foreground instructions. The packaged idle or active policy is appended
-after that shared prompt so configuration overrides cannot remove route
-selection, active-guide refusal, or workflow-control safeguards.
+An inline `foreground_prompt` or `foreground_prompt_file` supplies the root
+assistant and explicit background-route instructions. Active tea behavior comes
+from the focused policies built from `workflow.yaml`; configuration overrides
+cannot replace the active-guide scope or workflow-control safeguards.
 
 There is exactly one model loop. The foreground agent does not ask one model to
 route to another agent, and background agents never capture a foreground turn.
@@ -439,17 +442,18 @@ Test deterministic behavior separately from model quality:
 
 The checked-in live-model routing eval shares the production foreground's
 root-versus-active prompt and tool preparation. It validates the first model
-action, tool arguments, exact active-guide refusal, and positive active-guide
-routes. Start `model-servers` so the configured Omni LLM endpoint on port 8108
-is healthy, then run from `agent-samples/tea-making-sample/`:
+action, bound workflow arguments, semantic active-guide refusals, and positive
+active-guide routes. The suite must maintain an 80 percent pass rate so
+occasional language-model variation remains visible without making the
+evaluation unusable. Start `model-servers` so the configured Omni LLM endpoint
+on port 8108 is healthy, then run from `agent-samples/tea-making-sample/`:
 
 ```bash
 uv run --project worker python eval/eval.py
 ```
 
-The command prints one `PASS` or `FAIL` line for each case and exits with a
-nonzero status when a tool choice, argument schema, or response contract does
-not match.
+The command prints `PASS` or `MISS` for each case. It exits nonzero when the
+overall pass rate drops below 80 percent.
 
 When debugging, inspect the workflow, background, foreground, and Relay JSONL
 files as separate stages. This shows whether the problem came from evidence,
