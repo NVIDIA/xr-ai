@@ -79,11 +79,12 @@ cannot be evaluated when `cudaMemGetInfo` itself fails. Lower the setting only
 for later failures that report insufficient memory for the requested
 utilization or KV cache.
 
-### DGX Spark — Cosmos VLM has insufficient KV cache only on a cold start
+### DGX Spark — vLLM reports insufficient KV cache only on a cold start
 
-**Symptom:** the Cosmos VLM reports less KV-cache capacity on its first start
-than on a later start with the same `max_model_len`. The first start can reject
-the 8,192-token context even while Linux reports substantial available memory.
+**Symptom:** Nemotron Omni or the Cosmos VLM reports a negative or smaller
+KV-cache capacity on its first start than on a later start with the same
+configuration. The first start can reject the configured context even while
+Linux reports substantial available memory.
 
 **Cause:** vLLM derives non-Torch usage from changes in globally available
 memory while it loads and profiles a model. On a unified-memory system, model
@@ -91,18 +92,27 @@ downloads and checkpoint reads change the Linux filesystem page cache. vLLM
 can attribute part of that global change to the model and subtract it from the
 automatically sized KV cache. The behavior is tracked in [vLLM issue
 #35920](https://github.com/vllm-project/vllm/issues/35920).
+The model-server launcher starts these services sequentially, so concurrent
+startup is not required to trigger the page-cache accounting error.
 
 **Fix:** the bundled `spark` profile sets `kv_cache_memory_bytes` explicitly
-for Cosmos instead of relying on `gpu_memory_utilization`. Keep that fixed
-allocation when copying or modifying the profile. The value is mutually
-exclusive with `gpu_memory_utilization` and is passed to vLLM as
-`--kv-cache-memory-bytes`.
+for both Nemotron Omni and Cosmos instead of using the fractional profiler to
+size their caches. Keep the fixed allocations when copying or modifying the
+profile. The values are 2 GiB for Omni's 32,768-token hybrid Mamba/attention
+cache and 1.5 GiB for Cosmos's 8,192-token cache.
+
+The Spark files intentionally retain `gpu_memory_utilization`. In the bundled
+vLLM versions, `kv_cache_memory_bytes` controls the cache allocation and skips
+the unreliable profiling calculation, but vLLM still evaluates
+`gpu_memory_utilization` during its initial free-memory admission check. Do
+not remove the profile value and fall back to vLLM's higher default.
 
 Pre-download large checkpoints before starting a custom Spark profile when
 possible. Do not flush the filesystem cache routinely for this symptom: doing
 so makes the next checkpoint read cold and can reproduce the profiling
 variation. The cache-flush workaround in the previous section applies only
-when `cudaMemGetInfo` itself fails before weight loading.
+when `cudaMemGetInfo` itself fails before weight loading. An explicit cache
+cannot bypass that earlier CUDA memory-snapshot call.
 
 ### DGX Spark — LOVR auto-download is not supported
 

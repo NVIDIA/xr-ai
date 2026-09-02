@@ -25,8 +25,9 @@ Config keys
     tensor_parallel_size:    int    vLLM --tensor-parallel-size (default: 1).
     max_model_len:           int    vLLM --max-model-len (default: 8192).
     gpu_memory_utilization:  float  vLLM --gpu-memory-utilization (default: 0.85).
-    kv_cache_memory_bytes:   int    Explicit vLLM KV-cache size in bytes. Mutually
-                                    exclusive with gpu_memory_utilization (optional).
+    kv_cache_memory_bytes:   int    Explicit vLLM KV-cache size in bytes (optional).
+                                    When set, gpu_memory_utilization remains the
+                                    startup free-memory admission threshold.
     enforce_eager:           bool   Skip CUDA graph capture (default: false).
     async_scheduling:        bool   Enable vLLM async scheduling (default: false).
     hf_overrides:            dict   Hugging Face config overrides passed as JSON.
@@ -89,14 +90,9 @@ def run() -> None:
     max_seqs      = int(cfg.get("max_num_seqs",     _DEFAULT_SEQS))
     tp_size       = int(cfg.get("tensor_parallel_size", _DEFAULT_TP))
     max_ctx       = int(cfg.get("max_model_len",    _DEFAULT_CTX))
+    gpu_mem       = float(cfg.get("gpu_memory_utilization", _DEFAULT_GPU_MEM))
     kv_cache_memory_bytes = cfg.get("kv_cache_memory_bytes")
     if kv_cache_memory_bytes is not None:
-        if "gpu_memory_utilization" in cfg:
-            logger.error(
-                "'kv_cache_memory_bytes' and 'gpu_memory_utilization' are "
-                "mutually exclusive"
-            )
-            sys.exit(1)
         if isinstance(kv_cache_memory_bytes, bool):
             logger.error("'kv_cache_memory_bytes' must be a positive integer")
             sys.exit(1)
@@ -108,9 +104,6 @@ def run() -> None:
         if kv_cache_memory_bytes <= 0:
             logger.error("'kv_cache_memory_bytes' must be a positive integer")
             sys.exit(1)
-        gpu_mem = None
-    else:
-        gpu_mem = float(cfg.get("gpu_memory_utilization", _DEFAULT_GPU_MEM))
     enforce_eager = parse_config_bool(
         cfg.get("enforce_eager", _DEFAULT_EAGER), "enforce_eager"
     )
@@ -147,14 +140,13 @@ def run() -> None:
         "--max-num-seqs", str(max_seqs),
         "--tensor-parallel-size", str(tp_size),
         "--max-model-len", str(max_ctx),
+        "--gpu-memory-utilization", str(gpu_mem),
         "--limit-mm-per-prompt", json.dumps({"image": max_images, "video": max_videos}),
     ]
     if kv_cache_memory_bytes is not None:
         extra_serve_args.extend(
             ["--kv-cache-memory-bytes", str(kv_cache_memory_bytes)]
         )
-    else:
-        extra_serve_args.extend(["--gpu-memory-utilization", str(gpu_mem)])
     if enforce_eager:
         extra_serve_args.append("--enforce-eager")
     if async_sched:

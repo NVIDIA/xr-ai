@@ -254,6 +254,11 @@ def test_omni_profiles_select_supported_vllm_configuration(profile_path: Path) -
     assert config["vllm_image"] == "vllm/vllm-openai:v0.20.0"
     assert config["extra_pip"] == []
     assert "moe_backend" not in config
+    if profile_path.parent.name == "spark":
+        assert config["gpu_memory_utilization"] == 0.25
+        assert config["kv_cache_memory_bytes"] == 2147483648
+    else:
+        assert "kv_cache_memory_bytes" not in config
 
 
 def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -533,6 +538,54 @@ def test_omni_only_forwards_configured_moe_backend(
         assert "--moe-backend" not in args
     else:
         assert args[args.index("--moe-backend") + 1] == moe_backend
+
+
+def test_spark_omni_uses_explicit_kv_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    config_path = (
+        _REPO_ROOT
+        / "agent-samples/model-servers/yaml/spark/nemotron_omni_llm_server.yaml"
+    )
+    config = yaml.safe_load(config_path.read_text())
+    monkeypatch.setattr(_omni, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        _omni,
+        "load_config",
+        lambda: (config, config_path.parent, None),
+    )
+    monkeypatch.setattr(_omni, "resolve_model_cache", lambda *_a, **_k: Path("models"))
+    monkeypatch.setattr(_omni, "setup_hf_env", lambda *_a, **_k: None)
+    monkeypatch.setattr(_omni, "gpu_compute_major", lambda: 12)
+    monkeypatch.setattr(_omni, "serve", lambda **kwargs: captured.update(kwargs))
+
+    _omni.run()
+
+    args = captured["extra_serve_args"]
+    cache_index = args.index("--kv-cache-memory-bytes")
+    memory_index = args.index("--gpu-memory-utilization")
+    assert args[cache_index + 1] == "2147483648"
+    assert args[memory_index + 1] == "0.25"
+
+
+@pytest.mark.parametrize("value", [True, 0, -1, "invalid"])
+def test_omni_rejects_invalid_explicit_kv_cache(
+    monkeypatch: pytest.MonkeyPatch,
+    value: object,
+) -> None:
+    monkeypatch.setattr(_omni, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        _omni,
+        "load_config",
+        lambda: ({"kv_cache_memory_bytes": value}, Path("."), None),
+    )
+    monkeypatch.setattr(_omni, "resolve_model_cache", lambda *_a, **_k: Path("models"))
+    monkeypatch.setattr(_omni, "setup_hf_env", lambda *_a, **_k: None)
+    monkeypatch.setattr(_omni, "gpu_compute_major", lambda: 12)
+
+    with pytest.raises(SystemExit, match="1"):
+        _omni.run()
 
 
 def test_embedding_default_cache_tracks_service_depth(

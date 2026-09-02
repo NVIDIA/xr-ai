@@ -95,7 +95,8 @@ def test_spark_profile_uses_explicit_kv_cache(monkeypatch, tmp_path) -> None:
     args = captured["extra_serve_args"]
     cache_index = args.index("--kv-cache-memory-bytes")
     assert args[cache_index + 1] == "1610612736"
-    assert "--gpu-memory-utilization" not in args
+    memory_index = args.index("--gpu-memory-utilization")
+    assert args[memory_index + 1] == "0.2"
 
 
 def test_all_local_profiles_select_cosmos3_reasoner_runtime() -> None:
@@ -126,13 +127,16 @@ def test_hardware_profiles_reserve_measured_reasoner_memory() -> None:
     assert "kv_cache_memory_bytes" not in blackwell
     assert "kv_cache_memory_bytes" not in dual_ada
     assert spark["kv_cache_memory_bytes"] == 1610612736
-    assert "gpu_memory_utilization" not in spark
+    assert spark["gpu_memory_utilization"] == 0.20
 
 
-def test_vlm_memory_controls_are_mutually_exclusive(monkeypatch, tmp_path) -> None:
+@pytest.mark.parametrize("value", [True, 0, -1, "invalid"])
+def test_vlm_rejects_invalid_explicit_kv_cache(
+    monkeypatch, value: object,
+) -> None:
     server = _load_server_module()
     cfg = yaml.safe_load(_SERVER_YAML.read_text())
-    cfg["kv_cache_memory_bytes"] = 1610612736
+    cfg["kv_cache_memory_bytes"] = value
 
     monkeypatch.setattr(server, "setup_logging", lambda _name: None)
     monkeypatch.setattr(
