@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+models_config: models.json
+voice_gate_yaml: voice_gate.yaml
+
+# Paths resolve relative to this YAML file.
+artifacts_dir: ../artifacts
+guides_dir: ../guides
+
+# Raw frame sampling and looser semantic observation cadence.
+capture_fps: 2.0
+caption_interval_s: 5.0
+guide_scan_interval_s: 2.0
+
+frame_max_age_s: 2.0
+frame_timeout_s: 3.0
+
+silero_threshold: 0.4
+silence_duration: 0.6
+min_speech: 0.15
+idle_timeout_secs: 0
