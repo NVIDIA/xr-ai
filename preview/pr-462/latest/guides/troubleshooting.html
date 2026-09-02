@@ -516,9 +516,11 @@ for both Nemotron Omni and Cosmos instead of using the fractional profiler to
 size their caches. Keep the fixed allocations when copying or modifying the
 profile. The values are 2 GiB for Omni’s 32,768-token hybrid Mamba/attention
 cache and 1.5 GiB for Cosmos’s 8,192-token cache. The Cosmos budget supports
-one maximum-length request, so its Spark profile sets <code class="docutils literal notranslate"><span class="pre">max_num_seqs:</span> <span class="pre">1</span></code> and
-queues concurrent requests. Increase both the fixed cache and concurrency
-limit when a custom Spark deployment needs parallel full-context requests.</p>
+one maximum-length request while <code class="docutils literal notranslate"><span class="pre">max_num_seqs:</span> <span class="pre">4</span></code> retains concurrency for
+shorter requests. Concurrent requests near the context limit can queue,
+preempt, or recompute when their aggregate token demand exceeds the fixed
+cache. Increase the fixed cache when a custom Spark deployment needs parallel
+full-context requests.</p>
 <p>The Spark files intentionally retain <code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code>. In the bundled
 vLLM versions, <code class="docutils literal notranslate"><span class="pre">kv_cache_memory_bytes</span></code> controls the cache allocation and skips
 the unreliable profiling calculation, but vLLM still evaluates

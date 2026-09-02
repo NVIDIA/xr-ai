@@ -1395,10 +1395,11 @@ workflow.</p></li>
 <span class="c1"># vlm is THIRD in load order: STT → Omni → vlm.</span>
 <span class="c1"># free_at_startup ≈ 120 − 30 (Omni) − 2 (STT) ≈ 88 GiB.</span>
 <span class="c1"># Cosmos3 requires about 1.12 GiB of KV cache for one 8,192-token request.</span>
-<span class="c1"># Pin 1.5 GiB and one concurrent sequence because vLLM's fractional memory</span>
-<span class="c1"># profiler can misattribute filesystem page-cache changes as model overhead on</span>
-<span class="c1"># unified-memory systems. Concurrent requests queue rather than preempting and</span>
-<span class="c1"># recomputing a full context that cannot share this fixed cache budget.</span>
+<span class="c1"># Pin 1.5 GiB because vLLM's fractional memory profiler can misattribute</span>
+<span class="c1"># filesystem page-cache changes as model overhead on unified-memory systems.</span>
+<span class="c1"># Keep four sequences for concurrent shorter requests. The fixed cache is</span>
+<span class="c1"># shared, so concurrent maximum-length requests can queue, preempt, or</span>
+<span class="c1"># recompute when their aggregate token demand exceeds its capacity.</span>
 <span class="c1"># The 0.20 utilization remains vLLM's startup admission threshold; the fixed</span>
 <span class="c1"># byte value controls the KV-cache allocation.</span>
 <span class="c1"># hf_overrides selects the Reasoner runtime; details are documented in</span>
@@ -1414,7 +1415,7 @@ workflow.</p></li>
 <span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
 <span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.20</span>
 <span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
-<span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
 <span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">async_scheduling</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">mm_encoder_tp_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">data</span>
