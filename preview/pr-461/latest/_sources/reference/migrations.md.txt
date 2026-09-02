@@ -15,11 +15,6 @@ and command to `device_io_hub`. Rename `xr_media_hub.yaml` to
 
 ## Operator-visible runtime changes
 
-- Piper no longer reuses a healthy listener unless it carries xr-ai's managed
-  process and matching-port markers. Before upgrading a running checkout, use
-  its existing `model_servers --stop` command. If an older unmarked Piper
-  process remains on port 8105, stop that verified process once; subsequent
-  starts use the managed process group and support complete cleanup.
 - DeviceIOHub no longer falls back to embedded LiveKit development credentials.
   Set `api_key` and `api_secret` in `device_io_hub.yaml`, or inject
   `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` through the environment.

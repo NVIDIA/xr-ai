@@ -797,11 +797,9 @@ its persistent process with <code class="docutils literal notranslate"><span cla
 that survived a previous stack run, and is stopped by the same
 <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> cleanup.</p>
 <p>Piper uses the launcher’s persistent process group directly. Its bootstrap
-validates that an existing healthy listener carries xr-ai’s matching ownership
-markers; a listener without those markers fails startup instead of being
-silently adopted. When no server exists, the bootstrap replaces itself with
-the foreground Uvicorn and ONNX process. Repeated starts therefore do not leave
-idle Piper supervisor processes behind.</p>
+reuses an existing healthy listener. When no server exists, the bootstrap
+replaces itself with the foreground Uvicorn and ONNX process. Repeated starts
+therefore do not leave idle Piper supervisor processes behind.</p>
 <p>Docker containers carry a fingerprint of their image, GPU assignment, model
 cache, environment, bootstrap packages, complete vLLM command, and a versioned
 launcher-controlled Docker contract. This prevents a failed container created
@@ -815,14 +813,11 @@ with stale memory limits, entrypoint, setup commands, or model arguments.</p>
 stops them with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span></code> (escalating to <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">kill</span></code> after 20 s).
 Locally persisted processes (pip-mode vLLM and Piper) must carry the
 <code class="docutils literal notranslate"><span class="pre">XR_AI_VLLM_MANAGED</span></code> and <code class="docutils literal notranslate"><span class="pre">XR_AI_VLLM_PORT</span></code> ownership markers before cleanup
-sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code>. Marked local servers are stopped as complete
-process groups so their launcher and inference descendants cannot survive as
-orphans. Piper also carries <code class="docutils literal notranslate"><span class="pre">XR_AI_MANAGED_SERVICE=piper-tts</span></code>; existing Piper
-processes without that marker are recognized by their <code class="docutils literal notranslate"><span class="pre">piper_tts_server</span></code>
-command. A marked vLLM process on the same port is not treated as Piper.
-Unknown listeners and failed inspection abort cleanup without sending a signal,
-and <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> exits nonzero if any target could not be stopped.
-Absent servers are silently skipped.</p>
+sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code>. Piper is stopped as a complete process group so
+its launcher and inference descendants cannot survive as orphans; other local
+servers retain PID-only cleanup. Unknown listeners and failed inspection abort
+cleanup without sending a signal, and <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> exits nonzero if
+any target could not be stopped. Absent servers are silently skipped.</p>
 <p>The target ports and container names match the defaults in the per-profile YAML files.</p>
 </section>
 <section id="choosing-the-vllm-runtime-pip-vs-docker">

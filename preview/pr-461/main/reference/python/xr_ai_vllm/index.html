@@ -512,9 +512,6 @@ docker path stays light even when pip vllm is not installed.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_vllm.stop_persistent_servers" title="xr_ai_vllm.stop_persistent_servers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop_persistent_servers</span></code></a>(→ bool)</p></td>
 <td><p>Stop persisted servers and report whether every discovered server stopped.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_vllm.managed_server_on_port" title="xr_ai_vllm.managed_server_on_port"><code class="xref py py-obj docutils literal notranslate"><span class="pre">managed_server_on_port</span></code></a>(→ bool)</p></td>
-<td><p>Return whether <em>port</em> is held by the expected managed local server.</p></td>
-</tr>
 </tbody>
 </table>
 </div>
@@ -675,20 +672,12 @@ pyproject.toml there).</p>
 <li><p>Look for a docker container labelled <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm.port=&lt;port&gt;</span></code>
 (stamped at start time by the vLLM wrapper) and <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span></code> it.</p></li>
 <li><p>Fall back to port → pid for pip-mode vLLM or in-process servers
-(e.g. STT). Marker-owned processes are signalled as complete process
-groups; legacy command-owned processes are signalled by PID.</p></li>
+(e.g. STT). Piper is signalled as a complete process group; other
+local servers are signalled by PID.</p></li>
 </ol>
 <p>A missing container and listener is already stopped. Output is print-style
 with <code class="docutils literal notranslate"><span class="pre">[&lt;label&gt;]</span> <span class="pre">…</span></code> prefixes. Discovery errors and listeners that are not
 identified as xr-ai services fail closed without sending a signal.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="xr_ai_vllm.managed_server_on_port">
-<span class="sig-prename descclassname"><span class="pre">xr_ai_vllm.</span></span><span class="sig-name descname"><span class="pre">managed_server_on_port</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#xr_ai_vllm.managed_server_on_port" title="Link to this definition">#</a></dt>
-<dd><p>Return whether <em>port</em> is held by the expected managed local server.</p>
-<p>Discovery fails closed: containers, listeners without visible process IDs,
-and processes without xr-ai ownership are not considered reusable.</p>
 </dd></dl>
 
 </section>
@@ -754,7 +743,6 @@ and processes without xr-ai ownership are not considered reusable.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.DEFAULT_IMAGE"><code class="docutils literal notranslate"><span class="pre">DEFAULT_IMAGE</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.serve"><code class="docutils literal notranslate"><span class="pre">serve()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.stop_persistent_servers"><code class="docutils literal notranslate"><span class="pre">stop_persistent_servers()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.managed_server_on_port"><code class="docutils literal notranslate"><span class="pre">managed_server_on_port()</span></code></a></li>
 </ul>
 </li>
 </ul>

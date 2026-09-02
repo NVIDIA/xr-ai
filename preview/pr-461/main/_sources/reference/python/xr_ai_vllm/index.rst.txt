@@ -64,7 +64,6 @@ Functions
    xr_ai_vllm.serve_nim
    xr_ai_vllm.serve
    xr_ai_vllm.stop_persistent_servers
-   xr_ai_vllm.managed_server_on_port
 
 
 Package Contents
@@ -179,19 +178,11 @@ Package Contents
    1. Look for a docker container labelled ``xr-ai-vllm.port=<port>``
       (stamped at start time by the vLLM wrapper) and ``docker stop`` it.
    2. Fall back to port → pid for pip-mode vLLM or in-process servers
-      (e.g. STT). Marker-owned processes are signalled as complete process
-      groups; legacy command-owned processes are signalled by PID.
+      (e.g. STT). Piper is signalled as a complete process group; other
+      local servers are signalled by PID.
 
    A missing container and listener is already stopped. Output is print-style
    with ``[<label>] …`` prefixes. Discovery errors and listeners that are not
    identified as xr-ai services fail closed without sending a signal.
-
-
-.. py:function:: managed_server_on_port(label: str, port: int) -> bool
-
-   Return whether *port* is held by the expected managed local server.
-
-   Discovery fails closed: containers, listeners without visible process IDs,
-   and processes without xr-ai ownership are not considered reusable.
 
 

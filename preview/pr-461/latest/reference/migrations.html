@@ -434,11 +434,6 @@ and command to <code class="docutils literal notranslate"><span class="pre">devi
 <section id="operator-visible-runtime-changes">
 <h2>Operator-visible runtime changes<a class="headerlink" href="#operator-visible-runtime-changes" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p>Piper no longer reuses a healthy listener unless it carries xr-ai’s managed
-process and matching-port markers. Before upgrading a running checkout, use
-its existing <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> command. If an older unmarked Piper
-process remains on port 8105, stop that verified process once; subsequent
-starts use the managed process group and support complete cleanup.</p></li>
 <li><p>DeviceIOHub no longer falls back to embedded LiveKit development credentials.
 Set <code class="docutils literal notranslate"><span class="pre">api_key</span></code> and <code class="docutils literal notranslate"><span class="pre">api_secret</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>, or inject
 <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_SECRET</span></code> through the environment.</p></li>
