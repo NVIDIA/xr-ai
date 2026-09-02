@@ -316,7 +316,6 @@ def _port_open(host: str, port: int) -> bool:
 
 async def _load_backend(
     backend: _PiperBackend,
-    timeout_s: float,
 ) -> None:
     """Load Piper without letting a stuck native initializer block shutdown."""
     loop = asyncio.get_running_loop()
@@ -344,12 +343,7 @@ async def _load_backend(
             pass
 
     threading.Thread(target=_load, name="piper-model-loader", daemon=True).start()
-    try:
-        await asyncio.wait_for(loaded, timeout=timeout_s)
-    except asyncio.TimeoutError as exc:
-        raise TimeoutError(
-            f"server did not become ready within {timeout_s:g} seconds"
-        ) from exc
+    await loaded
 
 
 async def _run(
@@ -374,18 +368,33 @@ async def _run(
 
     app, backend = _build_app(cfg, model_cache)
 
-    await _load_backend(backend, startup_timeout_s)
+    serve_task: asyncio.Task | None = None
+    try:
+        async with asyncio.timeout(startup_timeout_s):
+            await _load_backend(backend)
 
-    config = uvicorn.Config(app, host=host, port=port, log_level="warning")
-    server = uvicorn.Server(config)
+            config = uvicorn.Config(app, host=host, port=port, log_level="warning")
+            server = uvicorn.Server(config)
 
-    logger.info("Starting HTTP server on http://localhost:{}/v1", port)
-    serve_task = asyncio.create_task(server.serve())
-    while not server.started:
-        if serve_task.done():
-            await serve_task
-            raise RuntimeError("HTTP server exited before becoming ready")
-        await asyncio.sleep(0.05)
+            logger.info("Starting HTTP server on http://localhost:{}/v1", port)
+            serve_task = asyncio.create_task(server.serve())
+            while not server.started:
+                if serve_task.done():
+                    await serve_task
+                    raise RuntimeError("HTTP server exited before becoming ready")
+                await asyncio.sleep(0.05)
+    except TimeoutError as exc:
+        if serve_task is not None:
+            serve_task.cancel()
+            try:
+                await serve_task
+            except asyncio.CancelledError:
+                pass
+        raise TimeoutError(
+            f"server did not become ready within {startup_timeout_s:g} seconds"
+        ) from exc
+
+    assert serve_task is not None
 
     logger.info("Ready  →  http://localhost:{}/v1", port)
     if ready_file:
@@ -467,6 +476,7 @@ def run() -> None:
         os.environ | {
             "XR_AI_VLLM_MANAGED": "1",
             "XR_AI_VLLM_PORT": str(port),
+            "XR_AI_MANAGED_SERVICE": "piper-tts",
         },
     )
 
