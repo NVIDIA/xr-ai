@@ -146,7 +146,6 @@ async def test_piper_reuses_healthy_persistent_server(
     execvpe = Mock(side_effect=AssertionError("must not launch a second server"))
     monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
     monkeypatch.setattr(module, "_health_url_ok", lambda _url: True)
-    monkeypatch.setattr(xr_ai_vllm, "managed_server_on_port", lambda *_args: True)
     monkeypatch.setattr(module.os, "execvpe", execvpe)
     monkeypatch.setattr(
         module.sys,
@@ -158,31 +157,6 @@ async def test_piper_reuses_healthy_persistent_server(
 
     assert ready_file.exists()
     execvpe.assert_not_called()
-
-
-async def test_piper_rejects_healthy_unmanaged_server(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    module = _load_piper_main_module()
-    ready_file = tmp_path / "ready"
-    monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
-    monkeypatch.setattr(module, "_health_url_ok", lambda _url: True)
-    monkeypatch.setattr(xr_ai_vllm, "managed_server_on_port", lambda *_args: False)
-    monkeypatch.setattr(
-        module.os,
-        "execvpe",
-        Mock(side_effect=AssertionError("must not replace an unmanaged server")),
-    )
-    monkeypatch.setattr(
-        module.sys,
-        "argv",
-        ["piper_tts_server", "--ready-file", str(ready_file)],
-    )
-
-    with pytest.raises(SystemExit, match="healthy but unmanaged"):
-        module.run()
-
-    assert not ready_file.exists()
 
 
 async def test_piper_probes_configured_non_loopback_host(
@@ -349,7 +323,6 @@ async def test_piper_execs_managed_server_in_place(
     assert argv[-2:] == ["--ready-file", str(ready_file)]
     assert child_env["XR_AI_VLLM_MANAGED"] == "1"
     assert child_env["XR_AI_VLLM_PORT"] == "8105"
-    assert child_env["XR_AI_MANAGED_SERVICE"] == "piper-tts"
     assert not ready_file.exists()
 
 

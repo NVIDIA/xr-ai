@@ -332,11 +332,9 @@ that survived a previous stack run, and is stopped by the same
 `model_servers --stop` cleanup.
 
 Piper uses the launcher's persistent process group directly. Its bootstrap
-validates that an existing healthy listener carries xr-ai's matching ownership
-markers; a listener without those markers fails startup instead of being
-silently adopted. When no server exists, the bootstrap replaces itself with
-the foreground Uvicorn and ONNX process. Repeated starts therefore do not leave
-idle Piper supervisor processes behind.
+reuses an existing healthy listener. When no server exists, the bootstrap
+replaces itself with the foreground Uvicorn and ONNX process. Repeated starts
+therefore do not leave idle Piper supervisor processes behind.
 
 Docker containers carry a fingerprint of their image, GPU assignment, model
 cache, environment, bootstrap packages, complete vLLM command, and a versioned
@@ -354,14 +352,11 @@ Cleanup locates labelled Docker containers before inspecting ports, then
 stops them with `docker stop` (escalating to `docker kill` after 20 s).
 Locally persisted processes (pip-mode vLLM and Piper) must carry the
 `XR_AI_VLLM_MANAGED` and `XR_AI_VLLM_PORT` ownership markers before cleanup
-sends `SIGTERM` or `SIGKILL`. Marked local servers are stopped as complete
-process groups so their launcher and inference descendants cannot survive as
-orphans. Piper also carries `XR_AI_MANAGED_SERVICE=piper-tts`; existing Piper
-processes without that marker are recognized by their `piper_tts_server`
-command. A marked vLLM process on the same port is not treated as Piper.
-Unknown listeners and failed inspection abort cleanup without sending a signal,
-and `model_servers --stop` exits nonzero if any target could not be stopped.
-Absent servers are silently skipped.
+sends `SIGTERM` or `SIGKILL`. Piper is stopped as a complete process group so
+its launcher and inference descendants cannot survive as orphans; other local
+servers retain PID-only cleanup. Unknown listeners and failed inspection abort
+cleanup without sending a signal, and `model_servers --stop` exits nonzero if
+any target could not be stopped. Absent servers are silently skipped.
 
 The target ports and container names match the defaults in the per-profile YAML files.
 

@@ -102,61 +102,6 @@ def test_piper_ownership_marker_matches_service_port(tmp_path, monkeypatch) -> N
     assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "tts", 8104)
 
 
-def test_marked_vllm_process_is_not_piper(tmp_path, monkeypatch) -> None:
-    proc_root = tmp_path / "proc" / "1234"
-    proc_root.mkdir(parents=True)
-    (proc_root / "cmdline").write_text("vllm\0serve\0some-model")
-    (proc_root / "environ").write_bytes(
-        b"XR_AI_VLLM_MANAGED=1\0XR_AI_VLLM_PORT=8105\0"
-    )
-    monkeypatch.setattr(
-        xr_ai_vllm._docker,
-        "Path",
-        lambda _path: proc_root / _path.rsplit("/", 1)[-1],
-    )
-    monkeypatch.setattr(
-        xr_ai_vllm._docker,
-        "pid_on_port_checked",
-        lambda _port: (1234, True, True),
-    )
-
-    assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "tts", 8105)
-    assert not xr_ai_vllm.managed_server_on_port("tts", 8105)
-
-
-def test_piper_service_marker_identifies_managed_server(tmp_path, monkeypatch) -> None:
-    proc_root = tmp_path / "proc" / "1234"
-    proc_root.mkdir(parents=True)
-    (proc_root / "cmdline").write_text("python\0-m\0renamed_piper_entrypoint")
-    (proc_root / "environ").write_bytes(
-        b"XR_AI_VLLM_MANAGED=1\0XR_AI_VLLM_PORT=8105\0"
-        b"XR_AI_MANAGED_SERVICE=piper-tts\0"
-    )
-    monkeypatch.setattr(
-        xr_ai_vllm._docker,
-        "Path",
-        lambda _path: proc_root / _path.rsplit("/", 1)[-1],
-    )
-
-    assert xr_ai_vllm._docker.is_xr_ai_server_process(1234, "tts", 8105)
-
-
-def test_managed_server_on_port_requires_owned_visible_listener(monkeypatch) -> None:
-    monkeypatch.setattr(
-        xr_ai_vllm._docker,
-        "pid_on_port_checked",
-        lambda _port: (1234, True, True),
-    )
-    monkeypatch.setattr(
-        xr_ai_vllm._docker,
-        "is_xr_ai_server_process",
-        lambda pid, label, port: (pid, label, port) == (1234, "tts", 8105),
-    )
-
-    assert xr_ai_vllm.managed_server_on_port("tts", 8105)
-    assert not xr_ai_vllm.managed_server_on_port("tts", 8104)
-
-
 def test_stop_signals_complete_managed_process_group(monkeypatch) -> None:
     calls: list[tuple[int, int]] = []
     monkeypatch.setattr(
@@ -199,6 +144,50 @@ def test_stop_signals_complete_managed_process_group(monkeypatch) -> None:
 
     assert xr_ai_vllm.stop_persistent_servers([("tts", 8105)])
     assert calls == [(4321, signal.SIGTERM)]
+
+
+def test_stop_keeps_non_piper_managed_process_pid_scoped(monkeypatch) -> None:
+    calls: list[tuple[int, int]] = []
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "container_on_port_checked",
+        lambda _port: (None, True),
+    )
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "pid_on_port_checked",
+        lambda _port: (1234, True, True),
+    )
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "is_xr_ai_server_process",
+        lambda *_args: True,
+    )
+    monkeypatch.setattr(
+        xr_ai_vllm.os,
+        "getpgid",
+        lambda _pid: (_ for _ in ()).throw(
+            AssertionError("non-Piper cleanup must remain PID-scoped")
+        ),
+    )
+    monkeypatch.setattr(
+        xr_ai_vllm.os,
+        "killpg",
+        lambda *_args: (_ for _ in ()).throw(
+            AssertionError("non-Piper cleanup must not signal a process group")
+        ),
+    )
+    monkeypatch.setattr(time, "sleep", lambda _seconds: None)
+
+    def kill(pid: int, sig: int) -> None:
+        calls.append((pid, sig))
+        if sig == 0:
+            raise ProcessLookupError
+
+    monkeypatch.setattr(xr_ai_vllm.os, "kill", kill)
+
+    assert xr_ai_vllm.stop_persistent_servers([("omni", 8108)])
+    assert calls == [(1234, signal.SIGTERM), (1234, 0)]
 
 
 def test_process_group_liveness_ignores_zombies(tmp_path) -> None:
