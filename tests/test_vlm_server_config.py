@@ -133,7 +133,7 @@ def test_hardware_profiles_reserve_measured_reasoner_memory() -> None:
     assert "max_num_seqs" not in dual_ada
     assert spark["kv_cache_memory_bytes"] == 1610612736
     assert spark["gpu_memory_utilization"] == 0.20
-    assert spark["max_num_seqs"] == 1
+    assert spark["max_num_seqs"] == 4
     assert spark["spark_uma"] is True
 
 
