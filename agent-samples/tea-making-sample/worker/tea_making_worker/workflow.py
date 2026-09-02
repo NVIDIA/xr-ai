@@ -67,23 +67,9 @@ _PROMPTS = Path(__file__).resolve().parent / "prompts"
 _OBSERVATION_PROMPT = _PROMPTS / "guidance_observation.txt"
 _VOICE_PROMPT = _PROMPTS / "guidance_voice.txt"
 _POLL_INTERVAL_S = 0.25
-_WATER_VISIBLE = re.compile(r"(?is)^water visible\s*:\s*(.+)$")
-_WATER_CUE = re.compile(
-    r"(?i)\b(?:"
-    r"(?:water|liquid|visible)\s+(?:surface|level)|"
-    r"(?:surface|level)\s+(?:of\s+)?(?:the\s+)?(?:water|liquid)|"
-    r"water\s*line|waterline|(?:side\s+)?gauge|"
-    r"(?:water\s+is\s+|actively\s+)?pouring\s+(?:in|into)|"
-    r"pouring\s+water|surface\s+reflection"
-    r")\b"
-)
 _TEMPERATURE = re.compile(
     r"(?i)(?<![\w.])(-?\d{1,3}(?:\.\d+)?)\s*"
     r"(?:°\s*|degrees?\s*)?(celsius|fahrenheit|c|f)\b"
-)
-_NEGATIVE_CUE = re.compile(
-    r"(?i)\b(?:absent|ambiguous|cannot|can't|closed|dry|empty|no|not|"
-    r"obscured|unclear|unable|unknown)\b"
 )
 _NUMBER = re.compile(r"(?<![\w.])-?\d{1,3}(?:\.\d+)?(?![\w.])")
 _NO_READING = re.compile(
@@ -105,11 +91,7 @@ class _StaleObservation(RuntimeError):
 
 
 def _water_visible(observation: str) -> bool:
-    match = _WATER_VISIBLE.fullmatch(observation.strip().strip("`'\" "))
-    if match is None:
-        return False
-    cue = match.group(1)
-    return _NEGATIVE_CUE.search(cue) is None and _WATER_CUE.search(cue) is not None
+    return observation.strip().strip("`'\" ").casefold() == "water present"
 
 
 def _temperature_reading_c(observation: str) -> tuple[float | None, bool]:
