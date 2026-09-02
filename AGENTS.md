@@ -130,6 +130,35 @@ Refer to [Adding a sample](docs/source/guides/adding-a-sample.md) and the
 - Preserve unrelated work in a dirty tree. Never use destructive Git commands
   to discard user changes.
 
+## Agent-assisted pull request hygiene
+
+- The human directing the work owns the pull request's goal, scope, design
+  choices, and tradeoffs. An agent may investigate and propose options, but it
+  must return choices that materially affect those decisions to the human.
+- Keep each pull request to one coherent outcome, with the implementation,
+  tests, and documentation needed for that outcome. A large or multi-PR change
+  requires a human-confirmed boundary and an accurate description of the
+  current change and planned follow-ups.
+- Keep the pull request description synchronized with the diff: state the
+  problem, solution and important design decisions, related issues, scope and
+  follow-ups, and validation.
+- A coding agent may apply nits and straightforward fixes within the confirmed
+  design. Feedback that changes architecture, behavior, scope, or tradeoffs
+  returns to the human for a decision. Issue creation requires explicit human
+  confirmation.
+- Before requesting review, inspect the complete merge-base diff once for
+  unnecessary churn, failure modes, and mismatches between code, tests,
+  documentation, and the description.
+- Never mark a pull request ready or request reviewers unless the human asks.
+  By default, first rebase it onto the latest target branch, satisfy the
+  repository's author-facing review requirements, and wait for required CI to
+  pass. A human may explicitly override a gate for one action or pull request;
+  treat an override as persistent only when the human says so and records it in
+  the appropriate maintained instruction or configuration.
+
+The optional authoring mechanics are in
+[`gh-develop-xr-ai`](skills/gh-develop-xr-ai/SKILL.md).
+
 ## Comments and documentation
 
 Comments explain a non-obvious invariant or failure mode. Do not narrate the
