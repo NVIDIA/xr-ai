@@ -20,9 +20,23 @@ from ...scene import SceneContext
 from ...spatial_ops import CreationLedger, TurnGuard, make_object_tools
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
+# The creation-always-new rule intentionally duplicates supervisor_prompt.txt; see
+# docs/source/reference/xr-render-demo.md ("stated in both places on purpose").
 DESCRIPTION = (
-    "Create new XR objects at their requested initial positions, and remove, resize, duplicate, or "
-    "reshape existing ones; never moves an existing object, including putting one in, on, or next to another."
+    "Create new XR objects at their requested initial positions, and remove, resize, duplicate, "
+    "or reshape existing ones; never moves or recolors an existing object. Moving includes "
+    "putting one in, on, or next to another, and any color change of an existing object belongs "
+    "to appearance_agent. A creation request always makes a new object, even when SCENE OBJECTS "
+    "already lists an identical one. Creation carries its position in the same single call, "
+    "whether user-relative, anchored on scene objects, or between two of them; this agent "
+    "resolves tracking and anchor geometry itself. Phrase creation as: Create <count, when more "
+    "than one> <color> <shape>(s) <the user's own spatial words>, with the user's color words "
+    "verbatim (a color word, \"same as capsule-8\", or a physical phrase like \"the color of my "
+    "apron\") and every requested copy in the one instruction. When the user named no position "
+    "at all, end with \"no position stated\"; never add that phrase when spatial words are "
+    "present, and never invent a position. Removal words with a side (\"the X on the left\") "
+    "stay a removal; a resize instruction carries the resolved id (\"Resize capsule-8 to half "
+    "its current size\")."
 )
 
 

@@ -608,6 +608,7 @@ generator scripts. Nothing installs from the directory.
   - `xr_render_demo_live_explore` → `xr_render_demo_eval.live_explore:run`
   - `xr_render_demo_live_garble` → `xr_render_demo_eval.live_garble:run`
   - `xr_render_demo_live_manip` → `xr_render_demo_eval.live_manip:run`
+  - `xr_render_demo_live_perception` → `xr_render_demo_eval.live_perception:run`
   - `xr_render_demo_live_pose_matrix` → `xr_render_demo_eval.live_pose_matrix:run`
   - `xr_render_demo_live_smoke` → `xr_render_demo_eval.live_smoke:run`
 

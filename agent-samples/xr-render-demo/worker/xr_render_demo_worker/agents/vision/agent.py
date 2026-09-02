@@ -20,9 +20,34 @@ from ...models import SubagentResult, SubagentTask
 from ...scene import SceneContext
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
+# The SCENE OBJECTS sentence intentionally duplicates supervisor_prompt.txt; see
+# docs/source/reference/xr-render-demo.md ("stated in both places on purpose").
+# _SHARED_RULES ends mid-sentence: each description completes it differently.
+_SHARED_RULES = (
+    "Any request to describe or survey what is visible also means the physical view, never a "
+    "recital of the XR scene. A user statement about the camera itself is not a perception "
+    "request. Never for facts about XR objects: SCENE OBJECTS is always current and complete, "
+    "tracking resolves user-relative placement, and the mutating agents read the camera "
+    "themselves for physical color sources. A new question about what the user holds, wears, "
+    "or sees is always a fresh delegation, every time it is asked, whatever earlier turns said "
+    "about cameras or showed as replies; \"check the camera\" or any telling you to look or "
+    "observe, as an answer to a clarifying question, means delegating the original pending "
+    "question, never those literal words. If live vision is unavailable this agent reports so"
+)
+
 DESCRIPTION = (
-    "Answer a question about the physical world from the live or recorded camera; "
-    "never for XR scene state or placement."
+    "Answer a question about the user's physical surroundings from the live camera, or from "
+    "recorded video when the question is about a past moment: \"what am I looking at?\" and "
+    "\"what was I holding a moment ago?\" are always this agent, never answered without "
+    "delegating here. " + _SHARED_RULES + "; never redelegate with historical video "
+    "substituted for the present."
+)
+
+_LIVE_ONLY_DESCRIPTION = (
+    "Answer a question about the user's present physical surroundings from the live camera: "
+    "\"what am I looking at?\" is always this agent, never answered without delegating here. "
+    "Recorded video is not available, so a question about a past moment cannot be answered; "
+    "say so plainly. " + _SHARED_RULES + "."
 )
 
 
@@ -103,7 +128,8 @@ def make_vision_agent(
             return SubagentResult(result="I couldn't complete that. Please try again.")
         return SubagentResult(result=loop_result.content or "Done.")
 
-    return Tool(name="vision_agent", description=DESCRIPTION,
+    description = DESCRIPTION if video is not None else _LIVE_ONLY_DESCRIPTION
+    return Tool(name="vision_agent", description=description,
                 request_model=SubagentTask, result_model=SubagentResult, handler=handle)
 
 
