@@ -79,6 +79,31 @@ cannot be evaluated when `cudaMemGetInfo` itself fails. Lower the setting only
 for later failures that report insufficient memory for the requested
 utilization or KV cache.
 
+### DGX Spark — Cosmos VLM has insufficient KV cache only on a cold start
+
+**Symptom:** the Cosmos VLM reports less KV-cache capacity on its first start
+than on a later start with the same `max_model_len`. The first start can reject
+the 8,192-token context even while Linux reports substantial available memory.
+
+**Cause:** vLLM derives non-Torch usage from changes in globally available
+memory while it loads and profiles a model. On a unified-memory system, model
+downloads and checkpoint reads change the Linux filesystem page cache. vLLM
+can attribute part of that global change to the model and subtract it from the
+automatically sized KV cache. The behavior is tracked in [vLLM issue
+#35920](https://github.com/vllm-project/vllm/issues/35920).
+
+**Fix:** the bundled `spark` profile sets `kv_cache_memory_bytes` explicitly
+for Cosmos instead of relying on `gpu_memory_utilization`. Keep that fixed
+allocation when copying or modifying the profile. The value is mutually
+exclusive with `gpu_memory_utilization` and is passed to vLLM as
+`--kv-cache-memory-bytes`.
+
+Pre-download large checkpoints before starting a custom Spark profile when
+possible. Do not flush the filesystem cache routinely for this symptom: doing
+so makes the next checkpoint read cold and can reproduce the profiling
+variation. The cache-flush workaround in the previous section applies only
+when `cudaMemGetInfo` itself fails before weight loading.
+
 ### DGX Spark — LOVR auto-download is not supported
 
 **Symptom:** `uv run --project agent-samples/xr-render-demo xr_render_demo`
