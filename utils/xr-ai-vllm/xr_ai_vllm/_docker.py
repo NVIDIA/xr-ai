@@ -964,7 +964,7 @@ def pid_on_port(port: int) -> int | None:
 
 
 def is_xr_ai_server_process(pid: int, label: str, port: int) -> bool:
-    """Return whether *pid* has the expected xr-ai ownership and identity."""
+    """Return whether *pid* has the expected xr-ai server command line."""
     try:
         command = Path(f"/proc/{pid}/cmdline").read_text(errors="replace")
     except OSError:
@@ -974,14 +974,7 @@ def is_xr_ai_server_process(pid: int, label: str, port: int) -> bool:
     }
     if expected_command := in_process_servers.get(label):
         return expected_command in command
-    if not has_xr_ai_ownership_marker(pid, port):
-        return False
-    if label == "tts":
-        return (
-            "piper_tts_server" in command
-            or has_xr_ai_service_marker(pid, "piper-tts")
-        )
-    return True
+    return has_xr_ai_ownership_marker(pid, port)
 
 
 def has_xr_ai_ownership_marker(pid: int, port: int) -> bool:
@@ -994,15 +987,6 @@ def has_xr_ai_ownership_marker(pid: int, port: int) -> bool:
         b"XR_AI_VLLM_MANAGED=1\0" in environment
         and f"XR_AI_VLLM_PORT={port}\0".encode() in environment
     )
-
-
-def has_xr_ai_service_marker(pid: int, service: str) -> bool:
-    """Return whether *pid* carries xr-ai's matching service identity."""
-    try:
-        environment = Path(f"/proc/{pid}/environ").read_bytes()
-    except OSError:
-        return False
-    return f"XR_AI_MANAGED_SERVICE={service}\0".encode() in environment
 
 
 def process_group_alive(pgid: int, proc_root: Path = Path("/proc")) -> bool:

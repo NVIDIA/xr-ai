@@ -160,8 +160,8 @@ def stop_persistent_servers(
     1. Look for a docker container labelled ``xr-ai-vllm.port=<port>``
        (stamped at start time by the vLLM wrapper) and ``docker stop`` it.
     2. Fall back to port → pid for pip-mode vLLM or in-process servers
-       (e.g. STT). Marker-owned processes are signalled as complete process
-       groups; legacy command-owned processes are signalled by PID.
+       (e.g. STT). Piper is signalled as a complete process group; other
+       local servers are signalled by PID.
 
     A missing container and listener is already stopped. Output is print-style
     with ``[<label>] …`` prefixes. Discovery errors and listeners that are not
@@ -223,47 +223,58 @@ def stop_persistent_servers(
             success = False
             continue
 
-        pgid: int | None = None
-        if _docker.has_xr_ai_ownership_marker(pid, port):
+        if label == "tts" and _docker.has_xr_ai_ownership_marker(pid, port):
             try:
                 pgid = os.getpgid(pid)
             except ProcessLookupError:
                 print(f"  [{label}] already gone", flush=True)
                 continue
-
-        target = f"process group {pgid}" if pgid is not None else f"pid {pid}"
-        print(f"  [{label}] stopping ({target}, port={port})…", flush=True)
-
-        def _signal(sig: int) -> None:
-            if pgid is None:
-                os.kill(pid, sig)
-            else:
-                os.killpg(pgid, sig)
-
-        def _alive() -> bool:
-            if pgid is not None:
-                return _docker.process_group_alive(pgid)
+            print(
+                f"  [{label}] stopping (process group {pgid}, port={port})…",
+                flush=True,
+            )
             try:
-                _signal(0)
+                os.killpg(pgid, signal.SIGTERM)
+                for _ in range(40):
+                    time.sleep(0.5)
+                    if not _docker.process_group_alive(pgid):
+                        print(f"  [{label}] stopped", flush=True)
+                        break
+                else:
+                    print(f"  [{label}] force-killing", flush=True)
+                    os.killpg(pgid, signal.SIGKILL)
+                    for _ in range(50):
+                        time.sleep(0.1)
+                        if not _docker.process_group_alive(pgid):
+                            print(f"  [{label}] stopped", flush=True)
+                            break
+                    else:
+                        print(
+                            f"  [{label}] still running after SIGKILL",
+                            flush=True,
+                        )
+                        success = False
             except ProcessLookupError:
-                return False
-            return True
+                print(f"  [{label}] already gone", flush=True)
+            continue
 
+        print(f"  [{label}] stopping (pid={pid}, port={port})…", flush=True)
         try:
-            _signal(signal.SIGTERM)
+            os.kill(pid, signal.SIGTERM)
             for _ in range(40):
                 time.sleep(0.5)
-                if not _alive():
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
                     print(f"  [{label}] stopped", flush=True)
                     break
             else:
                 print(f"  [{label}] force-killing", flush=True)
-                _signal(signal.SIGKILL)
-                for _ in range(50):
-                    time.sleep(0.1)
-                    if not _alive():
-                        print(f"  [{label}] stopped", flush=True)
-                        break
+                os.kill(pid, signal.SIGKILL)
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    print(f"  [{label}] stopped", flush=True)
                 else:
                     print(f"  [{label}] still running after SIGKILL", flush=True)
                     success = False
@@ -276,26 +287,10 @@ def stop_persistent_servers(
     return success
 
 
-def managed_server_on_port(label: str, port: int) -> bool:
-    """Return whether *port* is held by the expected managed local server.
-
-    Discovery fails closed: containers, listeners without visible process IDs,
-    and processes without xr-ai ownership are not considered reusable.
-    """
-    pid, checked, listening = _docker.pid_on_port_checked(port)
-    return bool(
-        checked
-        and listening
-        and pid is not None
-        and _docker.is_xr_ai_server_process(pid, label, port)
-    )
-
-
 __all__ = [
     "serve",
     "serve_nim",
     "stop_persistent_servers",
-    "managed_server_on_port",
     "DEFAULT_IMAGE",
     "resolve_model_cache",
     "load_config",
