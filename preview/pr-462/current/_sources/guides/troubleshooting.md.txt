@@ -66,9 +66,12 @@ vLLM service. The wrapper downloads and syncs the complete Hugging Face
 snapshot before vLLM initializes CUDA, so transfer, reconstruction, and dirty
 writeback allocations do not overlap the CUDA context allocation. If the
 driver allocation still fails, the wrapper waits for reclamation and restarts
-the stopped container once. The retry applies only when Docker reports that
-the container was not OOM-killed and the log has the DGX Spark driver-allocation
-signature; model-weight and KV-cache OOMs are not retried.
+the stopped container once. Only the wrapper that launched the current
+container attempt may restart it; another wrapper that adopts the running
+container observes it without taking ownership. The retry applies only when
+Docker reports that the container was not OOM-killed and the traceback reaches
+the initial vLLM memory snapshot through `mem_get_info`; model-weight and
+KV-cache OOMs are not retried.
 
 If the retry is exhausted, first install the current DGX OS and driver updates.
 The [DGX Spark release
@@ -112,7 +115,10 @@ startup is not required to trigger the page-cache accounting error.
 for both Nemotron Omni and Cosmos instead of using the fractional profiler to
 size their caches. Keep the fixed allocations when copying or modifying the
 profile. The values are 2 GiB for Omni's 32,768-token hybrid Mamba/attention
-cache and 1.5 GiB for Cosmos's 8,192-token cache.
+cache and 1.5 GiB for Cosmos's 8,192-token cache. The Cosmos budget supports
+one maximum-length request, so its Spark profile sets `max_num_seqs: 1` and
+queues concurrent requests. Increase both the fixed cache and concurrency
+limit when a custom Spark deployment needs parallel full-context requests.
 
 The Spark files intentionally retain `gpu_memory_utilization`. In the bundled
 vLLM versions, `kv_cache_memory_bytes` controls the cache allocation and skips
