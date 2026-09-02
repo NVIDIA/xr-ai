@@ -27,7 +27,7 @@ from .events import (
     InstrumentLost,
 )
 
-_VOICE_INTERVAL_S = 20.0
+_VOICE_INTERVAL_S = 5.0
 _SUMMARY_TIMEOUT_S = 5.0
 _SUMMARY_PROMPT = """Summarize instrument changes since the last spoken update.
 Describe the overall transition or trend for each instrument in one short natural sentence.

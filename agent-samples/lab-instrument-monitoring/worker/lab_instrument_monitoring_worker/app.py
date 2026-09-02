@@ -41,6 +41,15 @@ from .instruments import LabInstrumentAgent
 from .monitor import MonitorAgent
 from .web_events import WebEventsAdapterAgent
 
+_MONITORING_VOICE_SPACING_S = 5.0
+
+
+class _InstrumentVoiceAggregationAgent(VoiceAggregationAgent):
+    """Leave a quiet interval before the next routine monitoring update."""
+
+    def _playback_duration(self, text: str) -> float:
+        return super()._playback_duration(text) + _MONITORING_VOICE_SPACING_S
+
 
 class _VoiceAggregationLifecycleAgent(Agent):
     def __init__(self, voice_aggregation: VoiceAggregationAgent) -> None:
@@ -193,7 +202,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     )
     voice_aggregation = runtime.register(
         "voice-aggregation",
-        VoiceAggregationAgent(llm=llm),
+        _InstrumentVoiceAggregationAgent(llm=llm),
     )
     runtime.register(
         "voice-aggregation-lifecycle",

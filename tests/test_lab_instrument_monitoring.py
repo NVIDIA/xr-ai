@@ -48,6 +48,7 @@ _materialize_worker_config = _LAUNCHER["_materialize_worker_config"]
 _parser = _LAUNCHER["_parser"]
 
 from lab_instrument_monitoring_worker.app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    _InstrumentVoiceAggregationAgent,
     _VoiceAggregationLifecycleAgent,
 )
 from lab_instrument_monitoring_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
@@ -282,8 +283,9 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     assert config.web_events_port == 8092
     assert config.web_events_max_events == 5_000
     assert config.monitor_interval_s == 5.0
+    assert config.instrument_monitor_interval_s == 2.0
     assert config.instrument_state_interval_s == 10.0
-    assert config.instrument_lost_after_s == 30.0
+    assert config.instrument_lost_after_s == 5.0
     assert "Previous caption" not in config.monitor_prompt
     assert "current_view" in config.foreground_prompt
     monitor_prompt = config.monitor_prompt.lower()
@@ -1146,6 +1148,12 @@ async def test_participant_leave_releases_voice_aggregation_state() -> None:
     await lifecycle.participant_left(VoiceParticipantLeft(), ctx)  # type: ignore[arg-type]
 
     assert released == ["participant-1"]
+
+
+def test_instrument_voice_aggregation_leaves_post_playback_spacing() -> None:
+    aggregation = _InstrumentVoiceAggregationAgent(llm=object())  # type: ignore[arg-type]
+
+    assert aggregation._playback_duration("one two three four five") == pytest.approx(7.0)
 
 
 @pytest.mark.asyncio

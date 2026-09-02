@@ -219,6 +219,13 @@ in and out of view does not repeatedly alert unless its reading changes. This is
 application policy and belongs in the tracker rather than the VLM prompt or
 voice agent.
 
+The checked-in demo scans instruments every two seconds and marks an instrument
+as lost after five seconds without a sighting. Spoken monitoring changes are
+batched on a five-second cadence. They are non-urgent voice contributions, so
+the sample's aggregation policy waits for estimated active playback to finish
+and then leaves five seconds of quiet before delivering the next monitoring
+update. Foreground responses remain urgent and can interrupt that hold.
+
 Only marker identities present in `device_map.yaml` are treated as instruments.
 Unknown QR payloads and ArUco IDs are logged and ignored, preventing detector
 false positives from becoming names such as `ArUco 17`. They are still given a
