@@ -697,10 +697,12 @@ def test_workflow_enforces_consecutive_visual_evidence() -> None:
 @pytest.mark.parametrize(
     ("observation", "expected"),
     [
-        ("water visible: a clear waterline in the side gauge", True),
-        ("Water visible: water is pouring into the kettle", True),
+        ("water present", True),
+        ("Water Present", True),
+        ("`water present`", True),
         ("water not visible", False),
-        ("water visible: the level is unclear", False),
+        ("water absent", False),
+        ("water visible: yes", False),
         ("water visible: the kettle appears empty", False),
         ("water visible: the lid is open", False),
         ("The kettle contains water.", False),
@@ -767,7 +769,7 @@ def test_water_detection_uses_two_confirming_vlm_observations() -> None:
     guidance._apply_direct_evidence(
         session,
         step,
-        "water visible: a waterline in the side gauge",
+        "water present",
         session.revision,
     )
     assert session.state["water_filled"] is False
@@ -775,7 +777,7 @@ def test_water_detection_uses_two_confirming_vlm_observations() -> None:
     guidance._apply_direct_evidence(
         session,
         step,
-        "water visible: a surface reflection inside the kettle",
+        "water present",
         session.revision,
     )
     assert session.state["water_filled"] is True

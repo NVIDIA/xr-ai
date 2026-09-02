@@ -102,16 +102,16 @@ steps:
       interval_s: 2
       arguments:
         question: >-
-          Check only for water visibly inside the kettle or pot. Reply "water
-          visible: <cue>" only for a visible surface, waterline or gauge level,
-          or pouring into it. Otherwise reply "water not visible".
+          Decide whether water itself is visibly inside the kettle or pot.
+          Reply exactly "water present" when it is visible, or "water absent"
+          otherwise. Never infer from the vessel alone.
       result_field: answer
     evidence:
       pattern: "^water visible$"
       consecutive: 2
     agent:
       prompt: >-
-        Set water_filled after two accepted water-visible observations.
+        Set water_filled after two accepted water-present observations.
       tools: []
     voice:
       prompt: >-
