@@ -97,6 +97,7 @@ def test_spark_profile_uses_explicit_kv_cache(monkeypatch, tmp_path) -> None:
     assert args[cache_index + 1] == "1610612736"
     memory_index = args.index("--gpu-memory-utilization")
     assert args[memory_index + 1] == "0.2"
+    assert captured["spark_uma"] is True
 
 
 def test_all_local_profiles_select_cosmos3_reasoner_runtime() -> None:
@@ -126,8 +127,11 @@ def test_hardware_profiles_reserve_measured_reasoner_memory() -> None:
     assert dual_ada["gpu_memory_utilization"] == 0.47
     assert "kv_cache_memory_bytes" not in blackwell
     assert "kv_cache_memory_bytes" not in dual_ada
+    assert "spark_uma" not in blackwell
+    assert "spark_uma" not in dual_ada
     assert spark["kv_cache_memory_bytes"] == 1610612736
     assert spark["gpu_memory_utilization"] == 0.20
+    assert spark["spark_uma"] is True
 
 
 @pytest.mark.parametrize("value", [True, 0, -1, "invalid"])

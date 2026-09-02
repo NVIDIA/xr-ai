@@ -54,6 +54,15 @@ _HF_XET_IMPORT_CHECK = (
     "from packaging.specifiers import SpecifierSet; "
     f"assert SpecifierSet({_HF_XET_VERSION_SPEC!r}).contains(version('hf-xet'))"
 )
+_HF_PREFETCH_CODE = (
+    "import os, sys; "
+    "from huggingface_hub import snapshot_download; "
+    "print(f'Prefetching Hugging Face snapshot {sys.argv[1]} before CUDA startup', "
+    "flush=True); "
+    "snapshot_download(repo_id=sys.argv[1]); "
+    "os.sync()"
+)
+_SPARK_UMA_RETRY_DELAY_S = 10.0
 
 
 # ── docker run argv builder ──────────────────────────────────────────────────
@@ -100,6 +109,7 @@ def build_run_argv(
     extra_env: dict[str, str] | None,
     extra_pip: list[str] | None,
     vllm_argv: list[str],
+    prefetch_model: str | None = None,
 ) -> list[str]:
     """Build the `docker run …` argv that hosts vllm.
 
@@ -136,6 +146,8 @@ def build_run_argv(
         "extra_pip": extra_pip or [],
         "vllm_argv": vllm_argv,
     }
+    if prefetch_model:
+        payload["prefetch_model"] = prefetch_model
     # The name-only -e resolves the token into the container's creation-time
     # env, so a rotated token must change the contract; the key is omitted
     # entirely when unset to keep tokenless fingerprints stable.
@@ -193,6 +205,13 @@ def build_run_argv(
         # incapable Hub or install failure stops startup instead of falling
         # back to HTTPS.
         commands.extend([f"( {xet_check} || {xet_install} )", xet_check])
+    if prefetch_model:
+        # Spark's CPU and GPU share one memory pool. Finish network transfer,
+        # snapshot reconstruction, and writeback before vLLM initializes CUDA
+        # so their transient allocations cannot overlap a driver context.
+        commands.append(
+            shlex.join(["python3", "-c", _HF_PREFETCH_CODE, prefetch_model])
+        )
     if extra_pip:
         # extra_pip is the seam for models whose architecture needs a wheel
         # the NGC image doesn't bundle (e.g. mamba-ssm for Nemotron-Omni's
@@ -248,6 +267,23 @@ def container_running(name: str) -> bool:
         return bool(out)
     except (FileNotFoundError, subprocess.CalledProcessError):
         return False
+
+
+def container_oom_killed(name: str) -> bool | None:
+    """Return Docker's OOM-kill state, or ``None`` when it cannot be read."""
+    try:
+        raw = subprocess.check_output(
+            ["docker", "inspect", "--format", "{{.State.OOMKilled}}", name],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip().lower()
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+    if raw == "true":
+        return True
+    if raw == "false":
+        return False
+    return None
 
 
 def remove_container(name: str) -> bool:
@@ -620,6 +656,7 @@ def run(
     extra_env: dict[str, str] | None,
     extra_pip: list[str] | None,
     ready_file: Path | None,
+    spark_uma: bool = False,
 ) -> None:
     if hf_token:
         # Exported for build_run_argv's name-only passthrough.
@@ -634,6 +671,7 @@ def run(
         extra_env=extra_env,
         extra_pip=extra_pip,
         vllm_argv=vllm_argv,
+        prefetch_model=vllm_argv[2] if spark_uma else None,
     )
     run_container(
         argv=argv,
@@ -650,6 +688,7 @@ def run(
         ready_banner=f"Ready  →  http://localhost:{port}/v1  (docker: {container_name})",
         ready_file=ready_file,
         diagnostic_argv=vllm_argv,
+        spark_uma=spark_uma,
     )
 
 
@@ -666,6 +705,7 @@ def run_container(
     ready_banner: str,
     ready_file: Path | None,
     diagnostic_argv: list[str] | None = None,
+    spark_uma: bool = False,
 ) -> None:
     """Shared container lifecycle for the vLLM docker backend and NIMs.
 
@@ -841,34 +881,81 @@ def run_container(
 
     streamer = _LogStreamer(container_name)
     _state["streamer"] = streamer
-    try:
-        _lifecycle.wait_until_healthy(
-            health_url,
-            is_alive=lambda: (
-                proc.poll() is None if proc is not None
-                else container_running(container_name)
-            ),
-        )
-    except SystemExit:
-        # Two ways to land here: (a) wait_until_healthy raised SystemExit(1)
-        # because the container died on its own — the post-mortem log is
-        # valuable; (b) our signal handler called sys.exit(130) on abort — it
-        # already stopped+removed the container, so a "container failed"
-        # post-mortem on a now-removed container is misleading and wasteful.
-        # Skip the post-mortem only in the handler case.
-        if _state["handling"]:
+    retry_remaining = 1 if spark_uma else 0
+    while True:
+        try:
+            _lifecycle.wait_until_healthy(
+                health_url,
+                is_alive=lambda: (
+                    proc.poll() is None if proc is not None
+                    else container_running(container_name)
+                ),
+            )
+            break
+        except SystemExit:
+            # Two ways to land here: (a) wait_until_healthy raised SystemExit(1)
+            # because the container died on its own — the post-mortem log is
+            # valuable; (b) our signal handler called sys.exit(130) on abort — it
+            # already stopped+removed the container, so a "container failed"
+            # post-mortem on a now-removed container is misleading and wasteful.
+            # Skip the post-mortem only in the handler case.
+            if _state["handling"]:
+                raise
+            time.sleep(0.5)
+            _append_post_mortem(container_name, streamer.log_path)
+            retryable = (
+                retry_remaining > 0
+                and container_oom_killed(container_name) is False
+                and _diagnostics.is_cuda_memory_allocation_failure(
+                    streamer.log_path
+                )
+            )
+            if retryable:
+                retry_remaining -= 1
+                print(
+                    f"[{log_prefix}] DGX Spark UMA allocation failed during "
+                    "CUDA startup; waiting for memory reclamation, then "
+                    "retrying once…",
+                    flush=True,
+                )
+                deadline = time.monotonic() + _SPARK_UMA_RETRY_DELAY_S
+                while (
+                    container_running(container_name)
+                    and time.monotonic() < deadline
+                ):
+                    time.sleep(0.25)
+                if not container_running(container_name):
+                    # The failed CUDA process has exited. A bounded quiet
+                    # period lets its driver context and pending filesystem
+                    # writeback drain before restarting the same warm snapshot.
+                    time.sleep(_SPARK_UMA_RETRY_DELAY_S)
+                    if start_container(container_name):
+                        proc = None
+                        _state["proc"] = None
+                        continue
+                log.error(
+                    "DGX Spark cold-start retry could not restart stopped "
+                    "container %s",
+                    container_name,
+                )
+
+            streamer.stop()
+            diagnosis = (
+                _diagnostics.classify_vllm_failure(
+                    streamer.log_path,
+                    diagnostic_argv,
+                    spark_uma=spark_uma,
+                )
+                if diagnostic_argv is not None else None
+            )
+            if diagnosis:
+                log.error("%s", diagnosis)
+            log.error(
+                "container %s failed — see %s",
+                container_name,
+                streamer.log_path,
+            )
             raise
-        time.sleep(0.5)
-        streamer.stop()
-        _append_post_mortem(container_name, streamer.log_path)
-        diagnosis = (
-            _diagnostics.classify_vllm_failure(streamer.log_path, diagnostic_argv)
-            if diagnostic_argv is not None else None
-        )
-        if diagnosis:
-            log.error("%s", diagnosis)
-        log.error("container %s failed — see %s", container_name, streamer.log_path)
-        raise
 
     print(f"[{log_prefix}] {ready_banner}", flush=True)
     if ready_file:

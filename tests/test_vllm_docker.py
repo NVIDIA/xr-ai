@@ -295,6 +295,26 @@ class TestBuildRunArgv:
         assert "huggingface-hub>=" not in bash_cmd
         assert bash_cmd.endswith("vllm serve my-model --host 0.0.0.0 --port 8100")
 
+    def test_prefetches_and_syncs_snapshot_before_vllm(self, tmp_path):
+        kwargs = self._base_kwargs(tmp_path)
+        kwargs["prefetch_model"] = "org/cold-model"
+
+        argv = build_run_argv(**kwargs)
+        bash_cmd = argv[-1]
+
+        assert "snapshot_download" in bash_cmd
+        assert "org/cold-model" in bash_cmd
+        assert "os.sync()" in bash_cmd
+        assert bash_cmd.index("snapshot_download") < bash_cmd.index("vllm serve")
+
+    def test_prefetch_changes_configuration_fingerprint(self, tmp_path):
+        kwargs = self._base_kwargs(tmp_path)
+        without_prefetch = _fingerprint_from_argv(build_run_argv(**kwargs))
+        kwargs["prefetch_model"] = "org/cold-model"
+        with_prefetch = _fingerprint_from_argv(build_run_argv(**kwargs))
+
+        assert with_prefetch != without_prefetch
+
     def test_skips_xet_bootstrap_when_disabled_in_extra_env(self, tmp_path):
         kwargs = self._base_kwargs(tmp_path)
         kwargs["extra_env"] = {"HF_HUB_DISABLE_XET": "1"}
@@ -461,6 +481,17 @@ class TestContainerHelpers:
         ):
             assert not container_running("some-name")
 
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [("true\n", True), ("false\n", False), ("unknown\n", None)],
+    )
+    def test_container_oom_killed_reads_inspect_state(self, raw, expected):
+        with patch(
+            "xr_ai_vllm._docker.subprocess.check_output",
+            return_value=raw,
+        ):
+            assert _docker.container_oom_killed("some-name") is expected
+
     def test_container_label_returns_inspected_value(self):
         with patch(
             "xr_ai_vllm._docker.subprocess.check_output",
@@ -524,6 +555,27 @@ class TestRun:
         )
         assert "--gpu-memory-utilization" not in captured["argv"]
         assert captured["diagnostic_argv"] == kwargs["vllm_argv"]
+
+    def test_spark_uma_enables_prefetch_and_retry(self, tmp_path, monkeypatch):
+        kwargs = _run_kwargs(tmp_path)
+        kwargs["spark_uma"] = True
+        captured_build: dict = {}
+        captured_run: dict = {}
+        monkeypatch.setattr(
+            _docker,
+            "build_run_argv",
+            lambda **values: captured_build.update(values) or ["docker", "run"],
+        )
+        monkeypatch.setattr(
+            _docker,
+            "run_container",
+            lambda **values: captured_run.update(values),
+        )
+
+        run(**kwargs)
+
+        assert captured_build["prefetch_model"] == "model"
+        assert captured_run["spark_uma"] is True
 
     def test_healthy_unowned_listener_is_rejected(self, tmp_path):
         kwargs = _run_kwargs(tmp_path)
@@ -1134,7 +1186,7 @@ class TestRunContainer:
         monkeypatch.setattr(
             _docker._diagnostics,
             "classify_vllm_failure",
-            lambda _path, argv: captured.append(argv) or "diagnosis",
+            lambda _path, argv, **_kwargs: captured.append(argv) or "diagnosis",
         )
         kwargs = self._kwargs(tmp_path)
         diagnostic_argv = [
@@ -1147,6 +1199,114 @@ class TestRunContainer:
             _docker.run_container(**kwargs)
 
         assert captured == ([diagnostic_argv] if with_vllm_context else [])
+
+    def test_spark_retries_driver_allocation_failure_once(
+        self, monkeypatch, tmp_path,
+    ):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda *_a, **_k: False)
+        attempts = 0
+
+        def _wait(*_args, **_kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise SystemExit(1)
+
+        monkeypatch.setattr(_docker._lifecycle, "wait_until_healthy", _wait)
+
+        class _FakeProc:
+            def poll(self):
+                return 1
+
+        log_path = tmp_path / "container.log"
+
+        class _Streamer:
+            def __init__(self, _name):
+                self.log_path = log_path
+                self.log_path.write_text(
+                    "torch.AcceleratorError: CUDA error: out of memory\n"
+                    "cudaErrorMemoryAllocation\n",
+                    encoding="utf-8",
+                )
+
+            def stop(self):
+                pass
+
+        monkeypatch.setattr(_docker.subprocess, "Popen", lambda *_a, **_kw: _FakeProc())
+        monkeypatch.setattr(_docker, "_LogStreamer", _Streamer)
+        monkeypatch.setattr(_docker, "_append_post_mortem", lambda *_a, **_kw: None)
+        monkeypatch.setattr(_docker, "container_oom_killed", lambda _name: False)
+        monkeypatch.setattr(_docker.time, "sleep", lambda _seconds: None)
+        starts: list[str] = []
+        monkeypatch.setattr(
+            _docker,
+            "start_container",
+            lambda name: starts.append(name) or True,
+        )
+        kwargs = self._kwargs(tmp_path)
+        kwargs["spark_uma"] = True
+
+        _docker.run_container(**kwargs)
+
+        assert attempts == 2
+        assert starts == ["xr-ai-test-ctr"]
+        assert kwargs["ready_file"].exists()
+
+    @pytest.mark.parametrize(
+        ("spark_uma", "oom_killed"),
+        [(False, False), (True, True)],
+    )
+    def test_driver_allocation_retry_is_spark_only_and_not_for_oom_kills(
+        self, monkeypatch, tmp_path, spark_uma, oom_killed,
+    ):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda *_a, **_k: False)
+        monkeypatch.setattr(
+            _docker._lifecycle,
+            "wait_until_healthy",
+            lambda *_a, **_kw: (_ for _ in ()).throw(SystemExit(1)),
+        )
+
+        class _FakeProc:
+            def poll(self):
+                return 1
+
+        class _Streamer:
+            log_path = tmp_path / "container.log"
+
+            def __init__(self, _name):
+                self.log_path.write_text(
+                    "torch.AcceleratorError: CUDA error: out of memory\n"
+                    "cudaErrorMemoryAllocation\n",
+                    encoding="utf-8",
+                )
+
+            def stop(self):
+                pass
+
+        monkeypatch.setattr(_docker.subprocess, "Popen", lambda *_a, **_kw: _FakeProc())
+        monkeypatch.setattr(_docker, "_LogStreamer", _Streamer)
+        monkeypatch.setattr(_docker, "_append_post_mortem", lambda *_a, **_kw: None)
+        monkeypatch.setattr(
+            _docker,
+            "container_oom_killed",
+            lambda _name: oom_killed,
+        )
+        monkeypatch.setattr(_docker.time, "sleep", lambda _seconds: None)
+        starts: list[str] = []
+        monkeypatch.setattr(
+            _docker,
+            "start_container",
+            lambda name: starts.append(name) or True,
+        )
+        kwargs = self._kwargs(tmp_path)
+        kwargs["spark_uma"] = spark_uma
+
+        with pytest.raises(SystemExit, match="1"):
+            _docker.run_container(**kwargs)
+
+        assert starts == []
 
 
 class TestEvictLocalListener:

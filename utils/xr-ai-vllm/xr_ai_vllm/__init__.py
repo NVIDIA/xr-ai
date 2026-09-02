@@ -80,6 +80,7 @@ def serve(
     extra_env: dict[str, str] | None = None,
     extra_pip: list[str] | None = None,
     ready_file: Path | None = None,
+    spark_uma: bool = False,
 ) -> None:
     """Launch vLLM via *backend* (`"pip"` or `"docker"`).
 
@@ -112,6 +113,12 @@ def serve(
     ``["mamba-ssm", "causal-conv1d"]`` for Nemotron-Omni's hybrid SSM
     backbone. Silently ignored in pip mode (deps belong in the wrapper's
     pyproject.toml there).
+
+    *spark_uma* enables the DGX Spark cold-start safeguards in docker mode:
+    prefetching and syncing the Hugging Face snapshot before CUDA starts, and
+    one bounded restart after a non-container-OOM CUDA driver-allocation
+    failure. It is rejected in pip mode because that lifecycle cannot provide
+    the same isolated prefetch and restart boundary.
     """
     vllm_argv: list[str] = [
         "vllm", "serve", model,
@@ -121,6 +128,8 @@ def serve(
     vllm_argv += list(extra_serve_args)
 
     if backend == "pip":
+        if spark_uma:
+            raise ValueError("spark_uma cold-start safeguards require docker mode")
         _pip.run(
             persistent=persistent,
             log_prefix=log_prefix,
@@ -143,6 +152,7 @@ def serve(
             extra_env=extra_env,
             extra_pip=extra_pip,
             ready_file=ready_file,
+            spark_uma=spark_uma,
         )
     else:
         raise ValueError(
