@@ -787,7 +787,7 @@ async def test_instrument_monitor_emits_only_changes_lost_once_and_full_state(
         async def chat(self, messages, **_kwargs):
             summary_requests.append(messages[-1].content)
             return ChatResponse(
-                content="Device1 briefly disappeared, then increased overall to 13.5 V.",
+                content="Device1 increased overall to 13.5 V.",
                 reasoning=None,
                 tool_calls=None,
                 finish_reason="stop",
@@ -904,12 +904,92 @@ async def test_instrument_monitor_emits_only_changes_lost_once_and_full_state(
     assert collector.snapshots[-1].instruments[0].tracking is True
     assert [output.text for output in collector.voice] == [
         "Now tracking Device1 at 12 V.",
-        "Device1 briefly disappeared, then increased overall to 13.5 V.",
+        "I am no longer tracking Device1. Its last reading was 12 V.",
+        "Device1 increased overall to 13.5 V.",
         "Device1 changed from 13.5 V to 14 V.",
     ]
+    assert [output.interrupt for output in collector.voice] == [True, True, False, False]
     assert len(summary_requests) == 1
     assert '"reading": "13 V"' in summary_requests[0]
     assert '"reading": "13.5 V"' in summary_requests[0]
+
+
+@pytest.mark.asyncio
+async def test_instrument_tracking_updates_bypass_batch_and_interrupt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "lab_instrument_monitoring_worker.instrument_alerts._VOICE_INTERVAL_S",
+        60.0,
+    )
+    published: list[VoiceOutput] = []
+
+    class Context:
+        metadata = SimpleNamespace(participant_id="participant-1")
+
+        async def publish(self, topic, output: VoiceOutput) -> None:
+            assert topic is VOICE_CONTRIBUTION_TOPIC
+            published.append(output)
+
+    ctx = Context()
+    alerts = InstrumentAlertAgent()
+    await alerts.reading_changed(
+        InstrumentChange(
+            timestamp_us=1,
+            change_type="reading_changed",
+            marker_type=MarkerType.QR_CODE,
+            marker_id="meter-a",
+            device_name="Device1",
+            previous_reading="11 V",
+            meter_reading="12 V",
+            last_seen_us=1,
+        ),
+        ctx,  # type: ignore[arg-type]
+    )
+    await alerts.reading_changed(
+        InstrumentChange(
+            timestamp_us=2,
+            change_type="reading_changed",
+            marker_type=MarkerType.QR_CODE,
+            marker_id="meter-a",
+            device_name="Device1",
+            previous_reading="12 V",
+            meter_reading="13 V",
+            last_seen_us=2,
+        ),
+        ctx,  # type: ignore[arg-type]
+    )
+    await alerts.reading_changed(
+        InstrumentChange(
+            timestamp_us=3,
+            change_type="discovered",
+            marker_type=MarkerType.QR_CODE,
+            marker_id="meter-b",
+            device_name="Device2",
+            meter_reading="3 A",
+            last_seen_us=3,
+        ),
+        ctx,  # type: ignore[arg-type]
+    )
+    await alerts.instrument_lost(
+        InstrumentLost(
+            timestamp_us=4,
+            marker_type=MarkerType.QR_CODE,
+            marker_id="meter-a",
+            device_name="Device1",
+            meter_reading="13 V",
+            last_seen_us=2,
+        ),
+        ctx,  # type: ignore[arg-type]
+    )
+    await alerts.stop()
+
+    assert [output.text for output in published] == [
+        "Device1 changed from 11 V to 12 V.",
+        "Now tracking Device2 at 3 A.",
+        "I am no longer tracking Device1. Its last reading was 13 V.",
+    ]
+    assert [output.interrupt for output in published] == [False, True, True]
 
 
 @pytest.mark.asyncio

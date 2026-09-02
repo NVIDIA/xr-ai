@@ -155,29 +155,42 @@ class InstrumentAlertAgent(Agent):
     ) -> None:
         now = asyncio.get_running_loop().time()
         speak_now = False
+        interrupt = alert.discovered or alert.lost
         async with self._lock:
             state = self._states.setdefault(participant_id, _ParticipantAlerts())
-            quiet = (
-                state.last_spoken_at is None
-                or now - state.last_spoken_at >= _VOICE_INTERVAL_S
-            )
-            if quiet and not state.pending:
+            if interrupt:
+                # Tracking-state transitions supersede any stale reading update
+                # for this instrument and bypass routine monitoring cadence.
+                state.pending.pop(alert.key, None)
                 state.last_spoken_at = now
                 speak_now = True
             else:
-                state.pending.setdefault(alert.key, []).append(alert)
-                if state.flush_task is None or state.flush_task.done():
-                    delay_s = max(
-                        0.0,
-                        _VOICE_INTERVAL_S - (now - (state.last_spoken_at or now)),
-                    )
-                    state.flush_task = asyncio.create_task(
-                        self._flush_after(participant_id, state, delay_s),
-                        name=f"instrument-voice-summary:{participant_id}",
-                        context=nemo_relay.fork_asyncio_context(),
-                    )
+                quiet = (
+                    state.last_spoken_at is None
+                    or now - state.last_spoken_at >= _VOICE_INTERVAL_S
+                )
+                if quiet and not state.pending:
+                    state.last_spoken_at = now
+                    speak_now = True
+                else:
+                    state.pending.setdefault(alert.key, []).append(alert)
+                    if state.flush_task is None or state.flush_task.done():
+                        delay_s = max(
+                            0.0,
+                            _VOICE_INTERVAL_S - (now - (state.last_spoken_at or now)),
+                        )
+                        state.flush_task = asyncio.create_task(
+                            self._flush_after(participant_id, state, delay_s),
+                            name=f"instrument-voice-summary:{participant_id}",
+                            context=nemo_relay.fork_asyncio_context(),
+                        )
         if speak_now:
-            await self._publish(alert.ctx, immediate_text, alert.timestamp_us)
+            await self._publish(
+                alert.ctx,
+                immediate_text,
+                alert.timestamp_us,
+                interrupt=interrupt,
+            )
 
     async def _flush_after(
         self,
@@ -277,11 +290,17 @@ class InstrumentAlertAgent(Agent):
         ctx: RuntimeContext,
         text: str,
         timestamp_us: int,
+        *,
+        interrupt: bool = False,
     ) -> None:
         try:
             await ctx.publish(
                 VOICE_CONTRIBUTION_TOPIC,
-                VoiceOutput(text=text, timestamp_us=timestamp_us),
+                VoiceOutput(
+                    text=text,
+                    interrupt=interrupt,
+                    timestamp_us=timestamp_us,
+                ),
             )
         except RuntimeClosedError:
             return

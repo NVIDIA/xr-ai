@@ -220,11 +220,13 @@ application policy and belongs in the tracker rather than the VLM prompt or
 voice agent.
 
 The checked-in demo scans instruments every two seconds and marks an instrument
-as lost after five seconds without a sighting. Spoken monitoring changes are
-batched on a five-second cadence. They are non-urgent voice contributions, so
-the sample's aggregation policy waits for estimated active playback to finish
-and then leaves five seconds of quiet before delivering the next monitoring
-update. Foreground responses remain urgent and can interrupt that hold.
+as lost after five seconds without a sighting. Ordinary reading changes are
+batched as non-urgent voice contributions on a five-second cadence, so the
+sample's aggregation policy waits for estimated active playback to finish and
+then leaves five seconds of quiet before delivering the next reading update.
+Newly tracked and no-longer-tracked events are urgent: they bypass that cadence,
+take priority over queued contributions, and interrupt active voice output.
+Foreground responses remain urgent as well.
 
 Only marker identities present in `device_map.yaml` are treated as instruments.
 Unknown QR payloads and ArUco IDs are logged and ignored, preventing detector
