@@ -271,10 +271,13 @@ def stop_persistent_servers(
             else:
                 print(f"  [{label}] force-killing", flush=True)
                 os.kill(pid, signal.SIGKILL)
-                try:
-                    os.kill(pid, 0)
-                except ProcessLookupError:
-                    print(f"  [{label}] stopped", flush=True)
+                for _ in range(50):
+                    time.sleep(0.1)
+                    try:
+                        os.kill(pid, 0)
+                    except ProcessLookupError:
+                        print(f"  [{label}] stopped", flush=True)
+                        break
                 else:
                     print(f"  [{label}] still running after SIGKILL", flush=True)
                     success = False

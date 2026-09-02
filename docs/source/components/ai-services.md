@@ -332,9 +332,12 @@ that survived a previous stack run, and is stopped by the same
 `model_servers --stop` cleanup.
 
 Piper uses the launcher's persistent process group directly. Its bootstrap
-reuses an existing healthy listener. When no server exists, the bootstrap
-replaces itself with the foreground Uvicorn and ONNX process. Repeated starts
-therefore do not leave idle Piper supervisor processes behind.
+reuses an existing healthy listener. In a monitored stack, the reuse invocation
+remains alive as a health proxy so the launcher can detect service loss. A
+persistent-only launcher that uses `exit_after_ready=True` explicitly permits
+that proxy to exit after readiness, so repeated `model-servers` starts do not
+leave idle wrappers behind. When no server exists, the bootstrap replaces
+itself with the foreground Uvicorn and ONNX process.
 
 Docker containers carry a fingerprint of their image, GPU assignment, model
 cache, environment, bootstrap packages, complete vLLM command, and a versioned
