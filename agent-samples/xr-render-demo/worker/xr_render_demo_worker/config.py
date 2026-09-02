@@ -18,6 +18,7 @@ class WorkerConfig:
     scene_endpoint: str
     openxr_endpoint: str
     video_memory_endpoint: str
+    video_history_enabled: bool
     text_memory_dir: str
 
     silence_duration:  float
@@ -38,6 +39,7 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
         scene_endpoint = data.get("scene_endpoint", "tcp://127.0.0.1:8320"),
         openxr_endpoint = data.get("openxr_endpoint", "tcp://127.0.0.1:8330"),
         video_memory_endpoint = data.get("video_memory_endpoint", "tcp://127.0.0.1:8310"),
+        video_history_enabled = bool(data.get("video_history_enabled", False)),
         text_memory_dir = data.get("text_memory_dir", "/dev/shm/xr-ai/text-memory"),
         silence_duration  = float(data.get("silence_duration",  0.8)),
         min_speech        = float(data.get("min_speech",        0.15)),

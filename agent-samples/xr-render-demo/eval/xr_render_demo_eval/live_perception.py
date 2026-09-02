@@ -24,6 +24,7 @@ from pathlib import Path
 from xr_ai_hub import DataMessage
 from xr_ai_tools.rpc import RPCClient
 from xr_ai_tools.text_memory import AddTranscriptRequest, RecallConversationRequest, TextMemoryTools
+from xr_render_demo_worker.config import load_config
 from xr_render_scene import AddPrimitiveRequest, EmptyRequest, RemovePrimitiveRequest, SceneClient
 
 from ._live_endpoint import LiveEvalEndpoint, live_participant
@@ -35,13 +36,7 @@ CANONICAL = {"position": {"x": 0, "y": 1.6, "z": 0}, "forward": {"x": 0, "y": 0,
 def _text_memory_dir() -> str:
     """The driver reads the same transcript store the worker writes."""
     yaml_path = Path(__file__).resolve().parents[2] / "yaml" / "xr_render_demo_worker.yaml"
-    try:
-        for line in yaml_path.read_text(encoding="utf-8").splitlines():
-            if line.strip().startswith("text_memory_dir:"):
-                return line.split(":", 1)[1].strip()
-    except OSError:
-        pass
-    return "/dev/shm/xr-ai/text-memory"
+    return load_config(yaml_path).text_memory_dir
 
 
 # Bare "camera"/"vision" are excluded: a confabulated answer may mention the
@@ -176,6 +171,9 @@ async def main() -> None:
         raise SystemExit(2) from None
     try:
         wanted = set(sys.argv[1:])
+        unknown = wanted - {case["name"] for case in CASES}
+        if unknown:
+            raise SystemExit(f"unknown cases: {sorted(unknown)}")
         passed = failed = 0
         for index, case in enumerate(CASES):
             if wanted and case["name"] not in wanted:

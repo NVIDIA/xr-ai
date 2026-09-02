@@ -14,6 +14,11 @@ voice_gate_yaml: voice_gate.yaml
 scene_endpoint: tcp://127.0.0.1:8320
 openxr_endpoint: tcp://127.0.0.1:8330
 video_memory_endpoint: tcp://127.0.0.1:8310
+# Past-moment questions ("what was I holding a moment ago?") need recorded
+# video: enable video_recording in device_io_hub.yaml and set recordings_dir
+# in video_memory_service.yaml, then turn this on. Off, vision_agent answers
+# from the live camera only.
+video_history_enabled: false
 text_memory_dir: /dev/shm/xr-ai/text-memory
 
 # ── Voice activity detection (Silero VAD, ONNX backend) ──────────────────────

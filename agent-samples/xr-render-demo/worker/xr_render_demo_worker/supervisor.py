@@ -228,7 +228,11 @@ class SceneSupervisor:
         """Drop per-participant state after departure; a reconnecting id starts clean."""
         self._participant_locks.pop(participant_id, None)
         self._context.forget_participant(participant_id)
-        self._left_at_us[participant_id] = time.time_ns() // 1_000
+        now_us = time.time_ns() // 1_000
+        expired = [p for p, t in self._left_at_us.items() if t < now_us - _RECENT_WINDOW_US]
+        for p in expired:
+            del self._left_at_us[p]
+        self._left_at_us[participant_id] = now_us
 
     async def _recent_conversation(
         self, participant_id: str, reference_us: int
@@ -236,10 +240,13 @@ class SceneSupervisor:
         recalled = await self._text_memory.recall_conversation.execute(
             RecallConversationRequest(participant_id=participant_id)
         )
-        # A clipped utterance is completed within seconds or not at all; an
-        # older ask never splices into a new session's first words.
+        # A departure ends the session: turns before the last leave neither
+        # re-enter the block nor complete a clipped ask, however recent.
+        left_us = self._left_at_us.get(participant_id, 0)
+        session = [e for e in recalled.entries if e.timestamp_us >= left_us]
+        # A clipped utterance is completed within seconds or not at all.
         pending = ""
-        tail = recalled.entries[-2:]
+        tail = session[-2:]
         if (
             len(tail) == 2
             and tail[1].role == "agent"
@@ -249,15 +256,10 @@ class SceneSupervisor:
         ):
             pending = tail[0].text
         # User turns carry the hub's clock, agent turns the worker's; the
-        # window assumes both are wall-clock microseconds. A departure ends
-        # the session: turns before the last leave never re-enter the block,
-        # however recent; the age window covers worker restarts, which leave
-        # no departure record.
-        cutoff_us = max(
-            reference_us - _RECENT_WINDOW_US,
-            self._left_at_us.get(participant_id, 0),
-        )
-        entries = [e for e in recalled.entries if e.timestamp_us >= cutoff_us][-8:]
+        # window assumes both are wall-clock microseconds. The age window
+        # covers worker restarts, which leave no departure record.
+        cutoff_us = reference_us - _RECENT_WINDOW_US
+        entries = [e for e in session if e.timestamp_us >= cutoff_us][-8:]
         if not entries:
             return "", pending
         lines = [f"  {'User' if e.role == 'user' else 'Agent'}: {e.text}" for e in entries]

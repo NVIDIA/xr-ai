@@ -19,7 +19,7 @@ from xr_ai_voice import UserQuery
 from xr_render_demo_eval import harness
 from xr_render_demo_worker.agent import RenderAgent
 from xr_render_demo_worker.models import SceneRequest
-from xr_render_demo_worker.supervisor import SceneSupervisor
+from xr_render_demo_worker.supervisor import _TRUNCATED_ASK, SceneSupervisor
 
 
 class _RecordingMemory:
@@ -473,3 +473,35 @@ async def test_departure_ends_the_session_for_recall(monkeypatch) -> None:
         timestamp_us=_time.time_ns() // 1_000))
     assert seen_user_messages
     assert all("holding a torch" not in content for content in seen_user_messages)
+
+
+async def test_departure_drops_pending_truncated_ask(monkeypatch) -> None:
+    """A clipped ask left before departure never completes a reconnecting
+    participant's first words, even inside the completion window."""
+    import time as _time
+
+    now_us = _time.time_ns() // 1_000
+    memory = _RecordingMemory()
+    _seed_turn(memory, "alice", "Make a", f"{_TRUNCATED_ASK} A what?",
+               base_us=now_us - 2_000_000)
+    supervisor, _fake = _make_supervisor(memory)
+    supervisor.forget_participant("alice")
+    seen_user_messages: list[str] = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        seen_user_messages.extend(m.content for m in messages if m.role == "user")
+        return SimpleNamespace(content="Okay.", messages=list(messages), tool_calls=())
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await supervisor.handle(SceneRequest(
+        transcript="Cube please.", participant_id="alice", timestamp_us=now_us))
+    assert seen_user_messages
+    assert all("Make a" not in content for content in seen_user_messages)
+
+
+def test_departure_records_expire_with_the_recall_window() -> None:
+    supervisor, _fake = _make_supervisor()
+    supervisor._left_at_us["stale"] = 1
+    supervisor.forget_participant("alice")
+    assert set(supervisor._left_at_us) == {"alice"}

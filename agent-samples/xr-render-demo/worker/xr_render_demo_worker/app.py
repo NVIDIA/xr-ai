@@ -72,7 +72,7 @@ async def run_app(
     scene = SceneTools(config.scene_endpoint)
     tracking = TrackingTools(config.openxr_endpoint)
     text_memory = TextMemoryTools(config.text_memory_dir)
-    video = VideoMemoryTools(config.video_memory_endpoint)
+    video = VideoMemoryTools(config.video_memory_endpoint) if config.video_history_enabled else None
     images = ImageRegistry(allow_external=True)
     current_frame = CurrentFrameTool(
         endpoint=transport.endpoint,

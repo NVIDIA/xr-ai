@@ -73,6 +73,8 @@ def test_worker_config_loads_sample_yaml() -> None:
     config = load_config(_SAMPLE / "yaml/xr_render_demo_worker.yaml")
     assert config.models_config == _SAMPLE / "yaml/models.json"
     assert config.voice_gate_yaml.exists()
+    # The shipped hub disables recording, so the worker must not wire recorded video.
+    assert config.video_history_enabled is False
 
 
 def test_all_agent_modules_export_descriptions() -> None:
