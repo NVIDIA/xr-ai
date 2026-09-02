@@ -171,8 +171,8 @@ Package Contents
    *spark_uma* enables the DGX Spark cold-start safeguards in docker mode:
    prefetching and syncing the Hugging Face snapshot before CUDA starts, and
    one bounded restart after a non-container-OOM CUDA driver-allocation
-   failure. It is rejected in pip mode because that lifecycle cannot provide
-   the same isolated prefetch and restart boundary.
+   failure. Pip mode ignores this Docker lifecycle option, preserving the
+   one-field backend switch used by the service YAML files.
 
 
 .. py:function:: stop_persistent_servers(services: list[tuple[str, int]]) -> bool
@@ -183,8 +183,9 @@ Package Contents
 
    1. Look for a docker container labelled ``xr-ai-vllm.port=<port>``
       (stamped at start time by the vLLM wrapper) and ``docker stop`` it.
-   2. Fall back to port → pid → SIGTERM → SIGKILL for pip-mode vLLM or
-      in-process servers (e.g. STT).
+   2. Fall back to port → pid for pip-mode vLLM or in-process servers
+      (e.g. STT). Piper is signalled as a complete process group; other
+      local servers are signalled by PID.
 
    A missing container and listener is already stopped. Output is print-style
    with ``[<label>] …`` prefixes. Discovery errors and listeners that are not

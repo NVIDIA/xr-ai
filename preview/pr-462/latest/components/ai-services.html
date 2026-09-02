@@ -795,8 +795,14 @@ Either way vLLM keeps running after the orchestrator exits.</p>
 <p>The STT server follows the same pattern without Docker: <code class="docutils literal notranslate"><span class="pre">stt_server</span></code> spawns
 its persistent process with <code class="docutils literal notranslate"><span class="pre">start_new_session=True</span></code>, reuses a healthy server
 that survived a previous stack run, and is stopped by the same
-<code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> cleanup. The CPU Piper server is also launched as a
-persistent shared service and is stopped by the same command.</p>
+<code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> cleanup.</p>
+<p>Piper uses the launcher’s persistent process group directly. Its bootstrap
+reuses an existing healthy listener. In a monitored stack, the reuse invocation
+remains alive as a health proxy so the launcher can detect service loss. A
+persistent-only launcher that uses <code class="docutils literal notranslate"><span class="pre">exit_after_ready=True</span></code> explicitly permits
+that proxy to exit after readiness, so repeated <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> starts do not
+leave idle wrappers behind. When no server exists, the bootstrap replaces
+itself with the foreground Uvicorn and ONNX process.</p>
 <p>Docker containers carry a fingerprint of their image, GPU assignment, model
 cache, environment, bootstrap packages, complete vLLM command, and a versioned
 launcher-controlled Docker contract. This prevents a failed container created
@@ -810,8 +816,15 @@ with stale memory limits, entrypoint, setup commands, or model arguments.</p>
 stops them with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span></code> (escalating to <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">kill</span></code> after 20 s).
 Locally persisted processes (pip-mode vLLM and Piper) must carry the
 <code class="docutils literal notranslate"><span class="pre">XR_AI_VLLM_MANAGED</span></code> and <code class="docutils literal notranslate"><span class="pre">XR_AI_VLLM_PORT</span></code> ownership markers before cleanup
-sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code>. Unknown listeners and failed inspection abort
-cleanup without sending a signal; absent servers are silently skipped.</p>
+sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code>. Piper records the dedicated process group created
+by the launcher without leaving that group. Cleanup signals the complete group
+only after verifying both the listener marker and, when separate, the launcher’s
+group-leader marker, so inference descendants cannot survive as orphans and
+launcher abort-time escalation can still reach Piper. It falls back to PID-only
+cleanup if group ownership cannot be verified; other local servers always
+retain PID-only cleanup. Unknown listeners and failed inspection abort cleanup
+without sending a signal, and <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> exits nonzero if any target
+could not be stopped. Absent servers are silently skipped.</p>
 <p>The target ports and container names match the defaults in the per-profile YAML files.</p>
 </section>
 <section id="choosing-the-vllm-runtime-pip-vs-docker">
@@ -845,7 +858,9 @@ cleanup without sending a signal; absent servers are silently skipped.</p>
 </table>
 </div>
 <p>Both modes honor identical configuration keys — same model, same port, same vLLM
-flags. The dispatcher lives in <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-vllm/</span></code>. Switching is one YAML edit:</p>
+flags. Docker-only lifecycle settings such as <code class="docutils literal notranslate"><span class="pre">vllm_image</span></code>, <code class="docutils literal notranslate"><span class="pre">extra_pip</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">spark_uma</span></code> are accepted and ignored in pip mode. The dispatcher lives in
+<code class="docutils literal notranslate"><span class="pre">utils/xr-ai-vllm/</span></code>. Switching is one YAML edit:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># vlm-server (Cosmos3)</span>
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
 <span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.07-py3</span>
