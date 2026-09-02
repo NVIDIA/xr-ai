@@ -249,6 +249,12 @@ class _Leaves:
             if word in _SHAPE_WORDS:
                 return _SHAPE_WORDS[word]
         for word in words:
+            if word in _COLOR_WORDS:
+                raise ValueError(
+                    f"{word!r} is a color, not a shape. Do not change the shape; "
+                    "report the color change back as a recolor for appearance_agent."
+                )
+        for word in words:
             close = difflib.get_close_matches(word, _SHAPE_WORDS, n=1, cutoff=0.6)
             if close:
                 logger.debug("shape words resolved {!r} -> {}", shape_words, _SHAPE_WORDS[close[0]])

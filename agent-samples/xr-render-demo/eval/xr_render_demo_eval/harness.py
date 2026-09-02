@@ -77,10 +77,15 @@ class _FakeTextMemoryTools:
     def __init__(self, fake: "FakeScene") -> None:
         async def recall(req: RecallConversationRequest) -> RecallConversationResult:
             fake.calls.append(("recall_conversation", req.model_dump()))
+            # History ends seconds before the case's request timestamp, so
+            # the recency window (and the pending-ask window, for truncation
+            # cases) treats it as part of this session.
+            base_us = EVAL_REFERENCE_US - 4_000_000 - max(len(fake.history) - 1, 0) * 2_000_000
             entries: list[ConversationEntry] = []
             for i, (user_text, agent_text) in enumerate(fake.history):
-                entries.append(ConversationEntry(timestamp_us=(i + 1) * 1_000_000, role="user", text=user_text))
-                entries.append(ConversationEntry(timestamp_us=(i + 1) * 1_000_000 + 1, role="agent", text=agent_text))
+                turn_us = base_us + i * 2_000_000
+                entries.append(ConversationEntry(timestamp_us=turn_us, role="user", text=user_text))
+                entries.append(ConversationEntry(timestamp_us=turn_us + 1, role="agent", text=agent_text))
             if fake.memory_answer:
                 entries.append(ConversationEntry(timestamp_us=1, role="agent", text=fake.memory_answer))
             return RecallConversationResult(entries=entries)
@@ -189,6 +194,10 @@ class _FakeImageQueryTool:
         )
 
 
+# One clock for eval requests and the fake recall entries windowed against them.
+EVAL_REFERENCE_US = 1_700_000_000_000_000
+
+
 @dataclass(frozen=True)
 class Case:
     name: str
@@ -207,6 +216,7 @@ class Case:
     memory: str = ""
     history: tuple[tuple[str, str], ...] = ()
     reply_contains: str = ""
+    reply_excludes: str = ""
     camera_error: str = ""
     physical_expect_source: str = ""
 
@@ -313,7 +323,10 @@ CASES = (
         name="durable_memory",
         request="What object did we discuss in the earlier session?",
         memory="We discussed a small cyan sphere.",
-        required_tools=frozenset({"recall_conversation"}),
+        # The supervisor's own block recall is call one; memory_agent's
+        # recall is the second.
+        expected_call_counts=(("recall_conversation", 2),),
+        reply_contains="cyan",
     ),
     Case(
         name="placement_despite_camera_off",
@@ -693,7 +706,7 @@ async def run_corpus_case(case: dict[str, Any]) -> bool:
                 SceneRequest(
                     transcript=case["user"],
                     participant_id=_PARTICIPANT,
-                    timestamp_us=1_700_000_000_000_000,
+                    timestamp_us=EVAL_REFERENCE_US,
                 )
             )
             response = reply.response
@@ -800,6 +813,66 @@ UTTERANCES = (
         expected_colors=(("sphere-0", (0.0, 0.4, 1.0)),),
     ),
     Case(
+        name="basics_describe_view_is_camera",
+        # A describe-the-view request means the physical world; reciting
+        # SCENE OBJECTS is never the answer.
+        request="Describe what you can see.",
+        scene=(
+            {"id": "sphere-0", "type": "sphere",
+             "position": {"x": 0.0, "y": 1.6, "z": -1.5},
+             "color": {"r": 0, "g": 0.8, "b": 0}, "size": 0.1},
+            {"id": "box-0", "type": "box",
+             "position": {"x": 0.5, "y": 1.4, "z": -1.2},
+             "color": {"r": 1, "g": 0.5, "b": 0}, "size": 0.1},
+        ),
+        vision="A cluttered desk with a laptop and a coffee mug.",
+        required_tools=frozenset({"look_at_current_frame"}),
+        forbidden_tools=_FORBID_MUTATIONS,
+        reply_contains="desk",
+    ),
+    Case(
+        name="basics_use_the_camera_imperative",
+        # Telling the agent to consult the camera re-enters the pending
+        # question; the literal words are never the delegation.
+        request="Use the camera.",
+        vision="A bookshelf against a white wall.",
+        history=(
+            ("What's behind me right now?",
+             "Could you say more about what you mean?"),
+        ),
+        required_tools=frozenset({"look_at_current_frame"}),
+        forbidden_tools=_FORBID_MUTATIONS,
+        reply_contains="bookshelf",
+    ),
+    Case(
+        name="basics_holding_after_scene_work",
+        # A perception question right after ordinary scene work is fresh;
+        # neither SCENE OBJECTS nor the transcript holds the answer.
+        request="What's in my hand right now?",
+        scene=(
+            {"id": "box-1", "type": "box",
+             "position": {"x": -0.5, "y": 1.6, "z": -1.5},
+             "color": {"r": 0, "g": 0.8, "b": 0}, "size": 0.1},
+        ),
+        history=(
+            ("Make a green box.", "Created a green box in front of you."),
+            ("Move it left.", "Moved the box to your left."),
+        ),
+        vision="A phone in the user's hand.",
+        required_tools=frozenset({"look_at_current_frame"}),
+        forbidden_tools=_FORBID_MUTATIONS,
+        reply_contains="phone",
+    ),
+    Case(
+        name="basics_compound_one_part_blocked",
+        # One blocked part of a compound turn never blocks the others: the
+        # creation still lands while the perception part reports the outage.
+        request="Create a purple ring, then tell me what is printed on my shirt.",
+        camera_error="RPCError: camera feed unavailable",
+        required_tools=frozenset({"add_primitive"}),
+        expected_colors=(("ring-0", (0.6, 0.0, 1.0)),),
+    ),
+    Case(
         name="basics_physical_source_camera_down",
         # The camera outage must degrade to an honest no-change reply: the
         # resolver was attempted, nothing mutated, no invented color.
@@ -812,6 +885,19 @@ UTTERANCES = (
         camera_error="RPCError: camera feed unavailable",
         required_tools=frozenset({"current_frame"}),
         forbidden_tools=_FORBID_MUTATIONS,
+    ),
+    Case(
+        name="basics_stale_held_object_not_renamed",
+        # The user swapped objects between turns: the reply describes what
+        # this turn's camera read, never the object a recalled turn named.
+        # A guard for the supervisor prompt's reply rule; offline
+        # composition does not reproduce the failure, so this cannot catch
+        # the rule's removal.
+        request="Make a cube the color of what I'm holding.",
+        history=(("What am I holding?", "You are holding a red soda can."),),
+        vision="The item in the user's hand is gray.",
+        expected_colors=(("box-0", (0.5, 0.5, 0.5)),),
+        reply_excludes="soda",
     ),
     Case(
         name="basics_holding_color_with_history",
@@ -1102,7 +1188,7 @@ async def run_case(case: Case) -> bool:
                 SceneRequest(
                     transcript=case.request,
                     participant_id=_PARTICIPANT,
-                    timestamp_us=1_700_000_000_000_000,
+                    timestamp_us=EVAL_REFERENCE_US,
                 )
             )
             response = reply.response
@@ -1149,6 +1235,8 @@ async def run_case(case: Case) -> bool:
     }
     wrong_reply = bool(
         case.reply_contains and case.reply_contains.lower() not in response.lower()
+    ) or bool(
+        case.reply_excludes and case.reply_excludes.lower() in response.lower()
     )
     passed = (
         not errored
@@ -1190,7 +1278,8 @@ def audit_prompts() -> None:
     # Model-visible text lives in the prompt files and in the tool field
     # descriptions of spatial_ops.py; both shape the model's templates.
     prompts = (sorted(worker.rglob("*prompt*.txt"))
-               + [worker / "spatial_ops.py", worker / "_physical_color.py"]
+               + [worker / "spatial_ops.py", worker / "_physical_color.py",
+                  worker / "supervisor.py"]
                + sorted(worker.glob("agents/*/agent.py")))
     utterances = [case["user"] for case in CORPUS_CASES if case.get("user")]
     utterances += [case.request for case in (*CASES, *UTTERANCES)]
@@ -1238,6 +1327,21 @@ def audit_prompts() -> None:
             for text in turn
         ]
         fixture_ids |= {item["id"] for case in eval_supervisor.CASES for item in case.scene}
+    try:
+        from . import live_perception
+    except ImportError:
+        pass
+    else:
+        utterances += [case["prompt"] for case in live_perception.CASES]
+        utterances += [
+            turn for case in live_perception.CASES for turn in case.get("history", ())
+        ]
+        utterances += [case["pending"] for case in live_perception.CASES if "pending" in case]
+        eval_texts += [
+            text
+            for case in live_perception.CASES
+            for _role, text in case.get("poisoned", ())
+        ]
     for prompt_path in prompts:
         label = str(prompt_path.relative_to(worker))
         text = prompt_path.read_text(encoding="utf-8")

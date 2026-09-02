@@ -73,6 +73,8 @@ def test_worker_config_loads_sample_yaml() -> None:
     config = load_config(_SAMPLE / "yaml/xr_render_demo_worker.yaml")
     assert config.models_config == _SAMPLE / "yaml/models.json"
     assert config.voice_gate_yaml.exists()
+    # The shipped hub disables recording, so the worker must not wire recorded video.
+    assert config.video_history_enabled is False
 
 
 def test_all_agent_modules_export_descriptions() -> None:
@@ -120,7 +122,7 @@ def test_eval_case_filter_rejects_unknown_names_in_mixed_selection() -> None:
 def test_eval_utterances_alias_selects_the_complete_battery() -> None:
     from xr_render_demo_eval import harness
 
-    assert len(harness.UTTERANCES) == 35
+    assert len(harness.UTTERANCES) == 40
     assert harness._resolve_case_names(["utterances"]) == {
         case.name for case in harness.UTTERANCES
     }
@@ -235,6 +237,35 @@ def test_worker_config_idle_timeout_opt_in(tmp_path) -> None:
     y.write_text("idle_timeout_secs: 300\n")
     cfg = load_config(y)
     assert cfg.idle_timeout_secs == 300.0
+
+
+def test_worker_config_video_history_requires_yaml_boolean(tmp_path) -> None:
+    from xr_render_demo_worker.config import load_config
+
+    y = tmp_path / "w.yaml"
+    y.write_text("video_history_enabled: true\n")
+    assert load_config(y).video_history_enabled is True
+    y.write_text('video_history_enabled: "false"\n')
+    with pytest.raises(ValueError, match="video_history_enabled"):
+        load_config(y)
+
+
+async def test_close_clients_skips_disabled_video() -> None:
+    from types import SimpleNamespace
+
+    from xr_render_demo_worker.app import close_clients
+
+    closed: list[str] = []
+
+    async def _close(name: str) -> None:
+        closed.append(name)
+
+    scene = SimpleNamespace(client=SimpleNamespace(close=lambda: _close("scene")))
+    tracking = SimpleNamespace(close=lambda: _close("tracking"))
+    await close_clients(scene, tracking, None)
+    assert closed == ["scene", "tracking"]
+    await close_clients(scene, tracking, SimpleNamespace(close=lambda: _close("video")))
+    assert closed == ["scene", "tracking", "scene", "tracking", "video"]
 
 
 # ── untooled chat wire golden ─────────────────────────────────────────────────
@@ -460,3 +491,21 @@ def test_tool_def_to_openai_wire_shape() -> None:
             },
         },
     }
+
+
+def test_vision_description_matches_video_capability() -> None:
+    """The tool description offered to the supervisor must not advertise
+    recorded video when no video memory is wired."""
+    from xr_render_demo_worker.agents.vision import agent as vision
+
+    assert vision._SHARED_RULES in vision.DESCRIPTION
+    assert vision._SHARED_RULES in vision._LIVE_ONLY_DESCRIPTION
+    assert "recorded video when the question is about a past moment" in vision.DESCRIPTION
+    assert "Recorded video is not available" in vision._LIVE_ONLY_DESCRIPTION
+
+    with_video = vision.make_vision_agent(
+        llm=None, current_frame=None, image_query=None, video=object())
+    without_video = vision.make_vision_agent(
+        llm=None, current_frame=None, image_query=None, video=None)
+    assert with_video.description == vision.DESCRIPTION
+    assert without_video.description == vision._LIVE_ONLY_DESCRIPTION

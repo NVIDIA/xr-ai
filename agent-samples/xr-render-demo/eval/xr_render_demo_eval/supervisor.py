@@ -284,7 +284,7 @@ async def run_case(case: RoutingCase) -> bool:
                 SceneRequest(
                     transcript=case.request,
                     participant_id="eval-user",
-                    timestamp_us=1_700_000_000_000_000,
+                    timestamp_us=harness.EVAL_REFERENCE_US,
                 )
             )
         except Exception as exc:
