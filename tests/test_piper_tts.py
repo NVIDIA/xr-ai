@@ -145,8 +145,11 @@ async def test_piper_reuses_healthy_persistent_server(
     module = _load_piper_main_module()
     ready_file = tmp_path / "ready"
     execvpe = Mock(side_effect=AssertionError("must not launch a second server"))
+    monitor = Mock()
     monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
     monkeypatch.setattr(module, "_health_url_ok", lambda _url: True)
+    monkeypatch.setattr(module, "_monitor_reused_server", monitor)
+    monkeypatch.delenv(module._READY_PROCESS_MAY_EXIT_ENV, raising=False)
     monkeypatch.setattr(module.os, "execvpe", execvpe)
     monkeypatch.setattr(
         module.sys,
@@ -157,7 +160,46 @@ async def test_piper_reuses_healthy_persistent_server(
     module.run()
 
     assert ready_file.exists()
+    monitor.assert_called_once_with("http://127.0.0.1:8105/health")
     execvpe.assert_not_called()
+
+
+async def test_piper_reuse_exits_when_launcher_allows_ready_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_piper_main_module()
+    ready_file = tmp_path / "ready"
+    monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
+    monkeypatch.setattr(module, "_health_url_ok", lambda _url: True)
+    monkeypatch.setattr(
+        module,
+        "_monitor_reused_server",
+        lambda _url: pytest.fail("ready-exit launch must not remain monitored"),
+    )
+    monkeypatch.setenv(module._READY_PROCESS_MAY_EXIT_ENV, "1")
+    monkeypatch.setattr(
+        module.sys,
+        "argv",
+        ["piper_tts_server", "--ready-file", str(ready_file)],
+    )
+
+    module.run()
+
+    assert ready_file.exists()
+
+
+async def test_piper_reuse_monitor_tolerates_transient_health_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_piper_main_module()
+    health = Mock(side_effect=[False, True, False, False, False])
+    monkeypatch.setattr(module, "_health_url_ok", health)
+    monkeypatch.setattr(module.time, "sleep", lambda _seconds: None)
+
+    with pytest.raises(SystemExit, match="3 consecutive health checks"):
+        module._monitor_reused_server("http://127.0.0.1:8105/health")
+
+    assert health.call_count == 5
 
 
 async def test_piper_probes_configured_non_loopback_host(
@@ -413,6 +455,7 @@ async def test_piper_execs_managed_server_in_place(
     assert child_env["XR_AI_VLLM_MANAGED"] == "1"
     assert child_env["XR_AI_VLLM_PORT"] == "8105"
     assert child_env[module._PROCESS_GROUP_ENV] == "8105"
+    assert module._READY_PROCESS_MAY_EXIT_ENV not in child_env
     assert not ready_file.exists()
 
 
@@ -724,6 +767,7 @@ async def test_piper_managed_reuse_and_process_group_cleanup(
     }))
     env = _piper_environment(tmp_path / "logs")
     env["_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER"] = "piper_tts_server"
+    env["_XR_AI_LAUNCHER_READY_PROCESS_MAY_EXIT"] = "1"
     owner_ready = tmp_path / "owner.ready"
     reuse_ready = tmp_path / "reuse.ready"
     owner: subprocess.Popen | None = None

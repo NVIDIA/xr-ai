@@ -36,6 +36,7 @@ import os
 import socket
 import sys
 import threading
+import time
 import urllib.request
 import wave
 from pathlib import Path
@@ -50,6 +51,8 @@ _HF_REPO                   = "rhasspy/piper-voices"
 _PROCESS_GROUP_ENV         = "_XR_AI_PIPER_PROCESS_GROUP"
 _LAUNCHER_GROUP_OWNER_ENV  = "_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER"
 _LAUNCHER_GROUP_OWNER      = "piper_tts_server"
+_READY_PROCESS_MAY_EXIT_ENV = "_XR_AI_LAUNCHER_READY_PROCESS_MAY_EXIT"
+_REUSE_HEALTH_FAILURE_LIMIT = 3
 
 # Exit code for "the voice could not be obtained for environmental reasons"
 # (offline with an empty cache, or a transient HuggingFace download failure),
@@ -341,6 +344,27 @@ def _ensure_owned_process_group() -> int | None:
     return None
 
 
+def _monitor_reused_server(health_url: str, poll_s: float = 5.0) -> None:
+    """Remain monitorable until a reused server repeatedly fails health checks."""
+    failures = 0
+    while failures < _REUSE_HEALTH_FAILURE_LIMIT:
+        time.sleep(poll_s)
+        if _health_url_ok(health_url):
+            failures = 0
+            continue
+        failures += 1
+        if failures < _REUSE_HEALTH_FAILURE_LIMIT:
+            print(
+                f"[piper_tts_server] reused server health endpoint unreachable "
+                f"({failures}/{_REUSE_HEALTH_FAILURE_LIMIT}); retrying",
+                flush=True,
+            )
+    raise SystemExit(
+        f"[piper_tts_server] reused server failed "
+        f"{_REUSE_HEALTH_FAILURE_LIMIT} consecutive health checks"
+    )
+
+
 async def _load_backend(
     backend: _PiperBackend,
 ) -> None:
@@ -475,6 +499,8 @@ def run() -> None:
         )
         if ns.ready_file:
             ns.ready_file.touch()
+        if os.environ.get(_READY_PROCESS_MAY_EXIT_ENV) != "1":
+            _monitor_reused_server(health_url)
         return
 
     if _port_open(probe_host, port):
@@ -498,6 +524,7 @@ def run() -> None:
         "XR_AI_VLLM_PORT": str(port),
     }
     child_env.pop(_PROCESS_GROUP_ENV, None)
+    child_env.pop(_READY_PROCESS_MAY_EXIT_ENV, None)
     if process_group := _ensure_owned_process_group():
         child_env[_PROCESS_GROUP_ENV] = str(process_group)
     os.execvpe(
