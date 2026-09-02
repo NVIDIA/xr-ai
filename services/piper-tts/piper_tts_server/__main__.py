@@ -33,15 +33,12 @@ import asyncio
 import io
 import math
 import os
-import signal
 import socket
-import subprocess
 import sys
 import threading
 import time
 import urllib.request
 import wave
-from contextlib import suppress
 from pathlib import Path
 
 import yaml
@@ -50,9 +47,12 @@ from xr_ai_logging import setup_logging
 
 _DEFAULT_PORT              = 8105
 _DEFAULT_STARTUP_TIMEOUT_S = 600.0
-_PROCESS_STOP_TIMEOUT_S    = 10.0
-_IDLE_HEALTH_FAILURE_LIMIT = 3
 _HF_REPO                   = "rhasspy/piper-voices"
+_PROCESS_GROUP_ENV         = "_XR_AI_PIPER_PROCESS_GROUP"
+_LAUNCHER_GROUP_OWNER_ENV  = "_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER"
+_LAUNCHER_GROUP_OWNER      = "piper_tts_server"
+_READY_PROCESS_MAY_EXIT_ENV = "_XR_AI_LAUNCHER_READY_PROCESS_MAY_EXIT"
+_REUSE_HEALTH_FAILURE_LIMIT = 3
 
 # Exit code for "the voice could not be obtained for environmental reasons"
 # (offline with an empty cache, or a transient HuggingFace download failure),
@@ -320,7 +320,88 @@ def _port_open(host: str, port: int) -> bool:
         return False
 
 
-async def _run(cfg: dict, yaml_dir: Path) -> None:
+def _ensure_owned_process_group() -> int | None:
+    """Return the current safely signalable process group, if verified.
+
+    A launcher child remains in the dedicated session created around ``uv`` so
+    abort-time SIGKILL can still reach it. A directly started Piper process is
+    accepted only when it already leads its own session; otherwise cleanup
+    falls back to the listener PID.
+    """
+    pid = os.getpid()
+    try:
+        process_group = os.getpgrp()
+        session_id = os.getsid(0)
+    except OSError:
+        return None
+
+    if process_group != session_id:
+        return None
+    if process_group == pid:
+        return process_group
+    if os.environ.get(_LAUNCHER_GROUP_OWNER_ENV) == _LAUNCHER_GROUP_OWNER:
+        return process_group
+    return None
+
+
+def _monitor_reused_server(health_url: str, poll_s: float = 5.0) -> None:
+    """Remain monitorable until a reused server repeatedly fails health checks."""
+    failures = 0
+    while failures < _REUSE_HEALTH_FAILURE_LIMIT:
+        time.sleep(poll_s)
+        if _health_url_ok(health_url):
+            failures = 0
+            continue
+        failures += 1
+        if failures < _REUSE_HEALTH_FAILURE_LIMIT:
+            print(
+                f"[piper_tts_server] reused server health endpoint unreachable "
+                f"({failures}/{_REUSE_HEALTH_FAILURE_LIMIT}); retrying",
+                flush=True,
+            )
+    raise SystemExit(
+        f"[piper_tts_server] reused server failed "
+        f"{_REUSE_HEALTH_FAILURE_LIMIT} consecutive health checks"
+    )
+
+
+async def _load_backend(
+    backend: _PiperBackend,
+) -> None:
+    """Load Piper without letting a stuck native initializer block shutdown."""
+    loop = asyncio.get_running_loop()
+    loaded = loop.create_future()
+
+    def _publish(error: BaseException | None) -> None:
+        if loaded.done():
+            return
+        if error is None:
+            loaded.set_result(None)
+        else:
+            loaded.set_exception(error)
+
+    def _load() -> None:
+        error: BaseException | None = None
+        try:
+            backend._ensure_loaded()
+        except BaseException as exc:
+            error = exc
+        try:
+            loop.call_soon_threadsafe(_publish, error)
+        except RuntimeError:
+            # A startup timeout closes the loop while the daemon loader is
+            # still unwinding. The process is already exiting in that case.
+            pass
+
+    threading.Thread(target=_load, name="piper-model-loader", daemon=True).start()
+    await loaded
+
+
+async def _run(
+    cfg: dict,
+    yaml_dir: Path,
+    ready_file: Path | None = None,
+) -> None:
     import uvicorn
 
     if not cfg.get("voice"):
@@ -330,175 +411,48 @@ async def _run(cfg: dict, yaml_dir: Path) -> None:
     model_cache = _resolve_model_cache(cfg, yaml_dir)
     os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
     os.environ.setdefault("HF_XET_CACHE", str(model_cache / "piper" / "xet"))
+    startup_timeout_s = _parse_startup_timeout(
+        cfg.get("startup_timeout_s", _DEFAULT_STARTUP_TIMEOUT_S)
+    )
     port = int(cfg.get("port", _DEFAULT_PORT))
     host = cfg.get("host", "0.0.0.0")
 
     app, backend = _build_app(cfg, model_cache)
 
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, backend._ensure_loaded)
+    serve_task: asyncio.Task | None = None
+    try:
+        async with asyncio.timeout(startup_timeout_s):
+            await _load_backend(backend)
 
-    config = uvicorn.Config(app, host=host, port=port, log_level="warning")
-    server = uvicorn.Server(config)
+            config = uvicorn.Config(app, host=host, port=port, log_level="warning")
+            server = uvicorn.Server(config)
 
-    logger.info("Starting HTTP server on http://localhost:{}/v1", port)
-    await server.serve()
+            logger.info("Starting HTTP server on http://localhost:{}/v1", port)
+            serve_task = asyncio.create_task(server.serve())
+            while not server.started:
+                if serve_task.done():
+                    await serve_task
+                    raise RuntimeError("HTTP server exited before becoming ready")
+                await asyncio.sleep(0.05)
+    except TimeoutError as exc:
+        if serve_task is not None:
+            serve_task.cancel()
+            try:
+                await serve_task
+            except asyncio.CancelledError:
+                pass
+        raise TimeoutError(
+            f"server did not become ready within {startup_timeout_s:g} seconds"
+        ) from exc
+
+    assert serve_task is not None
+
+    logger.info("Ready  →  http://localhost:{}/v1", port)
+    if ready_file:
+        ready_file.touch()
+
+    await serve_task
     logger.info("Stopped.")
-
-
-def _wait_until_healthy(
-    process: subprocess.Popen,
-    health_url: str,
-    timeout_s: float,
-    poll_s: float = 1.0,
-) -> None:
-    """Wait for health while reporting a detached server crash immediately."""
-    deadline = time.monotonic() + timeout_s
-    while True:
-        returncode = process.poll()
-        if returncode is not None:
-            raise RuntimeError(
-                f"server exited with status {returncode} before becoming healthy"
-            )
-        if _health_url_ok(health_url):
-            return
-
-        remaining_s = deadline - time.monotonic()
-        if remaining_s <= 0:
-            raise TimeoutError(
-                f"server did not become healthy within {timeout_s:g} seconds"
-            )
-
-        try:
-            returncode = process.wait(timeout=min(poll_s, remaining_s))
-        except subprocess.TimeoutExpired:
-            continue
-        raise RuntimeError(
-            f"server exited with status {returncode} before becoming healthy"
-        )
-
-
-def _terminate_process(
-    process: subprocess.Popen,
-    timeout_s: float = _PROCESS_STOP_TIMEOUT_S,
-) -> None:
-    """Terminate and reap a detached server, escalating if it does not stop."""
-    if process.poll() is not None:
-        return
-    with suppress(ProcessLookupError):
-        process.terminate()
-    try:
-        process.wait(timeout=timeout_s)
-    except subprocess.TimeoutExpired:
-        with suppress(ProcessLookupError):
-            process.kill()
-        process.wait()
-
-
-def _start_persistent_server(
-    cmd: list[str],
-    health_url: str,
-    startup_timeout_s: float,
-    env: dict[str, str] | None = None,
-) -> subprocess.Popen:
-    """Start the detached server and return it once its health check passes."""
-    process: subprocess.Popen | None = None
-    pending_signal: int | None = None
-
-    def _abort_startup(signum, _frame) -> None:
-        nonlocal pending_signal
-        if pending_signal is not None:
-            return
-        pending_signal = signum
-        if process is not None:
-            raise SystemExit(128 + signum)
-
-    previous_handlers = {}
-    try:
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            previous_handlers[sig] = signal.signal(sig, _abort_startup)
-        process = subprocess.Popen(cmd, env=env, start_new_session=True)
-        if pending_signal is not None:
-            raise SystemExit(128 + pending_signal)
-        _wait_until_healthy(process, health_url, startup_timeout_s)
-    except (Exception, KeyboardInterrupt, SystemExit):
-        pending_signal = pending_signal or 0
-        if process is not None:
-            _terminate_process(process)
-        raise
-    finally:
-        for sig, handler in previous_handlers.items():
-            signal.signal(sig, handler)
-    assert process is not None
-    return process
-
-
-def _idle_until_stopped(
-    health_url: str,
-    process: subprocess.Popen | None = None,
-    poll_s: float = 5.0,
-) -> None:
-    """Keep the wrapper alive while the persisted server is still running."""
-    pending_signal: int | None = None
-
-    def _stop_owned_child(signum, _frame) -> None:
-        nonlocal pending_signal
-        if pending_signal is not None:
-            return
-        pending_signal = signum
-        raise SystemExit(128 + signum)
-
-    previous_handlers = {}
-    if process is not None:
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            previous_handlers[sig] = signal.signal(sig, _stop_owned_child)
-
-    health_failures = 0
-    try:
-        while True:
-            if process is None:
-                time.sleep(poll_s)
-            else:
-                try:
-                    returncode = process.wait(timeout=poll_s)
-                except subprocess.TimeoutExpired:
-                    pass
-                else:
-                    if returncode != 0:
-                        raise SystemExit(
-                            "[piper_tts_server] persistent server exited "
-                            f"with status {returncode}"
-                        )
-                    return
-
-            if _health_url_ok(health_url):
-                health_failures = 0
-                continue
-
-            if process is None:
-                return
-
-            health_failures += 1
-            if health_failures < _IDLE_HEALTH_FAILURE_LIMIT:
-                print(
-                    f"[piper_tts_server] health endpoint unreachable "
-                    f"({health_failures}/{_IDLE_HEALTH_FAILURE_LIMIT}); retrying",
-                    flush=True,
-                )
-                continue
-
-            raise SystemExit(
-                f"[piper_tts_server] persistent server failed "
-                f"{_IDLE_HEALTH_FAILURE_LIMIT} consecutive health checks; terminated"
-            )
-    except (KeyboardInterrupt, SystemExit):
-        pending_signal = pending_signal or 0
-        if process is not None:
-            _terminate_process(process)
-        raise
-    finally:
-        for sig, handler in previous_handlers.items():
-            signal.signal(sig, handler)
 
 
 def run() -> None:
@@ -522,7 +476,10 @@ def run() -> None:
             cfg = yaml.safe_load(f) or {}
 
     if ns._serve:
-        asyncio.run(_run(cfg, yaml_dir))
+        try:
+            asyncio.run(_run(cfg, yaml_dir, ready_file=ns.ready_file))
+        except Exception as exc:
+            raise SystemExit(f"[piper_tts_server] {exc}") from None
         return
 
     port = int(cfg.get("port", _DEFAULT_PORT))
@@ -542,7 +499,8 @@ def run() -> None:
         )
         if ns.ready_file:
             ns.ready_file.touch()
-        _idle_until_stopped(health_url)
+        if os.environ.get(_READY_PROCESS_MAY_EXIT_ENV) != "1":
+            _monitor_reused_server(health_url)
         return
 
     if _port_open(probe_host, port):
@@ -554,28 +512,26 @@ def run() -> None:
     cmd = [sys.executable, "-m", "piper_tts_server", "--_serve"]
     if ns.config:
         cmd += ["--config", str(ns.config)]
+    if ns.ready_file:
+        cmd += ["--ready-file", str(ns.ready_file)]
     print(
-        f"[piper_tts_server] starting persistent server on port {port} "
+        f"[piper_tts_server] starting managed server on port {port} "
         f"(startup timeout: {startup_timeout_s:g}s)…",
         flush=True,
     )
-    try:
-        process = _start_persistent_server(
-            cmd,
-            health_url,
-            startup_timeout_s,
-            env=os.environ | {
-                "XR_AI_VLLM_MANAGED": "1",
-                "XR_AI_VLLM_PORT": str(port),
-            },
-        )
-    except (RuntimeError, TimeoutError) as exc:
-        raise SystemExit(f"[piper_tts_server] {exc}") from exc
-
-    print(f"[piper_tts_server] Ready  →  http://localhost:{port}/v1", flush=True)
-    if ns.ready_file:
-        ns.ready_file.touch()
-    _idle_until_stopped(health_url, process)
+    child_env = os.environ | {
+        "XR_AI_VLLM_MANAGED": "1",
+        "XR_AI_VLLM_PORT": str(port),
+    }
+    child_env.pop(_PROCESS_GROUP_ENV, None)
+    child_env.pop(_READY_PROCESS_MAY_EXIT_ENV, None)
+    if process_group := _ensure_owned_process_group():
+        child_env[_PROCESS_GROUP_ENV] = str(process_group)
+    os.execvpe(
+        sys.executable,
+        cmd,
+        child_env,
+    )
 
 
 if __name__ == "__main__":

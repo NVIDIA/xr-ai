@@ -168,8 +168,9 @@ def stop_persistent_servers(
 
     1. Look for a docker container labelled ``xr-ai-vllm.port=<port>``
        (stamped at start time by the vLLM wrapper) and ``docker stop`` it.
-    2. Fall back to port → pid → SIGTERM → SIGKILL for pip-mode vLLM or
-       in-process servers (e.g. STT).
+    2. Fall back to port → pid for pip-mode vLLM or in-process servers
+       (e.g. STT). Piper is signalled as a complete process group; other
+       local servers are signalled by PID.
 
     A missing container and listener is already stopped. Output is print-style
     with ``[<label>] …`` prefixes. Discovery errors and listeners that are not
@@ -231,6 +232,41 @@ def stop_persistent_servers(
             success = False
             continue
 
+        pgid = (
+            _docker._piper_owned_process_group(pid, port)
+            if label == "tts"
+            else None
+        )
+        if pgid is not None:
+            print(
+                f"  [{label}] stopping (process group {pgid}, port={port})…",
+                flush=True,
+            )
+            try:
+                os.killpg(pgid, signal.SIGTERM)
+                for _ in range(40):
+                    time.sleep(0.5)
+                    if not _docker.process_group_alive(pgid):
+                        print(f"  [{label}] stopped", flush=True)
+                        break
+                else:
+                    print(f"  [{label}] force-killing", flush=True)
+                    os.killpg(pgid, signal.SIGKILL)
+                    for _ in range(50):
+                        time.sleep(0.1)
+                        if not _docker.process_group_alive(pgid):
+                            print(f"  [{label}] stopped", flush=True)
+                            break
+                    else:
+                        print(
+                            f"  [{label}] still running after SIGKILL",
+                            flush=True,
+                        )
+                        success = False
+            except ProcessLookupError:
+                print(f"  [{label}] already gone", flush=True)
+            continue
+
         print(f"  [{label}] stopping (pid={pid}, port={port})…", flush=True)
         try:
             os.kill(pid, signal.SIGTERM)
@@ -244,10 +280,13 @@ def stop_persistent_servers(
             else:
                 print(f"  [{label}] force-killing", flush=True)
                 os.kill(pid, signal.SIGKILL)
-                try:
-                    os.kill(pid, 0)
-                except ProcessLookupError:
-                    print(f"  [{label}] stopped", flush=True)
+                for _ in range(50):
+                    time.sleep(0.1)
+                    try:
+                        os.kill(pid, 0)
+                    except ProcessLookupError:
+                        print(f"  [{label}] stopped", flush=True)
+                        break
                 else:
                     print(f"  [{label}] still running after SIGKILL", flush=True)
                     success = False

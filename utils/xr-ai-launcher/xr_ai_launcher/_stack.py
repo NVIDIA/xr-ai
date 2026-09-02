@@ -52,6 +52,8 @@ from ._credentials import load_credentials
 
 _READY_INTERVAL = 5.0   # seconds between progress lines
 _STOP_TIMEOUT   = 20.0  # seconds before SIGKILL during shutdown
+_PROCESS_GROUP_OWNER_ENV = "_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER"
+_READY_PROCESS_MAY_EXIT_ENV = "_XR_AI_LAUNCHER_READY_PROCESS_MAY_EXIT"
 
 # launcher/ stays stdlib-only per AGENTS.md, so this module uses
 # ``logging.getLogger`` rather than loguru. The orchestrator's
@@ -199,7 +201,13 @@ def _strip_conflicting_cudnn(ld_library_path: str | None) -> tuple[str | None, l
     return (os.pathsep.join(kept) if kept else None), dropped
 
 
-def _spawn(proc: Process, base: Path, ready_file: Path) -> subprocess.Popen:
+def _spawn(
+    proc: Process,
+    base: Path,
+    ready_file: Path,
+    *,
+    ready_process_may_exit: bool = False,
+) -> subprocess.Popen:
     project = (base / proc.project).resolve()
 
     if shutil.which("uv"):
@@ -213,6 +221,12 @@ def _spawn(proc: Process, base: Path, ready_file: Path) -> subprocess.Popen:
     cmd += ["--ready-file", str(ready_file)]
 
     env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
+    # The child can record this launcher's dedicated session without creating
+    # a nested session that would escape _shutdown's SIGKILL escalation.
+    env[_PROCESS_GROUP_OWNER_ENV] = proc.command
+    env.pop(_READY_PROCESS_MAY_EXIT_ENV, None)
+    if ready_process_may_exit:
+        env[_READY_PROCESS_MAY_EXIT_ENV] = "1"
     if proc.gpu is not None:
         env["CUDA_VISIBLE_DEVICES"] = proc.gpu
 
@@ -478,7 +492,14 @@ def run_stack(
                     group: list[_ReadyEntry] = []
                     for proc in to_spawn:
                         ready_file = tmpdir / f"{proc.name}.ready"
-                        launched[proc.name] = _spawn(proc, base, ready_file)
+                        launched[proc.name] = _spawn(
+                            proc,
+                            base,
+                            ready_file,
+                            ready_process_may_exit=(
+                                exit_after_ready and proc.launch_mode == "persist"
+                            ),
+                        )
                         group.append((proc.name, ready_file, launched[proc.name]))
                     print(f"  [parallel] starting: {', '.join(p.name for p in to_spawn)}",
                           flush=True)
@@ -487,7 +508,14 @@ def run_stack(
                     if item.launch_mode == "reuse":
                         continue
                     ready_file = tmpdir / f"{item.name}.ready"
-                    launched[item.name] = _spawn(item, base, ready_file)
+                    launched[item.name] = _spawn(
+                        item,
+                        base,
+                        ready_file,
+                        ready_process_may_exit=(
+                            exit_after_ready and item.launch_mode == "persist"
+                        ),
+                    )
                     _wait_ready(item.name, ready_file, launched[item.name])
 
             log.info("All processes ready.")

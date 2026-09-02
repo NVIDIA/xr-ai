@@ -1138,6 +1138,11 @@ def is_xr_ai_server_process(pid: int, label: str, port: int) -> bool:
     }
     if expected_command := in_process_servers.get(label):
         return expected_command in command
+    return has_xr_ai_ownership_marker(pid, port)
+
+
+def has_xr_ai_ownership_marker(pid: int, port: int) -> bool:
+    """Return whether *pid* carries xr-ai's matching managed-port marker."""
     try:
         environment = Path(f"/proc/{pid}/environ").read_bytes()
     except OSError:
@@ -1146,3 +1151,89 @@ def is_xr_ai_server_process(pid: int, label: str, port: int) -> bool:
         b"XR_AI_VLLM_MANAGED=1\0" in environment
         and f"XR_AI_VLLM_PORT={port}\0".encode() in environment
     )
+
+
+def _piper_owned_process_group(pid: int, port: int) -> int | None:
+    """Return Piper's verified dedicated process group, if present.
+
+    The listener may lead its own session or remain in the launcher's session.
+    In the latter case the group leader must carry the matching private
+    launcher marker, so inherited terminal or caller groups fail closed.
+    """
+    try:
+        environment = Path(f"/proc/{pid}/environ").read_bytes()
+        entries = environment.split(b"\0")
+        prefix = b"_XR_AI_PIPER_PROCESS_GROUP="
+        raw_group = next(
+            entry.removeprefix(prefix)
+            for entry in entries
+            if entry.startswith(prefix)
+        )
+        group_id = int(raw_group)
+        process_group = os.getpgid(pid)
+        session_id = os.getsid(pid)
+    except (OSError, StopIteration, ValueError):
+        return None
+
+    if (
+        b"XR_AI_VLLM_MANAGED=1" not in entries
+        or f"XR_AI_VLLM_PORT={port}".encode() not in entries
+        or process_group != group_id
+        or session_id != group_id
+    ):
+        return None
+
+    if group_id == pid:
+        return group_id
+
+    try:
+        group_environment = Path(f"/proc/{group_id}/environ").read_bytes()
+        group_entries = group_environment.split(b"\0")
+        leader_group = os.getpgid(group_id)
+        leader_session = os.getsid(group_id)
+    except OSError:
+        return None
+    if (
+        b"_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER=piper_tts_server"
+        not in group_entries
+        or leader_group != group_id
+        or leader_session != group_id
+    ):
+        return None
+    return group_id
+
+
+def process_group_alive(pgid: int, proc_root: Path = Path("/proc")) -> bool:
+    """Return whether *pgid* contains any live, non-zombie process."""
+    try:
+        entries = list(proc_root.iterdir())
+    except OSError:
+        return True
+
+    saw_group = False
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            stat = (entry / "stat").read_text()
+            # ``comm`` is parenthesized and may contain spaces or parentheses.
+            fields = stat.rsplit(")", 1)[1].split()
+            state = fields[0]
+            process_group = int(fields[2])
+        except (IndexError, OSError, ValueError):
+            continue
+        if process_group != pgid:
+            continue
+        saw_group = True
+        if state != "Z":
+            return True
+    if saw_group:
+        return False
+
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True
+    return True

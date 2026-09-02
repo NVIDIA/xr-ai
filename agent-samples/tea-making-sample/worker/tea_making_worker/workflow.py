@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from contextlib import suppress
 from pathlib import Path
@@ -47,6 +48,7 @@ from .workflow_state import (
     monotonic_now,
 )
 from .workflow_tools import (
+    _NAMED_TOOL_NAMES,
     CurrentViewRequest,
     TimerRequest,
     clock_now_tool,
@@ -65,6 +67,17 @@ _PROMPTS = Path(__file__).resolve().parent / "prompts"
 _OBSERVATION_PROMPT = _PROMPTS / "guidance_observation.txt"
 _VOICE_PROMPT = _PROMPTS / "guidance_voice.txt"
 _POLL_INTERVAL_S = 0.25
+_TEMPERATURE = re.compile(
+    r"(?i)(?<![\w.])(-?\d{1,3}(?:\.\d+)?)\s*"
+    r"(?:°\s*|degrees?\s*)?(celsius|fahrenheit|c|f)\b"
+)
+_NUMBER = re.compile(r"(?<![\w.])-?\d{1,3}(?:\.\d+)?(?![\w.])")
+_NO_READING = re.compile(
+    r"(?i)\b(?:no (?:current )?reading|reading (?:is )?"
+    r"(?:missing|not visible|unavailable))\b"
+)
+_HEATING_THRESHOLD_C = 50.0
+_AMBIGUOUS_RETRIES = 3
 
 
 class _TriggerResult(BaseModel):
@@ -75,6 +88,27 @@ class _TriggerResult(BaseModel):
 
 class _StaleObservation(RuntimeError):
     """Stop an observation turn after its workflow revision changes."""
+
+
+def _water_visible(observation: str) -> bool:
+    return observation.strip().strip("`'\" ").casefold() == "water present"
+
+
+def _temperature_reading_c(observation: str) -> tuple[float | None, bool]:
+    text = observation.strip().strip("`'\" ").rstrip(".")
+    if _NO_READING.search(text) is not None:
+        return None, False
+    match = _TEMPERATURE.fullmatch(text)
+    if match is not None:
+        reading = float(match.group(1))
+        unit = match.group(2).casefold()
+        if unit in {"fahrenheit", "f"}:
+            reading = (reading - 32.0) * 5.0 / 9.0
+        return reading, False
+    unit_ambiguous = "unit ambiguous" in text.casefold() or bool(
+        _NUMBER.search(text)
+    )
+    return None, unit_ambiguous
 
 
 class GuidanceAgent(Agent):
@@ -108,6 +142,16 @@ class GuidanceAgent(Agent):
         self._connected: set[str] = set()
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._publish_locks: dict[str, asyncio.Lock] = {}
+        self._temperature_ambiguity: dict[str, tuple[int, int, bool]] = {}
+        for step in workflow.steps.values():
+            unknown = (
+                set(step.agent.tools) | set(step.voice.tools)
+            ) - _NAMED_TOOL_NAMES
+            if unknown:
+                raise ValueError(
+                    f"workflow step {step.id!r} references unknown tools: "
+                    f"{sorted(unknown)}"
+                )
 
     def bind_runtime(self, runtime: AgentRuntime) -> None:
         """Bind runtime publication before participant work starts."""
@@ -185,6 +229,7 @@ class GuidanceAgent(Agent):
             return
         self._connected.add(participant_id)
         self.store.release(participant_id)
+        self._temperature_ambiguity.pop(participant_id, None)
         session = self.store.get(participant_id)
         self.store.record(session, "participant.joined")
         await self._flush(session)
@@ -206,6 +251,7 @@ class GuidanceAgent(Agent):
             await self._flush(session)
         self.store.release(participant_id)
         self._publish_locks.pop(participant_id, None)
+        self._temperature_ambiguity.pop(participant_id, None)
         await ctx.publish(
             PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
             ParticipantCleanupComplete(
@@ -225,6 +271,7 @@ class GuidanceAgent(Agent):
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._publish_locks.clear()
+        self._temperature_ambiguity.clear()
 
     def _named_tools(
         self,
@@ -330,6 +377,8 @@ class GuidanceAgent(Agent):
             step,
             state,
         )
+        handled = False
+        next_state: dict[str, Any] | None = None
         async with session.lock:
             if not self._current(session, step, revision):
                 return
@@ -340,17 +389,118 @@ class GuidanceAgent(Agent):
                     trigger.detail,
                 )
             else:
-                self.store.observe(session, trigger.value)
-                state = dict(session.state)
-        if trigger.available:
+                handled = self._apply_direct_evidence(
+                    session,
+                    step,
+                    trigger.value,
+                    revision,
+                )
+                if not handled:
+                    self.store.observe(session, trigger.value)
+                    next_state = dict(session.state)
+        if trigger.available and not handled:
+            if next_state is None:
+                raise AssertionError("model observation requires current state")
             await self._observe(
                 session,
                 step,
                 trigger.value,
-                state,
+                next_state,
                 revision,
             )
         await self._flush(session)
+
+    def _apply_direct_evidence(
+        self,
+        session: WorkflowSession,
+        step: Step,
+        observation: Any,
+        revision: int,
+    ) -> bool:
+        """Apply the two simple visual classifications without another LLM."""
+
+        if not isinstance(observation, str):
+            return False
+        if step.id == "fill_water":
+            visible = _water_visible(observation)
+            self.store.observe(
+                session,
+                "water visible" if visible else "water not visible",
+            )
+            logger.debug(
+                "tea water evidence pid={!r} visible={} observation={!r}",
+                session.participant_id,
+                visible,
+                observation,
+            )
+            self._commit_on_evidence(session, step, "water_filled")
+            return True
+        if step.id != "heat_water":
+            return False
+
+        reading_c, unit_ambiguous = _temperature_reading_c(observation)
+        above_threshold = (
+            reading_c is not None and reading_c > _HEATING_THRESHOLD_C
+        )
+        self.store.observe(
+            session,
+            (
+                "temperature above threshold"
+                if above_threshold
+                else "temperature not above threshold"
+            ),
+        )
+        logger.debug(
+            "tea heating evidence pid={!r} reading_c={} ambiguous={} observation={!r}",
+            session.participant_id,
+            reading_c,
+            unit_ambiguous,
+            observation,
+        )
+        self._track_temperature_ambiguity(
+            session,
+            revision,
+            unit_ambiguous=unit_ambiguous,
+        )
+        self._commit_on_evidence(session, step, "heating_started")
+        return True
+
+    def _commit_on_evidence(
+        self,
+        session: WorkflowSession,
+        step: Step,
+        field: str,
+    ) -> None:
+        evidence = step.evidence
+        if evidence is None or session.evidence_hits < evidence.consecutive:
+            return
+        self.store.commit(session, {field: True}, "")
+
+    def _track_temperature_ambiguity(
+        self,
+        session: WorkflowSession,
+        revision: int,
+        *,
+        unit_ambiguous: bool,
+    ) -> None:
+        stored_revision, count, notified = self._temperature_ambiguity.get(
+            session.participant_id,
+            (revision, 0, False),
+        )
+        if stored_revision != revision:
+            count = 0
+            notified = False
+        count = count + 1 if unit_ambiguous else 0
+        if count >= _AMBIGUOUS_RETRIES and not notified:
+            session.notices.append(
+                "The temperature unit is ambiguous. Keep Celsius or Fahrenheit visible."
+            )
+            notified = True
+        self._temperature_ambiguity[session.participant_id] = (
+            revision,
+            count,
+            notified,
+        )
 
     async def _trigger(
         self,
