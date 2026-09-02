@@ -26,6 +26,9 @@ from xr_ai_tools.vision import (
 from .workflow_state import WorkflowSession, WorkflowStore
 
 ChangeCallback = Callable[[], Awaitable[None]]
+_NAMED_TOOL_NAMES = frozenset(
+    {"current_view", "rag_lookup", "clock__now", "clock__timer", "temperature__verify"}
+)
 
 
 class CurrentViewRequest(StrictRequest):
