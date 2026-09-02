@@ -48,6 +48,8 @@ _DEFAULT_PORT              = 8105
 _DEFAULT_STARTUP_TIMEOUT_S = 600.0
 _HF_REPO                   = "rhasspy/piper-voices"
 _PROCESS_GROUP_ENV         = "_XR_AI_PIPER_PROCESS_GROUP"
+_LAUNCHER_GROUP_OWNER_ENV  = "_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER"
+_LAUNCHER_GROUP_OWNER      = "piper_tts_server"
 
 # Exit code for "the voice could not be obtained for environmental reasons"
 # (offline with an empty cache, or a transient HuggingFace download failure),
@@ -316,20 +318,26 @@ def _port_open(host: str, port: int) -> bool:
 
 
 def _ensure_owned_process_group() -> int | None:
-    """Enter a self-owned session and return its safely signalable group ID.
+    """Return the current safely signalable process group, if verified.
 
-    Cleanup may signal the group only when this process is both its group and
-    session leader. If an inherited group cannot be isolated, leaving the
-    marker unset makes cleanup fall back to the listener PID.
+    A launcher child remains in the dedicated session created around ``uv`` so
+    abort-time SIGKILL can still reach it. A directly started Piper process is
+    accepted only when it already leads its own session; otherwise cleanup
+    falls back to the listener PID.
     """
     pid = os.getpid()
     try:
-        if os.getpgrp() != pid:
-            os.setsid()
-        if os.getpgrp() == pid and os.getsid(0) == pid:
-            return pid
+        process_group = os.getpgrp()
+        session_id = os.getsid(0)
     except OSError:
-        pass
+        return None
+
+    if process_group != session_id:
+        return None
+    if process_group == pid:
+        return process_group
+    if os.environ.get(_LAUNCHER_GROUP_OWNER_ENV) == _LAUNCHER_GROUP_OWNER:
+        return process_group
     return None
 
 
