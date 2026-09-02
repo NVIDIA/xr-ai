@@ -68,7 +68,7 @@
   step: fill_water
   query: What is the next step?
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:heat|water)\\b"
+  expected_response_pattern: "(?i)\\bheat\\w*\\b"
   forbidden_response: I can only help with the active tea guide right now.
 
 - name: completed-identification-answers-transcribed-instructions-question
@@ -118,7 +118,7 @@
     tea_ready: true
   query: What is the next step?
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:fill|water|vessel)\\b"
+  expected_response_pattern: "(?i)\\b(?:fill|vessel|kettle|pot)\\b"
   forbidden_response: I can only help with the active tea guide right now.
 
 - name: completed-identification-answers-what-to-do-now
@@ -134,7 +134,7 @@
     tea_ready: true
   query: What do I do now?
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:fill|water|vessel)\\b"
+  expected_response_pattern: "(?i)\\b(?:fill|vessel|kettle|pot)\\b"
   max_response_chars: 80
 
 - name: completed-identification-answers-whats-next
@@ -150,7 +150,7 @@
     tea_ready: true
   query: What's next?
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:fill|water|vessel)\\b"
+  expected_response_pattern: "(?i)\\b(?:fill|vessel|kettle|pot)\\b"
   max_response_chars: 80
 
 - name: completed-identification-answers-specific-tea-instructions-question
@@ -281,6 +281,7 @@
   step: fill_water
   query: Move on to the following tea step.
   expected_tool: workflow__advance
+  expected_skip: false
 
 - name: active-resets-on-direct-command
   route: active
@@ -367,14 +368,14 @@
   step: fill_water
   query: Remind me what I am doing right now.
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:fill|water|vessel|kettle|pot)\\b"
+  expected_response_pattern: "(?i)\\b(?:fill|vessel|kettle|pot)\\b"
 
 - name: active-explains-following-step
   route: active
   step: fill_water
   query: What comes after this step?
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:heat|water)\\b"
+  expected_response_pattern: "(?i)\\bheat\\w*\\b"
 
 - name: active-summarizes-procedure-from-middle
   route: active
@@ -389,7 +390,7 @@
   step: fill_water
   query: Whats the nex step
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:heat|water)\\b"
+  expected_response_pattern: "(?i)\\bheat\\w*\\b"
 
 - name: active-explains-temperature-choice
   route: active
@@ -450,12 +451,14 @@
   step: fill_water
   query: Could you move on to the next tea step?
   expected_tool: workflow__advance
+  expected_skip: false
 
 - name: active-accepts-skip-command
   route: active
   step: heat_water
   query: Skip this tea step.
   expected_tool: workflow__advance
+  expected_skip: true
 
 - name: active-accepts-reset-command
   route: active
@@ -499,14 +502,14 @@
   step: heat_water
   query: Will it rain tomorrow?
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|tea)\\b"
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
 
 - name: active-rejects-arithmetic-request
   route: active
   step: fill_water
   query: What is seventeen multiplied by nine?
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|tea)\\b"
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
   forbidden_response: "153"
 
 - name: active-rejects-unrelated-scene-description
@@ -514,4 +517,30 @@
   step: fill_water
   query: Describe the artwork on the wall behind me.
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|tea|not sure)\\b"
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
+
+- name: active-does-not-advance-on-bare-next-question
+  route: active
+  step: fill_water
+  query: Next?
+  expected_tool: null
+
+- name: active-accepts-polite-continue-command
+  route: active
+  step: fill_water
+  query: Could you please continue?
+  expected_tool: workflow__advance
+  expected_skip: false
+
+- name: active-accepts-proceed-command
+  route: active
+  step: fill_water
+  query: Proceed to the next tea step.
+  expected_tool: workflow__advance
+  expected_skip: false
+
+- name: active-accepts-restart-my-guide-command
+  route: active
+  step: steep_timer
+  query: Please restart my tea guide.
+  expected_tool: workflow__restart
