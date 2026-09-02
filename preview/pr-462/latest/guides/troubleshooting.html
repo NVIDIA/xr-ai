@@ -482,27 +482,36 @@ cannot be evaluated when <code class="docutils literal notranslate"><span class=
 for later failures that report insufficient memory for the requested
 utilization or KV cache.</p>
 </section>
-<section id="dgx-spark-cosmos-vlm-has-insufficient-kv-cache-only-on-a-cold-start">
-<h3>DGX Spark — Cosmos VLM has insufficient KV cache only on a cold start<a class="headerlink" href="#dgx-spark-cosmos-vlm-has-insufficient-kv-cache-only-on-a-cold-start" title="Link to this heading">#</a></h3>
-<p><strong>Symptom:</strong> the Cosmos VLM reports less KV-cache capacity on its first start
-than on a later start with the same <code class="docutils literal notranslate"><span class="pre">max_model_len</span></code>. The first start can reject
-the 8,192-token context even while Linux reports substantial available memory.</p>
+<section id="dgx-spark-vllm-reports-insufficient-kv-cache-only-on-a-cold-start">
+<h3>DGX Spark — vLLM reports insufficient KV cache only on a cold start<a class="headerlink" href="#dgx-spark-vllm-reports-insufficient-kv-cache-only-on-a-cold-start" title="Link to this heading">#</a></h3>
+<p><strong>Symptom:</strong> Nemotron Omni or the Cosmos VLM reports a negative or smaller
+KV-cache capacity on its first start than on a later start with the same
+configuration. The first start can reject the configured context even while
+Linux reports substantial available memory.</p>
 <p><strong>Cause:</strong> vLLM derives non-Torch usage from changes in globally available
 memory while it loads and profiles a model. On a unified-memory system, model
 downloads and checkpoint reads change the Linux filesystem page cache. vLLM
 can attribute part of that global change to the model and subtract it from the
 automatically sized KV cache. The behavior is tracked in <a class="reference external" href="https://github.com/vllm-project/vllm/issues/35920">vLLM issue
-#35920</a>.</p>
+#35920</a>.
+The model-server launcher starts these services sequentially, so concurrent
+startup is not required to trigger the page-cache accounting error.</p>
 <p><strong>Fix:</strong> the bundled <code class="docutils literal notranslate"><span class="pre">spark</span></code> profile sets <code class="docutils literal notranslate"><span class="pre">kv_cache_memory_bytes</span></code> explicitly
-for Cosmos instead of relying on <code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code>. Keep that fixed
-allocation when copying or modifying the profile. The value is mutually
-exclusive with <code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code> and is passed to vLLM as
-<code class="docutils literal notranslate"><span class="pre">--kv-cache-memory-bytes</span></code>.</p>
+for both Nemotron Omni and Cosmos instead of using the fractional profiler to
+size their caches. Keep the fixed allocations when copying or modifying the
+profile. The values are 2 GiB for Omni’s 32,768-token hybrid Mamba/attention
+cache and 1.5 GiB for Cosmos’s 8,192-token cache.</p>
+<p>The Spark files intentionally retain <code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code>. In the bundled
+vLLM versions, <code class="docutils literal notranslate"><span class="pre">kv_cache_memory_bytes</span></code> controls the cache allocation and skips
+the unreliable profiling calculation, but vLLM still evaluates
+<code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code> during its initial free-memory admission check. Do
+not remove the profile value and fall back to vLLM’s higher default.</p>
 <p>Pre-download large checkpoints before starting a custom Spark profile when
 possible. Do not flush the filesystem cache routinely for this symptom: doing
 so makes the next checkpoint read cold and can reproduce the profiling
 variation. The cache-flush workaround in the previous section applies only
-when <code class="docutils literal notranslate"><span class="pre">cudaMemGetInfo</span></code> itself fails before weight loading.</p>
+when <code class="docutils literal notranslate"><span class="pre">cudaMemGetInfo</span></code> itself fails before weight loading. An explicit cache
+cannot bypass that earlier CUDA memory-snapshot call.</p>
 </section>
 <section id="dgx-spark-lovr-auto-download-is-not-supported">
 <h3>DGX Spark — LOVR auto-download is not supported<a class="headerlink" href="#dgx-spark-lovr-auto-download-is-not-supported" title="Link to this heading">#</a></h3>
@@ -889,7 +898,7 @@ stall indefinitely; set <code class="docutils literal notranslate"><span class="
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup-time-issues">Setup-time issues</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-uv-sync-fails-to-build-a-wheel">DGX Spark — <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> fails to build a wheel</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-vllm-fails-in-cudamemgetinfo-before-loading-weights">DGX Spark — vLLM fails in <code class="docutils literal notranslate"><span class="pre">cudaMemGetInfo</span></code> before loading weights</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-cosmos-vlm-has-insufficient-kv-cache-only-on-a-cold-start">DGX Spark — Cosmos VLM has insufficient KV cache only on a cold start</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-vllm-reports-insufficient-kv-cache-only-on-a-cold-start">DGX Spark — vLLM reports insufficient KV cache only on a cold start</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-lovr-auto-download-is-not-supported">DGX Spark — LOVR auto-download is not supported</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#blackwell-gpus-b200-rtx-pro-6000-vlm-fails-to-start">Blackwell GPUs (B200, RTX PRO 6000) — VLM fails to start</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#gpu-service-aborts-with-cudnn-version-incompatibility">GPU service aborts with <code class="docutils literal notranslate"><span class="pre">cuDNN</span> <span class="pre">version</span> <span class="pre">incompatibility</span></code></a></li>

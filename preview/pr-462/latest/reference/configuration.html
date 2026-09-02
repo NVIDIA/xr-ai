@@ -1219,8 +1219,13 @@ workflow.</p></li>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
 <span class="c1"># Nemotron-3-Nano-Omni — DGX Spark (GB10).</span>
-<span class="c1"># The NVFP4 model shares unified memory with STT and the runtime, so retain the</span>
-<span class="c1"># conservative allocation used by the standard Nano stack.</span>
+<span class="c1"># The NVFP4 model shares unified memory with the rest of the stack. vLLM's</span>
+<span class="c1"># fractional profiler is unreliable while cold checkpoint reads change the</span>
+<span class="c1"># filesystem page cache, so reserve 2 GiB explicitly for the 32K hybrid</span>
+<span class="c1"># Mamba/attention cache. This covers four full 32K requests with the pinned</span>
+<span class="c1"># vLLM 0.20 cache layout; max_num_seqs still permits more shorter requests.</span>
+<span class="c1"># gpu_memory_utilization remains the vLLM startup admission threshold; it does</span>
+<span class="c1"># not size the cache when the byte value is set.</span>
 
 <span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
 <span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8108</span>
@@ -1231,6 +1236,7 @@ workflow.</p></li>
 <span class="nt">tensor_parallel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32768</span>
 <span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.25</span>
+<span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2147483648</span>
 <span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 
 <span class="nt">video_pruning_rate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
@@ -1383,6 +1389,8 @@ workflow.</p></li>
 <span class="c1"># Cosmos3 requires about 1.12 GiB of KV cache for the 8,192-token context.</span>
 <span class="c1"># Pin 1.5 GiB because vLLM's fractional memory profiler can misattribute</span>
 <span class="c1"># filesystem page-cache changes as model overhead on unified-memory systems.</span>
+<span class="c1"># The 0.20 utilization remains vLLM's startup admission threshold; the fixed</span>
+<span class="c1"># byte value controls the KV-cache allocation.</span>
 <span class="c1"># hf_overrides selects the Reasoner runtime; details are documented in</span>
 <span class="c1"># docs/source/components/ai-services.md#per-server-notes.</span>
 
@@ -1394,6 +1402,7 @@ workflow.</p></li>
 <span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8100</span>
 <span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
 <span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
+<span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.20</span>
 <span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
 <span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
 <span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
