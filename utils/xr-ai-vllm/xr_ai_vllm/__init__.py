@@ -116,9 +116,10 @@ def serve(
 
     *spark_uma* enables the DGX Spark cold-start safeguards in docker mode:
     prefetching and syncing the Hugging Face snapshot before CUDA starts, and
-    one bounded restart after a non-container-OOM CUDA driver-allocation
-    failure. Pip mode ignores this Docker lifecycle option, preserving the
-    one-field backend switch used by the service YAML files.
+    one bounded restart of a container attempt launched by this wrapper after
+    a non-container-OOM CUDA driver-allocation failure. Pip mode ignores this
+    Docker lifecycle option, preserving the one-field backend switch used by
+    the service YAML files.
     """
     vllm_argv: list[str] = [
         "vllm", "serve", model,

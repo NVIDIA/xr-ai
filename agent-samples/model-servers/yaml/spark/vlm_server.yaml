@@ -5,9 +5,11 @@
 #
 # vlm is THIRD in load order: STT → Omni → vlm.
 # free_at_startup ≈ 120 − 30 (Omni) − 2 (STT) ≈ 88 GiB.
-# Cosmos3 requires about 1.12 GiB of KV cache for the 8,192-token context.
-# Pin 1.5 GiB because vLLM's fractional memory profiler can misattribute
-# filesystem page-cache changes as model overhead on unified-memory systems.
+# Cosmos3 requires about 1.12 GiB of KV cache for one 8,192-token request.
+# Pin 1.5 GiB and one concurrent sequence because vLLM's fractional memory
+# profiler can misattribute filesystem page-cache changes as model overhead on
+# unified-memory systems. Concurrent requests queue rather than preempting and
+# recomputing a full context that cannot share this fixed cache budget.
 # The 0.20 utilization remains vLLM's startup admission threshold; the fixed
 # byte value controls the KV-cache allocation.
 # hf_overrides selects the Reasoner runtime; details are documented in
@@ -23,7 +25,7 @@ host: "0.0.0.0"
 model_cache: ../../../../models
 gpu_memory_utilization: 0.20
 kv_cache_memory_bytes: 1610612736
-max_num_seqs: 4
+max_num_seqs: 1
 enforce_eager: true
 async_scheduling: true
 mm_encoder_tp_mode: data

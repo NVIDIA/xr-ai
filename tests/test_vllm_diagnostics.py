@@ -12,6 +12,16 @@ from xr_ai_vllm._diagnostics import (
 )
 
 
+_EARLY_CUDA_ALLOCATION_FAILURE = (
+    'File "/opt/vllm/vllm/v1/worker/gpu_worker.py", line 282, in init_device\n'
+    "  self.init_snapshot = MemorySnapshot(device=self.device)\n"
+    'File "/opt/vllm/vllm/utils/mem_utils.py", line 108, in measure\n'
+    "  self.free_memory, self.total_memory = current_platform.mem_get_info(device)\n"
+    "torch.AcceleratorError: CUDA error: out of memory\n"
+    "Search for `cudaErrorMemoryAllocation' in the CUDA runtime API\n"
+)
+
+
 def test_negative_kv_cache_is_classified_as_insufficient_gpu_memory(
     tmp_path: Path,
 ) -> None:
@@ -43,10 +53,7 @@ def test_cuda_oom_is_classified(tmp_path: Path) -> None:
 
 def test_spark_driver_allocation_failure_has_uma_diagnosis(tmp_path: Path) -> None:
     log = tmp_path / "vllm.log"
-    log.write_text(
-        "torch.AcceleratorError: CUDA error: out of memory\n"
-        "Search for `cudaErrorMemoryAllocation' in the CUDA runtime API\n"
-    )
+    log.write_text(_EARLY_CUDA_ALLOCATION_FAILURE)
 
     assert is_cuda_memory_allocation_failure(log)
     diagnosis = classify_vllm_failure(
@@ -57,6 +64,34 @@ def test_spark_driver_allocation_failure_has_uma_diagnosis(tmp_path: Path) -> No
 
     assert diagnosis is not None
     assert diagnosis.startswith("DGX SPARK UMA ALLOCATION FAILURE")
+    assert "retry" not in diagnosis.lower()
+
+    exhausted = classify_vllm_failure(
+        log,
+        ["vllm", "serve", "model"],
+        spark_uma=True,
+        retry_exhausted=True,
+    )
+    assert exhausted is not None
+    assert "retry was exhausted" in exhausted.lower()
+
+
+def test_late_driver_allocation_failure_is_not_retryable(tmp_path: Path) -> None:
+    log = tmp_path / "vllm.log"
+    log.write_text(
+        "model_executor.load_model()\n"
+        "torch.AcceleratorError: CUDA error: out of memory\n"
+        "cudaErrorMemoryAllocation\n"
+    )
+
+    assert not is_cuda_memory_allocation_failure(log)
+    diagnosis = classify_vllm_failure(
+        log,
+        ["vllm", "serve", "model"],
+        spark_uma=True,
+    )
+    assert diagnosis is not None
+    assert diagnosis.startswith("INSUFFICIENT GPU MEMORY")
 
 
 def test_torch_cuda_oom_is_not_driver_allocation_signature(tmp_path: Path) -> None:
@@ -70,10 +105,7 @@ def test_attempt_boundary_excludes_an_old_driver_allocation_failure(
     tmp_path: Path,
 ) -> None:
     log = tmp_path / "vllm.log"
-    log.write_text(
-        "torch.AcceleratorError: CUDA error: out of memory\n"
-        "cudaErrorMemoryAllocation\n"
-    )
+    log.write_text(_EARLY_CUDA_ALLOCATION_FAILURE)
     current_attempt = log.stat().st_size
     with log.open("a", encoding="utf-8") as stream:
         stream.write("HfHubHTTPError: Invalid credentials in Authorization header\n")
