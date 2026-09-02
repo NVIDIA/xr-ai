@@ -439,13 +439,6 @@ def run() -> None:
     health_url = _health_url(probe_host, port)
 
     if _health_url_ok(health_url):
-        from xr_ai_vllm import managed_server_on_port
-
-        if not managed_server_on_port("tts", port):
-            raise SystemExit(
-                f"[piper_tts_server] a healthy but unmanaged server is already "
-                f"using port {port}; stop it explicitly before starting xr-ai"
-            )
         print(
             f"[piper_tts_server] already running on port {port} — reusing",
             flush=True,
@@ -476,7 +469,6 @@ def run() -> None:
         os.environ | {
             "XR_AI_VLLM_MANAGED": "1",
             "XR_AI_VLLM_PORT": str(port),
-            "XR_AI_MANAGED_SERVICE": "piper-tts",
         },
     )
 
