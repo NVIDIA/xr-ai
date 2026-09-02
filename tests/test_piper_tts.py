@@ -34,6 +34,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
+import xr_ai_launcher._stack as launcher_stack
 import xr_ai_vllm
 import yaml
 
@@ -333,24 +334,41 @@ async def test_piper_uses_existing_dedicated_process_group(
     assert module._ensure_owned_process_group() == 1234
 
 
-async def test_piper_isolates_an_inherited_process_group(
+async def test_piper_preserves_launcher_owned_process_group(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = _load_piper_main_module()
-    isolated = False
     monkeypatch.setattr(module.os, "getpid", lambda: 1234)
-    monkeypatch.setattr(module.os, "getpgrp", lambda: 1234 if isolated else 4321)
-    monkeypatch.setattr(module.os, "getsid", lambda _pid: 1234 if isolated else 4321)
+    monkeypatch.setattr(module.os, "getpgrp", lambda: 4321)
+    monkeypatch.setattr(module.os, "getsid", lambda _pid: 4321)
+    monkeypatch.setenv(
+        module._LAUNCHER_GROUP_OWNER_ENV,
+        module._LAUNCHER_GROUP_OWNER,
+    )
+    monkeypatch.setattr(
+        module.os,
+        "setsid",
+        lambda: pytest.fail("Piper must remain reachable by launcher SIGKILL"),
+    )
 
-    def setsid() -> int:
-        nonlocal isolated
-        isolated = True
-        return 1234
+    assert module._ensure_owned_process_group() == 4321
 
-    monkeypatch.setattr(module.os, "setsid", setsid)
 
-    assert module._ensure_owned_process_group() == 1234
-    assert isolated
+async def test_piper_does_not_claim_inherited_non_launcher_process_group(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_piper_main_module()
+    monkeypatch.setattr(module.os, "getpid", lambda: 1234)
+    monkeypatch.setattr(module.os, "getpgrp", lambda: 4321)
+    monkeypatch.setattr(module.os, "getsid", lambda _pid: 4321)
+    monkeypatch.delenv(module._LAUNCHER_GROUP_OWNER_ENV, raising=False)
+    monkeypatch.setattr(
+        module.os,
+        "setsid",
+        lambda: pytest.fail("Piper must not change a caller's process topology"),
+    )
+
+    assert module._ensure_owned_process_group() is None
 
 
 async def test_piper_does_not_claim_an_unisolated_process_group(
@@ -414,6 +432,91 @@ async def test_piper_omits_group_marker_when_ownership_is_unverified(
     module.run()
 
     assert module._PROCESS_GROUP_ENV not in execvpe.call_args.args[2]
+
+
+@pytest.mark.integration
+async def test_launcher_abort_force_kills_piper_in_its_process_group(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    if shutil.which("uv") is None:
+        pytest.skip("uv not on PATH")
+
+    executable_dir = tmp_path / "bin"
+    executable_dir.mkdir()
+    executable = executable_dir / "piper_tts_server"
+    executable.write_text(
+        """#!/usr/bin/env python3
+import argparse
+import json
+import os
+import signal
+import time
+from pathlib import Path
+
+from piper_tts_server.__main__ import _ensure_owned_process_group
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--ready-file", required=True)
+args = parser.parse_args()
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+Path(args.ready_file).write_text(json.dumps({
+    "pid": os.getpid(),
+    "group": _ensure_owned_process_group(),
+    "session": os.getsid(0),
+}))
+while True:
+    time.sleep(1)
+"""
+    )
+    executable.chmod(0o755)
+    monkeypatch.setenv(
+        "PATH",
+        f"{executable_dir}{os.pathsep}{os.environ['PATH']}",
+    )
+    python_path = os.environ.get("PYTHONPATH")
+    piper_python_path = str(_PIPER_PROJECT)
+    if python_path:
+        piper_python_path += os.pathsep + python_path
+    monkeypatch.setenv("PYTHONPATH", piper_python_path)
+
+    ready_file = tmp_path / "abort.ready"
+    process = launcher_stack._spawn(
+        launcher_stack.Process(
+            "tts",
+            _REPO_ROOT / "tests",
+            "piper_tts_server",
+        ),
+        _REPO_ROOT,
+        ready_file,
+    )
+
+    child_pid: int | None = None
+    try:
+        await _wait_for_ready_file(ready_file, proc=process, timeout=20)
+        state = json.loads(ready_file.read_text())
+        child_pid = state["pid"]
+        assert state["group"] == process.pid
+        assert state["session"] == process.pid
+
+        monkeypatch.setattr(launcher_stack, "_STOP_TIMEOUT", 0.1)
+        launcher_stack._shutdown({"tts": process})
+
+        deadline = asyncio.get_running_loop().time() + 5
+        while (
+            xr_ai_vllm._docker.process_group_alive(process.pid)
+            and asyncio.get_running_loop().time() < deadline
+        ):
+            await asyncio.sleep(0.05)
+        assert not xr_ai_vllm._docker.process_group_alive(process.pid)
+    finally:
+        with suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
+        if process.poll() is None:
+            process.wait(timeout=5)
+        if child_pid is not None:
+            with suppress(ProcessLookupError):
+                os.kill(child_pid, signal.SIGKILL)
 
 
 class _ServerExited(Exception):
@@ -620,6 +723,7 @@ async def test_piper_managed_reuse_and_process_group_cleanup(
         "model_cache": str(model_cache),
     }))
     env = _piper_environment(tmp_path / "logs")
+    env["_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER"] = "piper_tts_server"
     owner_ready = tmp_path / "owner.ready"
     reuse_ready = tmp_path / "reuse.ready"
     owner: subprocess.Popen | None = None
@@ -673,7 +777,7 @@ async def test_piper_managed_reuse_and_process_group_cleanup(
         assert inspected and listening and listener_pid is not None
         assert (
             xr_ai_vllm._docker._piper_owned_process_group(listener_pid, port)
-            == listener_pid
+            == owner.pid
         )
         stopped = await asyncio.get_running_loop().run_in_executor(
             None,

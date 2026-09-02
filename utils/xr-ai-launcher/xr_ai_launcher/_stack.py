@@ -52,6 +52,7 @@ from ._credentials import load_credentials
 
 _READY_INTERVAL = 5.0   # seconds between progress lines
 _STOP_TIMEOUT   = 20.0  # seconds before SIGKILL during shutdown
+_PROCESS_GROUP_OWNER_ENV = "_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER"
 
 # launcher/ stays stdlib-only per AGENTS.md, so this module uses
 # ``logging.getLogger`` rather than loguru. The orchestrator's
@@ -213,6 +214,9 @@ def _spawn(proc: Process, base: Path, ready_file: Path) -> subprocess.Popen:
     cmd += ["--ready-file", str(ready_file)]
 
     env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
+    # The child can record this launcher's dedicated session without creating
+    # a nested session that would escape _shutdown's SIGKILL escalation.
+    env[_PROCESS_GROUP_OWNER_ENV] = proc.command
     if proc.gpu is not None:
         env["CUDA_VISIBLE_DEVICES"] = proc.gpu
 

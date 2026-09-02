@@ -352,14 +352,15 @@ Cleanup locates labelled Docker containers before inspecting ports, then
 stops them with `docker stop` (escalating to `docker kill` after 20 s).
 Locally persisted processes (pip-mode vLLM and Piper) must carry the
 `XR_AI_VLLM_MANAGED` and `XR_AI_VLLM_PORT` ownership markers before cleanup
-sends `SIGTERM` or `SIGKILL`. Piper creates and records a dedicated process
-group before starting Uvicorn. Cleanup signals that complete group only after
-verifying the recorded group still belongs to the listener, so its inference
-descendants cannot survive as orphans. It falls back to PID-only cleanup if
-group ownership cannot be verified; other local servers always retain PID-only
-cleanup. Unknown listeners and failed inspection abort cleanup without sending
-a signal, and `model_servers --stop` exits nonzero if any target could not be
-stopped. Absent servers are silently skipped.
+sends `SIGTERM` or `SIGKILL`. Piper records the dedicated process group created
+by the launcher without leaving that group. Cleanup signals the complete group
+only after verifying both the listener marker and, when separate, the launcher's
+group-leader marker, so inference descendants cannot survive as orphans and
+launcher abort-time escalation can still reach Piper. It falls back to PID-only
+cleanup if group ownership cannot be verified; other local servers always
+retain PID-only cleanup. Unknown listeners and failed inspection abort cleanup
+without sending a signal, and `model_servers --stop` exits nonzero if any target
+could not be stopped. Absent servers are silently skipped.
 
 The target ports and container names match the defaults in the per-profile YAML files.
 

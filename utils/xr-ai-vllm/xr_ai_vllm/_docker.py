@@ -990,10 +990,11 @@ def has_xr_ai_ownership_marker(pid: int, port: int) -> bool:
 
 
 def _piper_owned_process_group(pid: int, port: int) -> int | None:
-    """Return Piper's verified, self-owned process group, if present.
+    """Return Piper's verified dedicated process group, if present.
 
-    The private marker alone is insufficient: the listener must still be the
-    leader of both the recorded process group and its dedicated session.
+    The listener may lead its own session or remain in the launcher's session.
+    In the latter case the group leader must carry the matching private
+    launcher marker, so inherited terminal or caller groups fail closed.
     """
     try:
         environment = Path(f"/proc/{pid}/environ").read_bytes()
@@ -1013,9 +1014,26 @@ def _piper_owned_process_group(pid: int, port: int) -> int | None:
     if (
         b"XR_AI_VLLM_MANAGED=1" not in entries
         or f"XR_AI_VLLM_PORT={port}".encode() not in entries
-        or group_id != pid
         or process_group != group_id
         or session_id != group_id
+    ):
+        return None
+
+    if group_id == pid:
+        return group_id
+
+    try:
+        group_environment = Path(f"/proc/{group_id}/environ").read_bytes()
+        group_entries = group_environment.split(b"\0")
+        leader_group = os.getpgid(group_id)
+        leader_session = os.getsid(group_id)
+    except OSError:
+        return None
+    if (
+        b"_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER=piper_tts_server"
+        not in group_entries
+        or leader_group != group_id
+        or leader_session != group_id
     ):
         return None
     return group_id
