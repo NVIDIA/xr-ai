@@ -38,6 +38,7 @@ _WORKER = _SAMPLE / "worker"
 sys.path.insert(0, str(_WORKER))
 
 import tea_making_worker.foreground as foreground_module  # noqa: E402  # pyright: ignore[reportMissingImports]
+import tea_making_worker.workflow as workflow_module  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     _CLIENT_TEXT_TOPIC,
     _ParticipantVoiceAggregationAgent,
@@ -678,9 +679,8 @@ def test_workflow_enforces_consecutive_visual_evidence() -> None:
     session = store.get("participant-2")
     store.start(session)
     store.advance(session, skip=True)
-    observation = "The kettle contains water inside with a visible surface and level."
+    observation = "water visible"
 
-    store.observe(session, observation)
     store.observe(session, observation)
     rejected = store.commit(session, {"water_filled": True}, "")
     assert not rejected.accepted
@@ -692,6 +692,125 @@ def test_workflow_enforces_consecutive_visual_evidence() -> None:
     assert accepted.complete
     assert session.state["water_filled"] is True
     assert session.step_id == "fill_water"
+
+
+@pytest.mark.parametrize(
+    ("observation", "expected"),
+    [
+        ("water visible: a clear waterline in the side gauge", True),
+        ("Water visible: water is pouring into the kettle", True),
+        ("water not visible", False),
+        ("water visible: the level is unclear", False),
+        ("The kettle contains water.", False),
+    ],
+)
+def test_water_observation_protocol(observation: str, expected: bool) -> None:
+    assert workflow_module._water_visible(observation) is expected
+
+
+@pytest.mark.parametrize(
+    ("observation", "reading_c", "ambiguous"),
+    [
+        ("51 C", 51.0, False),
+        ("123 F", pytest.approx(50.56, abs=0.01), False),
+        ("65 degrees Celsius", 65.0, False),
+        ("unit ambiguous", None, True),
+        ("The display reads 65", None, True),
+        ("no reading", None, False),
+    ],
+)
+def test_temperature_observation_protocol(
+    observation: str,
+    reading_c: float | None,
+    ambiguous: bool,
+) -> None:
+    actual_reading, actual_ambiguous = workflow_module._temperature_reading_c(
+        observation
+    )
+    assert actual_reading == reading_c
+    assert actual_ambiguous is ambiguous
+
+
+def _guidance_for_direct_evidence() -> GuidanceAgent:
+    return GuidanceAgent(
+        workflow=load_workflow(_SAMPLE / "yaml/workflow.yaml"),
+        llm=SimpleNamespace(),  # type: ignore[arg-type]
+        current_frame=SimpleNamespace(),  # type: ignore[arg-type]
+        image_query=SimpleNamespace(),  # type: ignore[arg-type]
+        rag=SimpleNamespace(),  # type: ignore[arg-type]
+    )
+
+
+def test_water_detection_uses_two_confirming_vlm_observations() -> None:
+    guidance = _guidance_for_direct_evidence()
+    session = guidance.store.get("participant-water-evidence")
+    guidance.store.start(session)
+    guidance.store.advance(session, skip=True)
+    step = guidance.workflow.step("fill_water")
+
+    guidance._apply_direct_evidence(
+        session,
+        step,
+        "water visible: a waterline in the side gauge",
+        session.revision,
+    )
+    assert session.state["water_filled"] is False
+
+    guidance._apply_direct_evidence(
+        session,
+        step,
+        "water visible: a surface reflection inside the kettle",
+        session.revision,
+    )
+    assert session.state["water_filled"] is True
+
+
+def test_heating_detection_requires_two_hot_explicit_unit_readings() -> None:
+    guidance = _guidance_for_direct_evidence()
+    session = guidance.store.get("participant-heating-evidence")
+    guidance.store.start(session)
+    guidance.store.advance(session, skip=True)
+    guidance.store.advance(session, skip=True)
+    step = guidance.workflow.step("heat_water")
+
+    for observation in ("51 C", "122 F", "51 C"):
+        guidance._apply_direct_evidence(
+            session,
+            step,
+            observation,
+            session.revision,
+        )
+    assert session.state["heating_started"] is False
+
+    guidance._apply_direct_evidence(
+        session,
+        step,
+        "123 F",
+        session.revision,
+    )
+    assert session.state["heating_started"] is True
+
+
+def test_heating_detection_retries_then_reports_ambiguous_unit_once() -> None:
+    guidance = _guidance_for_direct_evidence()
+    session = guidance.store.get("participant-ambiguous-temperature")
+    guidance.store.start(session)
+    guidance.store.advance(session, skip=True)
+    guidance.store.advance(session, skip=True)
+    step = guidance.workflow.step("heat_water")
+
+    for _ in range(4):
+        guidance._apply_direct_evidence(
+            session,
+            step,
+            "unit ambiguous",
+            session.revision,
+        )
+
+    assert session.state["heating_started"] is False
+    assert session.notices == [
+        "The temperature unit is ambiguous. Keep Celsius or Fahrenheit visible."
+    ]
 
 
 def test_guidance_exposes_one_foreground_stack_at_a_time() -> None:
