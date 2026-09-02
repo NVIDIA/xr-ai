@@ -66,6 +66,30 @@ def test_torch_cuda_oom_is_not_driver_allocation_signature(tmp_path: Path) -> No
     assert not is_cuda_memory_allocation_failure(log)
 
 
+def test_attempt_boundary_excludes_an_old_driver_allocation_failure(
+    tmp_path: Path,
+) -> None:
+    log = tmp_path / "vllm.log"
+    log.write_text(
+        "torch.AcceleratorError: CUDA error: out of memory\n"
+        "cudaErrorMemoryAllocation\n"
+    )
+    current_attempt = log.stat().st_size
+    with log.open("a", encoding="utf-8") as stream:
+        stream.write("HfHubHTTPError: Invalid credentials in Authorization header\n")
+
+    assert not is_cuda_memory_allocation_failure(
+        log,
+        start_offset=current_attempt,
+    )
+    assert classify_vllm_failure(
+        log,
+        ["vllm", "serve", "model"],
+        spark_uma=True,
+        start_offset=current_attempt,
+    ) is None
+
+
 def test_conflicting_process_memory_is_classified(tmp_path: Path) -> None:
     log = tmp_path / "vllm.log"
     log.write_text(

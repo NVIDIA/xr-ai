@@ -286,6 +286,19 @@ def container_oom_killed(name: str) -> bool | None:
     return None
 
 
+def container_started_at(name: str) -> str | None:
+    """Return the current container attempt's Docker start timestamp."""
+    try:
+        raw = subprocess.check_output(
+            ["docker", "inspect", "--format", "{{.State.StartedAt}}", name],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+    return raw if raw and not raw.startswith("0001-01-01") else None
+
+
 def remove_container(name: str) -> bool:
     """``docker rm`` *name* if it exists; return True if the container was removed.
 
@@ -502,6 +515,22 @@ def _container_log_path(container_name: str) -> Path:
     return log_dir / f"{container_name}.log"
 
 
+def _parse_timestamp(value: str | None) -> datetime | None:
+    """Parse Docker/Python RFC3339 timestamps for log-boundary comparisons."""
+    if not value:
+        return None
+    normalized = re.sub(r"(\.\d{6})\d+", r"\1", value)
+    if normalized.endswith("Z"):
+        normalized = f"{normalized[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 class _LogStreamer:
     """Stream container stdout/stderr to a sibling file (not to the terminal).
 
@@ -510,8 +539,8 @@ class _LogStreamer:
     startup failure leaves no trace. The streamer writes directly to a
     file fd so the launcher's stdout forwarder (and the wrapper's loguru
     sinks) stay quiet — the user reads the container log on demand via
-    ``tail -f``. ``docker logs -f`` replays from container start, so a
-    fast crash is still captured.
+    ``tail -f``. The initial ``--since`` boundary captures a fast crash while
+    excluding output from earlier starts of a persistent container.
 
     ``docker run`` returns before dockerd registers the container, and a
     ``docker logs -f`` attached too early exits with "No such container"
@@ -521,15 +550,16 @@ class _LogStreamer:
     i.e. until :meth:`stop`.
     """
 
-    def __init__(self, container_name: str) -> None:
+    def __init__(self, container_name: str, *, since: str | None = None) -> None:
         self._name    = container_name
         self.log_path = _container_log_path(container_name)
         self._stop_evt  = threading.Event()
         self._proc: subprocess.Popen | None = None
         self._announced = False
-        # RFC3339 start point for re-attaches; a plain `docker logs -f`
-        # replays from container start, duplicating the file's contents.
-        self._since: str | None = None
+        # Start at this container attempt, not its persistent history. Later
+        # re-attaches advance this cursor while retaining a small overlap.
+        self._since = since
+        self._not_before = _parse_timestamp(since)
         self._thread = threading.Thread(
             target=self._supervise, name=f"docker-logs-{container_name}", daemon=True,
         )
@@ -582,9 +612,10 @@ class _LogStreamer:
             # Back-date the cursor: lines the dead follower never delivered
             # would land before "now" and be skipped forever. A re-attach may
             # duplicate up to 30 s of output; losing diagnostics is worse.
-            self._since = (
-                datetime.now(timezone.utc) - timedelta(seconds=30)
-            ).isoformat()
+            rewind = datetime.now(timezone.utc) - timedelta(seconds=30)
+            if self._not_before is not None:
+                rewind = max(rewind, self._not_before)
+            self._since = rewind.isoformat()
             # docker logs -f also exits when the container stops; pause so a
             # stopped-but-expected container doesn't spin the attach loop.
             self._stop_evt.wait(1.0)
@@ -611,7 +642,13 @@ class _LogStreamer:
         self._thread.join(timeout=5)
 
 
-def _append_post_mortem(container_name: str, log_path: Path | None, n: int = 200) -> None:
+def _append_post_mortem(
+    container_name: str,
+    log_path: Path | None,
+    *,
+    since: str | None = None,
+    n: int = 200,
+) -> None:
     """Append `docker logs --tail` to the container log file as a fallback.
 
     Covers the small race where the streamer attaches just after the
@@ -621,8 +658,12 @@ def _append_post_mortem(container_name: str, log_path: Path | None, n: int = 200
     """
     target = log_path or _container_log_path(container_name)
     try:
+        argv = ["docker", "logs"]
+        if since:
+            argv += ["--since", since]
+        argv += ["--tail", str(n), container_name]
         result = subprocess.run(
-            ["docker", "logs", "--tail", str(n), container_name],
+            argv,
             capture_output=True, check=False,
         )
     except FileNotFoundError:
@@ -632,7 +673,10 @@ def _append_post_mortem(container_name: str, log_path: Path | None, n: int = 200
         return
     try:
         with open(target, "ab") as f:
-            f.write(f"\n---- post-mortem `docker logs --tail={n}` ----\n".encode())
+            scope = f" --since={since}" if since else ""
+            f.write(
+                f"\n---- post-mortem `docker logs{scope} --tail={n}` ----\n".encode()
+            )
             f.write(blob if blob.endswith(b"\n") else blob + b"\n")
             f.write(b"---- end post-mortem ----\n")
     except OSError:
@@ -836,6 +880,7 @@ def run_container(
             sys.exit(1)
         existing = running = False
 
+    attempt_started_at = datetime.now(timezone.utc).isoformat()
     if running and matching:
         # Running but not yet healthy — e.g. started by a wrapper that died,
         # or a NIM mid engine-download. Adopt it instead of a doomed
@@ -844,6 +889,9 @@ def run_container(
             f"[{log_prefix}] container {container_name} already running — "
             f"waiting for readiness",
             flush=True,
+        )
+        attempt_started_at = (
+            container_started_at(container_name) or attempt_started_at
         )
         proc = None
     elif existing and matching:
@@ -879,7 +927,12 @@ def run_container(
         proc = subprocess.Popen(argv, start_new_session=True)
     _state["proc"] = proc
 
-    streamer = _LogStreamer(container_name)
+    log_path = _container_log_path(container_name)
+    try:
+        attempt_log_offset = log_path.stat().st_size
+    except FileNotFoundError:
+        attempt_log_offset = 0
+    streamer = _LogStreamer(container_name, since=attempt_started_at)
     _state["streamer"] = streamer
     retry_remaining = 1 if spark_uma else 0
     while True:
@@ -902,12 +955,18 @@ def run_container(
             if _state["handling"]:
                 raise
             time.sleep(0.5)
-            _append_post_mortem(container_name, streamer.log_path)
+            streamer.stop()
+            _append_post_mortem(
+                container_name,
+                streamer.log_path,
+                since=attempt_started_at,
+            )
             retryable = (
                 retry_remaining > 0
                 and container_oom_killed(container_name) is False
                 and _diagnostics.is_cuda_memory_allocation_failure(
-                    streamer.log_path
+                    streamer.log_path,
+                    start_offset=attempt_log_offset,
                 )
             )
             if retryable:
@@ -929,22 +988,33 @@ def run_container(
                     # period lets its driver context and pending filesystem
                     # writeback drain before restarting the same warm snapshot.
                     time.sleep(_SPARK_UMA_RETRY_DELAY_S)
+                    retry_started_at = datetime.now(timezone.utc).isoformat()
+                    try:
+                        retry_log_offset = streamer.log_path.stat().st_size
+                    except OSError:
+                        retry_log_offset = attempt_log_offset
                     if start_container(container_name):
                         proc = None
                         _state["proc"] = None
+                        attempt_started_at = retry_started_at
+                        attempt_log_offset = retry_log_offset
+                        streamer = _LogStreamer(
+                            container_name,
+                            since=attempt_started_at,
+                        )
+                        _state["streamer"] = streamer
                         continue
                 log.error(
                     "DGX Spark cold-start retry could not restart stopped "
                     "container %s",
                     container_name,
                 )
-
-            streamer.stop()
             diagnosis = (
                 _diagnostics.classify_vllm_failure(
                     streamer.log_path,
                     diagnostic_argv,
                     spark_uma=spark_uma,
+                    start_offset=attempt_log_offset,
                 )
                 if diagnostic_argv is not None else None
             )
