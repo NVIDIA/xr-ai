@@ -171,6 +171,7 @@ async def test_piper_probes_configured_non_loopback_host(
     monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
     monkeypatch.setattr(module, "_health_url_ok", health)
     monkeypatch.setattr(module, "_port_open", port_open)
+    monkeypatch.setattr(module, "_ensure_owned_process_group", lambda: 8123)
     monkeypatch.setattr(module.os, "execvpe", execvpe)
     monkeypatch.setattr(
         module.sys,
@@ -185,6 +186,7 @@ async def test_piper_probes_configured_non_loopback_host(
     port_open.assert_called_once_with("192.0.2.10", 8123)
     execvpe.assert_called_once()
     assert execvpe.call_args.args[1][-2:] == ["--config", str(config_path)]
+    assert execvpe.call_args.args[2][module._PROCESS_GROUP_ENV] == "8123"
 
 
 @pytest.mark.parametrize(
@@ -294,6 +296,74 @@ async def test_piper_startup_timeout_cancels_server_that_never_starts(
     assert not ready_file.exists()
 
 
+@pytest.mark.parametrize("error", [TimeoutError("timed out"), OSError("bind failed")])
+async def test_piper_serve_translates_startup_errors(
+    error: Exception,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_piper_main_module()
+
+    def fail(coroutine) -> None:
+        coroutine.close()
+        raise error
+
+    monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
+    monkeypatch.setattr(module.asyncio, "run", fail)
+    monkeypatch.setattr(module.sys, "argv", ["piper_tts_server", "--_serve"])
+
+    with pytest.raises(SystemExit, match=rf"\[piper_tts_server\] {error}") as exc:
+        module.run()
+
+    assert exc.value.__cause__ is None
+
+
+async def test_piper_uses_existing_dedicated_process_group(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_piper_main_module()
+    monkeypatch.setattr(module.os, "getpid", lambda: 1234)
+    monkeypatch.setattr(module.os, "getpgrp", lambda: 1234)
+    monkeypatch.setattr(module.os, "getsid", lambda _pid: 1234)
+    monkeypatch.setattr(
+        module.os,
+        "setsid",
+        lambda: pytest.fail("an existing dedicated session must be preserved"),
+    )
+
+    assert module._ensure_owned_process_group() == 1234
+
+
+async def test_piper_isolates_an_inherited_process_group(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_piper_main_module()
+    isolated = False
+    monkeypatch.setattr(module.os, "getpid", lambda: 1234)
+    monkeypatch.setattr(module.os, "getpgrp", lambda: 1234 if isolated else 4321)
+    monkeypatch.setattr(module.os, "getsid", lambda _pid: 1234 if isolated else 4321)
+
+    def setsid() -> int:
+        nonlocal isolated
+        isolated = True
+        return 1234
+
+    monkeypatch.setattr(module.os, "setsid", setsid)
+
+    assert module._ensure_owned_process_group() == 1234
+    assert isolated
+
+
+async def test_piper_does_not_claim_an_unisolated_process_group(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_piper_main_module()
+    monkeypatch.setattr(module.os, "getpid", lambda: 1234)
+    monkeypatch.setattr(module.os, "getpgrp", lambda: 1234)
+    monkeypatch.setattr(module.os, "getsid", lambda _pid: 4321)
+
+    assert module._ensure_owned_process_group() is None
+
+
 async def test_piper_execs_managed_server_in_place(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -303,6 +373,7 @@ async def test_piper_execs_managed_server_in_place(
     monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
     monkeypatch.setattr(module, "_health_url_ok", lambda _url: False)
     monkeypatch.setattr(module, "_port_open", lambda _host, _port: False)
+    monkeypatch.setattr(module, "_ensure_owned_process_group", lambda: 8105)
     monkeypatch.setattr(module.os, "execvpe", execvpe)
     monkeypatch.setattr(
         module.sys,
@@ -323,7 +394,26 @@ async def test_piper_execs_managed_server_in_place(
     assert argv[-2:] == ["--ready-file", str(ready_file)]
     assert child_env["XR_AI_VLLM_MANAGED"] == "1"
     assert child_env["XR_AI_VLLM_PORT"] == "8105"
+    assert child_env[module._PROCESS_GROUP_ENV] == "8105"
     assert not ready_file.exists()
+
+
+async def test_piper_omits_group_marker_when_ownership_is_unverified(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_piper_main_module()
+    execvpe = Mock()
+    monkeypatch.setenv(module._PROCESS_GROUP_ENV, "4321")
+    monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
+    monkeypatch.setattr(module, "_health_url_ok", lambda _url: False)
+    monkeypatch.setattr(module, "_port_open", lambda _host, _port: False)
+    monkeypatch.setattr(module, "_ensure_owned_process_group", lambda: None)
+    monkeypatch.setattr(module.os, "execvpe", execvpe)
+    monkeypatch.setattr(module.sys, "argv", ["piper_tts_server"])
+
+    module.run()
+
+    assert module._PROCESS_GROUP_ENV not in execvpe.call_args.args[2]
 
 
 class _ServerExited(Exception):
@@ -576,6 +666,14 @@ async def test_piper_managed_reuse_and_process_group_cleanup(
             xr_ai_vllm._docker,
             "container_on_port_checked",
             lambda _port: (None, True),
+        )
+        listener_pid, inspected, listening = (
+            xr_ai_vllm._docker.pid_on_port_checked(port)
+        )
+        assert inspected and listening and listener_pid is not None
+        assert (
+            xr_ai_vllm._docker._piper_owned_process_group(listener_pid, port)
+            == listener_pid
         )
         stopped = await asyncio.get_running_loop().run_in_executor(
             None,

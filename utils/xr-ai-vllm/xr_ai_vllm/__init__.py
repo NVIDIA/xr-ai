@@ -223,12 +223,12 @@ def stop_persistent_servers(
             success = False
             continue
 
-        if label == "tts" and _docker.has_xr_ai_ownership_marker(pid, port):
-            try:
-                pgid = os.getpgid(pid)
-            except ProcessLookupError:
-                print(f"  [{label}] already gone", flush=True)
-                continue
+        pgid = (
+            _docker._piper_owned_process_group(pid, port)
+            if label == "tts"
+            else None
+        )
+        if pgid is not None:
             print(
                 f"  [{label}] stopping (process group {pgid}, port={port})…",
                 flush=True,
