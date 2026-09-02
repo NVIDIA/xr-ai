@@ -1799,20 +1799,16 @@ workflow.</p></li>
 <span class="w">      </span><span class="nt">interval_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">      </span><span class="nt">arguments</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">question</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">          </span><span class="no">Describe visible heating vessel interior and contents. Report</span>
-<span class="w">          </span><span class="no">concrete water cues: surface, level, reflections, or active</span>
-<span class="w">          </span><span class="no">pouring into it. Water outside or beside it does not count. Say when</span>
-<span class="w">          </span><span class="no">interior or water is not visible. Never infer.</span>
+<span class="w">          </span><span class="no">Check only for water visibly inside the kettle or pot. Reply "water</span>
+<span class="w">          </span><span class="no">visible: &lt;cue&gt;" only for a visible surface, waterline or gauge level,</span>
+<span class="w">          </span><span class="no">or pouring into it. Otherwise reply "water not visible".</span>
 <span class="w">      </span><span class="nt">result_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">answer</span>
 <span class="w">    </span><span class="nt">evidence</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|empty|obscured|cannot|can't)\\b)(?!.*\\b(no|not)\\s+(visible\\s+)?water\\b)(?=.*\\b(kettle|pot|vessel|container)\\b)(?=.*\\bwater\\b)(?=.*\\b(surface|level|reflection|pouring|inside|contains)\\b).+$"</span>
-<span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^water</span><span class="nv"> </span><span class="s">visible$"</span>
+<span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Set water_filled true only when this caption clearly shows the vessel</span>
-<span class="w">        </span><span class="no">interior plus a water surface, level, reflection, or pouring into it.</span>
-<span class="w">        </span><span class="no">Water nearby, a closed vessel, a user report, or unclear contents do</span>
-<span class="w">        </span><span class="no">not count. Otherwise commit empty updates/message.</span>
+<span class="w">        </span><span class="no">Set water_filled after two accepted water-visible observations.</span>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
@@ -1838,20 +1834,17 @@ workflow.</p></li>
 <span class="w">      </span><span class="nt">interval_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">      </span><span class="nt">arguments</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">question</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">          </span><span class="no">Describe visible heater-on indicators and transcribe the exact current</span>
-<span class="w">          </span><span class="no">numeric kettle or thermometer reading. Write the unit as Celsius or</span>
-<span class="w">          </span><span class="no">Fahrenheit. Mention hazards. If missing, say what is not visible. Do</span>
-<span class="w">          </span><span class="no">not convert or judge readiness.</span>
+<span class="w">          </span><span class="no">Read only the kettle or thermometer temperature. Reply "&lt;number&gt; C"</span>
+<span class="w">          </span><span class="no">or "&lt;number&gt; F" when the unit is visible, "unit ambiguous" when a</span>
+<span class="w">          </span><span class="no">number lacks a clear unit, or "no reading".</span>
 <span class="w">      </span><span class="nt">result_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">answer</span>
 <span class="w">    </span><span class="nt">evidence</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"(?is)^(?:(?=.*\\b\\d{2,3}\\s*(°|degrees|c|f)\\b).+|(?!(?:.*\\b(no|not|without)\\b.{0,24}\\b(heater|heating|power|indicator|display|light)\\b|.*\\b(heater|heating|power|indicator|display|light)\\b.{0,24}\\b(off|inactive|not)\\b))(?=.*\\b(heater|heating|power|indicator|display|light)\\b.{0,24}\\b(on|active|running|lit|illuminated)\\b).+)$"</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^temperature</span><span class="nv"> </span><span class="s">above</span><span class="nv"> </span><span class="s">threshold$"</span>
 <span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Set heating_started true only when input is false and the caption shows</span>
-<span class="w">        </span><span class="no">an active heater indicator or a numeric temperature followed by Celsius</span>
-<span class="w">        </span><span class="no">or Fahrenheit. Otherwise commit empty updates/message. Do not compare</span>
-<span class="w">        </span><span class="no">temperatures or track whether the water is ready.</span>
+<span class="w">        </span><span class="no">Set heating_started after two explicit-unit readings above 50 Celsius</span>
+<span class="w">        </span><span class="no">or 122 Fahrenheit. Ambiguous or missing units do not count.</span>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
