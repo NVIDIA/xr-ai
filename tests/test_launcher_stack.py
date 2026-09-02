@@ -5,10 +5,32 @@
 from __future__ import annotations
 
 import os
+from unittest.mock import Mock
 
 import pytest
 
 import xr_ai_launcher._stack as _stack
+
+
+def test_spawn_marks_the_launcher_owned_process_group(monkeypatch, tmp_path):
+    spawned = Mock()
+    spawned.stdout = None
+    spawned.stderr = None
+    popen = Mock(return_value=spawned)
+    thread = Mock()
+    monkeypatch.setattr(_stack.shutil, "which", lambda _command: "/usr/bin/uv")
+    monkeypatch.setattr(_stack.subprocess, "Popen", popen)
+    monkeypatch.setattr(_stack.threading, "Thread", Mock(return_value=thread))
+
+    process = _stack.Process("tts", tmp_path, "piper_tts_server")
+    _stack._spawn(process, tmp_path, tmp_path / "ready")
+
+    kwargs = popen.call_args.kwargs
+    assert kwargs["start_new_session"] is True
+    assert (
+        kwargs["env"][_stack._PROCESS_GROUP_OWNER_ENV]
+        == "piper_tts_server"
+    )
 
 
 class TestProcessDataclass:

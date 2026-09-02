@@ -126,6 +126,37 @@ def test_piper_process_group_requires_matching_owned_session(
     assert xr_ai_vllm._docker._piper_owned_process_group(1234, 8105) is None
 
 
+def test_piper_process_group_accepts_verified_launcher_session(
+    tmp_path, monkeypatch,
+) -> None:
+    listener = tmp_path / "proc" / "1234"
+    leader = tmp_path / "proc" / "4321"
+    listener.mkdir(parents=True)
+    leader.mkdir(parents=True)
+    (listener / "environ").write_bytes(
+        b"XR_AI_VLLM_MANAGED=1\0"
+        b"XR_AI_VLLM_PORT=8105\0"
+        b"_XR_AI_PIPER_PROCESS_GROUP=4321\0"
+    )
+    (leader / "environ").write_bytes(
+        b"_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER=piper_tts_server\0"
+    )
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "Path",
+        lambda raw: tmp_path / str(raw).removeprefix("/"),
+    )
+    monkeypatch.setattr(xr_ai_vllm._docker.os, "getpgid", lambda _pid: 4321)
+    monkeypatch.setattr(xr_ai_vllm._docker.os, "getsid", lambda _pid: 4321)
+
+    assert xr_ai_vllm._docker._piper_owned_process_group(1234, 8105) == 4321
+
+    (leader / "environ").write_bytes(
+        b"_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER=other_server\0"
+    )
+    assert xr_ai_vllm._docker._piper_owned_process_group(1234, 8105) is None
+
+
 def test_stop_signals_complete_managed_process_group(monkeypatch) -> None:
     calls: list[tuple[int, int]] = []
     monkeypatch.setattr(
