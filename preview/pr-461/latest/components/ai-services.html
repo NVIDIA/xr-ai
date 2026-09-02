@@ -813,14 +813,15 @@ with stale memory limits, entrypoint, setup commands, or model arguments.</p>
 stops them with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span></code> (escalating to <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">kill</span></code> after 20 s).
 Locally persisted processes (pip-mode vLLM and Piper) must carry the
 <code class="docutils literal notranslate"><span class="pre">XR_AI_VLLM_MANAGED</span></code> and <code class="docutils literal notranslate"><span class="pre">XR_AI_VLLM_PORT</span></code> ownership markers before cleanup
-sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code>. Piper creates and records a dedicated process
-group before starting Uvicorn. Cleanup signals that complete group only after
-verifying the recorded group still belongs to the listener, so its inference
-descendants cannot survive as orphans. It falls back to PID-only cleanup if
-group ownership cannot be verified; other local servers always retain PID-only
-cleanup. Unknown listeners and failed inspection abort cleanup without sending
-a signal, and <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> exits nonzero if any target could not be
-stopped. Absent servers are silently skipped.</p>
+sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code>. Piper records the dedicated process group created
+by the launcher without leaving that group. Cleanup signals the complete group
+only after verifying both the listener marker and, when separate, the launcher’s
+group-leader marker, so inference descendants cannot survive as orphans and
+launcher abort-time escalation can still reach Piper. It falls back to PID-only
+cleanup if group ownership cannot be verified; other local servers always
+retain PID-only cleanup. Unknown listeners and failed inspection abort cleanup
+without sending a signal, and <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> exits nonzero if any target
+could not be stopped. Absent servers are silently skipped.</p>
 <p>The target ports and container names match the defaults in the per-profile YAML files.</p>
 </section>
 <section id="choosing-the-vllm-runtime-pip-vs-docker">
