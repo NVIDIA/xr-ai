@@ -15,7 +15,20 @@ def _argument_value(argv: list[str], option: str) -> str | None:
         return None
 
 
-def is_cuda_memory_allocation_failure(log_path: str | Path) -> bool:
+def _read_log(log_path: str | Path, start_offset: int = 0) -> str | None:
+    try:
+        with Path(log_path).open("rb") as stream:
+            stream.seek(max(start_offset, 0))
+            return stream.read().decode(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def is_cuda_memory_allocation_failure(
+    log_path: str | Path,
+    *,
+    start_offset: int = 0,
+) -> bool:
     """Return whether vLLM failed at the CUDA driver-allocation boundary.
 
     This deliberately excludes ``torch.OutOfMemoryError`` and KV-cache
@@ -23,9 +36,8 @@ def is_cuda_memory_allocation_failure(log_path: str | Path) -> bool:
     ``cudaErrorMemoryAllocation`` identifies the transient UMA cold-start
     failure for which one clean container restart is useful.
     """
-    try:
-        body = Path(log_path).read_text(encoding="utf-8", errors="replace")
-    except OSError:
+    body = _read_log(log_path, start_offset)
+    if body is None:
         return False
     lowered = body.lower()
     return "torch.acceleratorerror" in lowered and (
@@ -39,11 +51,11 @@ def classify_vllm_failure(
     argv: list[str],
     *,
     spark_uma: bool = False,
+    start_offset: int = 0,
 ) -> str | None:
     """Return a clear diagnosis when *log_path* contains a GPU-memory failure."""
-    try:
-        body = Path(log_path).read_text(encoding="utf-8", errors="replace")
-    except OSError:
+    body = _read_log(log_path, start_offset)
+    if body is None:
         return None
     lowered = body.lower()
     utilization = _argument_value(argv, "--gpu-memory-utilization")
@@ -52,7 +64,10 @@ def classify_vllm_failure(
         if utilization else ""
     )
 
-    if spark_uma and is_cuda_memory_allocation_failure(log_path):
+    if spark_uma and is_cuda_memory_allocation_failure(
+        log_path,
+        start_offset=start_offset,
+    ):
         return (
             "DGX SPARK UMA ALLOCATION FAILURE: the CUDA driver could not allocate "
             "startup memory even though Linux may still report reclaimable memory. "

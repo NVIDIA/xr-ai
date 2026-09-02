@@ -379,7 +379,9 @@ All five vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
 | `docker` | `docker run <vllm_image> vllm serve …` | no | yes | Running the configured vLLM container used by the checked-in configurations. |
 
 Both modes honor identical configuration keys — same model, same port, same vLLM
-flags. The dispatcher lives in `utils/xr-ai-vllm/`. Switching is one YAML edit:
+flags. Docker-only lifecycle settings such as `vllm_image`, `extra_pip`, and
+`spark_uma` are accepted and ignored in pip mode. The dispatcher lives in
+`utils/xr-ai-vllm/`. Switching is one YAML edit:
 
 ```yaml
 # vlm-server (Cosmos3)
