@@ -239,6 +239,35 @@ def test_worker_config_idle_timeout_opt_in(tmp_path) -> None:
     assert cfg.idle_timeout_secs == 300.0
 
 
+def test_worker_config_video_history_requires_yaml_boolean(tmp_path) -> None:
+    from xr_render_demo_worker.config import load_config
+
+    y = tmp_path / "w.yaml"
+    y.write_text("video_history_enabled: true\n")
+    assert load_config(y).video_history_enabled is True
+    y.write_text('video_history_enabled: "false"\n')
+    with pytest.raises(ValueError, match="video_history_enabled"):
+        load_config(y)
+
+
+async def test_close_clients_skips_disabled_video() -> None:
+    from types import SimpleNamespace
+
+    from xr_render_demo_worker.app import close_clients
+
+    closed: list[str] = []
+
+    async def _close(name: str) -> None:
+        closed.append(name)
+
+    scene = SimpleNamespace(client=SimpleNamespace(close=lambda: _close("scene")))
+    tracking = SimpleNamespace(close=lambda: _close("tracking"))
+    await close_clients(scene, tracking, None)
+    assert closed == ["scene", "tracking"]
+    await close_clients(scene, tracking, SimpleNamespace(close=lambda: _close("video")))
+    assert closed == ["scene", "tracking", "scene", "tracking", "video"]
+
+
 # ── untooled chat wire golden ─────────────────────────────────────────────────
 
 

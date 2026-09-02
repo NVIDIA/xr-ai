@@ -144,6 +144,13 @@ async def run_app(
                 await render.stop()
         logger.info("xr-render-demo worker stopped")
     finally:
-        await scene.client.close()
-        await tracking.close()
+        await close_clients(scene, tracking, video)
+
+
+async def close_clients(
+    scene: SceneTools, tracking: TrackingTools, video: VideoMemoryTools | None
+) -> None:
+    await scene.client.close()
+    await tracking.close()
+    if video is not None:
         await video.close()
