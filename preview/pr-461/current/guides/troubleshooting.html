@@ -795,12 +795,12 @@ persistence</em>.</p>
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
-<p>For Piper this sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> to its persisted process group, waits up to 20 s,
-then sends <code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code>; other local servers retain PID-only cleanup. For
-docker-mode servers it runs <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span> <span class="pre">&lt;container_name&gt;</span></code> (escalating to
-<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">kill</span></code> after 20 s). Safe to run while the stack is down. The command
-exits nonzero rather than reporting success if ownership cannot be verified or
-any target remains running.</p>
+<p>For Piper this sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> to its verified, dedicated process group, waits
+up to 20 s, then sends <code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code>. It falls back to cleanup of the listener PID
+if process-group ownership cannot be verified, and other local servers always
+use PID-only cleanup. For docker-mode servers it runs <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span> <span class="pre">&lt;container_name&gt;</span></code> (escalating to <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">kill</span></code> after 20 s). Safe to run while
+the stack is down. The command exits nonzero rather than reporting success if
+server ownership cannot be verified or any target remains running.</p>
 </section>
 <section id="first-run-downloads-models-silently">
 <h3>First run downloads models silently<a class="headerlink" href="#first-run-downloads-models-silently" title="Link to this heading">#</a></h3>
