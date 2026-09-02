@@ -255,17 +255,69 @@ async def test_piper_rejects_unhealthy_listener_without_signaling_ready(
     execvpe.assert_not_called()
 
 
-async def test_piper_model_load_timeout_does_not_wait_for_loader() -> None:
+async def test_piper_model_load_timeout_does_not_wait_for_loader(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     module = _load_piper_main_module()
     release = threading.Event()
     backend = Mock()
     backend._ensure_loaded.side_effect = lambda: release.wait(timeout=1)
+    monkeypatch.setitem(module.sys.modules, "uvicorn", Mock())
+    monkeypatch.setattr(
+        module,
+        "_build_app",
+        lambda _cfg, _model_cache: (Mock(), backend),
+    )
 
     try:
         with pytest.raises(TimeoutError, match="within 0.01 seconds"):
-            await module._load_backend(backend, timeout_s=0.01)
+            await module._run(
+                {"voice": "en_US-lessac-medium", "startup_timeout_s": 0.01},
+                tmp_path,
+            )
     finally:
         release.set()
+
+
+async def test_piper_startup_timeout_cancels_server_that_never_starts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_piper_main_module()
+    ready_file = tmp_path / "ready"
+    backend = Mock()
+
+    class NeverStartedServer:
+        started = False
+        cancelled = False
+
+        async def serve(self) -> None:
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                self.cancelled = True
+                raise
+
+    server = NeverStartedServer()
+    uvicorn = Mock()
+    uvicorn.Server.return_value = server
+    monkeypatch.setitem(module.sys.modules, "uvicorn", uvicorn)
+    monkeypatch.setattr(
+        module,
+        "_build_app",
+        lambda _cfg, _model_cache: (Mock(), backend),
+    )
+
+    with pytest.raises(TimeoutError, match="within 0.01 seconds"):
+        await module._run(
+            {"voice": "en_US-lessac-medium", "startup_timeout_s": 0.01},
+            tmp_path,
+            ready_file,
+        )
+
+    assert server.cancelled
+    assert not ready_file.exists()
 
 
 async def test_piper_execs_managed_server_in_place(
@@ -297,6 +349,7 @@ async def test_piper_execs_managed_server_in_place(
     assert argv[-2:] == ["--ready-file", str(ready_file)]
     assert child_env["XR_AI_VLLM_MANAGED"] == "1"
     assert child_env["XR_AI_VLLM_PORT"] == "8105"
+    assert child_env["XR_AI_MANAGED_SERVICE"] == "piper-tts"
     assert not ready_file.exists()
 
 

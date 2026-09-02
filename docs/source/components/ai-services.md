@@ -356,9 +356,12 @@ Locally persisted processes (pip-mode vLLM and Piper) must carry the
 `XR_AI_VLLM_MANAGED` and `XR_AI_VLLM_PORT` ownership markers before cleanup
 sends `SIGTERM` or `SIGKILL`. Marked local servers are stopped as complete
 process groups so their launcher and inference descendants cannot survive as
-orphans. Unknown listeners and failed inspection abort cleanup without sending
-a signal, and `model_servers --stop` exits nonzero if any target could not be
-stopped. Absent servers are silently skipped.
+orphans. Piper also carries `XR_AI_MANAGED_SERVICE=piper-tts`; existing Piper
+processes without that marker are recognized by their `piper_tts_server`
+command. A marked vLLM process on the same port is not treated as Piper.
+Unknown listeners and failed inspection abort cleanup without sending a signal,
+and `model_servers --stop` exits nonzero if any target could not be stopped.
+Absent servers are silently skipped.
 
 The target ports and container names match the defaults in the per-profile YAML files.
 
