@@ -989,6 +989,38 @@ def has_xr_ai_ownership_marker(pid: int, port: int) -> bool:
     )
 
 
+def _piper_owned_process_group(pid: int, port: int) -> int | None:
+    """Return Piper's verified, self-owned process group, if present.
+
+    The private marker alone is insufficient: the listener must still be the
+    leader of both the recorded process group and its dedicated session.
+    """
+    try:
+        environment = Path(f"/proc/{pid}/environ").read_bytes()
+        entries = environment.split(b"\0")
+        prefix = b"_XR_AI_PIPER_PROCESS_GROUP="
+        raw_group = next(
+            entry.removeprefix(prefix)
+            for entry in entries
+            if entry.startswith(prefix)
+        )
+        group_id = int(raw_group)
+        process_group = os.getpgid(pid)
+        session_id = os.getsid(pid)
+    except (OSError, StopIteration, ValueError):
+        return None
+
+    if (
+        b"XR_AI_VLLM_MANAGED=1" not in entries
+        or f"XR_AI_VLLM_PORT={port}".encode() not in entries
+        or group_id != pid
+        or process_group != group_id
+        or session_id != group_id
+    ):
+        return None
+    return group_id
+
+
 def process_group_alive(pgid: int, proc_root: Path = Path("/proc")) -> bool:
     """Return whether *pgid* contains any live, non-zombie process."""
     try:

@@ -47,6 +47,7 @@ from xr_ai_logging import setup_logging
 _DEFAULT_PORT              = 8105
 _DEFAULT_STARTUP_TIMEOUT_S = 600.0
 _HF_REPO                   = "rhasspy/piper-voices"
+_PROCESS_GROUP_ENV         = "_XR_AI_PIPER_PROCESS_GROUP"
 
 # Exit code for "the voice could not be obtained for environmental reasons"
 # (offline with an empty cache, or a transient HuggingFace download failure),
@@ -314,6 +315,24 @@ def _port_open(host: str, port: int) -> bool:
         return False
 
 
+def _ensure_owned_process_group() -> int | None:
+    """Enter a self-owned session and return its safely signalable group ID.
+
+    Cleanup may signal the group only when this process is both its group and
+    session leader. If an inherited group cannot be isolated, leaving the
+    marker unset makes cleanup fall back to the listener PID.
+    """
+    pid = os.getpid()
+    try:
+        if os.getpgrp() != pid:
+            os.setsid()
+        if os.getpgrp() == pid and os.getsid(0) == pid:
+            return pid
+    except OSError:
+        pass
+    return None
+
+
 async def _load_backend(
     backend: _PiperBackend,
 ) -> None:
@@ -425,7 +444,10 @@ def run() -> None:
             cfg = yaml.safe_load(f) or {}
 
     if ns._serve:
-        asyncio.run(_run(cfg, yaml_dir, ready_file=ns.ready_file))
+        try:
+            asyncio.run(_run(cfg, yaml_dir, ready_file=ns.ready_file))
+        except Exception as exc:
+            raise SystemExit(f"[piper_tts_server] {exc}") from None
         return
 
     port = int(cfg.get("port", _DEFAULT_PORT))
@@ -463,13 +485,17 @@ def run() -> None:
         f"(startup timeout: {startup_timeout_s:g}s)…",
         flush=True,
     )
+    child_env = os.environ | {
+        "XR_AI_VLLM_MANAGED": "1",
+        "XR_AI_VLLM_PORT": str(port),
+    }
+    child_env.pop(_PROCESS_GROUP_ENV, None)
+    if process_group := _ensure_owned_process_group():
+        child_env[_PROCESS_GROUP_ENV] = str(process_group)
     os.execvpe(
         sys.executable,
         cmd,
-        os.environ | {
-            "XR_AI_VLLM_MANAGED": "1",
-            "XR_AI_VLLM_PORT": str(port),
-        },
+        child_env,
     )
 
 
