@@ -21,9 +21,15 @@ from ..._trace import current_participant_id, current_reference_time_us, current
 from ...models import SubagentResult, SubagentTask
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
-DESCRIPTION = ("Recall what was said in earlier conversation turns, including objects and "
-               "colors mentioned there; never a source for present-day or physical-world "
-               "facts like the color of a real surface.")
+DESCRIPTION = (
+    "Recall what was said, asked, or done in earlier conversation turns, including objects and "
+    "colors mentioned there. Every history question (\"which shape did I request first?\", "
+    "\"what did I ask you to build?\") routes here, even when [Recent conversation] seems to "
+    "contain the answer; that block only resolves references, and guessing a history answer is "
+    "always wrong. Never a source for present-day or physical-world facts, and what the camera "
+    "saw earlier belongs to vision_agent, not memory: only the conversation's own turns live "
+    "in the transcript."
+)
 
 _MAX_END_US = RecallConversationRequest.model_fields["end_us"].default
 

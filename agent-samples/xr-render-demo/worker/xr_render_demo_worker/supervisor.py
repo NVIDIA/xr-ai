@@ -83,6 +83,13 @@ _MUTATING_AGENTS = frozenset({"placement_agent", "appearance_agent", "object_age
 # Seconds to let a scene RPC propagate before diffing snapshots.
 _SCENE_SETTLE_S = 0.15
 
+# [Recent conversation] means this conversation: the transcript store
+# persists across sessions, and older turns read as answers to new
+# questions. History beyond the window is memory_agent's to recall.
+_RECENT_WINDOW_US = 10 * 60 * 1_000_000
+
+_PENDING_ASK_WINDOW_US = 8 * 1_000_000
+
 
 # Leading words that mark a status question about past work ("Did you move
 # the cube?"); unlike can/could/will, they cannot open a polite command.
@@ -215,27 +222,46 @@ class SceneSupervisor:
         self._prompt = _PROMPT.read_text(encoding="utf-8").strip()
         self._participant_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._scene_lock: asyncio.Lock = asyncio.Lock()
+        self._left_at_us: dict[str, int] = {}
 
     def forget_participant(self, participant_id: str) -> None:
         """Drop per-participant state after departure; a reconnecting id starts clean."""
         self._participant_locks.pop(participant_id, None)
         self._context.forget_participant(participant_id)
+        now_us = time.time_ns() // 1_000
+        expired = [p for p, t in self._left_at_us.items() if t < now_us - _RECENT_WINDOW_US]
+        for p in expired:
+            del self._left_at_us[p]
+        self._left_at_us[participant_id] = now_us
 
-    async def _recent_conversation(self, participant_id: str) -> tuple[str, str]:
+    async def _recent_conversation(
+        self, participant_id: str, reference_us: int
+    ) -> tuple[str, str]:
         recalled = await self._text_memory.recall_conversation.execute(
             RecallConversationRequest(participant_id=participant_id)
         )
-        entries = recalled.entries[-8:]
-        if not entries:
-            return "", ""
+        # A departure ends the session: turns before the last leave neither
+        # re-enter the block nor complete a clipped ask, however recent.
+        left_us = self._left_at_us.get(participant_id, 0)
+        session = [e for e in recalled.entries if e.timestamp_us >= left_us]
+        # A clipped utterance is completed within seconds or not at all.
         pending = ""
+        tail = session[-2:]
         if (
-            len(entries) >= 2
-            and entries[-1].role == "agent"
-            and entries[-1].text.startswith(_TRUNCATED_ASK)
-            and entries[-2].role == "user"
+            len(tail) == 2
+            and tail[1].role == "agent"
+            and tail[1].text.startswith(_TRUNCATED_ASK)
+            and tail[1].timestamp_us >= reference_us - _PENDING_ASK_WINDOW_US
+            and tail[0].role == "user"
         ):
-            pending = entries[-2].text
+            pending = tail[0].text
+        # User turns carry the hub's clock, agent turns the worker's; the
+        # window assumes both are wall-clock microseconds. The age window
+        # covers worker restarts, which leave no departure record.
+        cutoff_us = reference_us - _RECENT_WINDOW_US
+        entries = [e for e in session if e.timestamp_us >= cutoff_us][-8:]
+        if not entries:
+            return "", pending
         lines = [f"  {'User' if e.role == 'user' else 'Agent'}: {e.text}" for e in entries]
         block = (
             "[Recent conversation] (already handled; never a source of new work)\n"
@@ -260,6 +286,9 @@ class SceneSupervisor:
         )
 
     async def handle(self, request: SceneRequest) -> SceneReply:
+        if request.timestamp_us <= 0:
+            # An unset timestamp would disable the recall recency window.
+            request = request.model_copy(update={"timestamp_us": time.time_ns() // 1_000})
         current_trace_id.set(request.trace_id)
         current_participant_id.set(request.participant_id)
         current_reference_time_us.set(request.timestamp_us)
@@ -278,7 +307,9 @@ class SceneSupervisor:
             "supervisor turn participant={} trace={} transcript={!r}",
             request.participant_id, request.trace_id, request.transcript[:80],
         )
-        conversation, pending_truncation = await self._recent_conversation(request.participant_id)
+        conversation, pending_truncation = await self._recent_conversation(
+            request.participant_id, request.timestamp_us
+        )
         transcript = request.transcript
         if pending_truncation:
             resolved = _resolve_truncation_reply(pending_truncation, transcript)

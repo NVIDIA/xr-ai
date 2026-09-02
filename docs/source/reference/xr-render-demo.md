@@ -239,6 +239,9 @@ services. On each accepted `xr-render.user-query` event:
 
 1. **Recent conversation** is recalled from `TextMemoryTools` and injected
    as context so the model understands references like "fix that" or "undo".
+   The block is session-scoped: only the last eight turns since the
+   participant last departed, and within ten minutes of the request, are
+   injected; older history is memory_agent's to recall.
 2. **Supervisor loop** (`run_tool_loop`, up to 12 iterations) — Nemotron-Omni
    :8108 routes the request to one or more subagent tools. Each subagent
    runs its own inner `run_tool_loop` (up to 4 iterations) against the
@@ -310,8 +313,16 @@ in one place:
 
 Each agent has its own prompt file under
 `worker/xr_render_demo_worker/` (supervisor plus five subagents, six files total).
-The supervisor prompt routes requests to subagents; each subagent prompt
-is worked-example heavy and opens with pronoun and reference resolution.
+The supervisor prompt carries only cross-cutting turn discipline; the
+routing rules and ownership boundaries live in each subagent's tool
+`DESCRIPTION` constant (`agents/<name>/agent.py`), the surface the
+supervisor's model reads when selecting a tool. The vision agent selects
+between two descriptions at construction time: the full one when video
+memory is wired, and a live-only variant that disclaims past-moment
+questions when it is not. A few rules are stated in
+both places on purpose: descriptions alone are under-weighted mid-loop, so
+the supervisor prompt keeps a short backstop copy. Each subagent prompt is
+worked-example heavy and opens with pronoun and reference resolution.
 
 The placement agent's prompt maps utterance shapes to tools with contrast
 pairs: a stated distance is a shift (`nudge`); a user-anchored destination
@@ -355,6 +366,7 @@ so they do not mutate the LOVR scene.
 | Live manipulation | `xr_render_demo_live_manip` | Running demo stack and real scene state | Minutes |
 | Live speech noise | `xr_render_demo_live_garble` | Running demo stack with noisy utterances | Minutes |
 | Live exploration | `xr_render_demo_live_explore` | Running demo stack with novel prompts | Minutes |
+| Live perception routing | `xr_render_demo_live_perception` | Running demo stack and the worker's transcript store | Minutes |
 
 Run all commands from `agent-samples/xr-render-demo/eval/`:
 
@@ -390,6 +402,7 @@ uv run xr_render_demo_live_pose_matrix
 uv run xr_render_demo_live_manip
 uv run xr_render_demo_live_garble
 uv run xr_render_demo_live_explore
+uv run xr_render_demo_live_perception
 ```
 
 Live drivers join as synthetic participants, inject typed text, set simulated
@@ -411,6 +424,16 @@ stutters. Its restraint scoring fails incorrect mutations and accepts a
 clarifying response. `xr_render_demo_live_explore` sends novel conversational
 phrasing and scores intent invariants. Promote any violation into a permanent
 tier case before fixing it.
+
+`xr_render_demo_live_perception` builds real multi-turn history, then sends
+perception utterances and judges the reply text read back from the worker's
+transcript store. The live stack publishes no camera track, so a correctly
+routed perception turn must report an honest inability, recite no scene
+object, and leave the scene unchanged; one case also injects cross-session
+transcript turns to pin the supervisor's recall recency window, which keeps
+them out of [Recent conversation]. It catches routing misses the offline
+tiers cannot reproduce, whose recalled history is far shorter than a live
+session's.
 
 ### Add or change a case
 
@@ -441,7 +464,7 @@ parameter is the precedent: the model copies descriptors verbatim, and
 `spatial_ops` resolves shapes, damaged nouns, and colors against scene state.
 
 Run `uv run xr_render_demo_eval utterances` after every prompt or operations
-change. Its 35 cases take about three minutes. Run the longer scenario and
+change. Its cases take about three minutes. Run the longer scenario and
 precision tiers before completing a tuning round.
 
 (prompt-eval-overlap-audit)=
