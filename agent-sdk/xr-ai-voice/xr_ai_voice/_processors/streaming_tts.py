@@ -48,6 +48,7 @@ from xr_ai_models import TTSService
 from xr_ai_voicegate import VoiceGate
 
 from .._audio import wav_to_output_frames
+from .._capture_frames import _CaptureTtsCaptionFrame
 from .._frames import (
     AssistantResponseEndFrame,
     ParticipantLeftFrame,
@@ -278,11 +279,19 @@ class StreamingTtsProcessor(FrameProcessor):
         st.response_sentences += 1
         st.synth_seq += 1
         task  = asyncio.create_task(
-            self._synthesize(sentence, pid=pid),
+            self._synthesize_with_caption(sentence, pid=pid),
             name=f"tts-synth-{pid}-{st.synth_seq}",
             context=nemo_relay.fork_asyncio_context(),
         )
         await queue.put((task, pid))
+
+    async def _synthesize_with_caption(
+        self,
+        text: str,
+        *,
+        pid: str,
+    ) -> tuple[bytes, str]:
+        return await self._synthesize(text, pid=pid), text
 
     async def _synthesize(self, text: str, *, pid: str) -> bytes:
         with nemo_relay.scope.scope(
@@ -311,7 +320,7 @@ class StreamingTtsProcessor(FrameProcessor):
                     continue
                 task, pid = item
                 try:
-                    wav = await task
+                    wav, text = await task
                 except asyncio.CancelledError:
                     raise
                 except Exception:
@@ -325,16 +334,26 @@ class StreamingTtsProcessor(FrameProcessor):
                     self._voice_gate.observe_tts_wav(wav)
                 except Exception:
                     logger.exception("observe_tts_wav raised pid={!r}", pid)
-                await self._push_wav(wav, pid=pid)
+                await self._push_wav(wav, pid=pid, caption=text)
         except asyncio.CancelledError:
             return
 
-    async def _push_wav(self, wav_bytes: bytes, *, pid: str) -> None:
+    async def _push_wav(
+        self,
+        wav_bytes: bytes,
+        *,
+        pid: str,
+        caption: str,
+    ) -> None:
         try:
             frames = wav_to_output_frames(wav_bytes, pid)
         except Exception:
             logger.exception("tts WAV decode failed pid={!r}", pid)
             return
+        if frames and pid and self._transport is not None:
+            marker = _CaptureTtsCaptionFrame(caption)
+            marker.transport_destination = pid
+            await self.push_frame(marker)
         for out in frames:
             await self.push_frame(out)
 

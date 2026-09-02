@@ -57,8 +57,9 @@ This is enforced at several layers:
   validate that the target participant is currently connected; messages for
   unknown participants are dropped with a warning.
 - Return-traffic topics (`return_audio.*`, `return_audio_flush.*`,
-  `return_data.*`) are connector-only — an agent's default subscription
-  excludes them.
+  `return_data.*`) are transport-infrastructure-only. Connectors consume them
+  for delivery and the optional capture process observes them read-only; an
+  agent's default subscription excludes them.
 - On the LiveKit side, return audio is published as one track per participant
   with subscribe permissions restricted to that participant, and return data
   is addressed with `destination_identities` (refer to
@@ -158,6 +159,55 @@ avoids pulling in the full DeviceIOHub dependency tree (LiveKit, FastAPI,
 uvicorn, GPU codecs). `device_io_hub.ipc` re-exports the same names for the
 server side.
 ```
+
+## Media-hub session capture
+
+`device_io_capture` is an optional process from the DeviceIOHub package. It
+sits downstream of `HubEndpoint`, not inside the LiveKit connector:
+
+```
+device transport → connector → HubEndpoint → agents
+                                  └────────→ capture
+                         agent return media ─┘
+```
+
+This boundary is transport-independent. Incoming camera, microphone, and data
+have already been decoded, timestamped, and tagged with participant and track
+identities. The capture process uses a normal `ProcessorEndpoint` for that
+stream and a private read-only subscription to the hub's routed return topics
+for agent audio and data. It does not expose return traffic to agent APIs.
+
+Run the hub first, then start capture from the repository root:
+
+```
+uv run --project services/device-io-hub device_io_capture \
+  --config services/device-io-hub/media_capture.yaml
+```
+
+One connection produces one participant-scoped capture bundle: playable
+Matroska video with timestamp-aligned stereo PCM embedded (device left, agent
+right), the source H.264 and WAV tracks, exact raw float32 audio chunks, the
+complete directional data timeline, and a manifest.
+Final STT and the text actually sent to TTS appear as the large primary caption
+below the sensor image. Each TTS sentence travels through the paced media queue,
+so its caption is timestamped from the first corresponding audio chunk rather
+than from synthesis completion. Every UTF-8 data-channel message, inbound or
+outbound, scrolls through a smaller right-side panel with its direction and
+topic. Binary data is not rendered, but every data payload remains in
+`events.jsonl`. Both panels sit outside the sensor image, so composition
+never replaces camera
+pixels. Reserved speech-caption metadata stays inside hub IPC and is never
+forwarded to the client data channel.
+
+Capture frame requests are coalesced in a bounded queue, and NVENC work runs in
+dedicated threads in the capture process. Recorder overload therefore drops
+capture frames without delaying the hub's publish path. PyNvVideoCodec receives
+contiguous NV12 CPU input and emits H.264 Annex B chunks with repeated parameter
+sets and no B-frames. At session finalization, the chunks are joined in
+timestamp order and a private lightweight muxer packages them with the session
+PCM into one `.mkv`. Resolution or LiveKit track changes therefore do not create
+additional playable outputs. This does not affect the live path. No FFmpeg
+process or additional media library is involved.
 
 ## Per-participant return path
 

@@ -26,10 +26,13 @@ try:
 except (ImportError, RuntimeError, OSError) as exc:
     pytest.skip(f"PyNvVideoCodec unavailable: {exc}", allow_module_level=True)
 
-from xr_ai_hub import FrameSignal, PixelFormat, SlotView  # noqa: E402
+from xr_ai_hub import AudioChunk, DataMessage, FrameData, FrameSignal, PixelFormat, SlotView  # noqa: E402
 
+from video_memory_service.frames import decode_h264  # noqa: E402
 from video_memory_service.service import VideoMemoryService  # noqa: E402
 from video_memory_service.store import ChunkStore  # noqa: E402
+from device_io_hub.capture._recorder import SessionRecorder  # noqa: E402
+from device_io_hub.capture.config import CaptureConfig  # noqa: E402
 from device_io_hub.video import VideoRecorder, VideoRecorderConfig  # noqa: E402
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
@@ -201,3 +204,85 @@ async def test_resolution_change_surfaces_error():
         assert (640, 480) in resolutions
         if not enc.failed:
             assert (1280, 720) in resolutions
+
+
+async def test_media_capture_composites_caption_with_real_nvenc():
+    """Capture must join NVENC resolution chunks into one playable session."""
+    width, height = 640, 480
+    with tempfile.TemporaryDirectory() as out_dir:
+        _make_recorder(out_dir)  # pre-flight NVENC and skip only for unavailable hardware
+        config = CaptureConfig(
+            out_dir=out_dir,
+            sample_fps=30,
+            max_total_bytes=0,
+        )
+        recorder = SessionRecorder(config)
+        recorder.begin_session("gpu_capture", 1_000_000)
+        recorder.record_data(
+            "agent",
+            DataMessage(
+                "gpu_capture",
+                "agent.response",
+                1_000_000,
+                b"NVENC caption test",
+            ),
+        )
+        frame_specs = [(160, 120), (160, 120), *((width, height),) * 4]
+        for index, (frame_width, frame_height) in enumerate(frame_specs):
+            frame = FrameData(
+                seq=index,
+                pts_us=1_000_000 + index * 34_000,
+                width=frame_width,
+                height=frame_height,
+                fmt=PixelFormat.NV12,
+                data=_nv12_gradient(frame_width, frame_height, seed=index),
+                participant_id="gpu_capture",
+                track_id="camera",
+            )
+            recorder.record_video(frame)
+        samples = np.full(480, 0.25, dtype=np.float32)
+        for direction, value in (("device", samples), ("agent", -samples)):
+            recorder.record_audio(
+                direction,
+                AudioChunk(
+                    pts_us=1_000_000,
+                    sample_rate=48_000,
+                    channels=1,
+                    samples=samples.size,
+                    data=value.tobytes(),
+                    participant_id="gpu_capture",
+                    track_id=direction,
+                ),
+            )
+        recorder.end_session("gpu_capture", 1_140_000)
+
+        session = next(path for path in Path(out_dir).iterdir() if path.is_dir())
+        manifest = json.loads((session / "manifest.json").read_text())
+        segment = manifest["video_tracks"]["camera"][0]
+        assert len(manifest["video_tracks"]["camera"]) == 1
+        assert len(list((session / "video").glob("*.mkv"))) == 1
+        assert segment["width"] > width
+        assert segment["height"] > height
+        assert len(segment["encoded_dimensions"]) == 2
+        assert segment["audio_embedded"] is True
+        demuxer = PyNvVideoCodec.CreateDemuxer(str(session / segment["path"]))
+        assert demuxer.GetVideoStreamId() >= 0
+        assert demuxer.GetAudioStreamId() >= 0
+        packet_types = set()
+        video_pts = set()
+        while True:
+            packet = demuxer.DemuxNoSkipAudio()
+            if packet.bsl == 0:
+                break
+            packet_types.add("video" if packet.is_video else "audio")
+            if packet.is_video:
+                video_pts.add(packet.pts)
+        assert packet_types == {"video", "audio"}
+        assert len(video_pts) > 1
+        encoded = (session / segment["raw_path"]).read_bytes()
+        frames = decode_h264(encoded, gpu_id=0)
+        assert len(frames) == len(frame_specs)
+        assert frames[-1].shape == (
+            segment["height"] * 3 // 2,
+            segment["width"],
+        )

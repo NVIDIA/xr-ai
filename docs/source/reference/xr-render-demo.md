@@ -20,6 +20,7 @@ any owned process exit terminates the application stack.
 | Role | Ownership | Directory | Command | Port |
 |---|---|---|---|---|
 | hub | sample | `services/device-io-hub/` | `device_io_hub` | 8080 (HTTPS and `/rtc` WSS proxy); 7880 (plaintext LiveKit direct-debug path; firewall-restricted) |
+| capture | sample, opt-in | `services/device-io-hub/` | `device_io_capture` | — |
 | cloudxr | sample | `services/cloudxr-runtime/` | `cloudxr_runtime` | 48322 (WSS proxy for WebRTC profiles; unused by `auto-native`) |
 | stt | reused | `services/stt-server/` | `stt_server` | 8103 |
 | tts | reused | `services/piper-tts/` | `piper_tts_server` | 8105 |
@@ -113,6 +114,7 @@ restart `xr_render_demo` to apply a change.
 | `yaml/voice_gate.yaml` | Always-on speech or wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | Reused model adapters, endpoints, and readiness checks |
 | `yaml/device_io_hub.yaml` | LiveKit, web and token servers, networking, and video recording |
+| `yaml/media_capture.yaml` | Opt-in media-hub capture, NVENC output, caption layout, and retention |
 | `yaml/video_memory_service.yaml` | Recorded-query endpoint, output directory, and GPU |
 | `yaml/openxr_service.yaml` | OpenXR endpoint, CloudXR environment, and eval-only simulated pose |
 | `scene/scene_service.yaml` | LOVR binary and app, scene endpoint, and CloudXR environment |
@@ -133,6 +135,39 @@ model stack.
 
 Refer to the generated {doc}`configuration <configuration>` reference for exact
 fields, checked-in values, and adjacent YAML comments.
+
+## Opt-in session capture
+
+Capture is disabled by default. Run `uv run xr_render_demo --capture` to start
+`device_io_capture` immediately after DeviceIOHub. Capture subscribes to
+normalized media-hub IPC rather than LiveKit, so the recording contract stays
+the same if the device transport changes. It requests video pixels through the
+hub's on-demand frame path and observes already-routed return audio and data on
+the hub publisher. It never joins the LiveKit room.
+
+Each participant connection creates a timestamped directory under
+`~/.local/share/xr-ai/captures/xr-render-demo/` containing:
+
+- One playable `.mkv` under `video/`, with NVENC H.264 video and stereo
+  audio embedded. Final STT and spoken TTS text use the large lower caption;
+  all UTF-8 data-channel messages scroll in a smaller right-side panel. Both
+  panels are outside the sensor image. The joined source `.264` stream is
+  retained beside the `.mkv`.
+- `audio/conversation.wav`, with device input on the left and agent output on
+  the right, aligned by hub timestamps. Exact float32 chunks remain in
+  `device.f32le` and `agent.f32le`, indexed by `chunks.jsonl`.
+- `events.jsonl`, retaining inbound and outbound data with direction, topic,
+  timestamp, and either UTF-8 text or base64 for binary payloads.
+- `manifest.json`, recording timing, source track metadata, audio layout, and capture
+  frame drops.
+
+NVENC work runs behind a bounded queue in the capture process. When capture is
+slower than the live stream, it replaces old pending frame requests and records
+the drop count rather than adding latency to DeviceIOHub or the agent. The
+process uses DeviceIOHub's existing NumPy, ZMQ, and PyNvVideoCodec dependencies;
+it finalizes the `.mkv` locally and does not require FFmpeg or a media-container
+library. Omit `--capture` when recording is prohibited, and treat the output as
+sensitive device data.
 
 ## The LLM server
 
