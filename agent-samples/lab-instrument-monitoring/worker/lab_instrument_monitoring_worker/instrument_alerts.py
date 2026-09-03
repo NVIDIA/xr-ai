@@ -32,7 +32,10 @@ _VOICE_INTERVAL_S = 5.0
 _SUMMARY_TIMEOUT_S = 5.0
 _SUMMARY_PROMPT = """Summarize instrument changes since the last spoken update.
 Use one brief, precise sentence with no preamble or filler.
-Keep instrument names, final readings, units, and tracking status. Mention only actionable reversals or anomalies.
+For a monotonic numeric sequence, say the instrument increased or decreased from its first to final reading.
+For a non-monotonic numeric sequence, state its final reading plus the observed minimum and maximum.
+Never use arrows, inequality signs, symbolic transitions, or spoken symbol names such as "right arrow."
+Keep instrument names, readings, units, and tracking status. Mention only actionable reversals or anomalies.
 Prefer 20 words or fewer unless more words are required to preserve those facts.
 Do not invent values, units, causes, or instruments."""
 

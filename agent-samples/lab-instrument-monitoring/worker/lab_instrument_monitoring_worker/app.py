@@ -45,6 +45,9 @@ from .web_events import WebEventsAdapterAgent
 _MONITORING_VOICE_SPACING_S = 5.0
 _VOICE_AGGREGATION_PROMPT = """Combine simultaneous spoken updates into one brief, precise sentence.
 Preserve every instrument name, value, unit, tracking status, and actionable warning.
+Express numeric transitions with words such as increased or decreased.
+Never use arrows, inequality signs, or spoken symbol names.
+Preserve a supplied final, minimum, or maximum value for non-monotonic changes.
 Remove repetition, preambles, explanations, and filler. Do not invent information.
 Prefer 20 words or fewer unless more words are required to preserve those facts."""
 
