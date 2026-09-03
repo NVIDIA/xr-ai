@@ -90,6 +90,7 @@ from lab_instrument_monitoring_worker.images import (  # noqa: E402  # pyright: 
 )
 from lab_instrument_monitoring_worker.instrument_alerts import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     InstrumentAlertAgent,
+    _Alert,
 )
 from lab_instrument_monitoring_worker.instrument_monitor import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     InstrumentMonitorAgent,
@@ -845,7 +846,7 @@ async def test_instrument_monitor_emits_only_changes_lost_once_and_full_state(
         async def chat(self, messages, **_kwargs):
             summary_requests.append(messages[-1].content)
             return ChatResponse(
-                content="Device1 increased overall to 13.5 V.",
+                content="Device1 increased to 13.5 V.",
                 reasoning=None,
                 tool_calls=None,
                 finish_reason="stop",
@@ -965,8 +966,8 @@ async def test_instrument_monitor_emits_only_changes_lost_once_and_full_state(
         "Tracking Device1.",
         "Lost Device1. Last reading: 12 V.",
         "Tracking Device1.",
-        "Device1 increased overall to 13.5 V.",
-        "Device1: 13.5 V to 14 V.",
+        "Device1 increased to 13.5 V.",
+        "Device1 increased to 14 V.",
     ]
     assert [output.interrupt for output in collector.voice] == [False] * 5
     assert [output.priority for output in collector.voice] == [
@@ -1052,7 +1053,7 @@ async def test_instrument_tracking_updates_bypass_batch_at_high_priority(
     await alerts.stop()
 
     assert [output.text for output in published] == [
-        "Device1: 11 V to 12 V.",
+        "Device1 increased to 12 V.",
         "Tracking Device2.",
         "Lost Device1. Last reading: 13 V.",
     ]
@@ -1062,6 +1063,37 @@ async def test_instrument_tracking_updates_bypass_batch_at_high_priority(
         VoicePriority.HIGH,
         VoicePriority.HIGH,
     ]
+
+
+def test_instrument_fallback_uses_direction_or_one_peak() -> None:
+    ctx = SimpleNamespace()
+
+    def alert(
+        device_name: str,
+        reading: str,
+        *,
+        previous: str | None = None,
+    ) -> _Alert:
+        return _Alert(
+            key=("qr", device_name),
+            device_name=device_name,
+            meter_reading=reading,
+            timestamp_us=1,
+            lost=False,
+            discovered=False,
+            previous_reading=previous,
+            ctx=ctx,  # type: ignore[arg-type]
+        )
+
+    assert InstrumentAlertAgent._fallback_summary(
+        ([alert("Device1", "2 V", previous="1 V"), alert("Device1", "3 V")],)
+    ) == "Device1 increased to 3 V."
+    assert InstrumentAlertAgent._fallback_summary(
+        ([alert("Device1", "15 V", previous="10 V"), alert("Device1", "12 V")],)
+    ) == "Device1 ended at 12 V; peaked at 15 V."
+    assert InstrumentAlertAgent._fallback_summary(
+        ([alert("Device1", "5 V", previous="10 V"), alert("Device1", "8 V")],)
+    ) == "Device1 ended at 8 V; dipped to 5 V."
 
 
 @pytest.mark.asyncio

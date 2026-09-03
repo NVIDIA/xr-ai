@@ -27,17 +27,38 @@ from .events import (
     InstrumentChange,
     _InstrumentTrackingUpdate,
 )
+from .instrument_monitor import normalize_meter_reading
 
 _VOICE_INTERVAL_S = 5.0
 _SUMMARY_TIMEOUT_S = 5.0
 _SUMMARY_PROMPT = """Summarize instrument changes since the last spoken update.
-Use one brief, precise sentence with no preamble or filler.
-For a monotonic numeric sequence, say the instrument increased or decreased from its first to final reading.
-For a non-monotonic numeric sequence, state its final reading plus the observed minimum and maximum.
+Use ultra-short spoken clauses with no preamble or filler.
+For a monotonic numeric sequence, say only the instrument, increased or decreased, and its final reading.
+Never include the starting value.
+For a non-monotonic sequence, state the final reading and only its most informative turning-point extreme.
+Say "peaked at" for a maximum or "dipped to" for a minimum; never state both.
 Never use arrows, inequality signs, symbolic transitions, or spoken symbol names such as "right arrow."
 Keep instrument names, readings, units, and tracking status. Mention only actionable reversals or anomalies.
-Prefer 20 words or fewer unless more words are required to preserve those facts.
+Prefer 12 words or fewer per instrument unless more are required to preserve those facts.
 Do not invent values, units, causes, or instruments."""
+
+
+def _directional_update(
+    device_name: str,
+    previous_reading: str,
+    meter_reading: str,
+) -> str:
+    previous = normalize_meter_reading(previous_reading)
+    current = normalize_meter_reading(
+        meter_reading,
+        previous_unit=previous[1] if previous is not None else "",
+    )
+    if previous is not None and current is not None and previous[1] == current[1]:
+        if current[0] > previous[0]:
+            return f"{device_name} increased to {current[2]}."
+        if current[0] < previous[0]:
+            return f"{device_name} decreased to {current[2]}."
+    return f"{device_name}: {meter_reading}."
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,7 +113,11 @@ class InstrumentAlertAgent(Agent):
             immediate_text=(
                 f"{event.device_name}: {event.meter_reading}."
                 if event.change_type == "discovered"
-                else f"{event.device_name}: {event.previous_reading} to {event.meter_reading}."
+                else _directional_update(
+                    event.device_name,
+                    event.previous_reading or "",
+                    event.meter_reading,
+                )
             ),
         )
 
@@ -270,9 +295,52 @@ class InstrumentAlertAgent(Agent):
                     f"Lost {last.device_name} at {last.meter_reading}."
                 )
             elif first.previous_reading:
-                updates.append(
-                    f"{last.device_name}: {first.previous_reading} to {last.meter_reading}."
-                )
+                readings = [first.previous_reading, *(alert.meter_reading for alert in history)]
+                parsed = []
+                previous_unit = ""
+                for reading in readings:
+                    value = normalize_meter_reading(reading, previous_unit=previous_unit)
+                    if value is None:
+                        parsed = []
+                        break
+                    parsed.append(value)
+                    previous_unit = value[1]
+                if parsed and len({value[1] for value in parsed}) == 1:
+                    deltas = [
+                        following[0] - current[0]
+                        for current, following in zip(
+                            parsed[:-1], parsed[1:], strict=True
+                        )
+                    ]
+                    if deltas and all(delta >= 0 for delta in deltas) and any(
+                        delta > 0 for delta in deltas
+                    ):
+                        updates.append(f"{last.device_name} increased to {parsed[-1][2]}.")
+                        continue
+                    if deltas and all(delta <= 0 for delta in deltas) and any(
+                        delta < 0 for delta in deltas
+                    ):
+                        updates.append(f"{last.device_name} decreased to {parsed[-1][2]}.")
+                        continue
+                    if len(parsed) > 2:
+                        final = parsed[-1]
+                        extreme = max(
+                            parsed[1:-1],
+                            key=lambda value: abs(value[0] - final[0]),
+                        )
+                        if extreme[0] > final[0]:
+                            updates.append(
+                                f"{last.device_name} ended at {final[2]}; "
+                                f"peaked at {extreme[2]}."
+                            )
+                            continue
+                        if extreme[0] < final[0]:
+                            updates.append(
+                                f"{last.device_name} ended at {final[2]}; "
+                                f"dipped to {extreme[2]}."
+                            )
+                            continue
+                updates.append(f"{last.device_name}: {last.meter_reading}.")
             else:
                 updates.append(f"{last.device_name}: {last.meter_reading}.")
         return " ".join(updates)
