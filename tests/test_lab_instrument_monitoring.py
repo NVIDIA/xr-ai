@@ -296,7 +296,7 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     assert config.web_events_port == 8092
     assert config.web_events_max_events == 5_000
     assert config.monitor_interval_s == 5.0
-    assert config.instrument_monitor_interval_s == 2.0
+    assert config.instrument_monitor_interval_s == 1.0
     assert config.instrument_state_interval_s == 10.0
     assert config.instrument_lost_after_s == 5.0
     assert "Previous caption" not in config.monitor_prompt

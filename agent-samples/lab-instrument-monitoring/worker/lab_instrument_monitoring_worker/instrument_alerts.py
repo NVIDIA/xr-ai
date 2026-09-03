@@ -32,14 +32,12 @@ from .instrument_monitor import normalize_meter_reading
 _VOICE_INTERVAL_S = 5.0
 _SUMMARY_TIMEOUT_S = 5.0
 _SUMMARY_PROMPT = """Summarize instrument changes since the last spoken update.
-Use ultra-short spoken clauses with no preamble or filler.
-For a monotonic numeric sequence, say only the instrument, increased or decreased, and its final reading.
-Never include the starting value.
-For a non-monotonic sequence, state the final reading and only its most informative turning-point extreme.
-Say "peaked at" for a maximum or "dipped to" for a minimum; never state both.
+Use one very short, natural spoken clause per instrument with no preamble or filler.
+Characterize the overall trend when supported, using concise language such as increased, decreased,
+oscillating, unstable, spiking, recovering, or steady. Include the final reading, and include at most one
+notable peak or dip when it materially clarifies the trend. Never include the starting value.
 Never use arrows, inequality signs, symbolic transitions, or spoken symbol names such as "right arrow."
-Keep instrument names, readings, units, and tracking status. Mention only actionable reversals or anomalies.
-Prefer 12 words or fewer per instrument unless more are required to preserve those facts.
+Keep instrument names, readings, units, and tracking status. Prefer 12 words or fewer per instrument.
 Do not invent values, units, causes, or instruments."""
 
 

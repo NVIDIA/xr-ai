@@ -10,7 +10,7 @@ web_events_port: 8092
 web_events_max_events: 5000
 
 monitor_interval_s: 5.0
-instrument_monitor_interval_s: 2.0
+instrument_monitor_interval_s: 1.0
 instrument_state_interval_s: 10.0
 instrument_lost_after_s: 5.0
 monitor_history_size: 20

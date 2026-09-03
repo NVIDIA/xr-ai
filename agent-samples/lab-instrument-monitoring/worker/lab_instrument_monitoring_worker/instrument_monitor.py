@@ -255,6 +255,7 @@ class InstrumentMonitorAgent(Agent):
             await asyncio.sleep(_TRACKING_SCAN_INTERVAL_S)
 
     async def _scan_loop(self, participant_id: str) -> None:
+        next_scan = time.monotonic()
         while True:
             try:
                 result = await self._reader.read_lab_instruments.execute(
@@ -269,7 +270,12 @@ class InstrumentMonitorAgent(Agent):
                 raise
             except Exception:
                 logger.opt(exception=True).warning("instrument scan failed pid={!r}", participant_id)
-            await asyncio.sleep(self._interval_s)
+            next_scan += self._interval_s
+            now = time.monotonic()
+            if now >= next_scan:
+                missed = int((now - next_scan) // self._interval_s) + 1
+                next_scan += missed * self._interval_s
+            await asyncio.sleep(next_scan - now)
 
     async def _maintenance_loop(self, participant_id: str) -> None:
         next_snapshot = time.monotonic() + self._snapshot_interval_s
