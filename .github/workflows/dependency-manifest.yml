@@ -32,8 +32,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
-    name: generated dependency manifest and lock
+  python-lock:
+    name: python lockfile
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -51,7 +51,7 @@ jobs:
             **/pyproject.toml
             uv.toml
 
-      - name: Check generated dependency manifest and lock
+      - name: Check manifest and Python lockfile
         run: uv run --script .github/scripts/generate_dependency_manifest.py --check
 
   android-locks:
