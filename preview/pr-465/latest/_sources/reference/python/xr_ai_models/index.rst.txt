@@ -1,0 +1,1344 @@
+xr_ai_models
+============
+
+.. py:module:: xr_ai_models
+
+.. autoapi-nested-parse::
+
+   Unified service protocols and OpenAI-compatible clients for XR AI models.
+
+   Repository code talks to the typed ``*Service`` protocols. The concrete
+   ``OpenAICompat*`` clients cover every in-tree backend and external
+   OpenAI-compatible endpoints.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /reference/python/xr_ai_models/presets/index
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   xr_ai_models.ContentPart
+   xr_ai_models.ImageInput
+   xr_ai_models.VideoInput
+   xr_ai_models.Category
+   xr_ai_models.KIND_OPENAI_COMPAT
+   xr_ai_models.ModelKind
+   xr_ai_models.Spec
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_models.Capabilities
+   xr_ai_models.ChatMessage
+   xr_ai_models.ChatResponse
+   xr_ai_models.EmbeddingService
+   xr_ai_models.ImagePart
+   xr_ai_models.LLMService
+   xr_ai_models.STTService
+   xr_ai_models.TextPart
+   xr_ai_models.ToolCall
+   xr_ai_models.ToolDef
+   xr_ai_models.TTSService
+   xr_ai_models.VideoPart
+   xr_ai_models.VLMService
+   xr_ai_models.OpenAICompatLLM
+   xr_ai_models.OpenAICompatEmbedding
+   xr_ai_models.OpenAICompatSTT
+   xr_ai_models.OpenAICompatTTS
+   xr_ai_models.OpenAICompatVLM
+   xr_ai_models.AdapterSpec
+   xr_ai_models.DeploymentSpec
+   xr_ai_models.EmbeddingSpec
+   xr_ai_models.EndpointSpec
+   xr_ai_models.LLMSpec
+   xr_ai_models.ModelsConfig
+   xr_ai_models.STTSpec
+   xr_ai_models.TTSSpec
+   xr_ai_models.VLMSpec
+   xr_ai_models.RivaSTT
+   xr_ai_models.RivaTTS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   xr_ai_models.load_models_config
+   xr_ai_models.load_models_config_from_dict
+   xr_ai_models.make_embedding
+   xr_ai_models.make_llm
+   xr_ai_models.make_stt
+   xr_ai_models.make_tts
+   xr_ai_models.make_vlm
+
+
+Package Contents
+----------------
+
+.. py:class:: Capabilities
+
+   Features supported by a configured model endpoint.
+
+
+   .. py:attribute:: streaming
+      :type:  bool
+      :value: True
+
+
+      Whether the endpoint supports token streaming.
+
+
+
+   .. py:attribute:: tool_calls
+      :type:  bool
+      :value: False
+
+
+      Whether the endpoint supports function-tool calls.
+
+
+
+   .. py:attribute:: vision
+      :type:  bool
+      :value: False
+
+
+      Whether the endpoint accepts image inputs.
+
+
+
+   .. py:attribute:: video
+      :type:  bool
+      :value: False
+
+
+      Whether the endpoint accepts video inputs.
+
+
+
+   .. py:attribute:: reasoning
+      :type:  bool
+      :value: False
+
+
+      Whether the endpoint can return model reasoning.
+
+
+
+.. py:class:: ChatMessage
+
+   One input turn in an LLM or VLM conversation.
+
+
+   .. py:attribute:: role
+      :type:  Literal['system', 'user', 'assistant', 'tool']
+
+      The participant role associated with the message.
+
+
+
+   .. py:attribute:: content
+      :type:  str | list[ContentPart]
+
+      Plain text or ordered multimodal content supplied by the participant.
+
+
+
+   .. py:attribute:: tool_calls
+      :type:  list[ToolCall] | None
+      :value: None
+
+
+      Tool calls emitted by an assistant turn, when present.
+
+
+
+   .. py:attribute:: tool_call_id
+      :type:  str | None
+      :value: None
+
+
+      The call identifier answered by a tool-result message, when applicable.
+
+
+
+.. py:class:: ChatResponse
+
+   A normalized non-streaming response from a chat model.
+
+
+   .. py:attribute:: content
+      :type:  str
+
+      The assistant's user-visible response text.
+
+
+
+   .. py:attribute:: reasoning
+      :type:  str | None
+
+      Normalized model reasoning, when the endpoint returns it.
+
+
+
+   .. py:attribute:: tool_calls
+      :type:  list[ToolCall] | None
+
+      Function-tool invocations requested by the model, when present.
+
+
+
+   .. py:attribute:: finish_reason
+      :type:  str | None
+
+      The provider's reason for ending generation, when supplied.
+
+
+
+   .. py:attribute:: raw
+      :type:  dict[str, Any]
+
+      The unmodified provider response object.
+
+
+
+.. py:data:: ContentPart
+
+   A supported text, image, or video part in a chat message.
+
+
+.. py:class:: EmbeddingService
+
+
+
+   Structural interface for text-embedding services.
+
+
+   .. py:method:: embed(texts: Sequence[str], *, timeout: float | None = None) -> list[list[float]]
+      :async:
+
+
+      Embed text strings, returning one vector for each input in order.
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Return whether the configured endpoint is ready for requests.
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Release resources owned by the service.
+
+
+
+.. py:data:: ImageInput
+
+   Image bytes, a filesystem path, a ``data:`` URL, or an HTTP(S) URL.
+
+
+.. py:class:: ImagePart
+
+   An image reference in a multimodal chat message.
+
+
+   .. py:attribute:: url
+      :type:  str
+
+      An HTTP(S) or ``data:`` URL containing the image.
+
+
+
+   .. py:attribute:: type
+      :type:  Literal['image_url']
+      :value: 'image_url'
+
+
+      The OpenAI-compatible discriminator for this content part.
+
+
+
+.. py:class:: LLMService
+
+
+
+   Structural interface for text chat-completion services.
+
+
+   .. py:attribute:: capabilities
+      :type:  Capabilities
+
+      Features supported by this service.
+
+
+
+   .. py:method:: chat(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> ChatResponse
+      :async:
+
+
+      Generate one complete response for a sequence of chat messages.
+
+
+
+   .. py:method:: stream(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
+
+      Stream user-visible response text for a sequence of chat messages.
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Return whether the configured endpoint is ready for requests.
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Release resources owned by the service.
+
+
+
+.. py:class:: STTService
+
+
+
+   Structural interface for speech-to-text services.
+
+
+   .. py:method:: transcribe(audio: bytes, *, sample_rate: int | None = None, channels: int = 1, timeout: float | None = None) -> str
+      :async:
+
+
+      Transcribe WAV data or 16-bit PCM audio into text.
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Return whether the configured endpoint is ready for requests.
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Release resources owned by the service.
+
+
+
+.. py:class:: TextPart
+
+   Text content in a multimodal chat message.
+
+
+   .. py:attribute:: text
+      :type:  str
+
+      The text presented to the model.
+
+
+
+   .. py:attribute:: type
+      :type:  Literal['text']
+      :value: 'text'
+
+
+      The OpenAI-compatible discriminator for this content part.
+
+
+
+.. py:class:: ToolCall
+
+   A function-tool invocation requested by a model.
+
+
+   .. py:attribute:: id
+      :type:  str
+
+      The provider-assigned identifier used to submit the tool result.
+
+
+
+   .. py:attribute:: name
+      :type:  str
+
+      The function name requested by the model.
+
+
+
+   .. py:attribute:: arguments
+      :type:  str
+
+      JSON-encoded arguments string, per the OpenAI tool-call contract.
+
+
+
+.. py:class:: ToolDef
+
+   A function tool definition exposed to a chat model.
+
+
+   .. py:attribute:: name
+      :type:  str
+
+      The function name the model uses in a :class:`ToolCall`.
+
+
+
+   .. py:attribute:: description
+      :type:  str
+
+      A natural-language description of what the function does.
+
+
+
+   .. py:attribute:: parameters
+      :type:  dict[str, Any]
+
+      The function parameters as a JSON Schema object.
+
+
+
+   .. py:method:: to_openai() -> dict[str, Any]
+
+      Return this definition in OpenAI's function-tool wire format.
+
+
+
+.. py:class:: TTSService
+
+
+
+   Structural interface for text-to-speech services.
+
+
+   .. py:method:: synthesize(text: str, *, response_format: str = 'wav', timeout: float | None = None) -> bytes
+      :async:
+
+
+      Synthesize text and return audio in the requested format.
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Return whether the configured endpoint is ready for requests.
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Release resources owned by the service.
+
+
+
+.. py:data:: VideoInput
+
+   Video bytes, a filesystem path, a ``data:`` URL, or an HTTP(S) URL.
+
+
+.. py:class:: VideoPart
+
+   A video reference in a multimodal chat message.
+
+
+   .. py:attribute:: url
+      :type:  str
+
+      An HTTP(S) or ``data:`` URL containing the video.
+
+
+
+   .. py:attribute:: type
+      :type:  Literal['video_url']
+      :value: 'video_url'
+
+
+      The OpenAI-compatible discriminator for this content part.
+
+
+
+.. py:class:: VLMService
+
+
+
+   Structural interface for visual chat-completion services.
+
+
+   .. py:attribute:: capabilities
+      :type:  Capabilities
+
+      Features supported by this service.
+
+
+
+   .. py:method:: ask_image(image: ImageInput, question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> ChatResponse
+      :async:
+
+
+      Generate one response to a question about an image.
+
+
+
+   .. py:method:: ask_images(images: Sequence[ImageInput], question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> ChatResponse
+      :async:
+
+
+      Generate one response to a question about multiple images.
+
+
+
+   .. py:method:: ask_video(video: VideoInput, question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> ChatResponse
+      :async:
+
+
+      Generate one response to a question about a video.
+
+
+
+   .. py:method:: stream(image: ImageInput, question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
+
+      Stream response text for a question about an image.
+
+
+
+   .. py:method:: stream_images(images: Sequence[ImageInput], question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
+
+      Stream response text for a question about multiple images.
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Return whether the configured endpoint is ready for requests.
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Release resources owned by the service.
+
+
+
+.. py:class:: OpenAICompatLLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, reasoning_field: str | None = None, default_extras: dict[str, Any] | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
+
+   OpenAI-compatible ``/v1/chat/completions`` client.
+
+   Used directly for plain LLMs (Llama-Nemotron, Nemotron3-Nano,
+   Nemotron-Omni) and indirectly via :class:`OpenAICompatVLM` for VLMs.
+   The API key is read once from ``api_key_env`` during construction. An
+   injected HTTP client remains owned by the caller and is not closed here.
+
+
+   .. py:attribute:: health_url
+
+      The URL used to check endpoint readiness.
+
+
+
+   .. py:attribute:: capabilities
+
+      Features declared for this model endpoint.
+
+
+
+   .. py:method:: chat(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
+      :async:
+
+
+      Generate and return one normalized chat response.
+
+      Per-call generation values override endpoint defaults. ``headers`` may
+      supply request context but cannot override the configured authorization
+      header.
+
+
+
+   .. py:method:: stream(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
+      :async:
+
+
+      Stream user-visible text deltas from a chat completion.
+
+      Malformed server-sent event lines and deltas without content are
+      skipped. Tool-call and reasoning deltas are not yielded.
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Return whether the endpoint health check succeeds.
+
+      Returns ``True`` without an HTTP request when health checks were
+      disabled at construction time.
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Close the internally created HTTP client, if one is owned.
+
+
+
+.. py:class:: OpenAICompatEmbedding(base_url: str, model_name: str, *, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
+
+   OpenAI-compatible ``/v1/embeddings`` client.
+
+   The API key is read once from ``api_key_env`` during construction. An
+   injected HTTP client remains owned by the caller and is not closed here.
+
+
+   .. py:method:: embed(texts: Sequence[str], *, timeout: float | None = None) -> list[list[float]]
+      :async:
+
+
+      Embed *texts* and return one vector per input in input order.
+
+      An empty input is handled locally. A response containing a different
+      number of vectors raises :class:`ValueError`.
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Return whether the endpoint health check succeeds.
+
+      Returns ``True`` without an HTTP request when health checks were
+      disabled at construction time.
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Close the internally created HTTP client, if one is owned.
+
+
+
+.. py:class:: OpenAICompatSTT(base_url: str, *, api_key_env: str | None = None, timeout: float = 30.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
+
+   OpenAI-compatible ``/v1/audio/transcriptions`` client.
+
+   The API key is read once from ``api_key_env`` during construction. An
+   injected HTTP client remains owned by the caller and is not closed here.
+
+
+   .. py:method:: transcribe(audio: bytes, *, sample_rate: int | None = None, channels: int = 1, timeout: float | None = None) -> str
+      :async:
+
+
+      Transcribe WAV data or 16-bit PCM audio into text.
+
+      When ``sample_rate`` is provided, *audio* is interpreted as raw signed
+      16-bit PCM with the given channel count and wrapped in a WAV container.
+      Otherwise, *audio* must already contain a server-supported audio file.
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Return whether the endpoint health check succeeds.
+
+      Returns ``True`` without an HTTP request when health checks were
+      disabled at construction time.
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Close the internally created HTTP client, if one is owned.
+
+
+
+.. py:class:: OpenAICompatTTS(base_url: str, *, api_key_env: str | None = None, timeout: float = 30.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
+
+   OpenAI-compatible ``/v1/audio/speech`` client.
+
+   The API key is read once from ``api_key_env`` during construction. An
+   injected HTTP client remains owned by the caller and is not closed here.
+
+
+   .. py:method:: synthesize(text: str, *, response_format: str = 'wav', timeout: float | None = None) -> bytes
+      :async:
+
+
+      Synthesize *text* and return audio bytes in *response_format*.
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Return whether the endpoint health check succeeds.
+
+      Returns ``True`` without an HTTP request when health checks were
+      disabled at construction time.
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Close the internally created HTTP client, if one is owned.
+
+
+
+.. py:class:: OpenAICompatVLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, default_extras: dict[str, Any] | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
+
+   OpenAI-compatible client for image- and video-bearing chat requests.
+
+   Image and video paths or bytes are converted to ``data:`` URLs before
+   submission. An injected HTTP client remains owned by the caller and is not
+   closed here.
+
+
+   .. py:property:: capabilities
+      :type: xr_ai_models.Capabilities
+
+
+      Return the features declared for the underlying chat endpoint.
+
+
+
+   .. py:property:: health_url
+      :type: str
+
+
+      Return the URL used to check endpoint readiness.
+
+
+
+   .. py:method:: ask_image(image: xr_ai_models.ImageInput, question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
+      :async:
+
+
+      Generate one response to *question* about *image*.
+
+
+
+   .. py:method:: ask_images(images: Sequence[xr_ai_models.ImageInput], question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
+      :async:
+
+
+      Generate one response to *question* about an ordered image sequence.
+
+      Raises :class:`ValueError` when *images* is empty.
+
+
+
+   .. py:method:: ask_video(video: xr_ai_models.VideoInput, question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
+      :async:
+
+
+      Generate one response to *question* about *video*.
+
+      Raises :class:`ValueError` unless video support was declared in the
+      configured capabilities.
+
+
+
+   .. py:method:: stream(image: xr_ai_models.ImageInput, question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
+      :async:
+
+
+      Stream response text for *question* about *image*.
+
+
+
+   .. py:method:: stream_images(images: Sequence[xr_ai_models.ImageInput], question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
+      :async:
+
+
+      Stream response text for a question about an ordered image sequence.
+
+      Raises :class:`ValueError` when *images* is empty.
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Return whether the underlying chat endpoint is ready.
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Release resources owned by the underlying chat client.
+
+
+
+.. py:class:: AdapterSpec
+
+   API dialect and model-specific request/response behavior.
+
+   The ``riva_grpc`` speech fields ride here: ``function_id`` (hosted NVCF
+   selects the model by function-id metadata), ``use_ssl``, ``language``,
+   and the TTS-only ``voice`` and ``sample_rate``.
+
+
+   .. py:attribute:: kind
+      :type:  ModelKind
+      :value: 'openai_compat'
+
+
+      The concrete client implementation used for this role.
+
+
+
+   .. py:attribute:: model_name
+      :type:  str
+      :value: ''
+
+
+      The model identifier sent to endpoints that require one.
+
+
+
+   .. py:attribute:: reasoning_field
+      :type:  str | None
+      :value: None
+
+
+      The response field containing reasoning, or ``None`` for auto-detection.
+
+
+
+   .. py:attribute:: capabilities
+      :type:  dict[str, Any]
+
+      Overrides used to construct the service's capability flags.
+
+
+
+   .. py:attribute:: default_extras
+      :type:  dict[str, Any]
+
+      Model-specific fields merged into every request payload.
+
+
+
+   .. py:attribute:: function_id
+      :type:  str | None
+      :value: None
+
+
+      NVCF function id for hosted Riva speech endpoints.
+
+
+
+   .. py:attribute:: use_ssl
+      :type:  bool
+      :value: False
+
+
+      Whether the Riva gRPC channel uses TLS.
+
+
+
+   .. py:attribute:: language
+      :type:  str
+      :value: 'en-US'
+
+
+      BCP-47 language code for Riva speech recognition and synthesis.
+
+
+
+   .. py:attribute:: voice
+      :type:  str
+      :value: ''
+
+
+      Riva TTS voice name; the service default when empty.
+
+
+
+   .. py:attribute:: sample_rate
+      :type:  int
+      :value: 44100
+
+
+      Riva TTS output sample rate in Hz.
+
+
+
+.. py:data:: Category
+
+   A model role supported by :class:`ModelsConfig`.
+
+
+.. py:class:: DeploymentSpec
+
+   Process ownership for the endpoint that serves a model role.
+
+   ``credentials`` names keys the launched service itself needs (e.g.
+   NGC_API_KEY for a NIM container's nvcr.io pull and engine download)
+   even when the endpoint takes no API key.
+
+
+   .. py:attribute:: ownership
+      :type:  Ownership
+      :value: 'external'
+
+
+      Whether the launcher starts, reuses, or does not manage the service.
+
+
+
+   .. py:attribute:: service
+      :type:  str | None
+      :value: None
+
+
+      The launcher service name for managed or reused deployments.
+
+
+
+   .. py:attribute:: credentials
+      :type:  tuple[str, Ellipsis]
+      :value: ()
+
+
+      Environment keys the launched service needs (collected by the launcher).
+
+
+
+.. py:class:: EmbeddingSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', model_name: str = '', api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None)
+
+
+
+   Configuration for a text-embedding model role.
+
+
+   .. py:attribute:: adapter
+      :type:  AdapterSpec
+
+      Model-specific request and response behavior.
+
+
+
+   .. py:attribute:: endpoint
+      :type:  EndpointSpec
+
+      Endpoint connectivity, authentication, and readiness settings.
+
+
+
+   .. py:attribute:: deployment
+      :type:  DeploymentSpec
+
+      Launcher ownership metadata for the serving process.
+
+
+
+.. py:class:: EndpointSpec
+
+   Connectivity, authentication, timeout, and readiness for an adapter.
+
+
+   .. py:attribute:: base_url
+      :type:  str
+      :value: ''
+
+
+      The endpoint root URL, without a model-specific route.
+
+
+
+   .. py:attribute:: api_key_env
+      :type:  str | None
+      :value: None
+
+
+      Environment variable containing the bearer token, when required.
+
+
+
+   .. py:attribute:: timeout
+      :type:  float
+      :value: 60.0
+
+
+      Default request timeout in seconds.
+
+
+
+   .. py:attribute:: readiness
+      :type:  Readiness
+      :value: 'health'
+
+
+      How the client determines whether the endpoint is ready.
+
+
+
+   .. py:attribute:: health_path
+      :type:  str
+      :value: '/health'
+
+
+      Endpoint path probed for readiness (NIM containers use /v1/health/ready).
+
+
+
+   .. py:property:: health_check
+      :type: bool
+
+
+      Whether readiness requires a successful endpoint health check.
+
+
+
+.. py:data:: KIND_OPENAI_COMPAT
+   :type:  ModelKind
+   :value: 'openai_compat'
+
+
+   The adapter kind for OpenAI-compatible HTTP endpoints.
+
+
+.. py:class:: LLMSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', model_name: str = '', api_key_env: str | None = None, reasoning_field: str | None = None, capabilities: dict[str, Any] | None = None, default_extras: dict[str, Any] | None = None, timeout: float = 60.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None)
+
+
+
+   Configuration for a text chat-completion model role.
+
+
+   .. py:attribute:: adapter
+      :type:  AdapterSpec
+
+      Model-specific request and response behavior.
+
+
+
+   .. py:attribute:: endpoint
+      :type:  EndpointSpec
+
+      Endpoint connectivity, authentication, and readiness settings.
+
+
+
+   .. py:attribute:: deployment
+      :type:  DeploymentSpec
+
+      Launcher ownership metadata for the serving process.
+
+
+
+.. py:data:: ModelKind
+
+   A supported model-service adapter implementation.
+
+
+.. py:class:: ModelsConfig
+
+   Logical-name to typed model-role specifications.
+
+
+   .. py:attribute:: entries
+      :type:  dict[str, Spec]
+
+      Model-role specifications keyed by application-defined logical name.
+
+
+
+   .. py:method:: llm(name: str) -> LLMSpec
+
+      Return the LLM specification named *name*.
+
+
+
+   .. py:method:: vlm(name: str) -> VLMSpec
+
+      Return the VLM specification named *name*.
+
+
+
+   .. py:method:: stt(name: str) -> STTSpec
+
+      Return the speech-to-text specification named *name*.
+
+
+
+   .. py:method:: tts(name: str) -> TTSSpec
+
+      Return the text-to-speech specification named *name*.
+
+
+
+   .. py:method:: embedding(name: str) -> EmbeddingSpec
+
+      Return the embedding specification named *name*.
+
+
+
+   .. py:property:: required_credentials
+      :type: tuple[str, Ellipsis]
+
+
+      Return the sorted environment-variable names required by all roles.
+
+
+
+.. py:data:: Spec
+
+   Any typed model-role specification stored in :class:`ModelsConfig`.
+
+
+.. py:class:: STTSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', api_key_env: str | None = None, timeout: float = 30.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None)
+
+
+
+   Configuration for a speech-to-text model role.
+
+
+   .. py:attribute:: adapter
+      :type:  AdapterSpec
+
+      Model-specific request and response behavior.
+
+
+
+   .. py:attribute:: endpoint
+      :type:  EndpointSpec
+
+      Endpoint connectivity, authentication, and readiness settings.
+
+
+
+   .. py:attribute:: deployment
+      :type:  DeploymentSpec
+
+      Launcher ownership metadata for the serving process.
+
+
+
+.. py:class:: TTSSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', api_key_env: str | None = None, timeout: float = 30.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None)
+
+
+
+   Configuration for a text-to-speech model role.
+
+
+   .. py:attribute:: adapter
+      :type:  AdapterSpec
+
+      Model-specific request and response behavior.
+
+
+
+   .. py:attribute:: endpoint
+      :type:  EndpointSpec
+
+      Endpoint connectivity, authentication, and readiness settings.
+
+
+
+   .. py:attribute:: deployment
+      :type:  DeploymentSpec
+
+      Launcher ownership metadata for the serving process.
+
+
+
+.. py:class:: VLMSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', model_name: str = '', api_key_env: str | None = None, capabilities: dict[str, Any] | None = None, default_extras: dict[str, Any] | None = None, timeout: float = 60.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None)
+
+
+
+   Configuration for an image- or video-language model role.
+
+
+   .. py:attribute:: adapter
+      :type:  AdapterSpec
+
+      Model-specific request and response behavior.
+
+
+
+   .. py:attribute:: endpoint
+      :type:  EndpointSpec
+
+      Endpoint connectivity, authentication, and readiness settings.
+
+
+
+   .. py:attribute:: deployment
+      :type:  DeploymentSpec
+
+      Launcher ownership metadata for the serving process.
+
+
+
+.. py:function:: load_models_config(path: pathlib.Path | str) -> ModelsConfig
+
+   Load a YAML or JSON model profile and resolve its adapter presets.
+
+   The file may contain model entries directly or nested below a ``models``
+   key. Invalid entries raise :class:`ValueError` with the file path and role
+   name included in the message.
+
+
+.. py:function:: load_models_config_from_dict(raw: dict[str, Any], *, source: str = '<dict>') -> ModelsConfig
+
+   Build a model configuration from a parsed direct or ``models`` mapping.
+
+   ``source`` labels validation errors and is useful when the mapping did not
+   originate from a file.
+
+
+.. py:function:: make_embedding(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.EmbeddingService
+
+   Construct the embedding service for the named configuration entry.
+
+   Raises :class:`KeyError` when *name* is absent, :class:`TypeError` when it
+   names a different model role, and :class:`ValueError` for an unsupported
+   adapter kind.
+
+
+.. py:function:: make_llm(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.LLMService
+
+   Construct the text chat service for the named configuration entry.
+
+   Raises :class:`KeyError` when *name* is absent, :class:`TypeError` when it
+   names a different model role, and :class:`ValueError` for an unsupported
+   adapter kind.
+
+
+.. py:function:: make_stt(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.STTService
+
+   Construct the speech-to-text service for the named configuration entry.
+
+   Raises :class:`KeyError` when *name* is absent, :class:`TypeError` when it
+   names a different model role, and :class:`ValueError` for an unsupported
+   adapter kind.
+
+
+.. py:function:: make_tts(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.TTSService
+
+   Construct the text-to-speech service for the named configuration entry.
+
+   Raises :class:`KeyError` when *name* is absent, :class:`TypeError` when it
+   names a different model role, and :class:`ValueError` for an unsupported
+   adapter kind.
+
+
+.. py:function:: make_vlm(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.VLMService
+
+   Construct the visual chat service for the named configuration entry.
+
+   Raises :class:`KeyError` when *name* is absent, :class:`TypeError` when it
+   names a different model role, and :class:`ValueError` for an unsupported
+   adapter kind.
+
+
+.. py:class:: RivaSTT(base_url: str, *, api_key_env: str | None = None, function_id: str | None = None, use_ssl: bool = False, language: str = 'en-US', timeout: float = 30.0, health_check: bool = True)
+
+   Riva ASR client: offline (batch) recognition over gRPC.
+
+
+   .. py:method:: transcribe(audio: bytes, *, sample_rate: int | None = None, channels: int = 1, timeout: float | None = None) -> str
+      :async:
+
+
+      Recognize *audio* (WAV or raw 16-bit PCM) and return the transcript.
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Whether the Riva gRPC channel is ready (assumed when probing is off).
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Close the underlying gRPC channel.
+
+
+
+.. py:class:: RivaTTS(base_url: str, *, api_key_env: str | None = None, function_id: str | None = None, use_ssl: bool = False, voice: str = '', language: str = 'en-US', sample_rate: int = 44100, timeout: float = 30.0, health_check: bool = True)
+
+   Riva TTS client: streaming synthesis over gRPC, concatenated to one
+   WAV (or raw PCM) result.
+
+
+   .. py:method:: synthesize(text: str, *, response_format: str = 'wav', timeout: float | None = None) -> bytes
+      :async:
+
+
+      Synthesize *text* and return WAV bytes (or raw 16-bit PCM).
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Whether the Riva gRPC channel is ready (assumed when probing is off).
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Close the underlying gRPC channel.
+
+
+
