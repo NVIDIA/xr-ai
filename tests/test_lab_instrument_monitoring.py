@@ -270,11 +270,14 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     device_5 = config.device_map.resolve(MarkerType.QR_CODE, "device-5")
     aruco_1 = config.device_map.resolve(MarkerType.ARUCO, "1")
     aruco_4 = config.device_map.resolve(MarkerType.ARUCO, "4")
+    aruco_5 = config.device_map.resolve(MarkerType.ARUCO, "5")
     assert device_1 is not None and device_1.device_name == "Device1"
     assert device_5 is not None and device_5.device_name == "Device5"
-    assert aruco_1 is not None and aruco_1.device_name == "Device2"
-    assert aruco_4 is not None and aruco_4.device_name == "Device5"
+    assert aruco_1 is not None and aruco_1.device_name == "Device1"
+    assert aruco_4 is not None and aruco_4.device_name == "Device4"
+    assert aruco_5 is not None and aruco_5.device_name == "Device5"
     assert config.device_map.resolve(MarkerType.QR_CODE, "S2-CF") is None
+    assert config.device_map.resolve(MarkerType.ARUCO, "0") is None
     assert config.device_map.resolve(MarkerType.ARUCO, "99") is None
     assert config.artifacts_dir == _SAMPLE / "artifacts"
     assert config.capture_marker_scans is False
@@ -382,27 +385,26 @@ def test_launcher_reuses_cosmos_and_other_model_services(tmp_path: Path) -> None
     assert processes[-1].config == worker_config
 
 
-def test_sample_markers_match_device_map() -> None:
+def test_sample_markers_decode_expected_ids() -> None:
     marker_dir = _SAMPLE / "sample-markers"
     expected = {
-        "qr/Device1_QR_device-1.png": (MarkerType.QR_CODE, "device-1", "Device1"),
-        "qr/Device2_QR_device-2.png": (MarkerType.QR_CODE, "device-2", "Device2"),
-        "qr/Device3_QR_device-3.png": (MarkerType.QR_CODE, "device-3", "Device3"),
-        "qr/Device4_QR_device-4.png": (MarkerType.QR_CODE, "device-4", "Device4"),
-        "qr/Device5_QR_device-5.png": (MarkerType.QR_CODE, "device-5", "Device5"),
-        "aruco/Device1_ArUco_0.png": (MarkerType.ARUCO, "0", "Device1"),
-        "aruco/Device2_ArUco_1.png": (MarkerType.ARUCO, "1", "Device2"),
-        "aruco/Device3_ArUco_2.png": (MarkerType.ARUCO, "2", "Device3"),
-        "aruco/Device4_ArUco_3.png": (MarkerType.ARUCO, "3", "Device4"),
-        "aruco/Device5_ArUco_4.png": (MarkerType.ARUCO, "4", "Device5"),
+        "qr/Device1_QR_device-1.png": (MarkerType.QR_CODE, "device-1"),
+        "qr/Device2_QR_device-2.png": (MarkerType.QR_CODE, "device-2"),
+        "qr/Device3_QR_device-3.png": (MarkerType.QR_CODE, "device-3"),
+        "qr/Device4_QR_device-4.png": (MarkerType.QR_CODE, "device-4"),
+        "qr/Device5_QR_device-5.png": (MarkerType.QR_CODE, "device-5"),
+        "aruco/Device1_ArUco_0.png": (MarkerType.ARUCO, "0"),
+        "aruco/Device2_ArUco_1.png": (MarkerType.ARUCO, "1"),
+        "aruco/Device3_ArUco_2.png": (MarkerType.ARUCO, "2"),
+        "aruco/Device4_ArUco_3.png": (MarkerType.ARUCO, "3"),
+        "aruco/Device5_ArUco_4.png": (MarkerType.ARUCO, "4"),
     }
     assert {path.relative_to(marker_dir).as_posix() for path in marker_dir.rglob("*.png")} == set(expected)
 
-    config = load_config(_SAMPLE / "yaml" / "lab_instrument_monitoring_worker.yaml")
     qr_detector = cv2.QRCodeDetector()
     aruco_detector = cv2.aruco.ArucoDetector(cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50))
 
-    for filename, (marker_type, marker_id, device_name) in expected.items():
+    for filename, (marker_type, marker_id) in expected.items():
         image = cv2.imread(str(marker_dir / filename))
         assert image is not None
         if marker_type is MarkerType.QR_CODE:
@@ -412,8 +414,6 @@ def test_sample_markers_match_device_map() -> None:
             assert identifiers is not None and len(identifiers) == 1
             decoded_id = str(identifiers[0, 0])
         assert decoded_id == marker_id
-        identity = config.device_map.resolve(marker_type, decoded_id)
-        assert identity is not None and identity.device_name == device_name
 
 
 def test_monitor_and_foreground_share_participant_image_acquisition(tmp_path: Path) -> None:

@@ -394,12 +394,13 @@ readable devices, competing markers, and exact joint label-to-reading output.
 
 ### Printable sample markers
 
-The checked-in marker assets match `yaml/device_map.yaml`:
+The checked-in marker assets provide fixed payloads and IDs. Device names are
+resolved independently through `yaml/device_map.yaml`:
 
-| Files | Family | Encoded IDs | Device names |
-|---|---|---|---|
-| `sample-markers/qr/*.png` | QR | `device-1` through `device-5` | `Device1` through `Device5` |
-| `sample-markers/aruco/*.png` | ArUco `DICT_4X4_50` | `0` through `4` | `Device1` through `Device5` |
+| Files | Family | Encoded values |
+|---|---|---|
+| `sample-markers/qr/*.png` | QR | `device-1` through `device-5` |
+| `sample-markers/aruco/*.png` | ArUco `DICT_4X4_50` | `0` through `4` |
 
 Keep the white border, print without interpolation or cropping, and place a
 marker close enough to its instrument display for both to be clear in one

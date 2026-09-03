@@ -9,8 +9,8 @@ devices:
     device-4: Device4
     device-5: Device5
   aruco:
-    "0": Device1
-    "1": Device2
-    "2": Device3
-    "3": Device4
-    "4": Device5
+    "1": Device1
+    "2": Device2
+    "3": Device3
+    "4": Device4
+    "5": Device5
