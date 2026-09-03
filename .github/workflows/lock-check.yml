@@ -9,6 +9,9 @@ name: lock-check
 # so a single `uv lock` per project covers every supported interpreter
 # without needing a Python-version matrix here.
 #
+# dependency-manifest/ holds the one committed lockfile, aggregating every
+# project; its pyproject and lock are generated and checked here for drift.
+#
 # The root uv.toml limits package-index candidates to the last repository-wide
 # qualification point. This is the repo-wide check on Python-version +
 # dependency consistency: a project bumping `requires-python`, advancing that
@@ -74,6 +77,9 @@ jobs:
           cache-dependency-glob: |
             **/pyproject.toml
             uv.toml
+
+      - name: Check generated dependency manifest and lock
+        run: uv run --script .github/scripts/generate_dependency_manifest.py --check
 
       - name: Resolve every pyproject.toml
         run: |

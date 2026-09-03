@@ -30,6 +30,18 @@ repos:
         files: >-
           (^|/)pyproject\.toml$|^DEPENDENCIES\.md$|^\.github/scripts/generate_dependency_map\.py$
 
+      - id: generate-dependency-manifest
+        name: generate dependency manifest
+        description: >
+          Regenerates dependency-manifest/pyproject.toml from every project and
+          resolves its uv.lock under the root uv.toml cutoff. Pre-commit aborts
+          when either file changes so the operator can review and re-stage it.
+        entry: uv run --script .github/scripts/generate_dependency_manifest.py
+        language: system
+        pass_filenames: false
+        files: >-
+          (^|/)pyproject\.toml$|^uv\.toml$|^dependency-manifest/|^\.github/scripts/generate_dependency_(map|manifest)\.py$
+
       - id: check-spdx-headers
         name: check SPDX headers
         description: >

@@ -47,9 +47,11 @@ Narrative docs cover only
 workflows, operational decisions, credentials, and process relationships.
 
 After a `pyproject.toml` change, run
-`uv run --script .github/scripts/generate_dependency_map.py`. The pre-commit hook
-normally regenerates the Python inventory in `DEPENDENCIES.md` automatically,
-and CI rejects drift. Do not edit that generated section by hand. Regenerate the
+`uv run --script .github/scripts/generate_dependency_map.py` and
+`uv run --script .github/scripts/generate_dependency_manifest.py`. The
+pre-commit hook normally regenerates the Python inventory in `DEPENDENCIES.md`
+and the aggregate `dependency-manifest/` project and lock automatically, and CI
+rejects drift. Do not edit those generated files by hand. Regenerate the
 affected project's gitignored `uv.lock` locally. New source files require an
 SPDX header; refer to {doc}`SPDX headers <spdx-headers>`.
 
@@ -62,5 +64,6 @@ not always inherit the root file: uv stops upward config discovery at a nearer
 repository root with `--config-file uv.toml` as shown above. To qualify newer
 dependencies, advance the cutoff in a dedicated change, resolve every project
 with `uv --config-file uv.toml lock --upgrade --project <directory>`, and run
-the full test suite. The generated lockfiles are validation artifacts and remain
-gitignored.
+the full test suite. The generated per-project lockfiles are validation
+artifacts and remain gitignored; the aggregate `dependency-manifest/uv.lock` is
+the generated, committed exception.

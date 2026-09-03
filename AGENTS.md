@@ -107,10 +107,12 @@ Refer to [Adding a sample](docs/source/guides/adding-a-sample.md) and the
   and adjacent YAML comments. Files under a top-level sample's `yaml/` tree or
   beside a direct capability subproject are generated into the config reference.
 - After any `pyproject.toml` change, run
-  `uv run --script .github/scripts/generate_dependency_map.py`; the pre-commit hook
-  normally regenerates the Python inventory automatically and CI rejects drift.
-  Do not hand-edit the generated section in `DEPENDENCIES.md`. Regenerate the
-  affected project's gitignored `uv.lock` locally to verify resolution.
+  `uv run --script .github/scripts/generate_dependency_map.py` and
+  `uv run --script .github/scripts/generate_dependency_manifest.py`; the
+  pre-commit hook normally runs both and CI rejects drift. Do not hand-edit the
+  generated section in `DEPENDENCIES.md` or anything under `dependency-manifest/`.
+  Regenerate the affected project's gitignored `uv.lock` locally to verify
+  resolution.
 - The root `uv.toml` limits registry artifacts to the last dependency
   qualification timestamp. Advance it only in a dedicated dependency refresh,
   resolve every project's gitignored `uv.lock` with
@@ -118,7 +120,8 @@ Refer to [Adding a sample](docs/source/guides/adding-a-sample.md) and the
   repository root, and run the full test suite. uv stops upward config discovery
   at a nearer `[tool.uv]` table; most nested projects define one through
   `[tool.uv.sources]`, so pass the root config explicitly. Do not commit
-  generated lockfiles.
+  generated lockfiles; `dependency-manifest/uv.lock` is the generated exception
+  described in `DEPENDENCIES.md`.
 - Never put API keys or tokens in source files. Use environment variables or
   the credential store documented in `docs/source/getting_started/credentials.md`.
 - Do not add an abstraction until two concrete use cases need it.
