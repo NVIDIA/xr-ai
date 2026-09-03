@@ -15,6 +15,7 @@ from xr_ai_voice import (
 from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent
 
 from .events import (
+    _INSTRUMENT_TRACKING_TOPIC,
     FOREGROUND_RECORD_TOPIC,
     INSTRUMENT_CHANGE_TOPIC,
     INSTRUMENT_LOST_TOPIC,
@@ -27,6 +28,7 @@ from .events import (
     InstrumentLost,
     InstrumentStateSnapshot,
     MonitorRecord,
+    _InstrumentTrackingUpdate,
 )
 
 
@@ -46,6 +48,14 @@ class WebEventsAdapterAgent(Agent):
 
     @subscribe(INSTRUMENT_LOST_TOPIC)
     async def instrument_lost(self, event: InstrumentLost, ctx: RuntimeContext) -> None:
+        await self._publish(ctx, "instruments.tracking", "Instrument tracking", event)
+
+    @subscribe(_INSTRUMENT_TRACKING_TOPIC)
+    async def instrument_tracking(
+        self,
+        event: _InstrumentTrackingUpdate,
+        ctx: RuntimeContext,
+    ) -> None:
         await self._publish(ctx, "instruments.tracking", "Instrument tracking", event)
 
     @subscribe(INSTRUMENT_STATE_TOPIC)
@@ -99,6 +109,7 @@ class WebEventsAdapterAgent(Agent):
         | InstrumentChange
         | InstrumentLost
         | InstrumentStateSnapshot
+        | _InstrumentTrackingUpdate
         | ForegroundRecord
         | VoiceTranscript,
     ) -> None:

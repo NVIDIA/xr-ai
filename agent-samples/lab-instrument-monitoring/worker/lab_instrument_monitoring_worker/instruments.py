@@ -78,6 +78,48 @@ class LabInstrumentAgent(Agent):
         )
         super().__init__((self.read_lab_instruments,))
 
+    async def _scan_instrument_sightings(
+        self,
+        participant_id: str,
+    ) -> list[InstrumentSighting]:
+        """Scan configured markers without waiting for display inference."""
+
+        try:
+            frame = await self._images.get_current_frame.execute(
+                CurrentFrameRequest(participant_id=participant_id)
+            )
+            tracked = await self._images.track_markers.execute(
+                MarkerTrackingRequest(
+                    participant_id=participant_id,
+                    image=frame.image,
+                )
+            )
+            if not tracked.available:
+                return []
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.opt(exception=True).warning(
+                "instrument marker scan failed pid={!r}",
+                participant_id,
+            )
+            return []
+
+        sightings: list[InstrumentSighting] = []
+        for marker in tracked.markers:
+            identity = self._device_map.resolve(marker.marker_type, marker.value)
+            if identity is None:
+                continue
+            sightings.append(
+                InstrumentSighting(
+                    timestamp_us=frame.timestamp_us,
+                    marker_type=marker.marker_type,
+                    marker_id=marker.value,
+                    device_name=identity.device_name,
+                )
+            )
+        return sightings
+
     async def _read_lab_instruments(
         self,
         request: ReadLabInstrumentsRequest,

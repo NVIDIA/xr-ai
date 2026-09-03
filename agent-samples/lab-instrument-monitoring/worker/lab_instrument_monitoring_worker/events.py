@@ -86,6 +86,19 @@ class InstrumentLost(BaseModel):
     last_seen_us: int = Field(ge=0)
 
 
+class _InstrumentTrackingUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_type: Literal["tracking"] = "tracking"
+    timestamp_us: int = Field(ge=0)
+    marker_type: MarkerType
+    marker_id: str = Field(min_length=1)
+    device_name: str = Field(min_length=1)
+    tracking: bool
+    meter_reading: str | None = None
+    last_seen_us: int = Field(ge=0)
+
+
 class InstrumentStateSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -124,6 +137,10 @@ INSTRUMENT_CHANGE_TOPIC = Topic(
 INSTRUMENT_LOST_TOPIC = Topic(
     "lab-instrument-monitoring.instrument-lost",
     InstrumentLost,
+)
+_INSTRUMENT_TRACKING_TOPIC = Topic(
+    "lab-instrument-monitoring.instrument-tracking",
+    _InstrumentTrackingUpdate,
 )
 INSTRUMENT_STATE_TOPIC = Topic(
     "lab-instrument-monitoring.instrument-state",

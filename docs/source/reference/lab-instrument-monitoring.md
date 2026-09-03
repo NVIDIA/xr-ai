@@ -202,31 +202,37 @@ tracker shape.
 ## Stateful monitoring
 
 `InstrumentMonitorAgent` owns one task group and tracker per participant. Its
-scan loop calls the one-frame reader. Its maintenance loop publishes lost-device
-events and complete state snapshots.
+fast scan loop reads marker presence directly, its reading loop calls the
+one-frame VLM reader, and its maintenance loop publishes lost-device events and
+complete state snapshots.
 
 Readings are normalized before comparison. If a later VLM response omits a
 unit, the previous known unit is retained. The agent publishes:
 
 - `InstrumentChange` when a device is first discovered;
 - `InstrumentChange` when its normalized value or unit changes;
+- a tracking transition when a configured marker appears or reappears;
 - `InstrumentLost` once after the device exceeds the last-seen timeout;
 - `InstrumentStateSnapshot` periodically, including tracking status.
 
-A mapped marker refreshes last-seen state even when its display is temporarily
-unreadable, so glare does not produce a false lost-device alert. A device moving
-in and out of view does not repeatedly alert unless its reading changes. This is
-application policy and belongs in the tracker rather than the VLM prompt or
-voice agent.
+A marker-only scan runs twice per second and drives tracked/not-tracked state
+without waiting for the VLM. The slower two-second joint VLM scan is responsible
+only for display readings and marker-to-housing association. A mapped marker
+refreshes last-seen state even when its display is temporarily unreadable, so
+glare does not produce a false lost-device alert. A device that returns after a
+lost transition produces a new tracked event even when its reading is unchanged.
+This is application policy and belongs in the tracker rather than the VLM prompt
+or voice agent.
 
-The checked-in demo scans instruments every two seconds and marks an instrument
-as lost after five seconds without a sighting. Ordinary reading changes are
-batched as non-urgent voice contributions on a five-second cadence, so the
+The checked-in demo marks an instrument as lost after five seconds without a
+sighting. Ordinary reading changes are batched as non-urgent voice contributions
+on a five-second cadence, so the
 sample's aggregation policy waits for estimated active playback to finish and
 then leaves five seconds of quiet before delivering the next reading update.
-Newly tracked and no-longer-tracked events are urgent: they bypass that cadence,
-take priority over queued contributions, and interrupt active voice output.
-Foreground responses remain urgent as well.
+Newly tracked and no-longer-tracked events use high scheduling priority: they
+bypass the quiet interval, take priority over routine queued contributions, and
+coalesce with simultaneous tracking changes. They wait for active speech to
+finish instead of interrupting it. Foreground responses remain urgent.
 
 Only marker identities present in `device_map.yaml` are treated as instruments.
 Unknown QR payloads and ArUco IDs are logged and ignored, preventing detector

@@ -17,21 +17,23 @@ from xr_ai_voice import (
     VOICE_CONTRIBUTION_TOPIC,
     VoiceOutput,
     VoiceParticipantLeft,
+    VoicePriority,
 )
 
 from .events import (
+    _INSTRUMENT_TRACKING_TOPIC,
     INSTRUMENT_CHANGE_TOPIC,
-    INSTRUMENT_LOST_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     InstrumentChange,
-    InstrumentLost,
+    _InstrumentTrackingUpdate,
 )
 
 _VOICE_INTERVAL_S = 5.0
 _SUMMARY_TIMEOUT_S = 5.0
 _SUMMARY_PROMPT = """Summarize instrument changes since the last spoken update.
-Describe the overall transition or trend for each instrument in one short natural sentence.
-Keep final readings and tracking status. Mention reversals or anomalies, but do not recite every intermediate reading.
+Use one brief, precise sentence with no preamble or filler.
+Keep instrument names, final readings, units, and tracking status. Mention only actionable reversals or anomalies.
+Prefer 20 words or fewer unless more words are required to preserve those facts.
 Do not invent values, units, causes, or instruments."""
 
 
@@ -85,37 +87,35 @@ class InstrumentAlertAgent(Agent):
                 ctx=ctx,
             ),
             immediate_text=(
-                f"Now tracking {event.device_name} at {event.meter_reading}."
+                f"{event.device_name}: {event.meter_reading}."
                 if event.change_type == "discovered"
-                else (
-                    f"{event.device_name} changed from {event.previous_reading} "
-                    f"to {event.meter_reading}."
-                )
+                else f"{event.device_name}: {event.previous_reading} to {event.meter_reading}."
             ),
         )
 
-    @subscribe(INSTRUMENT_LOST_TOPIC)
-    async def instrument_lost(
+    @subscribe(_INSTRUMENT_TRACKING_TOPIC)
+    async def tracking_changed(
         self,
-        event: InstrumentLost,
+        event: _InstrumentTrackingUpdate,
         ctx: RuntimeContext,
     ) -> None:
-        await self._accept(
-            self._participant(ctx),
-            _Alert(
-                key=(str(event.marker_type), event.marker_id),
-                device_name=event.device_name,
-                meter_reading=event.meter_reading,
-                timestamp_us=event.timestamp_us,
-                lost=True,
-                discovered=False,
-                previous_reading=None,
-                ctx=ctx,
-            ),
-            immediate_text=(
-                f"I am no longer tracking {event.device_name}. "
-                f"Its last reading was {event.meter_reading}."
-            ),
+        participant_id = self._participant(ctx)
+        key = (str(event.marker_type), event.marker_id)
+        async with self._lock:
+            state = self._states.setdefault(participant_id, _ParticipantAlerts())
+            state.pending.pop(key, None)
+            state.last_spoken_at = asyncio.get_running_loop().time()
+        if event.tracking:
+            text = f"Tracking {event.device_name}."
+        elif event.meter_reading is None:
+            text = f"Lost {event.device_name}."
+        else:
+            text = f"Lost {event.device_name}. Last reading: {event.meter_reading}."
+        await self._publish(
+            ctx,
+            text,
+            event.timestamp_us,
+            priority=VoicePriority.HIGH,
         )
 
     @subscribe(PARTICIPANT_LEFT_TOPIC)
@@ -155,41 +155,32 @@ class InstrumentAlertAgent(Agent):
     ) -> None:
         now = asyncio.get_running_loop().time()
         speak_now = False
-        interrupt = alert.discovered or alert.lost
         async with self._lock:
             state = self._states.setdefault(participant_id, _ParticipantAlerts())
-            if interrupt:
-                # Tracking-state transitions supersede any stale reading update
-                # for this instrument and bypass routine monitoring cadence.
-                state.pending.pop(alert.key, None)
+            quiet = (
+                state.last_spoken_at is None
+                or now - state.last_spoken_at >= _VOICE_INTERVAL_S
+            )
+            if quiet and not state.pending:
                 state.last_spoken_at = now
                 speak_now = True
             else:
-                quiet = (
-                    state.last_spoken_at is None
-                    or now - state.last_spoken_at >= _VOICE_INTERVAL_S
-                )
-                if quiet and not state.pending:
-                    state.last_spoken_at = now
-                    speak_now = True
-                else:
-                    state.pending.setdefault(alert.key, []).append(alert)
-                    if state.flush_task is None or state.flush_task.done():
-                        delay_s = max(
-                            0.0,
-                            _VOICE_INTERVAL_S - (now - (state.last_spoken_at or now)),
-                        )
-                        state.flush_task = asyncio.create_task(
-                            self._flush_after(participant_id, state, delay_s),
-                            name=f"instrument-voice-summary:{participant_id}",
-                            context=nemo_relay.fork_asyncio_context(),
-                        )
+                state.pending.setdefault(alert.key, []).append(alert)
+                if state.flush_task is None or state.flush_task.done():
+                    delay_s = max(
+                        0.0,
+                        _VOICE_INTERVAL_S - (now - (state.last_spoken_at or now)),
+                    )
+                    state.flush_task = asyncio.create_task(
+                        self._flush_after(participant_id, state, delay_s),
+                        name=f"instrument-voice-summary:{participant_id}",
+                        context=nemo_relay.fork_asyncio_context(),
+                    )
         if speak_now:
             await self._publish(
                 alert.ctx,
                 immediate_text,
                 alert.timestamp_us,
-                interrupt=interrupt,
             )
 
     async def _flush_after(
@@ -273,17 +264,15 @@ class InstrumentAlertAgent(Agent):
             last = history[-1]
             if last.lost:
                 updates.append(
-                    f"No longer tracking {last.device_name}; its last reading was "
-                    f"{last.meter_reading}."
+                    f"Lost {last.device_name} at {last.meter_reading}."
                 )
             elif first.previous_reading:
                 updates.append(
-                    f"{last.device_name} moved from {first.previous_reading} "
-                    f"to {last.meter_reading}."
+                    f"{last.device_name}: {first.previous_reading} to {last.meter_reading}."
                 )
             else:
-                updates.append(f"{last.device_name} now reads {last.meter_reading}.")
-        return "Instrument update: " + " ".join(updates)
+                updates.append(f"{last.device_name}: {last.meter_reading}.")
+        return " ".join(updates)
 
     @staticmethod
     async def _publish(
@@ -291,14 +280,14 @@ class InstrumentAlertAgent(Agent):
         text: str,
         timestamp_us: int,
         *,
-        interrupt: bool = False,
+        priority: VoicePriority = VoicePriority.NORMAL,
     ) -> None:
         try:
             await ctx.publish(
                 VOICE_CONTRIBUTION_TOPIC,
                 VoiceOutput(
                     text=text,
-                    interrupt=interrupt,
+                    priority=priority,
                     timestamp_us=timestamp_us,
                 ),
             )

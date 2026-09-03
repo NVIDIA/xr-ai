@@ -16,7 +16,7 @@ from loguru import logger
 from xr_ai_models import ChatMessage, LLMService
 from xr_ai_runtime import Agent, RuntimeClosedError, RuntimeContext, Topic, subscribe
 
-from ._runtime import VOICE_OUTPUT_TOPIC, VoiceOutput
+from ._runtime import VOICE_OUTPUT_TOPIC, VoiceOutput, VoicePriority
 
 VOICE_CONTRIBUTION_TOPIC = Topic(
     "voice.contribution",
@@ -63,8 +63,9 @@ class VoiceAggregationAgent(Agent):
     so later updates wait and coalesce instead of building a speech queue.
     Multiple pending finite contributions are rewritten into one response. A
     lone incremental response streams through immediately and uses the same
-    scheduling reservation after its final chunk. An urgent contribution
-    interrupts the active output.
+    scheduling reservation after its final chunk. High-priority contributions
+    move ahead of routine pending work without interrupting active output. An
+    urgent contribution interrupts the active output.
     """
 
     def __init__(
@@ -233,7 +234,8 @@ class VoiceAggregationAgent(Agent):
                 await self._forward_stream(participant_id, state, contribution)
                 return
             batch = await self._finite_batch(state, contribution)
-            await self._speak_batch(participant_id, state, batch)
+            if batch:
+                await self._speak_batch(participant_id, state, batch)
         finally:
             state.in_flight_count = 0
 
@@ -243,15 +245,23 @@ class VoiceAggregationAgent(Agent):
         contribution: _Contribution,
     ) -> None:
         if len(state.pending) >= self._queue_capacity:
-            victim_index = next(
-                (index for index, pending in enumerate(state.pending) if not pending.output.interrupt),
-                None,
-            )
-            if victim_index is None and not contribution.output.interrupt:
+            incoming_rank = self._schedule_rank(contribution)
+            candidates = [
+                (index, self._schedule_rank(pending))
+                for index, pending in enumerate(state.pending)
+                if contribution.output.interrupt
+                or (
+                    not pending.output.interrupt
+                    and self._schedule_rank(pending) <= incoming_rank
+                )
+            ]
+            if not candidates:
                 self._drop_contribution(state, contribution, incoming=True)
                 return
-            if victim_index is None:
-                victim_index = 0
+            lowest_rank = min(rank for _index, rank in candidates)
+            victim_index = next(
+                index for index, rank in candidates if rank == lowest_rank
+            )
             victim = state.pending[victim_index]
             del state.pending[victim_index]
             self._drop_contribution(state, victim, incoming=False)
@@ -285,9 +295,9 @@ class VoiceAggregationAgent(Agent):
     ) -> None:
         state.pending.extendleft(reversed(batch))
         while len(state.pending) > self._queue_capacity:
-            victim_index = next(
-                (index for index, pending in enumerate(state.pending) if not pending.output.interrupt),
-                0,
+            victim_index = min(
+                range(len(state.pending)),
+                key=lambda index: self._schedule_rank(state.pending[index]),
             )
             victim = state.pending[victim_index]
             del state.pending[victim_index]
@@ -346,11 +356,17 @@ class VoiceAggregationAgent(Agent):
             return False
         return True
 
-    @staticmethod
-    def _pop_next(state: _ParticipantState) -> _Contribution | None:
+    @classmethod
+    def _pop_next(cls, state: _ParticipantState) -> _Contribution | None:
         if not state.pending:
             return None
-        return state.pending.popleft()
+        index = max(
+            range(len(state.pending)),
+            key=lambda item: cls._schedule_rank(state.pending[item]),
+        )
+        contribution = state.pending[index]
+        del state.pending[index]
+        return contribution
 
     async def _wait_for_next(self, state: _ParticipantState) -> _Contribution:
         while True:
@@ -373,6 +389,7 @@ class VoiceAggregationAgent(Agent):
         if self._coalesce_window_s:
             await asyncio.sleep(self._coalesce_window_s)
         batch = [first]
+        priority = first.output.priority
         while len(batch) < self._max_batch_size:
             contribution = self._pop_next(state)
             if contribution is None:
@@ -386,16 +403,31 @@ class VoiceAggregationAgent(Agent):
                 continue
             if key is not None and not contribution.output.final:
                 state.pending.appendleft(contribution)
-                urgent = self._pop_finite_interrupt(state)
-                if urgent is not None:
+                preempting = self._pop_finite_preemption(state, priority)
+                if preempting is not None:
                     self._restore_batch(state, batch)
-                    return [urgent]
+                    if preempting.output.interrupt:
+                        return [preempting]
+                    state.pending.appendleft(preempting)
+                    state.changed.set()
+                    return []
                 state.changed.set()
                 break
             if contribution.output.interrupt:
                 state.pending.extendleft(reversed(batch))
                 state.changed.set()
                 return [contribution]
+            if self._priority_rank(contribution.output.priority) > self._priority_rank(
+                priority
+            ):
+                self._restore_batch(state, batch)
+                state.pending.appendleft(contribution)
+                state.changed.set()
+                return []
+            if contribution.output.priority != priority:
+                state.pending.appendleft(contribution)
+                state.changed.set()
+                break
             batch.append(contribution)
         return batch
 
@@ -523,6 +555,7 @@ class VoiceAggregationAgent(Agent):
                     response_id=response_id,
                     final=contribution.output.final,
                     interrupt=interrupt,
+                    priority=contribution.output.priority,
                     timestamp_us=contribution.output.timestamp_us,
                 ),
             )
@@ -539,6 +572,7 @@ class VoiceAggregationAgent(Agent):
                 VOICE_OUTPUT_TOPIC,
                 VoiceOutput(
                     response_id=response_id,
+                    priority=contribution.output.priority,
                     timestamp_us=contribution.output.timestamp_us,
                 ),
             )
@@ -563,37 +597,37 @@ class VoiceAggregationAgent(Agent):
                 name=f"voice-aggregation-rewrite:{participant_id}",
                 context=nemo_relay.fork_asyncio_context(),
             )
-            urgent = asyncio.create_task(
-                self._wait_for_interrupt(state),
-                name=f"voice-aggregation-interrupt:{participant_id}",
+            preempting = asyncio.create_task(
+                self._wait_for_preemption(state, batch[0].output.priority),
+                name=f"voice-aggregation-preemption:{participant_id}",
             )
             try:
                 done, _pending = await asyncio.wait(
-                    (rewrite, urgent),
+                    (rewrite, preempting),
                     return_when=asyncio.FIRST_COMPLETED,
                 )
-                if urgent in done:
+                if preempting in done:
                     state.in_flight_count += 1
                     logger.debug(
-                        "urgent voice contribution preempted rewrite pid={!r}",
+                        "higher-priority voice contribution preempted rewrite pid={!r}",
                         participant_id,
                     )
                     rewrite.cancel()
                     await asyncio.gather(rewrite, return_exceptions=True)
                     self._restore_batch(state, batch)
                     state.in_flight_count = 1
-                    await self._dispatch_urgent(
+                    await self._dispatch_preempting(
                         participant_id,
                         state,
-                        urgent.result(),
+                        preempting.result(),
                     )
                     return
                 text = rewrite.result()
             finally:
-                for task in (rewrite, urgent):
+                for task in (rewrite, preempting):
                     if not task.done():
                         task.cancel()
-                await asyncio.gather(rewrite, urgent, return_exceptions=True)
+                await asyncio.gather(rewrite, preempting, return_exceptions=True)
         if not text:
             state.in_flight_count = 0
             return
@@ -614,6 +648,7 @@ class VoiceAggregationAgent(Agent):
                 # Closing it here lets the data echo reach the client now.
                 final=True,
                 interrupt=interrupts,
+                priority=batch[0].output.priority,
                 timestamp_us=timestamp_us,
             ),
             ctx=batch[0].ctx,
@@ -637,6 +672,16 @@ class VoiceAggregationAgent(Agent):
                 urgent_contribution,
             )
             return
+        priority_contribution = await self._hold_priority_delay(
+            state,
+            self._post_playback_delay(output.output),
+        )
+        if priority_contribution is not None:
+            await self._dispatch_preempting(
+                participant_id,
+                state,
+                priority_contribution,
+            )
 
     async def _hold_output(
         self,
@@ -669,6 +714,36 @@ class VoiceAggregationAgent(Agent):
                 return contribution
             await state.changed.wait()
 
+    async def _hold_priority_delay(
+        self,
+        state: _ParticipantState,
+        duration_s: float,
+    ) -> _Contribution | None:
+        if duration_s <= 0:
+            return None
+        try:
+            return await asyncio.wait_for(
+                self._wait_for_preemption(state, VoicePriority.NORMAL),
+                timeout=duration_s,
+            )
+        except TimeoutError:
+            return None
+
+    async def _wait_for_preemption(
+        self,
+        state: _ParticipantState,
+        priority: VoicePriority,
+    ) -> _Contribution:
+        while True:
+            contribution = self._pop_preemption(state, priority)
+            if contribution is not None:
+                return contribution
+            state.changed.clear()
+            contribution = self._pop_preemption(state, priority)
+            if contribution is not None:
+                return contribution
+            await state.changed.wait()
+
     @staticmethod
     def _pop_interrupt(state: _ParticipantState) -> _Contribution | None:
         for index, contribution in enumerate(state.pending):
@@ -677,13 +752,54 @@ class VoiceAggregationAgent(Agent):
                 return contribution
         return None
 
-    @staticmethod
-    def _pop_finite_interrupt(state: _ParticipantState) -> _Contribution | None:
-        for index, contribution in enumerate(state.pending):
-            if contribution.output.interrupt and (contribution.stream_key is None or contribution.output.final):
-                del state.pending[index]
-                return contribution
-        return None
+    @classmethod
+    def _pop_preemption(
+        cls,
+        state: _ParticipantState,
+        priority: VoicePriority,
+    ) -> _Contribution | None:
+        baseline = cls._priority_rank(priority)
+        candidates = [
+            index
+            for index, contribution in enumerate(state.pending)
+            if contribution.output.interrupt
+            or cls._priority_rank(contribution.output.priority) > baseline
+        ]
+        if not candidates:
+            return None
+        index = max(
+            candidates,
+            key=lambda item: cls._schedule_rank(state.pending[item]),
+        )
+        contribution = state.pending[index]
+        del state.pending[index]
+        return contribution
+
+    @classmethod
+    def _pop_finite_preemption(
+        cls,
+        state: _ParticipantState,
+        priority: VoicePriority,
+    ) -> _Contribution | None:
+        baseline = cls._priority_rank(priority)
+        candidates = [
+            index
+            for index, contribution in enumerate(state.pending)
+            if (
+                contribution.output.interrupt
+                or cls._priority_rank(contribution.output.priority) > baseline
+            )
+            and (contribution.stream_key is None or contribution.output.final)
+        ]
+        if not candidates:
+            return None
+        index = max(
+            candidates,
+            key=lambda item: cls._schedule_rank(state.pending[item]),
+        )
+        contribution = state.pending[index]
+        del state.pending[index]
+        return contribution
 
     async def _dispatch_urgent(
         self,
@@ -698,12 +814,37 @@ class VoiceAggregationAgent(Agent):
             return
         await self._speak_batch(participant_id, state, [contribution])
 
+    async def _dispatch_preempting(
+        self,
+        participant_id: str,
+        state: _ParticipantState,
+        contribution: _Contribution,
+    ) -> None:
+        if contribution.output.interrupt:
+            await self._dispatch_urgent(participant_id, state, contribution)
+            return
+        await self._process_contribution(participant_id, state, contribution)
+
     def _playback_duration(self, text: str) -> float:
         words = len(text.split())
         estimated_s = words * 60.0 / self._speech_rate_wpm
         return min(
             self._maximum_playback_s,
             max(self._minimum_playback_s, estimated_s),
+        )
+
+    def _post_playback_delay(self, _output: VoiceOutput) -> float:
+        return 0.0
+
+    @staticmethod
+    def _priority_rank(priority: VoicePriority) -> int:
+        return 1 if priority is VoicePriority.HIGH else 0
+
+    @classmethod
+    def _schedule_rank(cls, contribution: _Contribution) -> tuple[int, int]:
+        return (
+            int(contribution.output.interrupt),
+            cls._priority_rank(contribution.output.priority),
         )
 
     @staticmethod

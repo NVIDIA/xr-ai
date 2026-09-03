@@ -10,6 +10,7 @@ from builtins import BaseExceptionGroup
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -72,6 +73,13 @@ class VoiceParticipantLeft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class VoicePriority(StrEnum):
+    """Scheduling priority for aggregated voice output."""
+
+    NORMAL = "normal"
+    HIGH = "high"
+
+
 class VoiceInterrupted(BaseModel):
     """Notification that participant-scoped or global voice work was interrupted."""
 
@@ -94,6 +102,9 @@ class VoiceOutput(BaseModel):
 
     interrupt: bool = False
     """Whether the first response message supersedes active voice output."""
+
+    priority: VoicePriority = VoicePriority.NORMAL
+    """Aggregation priority, independent of whether active speech is interrupted."""
 
     timestamp_us: int | None = Field(default=None, ge=0)
     """Optional originating input timestamp propagated to TTS."""
@@ -728,6 +739,7 @@ __all__ = [
     "VoiceOutput",
     "VoiceParticipantJoined",
     "VoiceParticipantLeft",
+    "VoicePriority",
     "VoiceStreamClosedError",
     "VoiceTranscript",
 ]

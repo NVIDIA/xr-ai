@@ -16,6 +16,7 @@ from xr_ai_voice import (
     VOICE_OUTPUT_TOPIC,
     VoiceAggregationAgent,
     VoiceOutput,
+    VoicePriority,
 )
 
 
@@ -685,6 +686,53 @@ async def test_urgent_contribution_interrupts_active_stream() -> None:
     ]
     assert recorder.outputs[-1][0].interrupt is True
     assert llm.calls == []
+
+
+async def test_high_priority_updates_aggregate_ahead_without_interrupting() -> None:
+    llm = _LLM("Now tracking Device1 and Device2.")
+    runtime, aggregator, recorder = await _start(
+        llm,
+        minimum_playback_s=0.1,
+        coalesce_window_s=0.02,
+    )
+    try:
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Current response."),
+            participant_id="alice",
+            source="foreground",
+        )
+        await recorder.wait_for(1)
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Routine reading update."),
+            participant_id="alice",
+            source="instrument-readings",
+        )
+        for text in ("Now tracking Device1.", "Now tracking Device2."):
+            await runtime.publish(
+                VOICE_CONTRIBUTION_TOPIC,
+                VoiceOutput(text=text, priority=VoicePriority.HIGH),
+                participant_id="alice",
+                source="instrument-tracking",
+            )
+        await asyncio.sleep(0.03)
+        assert len(recorder.outputs) == 1
+        await recorder.wait_for(3)
+    finally:
+        await _stop(runtime, aggregator)
+
+    assert [output.text for output, _metadata in recorder.outputs] == [
+        "Current response.",
+        "Now tracking Device1 and Device2.",
+        "Routine reading update.",
+    ]
+    tracking = recorder.outputs[1][0]
+    assert tracking.priority is VoicePriority.HIGH
+    assert tracking.interrupt is False
+    assert len(llm.calls) == 1
+    assert "Now tracking Device1." in str(llm.calls[0][0][-1].content)
+    assert "Now tracking Device2." in str(llm.calls[0][0][-1].content)
 
 
 async def test_urgent_batch_speaks_alert_first_and_retains_routine_order() -> None:

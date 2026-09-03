@@ -33,6 +33,7 @@ from xr_ai_voice import (
     VoiceOutput,
     VoiceParticipantJoined,
     VoiceParticipantLeft,
+    VoicePriority,
     VoiceTranscript,
 )
 from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent
@@ -54,6 +55,7 @@ from lab_instrument_monitoring_worker.app import (  # noqa: E402  # pyright: ign
 from lab_instrument_monitoring_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
 from lab_instrument_monitoring_worker.device_map import DeviceMap  # noqa: E402  # pyright: ignore[reportMissingImports]
 from lab_instrument_monitoring_worker.events import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    _INSTRUMENT_TRACKING_TOPIC,
     FOREGROUND_RECORD_TOPIC,
     INSTRUMENT_CHANGE_TOPIC,
     INSTRUMENT_LOST_TOPIC,
@@ -68,6 +70,7 @@ from lab_instrument_monitoring_worker.events import (  # noqa: E402  # pyright: 
     InstrumentSighting,
     InstrumentStateSnapshot,
     MonitorRecord,
+    _InstrumentTrackingUpdate,
 )
 from lab_instrument_monitoring_worker.file_output import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     FileOutputAgent,
@@ -118,6 +121,7 @@ class _InstrumentEventCollector(Agent):
         self.changes: list[InstrumentChange] = []
         self.lost: list[InstrumentLost] = []
         self.snapshots: list[InstrumentStateSnapshot] = []
+        self.tracking: list[_InstrumentTrackingUpdate] = []
         self.voice: list[VoiceOutput] = []
 
     @subscribe(INSTRUMENT_CHANGE_TOPIC)
@@ -127,6 +131,14 @@ class _InstrumentEventCollector(Agent):
     @subscribe(INSTRUMENT_LOST_TOPIC)
     async def tracking_lost(self, event: InstrumentLost, _ctx: RuntimeContext) -> None:
         self.lost.append(event)
+
+    @subscribe(_INSTRUMENT_TRACKING_TOPIC)
+    async def tracking_changed(
+        self,
+        event: _InstrumentTrackingUpdate,
+        _ctx: RuntimeContext,
+    ) -> None:
+        self.tracking.append(event)
 
     @subscribe(INSTRUMENT_STATE_TOPIC)
     async def state(self, event: InstrumentStateSnapshot, _ctx: RuntimeContext) -> None:
@@ -661,6 +673,52 @@ async def test_instrument_reader_returns_sighting_when_display_is_unreadable(
 
 
 @pytest.mark.asyncio
+async def test_instrument_marker_scan_does_not_call_vlm() -> None:
+    marker = TrackedMarker(
+        marker_type=MarkerType.QR_CODE,
+        value="meter-a",
+        corners=[
+            MarkerPoint(x=1, y=1),
+            MarkerPoint(x=2, y=1),
+            MarkerPoint(x=2, y=2),
+            MarkerPoint(x=1, y=2),
+        ],
+    )
+    images = _make_images()
+    agent = _make_instruments(images)
+
+    async def current_frame(_request):
+        return ImageFrame(
+            image=ImageReference(uri="xr-image://frame-1"),
+            timestamp_us=17,
+            width=640,
+            height=480,
+            sequence=3,
+            participant_id="participant-1",
+        )
+
+    async def tracked_markers(_request):
+        return SimpleNamespace(available=True, markers=[marker], message="")
+
+    images.get_current_frame = SimpleNamespace(execute=current_frame)  # type: ignore[assignment]
+    images.track_markers = SimpleNamespace(execute=tracked_markers)  # type: ignore[assignment]
+    agent._query_image = SimpleNamespace(  # type: ignore[assignment]
+        execute=lambda _request: pytest.fail("marker-only scan called the VLM")
+    )
+
+    sightings = await agent._scan_instrument_sightings("participant-1")
+
+    assert sightings == [
+        InstrumentSighting(
+            timestamp_us=17,
+            marker_type=MarkerType.QR_CODE,
+            marker_id="meter-a",
+            device_name="Device1",
+        )
+    ]
+
+
+@pytest.mark.asyncio
 async def test_instrument_reader_queries_all_markers_once_and_maps_joint_result() -> None:
     markers = [
         TrackedMarker(
@@ -902,20 +960,29 @@ async def test_instrument_monitor_emits_only_changes_lost_once_and_full_state(
     assert collector.snapshots[-1].instruments[0].marker_id == "meter-a"
     assert collector.snapshots[-1].instruments[0].device_name == "Device1"
     assert collector.snapshots[-1].instruments[0].tracking is True
+    assert [event.tracking for event in collector.tracking] == [True, False, True]
     assert [output.text for output in collector.voice] == [
-        "Now tracking Device1 at 12 V.",
-        "I am no longer tracking Device1. Its last reading was 12 V.",
+        "Tracking Device1.",
+        "Lost Device1. Last reading: 12 V.",
+        "Tracking Device1.",
         "Device1 increased overall to 13.5 V.",
-        "Device1 changed from 13.5 V to 14 V.",
+        "Device1: 13.5 V to 14 V.",
     ]
-    assert [output.interrupt for output in collector.voice] == [True, True, False, False]
+    assert [output.interrupt for output in collector.voice] == [False] * 5
+    assert [output.priority for output in collector.voice] == [
+        VoicePriority.HIGH,
+        VoicePriority.HIGH,
+        VoicePriority.HIGH,
+        VoicePriority.NORMAL,
+        VoicePriority.NORMAL,
+    ]
     assert len(summary_requests) == 1
     assert '"reading": "13 V"' in summary_requests[0]
     assert '"reading": "13.5 V"' in summary_requests[0]
 
 
 @pytest.mark.asyncio
-async def test_instrument_tracking_updates_bypass_batch_and_interrupt(
+async def test_instrument_tracking_updates_bypass_batch_at_high_priority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -959,24 +1026,24 @@ async def test_instrument_tracking_updates_bypass_batch_and_interrupt(
         ),
         ctx,  # type: ignore[arg-type]
     )
-    await alerts.reading_changed(
-        InstrumentChange(
+    await alerts.tracking_changed(
+        _InstrumentTrackingUpdate(
             timestamp_us=3,
-            change_type="discovered",
             marker_type=MarkerType.QR_CODE,
             marker_id="meter-b",
             device_name="Device2",
-            meter_reading="3 A",
+            tracking=True,
             last_seen_us=3,
         ),
         ctx,  # type: ignore[arg-type]
     )
-    await alerts.instrument_lost(
-        InstrumentLost(
+    await alerts.tracking_changed(
+        _InstrumentTrackingUpdate(
             timestamp_us=4,
             marker_type=MarkerType.QR_CODE,
             marker_id="meter-a",
             device_name="Device1",
+            tracking=False,
             meter_reading="13 V",
             last_seen_us=2,
         ),
@@ -985,11 +1052,16 @@ async def test_instrument_tracking_updates_bypass_batch_and_interrupt(
     await alerts.stop()
 
     assert [output.text for output in published] == [
-        "Device1 changed from 11 V to 12 V.",
-        "Now tracking Device2 at 3 A.",
-        "I am no longer tracking Device1. Its last reading was 13 V.",
+        "Device1: 11 V to 12 V.",
+        "Tracking Device2.",
+        "Lost Device1. Last reading: 13 V.",
     ]
-    assert [output.interrupt for output in published] == [False, True, True]
+    assert [output.interrupt for output in published] == [False, False, False]
+    assert [output.priority for output in published] == [
+        VoicePriority.NORMAL,
+        VoicePriority.HIGH,
+        VoicePriority.HIGH,
+    ]
 
 
 @pytest.mark.asyncio
@@ -1031,6 +1103,56 @@ async def test_instrument_monitor_emits_changes_when_only_unit_changes() -> None
         ("1 A", "12 V"),
         ("12 V", "12 mV"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_marker_sightings_drive_tracking_without_vlm_readings() -> None:
+    monitor = _make_instrument_monitor()
+    collector = _InstrumentEventCollector()
+    runtime = AgentRuntime()
+    runtime.register("instrument-monitor", monitor)
+    runtime.register("collector", collector)
+    device1 = InstrumentSighting(
+        timestamp_us=1,
+        marker_type=MarkerType.QR_CODE,
+        marker_id="meter-a",
+        device_name="Device1",
+    )
+    device2 = InstrumentSighting(
+        timestamp_us=1,
+        marker_type=MarkerType.ARUCO,
+        marker_id="23",
+        device_name="Device2",
+    )
+
+    async with runtime:
+        monitor.bind_runtime(runtime)
+        monitor._trackers["participant-1"] = _ParticipantTracker()
+        await monitor._observe_tracking(
+            "participant-1",
+            [device1, device2],
+            observed_at=100.0,
+        )
+        await monitor._publish_lost("participant-1", 116.0)
+        await monitor._observe_tracking(
+            "participant-1",
+            [device1.model_copy(update={"timestamp_us": 2})],
+            observed_at=117.0,
+        )
+        await monitor.stop()
+
+    assert [
+        (event.device_name, event.tracking)
+        for event in collector.tracking
+    ] == [
+        ("Device1", True),
+        ("Device2", True),
+        ("Device1", False),
+        ("Device2", False),
+        ("Device1", True),
+    ]
+    assert collector.changes == []
+    assert collector.lost == []
 
 
 @pytest.mark.asyncio
@@ -1233,7 +1355,9 @@ async def test_participant_leave_releases_voice_aggregation_state() -> None:
 def test_instrument_voice_aggregation_leaves_post_playback_spacing() -> None:
     aggregation = _InstrumentVoiceAggregationAgent(llm=object())  # type: ignore[arg-type]
 
-    assert aggregation._playback_duration("one two three four five") == pytest.approx(7.0)
+    output = VoiceOutput(text="one two three four five")
+    assert aggregation._playback_duration(output.text) == pytest.approx(2.0)
+    assert aggregation._post_playback_delay(output) == 5.0
 
 
 @pytest.mark.asyncio

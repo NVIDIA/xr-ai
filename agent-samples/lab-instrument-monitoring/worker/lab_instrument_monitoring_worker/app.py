@@ -20,6 +20,7 @@ from xr_ai_voice import (
     VadConfig,
     VoiceAgent,
     VoiceAggregationAgent,
+    VoiceOutput,
     VoiceParticipantLeft,
 )
 from xr_ai_voicegate import load_voice_gate_config
@@ -42,13 +43,17 @@ from .monitor import MonitorAgent
 from .web_events import WebEventsAdapterAgent
 
 _MONITORING_VOICE_SPACING_S = 5.0
+_VOICE_AGGREGATION_PROMPT = """Combine simultaneous spoken updates into one brief, precise sentence.
+Preserve every instrument name, value, unit, tracking status, and actionable warning.
+Remove repetition, preambles, explanations, and filler. Do not invent information.
+Prefer 20 words or fewer unless more words are required to preserve those facts."""
 
 
 class _InstrumentVoiceAggregationAgent(VoiceAggregationAgent):
     """Leave a quiet interval before the next routine monitoring update."""
 
-    def _playback_duration(self, text: str) -> float:
-        return super()._playback_duration(text) + _MONITORING_VOICE_SPACING_S
+    def _post_playback_delay(self, _output: VoiceOutput) -> float:
+        return _MONITORING_VOICE_SPACING_S
 
 
 class _VoiceAggregationLifecycleAgent(Agent):
@@ -202,7 +207,10 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     )
     voice_aggregation = runtime.register(
         "voice-aggregation",
-        _InstrumentVoiceAggregationAgent(llm=llm),
+        _InstrumentVoiceAggregationAgent(
+            llm=llm,
+            prompt=_VOICE_AGGREGATION_PROMPT,
+        ),
     )
     runtime.register(
         "voice-aggregation-lifecycle",

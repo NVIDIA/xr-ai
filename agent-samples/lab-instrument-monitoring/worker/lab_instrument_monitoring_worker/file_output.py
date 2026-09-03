@@ -24,6 +24,7 @@ from xr_ai_voice import (
 )
 
 from .events import (
+    _INSTRUMENT_TRACKING_TOPIC,
     FOREGROUND_RECORD_TOPIC,
     INSTRUMENT_CHANGE_TOPIC,
     INSTRUMENT_LOST_TOPIC,
@@ -36,6 +37,7 @@ from .events import (
     InstrumentLost,
     InstrumentStateSnapshot,
     MonitorRecord,
+    _InstrumentTrackingUpdate,
 )
 
 _SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
@@ -137,6 +139,14 @@ class FileOutputAgent(Agent):
     ) -> None:
         await self._write_instrument_event(record, ctx)
 
+    @subscribe(_INSTRUMENT_TRACKING_TOPIC)
+    async def write_instrument_tracking(
+        self,
+        record: _InstrumentTrackingUpdate,
+        ctx: RuntimeContext,
+    ) -> None:
+        await self._write_instrument_event(record, ctx)
+
     @subscribe(INSTRUMENT_STATE_TOPIC)
     async def write_instrument_state(
         self,
@@ -218,7 +228,10 @@ class FileOutputAgent(Agent):
 
     async def _write_instrument_event(
         self,
-        record: InstrumentChange | InstrumentLost | InstrumentStateSnapshot,
+        record: InstrumentChange
+        | InstrumentLost
+        | InstrumentStateSnapshot
+        | _InstrumentTrackingUpdate,
         ctx: RuntimeContext,
     ) -> None:
         state = await self._state(self._participant(ctx))

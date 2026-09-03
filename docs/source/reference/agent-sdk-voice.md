@@ -93,7 +93,12 @@ register one `VoiceAggregationAgent`. Producers publish to
 `VOICE_OUTPUT_TOPIC`.
 
 ```python
-from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC, VoiceAggregationAgent, VoiceOutput
+from xr_ai_voice import (
+    VOICE_CONTRIBUTION_TOPIC,
+    VoiceAggregationAgent,
+    VoiceOutput,
+    VoicePriority,
+)
 
 aggregation = runtime.register(
     "voice-aggregation",
@@ -102,7 +107,7 @@ aggregation = runtime.register(
 
 await ctx.publish(
     VOICE_CONTRIBUTION_TOPIC,
-    VoiceOutput(text="The timer is done."),
+    VoiceOutput(text="The timer is done.", priority=VoicePriority.HIGH),
 )
 ```
 
@@ -113,11 +118,14 @@ open-loop spoken-duration estimate schedules later speech. Tune its word rate
 and playback bounds for the selected voice; the estimate is not an audio
 acknowledgement.
 
-Rewrite timeout or failure falls back to ordered source text. Urgent output
-bypasses coalescing, cancels a rewrite, and interrupts active speech. Bounded
-queues prefer recent alerts over routine updates and log every drop. Dropping
-or interrupting a streaming contribution quarantines its response ID through
-its terminator or idle expiry so stale fragments cannot reopen speech.
+Rewrite timeout or failure falls back to ordered source text. High-priority
+output moves ahead of routine queued contributions and can preempt an unspoken
+routine rewrite, but it waits for active speech to finish and still coalesces
+with simultaneous high-priority output. `interrupt=True` remains independent:
+it bypasses coalescing, cancels a rewrite, and interrupts active speech. Bounded
+queues preserve higher-priority work over routine updates and log every drop.
+Dropping or interrupting a streaming contribution quarantines its response ID
+through its terminator or idle expiry so stale fragments cannot reopen speech.
 
 Applications call `release(participant_id)` on departure and `stop()` before
 runtime shutdown. The aggregator logs accepted contributions discarded during

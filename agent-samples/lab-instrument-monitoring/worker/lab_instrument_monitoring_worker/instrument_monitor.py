@@ -20,6 +20,7 @@ from xr_ai_tools.marker_tracking import MarkerType
 from xr_ai_voice import VoiceParticipantLeft
 
 from .events import (
+    _INSTRUMENT_TRACKING_TOPIC,
     INSTRUMENT_CHANGE_TOPIC,
     INSTRUMENT_LOST_TOPIC,
     INSTRUMENT_STATE_TOPIC,
@@ -30,6 +31,7 @@ from .events import (
     InstrumentSighting,
     InstrumentState,
     InstrumentStateSnapshot,
+    _InstrumentTrackingUpdate,
 )
 from .instruments import LabInstrumentAgent, ReadLabInstrumentsRequest
 from .monitor import MonitoringRequest, MonitoringState
@@ -56,6 +58,7 @@ _UNIT_ALIASES = {
     "watt": "W",
     "watts": "W",
 }
+_TRACKING_SCAN_INTERVAL_S = 0.5
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,8 +83,22 @@ class _TrackedInstrument:
 
 
 @dataclass(slots=True)
+class _TrackedMarkerPresence:
+    marker_type: MarkerType
+    marker_id: str
+    device_name: str
+    first_seen_us: int
+    last_seen_us: int
+    last_seen_monotonic: float
+    tracking: bool = True
+
+
+@dataclass(slots=True)
 class _ParticipantTracker:
     instruments: dict[tuple[MarkerType, str], _TrackedInstrument] = field(default_factory=dict)
+    markers: dict[tuple[MarkerType, str], _TrackedMarkerPresence] = field(
+        default_factory=dict
+    )
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
@@ -227,8 +244,15 @@ class InstrumentMonitorAgent(Agent):
     async def _run(self, participant_id: str) -> None:
         with nemo_relay.use_scope_stack(nemo_relay.create_scope_stack()):
             async with asyncio.TaskGroup() as tasks:
+                tasks.create_task(self._tracking_scan_loop(participant_id))
                 tasks.create_task(self._scan_loop(participant_id))
                 tasks.create_task(self._maintenance_loop(participant_id))
+
+    async def _tracking_scan_loop(self, participant_id: str) -> None:
+        while True:
+            sightings = await self._reader._scan_instrument_sightings(participant_id)
+            await self._observe_tracking(participant_id, sightings)
+            await asyncio.sleep(_TRACKING_SCAN_INTERVAL_S)
 
     async def _scan_loop(self, participant_id: str) -> None:
         while True:
@@ -267,6 +291,22 @@ class InstrumentMonitorAgent(Agent):
         sightings: list[InstrumentSighting] | None = None,
         observed_at: float | None = None,
     ) -> None:
+        tracking_sightings = sightings
+        if tracking_sightings is None:
+            tracking_sightings = [
+                InstrumentSighting(
+                    timestamp_us=reading.timestamp_us,
+                    marker_type=reading.marker_type,
+                    marker_id=reading.marker_id,
+                    device_name=reading.device_name,
+                )
+                for reading in readings
+            ]
+        await self._observe_tracking(
+            participant_id,
+            tracking_sightings,
+            observed_at=observed_at,
+        )
         tracker = self._trackers.get(participant_id)
         runtime = self._runtime
         if tracker is None or runtime is None:
@@ -368,6 +408,76 @@ class InstrumentMonitorAgent(Agent):
                     change.device_name,
                 )
 
+    async def _observe_tracking(
+        self,
+        participant_id: str,
+        sightings: list[InstrumentSighting],
+        *,
+        observed_at: float | None = None,
+    ) -> None:
+        tracker = self._trackers.get(participant_id)
+        runtime = self._runtime
+        if tracker is None or runtime is None:
+            return
+        seen_at = time.monotonic() if observed_at is None else observed_at
+        updates: list[_InstrumentTrackingUpdate] = []
+        async with tracker.lock:
+            unique = {
+                (sighting.marker_type, sighting.marker_id): sighting
+                for sighting in sightings
+            }
+            for marker_key, sighting in unique.items():
+                presence = tracker.markers.get(marker_key)
+                reading = tracker.instruments.get(marker_key)
+                if presence is None:
+                    presence = _TrackedMarkerPresence(
+                        marker_type=sighting.marker_type,
+                        marker_id=sighting.marker_id,
+                        device_name=sighting.device_name,
+                        first_seen_us=sighting.timestamp_us,
+                        last_seen_us=sighting.timestamp_us,
+                        last_seen_monotonic=seen_at,
+                    )
+                    tracker.markers[marker_key] = presence
+                    updates.append(
+                        _InstrumentTrackingUpdate(
+                            timestamp_us=sighting.timestamp_us,
+                            marker_type=sighting.marker_type,
+                            marker_id=sighting.marker_id,
+                            device_name=sighting.device_name,
+                            tracking=True,
+                            meter_reading=(
+                                reading.state.meter_reading if reading is not None else None
+                            ),
+                            last_seen_us=sighting.timestamp_us,
+                        )
+                    )
+                else:
+                    if not presence.tracking:
+                        updates.append(
+                            _InstrumentTrackingUpdate(
+                                timestamp_us=sighting.timestamp_us,
+                                marker_type=sighting.marker_type,
+                                marker_id=sighting.marker_id,
+                                device_name=sighting.device_name,
+                                tracking=True,
+                                meter_reading=(
+                                    reading.state.meter_reading
+                                    if reading is not None
+                                    else None
+                                ),
+                                last_seen_us=sighting.timestamp_us,
+                            )
+                        )
+                    presence.last_seen_us = sighting.timestamp_us
+                    presence.last_seen_monotonic = seen_at
+                    presence.tracking = True
+                if reading is not None:
+                    reading.last_seen_monotonic = seen_at
+                    reading.state.last_seen_us = sighting.timestamp_us
+                    reading.state.tracking = True
+        await self._publish_tracking_updates(participant_id, updates)
+
     async def _publish_lost(self, participant_id: str, now: float) -> None:
         tracker = self._trackers.get(participant_id)
         runtime = self._runtime
@@ -375,7 +485,29 @@ class InstrumentMonitorAgent(Agent):
             return
         timestamp_us = time.time_ns() // 1_000
         lost: list[InstrumentLost] = []
+        tracking_updates: list[_InstrumentTrackingUpdate] = []
         async with tracker.lock:
+            for marker_key, presence in tracker.markers.items():
+                if (
+                    not presence.tracking
+                    or now - presence.last_seen_monotonic < self._lost_after_s
+                ):
+                    continue
+                presence.tracking = False
+                reading = tracker.instruments.get(marker_key)
+                tracking_updates.append(
+                    _InstrumentTrackingUpdate(
+                        timestamp_us=timestamp_us,
+                        marker_type=presence.marker_type,
+                        marker_id=presence.marker_id,
+                        device_name=presence.device_name,
+                        tracking=False,
+                        meter_reading=(
+                            reading.state.meter_reading if reading is not None else None
+                        ),
+                        last_seen_us=presence.last_seen_us,
+                    )
+                )
             for tracked in tracker.instruments.values():
                 if not tracked.state.tracking or now - tracked.last_seen_monotonic < self._lost_after_s:
                     continue
@@ -390,6 +522,7 @@ class InstrumentMonitorAgent(Agent):
                         last_seen_us=tracked.state.last_seen_us,
                     )
                 )
+        await self._publish_tracking_updates(participant_id, tracking_updates)
         for event in lost:
             try:
                 await runtime.publish(
@@ -405,6 +538,31 @@ class InstrumentMonitorAgent(Agent):
                     "instrument lost publish failed pid={!r} device={!r}",
                     participant_id,
                     event.device_name,
+                )
+
+    async def _publish_tracking_updates(
+        self,
+        participant_id: str,
+        updates: list[_InstrumentTrackingUpdate],
+    ) -> None:
+        runtime = self._runtime
+        if runtime is None:
+            return
+        for update in updates:
+            try:
+                await runtime.publish(
+                    _INSTRUMENT_TRACKING_TOPIC,
+                    update,
+                    participant_id=participant_id,
+                    source="instrument-tracking",
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.opt(exception=True).warning(
+                    "instrument tracking publish failed pid={!r} device={!r}",
+                    participant_id,
+                    update.device_name,
                 )
 
     async def _publish_snapshot(self, participant_id: str) -> None:
