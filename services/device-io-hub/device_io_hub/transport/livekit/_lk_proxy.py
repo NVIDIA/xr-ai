@@ -9,7 +9,7 @@ from wsgiref.util import is_hop_by_hop
 
 import httpx
 import websockets
-from fastapi import FastAPI, Request, WebSocket
+from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import Response
 from loguru import logger
 
@@ -29,8 +29,14 @@ def _forward_headers(items) -> dict[str, str]:
     }
 
 
+_RTC_PATHS = {"": "/rtc", "v1": "/rtc/v1"}
+
+
 def _rtc_path(tail: str) -> str:
-    return f"/rtc/{tail}" if tail else "/rtc"
+    try:
+        return _RTC_PATHS[tail]
+    except KeyError:
+        raise HTTPException(status_code=404) from None
 
 
 async def proxy_validate(
@@ -54,8 +60,11 @@ async def pump_rtc_ws(
     lk_internal_ws: str,
     tail: str = "",
 ) -> None:
+    if tail not in _RTC_PATHS:
+        await client_ws.close(code=1008)
+        return
     qs = client_ws.scope.get("query_string", b"").decode()
-    target = f"{lk_internal_ws}{_rtc_path(tail)}?{qs}"
+    target = f"{lk_internal_ws}{_RTC_PATHS[tail]}?{qs}"
     fwd_headers = _forward_headers(client_ws.headers.items())
     await client_ws.accept()
     try:
@@ -116,6 +125,8 @@ def mount_rtc_proxy(
     for livekit-client v2.x); the empty-tail routes preserve the pre-v2
     plain ``/rtc`` form. Both pairs forward end-to-end headers so the
     LiveKit Swift SDK's ``Authorization: Bearer`` reaches the server.
+    Any ``tail`` outside ``_RTC_PATHS`` is rejected (404 for HTTP, close
+    1008 before accept for WebSocket).
     """
     @app.get("/rtc/validate")
     async def _rtc_validate_root(request: Request) -> Response:

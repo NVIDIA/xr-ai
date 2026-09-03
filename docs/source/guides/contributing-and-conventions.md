@@ -64,5 +64,5 @@ dependencies, advance the cutoff in a dedicated change, resolve every project
 with `uv --config-file uv.toml lock --upgrade --project <directory>`, and run
 the full test suite. The generated per-project lockfiles are validation
 artifacts and remain gitignored. The same change regenerates the committed
-`dependency-manifest/` lock; the pre-commit hook does this when `uv.toml` is
-staged.
+locks under `dependency-manifest/`; the pre-commit hook does the Python one when
+`uv.toml` is staged.

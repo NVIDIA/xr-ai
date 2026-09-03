@@ -3,9 +3,11 @@
 
 name: dependency-manifest
 
-# dependency-manifest/ is the committed, fully resolved dependency set as of the
-# last uv.toml cutoff change, so ordinary pull requests never trigger this check;
-# only the cutoff, the manifest, or the files that generate it do.
+# dependency-manifest/ holds the committed, fully resolved dependency set as of
+# the last uv.toml cutoff change, so ordinary pull requests never trigger this
+# check; only the cutoff, the manifest, or the files that generate it do. The
+# check covers the Python lock; the Android and web-xr locks there are refreshed
+# by hand (see DEPENDENCIES.md).
 
 on:
   push:

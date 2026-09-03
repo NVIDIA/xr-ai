@@ -49,8 +49,9 @@ most nested projects define one through `[tool.uv.sources]`, so pass the root
 config explicitly. All generated per-project lockfiles remain gitignored
 validation artifacts; do not commit them.
 
-The one committed lockfile is `dependency-manifest/uv.lock`. The
-`dependency-manifest/` project depends on every package in the repository, so
+Committed lockfiles live only under `dependency-manifest/`. The Python one is
+`dependency-manifest/uv.lock`: the `dependency-manifest/` project depends on
+every package in the repository, so
 its lock records the complete resolved runtime dependency set at the
 qualification cutoff for dependency analysis tooling; build-system requirements
 such as `hatchling` are not part of a uv lock. Both files describe the
@@ -64,6 +65,17 @@ declaration narrows the manifest. The pre-commit hook runs the script when
 `uv.toml` is staged, and the `dependency-manifest` workflow verifies both files
 with `--check` on changes that touch `uv.toml`, `dependency-manifest/`, or the
 generator scripts. Nothing installs from the directory.
+
+The same directory holds the client lockfiles. Refresh them by hand in the same
+cutoff change; no check covers them:
+
+- `dependency-manifest/android/*.lockfile`: from `client-samples/android/`, run
+  `./gradlew dependencies :app:dependencies --write-locks`. Locking is active
+  only for that flag.
+- `dependency-manifest/web-xr-build/package-lock.json`: copy the current
+  `client-samples/web-xr-build/package.json` and the CloudXR tarball as `sdk.tgz`
+  into that directory, then run
+  `npm install --package-lock-only --ignore-scripts --legacy-peer-deps` there.
 
 ## Generated Python project inventory
 
@@ -767,6 +779,10 @@ remain owned by their platform manifests:
 - Web: the vendored, gitignored `livekit-client` and NVIDIA CloudXR bundles
   produced by `client-samples/web-xr-build/build.sh`.
 
+Resolved snapshots for Android and Web are committed under
+`dependency-manifest/` and refreshed only at the dependency cutoff; see
+Dependency qualification.
+
 See each client's README for setup, supported versions, and platform-specific
 entitlements.
 
@@ -784,7 +800,7 @@ Keep non-obvious fan-out in the same change:
 | CloudXR configuration or native-profile helpers | xr-render configuration and orchestrator, [Adding CloudXR](docs/source/guides/adding-cloudxr.md), and [xr-render reference](docs/source/reference/xr-render-demo.md) |
 | Scene-service configuration | Scene YAML, xr-render orchestrator, and [xr-render reference](docs/source/reference/xr-render-demo.md) |
 | Any `pyproject.toml` dependency or project metadata | Regenerate this map and the affected project's gitignored `uv.lock` |
-| `uv.toml` dependency cutoff | Regenerate `dependency-manifest/` with `.github/scripts/generate_dependency_manifest.py` |
+| `uv.toml` dependency cutoff | Regenerate `dependency-manifest/` with `.github/scripts/generate_dependency_manifest.py` and refresh the Android and web-xr locks per Dependency qualification |
 | New sample or reusable service | Root and local READMEs and the relevant Sphinx guide |
 | `xr-ai-models` protocol, profile schema, or preset | Generated API reference, preset registry, sample profiles, and architecture rules |
 
