@@ -16,6 +16,7 @@ import yaml
 from lab_instrument_monitoring_worker.instruments import (
     LabInstrumentAgent,
     _annotate_markers,
+    _assign_marker_colors,
     _parse_joint_readings,
 )
 from lab_instrument_monitoring_worker.monitor import parse_monitor_response
@@ -60,7 +61,7 @@ def _instrument_scene(
     gap = 10 if competing else 120
     width = (1120 - gap) // 2
     left_positions = (80, 80 + width + gap)
-    markers: list[tuple[str, TrackedMarker]] = []
+    markers: list[TrackedMarker] = []
     for index, (left, reading, marker_file) in enumerate(
         zip(
             left_positions,
@@ -94,18 +95,15 @@ def _instrument_scene(
             interpolation=cv2.INTER_NEAREST,
         )
         markers.append(
-            (
-                f"M{index}",
-                TrackedMarker(
-                    marker_type=MarkerType.QR_CODE,
-                    value=f"device-{index}",
-                    corners=[
-                        MarkerPoint(x=marker_left, y=525),
-                        MarkerPoint(x=marker_left + 60, y=525),
-                        MarkerPoint(x=marker_left + 60, y=585),
-                        MarkerPoint(x=marker_left, y=585),
-                    ],
-                ),
+            TrackedMarker(
+                marker_type=MarkerType.QR_CODE,
+                value=f"device-{index}",
+                corners=[
+                    MarkerPoint(x=marker_left, y=525),
+                    MarkerPoint(x=marker_left + 60, y=525),
+                    MarkerPoint(x=marker_left + 60, y=585),
+                    MarkerPoint(x=marker_left, y=585),
+                ],
             )
         )
     if instruction_text:
@@ -118,7 +116,7 @@ def _instrument_scene(
             (20, 20, 20),
             3,
         )
-    return _annotate_markers(_encode(image), markers)
+    return _annotate_markers(_encode(image), _assign_marker_colors(markers))
 
 
 def _encode(image: np.ndarray[Any, Any]) -> bytes:
@@ -162,11 +160,7 @@ async def main() -> None:
             response = await vlm.ask_image(
                 _image(case),
                 _question(case),
-                system_prompt=(
-                    monitor_prompt
-                    if case["kind"] == "monitor"
-                    else instrument_prompt
-                ),
+                system_prompt=(monitor_prompt if case["kind"] == "monitor" else instrument_prompt),
                 temperature=0.0,
             )
             error = _validate(case, response.content)
@@ -188,7 +182,7 @@ def _question(case: dict[str, Any]) -> str:
                 "previous_caption": case["previous_caption"],
             }
         )
-    return LabInstrumentAgent._reading_query(["M1", "M2"])
+    return LabInstrumentAgent._reading_query(["magenta", "cyan"])
 
 
 def _validate(case: dict[str, Any], text: str) -> str | None:
@@ -203,7 +197,7 @@ def _validate(case: dict[str, Any], text: str) -> str | None:
         if decision.changed is not case["expected_changed"]:
             return f"expected changed={case['expected_changed']}, received {decision.changed}"
         return None
-    parsed = _parse_joint_readings(text, ["M1", "M2"])
+    parsed = _parse_joint_readings(text, ["magenta", "cyan"])
     if parsed is None:
         return f"invalid joint reading JSON: {text!r}"
     expected = case["expected_readings"]

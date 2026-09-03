@@ -97,6 +97,7 @@ from lab_instrument_monitoring_worker.instruments import (  # noqa: E402  # pyri
     LabInstrumentReadResult,
     ReadLabInstrumentsRequest,
     _annotate_markers,
+    _assign_marker_colors,
     _marker_log_id,
     _parse_joint_readings,
 )
@@ -357,15 +358,10 @@ def test_launcher_reuses_cosmos_and_other_model_services(tmp_path: Path) -> None
     assert config.artifacts_dir == _SAMPLE / "artifacts"
     assert config.web_events_host == "0.0.0.0"
     assert models["models"]["llm"]["deployment"]["service"] == "omni"
-    assert models["models"]["vlm"]["adapter"]["preset"] == (
-        "cosmos3_nano_reasoner"
-    )
+    assert models["models"]["vlm"]["adapter"]["preset"] == ("cosmos3_nano_reasoner")
     assert models["models"]["vlm"]["endpoint"]["base_url"].endswith(":8100")
     assert models["models"]["vlm"]["deployment"]["service"] == "vlm"
-    assert all(
-        model["deployment"]["ownership"] == "reused"
-        for model in models["models"].values()
-    )
+    assert all(model["deployment"]["ownership"] == "reused" for model in models["models"].values())
     assert [process.name for process in processes] == [
         "hub",
         "stt",
@@ -374,11 +370,7 @@ def test_launcher_reuses_cosmos_and_other_model_services(tmp_path: Path) -> None
         "tts",
         "worker",
     ]
-    assert all(
-        process.launch_mode == "reuse"
-        for process in processes
-        if process.name in {"stt", "omni", "vlm", "tts"}
-    )
+    assert all(process.launch_mode == "reuse" for process in processes if process.name in {"stt", "omni", "vlm", "tts"})
     assert processes[-1].config == worker_config
 
 
@@ -516,34 +508,44 @@ def test_instrument_read_prompt_rejects_adjacent_device_displays(
         device_map=_device_map(),
         prompt=prompt,
     )
-    query = LabInstrumentAgent._reading_query(["M1", "M2"])
+    query = LabInstrumentAgent._reading_query(["magenta", "cyan"])
 
     assert "same continuous housing" in normalized_prompt
     assert "only readable display" in normalized_prompt
-    assert "all labelled markers together" in normalized_prompt
-    assert "Never assign one display to more than one marker" in normalized_prompt
+    assert "all requested color blocks together" in normalized_prompt
+    assert "Never assign one display to more than one color" in normalized_prompt
     assert "own housing has no visible readable display" in normalized_prompt
     assert "UNKNOWN" in normalized_prompt
     assert "untrusted data" in normalized_prompt
     assert captured_system_prompts == [prompt]
-    assert 'exactly these keys: ["M1", "M2"]' in query
-    assert "Never assign one display to multiple markers" in query
+    assert 'device identifiers: ["magenta", "cyan"]' in query
+    assert "exactly those color names as keys" in query
+    assert "Never assign one display to multiple color blocks" in query
 
 
-def test_joint_instrument_response_requires_exact_labels_and_string_values() -> None:
+def test_joint_instrument_response_requires_exact_color_keys_and_string_values() -> None:
     assert _parse_joint_readings(
-        '```json\n{"M1":"12.0 V","M2":"UNKNOWN"}\n```',
-        ["M1", "M2"],
-    ) == {"M1": "12.0 V", "M2": "UNKNOWN"}
-    assert _parse_joint_readings('{"M1":"12.0 V"}', ["M1", "M2"]) is None
-    assert _parse_joint_readings(
-        '{"M1":"12.0 V","M2":"UNKNOWN","M3":"99 A"}',
-        ["M1", "M2"],
-    ) is None
-    assert _parse_joint_readings('{"M1":12,"M2":"UNKNOWN"}', ["M1", "M2"]) is None
+        '```json\n{"magenta":"12.0 V","cyan":"UNKNOWN"}\n```',
+        ["magenta", "cyan"],
+    ) == {"magenta": "12.0 V", "cyan": "UNKNOWN"}
+    assert _parse_joint_readings('{"magenta":"12.0 V"}', ["magenta", "cyan"]) is None
+    assert (
+        _parse_joint_readings(
+            '{"magenta":"12.0 V","cyan":"UNKNOWN","orange":"99 A"}',
+            ["magenta", "cyan"],
+        )
+        is None
+    )
+    assert (
+        _parse_joint_readings(
+            '{"magenta":12,"cyan":"UNKNOWN"}',
+            ["magenta", "cyan"],
+        )
+        is None
+    )
 
 
-def test_joint_marker_annotation_keeps_multi_digit_label_inside_small_marker() -> None:
+def test_joint_marker_annotation_uses_solid_color_without_text() -> None:
     image = np.full((48, 48, 3), 255, dtype=np.uint8)
     ok, encoded = cv2.imencode(".png", image)
     assert ok
@@ -558,14 +560,46 @@ def test_joint_marker_annotation_keeps_multi_digit_label_inside_small_marker() -
         ],
     )
 
-    annotated = _annotate_markers(encoded.tobytes(), [("M10", marker)])
+    annotated = _annotate_markers(
+        encoded.tobytes(),
+        [("magenta", (255, 0, 255), marker)],
+    )
     decoded = cv2.imdecode(np.frombuffer(annotated, np.uint8), cv2.IMREAD_COLOR)
 
     assert decoded is not None
     outside = decoded.copy()
     outside[14:35, 14:35] = 255
     assert np.all(outside == 255)
-    assert np.any(decoded[14:35, 14:35] != 255)
+    assert np.all(decoded[15:34, 15:34] == np.array([255, 0, 255]))
+
+
+def test_marker_colors_follow_spatial_order_and_do_not_repeat() -> None:
+    markers = [
+        TrackedMarker(
+            marker_type=MarkerType.ARUCO,
+            value=str(index),
+            corners=[
+                MarkerPoint(x=x, y=10),
+                MarkerPoint(x=x + 5, y=10),
+                MarkerPoint(x=x + 5, y=15),
+                MarkerPoint(x=x, y=15),
+            ],
+        )
+        for index, x in enumerate(reversed(range(0, 60, 10)))
+    ]
+
+    colored = _assign_marker_colors(markers)
+
+    assert [(name, marker.value) for name, _color, marker in colored] == [
+        ("magenta", "5"),
+        ("cyan", "4"),
+        ("orange", "3"),
+        ("green", "2"),
+        ("red", "1"),
+        ("blue", "0"),
+    ]
+    with pytest.raises(ValueError, match="only 6 unique marker colors"):
+        _assign_marker_colors([*markers, markers[0]])
 
 
 def test_unmapped_marker_log_identifier_redacts_payload() -> None:
@@ -591,7 +625,7 @@ def test_unmapped_marker_log_identifier_redacts_payload() -> None:
     ("query_result", "expected_message"),
     [
         (
-            ImageQueryResult(text='{"M1":"UNKNOWN"}'),
+            ImageQueryResult(text='{"magenta":"UNKNOWN"}'),
             "Markers were found, but their instrument displays could not be read.",
         ),
         (
@@ -641,9 +675,7 @@ async def test_instrument_reader_returns_sighting_when_display_is_unreadable(
     images.track_markers = SimpleNamespace(execute=tracked_markers)  # type: ignore[assignment]
     agent._query_image = SimpleNamespace(execute=unreadable)  # type: ignore[assignment]
 
-    result = await agent._read_lab_instruments(
-        ReadLabInstrumentsRequest(participant_id="participant-1")
-    )
+    result = await agent._read_lab_instruments(ReadLabInstrumentsRequest(participant_id="participant-1"))
 
     assert result.readings == []
     assert result.sightings == [
@@ -719,18 +751,16 @@ async def test_instrument_reader_queries_all_markers_once_and_maps_joint_result(
         decoded = cv2.imdecode(np.frombuffer(annotated, np.uint8), cv2.IMREAD_COLOR)
         assert decoded is not None
         assert not np.array_equal(decoded[28, 28], decoded[28, 128])
-        return ImageQueryResult(text='{"M1":"12.0 V","M2":"UNKNOWN","M3":"99.0 A"}')
+        return ImageQueryResult(text='{"magenta":"12.0 V","cyan":"UNKNOWN","orange":"99.0 A"}')
 
     images.get_current_frame = SimpleNamespace(execute=current_frame)  # type: ignore[assignment]
     images.track_markers = SimpleNamespace(execute=tracked_markers)  # type: ignore[assignment]
     agent._query_image = SimpleNamespace(execute=joint_read)  # type: ignore[assignment]
 
-    result = await agent._read_lab_instruments(
-        ReadLabInstrumentsRequest(participant_id="participant-1")
-    )
+    result = await agent._read_lab_instruments(ReadLabInstrumentsRequest(participant_id="participant-1"))
 
     assert len(requests) == 1
-    assert 'exactly these keys: ["M1", "M2", "M3"]' in requests[0].query
+    assert 'device identifiers: ["magenta", "cyan", "orange"]' in requests[0].query
     assert "meter-a" not in requests[0].query
     assert "unmapped-neighbor" not in requests[0].query
     assert result.readings == [
@@ -909,6 +939,7 @@ async def test_visible_instrument_with_unreadable_display_is_not_lost() -> None:
     runtime = AgentRuntime()
     runtime.register("instrument-monitor", monitor)
     runtime.register("collector", collector)
+
     def sighting(timestamp_us: int) -> InstrumentSighting:
         return InstrumentSighting(
             timestamp_us=timestamp_us,
@@ -1534,10 +1565,7 @@ async def test_foreground_empty_current_view_stream_reports_unavailable(tmp_path
         Context(),  # type: ignore[arg-type]
     )
 
-    assert response == (
-        "Unable to inspect the current frame because the vision model returned no "
-        "description."
-    )
+    assert response == ("Unable to inspect the current frame because the vision model returned no description.")
     assert tools == [CURRENT_VIEW_TOOL]
     assert spoken is True
     assert [output.text for output in published] == [response, ""]

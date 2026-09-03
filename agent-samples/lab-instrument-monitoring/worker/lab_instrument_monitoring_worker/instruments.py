@@ -9,14 +9,13 @@ import asyncio
 import hashlib
 import io
 import json
-import math
 import re
 import time
 from collections import Counter
 from pathlib import Path
 
 from loguru import logger
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_models import VLMService
 from xr_ai_runtime import Agent
@@ -31,6 +30,18 @@ from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 from .device_map import DeviceMap
 from .events import InstrumentReading, InstrumentSighting
 from .images import ParticipantImageAgent
+
+RGBColor = tuple[int, int, int]
+ColoredMarker = tuple[str, RGBColor, TrackedMarker]
+
+_MARKER_COLORS: tuple[tuple[str, RGBColor], ...] = (
+    ("magenta", (255, 0, 255)),
+    ("cyan", (0, 255, 255)),
+    ("orange", (255, 180, 0)),
+    ("green", (80, 220, 80)),
+    ("red", (255, 90, 90)),
+    ("blue", (100, 160, 255)),
+)
 
 
 class ReadLabInstrumentsRequest(BaseModel):
@@ -127,17 +138,14 @@ class LabInstrumentAgent(Agent):
         if not markers:
             return LabInstrumentReadResult(message="No readable marker-labelled lab instruments were found.")
 
-        labeled_markers = [
-            (f"M{index}", marker)
-            for index, marker in enumerate(
-                sorted(markers, key=_marker_position),
-                start=1,
-            )
-        ]
-        labels = [label for label, _marker in labeled_markers]
+        try:
+            colored_markers = _assign_marker_colors(markers)
+        except ValueError as exc:
+            return LabInstrumentReadResult(available=False, message=str(exc))
+        color_keys = [color_name for color_name, _color, _marker in colored_markers]
         mapped: dict[str, tuple[TrackedMarker, str]] = {}
         sightings: list[InstrumentSighting] = []
-        for label, marker in labeled_markers:
+        for color_name, _color, marker in colored_markers:
             identity = self._device_map.resolve(marker.marker_type, marker.value)
             if identity is None:
                 logger.warning(
@@ -145,7 +153,7 @@ class LabInstrumentAgent(Agent):
                     _marker_log_id(marker),
                 )
                 continue
-            mapped[label] = (marker, identity.device_name)
+            mapped[color_name] = (marker, identity.device_name)
             sightings.append(
                 InstrumentSighting(
                     timestamp_us=frame.timestamp_us,
@@ -167,7 +175,7 @@ class LabInstrumentAgent(Agent):
             annotated_bytes = await asyncio.to_thread(
                 _annotate_markers,
                 source,
-                labeled_markers,
+                colored_markers,
             )
             annotated = self._images.images.put_derived(
                 annotated_bytes,
@@ -176,10 +184,10 @@ class LabInstrumentAgent(Agent):
             result = await self._query_image.execute(
                 ImageQueryRequest(
                     image=annotated,
-                    query=self._reading_query(labels),
+                    query=self._reading_query(color_keys),
                 )
             )
-            parsed = _parse_joint_readings(result.text, labels) if result.available else None
+            parsed = _parse_joint_readings(result.text, color_keys) if result.available else None
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -214,10 +222,10 @@ class LabInstrumentAgent(Agent):
                 marker_type=marker.marker_type,
                 marker_id=marker.value,
                 device_name=device_name,
-                meter_reading=parsed[label],
+                meter_reading=parsed[color_name],
             )
-            for label, (marker, device_name) in mapped.items()
-            if parsed[label].upper() != "UNKNOWN"
+            for color_name, (marker, device_name) in mapped.items()
+            if parsed[color_name].upper() != "UNKNOWN"
         ]
         if not readings:
             return LabInstrumentReadResult(
@@ -245,12 +253,13 @@ class LabInstrumentAgent(Agent):
         return path
 
     @staticmethod
-    def _reading_query(labels: list[str]) -> str:
-        keys = json.dumps(labels)
+    def _reading_query(color_keys: list[str]) -> str:
+        keys = json.dumps(color_keys)
         return (
-            "Read all marker-labelled instruments together. Return one JSON object with exactly "
-            f"these keys: {keys}. Each value must be the reading and unit from that marker's own "
-            "physical instrument, or UNKNOWN. Never assign one display to multiple markers."
+            "Read all color-block-marked instruments together. The solid color blocks are the "
+            f"device identifiers: {keys}. Return one JSON object with exactly those color names "
+            "as keys. Each value must be the reading and unit from that color block's own physical "
+            "instrument, or UNKNOWN. Never assign one display to multiple color blocks."
         )
 
     @staticmethod
@@ -272,66 +281,37 @@ def _marker_position(marker: TrackedMarker) -> tuple[float, float]:
     )
 
 
+def _assign_marker_colors(markers: list[TrackedMarker]) -> list[ColoredMarker]:
+    if len(markers) > len(_MARKER_COLORS):
+        raise ValueError(
+            f"Found {len(markers)} markers, but only {len(_MARKER_COLORS)} unique marker colors are configured."
+        )
+    return [
+        (color_name, color, marker)
+        for (color_name, color), marker in zip(
+            _MARKER_COLORS,
+            sorted(markers, key=_marker_position),
+            strict=False,
+        )
+    ]
+
+
 def _annotate_markers(
     source: bytes,
-    labeled_markers: list[tuple[str, TrackedMarker]],
+    colored_markers: list[ColoredMarker],
 ) -> bytes:
-    palette = (
-        (255, 0, 255),
-        (0, 255, 255),
-        (255, 180, 0),
-        (80, 220, 80),
-        (255, 90, 90),
-        (100, 160, 255),
-    )
     with Image.open(io.BytesIO(source)) as opened:
         image = opened.convert("RGB")
     draw = ImageDraw.Draw(image)
-    for index, (label, marker) in enumerate(labeled_markers):
+    for _color_name, color, marker in colored_markers:
         points = [(point.x, point.y) for point in marker.corners]
-        draw.polygon(points, fill=palette[index % len(palette)])
-        left = min(point[0] for point in points)
-        right = max(point[0] for point in points)
-        top = min(point[1] for point in points)
-        bottom = max(point[1] for point in points)
-        edges = [
-            math.hypot(following[0] - point[0], following[1] - point[1])
-            for point, following in zip(points, (*points[1:], points[0]), strict=True)
-        ]
-        usable_width = max(1, int(min(right - left, min(edges))) - 4)
-        usable_height = max(1, int(min(bottom - top, min(edges))) - 4)
-        font = _fit_label_font(draw, label, usable_width, usable_height)
-        if font is None:
-            continue
-        draw.text(
-            ((left + right) / 2, (top + bottom) / 2),
-            label,
-            fill=(0, 0, 0),
-            font=font,
-            anchor="mm",
-            stroke_width=1,
-            stroke_fill=(255, 255, 255),
-        )
+        draw.polygon(points, fill=color)
     output = io.BytesIO()
     image.save(output, format="PNG")
     return output.getvalue()
 
 
-def _fit_label_font(
-    draw: ImageDraw.ImageDraw,
-    label: str,
-    max_width: int,
-    max_height: int,
-) -> ImageFont.ImageFont | ImageFont.FreeTypeFont | None:
-    for size in range(min(42, max_height), 0, -1):
-        font = ImageFont.load_default(size=size)
-        bounds = draw.textbbox((0, 0), label, font=font, stroke_width=1)
-        if bounds[2] - bounds[0] <= max_width and bounds[3] - bounds[1] <= max_height:
-            return font
-    return None
-
-
-def _parse_joint_readings(text: str, labels: list[str]) -> dict[str, str] | None:
+def _parse_joint_readings(text: str, color_keys: list[str]) -> dict[str, str] | None:
     visible = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
     start = visible.find("{")
     end = visible.rfind("}")
@@ -341,11 +321,11 @@ def _parse_joint_readings(text: str, labels: list[str]) -> dict[str, str] | None
         payload = json.loads(visible[start : end + 1])
     except json.JSONDecodeError:
         return None
-    if not isinstance(payload, dict) or set(payload) != set(labels):
+    if not isinstance(payload, dict) or set(payload) != set(color_keys):
         return None
     if not all(isinstance(value, str) and value.strip() for value in payload.values()):
         return None
-    return {label: payload[label].strip() for label in labels}
+    return {color_name: payload[color_name].strip() for color_name in color_keys}
 
 
 __all__ = [

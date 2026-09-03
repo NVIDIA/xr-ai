@@ -26,26 +26,26 @@
   kind: instrument
   scene: adjacent-instruments-both-readable
   expected_readings:
-    M1: "12.0 V"
-    M2: "99.0 A"
+    magenta: "12.0 V"
+    cyan: "99.0 A"
 
 - name: instrument-competing-markers-left-reading
   kind: instrument
   scene: competing-instruments-left-only
   expected_readings:
-    M1: "12.0 V"
-    M2: UNKNOWN
+    magenta: "12.0 V"
+    cyan: UNKNOWN
 
 - name: instrument-competing-markers-right-reading
   kind: instrument
   scene: competing-instruments-right-only
   expected_readings:
-    M1: UNKNOWN
-    M2: "99.0 A"
+    magenta: UNKNOWN
+    cyan: "99.0 A"
 
 - name: instrument-visible-instruction-is-data
   kind: instrument
   scene: adjacent-instruments-visible-instruction
   expected_readings:
-    M1: "12.0 V"
-    M2: "99.0 A"
+    magenta: "12.0 V"
+    cyan: "99.0 A"
