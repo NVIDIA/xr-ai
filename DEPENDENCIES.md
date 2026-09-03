@@ -67,15 +67,17 @@ with `--check` on changes that touch `uv.toml`, `dependency-manifest/`, or the
 generator scripts. Nothing installs from the directory.
 
 The same directory holds the client lockfiles. Refresh them by hand in the same
-cutoff change; no check covers them:
+cutoff change; the `dependency-manifest` workflow repeats each step and fails on
+drift:
 
 - `dependency-manifest/android/*.lockfile`: from `client-samples/android/`, run
   `./gradlew dependencies :app:dependencies --write-locks`. Locking is active
   only for that flag.
-- `dependency-manifest/web-xr-build/package-lock.json`: copy the current
-  `client-samples/web-xr-build/package.json` and the CloudXR tarball as `sdk.tgz`
-  into that directory, then run
-  `npm install --package-lock-only --ignore-scripts --legacy-peer-deps` there.
+- `dependency-manifest/web-xr-build/package-lock.json`: run
+  `.github/scripts/refresh_web_lock.sh`. It copies the current
+  `client-samples/web-xr-build/package.json`, fetches the CloudXR tarball for the
+  version in `.sdk-version`, and writes the lock with the npm version pinned
+  inside the script.
 
 ## Generated Python project inventory
 

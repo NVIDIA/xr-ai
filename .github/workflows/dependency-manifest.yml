@@ -4,10 +4,9 @@
 name: dependency-manifest
 
 # dependency-manifest/ holds the committed, fully resolved dependency set as of
-# the last uv.toml cutoff change, so ordinary pull requests never trigger this
-# check; only the cutoff, the manifest, or the files that generate it do. The
-# check covers the Python lock; the Android and web-xr locks there are refreshed
-# by hand (see DEPENDENCIES.md).
+# the last uv.toml cutoff change, so ordinary pull requests never trigger these
+# checks; only the cutoff, the manifest, or the files that generate it do. Each
+# job regenerates one lock the way DEPENDENCIES.md describes and fails on drift.
 
 on:
   push:
@@ -17,6 +16,7 @@ on:
       - 'dependency-manifest/**'
       - '.github/scripts/generate_dependency_map.py'
       - '.github/scripts/generate_dependency_manifest.py'
+      - '.github/scripts/refresh_web_lock.sh'
       - '.github/workflows/dependency-manifest.yml'
   pull_request:
     paths:
@@ -24,6 +24,7 @@ on:
       - 'dependency-manifest/**'
       - '.github/scripts/generate_dependency_map.py'
       - '.github/scripts/generate_dependency_manifest.py'
+      - '.github/scripts/refresh_web_lock.sh'
       - '.github/workflows/dependency-manifest.yml'
 
 concurrency:
@@ -52,3 +53,48 @@ jobs:
 
       - name: Check generated dependency manifest and lock
         run: uv run --script .github/scripts/generate_dependency_manifest.py --check
+
+  android-locks:
+    name: android lockfiles
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
+
+      - name: Regenerate Android lockfiles
+        working-directory: client-samples/android
+        run: ./gradlew dependencies :app:dependencies --write-locks
+
+      - name: Check committed Android lockfiles
+        run: git diff --exit-code -- dependency-manifest/android
+
+  web-locks:
+    name: web-xr lockfile
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Regenerate web-xr lockfile
+        run: .github/scripts/refresh_web_lock.sh
+
+      - name: Check committed web-xr lockfile
+        run: git diff --exit-code -- dependency-manifest/web-xr-build
