@@ -1,0 +1,56 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: dependency-manifest
+
+# dependency-manifest/ is the committed, fully resolved dependency set as of the
+# last uv.toml cutoff change, so ordinary pull requests never trigger this check;
+# only the cutoff, the manifest, or the files that generate it do.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'uv.toml'
+      - 'dependency-manifest/**'
+      - '.github/scripts/generate_dependency_map.py'
+      - '.github/scripts/generate_dependency_manifest.py'
+      - '.github/workflows/dependency-manifest.yml'
+  pull_request:
+    paths:
+      - 'uv.toml'
+      - 'dependency-manifest/**'
+      - '.github/scripts/generate_dependency_map.py'
+      - '.github/scripts/generate_dependency_manifest.py'
+      - '.github/workflows/dependency-manifest.yml'
+
+concurrency:
+  group: dependency-manifest-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: generated dependency manifest and lock
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3.2.4
+        with:
+          # The check compares a fresh resolution byte for byte with the committed
+          # lock, and lock output varies across uv releases. This is the version to
+          # regenerate with (see DEPENDENCIES.md); bump both together.
+          version: "0.10.7"
+          enable-cache: true
+          # The check re-resolves from every pyproject.toml, so key the cache on
+          # those and the shared cutoff rather than the committed lock.
+          cache-dependency-glob: |
+            **/pyproject.toml
+            uv.toml
+
+      - name: Check generated dependency manifest and lock
+        run: uv run --script .github/scripts/generate_dependency_manifest.py --check
