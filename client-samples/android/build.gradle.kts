@@ -34,6 +34,20 @@ allprojects {
     configurations.configureEach { forceNettyVersion() }
 }
 
+// Opt-in only: the locks under dependency-manifest/android are a cutoff snapshot
+// for dependency analysis, not a build input (see DEPENDENCIES.md).
+if (gradle.startParameter.isWriteDependencyLocks) {
+    val lockDir = rootDir.resolve("../../dependency-manifest/android").normalize()
+    buildscript.dependencyLocking {
+        lockAllConfigurations()
+        lockFile.set(lockDir.resolve("buildscript-gradle.lockfile"))
+    }
+    project(":app").dependencyLocking {
+        lockAllConfigurations()
+        lockFile.set(lockDir.resolve("gradle.lockfile"))
+    }
+}
+
 // CI runs this so the lift fails loudly if a Gradle or AGP change stops it applying.
 tasks.register("verifyNettyPin") {
     doLast {

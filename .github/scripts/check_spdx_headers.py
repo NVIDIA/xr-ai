@@ -104,6 +104,7 @@ _SKIP_NAMES = {
 _SKIP_EXTS = {
     ".json",
     ".resolved",
+    ".lockfile",
     ".gif",
     ".pbxproj",
     ".xcworkspacedata",
