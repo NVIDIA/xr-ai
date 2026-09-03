@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 import time
 from contextlib import suppress
 from pathlib import Path
@@ -49,8 +48,10 @@ from .workflow_state import (
 )
 from .workflow_tools import (
     _NAMED_TOOL_NAMES,
+    CommitRequest,
     CurrentViewRequest,
     TimerRequest,
+    WorkflowCommitResult,
     clock_now_tool,
     clock_timer_tool,
     named_tool_set,
@@ -67,17 +68,6 @@ _PROMPTS = Path(__file__).resolve().parent / "prompts"
 _OBSERVATION_PROMPT = _PROMPTS / "guidance_observation.txt"
 _VOICE_PROMPT = _PROMPTS / "guidance_voice.txt"
 _POLL_INTERVAL_S = 0.25
-_TEMPERATURE = re.compile(
-    r"(?i)(?<![\w.])(-?\d{1,3}(?:\.\d+)?)\s*"
-    r"(?:°\s*|degrees?\s*)?(celsius|fahrenheit|c|f)\b"
-)
-_NUMBER = re.compile(r"(?<![\w.])-?\d{1,3}(?:\.\d+)?(?![\w.])")
-_NO_READING = re.compile(
-    r"(?i)\b(?:no (?:current )?reading|reading (?:is )?"
-    r"(?:missing|not visible|unavailable))\b"
-)
-_HEATING_THRESHOLD_C = 50.0
-_AMBIGUOUS_RETRIES = 3
 
 
 class _TriggerResult(BaseModel):
@@ -88,27 +78,6 @@ class _TriggerResult(BaseModel):
 
 class _StaleObservation(RuntimeError):
     """Stop an observation turn after its workflow revision changes."""
-
-
-def _water_visible(observation: str) -> bool:
-    return observation.strip().strip("`'\" ").casefold() == "water present"
-
-
-def _temperature_reading_c(observation: str) -> tuple[float | None, bool]:
-    text = observation.strip().strip("`'\" ").rstrip(".")
-    if _NO_READING.search(text) is not None:
-        return None, False
-    match = _TEMPERATURE.fullmatch(text)
-    if match is not None:
-        reading = float(match.group(1))
-        unit = match.group(2).casefold()
-        if unit in {"fahrenheit", "f"}:
-            reading = (reading - 32.0) * 5.0 / 9.0
-        return reading, False
-    unit_ambiguous = "unit ambiguous" in text.casefold() or bool(
-        _NUMBER.search(text)
-    )
-    return None, unit_ambiguous
 
 
 class GuidanceAgent(Agent):
@@ -142,7 +111,6 @@ class GuidanceAgent(Agent):
         self._connected: set[str] = set()
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._publish_locks: dict[str, asyncio.Lock] = {}
-        self._temperature_ambiguity: dict[str, tuple[int, int, bool]] = {}
         for step in workflow.steps.values():
             unknown = (
                 set(step.agent.tools) | set(step.voice.tools)
@@ -229,7 +197,6 @@ class GuidanceAgent(Agent):
             return
         self._connected.add(participant_id)
         self.store.release(participant_id)
-        self._temperature_ambiguity.pop(participant_id, None)
         session = self.store.get(participant_id)
         self.store.record(session, "participant.joined")
         await self._flush(session)
@@ -251,7 +218,6 @@ class GuidanceAgent(Agent):
             await self._flush(session)
         self.store.release(participant_id)
         self._publish_locks.pop(participant_id, None)
-        self._temperature_ambiguity.pop(participant_id, None)
         await ctx.publish(
             PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
             ParticipantCleanupComplete(
@@ -271,7 +237,6 @@ class GuidanceAgent(Agent):
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._publish_locks.clear()
-        self._temperature_ambiguity.clear()
 
     def _named_tools(
         self,
@@ -377,7 +342,6 @@ class GuidanceAgent(Agent):
             step,
             state,
         )
-        handled = False
         next_state: dict[str, Any] | None = None
         async with session.lock:
             if not self._current(session, step, revision):
@@ -389,16 +353,8 @@ class GuidanceAgent(Agent):
                     trigger.detail,
                 )
             else:
-                handled = self._apply_direct_evidence(
-                    session,
-                    step,
-                    trigger.value,
-                    revision,
-                )
-                if not handled:
-                    self.store.observe(session, trigger.value)
-                    next_state = dict(session.state)
-        if trigger.available and not handled:
+                next_state = dict(session.state)
+        if trigger.available:
             if next_state is None:
                 raise AssertionError("model observation requires current state")
             await self._observe(
@@ -409,98 +365,6 @@ class GuidanceAgent(Agent):
                 revision,
             )
         await self._flush(session)
-
-    def _apply_direct_evidence(
-        self,
-        session: WorkflowSession,
-        step: Step,
-        observation: Any,
-        revision: int,
-    ) -> bool:
-        """Apply the two simple visual classifications without another LLM."""
-
-        if not isinstance(observation, str):
-            return False
-        if step.id == "fill_water":
-            visible = _water_visible(observation)
-            self.store.observe(
-                session,
-                "water visible" if visible else "water not visible",
-            )
-            logger.debug(
-                "tea water evidence pid={!r} visible={} observation={!r}",
-                session.participant_id,
-                visible,
-                observation,
-            )
-            self._commit_on_evidence(session, step, "water_filled")
-            return True
-        if step.id != "heat_water":
-            return False
-
-        reading_c, unit_ambiguous = _temperature_reading_c(observation)
-        above_threshold = (
-            reading_c is not None and reading_c > _HEATING_THRESHOLD_C
-        )
-        self.store.observe(
-            session,
-            (
-                "temperature above threshold"
-                if above_threshold
-                else "temperature not above threshold"
-            ),
-        )
-        logger.debug(
-            "tea heating evidence pid={!r} reading_c={} ambiguous={} observation={!r}",
-            session.participant_id,
-            reading_c,
-            unit_ambiguous,
-            observation,
-        )
-        self._track_temperature_ambiguity(
-            session,
-            revision,
-            unit_ambiguous=unit_ambiguous,
-        )
-        self._commit_on_evidence(session, step, "heating_started")
-        return True
-
-    def _commit_on_evidence(
-        self,
-        session: WorkflowSession,
-        step: Step,
-        field: str,
-    ) -> None:
-        evidence = step.evidence
-        if evidence is None or session.evidence_hits < evidence.consecutive:
-            return
-        self.store.commit(session, {field: True}, "")
-
-    def _track_temperature_ambiguity(
-        self,
-        session: WorkflowSession,
-        revision: int,
-        *,
-        unit_ambiguous: bool,
-    ) -> None:
-        stored_revision, count, notified = self._temperature_ambiguity.get(
-            session.participant_id,
-            (revision, 0, False),
-        )
-        if stored_revision != revision:
-            count = 0
-            notified = False
-        count = count + 1 if unit_ambiguous else 0
-        if count >= _AMBIGUOUS_RETRIES and not notified:
-            session.notices.append(
-                "The temperature unit is ambiguous. Keep Celsius or Fahrenheit visible."
-            )
-            notified = True
-        self._temperature_ambiguity[session.participant_id] = (
-            revision,
-            count,
-            notified,
-        )
 
     async def _trigger(
         self,
@@ -542,12 +406,7 @@ class GuidanceAgent(Agent):
         revision: int,
     ) -> None:
         quick = self._named_tools(session, step.agent.tools)
-        commit = workflow_commit_tool(
-            self.store,
-            session,
-            expected_step_id=step.id,
-            expected_revision=revision,
-        )
+        commit = self._observation_commit_tool(session, step, revision)
         tools = ToolSet(
             {
                 commit.name: commit,
@@ -603,6 +462,7 @@ class GuidanceAgent(Agent):
         except ToolLoopError as exc:
             async with session.lock:
                 if self._current(session, step, revision):
+                    self._reject_observation_evidence(session, step)
                     self.store.record(
                         session,
                         "agent.observation_skipped",
@@ -621,6 +481,7 @@ class GuidanceAgent(Agent):
         async with session.lock:
             if commit_record is None:
                 if self._current(session, step, revision):
+                    self._reject_observation_evidence(session, step)
                     self.store.record(
                         session,
                         "agent.observation_skipped",
@@ -638,6 +499,66 @@ class GuidanceAgent(Agent):
                     "agent.observation_complete",
                     ",".join(called),
                 )
+
+    def _observation_commit_tool(
+        self,
+        session: WorkflowSession,
+        step: Step,
+        revision: int,
+    ) -> Tool:
+        """Count model completion judgments before applying guarded state."""
+
+        if step.evidence is None:
+            return workflow_commit_tool(
+                self.store,
+                session,
+                expected_step_id=step.id,
+                expected_revision=revision,
+            )
+
+        async def commit(request: CommitRequest) -> WorkflowCommitResult:
+            async with session.lock:
+                if session.step_id != step.id or session.revision != revision:
+                    return WorkflowCommitResult(
+                        accepted=False,
+                        complete=False,
+                        message="observation is stale",
+                        revision=session.revision,
+                    )
+                updates = dict(request.updates)
+                judgment = (
+                    "accepted"
+                    if self.store._completion_proposed(session, updates)
+                    else "rejected"
+                )
+                self.store.observe(session, judgment)
+                result = self.store.commit(session, updates, request.message)
+            return WorkflowCommitResult(
+                accepted=result.accepted,
+                complete=result.complete,
+                message=result.message,
+                revision=result.revision,
+            )
+
+        return Tool(
+            "workflow__commit",
+            (
+                "Commit one semantic judgment from the fresh observation. "
+                "Use empty updates when the observation does not support completion."
+            ),
+            CommitRequest,
+            WorkflowCommitResult,
+            commit,
+            return_direct=True,
+        )
+
+    def _reject_observation_evidence(
+        self,
+        session: WorkflowSession,
+        step: Step,
+    ) -> None:
+        if step.evidence is not None:
+            self.store.observe(session, "rejected")
 
     @staticmethod
     def _current(
