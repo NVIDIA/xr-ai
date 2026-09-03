@@ -1,0 +1,1175 @@
+xr_ai_hub
+=========
+
+.. py:module:: xr_ai_hub
+
+.. autoapi-nested-parse::
+
+   xr_ai_hub — lightweight agent-side SDK for DeviceIOHub.
+
+   Agents only need this package (pyzmq + msgpack). The hub implementation and
+   its LiveKit, FastAPI, and uvicorn dependencies are not included.
+
+   Typical usage::
+
+       from xr_ai_hub import ProcessorEndpoint, DataMessage, FrameSignal
+
+       ep = ProcessorEndpoint(sub_addr="ipc:///tmp/xr_hub_pub",
+                              push_addr="ipc:///tmp/xr_hub_in")
+       ep.on_frame(my_frame_handler)
+       ep.on_data(my_data_handler)
+       await ep.run()
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   xr_ai_hub.AGENT_STATUS_TOPIC
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   xr_ai_hub.FrameUnavailable
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_hub.LiveFrameSource
+   xr_ai_hub.ProcessorEndpoint
+   xr_ai_hub.Subscribe
+   xr_ai_hub.ShmRingBuffer
+   xr_ai_hub.SlotView
+   xr_ai_hub.AgentPresence
+   xr_ai_hub.AudioChunk
+   xr_ai_hub.ConnectorRegistration
+   xr_ai_hub.ControlMessage
+   xr_ai_hub.DataMessage
+   xr_ai_hub.FrameData
+   xr_ai_hub.FrameRequest
+   xr_ai_hub.FrameSignal
+   xr_ai_hub.MsgType
+   xr_ai_hub.ParticipantEvent
+   xr_ai_hub.PixelFormat
+   xr_ai_hub.ReturnAudioFlush
+   xr_ai_hub.RosterRequest
+   xr_ai_hub.SubscriptionProbe
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   xr_ai_hub.decode
+   xr_ai_hub.encode
+   xr_ai_hub.register_decoder
+   xr_ai_hub.register_encoder
+
+
+Package Contents
+----------------
+
+.. py:function:: decode(raw: bytes) -> tuple[int, Any]
+
+   Decode a wire message into its numeric type identifier and payload object.
+
+   Raises
+   ------
+   KeyError
+       If no decoder is registered for the encoded type identifier.
+
+
+.. py:function:: encode(type_id: int, msg: Any) -> bytes
+
+   Encode a registered message as a type byte followed by msgpack payload.
+
+   Raises
+   ------
+   KeyError
+       If no encoder is registered for ``type_id``.
+
+
+.. py:function:: register_decoder(type_id: int, fn: Callable[[list], Any]) -> None
+
+   Register the payload deserializer for a wire message type.
+
+   Parameters
+   ----------
+   type_id :
+       Numeric wire identifier, normally a :class:`~xr_ai_hub.MsgType` value.
+   fn :
+       Callable that converts a decoded msgpack list to a message object.
+
+
+.. py:function:: register_encoder(type_id: int, fn: Callable[[Any], list]) -> None
+
+   Register the payload serializer for a wire message type.
+
+   Parameters
+   ----------
+   type_id :
+       Numeric wire identifier, normally a :class:`~xr_ai_hub.MsgType` value.
+   fn :
+       Callable that converts a message object to a msgpack-serializable list.
+
+
+.. py:exception:: FrameUnavailable
+
+
+
+   Raised when a fresh camera frame cannot be obtained before the timeout.
+
+
+.. py:class:: LiveFrameSource(endpoint: xr_ai_hub.ProcessorEndpoint, *, max_age_s: float = 2.0, timeout_s: float = 5.0)
+
+   Track frame signals and fetch fresh pixels through ``ProcessorEndpoint``.
+
+   The source stops at raw ``FrameData`` so consumers own image conversion and
+   model work without adding dependencies to the hub client.
+
+   Parameters
+   ----------
+   endpoint :
+       Running processor endpoint used to observe signals and request pixels.
+   max_age_s :
+       Maximum accepted frame age in seconds.
+   timeout_s :
+       Maximum time :meth:`get` waits for a fresh frame signal.
+
+
+   .. py:method:: participants() -> list[str]
+
+      Return participant IDs with a frame inside the freshness window.
+
+
+
+   .. py:method:: get(participant_id: str) -> xr_ai_hub.FrameData
+      :async:
+
+
+      Return fresh pixels for a participant.
+
+      Raises
+      ------
+      FrameUnavailable
+          If no fresh signal arrives before the configured timeout or the
+          hub cannot supply pixels for the selected frame.
+
+
+
+   .. py:method:: release(participant_id: str) -> None
+
+      Drop a participant's signals and wake its pending frame requests.
+
+
+
+.. py:data:: AGENT_STATUS_TOPIC
+   :value: '_agent.status'
+
+
+   Reserved return-data topic used for aggregated agent readiness status.
+
+
+.. py:class:: ProcessorEndpoint(sub_addr: str, push_addr: str, *, auto_subscribe: bool = True, filter: Subscribe = Subscribe.ALL, agent_id: str | None = None, announces_readiness: bool = False)
+
+   Downstream IPC endpoint for data processors.
+
+   See the module docstring for the subscription model.
+
+   ::
+
+       ep = ProcessorEndpoint(
+           sub_addr="ipc:///tmp/xr_hub_pub",
+           push_addr="ipc:///tmp/xr_hub_in",
+       )
+       ep.on_audio(handle_audio)
+       ep.on_data(handle_data)
+       ep.on_participant(handle_participant)  # optional — set is auto-maintained
+       await ep.run()
+
+   Audio-only processor that ignores video frames at the kernel level::
+
+       ep = ProcessorEndpoint(..., filter=Subscribe.AUDIO | Subscribe.DATA)
+
+   Single-client agent — opt out of auto-subscribe and pin one pid::
+
+       ep = ProcessorEndpoint(..., auto_subscribe=False)
+       ep.subscribe("alice")  # may be called before alice has joined
+
+   Parameters
+   ----------
+   sub_addr :
+       ZMQ address of the hub publisher that supplies inbound messages.
+   push_addr :
+       ZMQ address of the hub receiver for outbound messages.
+   auto_subscribe :
+       Whether participant join and leave events automatically manage
+       subscriptions. Defaults to ``True``.
+   filter :
+       Default message categories selected for each subscription.
+   agent_id :
+       Stable identity used for agent presence and readiness. When omitted,
+       ``XR_AI_AGENT_ID`` or a process-local generated identity is used.
+   announces_readiness :
+       Whether this endpoint participates in the hub's readiness aggregation.
+
+
+   .. py:property:: agent_id
+      :type: str
+
+
+      Identity this endpoint's status updates are attributed to.
+
+
+
+   .. py:property:: connected_participants
+      :type: frozenset[str]
+
+
+      Participant IDs currently connected to the hub, auto-updated.
+
+
+
+   .. py:property:: subscribed_participants
+      :type: frozenset[str]
+
+
+      Participant IDs this endpoint currently has live SUBSCRIBEs for.
+
+      With ``auto_subscribe=True`` this tracks ``connected_participants``.
+      With ``auto_subscribe=False`` it reflects whatever the caller has
+      explicitly subscribed to via :meth:`subscribe`.
+
+
+
+   .. py:method:: subscribe(participant_id: str, *, filter: Subscribe | None = None) -> None
+
+      Subscribe to (a subset of) traffic for *participant_id*.
+
+      Idempotent. Calling with a different ``filter`` than a previous
+      call updates the live subscriptions — the diff is unsubscribed
+      and the new categories are subscribed. Subscribing to a pid who
+      is not yet connected is fine; ZMQ holds the SUBSCRIBE until
+      matching traffic arrives.
+
+      Parameters
+      ----------
+      participant_id :
+          Target participant.
+      filter :
+          Categories to receive. Defaults to the constructor ``filter``.
+
+
+
+   .. py:method:: unsubscribe(participant_id: str) -> None
+
+      Drop every subscription for *participant_id*. Idempotent.
+
+
+
+   .. py:method:: wait_for_subscriptions(*, timeout: float = _PROBE_TIMEOUT) -> bool
+      :async:
+
+
+      Block until the hub has applied every subscription issued so far.
+
+      ZMQ SUBSCRIBEs are asynchronous: the hub drops matching traffic until
+      the command reaches it, so an agent that announces availability the
+      moment it calls :meth:`subscribe` invites the client's first request
+      into that gap. This closes it by round-tripping a token through the
+      hub — subscription commands from one socket are applied in order, so
+      the echo proves the preceding SUBSCRIBEs are live.
+
+      Returns ``False`` if *timeout* elapses first; callers should treat that
+      as "not confirmed" rather than an error, since the hub may simply be
+      an older build that does not answer probes.
+
+
+
+   .. py:method:: on_frame(cb: FrameSignalCallback) -> None
+
+      Register an async callback for video frame metadata.
+
+
+
+   .. py:method:: on_frame_data(cb: FrameDataCallback) -> None
+
+      Register an async callback for requested frame pixel data.
+
+
+
+   .. py:method:: on_audio(cb: AudioCallback) -> None
+
+      Register an async callback for inbound PCM audio chunks.
+
+
+
+   .. py:method:: on_data(cb: DataCallback) -> CallbackUnsubscribe
+
+      Register an async data callback and return an idempotent unsubscriber.
+
+
+
+   .. py:method:: on_participant(cb: ParticipantCallback) -> None
+
+      Register an async callback for participant join and leave events.
+
+
+
+   .. py:method:: send_return_data(msg: xr_ai_hub.DataMessage) -> None
+      :async:
+
+
+      Send an application data message to its target participant.
+
+
+
+   .. py:method:: send_return_audio(chunk: xr_ai_hub.AudioChunk) -> None
+      :async:
+
+
+      Queue a PCM audio chunk for playback by its target participant.
+
+
+
+   .. py:method:: flush_return_audio(participant_id: str) -> None
+      :async:
+
+
+      Drop any return audio currently queued at the hub for *participant_id*.
+
+      Use to cleanly interrupt the agent's own audio playback (e.g. when
+      cancelling an in-flight TTS response on a new user query). Audio that
+      has already left the hub for the client may still play out for the
+      duration of the client's jitter buffer (~100 ms).
+
+
+
+   .. py:method:: request_roster() -> None
+      :async:
+
+
+      Ask the hub to re-publish ``PARTICIPANT_EVENT(joined=True)`` for
+      every currently-connected participant.
+
+      Useful when starting up mid-session so the auto-subscribe handler
+      can pick up clients who joined before this endpoint connected.
+      Called automatically once at the start of :meth:`run` when
+      ``auto_subscribe=True``.
+
+
+
+   .. py:method:: set_status(status: str, participant_id: str | None = None) -> None
+      :async:
+
+
+      Publish agent status to connected clients via the internal SDK channel.
+
+      The status is delivered on the reserved LiveKit topic ``_agent.status``
+      and is intercepted client-side by the StreamKit SDK — it never surfaces
+      as a raw ``onDataReceived`` message.
+
+      This is *this agent's* state, not the room's. The hub tags it with
+      :attr:`agent_id` and folds it together with every other attached
+      agent's state, so clients still see a single scalar.
+
+      Parameters
+      ----------
+      status :
+          Current-state string. Recognised by the hub's aggregation, in
+          decreasing precedence: ``"loading"``, ``"processing"``,
+          ``"idle"``, ``"ready"``. Unrecognised values are treated as
+          ``"processing"`` — an unknown state is not an available one.
+      participant_id :
+          Target participant. If *None*, sets the endpoint default and
+          broadcasts it to every currently connected participant.
+          When provided, has no effect if the participant is not currently
+          in ``connected_participants``; call after its join callback fires.
+
+
+
+   .. py:method:: mark_ready() -> None
+      :async:
+
+
+      Declare this agent available to serve requests.
+
+      Broadcasts ``"ready"`` and records it as the default, so participants
+      joining later are told as soon as their subscription is confirmed.
+      The client only sees ``ready`` once every attached agent has said so.
+
+
+
+   .. py:method:: republish_statuses() -> None
+      :async:
+
+
+      Re-send each connected participant's current agent-status state.
+
+      Status is state, not an edge-triggered event. Re-announcing it lets a
+      client that joins or reconnects after the original publication converge
+      without coupling process readiness to participant discovery.
+
+
+
+   .. py:method:: request_frame(signal: xr_ai_hub.FrameSignal, timeout: float = _FRAME_REQUEST_TIMEOUT) -> xr_ai_hub.FrameData | None
+      :async:
+
+
+      Request a pixel-data snapshot of the latest frame for this participant/track.
+
+      The hub holds the most recent SHM slot and copies pixels only when a
+      request arrives — no frame data is sent unless explicitly requested.
+
+      Multiple concurrent calls for the same (participant, track) are coalesced:
+      only one FRAME_REQUEST is sent and all callers receive the same response.
+
+      Returns None if the hub has no frame for this track yet, or on timeout.
+
+
+
+   .. py:method:: run() -> None
+      :async:
+
+
+      Receive and dispatch messages until :meth:`stop` is called.
+
+      Registered callbacks run in independent tasks. An unhandled callback
+      exception is fatal to the processor process.
+
+
+
+   .. py:method:: wait_until_running() -> None
+      :async:
+
+
+      Wait until :meth:`run` has entered its receive loop.
+
+
+
+   .. py:method:: stop() -> None
+
+      Request receive-loop shutdown and detach this agent's presence.
+
+
+
+   .. py:method:: close() -> None
+
+      Close the endpoint's ZMQ sockets without waiting for queued messages.
+
+
+
+.. py:class:: Subscribe(*args, **kwds)
+
+
+
+   Per-participant message-category filter.
+
+   Each flag corresponds to a class of pid-scoped ZMQ topics on the hub
+   PUB socket. ``Subscribe.ALL`` (the default) gets every category for
+   each subscribed participant; combine flags with ``|`` to scope down.
+
+   Example
+   -------
+   ::
+
+       # Audio-only processor; ignores data + video on every pid.
+       ep = ProcessorEndpoint(..., filter=Subscribe.AUDIO)
+
+       # Per-pid override at subscribe time:
+       ep.subscribe("alice", filter=Subscribe.DATA)
+
+
+   .. py:attribute:: DATA
+
+      Application data messages for a participant.
+
+
+
+   .. py:attribute:: AUDIO
+
+      PCM audio chunks for a participant.
+
+
+
+   .. py:attribute:: VIDEO
+
+      Video frame signals and requested pixel data for a participant.
+
+
+
+   .. py:attribute:: ALL
+
+      All participant-scoped message categories.
+
+
+
+.. py:class:: ShmRingBuffer(name: str, num_slots: int = 0, max_frame_bytes: int = 0, create: bool = False)
+
+   Shared-memory ring buffer for raw video frames.
+
+   Hub creates the buffer (create=True). Connector opens it (create=False) and
+   reads num_slots / max_frame_bytes from the global header automatically.
+
+   The caller that uses read_slot() MUST call release_slot() before the next
+   write_frame() for that slot can succeed. Both operations are O(1).
+
+   Parameters
+   ----------
+   name :
+       Operating-system name of the shared-memory segment.
+   num_slots :
+       Number of fixed-capacity slots to allocate when ``create`` is true.
+   max_frame_bytes :
+       Maximum pixel payload per slot when ``create`` is true.
+   create :
+       Create and initialize the segment instead of attaching to an existing
+       one. The creator is responsible for eventually calling :meth:`unlink`.
+
+
+   .. py:method:: write_frame(data: bytes | memoryview, width: int, height: int, fmt: xr_ai_hub.PixelFormat, pts_us: int, seq: int) -> int
+
+      Write a frame into the next free slot and return its index.
+
+      Raises
+      ------
+      RuntimeError
+          If every slot is occupied. This is the producer's back-pressure
+          signal; consumers release occupied slots with :meth:`release_slot`.
+      ValueError
+          If the frame is larger than the configured slot capacity.
+
+
+
+   .. py:method:: read_slot(signal: xr_ai_hub.FrameSignal) -> SlotView
+
+      Return a zero-copy view of a ready slot's pixel data.
+
+      The view remains valid until :meth:`release_slot` is called for the
+      slot and must not be retained afterward.
+
+      Raises
+      ------
+      RuntimeError
+          If the indicated slot header is invalid or not ready for consumption.
+      ValueError
+          If the signal identifies an invalid slot or disagrees with the
+          canonical metadata stored in the slot header.
+
+
+
+   .. py:method:: release_slot(slot: int) -> None
+
+      Mark a consumed slot as free so the producer can reuse it.
+
+
+
+   .. py:method:: close() -> None
+
+      Release this process's view and close its shared-memory handle.
+
+
+
+   .. py:method:: unlink() -> None
+
+      Remove the segment, tolerating repeated cleanup by this process.
+
+
+
+.. py:class:: SlotView
+
+
+
+   Zero-copy view into one ring-buffer slot's pixel data.
+
+
+   .. py:attribute:: data
+      :type:  memoryview
+
+      Pixel bytes backed directly by the shared-memory segment.
+
+
+
+   .. py:attribute:: signal
+      :type:  xr_ai_hub.FrameSignal
+
+      Metadata identifying and describing the occupied slot.
+
+
+
+.. py:class:: AgentPresence
+
+   An agent endpoint has attached to (or detached from) the hub.
+
+   Only endpoints that opt into readiness send this. The hub counts every
+   attached agent as unavailable until it publishes an availability status,
+   so one ready agent cannot make the room look ready.
+
+   ``scope`` names the participants this agent answers for — *None* means
+   every participant. A participant's readiness aggregates only over the
+   agents whose scope covers it.
+
+
+   .. py:attribute:: agent_id
+      :type:  str
+
+      Identity of the agent endpoint.
+
+
+
+   .. py:attribute:: attached
+      :type:  bool
+
+      Whether the endpoint is attaching to or detaching from the hub.
+
+
+
+   .. py:attribute:: scope
+      :type:  list[str] | None
+      :value: None
+
+
+      Participant IDs served by the agent, or ``None`` for every participant.
+
+
+
+.. py:class:: AudioChunk
+
+   Raw PCM audio chunk from the connector.
+
+
+   .. py:attribute:: pts_us
+      :type:  int
+
+      Presentation timestamp in microseconds.
+
+
+
+   .. py:attribute:: sample_rate
+      :type:  int
+
+      Sample rate in hertz.
+
+
+
+   .. py:attribute:: channels
+      :type:  int
+
+      Number of interleaved audio channels.
+
+
+
+   .. py:attribute:: samples
+      :type:  int
+
+      Number of sample frames per channel.
+
+
+
+   .. py:attribute:: data
+      :type:  bytes
+
+      Little-endian, interleaved float32 PCM samples.
+
+
+
+   .. py:attribute:: participant_id
+      :type:  str
+      :value: 'default'
+
+
+      Identity of the participant that produced the audio.
+
+
+
+   .. py:attribute:: track_id
+      :type:  str
+      :value: 'default'
+
+
+      Identity of the participant's audio track.
+
+
+
+.. py:class:: ConnectorRegistration
+
+   Sent by a connector on startup so the hub can open its ring buffer.
+
+
+   .. py:attribute:: connector_id
+      :type:  str
+
+      Identity assigned to the connector.
+
+
+
+   .. py:attribute:: shm_name
+      :type:  str
+
+      Name of the connector's shared-memory ring buffer.
+
+
+
+.. py:class:: ControlMessage
+
+   Extensible key/value control message (hub-internal, no track concept).
+
+
+   .. py:attribute:: topic
+      :type:  str
+
+      Control-message topic.
+
+
+
+   .. py:attribute:: payload
+      :type:  dict[str, Any]
+
+      Topic-specific control values.
+
+
+
+.. py:class:: DataMessage
+
+   Arbitrary binary/text payload from a LiveKit data channel.
+
+   LiveKit data channels are per-participant and routed by topic string —
+   there is no track SID for data.
+
+
+   .. py:attribute:: participant_id
+      :type:  str
+
+      Identity of the participant that sent or should receive the payload.
+
+
+
+   .. py:attribute:: topic
+      :type:  str
+
+      Application-defined data-channel topic.
+
+
+
+   .. py:attribute:: pts_us
+      :type:  int
+
+      Presentation timestamp in microseconds.
+
+
+
+   .. py:attribute:: data
+      :type:  bytes
+
+      Opaque message payload.
+
+
+
+.. py:class:: FrameData
+
+   Pixel data for the latest frame, published by the hub on `video_data.<pid>.<track>`.
+
+   The hub holds one SHM slot per (participant, track) — always the most recent
+   frame. Processors receive FrameSignal metadata at full rate via on_frame(),
+   then call ProcessorEndpoint.request_frame() to get a pixel copy at their own
+   sampling rate. The hub only copies pixels when a request arrives.
+
+
+   .. py:attribute:: seq
+      :type:  int
+
+      Sequence number of the copied frame.
+
+
+
+   .. py:attribute:: pts_us
+      :type:  int
+
+      Presentation timestamp in microseconds.
+
+
+
+   .. py:attribute:: width
+      :type:  int
+
+      Frame width in pixels.
+
+
+
+   .. py:attribute:: height
+      :type:  int
+
+      Frame height in pixels.
+
+
+
+   .. py:attribute:: fmt
+      :type:  PixelFormat
+
+      Pixel layout used by :attr:`data`.
+
+
+
+   .. py:attribute:: data
+      :type:  bytes
+
+      Raw pixel bytes encoded in :attr:`fmt`.
+
+
+
+   .. py:attribute:: participant_id
+      :type:  str
+      :value: 'default'
+
+
+      Identity of the participant that produced the frame.
+
+
+
+   .. py:attribute:: track_id
+      :type:  str
+      :value: 'default'
+
+
+      Identity of the participant's video track.
+
+
+
+.. py:class:: FrameRequest
+
+   Sent by a processor to request a copy of the current latest frame.
+
+
+   .. py:attribute:: participant_id
+      :type:  str
+
+      Identity of the participant whose frame is requested.
+
+
+
+   .. py:attribute:: track_id
+      :type:  str
+
+      Identity of the video track whose frame is requested.
+
+
+
+.. py:class:: FrameSignal
+
+   Signals that a decoded frame has been written into the shared-memory ring buffer.
+
+
+   .. py:attribute:: slot
+      :type:  int
+
+      Index of the shared-memory slot containing the frame.
+
+
+
+   .. py:attribute:: seq
+      :type:  int
+
+      Sequence number that increases for each participant and track pair.
+
+
+
+   .. py:attribute:: pts_us
+      :type:  int
+
+      Presentation timestamp in microseconds.
+
+
+
+   .. py:attribute:: width
+      :type:  int
+
+      Frame width in pixels.
+
+
+
+   .. py:attribute:: height
+      :type:  int
+
+      Frame height in pixels.
+
+
+
+   .. py:attribute:: fmt
+      :type:  PixelFormat
+
+      Pixel layout used by the frame data.
+
+
+
+   .. py:attribute:: data_sz
+      :type:  int
+
+      Number of frame-data bytes written into the slot.
+
+
+
+   .. py:attribute:: participant_id
+      :type:  str
+      :value: 'default'
+
+
+      Identity of the participant that produced the frame.
+
+
+
+   .. py:attribute:: track_id
+      :type:  str
+      :value: 'default'
+
+
+      Identity of the participant's video track.
+
+
+
+.. py:class:: MsgType
+
+
+
+   Wire-level message identifiers used by the hub IPC protocol.
+
+
+   .. py:attribute:: FRAME_SIGNAL
+      :value: 1
+
+
+      Metadata indicating that a video frame is ready in shared memory.
+
+
+
+   .. py:attribute:: AUDIO_CHUNK
+      :value: 2
+
+
+      Inbound PCM audio from a connector.
+
+
+
+   .. py:attribute:: CONTROL
+      :value: 3
+
+
+      Hub-internal control data.
+
+
+
+   .. py:attribute:: DATA_MESSAGE
+      :value: 4
+
+
+      Inbound application data from a connector.
+
+
+
+   .. py:attribute:: RETURN_AUDIO
+      :value: 5
+
+
+      PCM audio returned to a client.
+
+
+
+   .. py:attribute:: RETURN_DATA
+      :value: 6
+
+
+      Application data returned to a client.
+
+
+
+   .. py:attribute:: PARTICIPANT_EVENT
+      :value: 7
+
+
+      Participant join or leave notification.
+
+
+
+   .. py:attribute:: CONNECTOR_REGISTER
+      :value: 8
+
+
+      Connector registration and shared-memory discovery.
+
+
+
+   .. py:attribute:: FRAME_REQUEST
+      :value: 9
+
+
+      Request for the latest pixels from a participant track.
+
+
+
+   .. py:attribute:: FRAME_DATA
+      :value: 10
+
+
+      Pixel data returned in response to a frame request.
+
+
+
+   .. py:attribute:: RETURN_AUDIO_FLUSH
+      :value: 11
+
+
+      Request to discard queued return audio for a participant.
+
+
+
+   .. py:attribute:: ROSTER_REQUEST
+      :value: 12
+
+
+      Request to replay join events for the current participant roster.
+
+
+
+   .. py:attribute:: SUBSCRIPTION_PROBE
+      :value: 13
+
+
+      Subscription-barrier token echoed by the hub.
+
+
+
+   .. py:attribute:: AGENT_PRESENCE
+      :value: 14
+
+
+      Readiness-participating agent attachment or detachment.
+
+
+
+.. py:class:: ParticipantEvent
+
+   A LiveKit participant has joined or left the room.
+
+
+   .. py:attribute:: participant_id
+      :type:  str
+
+      Identity of the participant whose state changed.
+
+
+
+   .. py:attribute:: joined
+      :type:  bool
+
+      Whether the participant joined; ``False`` indicates departure.
+
+
+
+   .. py:attribute:: pts_us
+      :type:  int
+
+      Timestamp of the event in microseconds.
+
+
+
+   .. py:attribute:: connector_id
+      :type:  str
+      :value: ''
+
+
+      Identity of the connector that reported the participant.
+
+
+
+.. py:class:: PixelFormat
+
+
+
+   Pixel layouts supported by shared-memory video frames.
+
+
+   .. py:attribute:: I420
+      :value: 0
+
+
+      Planar YUV 4:2:0 with Y, U, and V planes.
+
+
+
+   .. py:attribute:: NV12
+      :value: 1
+
+
+      YUV 4:2:0 with a Y plane followed by interleaved UV samples.
+
+
+
+   .. py:attribute:: RGB24
+      :value: 2
+
+
+      Packed 24-bit RGB pixels.
+
+
+
+   .. py:attribute:: RGBA
+      :value: 3
+
+
+      Packed 32-bit RGB pixels with an alpha channel.
+
+
+
+   .. py:attribute:: BGRA
+      :value: 4
+
+
+      Packed 32-bit BGR pixels with an alpha channel.
+
+
+
+.. py:class:: ReturnAudioFlush
+
+   Drop any audio queued for *participant_id*'s return track.
+
+
+   .. py:attribute:: participant_id
+      :type:  str
+
+      Identity of the participant whose queued return audio is discarded.
+
+
+
+.. py:class:: RosterRequest
+
+   Ask the hub to re-publish ``PARTICIPANT_EVENT(joined=True)`` on the
+   ``participant`` topic for every currently-connected participant.
+
+   Used by a :class:`ProcessorEndpoint` started mid-session to learn
+   about clients that joined before it did. Replays go on the regular
+   participant topic, so other endpoints will see them too.
+
+
+.. py:class:: SubscriptionProbe
+
+   Round-trip token echoed by the hub on ``_probe.<token>``.
+
+   ZMQ applies SUBSCRIBEs from one socket in order, so receiving the echo
+   proves every subscription issued before the probe is live on the hub.
+
+
+   .. py:attribute:: token
+      :type:  str
+
+      Opaque correlation token echoed by the hub.
+
+
+
