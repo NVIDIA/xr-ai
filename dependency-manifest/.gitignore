@@ -1,16 +1,5 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Gradle
-.gradle/
-build/
-local.properties
-settings-gradle.lockfile
-
-# Android Studio / IntelliJ
-.idea/
-*.iml
-captures/
-
-# OS
-.DS_Store
+*.tgz
+node_modules/

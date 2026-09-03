@@ -3,3 +3,5 @@
 
 *.gif filter=lfs diff=lfs merge=lfs -text
 dependency-manifest/uv.lock linguist-generated=true
+dependency-manifest/android/*.lockfile linguist-generated=true
+dependency-manifest/web-xr-build/package-lock.json linguist-generated=true
