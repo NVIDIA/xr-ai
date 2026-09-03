@@ -46,8 +46,8 @@ root with `uv --config-file uv.toml lock --upgrade --project <directory>`.
 Inspect the resolved version changes and run the full CPU and GPU test suites
 before merging. uv stops upward config discovery at a nearer `[tool.uv]` table;
 most nested projects define one through `[tool.uv.sources]`, so pass the root
-config explicitly. All generated `uv.lock` files remain gitignored validation
-artifacts; do not commit them.
+config explicitly. All generated per-project lockfiles remain gitignored
+validation artifacts; do not commit them.
 
 The one committed lockfile is `dependency-manifest/uv.lock`. The
 `dependency-manifest/` project depends on every package in the repository, so
@@ -57,12 +57,13 @@ such as `hatchling` are not part of a uv lock. Both files describe the
 repository as of the last cutoff change: projects and dependencies added since
 then appear at the next cutoff, and a release yanked from the index changes the
 next fresh resolution. `uv run --script .github/scripts/generate_dependency_manifest.py`
-generates them with uv 0.10.7, the version the `dependency-manifest` workflow
-pins, because lock output varies across uv releases; bump the two together. The
-pre-commit hook runs the script when `uv.toml` is staged, and the workflow
-verifies both files with `--check` on changes that touch `uv.toml`,
-`dependency-manifest/`, or the generator scripts. Nothing installs from the
-directory.
+generates them and always resolves with the uv version pinned inside the script,
+because lock output varies across uv releases. The manifest's `requires-python`
+is the range of interpreters every project accepts, so a project with a narrower
+declaration narrows the manifest. The pre-commit hook runs the script when
+`uv.toml` is staged, and the `dependency-manifest` workflow verifies both files
+with `--check` on changes that touch `uv.toml`, `dependency-manifest/`, or the
+generator scripts. Nothing installs from the directory.
 
 ## Generated Python project inventory
 
