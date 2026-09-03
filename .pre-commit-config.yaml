@@ -18,6 +18,18 @@ repos:
 
   - repo: local
     hooks:
+      - id: generate-dependency-manifest
+        name: generate dependency manifest
+        description: >
+          Regenerates dependency-manifest/pyproject.toml from every project and
+          resolves its uv.lock at the uv.toml cutoff. Pre-commit aborts when
+          either file changes so the operator can review and re-stage it.
+        entry: uv run --script .github/scripts/generate_dependency_manifest.py
+        language: system
+        pass_filenames: false
+        files: >-
+          ^uv\.toml$|^dependency-manifest/|^\.github/scripts/generate_dependency_(map|manifest)\.py$
+
       - id: generate-dependency-map
         name: generate dependency map
         description: >

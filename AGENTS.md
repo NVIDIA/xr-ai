@@ -118,7 +118,11 @@ Refer to [Adding a sample](docs/source/guides/adding-a-sample.md) and the
   repository root, and run the full test suite. uv stops upward config discovery
   at a nearer `[tool.uv]` table; most nested projects define one through
   `[tool.uv.sources]`, so pass the root config explicitly. Do not commit
-  generated lockfiles.
+  per-project lockfiles; `dependency-manifest/uv.lock` is the one exception and
+  is produced by `uv run --script .github/scripts/generate_dependency_manifest.py`
+  (pre-commit runs it when `uv.toml` is staged). Only a `uv.toml` change
+  regenerates `dependency-manifest/`: do not run the generator for ordinary
+  dependency or project changes, even when a new project is missing from it.
 - Never put API keys or tokens in source files. Use environment variables or
   the credential store documented in `docs/source/getting_started/credentials.md`.
 - Do not add an abstraction until two concrete use cases need it.
