@@ -29,7 +29,7 @@ from .events import (
 )
 from .instrument_monitor import normalize_meter_reading
 
-_VOICE_INTERVAL_S = 5.0
+_VOICE_INTERVAL_S = 10.0
 _SUMMARY_TIMEOUT_S = 5.0
 _SUMMARY_PROMPT = """Summarize instrument changes since the last spoken update.
 For each instrument, say only its name, one short trend, and its final reading.

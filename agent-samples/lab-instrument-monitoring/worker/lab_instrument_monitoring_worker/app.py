@@ -20,7 +20,6 @@ from xr_ai_voice import (
     VadConfig,
     VoiceAgent,
     VoiceAggregationAgent,
-    VoiceOutput,
     VoiceParticipantLeft,
 )
 from xr_ai_voicegate import load_voice_gate_config
@@ -42,7 +41,6 @@ from .instruments import LabInstrumentAgent
 from .monitor import MonitorAgent
 from .web_events import WebEventsAdapterAgent
 
-_MONITORING_VOICE_SPACING_S = 5.0
 _VOICE_AGGREGATION_PROMPT = """Combine simultaneous instrument updates into the shortest clear speech.
 For each value update, preserve only the instrument name, one trend, and the final value with its unit.
 The trend may be increased, decreased, oscillating, unstable, or one supplied peak or dip. Keep at most
@@ -50,13 +48,6 @@ one peak or dip and the final value. Never include starting or intermediate valu
 arrows, inequality signs, spoken symbol names, explanations, causes, recommendations, or filler.
 For tracking-only updates, preserve the instrument name and tracking or lost status. Do not invent facts.
 Prefer one clause and 10 words or fewer per instrument."""
-
-
-class _InstrumentVoiceAggregationAgent(VoiceAggregationAgent):
-    """Leave a quiet interval before the next routine monitoring update."""
-
-    def _post_playback_delay(self, _output: VoiceOutput) -> float:
-        return _MONITORING_VOICE_SPACING_S
 
 
 class _VoiceAggregationLifecycleAgent(Agent):
@@ -210,7 +201,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     )
     voice_aggregation = runtime.register(
         "voice-aggregation",
-        _InstrumentVoiceAggregationAgent(
+        VoiceAggregationAgent(
             llm=llm,
             prompt=_VOICE_AGGREGATION_PROMPT,
         ),

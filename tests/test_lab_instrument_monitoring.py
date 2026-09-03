@@ -30,6 +30,7 @@ from xr_ai_voice import (
     VOICE_CONTRIBUTION_TOPIC,
     VOICE_TRANSCRIPT_TOPIC,
     UserQuery,
+    VoiceAggregationAgent,
     VoiceOutput,
     VoiceParticipantJoined,
     VoiceParticipantLeft,
@@ -49,7 +50,6 @@ _materialize_worker_config = _LAUNCHER["_materialize_worker_config"]
 _parser = _LAUNCHER["_parser"]
 
 from lab_instrument_monitoring_worker.app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
-    _InstrumentVoiceAggregationAgent,
     _VoiceAggregationLifecycleAgent,
 )
 from lab_instrument_monitoring_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
@@ -1384,12 +1384,12 @@ async def test_participant_leave_releases_voice_aggregation_state() -> None:
     assert released == ["participant-1"]
 
 
-def test_instrument_voice_aggregation_leaves_post_playback_spacing() -> None:
-    aggregation = _InstrumentVoiceAggregationAgent(llm=object())  # type: ignore[arg-type]
+def test_instrument_voice_aggregation_has_no_post_playback_spacing() -> None:
+    aggregation = VoiceAggregationAgent(llm=object())  # type: ignore[arg-type]
 
     output = VoiceOutput(text="one two three four five")
     assert aggregation._playback_duration(output.text) == pytest.approx(2.0)
-    assert aggregation._post_playback_delay(output) == 5.0
+    assert aggregation._post_playback_delay(output) == 0.0
 
 
 @pytest.mark.asyncio
