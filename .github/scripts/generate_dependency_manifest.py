@@ -3,7 +3,7 @@
 
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["packaging>=24"]
 # ///
 
 """Generate dependency-manifest/pyproject.toml and its uv.lock from every project."""
@@ -18,8 +18,14 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from generate_dependency_map import MANIFEST_DIRECTORY, Project, discover_projects
+from packaging.specifiers import SpecifierSet
+from packaging.version import Version
 
 MANIFEST_NAME = "xr-ai-dependency-manifest"
+# Lock output varies across uv releases, so the lock is always produced by this
+# exact version, whatever `uv` is on PATH.
+UV_VERSION = "0.10.7"
+_PYTHON_MINORS = range(8, 20)
 REGENERATE = "  uv run --script .github/scripts/generate_dependency_manifest.py"
 
 _HEADER = """\
@@ -41,26 +47,39 @@ def manifest_members(projects: Sequence[Project]) -> list[Project]:
     )
 
 
+def common_python_range(ranges: Sequence[str]) -> str:
+    """Return the contiguous run of CPython minors every range in *ranges* accepts."""
+
+    specifiers = [SpecifierSet(item) for item in ranges]
+    minors = [minor for minor in _PYTHON_MINORS if all(Version(f"3.{minor}") in specifier for specifier in specifiers)]
+    if not minors:
+        raise ValueError(f"projects share no supported Python version: {sorted(set(ranges))}")
+    if minors != list(range(minors[0], minors[-1] + 1)):
+        raise ValueError(f"projects share a non-contiguous set of Python versions: {minors}")
+    return f">=3.{minors[0]},<3.{minors[-1] + 1}"
+
+
 def manifest_toml(projects: Sequence[Project]) -> str:
     """Return the manifest pyproject.toml aggregating *projects*."""
 
     members = manifest_members(projects)
     if not members:
         raise ValueError("no projects found to aggregate")
-    python_ranges = {project.requires_python for project in members}
-    if len(python_ranges) != 1:
-        raise ValueError(f"projects declare different requires-python ranges: {sorted(python_ranges)}")
+    python_range = common_python_range([project.requires_python for project in members])
 
     dependencies = []
     for project in members:
         extras = ",".join(sorted(project.optional_dependencies))
         dependencies.append(f"{project.name}[{extras}]" if extras else project.name)
-    width = max(len(project.name) for project in members)
+    # Keys are quoted because distribution names may contain dots, which TOML
+    # would otherwise read as nested tables.
+    keys = [f'"{project.name}"' for project in members]
+    width = max(len(key) for key in keys)
     # Every source is editable: the projects depend on each other as editable
     # paths, and mixing modes resolves to conflicting URLs.
     sources = [
-        f'{project.name:<{width}} = {{ path = "../{project.relative_directory.as_posix()}", editable = true }}'
-        for project in members
+        f'{key:<{width}} = {{ path = "../{project.relative_directory.as_posix()}", editable = true }}'
+        for key, project in zip(keys, members, strict=True)
     ]
 
     lines = [
@@ -69,7 +88,7 @@ def manifest_toml(projects: Sequence[Project]) -> str:
         f'name = "{MANIFEST_NAME}"',
         'version = "0.0.0"',
         'description = "Repository-wide resolved dependency manifest."',
-        f'requires-python = "{python_ranges.pop()}"',
+        f'requires-python = "{python_range}"',
         "dependencies = [",
         *(f'    "{dependency}",' for dependency in dependencies),
         "]",
@@ -84,10 +103,10 @@ def manifest_toml(projects: Sequence[Project]) -> str:
 
 
 def lock_manifest(root: Path) -> None:
-    """Resolve the manifest lock from scratch under the root uv.toml cutoff."""
+    """Resolve the manifest lock from scratch with the pinned uv under the root uv.toml cutoff."""
 
     subprocess.run(
-        ["uv", "--config-file", "uv.toml", "lock", "--upgrade", "--project", MANIFEST_DIRECTORY],
+        ["uvx", f"uv@{UV_VERSION}", "--config-file", "uv.toml", "lock", "--upgrade", "--project", MANIFEST_DIRECTORY],
         cwd=root,
         check=True,
     )
