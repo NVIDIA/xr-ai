@@ -1090,10 +1090,10 @@ def test_instrument_fallback_uses_direction_or_one_peak() -> None:
     ) == "Device1 increased to 3 V."
     assert InstrumentAlertAgent._fallback_summary(
         ([alert("Device1", "15 V", previous="10 V"), alert("Device1", "12 V")],)
-    ) == "Device1 ended at 12 V; peaked at 15 V."
+    ) == "Device1 peaked at 15 V; now 12 V."
     assert InstrumentAlertAgent._fallback_summary(
         ([alert("Device1", "5 V", previous="10 V"), alert("Device1", "8 V")],)
-    ) == "Device1 ended at 8 V; dipped to 5 V."
+    ) == "Device1 dipped to 5 V; now 8 V."
 
 
 @pytest.mark.asyncio

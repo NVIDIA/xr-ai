@@ -32,13 +32,12 @@ from .instrument_monitor import normalize_meter_reading
 _VOICE_INTERVAL_S = 5.0
 _SUMMARY_TIMEOUT_S = 5.0
 _SUMMARY_PROMPT = """Summarize instrument changes since the last spoken update.
-Use one very short, natural spoken clause per instrument with no preamble or filler.
-Characterize the overall trend when supported, using concise language such as increased, decreased,
-oscillating, unstable, spiking, recovering, or steady. Include the final reading, and include at most one
-notable peak or dip when it materially clarifies the trend. Never include the starting value.
-Never use arrows, inequality signs, symbolic transitions, or spoken symbol names such as "right arrow."
-Keep instrument names, readings, units, and tracking status. Prefer 12 words or fewer per instrument.
-Do not invent values, units, causes, or instruments."""
+For each instrument, say only its name, one short trend, and its final reading.
+Use increased or decreased for a monotonic trend. For a non-monotonic trend, use one concise description
+such as oscillating or unstable; when useful, include only one most informative "peaked at" or "dipped to"
+value alongside the final reading. Never include the starting value, intermediate readings, a sequence,
+explanation, cause, recommendation, or filler. Never use arrows, inequality signs, symbolic transitions,
+or spoken symbol names. Prefer one clause and 10 words or fewer per instrument. Do not invent facts."""
 
 
 def _directional_update(
@@ -328,14 +327,14 @@ class InstrumentAlertAgent(Agent):
                         )
                         if extreme[0] > final[0]:
                             updates.append(
-                                f"{last.device_name} ended at {final[2]}; "
-                                f"peaked at {extreme[2]}."
+                                f"{last.device_name} peaked at {extreme[2]}; "
+                                f"now {final[2]}."
                             )
                             continue
                         if extreme[0] < final[0]:
                             updates.append(
-                                f"{last.device_name} ended at {final[2]}; "
-                                f"dipped to {extreme[2]}."
+                                f"{last.device_name} dipped to {extreme[2]}; "
+                                f"now {final[2]}."
                             )
                             continue
                 updates.append(f"{last.device_name}: {last.meter_reading}.")

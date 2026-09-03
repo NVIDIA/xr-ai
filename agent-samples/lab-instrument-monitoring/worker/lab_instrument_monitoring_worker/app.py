@@ -43,13 +43,13 @@ from .monitor import MonitorAgent
 from .web_events import WebEventsAdapterAgent
 
 _MONITORING_VOICE_SPACING_S = 5.0
-_VOICE_AGGREGATION_PROMPT = """Combine simultaneous spoken updates into one brief, precise sentence.
-Preserve every instrument name, final value, unit, tracking status, actionable warning, and concise trend
-description such as increased, decreased, oscillating, unstable, spiking, recovering, or steady.
-Keep at most one useful peak or dip per instrument and omit starting values.
-Never use arrows, inequality signs, or spoken symbol names.
-Remove repetition, preambles, explanations, and filler. Do not invent information.
-Prefer 12 words or fewer per instrument."""
+_VOICE_AGGREGATION_PROMPT = """Combine simultaneous instrument updates into the shortest clear speech.
+For each value update, preserve only the instrument name, one trend, and the final value with its unit.
+The trend may be increased, decreased, oscillating, unstable, or one supplied peak or dip. Keep at most
+one peak or dip and the final value. Never include starting or intermediate values, a reading sequence,
+arrows, inequality signs, spoken symbol names, explanations, causes, recommendations, or filler.
+For tracking-only updates, preserve the instrument name and tracking or lost status. Do not invent facts.
+Prefer one clause and 10 words or fewer per instrument."""
 
 
 class _InstrumentVoiceAggregationAgent(VoiceAggregationAgent):
