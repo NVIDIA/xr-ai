@@ -38,7 +38,6 @@ _WORKER = _SAMPLE / "worker"
 sys.path.insert(0, str(_WORKER))
 
 import tea_making_worker.foreground as foreground_module  # noqa: E402  # pyright: ignore[reportMissingImports]
-import tea_making_worker.workflow as workflow_module  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     _CLIENT_TEXT_TOPIC,
     _ParticipantVoiceAggregationAgent,
@@ -622,7 +621,7 @@ def test_workflow_rejects_incomplete_completion_and_transitions_atomically() -> 
     store = WorkflowStore(workflow)
     session = store.get("participant-invalid")
     store.start(session)
-    store.observe(session, "Twinings Earl Grey label")
+    store.observe(session, "accepted")
 
     rejected = store.commit(session, {"tea_ready": True}, "")
 
@@ -646,7 +645,7 @@ def test_skipping_completed_step_preserves_verified_state() -> None:
     store = WorkflowStore(workflow)
     session = store.get("participant-verified")
     store.start(session)
-    store.observe(session, "Twinings Earl Grey label")
+    store.observe(session, "accepted")
     accepted = store.commit(
         session,
         {
@@ -687,182 +686,187 @@ def test_skipping_steeping_detection_also_skips_the_timer() -> None:
     assert "steeping_started_at_us" not in session.state
 
 
-def test_workflow_enforces_consecutive_visual_evidence() -> None:
+def test_workflow_enforces_consecutive_model_judgments() -> None:
     workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
     store = WorkflowStore(workflow)
     session = store.get("participant-2")
     store.start(session)
     store.advance(session, skip=True)
-    observation = "water visible"
+    store.advance(session, skip=True)
 
-    store.observe(session, observation)
-    rejected = store.commit(session, {"water_filled": True}, "")
+    store.observe(session, "accepted")
+    rejected = store.commit(session, {"heating_started": True}, "")
     assert not rejected.accepted
-    assert session.state["water_filled"] is False
+    assert session.state["heating_started"] is False
 
-    store.observe(session, observation)
-    accepted = store.commit(session, {"water_filled": True}, "")
+    store.observe(session, "accepted")
+    accepted = store.commit(session, {"heating_started": True}, "")
     assert accepted.accepted
     assert accepted.complete
-    assert session.state["water_filled"] is True
-    assert session.step_id == "fill_water"
+    assert session.state["heating_started"] is True
+    assert session.step_id == "heat_water"
 
 
-@pytest.mark.parametrize(
-    ("observation", "expected"),
-    [
-        ("water present", True),
-        ("Water Present", True),
-        ("`water present`", True),
-        ("water not visible", False),
-        ("water absent", False),
-        ("water visible: yes", False),
-        ("water visible: the kettle appears empty", False),
-        ("water visible: the lid is open", False),
-        ("The kettle contains water.", False),
-    ],
-)
-def test_water_observation_protocol(observation: str, expected: bool) -> None:
-    assert workflow_module._water_visible(observation) is expected
-
-
-@pytest.mark.parametrize(
-    ("observation", "reading_c", "ambiguous"),
-    [
-        ("51 C", 51.0, False),
-        ("123 F", pytest.approx(50.56, abs=0.01), False),
-        ("65 degrees Celsius", 65.0, False),
-        ("unit ambiguous", None, True),
-        ("The display reads 65", None, True),
-        ("No current reading; the target is 93 Celsius.", None, False),
-        ("The target is 93 Celsius.", None, True),
-        ("no reading", None, False),
-    ],
-)
-def test_temperature_observation_protocol(
-    observation: str,
-    reading_c: float | None,
-    ambiguous: bool,
-) -> None:
-    actual_reading, actual_ambiguous = workflow_module._temperature_reading_c(
-        observation
+def _commit_response(updates: dict[str, bool | int | float | str]) -> ChatResponse:
+    return ChatResponse(
+        "",
+        None,
+        [
+            ToolCall(
+                id="commit-1",
+                name="workflow__commit",
+                arguments=json.dumps({"updates": updates, "message": ""}),
+            )
+        ],
+        "tool_calls",
+        {},
     )
-    assert actual_reading == reading_c
-    assert actual_ambiguous is ambiguous
 
 
-def _guidance_for_direct_evidence() -> GuidanceAgent:
+def _guidance_for_observation(llm: object) -> GuidanceAgent:
     return GuidanceAgent(
         workflow=load_workflow(_SAMPLE / "yaml/workflow.yaml"),
-        llm=SimpleNamespace(),  # type: ignore[arg-type]
+        llm=llm,  # type: ignore[arg-type]
         current_frame=SimpleNamespace(),  # type: ignore[arg-type]
         image_query=SimpleNamespace(),  # type: ignore[arg-type]
         rag=SimpleNamespace(),  # type: ignore[arg-type]
     )
 
 
-def test_water_detection_uses_two_confirming_vlm_observations() -> None:
-    guidance = _guidance_for_direct_evidence()
-    session = guidance.store.get("participant-water-evidence")
-    guidance.store.start(session)
-    guidance.store.advance(session, skip=True)
-    step = guidance.workflow.step("fill_water")
-
-    for observation in (
-        "water visible: the kettle appears empty",
-        "water visible: the lid is open",
-    ):
-        guidance._apply_direct_evidence(
-            session,
-            step,
-            observation,
-            session.revision,
-        )
-    assert session.state["water_filled"] is False
-
-    guidance._apply_direct_evidence(
+async def _observe_caption(
+    guidance: GuidanceAgent,
+    participant_id: str,
+    caption: str,
+) -> None:
+    session = guidance.store.get(participant_id)
+    assert session.step_id is not None
+    step = guidance.workflow.step(session.step_id)
+    await guidance._observe(
         session,
         step,
-        "water present",
+        caption,
+        dict(session.state),
         session.revision,
+    )
+
+
+@pytest.mark.asyncio
+async def test_water_presence_is_judged_by_observation_llm() -> None:
+    captions: list[str] = []
+
+    class Llm:
+        async def chat(self, messages, **_kwargs):
+            request = json.loads(messages[-1].content)
+            caption = request["observation"]
+            captions.append(caption)
+            updates = (
+                {"water_filled": True}
+                if caption.startswith("A reflective pool")
+                else {}
+            )
+            return _commit_response(updates)
+
+    guidance = _guidance_for_observation(Llm())
+    session = guidance.store.get("participant-water-judgment")
+    guidance.store.start(session)
+    guidance.store.advance(session, skip=True)
+
+    await _observe_caption(
+        guidance,
+        session.participant_id,
+        "The lid is open, but the vessel appears empty.",
     )
     assert session.state["water_filled"] is False
 
-    guidance._apply_direct_evidence(
-        session,
-        step,
-        "water present",
-        session.revision,
+    await _observe_caption(
+        guidance,
+        session.participant_id,
+        "A reflective pool occupies the lower half of the vessel.",
     )
     assert session.state["water_filled"] is True
+    assert captions == [
+        "The lid is open, but the vessel appears empty.",
+        "A reflective pool occupies the lower half of the vessel.",
+    ]
 
 
-def test_heating_detection_requires_two_hot_explicit_unit_readings() -> None:
-    guidance = _guidance_for_direct_evidence()
-    session = guidance.store.get("participant-heating-evidence")
+@pytest.mark.asyncio
+async def test_heating_uses_two_positive_llm_judgments() -> None:
+    class Llm:
+        async def chat(self, messages, **_kwargs):
+            caption = json.loads(messages[-1].content)["observation"]
+            supported = caption.startswith("Current display")
+            return _commit_response({"heating_started": True} if supported else {})
+
+    guidance = _guidance_for_observation(Llm())
+    session = guidance.store.get("participant-heating-judgment")
     guidance.store.start(session)
     guidance.store.advance(session, skip=True)
     guidance.store.advance(session, skip=True)
-    step = guidance.workflow.step("heat_water")
 
-    for observation in ("51 C", "122 F", "51 C"):
-        guidance._apply_direct_evidence(
-            session,
-            step,
-            observation,
-            session.revision,
-        )
+    await _observe_caption(
+        guidance,
+        session.participant_id,
+        "No current reading is visible; the printed target is 93 Celsius.",
+    )
+    await _observe_caption(
+        guidance,
+        session.participant_id,
+        "Current display reads 55 degrees Celsius.",
+    )
     assert session.state["heating_started"] is False
 
-    guidance._apply_direct_evidence(
-        session,
-        step,
-        "123 F",
-        session.revision,
+    await _observe_caption(
+        guidance,
+        session.participant_id,
+        "The display shows 58, but its unit is unclear.",
+    )
+    await _observe_caption(
+        guidance,
+        session.participant_id,
+        "Current display reads 56 degrees Celsius.",
+    )
+    assert session.state["heating_started"] is False
+
+    await _observe_caption(
+        guidance,
+        session.participant_id,
+        "Current display reads 57 degrees Celsius.",
     )
     assert session.state["heating_started"] is True
 
 
-def test_heating_detection_rejects_target_temperature_as_current_reading() -> None:
-    guidance = _guidance_for_direct_evidence()
-    session = guidance.store.get("participant-target-temperature")
+@pytest.mark.asyncio
+async def test_steeping_llm_calls_clock_before_confirming_start() -> None:
+    class Llm:
+        async def chat(self, messages, **_kwargs):
+            if messages[-1].role == "user":
+                return ChatResponse(
+                    "",
+                    None,
+                    [ToolCall(id="now-1", name="clock__now", arguments="{}")],
+                    "tool_calls",
+                    {},
+                )
+            now = json.loads(messages[-1].content)["epoch_us"]
+            return _commit_response(
+                {"steeping_started_at_us": now, "steeping_started": True}
+            )
+
+    guidance = _guidance_for_observation(Llm())
+    session = guidance.store.get("participant-steeping-judgment")
     guidance.store.start(session)
     guidance.store.advance(session, skip=True)
     guidance.store.advance(session, skip=True)
-    step = guidance.workflow.step("heat_water")
-
-    for _ in range(3):
-        guidance._apply_direct_evidence(
-            session,
-            step,
-            "No current reading; the target is 93 Celsius.",
-            session.revision,
-        )
-
-    assert session.state["heating_started"] is False
-    assert session.notices == []
-
-
-def test_heating_detection_retries_then_reports_ambiguous_unit_once() -> None:
-    guidance = _guidance_for_direct_evidence()
-    session = guidance.store.get("participant-ambiguous-temperature")
-    guidance.store.start(session)
     guidance.store.advance(session, skip=True)
-    guidance.store.advance(session, skip=True)
-    step = guidance.workflow.step("heat_water")
 
-    for _ in range(4):
-        guidance._apply_direct_evidence(
-            session,
-            step,
-            "unit ambiguous",
-            session.revision,
-        )
+    caption = "The sachet is floating in the liquid inside the cup."
+    await _observe_caption(guidance, session.participant_id, caption)
+    assert session.state["steeping_started"] is False
 
-    assert session.state["heating_started"] is False
-    assert session.notices == [
-        "The temperature unit is ambiguous. Keep Celsius or Fahrenheit visible."
-    ]
+    await _observe_caption(guidance, session.participant_id, caption)
+    assert session.state["steeping_started"] is True
+    assert session.state["steeping_started_at_us"] > 0
 
 
 def test_guidance_exposes_one_foreground_stack_at_a_time() -> None:
@@ -1087,7 +1091,7 @@ async def test_completed_step_does_not_invoke_trigger_or_model() -> None:
     )
     session = guidance.store.get("participant-complete")
     guidance.store.start(session)
-    guidance.store.observe(session, "Twinings Earl Grey label")
+    guidance.store.observe(session, "accepted")
     result = guidance.store.commit(
         session,
         {
@@ -2074,9 +2078,8 @@ def _activate_test_step(guidance: GuidanceAgent, step_id: str) -> None:
     while session.step_id != step_id:
         assert session.step_id is not None
         if session.step_id == "start_steeping" and step_id == "steep_timer":
-            observation = "A tea bag is immersed in the water."
-            guidance.store.observe(session, observation)
-            guidance.store.observe(session, observation)
+            guidance.store.observe(session, "accepted")
+            guidance.store.observe(session, "accepted")
             committed = guidance.store.commit(
                 session,
                 {"steeping_started_at_us": 1, "steeping_started": True},

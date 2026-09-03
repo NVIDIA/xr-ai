@@ -13,10 +13,11 @@ architecture reference explains how to adapt the sample to another procedure
 rather than merely changing model settings.
 
 The defining pattern is a deterministic workflow around an agentic core. YAML
-declares the steps and state contract. Application code owns transitions and
-evidence. The model interprets observations and selects native tools, but it
-does not choose which workflow is active, mutate arbitrary state, or advance a
-step implicitly.
+declares the steps and state contract. A VLM describes each current view, and
+the observation LLM judges that natural-language caption and selects native
+tools. Application code validates the resulting state proposal and counts any
+required consecutive confirmations. The model does not choose which workflow
+is active, mutate arbitrary state, or advance a step implicitly.
 
 ## What to copy
 
@@ -268,9 +269,10 @@ workflow step is active, the task:
 
 1. Executes the step's deterministic trigger, such as `current_view` or
    `clock__timer`.
-2. Applies the declared evidence rule.
-3. Calls the bounded tool loop with only the step's observation tools.
-4. Accepts state through the controlled commit tool.
+2. Calls the bounded observation tool loop to judge the trigger result.
+3. Counts a valid completion proposal against the declared confirmation rule.
+4. Accepts state through the controlled commit tool only after the required
+   confirmations.
 5. Publishes typed records and completion notices.
 
 Unavailable frames, invalid observations, and service failures record an error
@@ -283,8 +285,10 @@ accepted only when the captured step and revision still match. Reset, restart,
 status, and advance controls therefore remain responsive during slow inference.
 
 To use audio, sensor, or backend evidence, add another deterministic trigger
-that returns a typed result. Keep evidence collection separate from state
-mutation so the same workflow rules remain testable without the live source.
+that returns a typed result. Keep observation, semantic judgment, and guarded
+state mutation separate so the same workflow rules remain testable without the
+live source. Regex matching may guard the internal judgment token, but should
+not be the primary interpreter of natural-language captions.
 
 ## Independent background agents
 
@@ -361,7 +365,8 @@ ZMQ service rather than bypassing the repository's service model.
 1. Define the new state fields and steps in `workflow.yaml`.
 2. Give every step the smallest possible `reads`, `writes`, and tool set.
 3. Put calculations and external facts behind deterministic tools.
-4. Define evidence independently of the observation prompt.
+4. Give the VLM a small factual caption prompt and the observation LLM a small
+   semantic judgment prompt; use code only to validate and count proposals.
 5. Keep advancement explicit unless the product explicitly requires automatic
    transitions.
 6. Add state and routing tests before tuning prompts.

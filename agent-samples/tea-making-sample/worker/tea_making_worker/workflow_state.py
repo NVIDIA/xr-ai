@@ -179,7 +179,7 @@ class WorkflowStore:
         session: WorkflowSession,
         observation: Any,
     ) -> None:
-        """Update consecutive evidence without letting the model control it."""
+        """Update the deterministic count of consecutive guarded judgments."""
 
         step = self.active_step(session)
         if step.evidence is None:
@@ -197,6 +197,21 @@ class WorkflowStore:
             (
                 f"matched={str(matched).lower()} consecutive={session.evidence_hits}/{step.evidence.consecutive}"
             ),
+        )
+
+    def _completion_proposed(
+        self,
+        session: WorkflowSession,
+        updates: dict[str, Any],
+    ) -> bool:
+        """Return whether a valid model proposal completes the active step."""
+
+        step = self.active_step(session)
+        if self._invalid_patch(step, updates):
+            return False
+        candidate = {**session.state, **updates}
+        return step.is_complete(candidate) and all(
+            name in candidate for name in step.writes
         )
 
     def commit(

@@ -91,9 +91,8 @@ def _active_route(
         if not session.active or session.step_id is None:
             raise ValueError(f"cannot reach active step {target_step!r}")
         if session.step_id == "start_steeping" and target_step == "steep_timer":
-            observation = "A tea bag is immersed in the water."
-            guidance.store.observe(session, observation)
-            guidance.store.observe(session, observation)
+            guidance.store.observe(session, "accepted")
+            guidance.store.observe(session, "accepted")
             result = guidance.store.commit(
                 session,
                 {"steeping_started_at_us": 1, "steeping_started": True},
@@ -106,8 +105,8 @@ def _active_route(
             guidance.store.advance(session, skip=True)
     state_updates = dict(case.get("state_updates", {}))
     if state_updates:
-        for observation in case.get("observations", []):
-            guidance.store.observe(session, observation)
+        for _observation in case.get("observations", []):
+            guidance.store.observe(session, "accepted")
         result = guidance.store.commit(session, state_updates, "")
         if not result.accepted:
             raise ValueError(f"state updates for {case['name']!r} were rejected: {state_updates!r}")
