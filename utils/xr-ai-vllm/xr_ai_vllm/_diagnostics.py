@@ -15,11 +15,58 @@ def _argument_value(argv: list[str], option: str) -> str | None:
         return None
 
 
-def classify_vllm_failure(log_path: str | Path, argv: list[str]) -> str | None:
-    """Return a clear diagnosis when *log_path* contains a GPU-memory failure."""
+def _read_log(log_path: str | Path, start_offset: int = 0) -> str | None:
     try:
-        body = Path(log_path).read_text(encoding="utf-8", errors="replace")
+        with Path(log_path).open("rb") as stream:
+            stream.seek(max(start_offset, 0))
+            return stream.read().decode(encoding="utf-8", errors="replace")
     except OSError:
+        return None
+
+
+def is_cuda_memory_allocation_failure(
+    log_path: str | Path,
+    *,
+    start_offset: int = 0,
+) -> bool:
+    """Return whether vLLM failed at the CUDA driver-allocation boundary.
+
+    This deliberately excludes model-loading, ``torch.OutOfMemoryError``, and
+    KV-cache admission failures. The transient DGX Spark failure occurs while
+    ``init_device`` takes its initial ``MemorySnapshot`` through
+    ``mem_get_info``; the traceback context distinguishes that failure from a
+    later allocation error carrying the same generic CUDA text.
+    """
+    body = _read_log(log_path, start_offset)
+    if body is None:
+        return False
+    lowered = body.lower()
+    initial_snapshot = (
+        "in init_device" in lowered
+        and "in measure" in lowered
+        and "mem_get_info" in lowered
+    )
+    return (
+        initial_snapshot
+        and "torch.acceleratorerror" in lowered
+        and (
+            "cudaerrormemoryallocation" in lowered
+            or "cuda error: out of memory" in lowered
+        )
+    )
+
+
+def classify_vllm_failure(
+    log_path: str | Path,
+    argv: list[str],
+    *,
+    spark_uma: bool = False,
+    start_offset: int = 0,
+    retry_exhausted: bool = False,
+) -> str | None:
+    """Return a clear diagnosis when *log_path* contains a GPU-memory failure."""
+    body = _read_log(log_path, start_offset)
+    if body is None:
         return None
     lowered = body.lower()
     utilization = _argument_value(argv, "--gpu-memory-utilization")
@@ -27,6 +74,21 @@ def classify_vllm_failure(log_path: str | Path, argv: list[str]) -> str | None:
         f" (configured gpu_memory_utilization={utilization})"
         if utilization else ""
     )
+
+    if spark_uma and is_cuda_memory_allocation_failure(
+        log_path,
+        start_offset=start_offset,
+    ):
+        retry_detail = (
+            "The automatic cold-start retry was exhausted. "
+            if retry_exhausted else ""
+        )
+        return (
+            "DGX SPARK UMA ALLOCATION FAILURE: the CUDA driver could not allocate "
+            "startup memory even though Linux may still report reclaimable memory. "
+            f"{retry_detail}Stop unrelated "
+            "memory-intensive workloads and verify the supported DGX OS and driver."
+        )
 
     if (
         "no available memory for the cache blocks" in lowered
@@ -46,7 +108,11 @@ def classify_vllm_failure(log_path: str | Path, argv: list[str]) -> str | None:
             "model/context/concurrency, free GPU memory, or use a larger device."
         )
 
-    if "cuda out of memory" in lowered or "torch.outofmemoryerror" in lowered:
+    if (
+        "cuda out of memory" in lowered
+        or "cuda error: out of memory" in lowered
+        or "torch.outofmemoryerror" in lowered
+    ):
         return (
             "INSUFFICIENT GPU MEMORY: CUDA allocation failed during vLLM startup"
             f"{budget}. Free GPU memory, reduce the configured model/context/"

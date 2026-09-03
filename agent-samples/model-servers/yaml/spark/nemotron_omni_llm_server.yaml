@@ -2,8 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Nemotron-3-Nano-Omni — DGX Spark (GB10).
-# The NVFP4 model shares unified memory with STT and the runtime, so retain the
-# conservative allocation used by the standard Nano stack.
+# The NVFP4 model shares unified memory with the rest of the stack. vLLM's
+# fractional profiler is unreliable while cold checkpoint reads change the
+# filesystem page cache, so reserve 2 GiB explicitly for the 32K hybrid
+# Mamba/attention cache. This covers four full 32K requests with the pinned
+# vLLM 0.20 cache layout; max_num_seqs still permits more shorter requests.
+# gpu_memory_utilization remains the vLLM startup admission threshold; it does
+# not size the cache when the byte value is set.
 
 host: "0.0.0.0"
 port: 8108
@@ -14,6 +19,7 @@ max_num_seqs: 8
 tensor_parallel_size: 1
 max_model_len: 32768
 gpu_memory_utilization: 0.25
+kv_cache_memory_bytes: 2147483648
 enforce_eager: false
 
 video_pruning_rate: 0.5
@@ -23,3 +29,7 @@ video_num_frames: 64
 vllm_backend: docker
 vllm_image: vllm/vllm-openai:v0.20.0
 extra_pip: []
+
+# Prefetch and sync the snapshot before CUDA initialization, then retry once
+# only if the driver rejects a CUDA allocation without an OOM-killed container.
+spark_uma: true

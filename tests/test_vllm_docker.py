@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import xr_ai_vllm
 from xr_ai_vllm import _docker
 from xr_ai_vllm._docker import (
     _CONFIG_LABEL,
@@ -24,6 +25,15 @@ from xr_ai_vllm._docker import (
     container_running,
     pid_on_port,
     run,
+)
+
+_EARLY_CUDA_ALLOCATION_FAILURE = (
+    'File "/opt/vllm/vllm/v1/worker/gpu_worker.py", line 282, in init_device\n'
+    "  self.init_snapshot = MemorySnapshot(device=self.device)\n"
+    'File "/opt/vllm/vllm/utils/mem_utils.py", line 108, in measure\n'
+    "  self.free_memory, self.total_memory = current_platform.mem_get_info(device)\n"
+    "torch.AcceleratorError: CUDA error: out of memory\n"
+    "cudaErrorMemoryAllocation\n"
 )
 
 
@@ -295,6 +305,26 @@ class TestBuildRunArgv:
         assert "huggingface-hub>=" not in bash_cmd
         assert bash_cmd.endswith("vllm serve my-model --host 0.0.0.0 --port 8100")
 
+    def test_prefetches_and_syncs_snapshot_before_vllm(self, tmp_path):
+        kwargs = self._base_kwargs(tmp_path)
+        kwargs["prefetch_model"] = "org/cold-model"
+
+        argv = build_run_argv(**kwargs)
+        bash_cmd = argv[-1]
+
+        assert "snapshot_download" in bash_cmd
+        assert "org/cold-model" in bash_cmd
+        assert "os.sync()" in bash_cmd
+        assert bash_cmd.index("snapshot_download") < bash_cmd.index("vllm serve")
+
+    def test_prefetch_changes_configuration_fingerprint(self, tmp_path):
+        kwargs = self._base_kwargs(tmp_path)
+        without_prefetch = _fingerprint_from_argv(build_run_argv(**kwargs))
+        kwargs["prefetch_model"] = "org/cold-model"
+        with_prefetch = _fingerprint_from_argv(build_run_argv(**kwargs))
+
+        assert with_prefetch != without_prefetch
+
     def test_skips_xet_bootstrap_when_disabled_in_extra_env(self, tmp_path):
         kwargs = self._base_kwargs(tmp_path)
         kwargs["extra_env"] = {"HF_HUB_DISABLE_XET": "1"}
@@ -351,7 +381,7 @@ def _wait_for(predicate, timeout_s=5.0):
 
 
 class TestLogStreamer:
-    def _make(self, monkeypatch, tmp_path, exists):
+    def _make(self, monkeypatch, tmp_path, exists, *, since=None):
         attached: list[_FakeLogProc] = []
         monkeypatch.setattr(
             "xr_ai_vllm._docker._container_log_path",
@@ -367,7 +397,7 @@ class TestLogStreamer:
             return proc
 
         monkeypatch.setattr(_LogStreamer, "_attach", _fake_attach)
-        return _LogStreamer("fake-container"), attached
+        return _LogStreamer("fake-container", since=since), attached
 
     def test_attach_waits_for_container(self, monkeypatch, tmp_path):
         exists = threading.Event()
@@ -421,6 +451,26 @@ class TestLogStreamer:
         finally:
             streamer.stop()
 
+    def test_reattach_never_replays_before_attempt_boundary(
+        self, monkeypatch, tmp_path,
+    ):
+        exists = threading.Event()
+        exists.set()
+        boundary = "2099-01-01T00:00:00+00:00"
+        streamer, attached = self._make(
+            monkeypatch,
+            tmp_path,
+            exists,
+            since=boundary,
+        )
+        try:
+            assert _wait_for(lambda: len(attached) == 1)
+            attached[0].terminate()
+            assert _wait_for(lambda: len(attached) == 2)
+            assert streamer._since == boundary
+        finally:
+            streamer.stop()
+
     def test_unwritable_log_path_ends_supervisor(self, monkeypatch, tmp_path):
         monkeypatch.setattr(
             "xr_ai_vllm._docker._container_log_path",
@@ -446,6 +496,34 @@ class TestLogStreamer:
         streamer.stop()
 
 
+def test_post_mortem_is_scoped_to_current_attempt(tmp_path):
+    log_path = tmp_path / "container.log"
+    started_at = "2026-09-02T18:28:21.123456789Z"
+    result = MagicMock(stdout=b"current failure\n", stderr=b"")
+
+    with patch("xr_ai_vllm._docker.subprocess.run", return_value=result) as run:
+        _docker._append_post_mortem(
+            "some-name",
+            log_path,
+            since=started_at,
+        )
+
+    run.assert_called_once_with(
+        [
+            "docker",
+            "logs",
+            "--since",
+            started_at,
+            "--tail",
+            "200",
+            "some-name",
+        ],
+        capture_output=True,
+        check=False,
+    )
+    assert "current failure" in log_path.read_text(encoding="utf-8")
+
+
 class TestContainerHelpers:
     def test_container_exists_false_when_docker_missing(self):
         with patch(
@@ -460,6 +538,35 @@ class TestContainerHelpers:
             side_effect=FileNotFoundError,
         ):
             assert not container_running("some-name")
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [("true\n", True), ("false\n", False), ("unknown\n", None)],
+    )
+    def test_container_oom_killed_reads_inspect_state(self, raw, expected):
+        with patch(
+            "xr_ai_vllm._docker.subprocess.check_output",
+            return_value=raw,
+        ):
+            assert _docker.container_oom_killed("some-name") is expected
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            (
+                "2026-09-02T18:28:21.123456789Z\n",
+                "2026-09-02T18:28:21.123456789Z",
+            ),
+            ("0001-01-01T00:00:00Z\n", None),
+            ("\n", None),
+        ],
+    )
+    def test_container_started_at_reads_current_attempt(self, raw, expected):
+        with patch(
+            "xr_ai_vllm._docker.subprocess.check_output",
+            return_value=raw,
+        ):
+            assert _docker.container_started_at("some-name") == expected
 
     def test_container_label_returns_inspected_value(self):
         with patch(
@@ -524,6 +631,50 @@ class TestRun:
         )
         assert "--gpu-memory-utilization" not in captured["argv"]
         assert captured["diagnostic_argv"] == kwargs["vllm_argv"]
+
+    def test_spark_uma_enables_prefetch_and_retry(self, tmp_path, monkeypatch):
+        kwargs = _run_kwargs(tmp_path)
+        kwargs["spark_uma"] = True
+        captured_build: dict = {}
+        captured_run: dict = {}
+        monkeypatch.setattr(
+            _docker,
+            "build_run_argv",
+            lambda **values: captured_build.update(values) or ["docker", "run"],
+        )
+        monkeypatch.setattr(
+            _docker,
+            "run_container",
+            lambda **values: captured_run.update(values),
+        )
+
+        run(**kwargs)
+
+        assert captured_build["prefetch_model"] == "model"
+        assert captured_run["spark_uma"] is True
+
+    def test_spark_uma_is_harmless_in_pip_mode(self, tmp_path, monkeypatch):
+        captured: dict = {}
+        monkeypatch.setattr(
+            xr_ai_vllm._pip,
+            "run",
+            lambda **values: captured.update(values),
+        )
+
+        xr_ai_vllm.serve(
+            backend="pip",
+            persistent=True,
+            container_name="unused",
+            log_prefix="test",
+            model="model",
+            extra_serve_args=[],
+            host="127.0.0.1",
+            port=8100,
+            model_cache=tmp_path,
+            spark_uma=True,
+        )
+
+        assert captured["vllm_argv"][2] == "model"
 
     def test_healthy_unowned_listener_is_rejected(self, tmp_path):
         kwargs = _run_kwargs(tmp_path)
@@ -668,6 +819,10 @@ class TestRun:
             patch("xr_ai_vllm._docker._lifecycle.health_ok", return_value=False),
             patch("xr_ai_vllm._docker.container_exists", return_value=True),
             patch("xr_ai_vllm._docker.container_running", return_value=True),
+            patch(
+                "xr_ai_vllm._docker.container_started_at",
+                return_value="2026-09-02T18:28:21Z",
+            ),
             patch("xr_ai_vllm._docker.container_label",
                   side_effect=lambda name, label: _fingerprint_from_argv(
                       build_run_argv(
@@ -702,7 +857,7 @@ class TestRunContainer:
     class _FakeStreamer:
         log_path = None
 
-        def __init__(self, name):
+        def __init__(self, name, **_kwargs):
             pass
 
         def stop(self):
@@ -731,6 +886,7 @@ class TestRunContainer:
         monkeypatch.setattr(d, "start_container", lambda name: True)
         monkeypatch.setattr(d, "container_running", lambda name: False)
         monkeypatch.setattr(d, "container_exists", lambda name: False)
+        monkeypatch.setattr(d, "container_started_at", lambda name: None)
         monkeypatch.setattr(d, "_LogStreamer", self._FakeStreamer)
         monkeypatch.setattr(d, "_maybe_ngc_login", lambda image: None)
         monkeypatch.setattr(d._lifecycle, "idle_until_stopped", lambda *a, **k: None)
@@ -1120,7 +1276,7 @@ class TestRunContainer:
         class _Streamer:
             log_path = tmp_path / "container.log"
 
-            def __init__(self, _name):
+            def __init__(self, _name, **_kwargs):
                 self.log_path.write_text("CUDA out of memory", encoding="utf-8")
 
             def stop(self):
@@ -1134,7 +1290,7 @@ class TestRunContainer:
         monkeypatch.setattr(
             _docker._diagnostics,
             "classify_vllm_failure",
-            lambda _path, argv: captured.append(argv) or "diagnosis",
+            lambda _path, argv, **_kwargs: captured.append(argv) or "diagnosis",
         )
         kwargs = self._kwargs(tmp_path)
         diagnostic_argv = [
@@ -1147,6 +1303,267 @@ class TestRunContainer:
             _docker.run_container(**kwargs)
 
         assert captured == ([diagnostic_argv] if with_vllm_context else [])
+
+    def test_spark_retries_driver_allocation_failure_once(
+        self, monkeypatch, tmp_path,
+    ):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda *_a, **_k: False)
+        attempts = 0
+
+        def _wait(*_args, **_kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise SystemExit(1)
+
+        monkeypatch.setattr(_docker._lifecycle, "wait_until_healthy", _wait)
+
+        class _FakeProc:
+            def poll(self):
+                return 1
+
+        log_path = tmp_path / "container.log"
+
+        class _Streamer:
+            def __init__(self, _name, **_kwargs):
+                self.log_path = log_path
+                self.log_path.write_text(
+                    _EARLY_CUDA_ALLOCATION_FAILURE,
+                    encoding="utf-8",
+                )
+
+            def stop(self):
+                pass
+
+        monkeypatch.setattr(_docker.subprocess, "Popen", lambda *_a, **_kw: _FakeProc())
+        monkeypatch.setattr(_docker, "_LogStreamer", _Streamer)
+        monkeypatch.setattr(_docker, "_append_post_mortem", lambda *_a, **_kw: None)
+        monkeypatch.setattr(_docker, "container_oom_killed", lambda _name: False)
+        monkeypatch.setattr(_docker.time, "sleep", lambda _seconds: None)
+        starts: list[str] = []
+        monkeypatch.setattr(
+            _docker,
+            "start_container",
+            lambda name: starts.append(name) or True,
+        )
+        kwargs = self._kwargs(tmp_path)
+        kwargs["spark_uma"] = True
+
+        _docker.run_container(**kwargs)
+
+        assert attempts == 2
+        assert starts == ["xr-ai-test-ctr"]
+        assert kwargs["ready_file"].exists()
+
+    def test_spark_does_not_retry_an_adopted_container(
+        self, monkeypatch, tmp_path,
+    ):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda *_a, **_k: False)
+        running = {"value": True}
+        monkeypatch.setattr(
+            _docker,
+            "container_running",
+            lambda _name: running["value"],
+        )
+        monkeypatch.setattr(_docker, "container_exists", lambda _name: True)
+
+        def _fail_adopted_attempt(*_args, **_kwargs):
+            running["value"] = False
+            raise SystemExit(1)
+
+        monkeypatch.setattr(
+            _docker._lifecycle,
+            "wait_until_healthy",
+            _fail_adopted_attempt,
+        )
+        log_path = tmp_path / "container.log"
+
+        class _Streamer:
+            def __init__(self, _name, **_kwargs):
+                self.log_path = log_path
+                self.log_path.write_text(
+                    _EARLY_CUDA_ALLOCATION_FAILURE,
+                    encoding="utf-8",
+                )
+
+            def stop(self):
+                pass
+
+        monkeypatch.setattr(_docker, "_LogStreamer", _Streamer)
+        monkeypatch.setattr(_docker, "_append_post_mortem", lambda *_a, **_kw: None)
+        monkeypatch.setattr(_docker.time, "sleep", lambda _seconds: None)
+        starts: list[str] = []
+        monkeypatch.setattr(
+            _docker,
+            "start_container",
+            lambda name: starts.append(name) or True,
+        )
+        kwargs = self._kwargs(tmp_path)
+        kwargs["spark_uma"] = True
+
+        with pytest.raises(SystemExit, match="1"):
+            _docker.run_container(**kwargs)
+
+        assert starts == []
+
+    def test_spark_does_not_retry_an_old_attempt_allocation_failure(
+        self, monkeypatch, tmp_path,
+    ):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda *_a, **_k: False)
+        monkeypatch.setattr(
+            _docker._lifecycle,
+            "wait_until_healthy",
+            lambda *_a, **_kw: (_ for _ in ()).throw(SystemExit(1)),
+        )
+
+        class _FakeProc:
+            def poll(self):
+                return 1
+
+        log_path = tmp_path / "container.log"
+        log_path.write_text(
+            _EARLY_CUDA_ALLOCATION_FAILURE,
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(_docker, "_container_log_path", lambda _name: log_path)
+
+        class _Streamer:
+            def __init__(self, _name, **_kwargs):
+                self.log_path = log_path
+                with self.log_path.open("a", encoding="utf-8") as stream:
+                    stream.write("HfHubHTTPError: Invalid credentials\n")
+
+            def stop(self):
+                pass
+
+        monkeypatch.setattr(_docker.subprocess, "Popen", lambda *_a, **_kw: _FakeProc())
+        monkeypatch.setattr(_docker, "_LogStreamer", _Streamer)
+        monkeypatch.setattr(_docker, "_append_post_mortem", lambda *_a, **_kw: None)
+        monkeypatch.setattr(_docker, "container_oom_killed", lambda _name: False)
+        monkeypatch.setattr(_docker.time, "sleep", lambda _seconds: None)
+        starts: list[str] = []
+        monkeypatch.setattr(
+            _docker,
+            "start_container",
+            lambda name: starts.append(name) or True,
+        )
+        kwargs = self._kwargs(tmp_path)
+        kwargs["spark_uma"] = True
+
+        with pytest.raises(SystemExit, match="1"):
+            _docker.run_container(**kwargs)
+
+        assert starts == []
+
+    @pytest.mark.parametrize("restart_succeeds", [False, True])
+    def test_retry_exhaustion_requires_a_successful_restart(
+        self, monkeypatch, tmp_path, restart_succeeds,
+    ):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda *_a, **_k: False)
+        monkeypatch.setattr(
+            _docker._lifecycle,
+            "wait_until_healthy",
+            lambda *_a, **_kw: (_ for _ in ()).throw(SystemExit(1)),
+        )
+
+        class _FakeProc:
+            def poll(self):
+                return 1
+
+        log_path = tmp_path / "container.log"
+
+        class _Streamer:
+            def __init__(self, _name, **_kwargs):
+                self.log_path = log_path
+                with self.log_path.open("a", encoding="utf-8") as stream:
+                    stream.write(_EARLY_CUDA_ALLOCATION_FAILURE)
+
+            def stop(self):
+                pass
+
+        monkeypatch.setattr(_docker.subprocess, "Popen", lambda *_a, **_kw: _FakeProc())
+        monkeypatch.setattr(_docker, "_LogStreamer", _Streamer)
+        monkeypatch.setattr(_docker, "_append_post_mortem", lambda *_a, **_kw: None)
+        monkeypatch.setattr(_docker, "container_oom_killed", lambda _name: False)
+        monkeypatch.setattr(_docker.time, "sleep", lambda _seconds: None)
+        monkeypatch.setattr(
+            _docker,
+            "start_container",
+            lambda _name: restart_succeeds,
+        )
+        exhausted: list[bool] = []
+        monkeypatch.setattr(
+            _docker._diagnostics,
+            "classify_vllm_failure",
+            lambda *_a, **kwargs: exhausted.append(kwargs["retry_exhausted"])
+            or "diagnosis",
+        )
+        kwargs = self._kwargs(tmp_path)
+        kwargs["spark_uma"] = True
+        kwargs["diagnostic_argv"] = ["vllm", "serve", "model"]
+
+        with pytest.raises(SystemExit, match="1"):
+            _docker.run_container(**kwargs)
+
+        assert exhausted == [restart_succeeds]
+
+    @pytest.mark.parametrize(
+        ("spark_uma", "oom_killed"),
+        [(False, False), (True, True)],
+    )
+    def test_driver_allocation_retry_is_spark_only_and_not_for_oom_kills(
+        self, monkeypatch, tmp_path, spark_uma, oom_killed,
+    ):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda *_a, **_k: False)
+        monkeypatch.setattr(
+            _docker._lifecycle,
+            "wait_until_healthy",
+            lambda *_a, **_kw: (_ for _ in ()).throw(SystemExit(1)),
+        )
+
+        class _FakeProc:
+            def poll(self):
+                return 1
+
+        class _Streamer:
+            log_path = tmp_path / "container.log"
+
+            def __init__(self, _name, **_kwargs):
+                self.log_path.write_text(
+                    _EARLY_CUDA_ALLOCATION_FAILURE,
+                    encoding="utf-8",
+                )
+
+            def stop(self):
+                pass
+
+        monkeypatch.setattr(_docker.subprocess, "Popen", lambda *_a, **_kw: _FakeProc())
+        monkeypatch.setattr(_docker, "_LogStreamer", _Streamer)
+        monkeypatch.setattr(_docker, "_append_post_mortem", lambda *_a, **_kw: None)
+        monkeypatch.setattr(
+            _docker,
+            "container_oom_killed",
+            lambda _name: oom_killed,
+        )
+        monkeypatch.setattr(_docker.time, "sleep", lambda _seconds: None)
+        starts: list[str] = []
+        monkeypatch.setattr(
+            _docker,
+            "start_container",
+            lambda name: starts.append(name) or True,
+        )
+        kwargs = self._kwargs(tmp_path)
+        kwargs["spark_uma"] = spark_uma
+
+        with pytest.raises(SystemExit, match="1"):
+            _docker.run_container(**kwargs)
+
+        assert starts == []
 
 
 class TestEvictLocalListener:

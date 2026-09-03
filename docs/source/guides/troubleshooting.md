@@ -26,17 +26,20 @@ sudo apt install python3-dev
 
 This applies to the `agent-samples/model-servers/yaml/spark/` profile.
 
-### DGX Spark — vLLM fails in `cudaMemGetInfo` before loading weights
+### DGX Spark — CUDA allocation fails during a vLLM cold start
 
 **Symptom:** `model_servers` aborts while starting a vLLM service, often the
 embedding server after the larger services have started. The traceback reaches
 `MemorySnapshot.measure()`, then ends in `torch.cuda.mem_get_info()` or
-`cudaMemGetInfo` with a CUDA out-of-memory error. `htop` can still show tens of
-gigabytes of available memory.
+`cudaMemGetInfo` with a CUDA out-of-memory error. Another form ends in
+`torch.AcceleratorError` and references `cudaErrorMemoryAllocation` after the
+kernel driver reports `NV_ERR_NO_MEMORY`. Docker reports that the container was
+not OOM-killed, and `htop` can still show tens of gigabytes of available memory.
 
-**Cause:** this traceback is not a model-weight or KV-cache allocation failure.
-The CUDA memory snapshot fails before vLLM loads that service's weights or
-checks its configured `gpu_memory_utilization`.
+**Cause:** these tracebacks are not model-weight or KV-cache allocation
+failures. The CUDA driver fails to obtain immediately usable memory before or
+during initialization. The `CUDA_LAUNCH_BLOCKING=1` line in the traceback is
+generic debugging advice, not the cause.
 
 DGX Spark uses a unified memory architecture: the CPU, GPU, filesystem cache,
 and model servers share the same DRAM. Linux `MemAvailable` includes memory that
@@ -58,10 +61,23 @@ If `MemAvailable` is much larger than `MemFree` and `Cached` is large, the
 failure is consistent with reclaimable-cache pressure rather than the next
 model being too large for the configured profile.
 
-**Fix:** first install the current DGX OS and driver updates. The [DGX Spark
-release notes](https://docs.nvidia.com/dgx/dgx-spark/release-notes.html)
-identify improved GB10 UMA out-of-memory handling in the July 2026 release.
-Stop unrelated memory-intensive workloads before retrying the stack.
+**Fix:** the bundled `spark` profile enables `spark_uma` for each Docker-backed
+vLLM service. The wrapper downloads and syncs the complete Hugging Face
+snapshot before vLLM initializes CUDA, so transfer, reconstruction, and dirty
+writeback allocations do not overlap the CUDA context allocation. If the
+driver allocation still fails, the wrapper waits for reclamation and restarts
+the stopped container once. Only the wrapper that launched the current
+container attempt may restart it; another wrapper that adopts the running
+container observes it without taking ownership. The retry applies only when
+Docker reports that the container was not OOM-killed and the traceback reaches
+the initial vLLM memory snapshot through `mem_get_info`; model-weight and
+KV-cache OOMs are not retried.
+
+If the retry is exhausted, first install the current DGX OS and driver updates.
+The [DGX Spark release
+notes](https://docs.nvidia.com/dgx/dgx-spark/release-notes.html) identify
+improved GB10 UMA out-of-memory handling in the July 2026 release. Stop
+unrelated memory-intensive workloads before retrying the stack.
 
 For diagnosis and recovery, NVIDIA recommends flushing clean filesystem caches
 and then restarting the application:
@@ -78,6 +94,46 @@ Do not lower `gpu_memory_utilization` solely for this traceback. That setting
 cannot be evaluated when `cudaMemGetInfo` itself fails. Lower the setting only
 for later failures that report insufficient memory for the requested
 utilization or KV cache.
+
+### DGX Spark — vLLM reports insufficient KV cache only on a cold start
+
+**Symptom:** Nemotron Omni or the Cosmos VLM reports a negative or smaller
+KV-cache capacity on its first start than on a later start with the same
+configuration. The first start can reject the configured context even while
+Linux reports substantial available memory.
+
+**Cause:** vLLM derives non-Torch usage from changes in globally available
+memory while it loads and profiles a model. On a unified-memory system, model
+downloads and checkpoint reads change the Linux filesystem page cache. vLLM
+can attribute part of that global change to the model and subtract it from the
+automatically sized KV cache. The behavior is tracked in [vLLM issue
+#35920](https://github.com/vllm-project/vllm/issues/35920).
+The model-server launcher starts these services sequentially, so concurrent
+startup is not required to trigger the page-cache accounting error.
+
+**Fix:** the bundled `spark` profile sets `kv_cache_memory_bytes` explicitly
+for both Nemotron Omni and Cosmos instead of using the fractional profiler to
+size their caches. Keep the fixed allocations when copying or modifying the
+profile. The values are 2 GiB for Omni's 32,768-token hybrid Mamba/attention
+cache and 1.5 GiB for Cosmos's 8,192-token cache. The Cosmos budget supports
+one maximum-length request while `max_num_seqs: 4` retains concurrency for
+shorter requests. Concurrent requests near the context limit can queue,
+preempt, or recompute when their aggregate token demand exceeds the fixed
+cache. Increase the fixed cache when a custom Spark deployment needs parallel
+full-context requests.
+
+The Spark files intentionally retain `gpu_memory_utilization`. In the bundled
+vLLM versions, `kv_cache_memory_bytes` controls the cache allocation and skips
+the unreliable profiling calculation, but vLLM still evaluates
+`gpu_memory_utilization` during its initial free-memory admission check. Do
+not remove the profile value and fall back to vLLM's higher default.
+
+Enable `spark_uma` on each Docker-backed vLLM service when copying the bundled
+settings into a custom Spark profile. Do not flush the filesystem cache
+routinely for this symptom: doing so makes the next checkpoint read cold and
+can reproduce the profiling variation. An explicit KV cache cannot bypass an
+earlier CUDA driver-allocation failure; the prefetch and bounded retry are
+separate safeguards for that stage.
 
 ### DGX Spark — LOVR auto-download is not supported
 
