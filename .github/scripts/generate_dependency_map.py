@@ -22,6 +22,11 @@ from pathlib import Path
 START_MARKER = "<!-- BEGIN GENERATED PYTHON DEPENDENCY MAP -->"
 END_MARKER = "<!-- END GENERATED PYTHON DEPENDENCY MAP -->"
 
+# The aggregate manifest is generated from the other projects and validated by
+# its own workflow; discovery skips its sources so a moved project does not
+# fail here before the manifest can be regenerated.
+MANIFEST_DIRECTORY = "dependency-manifest"
+
 _IGNORED_DIRECTORIES = {
     ".git",
     ".mypy_cache",
@@ -197,6 +202,8 @@ def _validate_local_sources(
     root: Path,
 ) -> None:
     for project in projects:
+        if project.relative_directory.parts[:1] == (MANIFEST_DIRECTORY,):
+            continue
         dependency_names = _all_dependency_names(project)
         source_names = {canonical_name(name) for name in project.uv_sources}
         unused_sources = source_names - dependency_names

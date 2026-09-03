@@ -53,10 +53,16 @@ The one committed lockfile is `dependency-manifest/uv.lock`. The
 `dependency-manifest/` project depends on every package in the repository, so
 its lock records the complete resolved runtime dependency set at the
 qualification cutoff for dependency analysis tooling; build-system requirements
-such as `hatchling` are not part of a uv lock. Nothing else reads it and no CI check
-depends on it, so it is regenerated only as part of a dependency refresh: add any
-projects created since the last refresh to `dependency-manifest/pyproject.toml`,
-then run `uv --config-file uv.toml lock --upgrade --project dependency-manifest`.
+such as `hatchling` are not part of a uv lock. Both files describe the
+repository as of the last cutoff change: projects and dependencies added since
+then appear at the next cutoff, and a release yanked from the index changes the
+next fresh resolution. `uv run --script .github/scripts/generate_dependency_manifest.py`
+generates them with uv 0.10.7, the version the `dependency-manifest` workflow
+pins, because lock output varies across uv releases; bump the two together. The
+pre-commit hook runs the script when `uv.toml` is staged, and the workflow
+verifies both files with `--check` on changes that touch `uv.toml`,
+`dependency-manifest/`, or the generator scripts. Nothing installs from the
+directory.
 
 ## Generated Python project inventory
 
@@ -681,31 +687,6 @@ then run `uv --config-file uv.toml lock --upgrade --project dependency-manifest`
 - Python: `>=3.11,<3.13`
 - Build dependencies: none
 - Runtime dependencies:
-  - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
-  - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
-  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
-  - `xr-ai-tools[frames,image-editing,marker-tracking,relay,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
-  - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
-  - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
-  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
-  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)
-  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
-  - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
-  - `cloudxr-runtime` → [`cloudxr-runtime`](services/cloudxr-runtime/) (local, editable)
-  - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
-  - `embedding-server` → [`embedding-server`](services/embedding-server/) (local, editable)
-  - `llama-nemotron-llm-server` → [`llama-nemotron-llm-server`](services/llama-nemotron-llm/) (local, editable)
-  - `magpie-tts-server` → [`magpie-tts-server`](services/magpie-tts/) (local, editable)
-  - `nemotron-omni-llm-server` → [`nemotron-omni-llm-server`](services/nemotron-omni-llm/) (local, editable)
-  - `nemotron3-nano-llm-server` → [`nemotron3-nano-llm-server`](services/nemotron3-nano-llm/) (local, editable)
-  - `nim-server` → [`nim-server`](services/nim-server/) (local, editable)
-  - `piper-tts-server` → [`piper-tts-server`](services/piper-tts/) (local, editable)
-  - `stt-server` → [`stt-server`](services/stt-server/) (local, editable)
-  - `vlm-server` → [`vlm-server`](services/vlm-server/) (local, editable)
-  - `xr-openxr-service` → [`xr-openxr-service`](services/openxr-service/) (local, editable)
-  - `xr-rag-service` → [`xr-rag-service`](services/rag-service/) (local, editable)
-  - `xr-video-memory-service` → [`xr-video-memory-service`](services/video-memory-service/) (local, editable)
   - `lab-instrument-monitoring` → [`lab-instrument-monitoring`](agent-samples/lab-instrument-monitoring/) (local, editable)
   - `lab-instrument-monitoring-worker` → [`lab-instrument-monitoring-worker`](agent-samples/lab-instrument-monitoring/worker/) (local, editable)
   - `model-servers` → [`model-servers`](agent-samples/model-servers/) (local, editable)
@@ -715,9 +696,34 @@ then run `uv --config-file uv.toml lock --upgrade --project dependency-manifest`
   - `tea-making-worker` → [`tea-making-worker`](agent-samples/tea-making-sample/worker/) (local, editable)
   - `xr-render-demo` → [`xr-render-demo`](agent-samples/xr-render-demo/) (local, editable)
   - `xr-render-demo-eval` → [`xr-render-demo-eval`](agent-samples/xr-render-demo/eval/) (local, editable)
-  - `xr-render-demo-worker` → [`xr-render-demo-worker`](agent-samples/xr-render-demo/worker/) (local, editable)
   - `xr-render-scene` → [`xr-render-scene`](agent-samples/xr-render-demo/scene/) (local, editable)
+  - `xr-render-demo-worker` → [`xr-render-demo-worker`](agent-samples/xr-render-demo/worker/) (local, editable)
+  - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
+  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
+  - `xr-ai-tools[frames,image-editing,marker-tracking,relay,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
+  - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
+  - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
+  - `cloudxr-runtime` → [`cloudxr-runtime`](services/cloudxr-runtime/) (local, editable)
+  - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
+  - `embedding-server` → [`embedding-server`](services/embedding-server/) (local, editable)
+  - `llama-nemotron-llm-server` → [`llama-nemotron-llm-server`](services/llama-nemotron-llm/) (local, editable)
+  - `magpie-tts-server` → [`magpie-tts-server`](services/magpie-tts/) (local, editable)
+  - `nemotron-omni-llm-server` → [`nemotron-omni-llm-server`](services/nemotron-omni-llm/) (local, editable)
+  - `nemotron3-nano-llm-server` → [`nemotron3-nano-llm-server`](services/nemotron3-nano-llm/) (local, editable)
+  - `nim-server` → [`nim-server`](services/nim-server/) (local, editable)
+  - `xr-openxr-service` → [`xr-openxr-service`](services/openxr-service/) (local, editable)
+  - `piper-tts-server` → [`piper-tts-server`](services/piper-tts/) (local, editable)
+  - `xr-rag-service` → [`xr-rag-service`](services/rag-service/) (local, editable)
+  - `stt-server` → [`stt-server`](services/stt-server/) (local, editable)
+  - `xr-video-memory-service` → [`xr-video-memory-service`](services/video-memory-service/) (local, editable)
+  - `vlm-server` → [`vlm-server`](services/vlm-server/) (local, editable)
   - `xr-ai-tests` → [`xr-ai-tests`](tests/) (local, editable)
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+  - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
 - Optional dependency groups: none
 - Commands: none
 
@@ -776,6 +782,7 @@ Keep non-obvious fan-out in the same change:
 | CloudXR configuration or native-profile helpers | xr-render configuration and orchestrator, [Adding CloudXR](docs/source/guides/adding-cloudxr.md), and [xr-render reference](docs/source/reference/xr-render-demo.md) |
 | Scene-service configuration | Scene YAML, xr-render orchestrator, and [xr-render reference](docs/source/reference/xr-render-demo.md) |
 | Any `pyproject.toml` dependency or project metadata | Regenerate this map and the affected project's gitignored `uv.lock` |
+| `uv.toml` dependency cutoff | Regenerate `dependency-manifest/` with `.github/scripts/generate_dependency_manifest.py` |
 | New sample or reusable service | Root and local READMEs and the relevant Sphinx guide |
 | `xr-ai-models` protocol, profile schema, or preset | Generated API reference, preset registry, sample profiles, and architecture rules |
 
