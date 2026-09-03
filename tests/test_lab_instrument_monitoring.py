@@ -268,16 +268,16 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     }
     device_1 = config.device_map.resolve(MarkerType.QR_CODE, "device-1")
     device_5 = config.device_map.resolve(MarkerType.QR_CODE, "device-5")
+    aruco_0 = config.device_map.resolve(MarkerType.ARUCO, "0")
     aruco_1 = config.device_map.resolve(MarkerType.ARUCO, "1")
     aruco_4 = config.device_map.resolve(MarkerType.ARUCO, "4")
-    aruco_5 = config.device_map.resolve(MarkerType.ARUCO, "5")
     assert device_1 is not None and device_1.device_name == "Device1"
     assert device_5 is not None and device_5.device_name == "Device5"
+    assert aruco_0 is not None and aruco_0.device_name == "Device0"
     assert aruco_1 is not None and aruco_1.device_name == "Device1"
     assert aruco_4 is not None and aruco_4.device_name == "Device4"
-    assert aruco_5 is not None and aruco_5.device_name == "Device5"
     assert config.device_map.resolve(MarkerType.QR_CODE, "S2-CF") is None
-    assert config.device_map.resolve(MarkerType.ARUCO, "0") is None
+    assert config.device_map.resolve(MarkerType.ARUCO, "5") is None
     assert config.device_map.resolve(MarkerType.ARUCO, "99") is None
     assert config.artifacts_dir == _SAMPLE / "artifacts"
     assert config.capture_marker_scans is False
