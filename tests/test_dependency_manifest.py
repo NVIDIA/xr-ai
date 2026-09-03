@@ -113,8 +113,8 @@ def test_manifest_lists_every_project_with_all_extras(tmp_path: Path) -> None:
 
     assert '    "library[audio,vision]",' in manifest
     assert '    "server",' in manifest
-    assert 'library = { path = "../agent-sdk/library", editable = true }' in manifest
-    assert 'server  = { path = "../services/server", editable = true }' in manifest
+    assert '"library" = { path = "../agent-sdk/library", editable = true }' in manifest
+    assert '"server"  = { path = "../services/server", editable = true }' in manifest
     assert 'requires-python = ">=3.11,<3.13"' in manifest
     assert "package = false" in manifest
 
@@ -141,12 +141,28 @@ def test_manifest_excludes_its_own_directory_only(tmp_path: Path) -> None:
     assert '"library"' in manifest
 
 
-def test_manifest_requires_one_python_range(tmp_path: Path) -> None:
+def test_manifest_narrows_python_range_to_what_every_project_accepts(tmp_path: Path) -> None:
     _write_project(tmp_path, "agent-sdk/library", name="library")
+    _write_project(tmp_path, "services/server", name="server", requires_python=">= 3.12")
+
+    assert 'requires-python = ">=3.12,<3.13"' in _render(tmp_path)
+
+
+def test_manifest_rejects_disjoint_python_ranges(tmp_path: Path) -> None:
+    _write_project(tmp_path, "agent-sdk/library", name="library", requires_python=">=3.11,<3.12")
     _write_project(tmp_path, "services/server", name="server", requires_python=">=3.12")
 
-    with pytest.raises(ValueError, match="requires-python"):
+    with pytest.raises(ValueError, match="no supported Python version"):
         _render(tmp_path)
+
+
+def test_manifest_quotes_dotted_project_names(tmp_path: Path) -> None:
+    _write_project(tmp_path, "utils/dotted", name="foo.bar")
+
+    manifest = _render(tmp_path)
+
+    assert '"foo.bar" = { path = "../utils/dotted", editable = true }' in manifest
+    assert '    "foo.bar",' in manifest
 
 
 def test_manifest_requires_projects() -> None:
@@ -247,7 +263,7 @@ def test_write_reports_already_current(tmp_path: Path, monkeypatch, capsys) -> N
 
 def test_generation_error_is_reported(tmp_path: Path, monkeypatch, capsys) -> None:
     _write_repo(tmp_path)
-    _write_project(tmp_path, "utils/other", name="other", requires_python=">=3.12")
+    _write_project(tmp_path, "utils/other", name="other", requires_python=">=3.13")
     monkeypatch.setattr(dependency_manifest, "lock_manifest", _fake_lock([]))
 
     assert dependency_manifest.main(["--check"], root=tmp_path) == 1
