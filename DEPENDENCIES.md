@@ -54,11 +54,12 @@ Committed lockfiles live only under `dependency-manifest/`. The Python one is
 every package in the repository, so
 its lock records the complete resolved runtime dependency set at the
 qualification cutoff for dependency analysis tooling; build-system requirements
-such as `hatchling` are not part of a uv lock. Both files describe the
-repository as of the last cutoff change: projects and dependencies added since
-then appear at the next cutoff, and a release yanked from the index changes the
-next fresh resolution. `uv run --script .github/scripts/generate_dependency_manifest.py`
-generates them and always resolves with the uv version pinned inside the script,
+such as `hatchling` are not part of a uv lock. That project's `pyproject.toml`
+and `uv.lock` describe the repository as of the last cutoff change: projects and
+dependencies added since then appear at the next cutoff, and a release yanked
+from the index changes the next fresh resolution.
+`uv run --script .github/scripts/generate_dependency_manifest.py` generates both
+files and always resolves with the uv version pinned inside the script,
 because lock output varies across uv releases. The manifest's `requires-python`
 is the range of interpreters every project accepts, so a project with a narrower
 declaration narrows the manifest. The pre-commit hook runs the script when
