@@ -70,14 +70,18 @@ The same directory holds the client lockfiles. Refresh them by hand in the same
 cutoff change; the `dependency-manifest` workflow repeats each step and fails on
 drift:
 
-- `dependency-manifest/android/*.lockfile`: from `client-samples/android/`, run
-  `./gradlew dependencies :app:dependencies --write-locks`. Locking is active
-  only for that flag.
+- `dependency-manifest/android/*.lockfile`: delete the existing files, then from
+  `client-samples/android/` run `./gradlew dependencies :app:dependencies
+  --write-locks`. Gradle merges into an existing lockfile, and it has no
+  publish-date bound: its selection rules see version strings, not upload
+  times. The snapshot is a function of the catalog, the plugin versions, and
+  their published transitive metadata; the workflow regenerates it from
+  nothing and fails on any difference, which is what catches a floating version.
 - `dependency-manifest/web-xr-build/package-lock.json`: run
-  `.github/scripts/refresh_web_lock.sh`. It copies the current
-  `client-samples/web-xr-build/package.json`, fetches the CloudXR tarball for the
-  version in `.sdk-version`, and writes the lock with the npm version pinned
-  inside the script.
+  `.github/scripts/refresh_web_lock.sh`; it resolves at the `uv.toml` cutoff
+  with a pinned npm. This is a point-in-time snapshot: `build.sh` in the real
+  sample resolves unbounded and may install newer versions. An exact transitive
+  pin published after the cutoff fails the resolve rather than floating.
 
 ## Generated Python project inventory
 

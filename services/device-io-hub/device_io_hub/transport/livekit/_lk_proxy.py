@@ -125,8 +125,8 @@ def mount_rtc_proxy(
     for livekit-client v2.x); the empty-tail routes preserve the pre-v2
     plain ``/rtc`` form. Both pairs forward end-to-end headers so the
     LiveKit Swift SDK's ``Authorization: Bearer`` reaches the server.
-    Any ``tail`` outside ``_RTC_PATHS`` is rejected (404 for HTTP, close
-    1008 before accept for WebSocket).
+    Any ``tail`` outside ``_RTC_PATHS`` is rejected (404 for HTTP, handshake
+    denied before accept for WebSocket).
     """
     @app.get("/rtc/validate")
     async def _rtc_validate_root(request: Request) -> Response:

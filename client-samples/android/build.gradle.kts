@@ -35,16 +35,22 @@ allprojects {
 }
 
 // Opt-in only: the locks under dependency-manifest/android are a cutoff snapshot
-// for dependency analysis, not a build input (see DEPENDENCIES.md).
+// for dependency analysis, not a build input (see DEPENDENCIES.md). The Kotlin
+// plugin's ABI validation classpath resolves a floating version, so it stays out.
 if (gradle.startParameter.isWriteDependencyLocks) {
     val lockDir = rootDir.resolve("../../dependency-manifest/android").normalize()
     buildscript.dependencyLocking {
         lockAllConfigurations()
         lockFile.set(lockDir.resolve("buildscript-gradle.lockfile"))
     }
-    project(":app").dependencyLocking {
-        lockAllConfigurations()
-        lockFile.set(lockDir.resolve("gradle.lockfile"))
+    project(":app") {
+        dependencyLocking {
+            lockAllConfigurations()
+            lockFile.set(lockDir.resolve("gradle.lockfile"))
+        }
+        configurations.matching { it.name.startsWith("kotlinAbiValidation") }.configureEach {
+            resolutionStrategy.deactivateDependencyLocking()
+        }
     }
 }
 
