@@ -177,25 +177,33 @@ class WorkflowStore:
     def observe(
         self,
         session: WorkflowSession,
-        observation: Any,
+        observation: Any | None,
     ) -> None:
-        """Update the deterministic count of consecutive guarded judgments."""
+        """Update consecutive conclusive evidence while preserving unknowns."""
 
         step = self.active_step(session)
         if step.evidence is None:
             return
-        value = (
-            observation
-            if isinstance(observation, str)
-            else json.dumps(observation, separators=(",", ":"))
-        )
-        matched = re.fullmatch(step.evidence.pattern, value.strip()) is not None
-        session.evidence_hits = session.evidence_hits + 1 if matched else 0
+        matched: bool | None
+        if observation is None:
+            matched = None
+        else:
+            value = (
+                observation
+                if isinstance(observation, str)
+                else json.dumps(observation, separators=(",", ":"))
+            )
+            matched = re.fullmatch(step.evidence.pattern, value.strip()) is not None
+        if matched is True:
+            session.evidence_hits += 1
+        elif matched is False:
+            session.evidence_hits = 0
+        outcome = "unknown" if matched is None else str(matched).lower()
         self._event(
             session,
             "step.evidence",
             (
-                f"matched={str(matched).lower()} consecutive={session.evidence_hits}/{step.evidence.consecutive}"
+                f"matched={outcome} consecutive={session.evidence_hits}/{step.evidence.consecutive}"
             ),
         )
 

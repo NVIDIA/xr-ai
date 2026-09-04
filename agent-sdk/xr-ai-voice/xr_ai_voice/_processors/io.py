@@ -20,6 +20,8 @@ from pipecat.frames.frames import (
     Frame,
     InterruptionFrame,
     TextFrame,
+    UserStartedSpeakingFrame,
+    UserStoppedSpeakingFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
@@ -53,6 +55,8 @@ class _VoiceIOProcessor(FrameProcessor):
         transport: HubVoiceTransport | None = None,
         on_participant_joined: Callable[[str], Awaitable[None] | None] | None = None,
         on_participant_left: Callable[[str], Awaitable[None] | None] | None = None,
+        on_speech_started: Callable[[str], Awaitable[None] | None] | None = None,
+        on_speech_stopped: Callable[[str], Awaitable[None] | None] | None = None,
         on_interrupted: Callable[[str | None], Awaitable[None] | None] | None = None,
         interrupt_on_supersede: bool = False,
     ) -> None:
@@ -61,6 +65,8 @@ class _VoiceIOProcessor(FrameProcessor):
         self._transport = transport
         self._on_participant_joined = on_participant_joined
         self._on_participant_left = on_participant_left
+        self._on_speech_started = on_speech_started
+        self._on_speech_stopped = on_speech_stopped
         self._on_interrupted = on_interrupted
         self._interrupt_on_supersede = interrupt_on_supersede
         self._inflight: dict[str, asyncio.Task[None]] = {}
@@ -119,6 +125,18 @@ class _VoiceIOProcessor(FrameProcessor):
                 await self._cancel_all()
             await self.push_frame(frame, direction)
             await self._notify_interrupted(pid)
+            return
+
+        if isinstance(frame, UserStartedSpeakingFrame):
+            if frame.transport_source:
+                await self._notify_speech_started(frame.transport_source)
+            await self.push_frame(frame, direction)
+            return
+
+        if isinstance(frame, UserStoppedSpeakingFrame):
+            if frame.transport_source:
+                await self._notify_speech_stopped(frame.transport_source)
+            await self.push_frame(frame, direction)
             return
 
         if isinstance(frame, (EndFrame, CancelFrame)):
@@ -311,6 +329,26 @@ class _VoiceIOProcessor(FrameProcessor):
                 await result
         except Exception:
             logger.exception("voice participant-left callback raised pid={!r}", pid)
+
+    async def _notify_speech_started(self, pid: str) -> None:
+        if self._on_speech_started is None:
+            return
+        try:
+            result = self._on_speech_started(pid)
+            if inspect.isawaitable(result):
+                await result
+        except Exception:
+            logger.exception("voice speech-started callback raised pid={!r}", pid)
+
+    async def _notify_speech_stopped(self, pid: str) -> None:
+        if self._on_speech_stopped is None:
+            return
+        try:
+            result = self._on_speech_stopped(pid)
+            if inspect.isawaitable(result):
+                await result
+        except Exception:
+            logger.exception("voice speech-stopped callback raised pid={!r}", pid)
 
     async def _notify_interrupted(self, pid: str | None) -> None:
         if self._on_interrupted is None:
