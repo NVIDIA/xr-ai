@@ -183,16 +183,22 @@ To add a foreground capability:
    `capture_marker_scans` is enabled.
 3. Detect every QR and ArUco marker in the frame.
 4. Resolve each marker through `DeviceMap`.
-5. Create one derived image that overlays every detected polygon with a unique
-   temporary label.
-6. Ask the VLM once for a strict JSON map from every temporary label to its own
-   display reading or `UNKNOWN`.
+5. Create one derived image that draws a distinct, bold colored X over each
+   configured marker polygon. The X stays aligned to the image frame even when
+   the detected marker is rotated.
+6. Ask the VLM once for a strict JSON map from every requested color name to
+   that X marker's own display reading or `UNKNOWN`.
 7. Return mapped `InstrumentSighting` values independently from successful
    `InstrumentReading` values.
 
 The marker determines identity before the VLM reads the display. This prevents
 the model from guessing which instrument produced a value. Image references,
 not image bytes, pass between tools; media stays in the shared image registry.
+Color names remain internal correlation keys. User-facing results contain only
+device names resolved from scanned markers through `DeviceMap`; they never use
+the temporary color name as a device identity. Parsed response values are
+validated independently: an invalid value is treated as `UNKNOWN` without
+discarding valid readings returned for other colors in the same response.
 
 To use a different identifier, replace the marker tool and `DeviceMap` while
 preserving the one-frame `LabInstrumentReadResult` boundary. Barcode, OCR label,
@@ -221,16 +227,18 @@ voice agent.
 
 Only marker identities present in `device_map.yaml` are treated as instruments.
 Unknown QR payloads and ArUco IDs are logged and ignored, preventing detector
-false positives from becoming names such as `ArUco 17`. They are still given a
-temporary visual label so the VLM can reason about competing housings. The
-one-frame reader requires visible evidence that each labelled marker and
-display share one continuous physical instrument housing. Proximity, alignment,
-or being the only readable display does not establish ownership, and one
-display may not be assigned to multiple markers. The reader returns `UNKNOWN`
-when a housing has no readable display or an adjacent display cannot be
-excluded. These fixed rules are supplied as a system prompt; decoded marker
-identities remain outside the prompt and visible text is treated as evidence,
-never as instructions.
+false positives from becoming names such as `ArUco 17`. Unmapped detections do
+not consume a color or appear in the VLM request. The reader supports six
+colored X markers in one request. If more than six configured markers are
+visible, it logs the overflow, reads the first six in top-to-bottom and
+left-to-right order, and still returns sightings for every configured marker.
+The one-frame reader treats each colored X as a trusted marker association and
+matches it to the nearest compatible display without crossing a visible device
+boundary. One display may not be assigned to multiple X markers. The reader
+returns `UNKNOWN` when the display is unreadable or two nearby displays are
+equally plausible. These fixed rules are supplied as a system prompt; decoded
+marker identities remain outside the prompt and visible text is treated as
+evidence, never as instructions.
 
 ## Connecting a backend
 
