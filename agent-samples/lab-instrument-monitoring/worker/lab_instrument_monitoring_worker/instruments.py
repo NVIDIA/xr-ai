@@ -23,6 +23,7 @@ from xr_ai_tools import Tool
 from xr_ai_tools.current_frame import CurrentFrameRequest
 from xr_ai_tools.marker_tracking import (
     MarkerTrackingRequest,
+    MarkerType,
     TrackedMarker,
 )
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
@@ -37,10 +38,10 @@ ColoredMarker = tuple[str, RGBColor, TrackedMarker]
 _MARKER_COLORS: tuple[tuple[str, RGBColor], ...] = (
     ("magenta", (255, 0, 255)),
     ("cyan", (0, 255, 255)),
-    ("orange", (255, 180, 0)),
-    ("green", (80, 220, 80)),
-    ("red", (255, 90, 90)),
-    ("blue", (100, 160, 255)),
+    ("red", (255, 0, 0)),
+    ("green", (0, 128, 0)),
+    ("blue", (0, 0, 255)),
+    ("yellow", (255, 255, 0)),
 )
 
 
@@ -138,14 +139,10 @@ class LabInstrumentAgent(Agent):
         if not markers:
             return LabInstrumentReadResult(message="No readable marker-labelled lab instruments were found.")
 
-        try:
-            colored_markers = _assign_marker_colors(markers)
-        except ValueError as exc:
-            return LabInstrumentReadResult(available=False, message=str(exc))
-        color_keys = [color_name for color_name, _color, _marker in colored_markers]
-        mapped: dict[str, tuple[TrackedMarker, str]] = {}
+        mapped_markers: list[TrackedMarker] = []
+        device_names: dict[tuple[MarkerType, str], str] = {}
         sightings: list[InstrumentSighting] = []
-        for color_name, _color, marker in colored_markers:
+        for marker in markers:
             identity = self._device_map.resolve(marker.marker_type, marker.value)
             if identity is None:
                 logger.warning(
@@ -153,7 +150,8 @@ class LabInstrumentAgent(Agent):
                     _marker_log_id(marker),
                 )
                 continue
-            mapped[color_name] = (marker, identity.device_name)
+            mapped_markers.append(marker)
+            device_names[(marker.marker_type, marker.value)] = identity.device_name
             sightings.append(
                 InstrumentSighting(
                     timestamp_us=frame.timestamp_us,
@@ -163,12 +161,30 @@ class LabInstrumentAgent(Agent):
                 )
             )
 
-        if not mapped:
+        if not mapped_markers:
             return LabInstrumentReadResult(
                 sightings=sightings,
                 available=False,
                 message="No configured marker-labelled lab instruments were found.",
             )
+
+        if len(mapped_markers) > len(_MARKER_COLORS):
+            logger.warning(
+                "instrument marker palette exhausted pid={!r} mapped={} supported={} ignored={}",
+                request.participant_id,
+                len(mapped_markers),
+                len(_MARKER_COLORS),
+                len(mapped_markers) - len(_MARKER_COLORS),
+            )
+        colored_markers = _assign_marker_colors(mapped_markers)
+        color_keys = [color_name for color_name, _color, _marker in colored_markers]
+        mapped = {
+            color_name: (
+                marker,
+                device_names[(marker.marker_type, marker.value)],
+            )
+            for color_name, _color, marker in colored_markers
+        }
 
         result = None
         try:
@@ -255,11 +271,18 @@ class LabInstrumentAgent(Agent):
     @staticmethod
     def _reading_query(color_keys: list[str]) -> str:
         keys = json.dumps(color_keys)
+        palette = dict(_MARKER_COLORS)
+        legend = ", ".join(
+            f"{color_name}=#{red:02X}{green:02X}{blue:02X}"
+            for color_name in color_keys
+            for red, green, blue in (palette[color_name],)
+        )
         return (
-            "Read all color-block-marked instruments together. The solid color blocks are the "
-            f"device identifiers: {keys}. Return one JSON object with exactly those color names "
-            "as keys. Each value must be the reading and unit from that color block's own physical "
-            "instrument, or UNKNOWN. Never assign one display to multiple color blocks."
+            "Read all color-block-marked instruments together. The color-name identifiers and "
+            f"their exact RGB values are {legend}. The requested identifiers are: {keys}. Return "
+            "one JSON object with exactly those lowercase color names as keys. Each value must be "
+            "the reading and unit from that color block's own physical instrument, or UNKNOWN. "
+            "Never assign one display to multiple color blocks."
         )
 
     @staticmethod
@@ -282,10 +305,6 @@ def _marker_position(marker: TrackedMarker) -> tuple[float, float]:
 
 
 def _assign_marker_colors(markers: list[TrackedMarker]) -> list[ColoredMarker]:
-    if len(markers) > len(_MARKER_COLORS):
-        raise ValueError(
-            f"Found {len(markers)} markers, but only {len(_MARKER_COLORS)} unique marker colors are configured."
-        )
     return [
         (color_name, color, marker)
         for (color_name, color), marker in zip(
@@ -317,15 +336,36 @@ def _parse_joint_readings(text: str, color_keys: list[str]) -> dict[str, str] | 
     end = visible.rfind("}")
     if start < 0 or end < start:
         return None
+    duplicate_key = False
+
+    def normalized_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        nonlocal duplicate_key
+        normalized: dict[str, object] = {}
+        for key, value in pairs:
+            normalized_key = key.strip().lower()
+            if normalized_key in normalized:
+                duplicate_key = True
+            normalized[normalized_key] = value
+        return normalized
+
     try:
-        payload = json.loads(visible[start : end + 1])
+        payload = json.loads(
+            visible[start : end + 1],
+            object_pairs_hook=normalized_object,
+        )
     except json.JSONDecodeError:
         return None
-    if not isinstance(payload, dict) or set(payload) != set(color_keys):
+    expected_keys = {color_name: color_name.strip().lower() for color_name in color_keys}
+    if duplicate_key or len(set(expected_keys.values())) != len(color_keys):
+        return None
+    if not isinstance(payload, dict) or set(payload) != set(expected_keys.values()):
         return None
     if not all(isinstance(value, str) and value.strip() for value in payload.values()):
         return None
-    return {color_name: payload[color_name].strip() for color_name in color_keys}
+    return {
+        color_name: payload[normalized_name].strip()
+        for color_name, normalized_name in expected_keys.items()
+    }
 
 
 __all__ = [

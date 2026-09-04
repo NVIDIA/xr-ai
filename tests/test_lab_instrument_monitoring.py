@@ -93,6 +93,7 @@ from lab_instrument_monitoring_worker.instrument_monitor import (  # noqa: E402 
     normalize_meter_reading,
 )
 from lab_instrument_monitoring_worker.instruments import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    _MARKER_COLORS,
     LabInstrumentAgent,
     LabInstrumentReadResult,
     ReadLabInstrumentsRequest,
@@ -358,10 +359,15 @@ def test_launcher_reuses_cosmos_and_other_model_services(tmp_path: Path) -> None
     assert config.artifacts_dir == _SAMPLE / "artifacts"
     assert config.web_events_host == "0.0.0.0"
     assert models["models"]["llm"]["deployment"]["service"] == "omni"
-    assert models["models"]["vlm"]["adapter"]["preset"] == ("cosmos3_nano_reasoner")
+    assert models["models"]["vlm"]["adapter"]["preset"] == (
+        "cosmos3_nano_reasoner"
+    )
     assert models["models"]["vlm"]["endpoint"]["base_url"].endswith(":8100")
     assert models["models"]["vlm"]["deployment"]["service"] == "vlm"
-    assert all(model["deployment"]["ownership"] == "reused" for model in models["models"].values())
+    assert all(
+        model["deployment"]["ownership"] == "reused"
+        for model in models["models"].values()
+    )
     assert [process.name for process in processes] == [
         "hub",
         "stt",
@@ -370,7 +376,11 @@ def test_launcher_reuses_cosmos_and_other_model_services(tmp_path: Path) -> None
         "tts",
         "worker",
     ]
-    assert all(process.launch_mode == "reuse" for process in processes if process.name in {"stt", "omni", "vlm", "tts"})
+    assert all(
+        process.launch_mode == "reuse"
+        for process in processes
+        if process.name in {"stt", "omni", "vlm", "tts"}
+    )
     assert processes[-1].config == worker_config
 
 
@@ -518,8 +528,9 @@ def test_instrument_read_prompt_rejects_adjacent_device_displays(
     assert "UNKNOWN" in normalized_prompt
     assert "untrusted data" in normalized_prompt
     assert captured_system_prompts == [prompt]
-    assert 'device identifiers: ["magenta", "cyan"]' in query
-    assert "exactly those color names as keys" in query
+    assert "magenta=#FF00FF, cyan=#00FFFF" in query
+    assert 'requested identifiers are: ["magenta", "cyan"]' in query
+    assert "exactly those lowercase color names as keys" in query
     assert "Never assign one display to multiple color blocks" in query
 
 
@@ -528,10 +539,21 @@ def test_joint_instrument_response_requires_exact_color_keys_and_string_values()
         '```json\n{"magenta":"12.0 V","cyan":"UNKNOWN"}\n```',
         ["magenta", "cyan"],
     ) == {"magenta": "12.0 V", "cyan": "UNKNOWN"}
+    assert _parse_joint_readings(
+        '{" Magenta ":"12.0 V","CYAN":"UNKNOWN"}',
+        ["magenta", "cyan"],
+    ) == {"magenta": "12.0 V", "cyan": "UNKNOWN"}
     assert _parse_joint_readings('{"magenta":"12.0 V"}', ["magenta", "cyan"]) is None
     assert (
         _parse_joint_readings(
-            '{"magenta":"12.0 V","cyan":"UNKNOWN","orange":"99 A"}',
+            '{"magenta":"12.0 V","cyan":"UNKNOWN","red":"99 A"}',
+            ["magenta", "cyan"],
+        )
+        is None
+    )
+    assert (
+        _parse_joint_readings(
+            '{"magenta":"12.0 V","Magenta":"99.0 V","cyan":"UNKNOWN"}',
             ["magenta", "cyan"],
         )
         is None
@@ -562,7 +584,7 @@ def test_joint_marker_annotation_uses_solid_color_without_text() -> None:
 
     annotated = _annotate_markers(
         encoded.tobytes(),
-        [("magenta", (255, 0, 255), marker)],
+        [(_MARKER_COLORS[2][0], _MARKER_COLORS[2][1], marker)],
     )
     decoded = cv2.imdecode(np.frombuffer(annotated, np.uint8), cv2.IMREAD_COLOR)
 
@@ -570,7 +592,7 @@ def test_joint_marker_annotation_uses_solid_color_without_text() -> None:
     outside = decoded.copy()
     outside[14:35, 14:35] = 255
     assert np.all(outside == 255)
-    assert np.all(decoded[15:34, 15:34] == np.array([255, 0, 255]))
+    assert np.all(decoded[15:34, 15:34] == np.array([0, 0, 255]))
 
 
 def test_marker_colors_follow_spatial_order_and_do_not_repeat() -> None:
@@ -590,16 +612,15 @@ def test_marker_colors_follow_spatial_order_and_do_not_repeat() -> None:
 
     colored = _assign_marker_colors(markers)
 
-    assert [(name, marker.value) for name, _color, marker in colored] == [
-        ("magenta", "5"),
-        ("cyan", "4"),
-        ("orange", "3"),
-        ("green", "2"),
-        ("red", "1"),
-        ("blue", "0"),
+    assert [(name, color, marker.value) for name, color, marker in colored] == [
+        ("magenta", (255, 0, 255), "5"),
+        ("cyan", (0, 255, 255), "4"),
+        ("red", (255, 0, 0), "3"),
+        ("green", (0, 128, 0), "2"),
+        ("blue", (0, 0, 255), "1"),
+        ("yellow", (255, 255, 0), "0"),
     ]
-    with pytest.raises(ValueError, match="only 6 unique marker colors"):
-        _assign_marker_colors([*markers, markers[0]])
+    assert _assign_marker_colors([*markers, markers[0]]) == colored
 
 
 def test_unmapped_marker_log_identifier_redacts_payload() -> None:
@@ -675,7 +696,9 @@ async def test_instrument_reader_returns_sighting_when_display_is_unreadable(
     images.track_markers = SimpleNamespace(execute=tracked_markers)  # type: ignore[assignment]
     agent._query_image = SimpleNamespace(execute=unreadable)  # type: ignore[assignment]
 
-    result = await agent._read_lab_instruments(ReadLabInstrumentsRequest(participant_id="participant-1"))
+    result = await agent._read_lab_instruments(
+        ReadLabInstrumentsRequest(participant_id="participant-1")
+    )
 
     assert result.readings == []
     assert result.sightings == [
@@ -691,7 +714,7 @@ async def test_instrument_reader_returns_sighting_when_display_is_unreadable(
 
 
 @pytest.mark.asyncio
-async def test_instrument_reader_queries_all_markers_once_and_maps_joint_result() -> None:
+async def test_instrument_reader_filters_unmapped_markers_before_assigning_colors() -> None:
     markers = [
         TrackedMarker(
             marker_type=MarkerType.ARUCO,
@@ -724,7 +747,20 @@ async def test_instrument_reader_queries_all_markers_once_and_maps_joint_result(
             ],
         ),
     ]
-    ok, encoded = cv2.imencode(".png", np.full((100, 300, 3), 240, dtype=np.uint8))
+    markers.extend(
+        TrackedMarker(
+            marker_type=MarkerType.QR_CODE,
+            value=f"unmapped-{index}",
+            corners=[
+                MarkerPoint(x=left, y=25),
+                MarkerPoint(x=left + 50, y=25),
+                MarkerPoint(x=left + 50, y=75),
+                MarkerPoint(x=left, y=75),
+            ],
+        )
+        for index, left in enumerate(range(325, 626, 75), start=1)
+    )
+    ok, encoded = cv2.imencode(".png", np.full((100, 700, 3), 240, dtype=np.uint8))
     assert ok
     images = _make_images()
     agent = _make_instruments(images)
@@ -735,7 +771,7 @@ async def test_instrument_reader_queries_all_markers_once_and_maps_joint_result(
         return ImageFrame(
             image=frame_reference,
             timestamp_us=11,
-            width=300,
+            width=700,
             height=100,
             sequence=2,
             participant_id="participant-1",
@@ -750,17 +786,23 @@ async def test_instrument_reader_queries_all_markers_once_and_maps_joint_result(
         assert isinstance(annotated, bytes)
         decoded = cv2.imdecode(np.frombuffer(annotated, np.uint8), cv2.IMREAD_COLOR)
         assert decoded is not None
-        assert not np.array_equal(decoded[28, 28], decoded[28, 128])
-        return ImageQueryResult(text='{"magenta":"12.0 V","cyan":"UNKNOWN","orange":"99.0 A"}')
+        assert np.array_equal(decoded[28, 28], np.array([255, 0, 255]))
+        assert np.array_equal(decoded[28, 128], np.array([255, 255, 0]))
+        assert np.array_equal(decoded[28, 228], np.array([240, 240, 240]))
+        assert np.array_equal(decoded[28, 328], np.array([240, 240, 240]))
+        return ImageQueryResult(text='{"magenta":"12.0 V","cyan":"UNKNOWN"}')
 
     images.get_current_frame = SimpleNamespace(execute=current_frame)  # type: ignore[assignment]
     images.track_markers = SimpleNamespace(execute=tracked_markers)  # type: ignore[assignment]
     agent._query_image = SimpleNamespace(execute=joint_read)  # type: ignore[assignment]
 
-    result = await agent._read_lab_instruments(ReadLabInstrumentsRequest(participant_id="participant-1"))
+    result = await agent._read_lab_instruments(
+        ReadLabInstrumentsRequest(participant_id="participant-1")
+    )
 
     assert len(requests) == 1
-    assert 'device identifiers: ["magenta", "cyan", "orange"]' in requests[0].query
+    assert 'requested identifiers are: ["magenta", "cyan"]' in requests[0].query
+    assert "red" not in requests[0].query
     assert "meter-a" not in requests[0].query
     assert "unmapped-neighbor" not in requests[0].query
     assert result.readings == [
@@ -939,7 +981,6 @@ async def test_visible_instrument_with_unreadable_display_is_not_lost() -> None:
     runtime = AgentRuntime()
     runtime.register("instrument-monitor", monitor)
     runtime.register("collector", collector)
-
     def sighting(timestamp_us: int) -> InstrumentSighting:
         return InstrumentSighting(
             timestamp_us=timestamp_us,
@@ -1565,7 +1606,10 @@ async def test_foreground_empty_current_view_stream_reports_unavailable(tmp_path
         Context(),  # type: ignore[arg-type]
     )
 
-    assert response == ("Unable to inspect the current frame because the vision model returned no description.")
+    assert response == (
+        "Unable to inspect the current frame because the vision model returned no "
+        "description."
+    )
     assert tools == [CURRENT_VIEW_TOOL]
     assert spoken is True
     assert [output.text for output in published] == [response, ""]
@@ -1781,6 +1825,7 @@ def test_visual_eval_covers_prompt_driven_monitor_and_instrument_rules() -> None
         ("monitor", "monitor-unchanged"),
         ("monitor", "monitor-changed"),
         ("instrument", "instrument-two-readable-devices"),
+        ("instrument", "instrument-six-color-identifiers"),
         ("instrument", "instrument-competing-markers-left-reading"),
         ("instrument", "instrument-competing-markers-right-reading"),
         ("instrument", "instrument-visible-instruction-is-data"),

@@ -119,6 +119,41 @@ def _instrument_scene(
     return _annotate_markers(_encode(image), _assign_marker_colors(markers))
 
 
+def _six_color_instrument_scene() -> bytes:
+    image = np.full((720, 1280, 3), 245, dtype=np.uint8)
+    readings = ("10 V", "20 V", "30 V", "40 V", "50 V", "60 V")
+    markers: list[TrackedMarker] = []
+    for index, reading in enumerate(readings):
+        row, column = divmod(index, 3)
+        left = 40 + column * 410
+        top = 40 + row * 335
+        cv2.rectangle(image, (left, top), (left + 380, top + 305), (75, 75, 75), -1)
+        cv2.rectangle(image, (left, top), (left + 380, top + 305), (25, 25, 25), 5)
+        cv2.rectangle(image, (left + 50, top + 65), (left + 330, top + 180), (225, 235, 220), -1)
+        cv2.putText(
+            image,
+            reading,
+            (left + 105, top + 140),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.5,
+            (10, 10, 10),
+            4,
+        )
+        markers.append(
+            TrackedMarker(
+                marker_type=MarkerType.QR_CODE,
+                value=f"device-{index + 1}",
+                corners=[
+                    MarkerPoint(x=left + 30, y=top + 220),
+                    MarkerPoint(x=left + 90, y=top + 220),
+                    MarkerPoint(x=left + 90, y=top + 280),
+                    MarkerPoint(x=left + 30, y=top + 280),
+                ],
+            )
+        )
+    return _annotate_markers(_encode(image), _assign_marker_colors(markers))
+
+
 def _encode(image: np.ndarray[Any, Any]) -> bytes:
     ok, encoded = cv2.imencode(".png", image)
     if not ok:
@@ -146,6 +181,8 @@ def _image(case: dict[str, Any]) -> bytes:
             right_reading="99.0 A",
             instruction_text=True,
         )
+    if scene == "six-color-instruments":
+        return _six_color_instrument_scene()
     raise ValueError(f"unknown eval scene: {scene}")
 
 
@@ -160,7 +197,11 @@ async def main() -> None:
             response = await vlm.ask_image(
                 _image(case),
                 _question(case),
-                system_prompt=(monitor_prompt if case["kind"] == "monitor" else instrument_prompt),
+                system_prompt=(
+                    monitor_prompt
+                    if case["kind"] == "monitor"
+                    else instrument_prompt
+                ),
                 temperature=0.0,
             )
             error = _validate(case, response.content)
@@ -182,7 +223,7 @@ def _question(case: dict[str, Any]) -> str:
                 "previous_caption": case["previous_caption"],
             }
         )
-    return LabInstrumentAgent._reading_query(["magenta", "cyan"])
+    return LabInstrumentAgent._reading_query(list(case["expected_readings"]))
 
 
 def _validate(case: dict[str, Any], text: str) -> str | None:
@@ -197,7 +238,7 @@ def _validate(case: dict[str, Any], text: str) -> str | None:
         if decision.changed is not case["expected_changed"]:
             return f"expected changed={case['expected_changed']}, received {decision.changed}"
         return None
-    parsed = _parse_joint_readings(text, ["magenta", "cyan"])
+    parsed = _parse_joint_readings(text, list(case["expected_readings"]))
     if parsed is None:
         return f"invalid joint reading JSON: {text!r}"
     expected = case["expected_readings"]

@@ -29,6 +29,17 @@
     magenta: "12.0 V"
     cyan: "99.0 A"
 
+- name: instrument-six-color-identifiers
+  kind: instrument
+  scene: six-color-instruments
+  expected_readings:
+    magenta: "10 V"
+    cyan: "20 V"
+    red: "30 V"
+    green: "40 V"
+    blue: "50 V"
+    yellow: "60 V"
+
 - name: instrument-competing-markers-left-reading
   kind: instrument
   scene: competing-instruments-left-only
