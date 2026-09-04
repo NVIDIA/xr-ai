@@ -528,9 +528,11 @@ def test_instrument_read_prompt_rejects_adjacent_device_displays(
     assert "UNKNOWN" in normalized_prompt
     assert "untrusted data" in normalized_prompt
     assert captured_system_prompts == [prompt]
-    assert "magenta=#FF00FF, cyan=#00FFFF" in query
-    assert 'requested identifiers are: ["magenta", "cyan"]' in query
+    assert "#FF00FF" not in query
+    assert "RGB" not in query
+    assert 'solid-color identifiers are: ["magenta", "cyan"]' in query
     assert "exactly those lowercase color names as keys" in query
+    assert "Each value must contain only the reading and unit" in query
     assert "Never assign one display to multiple color blocks" in query
 
 
@@ -554,6 +556,27 @@ def test_joint_instrument_response_requires_exact_color_keys_and_string_values()
     assert (
         _parse_joint_readings(
             '{"magenta":"12.0 V","Magenta":"99.0 V","cyan":"UNKNOWN"}',
+            ["magenta", "cyan"],
+        )
+        is None
+    )
+    assert (
+        _parse_joint_readings(
+            '{"magenta":"magenta 12.0 V","cyan":"UNKNOWN"}',
+            ["magenta", "cyan"],
+        )
+        is None
+    )
+    assert (
+        _parse_joint_readings(
+            '{"magenta":"red 12.0 V","cyan":"UNKNOWN"}',
+            ["magenta", "cyan"],
+        )
+        is None
+    )
+    assert (
+        _parse_joint_readings(
+            '{"magenta":"#FF00FF","cyan":"UNKNOWN"}',
             ["magenta", "cyan"],
         )
         is None
@@ -801,10 +824,12 @@ async def test_instrument_reader_filters_unmapped_markers_before_assigning_color
     )
 
     assert len(requests) == 1
-    assert 'requested identifiers are: ["magenta", "cyan"]' in requests[0].query
+    assert 'solid-color identifiers are: ["magenta", "cyan"]' in requests[0].query
     assert "red" not in requests[0].query
     assert "meter-a" not in requests[0].query
     assert "unmapped-neighbor" not in requests[0].query
+    assert "Device1" not in requests[0].query
+    assert "Device2" not in requests[0].query
     assert result.readings == [
         InstrumentReading(
             timestamp_us=11,
@@ -815,6 +840,9 @@ async def test_instrument_reader_filters_unmapped_markers_before_assigning_color
         )
     ]
     assert {sighting.marker_id for sighting in result.sightings} == {"meter-a", "23"}
+    rendered = LabInstrumentAgent.render_readings(result)
+    assert rendered == "Device1: 12.0 V"
+    assert all(color_name not in rendered.lower() for color_name, _rgb in _MARKER_COLORS)
 
 
 @pytest.mark.asyncio

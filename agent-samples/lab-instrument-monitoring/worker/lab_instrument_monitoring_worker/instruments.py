@@ -271,18 +271,12 @@ class LabInstrumentAgent(Agent):
     @staticmethod
     def _reading_query(color_keys: list[str]) -> str:
         keys = json.dumps(color_keys)
-        palette = dict(_MARKER_COLORS)
-        legend = ", ".join(
-            f"{color_name}=#{red:02X}{green:02X}{blue:02X}"
-            for color_name in color_keys
-            for red, green, blue in (palette[color_name],)
-        )
         return (
-            "Read all color-block-marked instruments together. The color-name identifiers and "
-            f"their exact RGB values are {legend}. The requested identifiers are: {keys}. Return "
-            "one JSON object with exactly those lowercase color names as keys. Each value must be "
-            "the reading and unit from that color block's own physical instrument, or UNKNOWN. "
-            "Never assign one display to multiple color blocks."
+            "Read all color-block-marked instruments together. The requested solid-color "
+            f"identifiers are: {keys}. Return one JSON object with exactly those lowercase color "
+            "names as keys. Each value must contain only the reading and unit from that color "
+            "block's own physical instrument, or UNKNOWN. Never assign one display to multiple "
+            "color blocks."
         )
 
     @staticmethod
@@ -362,10 +356,20 @@ def _parse_joint_readings(text: str, color_keys: list[str]) -> dict[str, str] | 
         return None
     if not all(isinstance(value, str) and value.strip() for value in payload.values()):
         return None
-    return {
+    readings = {
         color_name: payload[normalized_name].strip()
         for color_name, normalized_name in expected_keys.items()
     }
+    if any(
+        re.search(r"#[0-9A-Fa-f]{6}\b", reading)
+        or any(
+            re.search(rf"\b{re.escape(identifier)}\b", reading, flags=re.IGNORECASE)
+            for identifier, _rgb in _MARKER_COLORS
+        )
+        for reading in readings.values()
+    ):
+        return None
+    return readings
 
 
 __all__ = [
