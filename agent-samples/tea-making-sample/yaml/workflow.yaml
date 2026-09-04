@@ -108,7 +108,7 @@ steps:
       result_field: answer
     evidence:
       pattern: "^accepted$"
-      consecutive: 1
+      consecutive: 2
     agent:
       prompt: >-
         Judge the fresh caption semantically without requiring particular

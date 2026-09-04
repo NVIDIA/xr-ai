@@ -824,10 +824,18 @@ async def test_water_presence_is_judged_by_observation_llm() -> None:
         session.participant_id,
         "A reflective pool occupies the lower half of the vessel.",
     )
+    assert session.state["water_filled"] is False
+
+    await _observe_caption(
+        guidance,
+        session.participant_id,
+        "A reflective pool is clearly visible inside the vessel.",
+    )
     assert session.state["water_filled"] is True
     assert captions == [
         "The lid is open, but the vessel appears empty.",
         "A reflective pool occupies the lower half of the vessel.",
+        "A reflective pool is clearly visible inside the vessel.",
     ]
 
 
@@ -893,6 +901,37 @@ async def test_heating_clear_negative_resets_positive_judgment() -> None:
     await _observe_caption(guidance, session.participant_id, "Reading above fifty.")
     await _observe_caption(guidance, session.participant_id, "Reading is forty.")
     await _observe_caption(guidance, session.participant_id, "Reading above fifty.")
+    assert session.state["heating_started"] is False
+
+    await _observe_caption(guidance, session.participant_id, "Reading above fifty.")
+    assert session.state["heating_started"] is True
+
+
+@pytest.mark.asyncio
+async def test_malformed_commit_preserves_positive_judgment() -> None:
+    responses = iter(
+        (
+            _commit_response({"heating_started": True}),
+            _commit_response({"not_writable": True}),
+            _commit_response({"heating_started": True}),
+        )
+    )
+
+    class Llm:
+        async def chat(self, _messages, **_kwargs):
+            return next(responses)
+
+    guidance = _guidance_for_observation(Llm())
+    session = guidance.store.get("participant-malformed-commit")
+    guidance.store.start(session)
+    guidance.store.advance(session, skip=True)
+    guidance.store.advance(session, skip=True)
+
+    await _observe_caption(guidance, session.participant_id, "Reading above fifty.")
+    assert session.evidence_hits == 1
+
+    await _observe_caption(guidance, session.participant_id, "Malformed judgment.")
+    assert session.evidence_hits == 1
     assert session.state["heating_started"] is False
 
     await _observe_caption(guidance, session.participant_id, "Reading above fifty.")
