@@ -719,7 +719,10 @@ Each subagent runs its own inner tool loop against the scene and tracking
 services. On each accepted <code class="docutils literal notranslate"><span class="pre">xr-render.user-query</span></code> event:</p>
 <ol class="arabic simple">
 <li><p><strong>Recent conversation</strong> is recalled from <code class="docutils literal notranslate"><span class="pre">TextMemoryTools</span></code> and injected
-as context so the model understands references like “fix that” or “undo”.</p></li>
+as context so the model understands references like “fix that” or “undo”.
+The block is session-scoped: only the last eight turns since the
+participant last departed, and within ten minutes of the request, are
+injected; older history is memory_agent’s to recall.</p></li>
 <li><p><strong>Supervisor loop</strong> (<code class="docutils literal notranslate"><span class="pre">run_tool_loop</span></code>, up to 12 iterations) — Nemotron-Omni
 :8108 routes the request to one or more subagent tools. Each subagent
 runs its own inner <code class="docutils literal notranslate"><span class="pre">run_tool_loop</span></code> (up to 4 iterations) against the
@@ -790,8 +793,16 @@ its new id), <code class="docutils literal notranslate"><span class="pre">resize
 <h2>Prompt structure<a class="headerlink" href="#prompt-structure" title="Link to this heading">#</a></h2>
 <p>Each agent has its own prompt file under
 <code class="docutils literal notranslate"><span class="pre">worker/xr_render_demo_worker/</span></code> (supervisor plus five subagents, six files total).
-The supervisor prompt routes requests to subagents; each subagent prompt
-is worked-example heavy and opens with pronoun and reference resolution.</p>
+The supervisor prompt carries only cross-cutting turn discipline; the
+routing rules and ownership boundaries live in each subagent’s tool
+<code class="docutils literal notranslate"><span class="pre">DESCRIPTION</span></code> constant (<code class="docutils literal notranslate"><span class="pre">agents/&lt;name&gt;/agent.py</span></code>), the surface the
+supervisor’s model reads when selecting a tool. The vision agent selects
+between two descriptions at construction time: the full one when video
+memory is wired, and a live-only variant that disclaims past-moment
+questions when it is not. A few rules are stated in
+both places on purpose: descriptions alone are under-weighted mid-loop, so
+the supervisor prompt keeps a short backstop copy. Each subagent prompt is
+worked-example heavy and opens with pronoun and reference resolution.</p>
 <p>The placement agent’s prompt maps utterance shapes to tools with contrast
 pairs: a stated distance is a shift (<code class="docutils literal notranslate"><span class="pre">nudge</span></code>); a user-anchored destination
 uses <code class="docutils literal notranslate"><span class="pre">move_user_relative</span></code>; a destination anchored on another object uses
@@ -871,6 +882,11 @@ so they do not mutate the LOVR scene.</p>
 <td><p>Running demo stack with novel prompts</p></td>
 <td><p>Minutes</p></td>
 </tr>
+<tr class="row-even"><td><p>Live perception routing</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_live_perception</span></code></p></td>
+<td><p>Running demo stack and the worker’s transcript store</p></td>
+<td><p>Minutes</p></td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -903,6 +919,7 @@ uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo_live_pose_ma
 uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo_live_manip
 uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo_live_garble
 uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo_live_explore
+uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo_live_perception
 </pre></div>
 </div>
 <p>Live drivers join as synthetic participants, inject typed text, set simulated
@@ -924,6 +941,15 @@ stutters. Its restraint scoring fails incorrect mutations and accepts a
 clarifying response. <code class="docutils literal notranslate"><span class="pre">xr_render_demo_live_explore</span></code> sends novel conversational
 phrasing and scores intent invariants. Promote any violation into a permanent
 tier case before fixing it.</p>
+<p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_live_perception</span></code> builds real multi-turn history, then sends
+perception utterances and judges the reply text read back from the worker’s
+transcript store. The live stack publishes no camera track, so a correctly
+routed perception turn must report an honest inability, recite no scene
+object, and leave the scene unchanged; one case also injects cross-session
+transcript turns to pin the supervisor’s recall recency window, which keeps
+them out of [Recent conversation]. It catches routing misses the offline
+tiers cannot reproduce, whose recalled history is far shorter than a live
+session’s.</p>
 </section>
 <section id="add-or-change-a-case">
 <h3>Add or change a case<a class="headerlink" href="#add-or-change-a-case" title="Link to this heading">#</a></h3>
@@ -952,7 +978,7 @@ name the parameter for the text the model can copy. The <code class="docutils li
 parameter is the precedent: the model copies descriptors verbatim, and
 <code class="docutils literal notranslate"><span class="pre">spatial_ops</span></code> resolves shapes, damaged nouns, and colors against scene state.</p>
 <p>Run <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">xr_render_demo_eval</span> <span class="pre">utterances</span></code> after every prompt or operations
-change. Its 35 cases take about three minutes. Run the longer scenario and
+change. Its cases take about three minutes. Run the longer scenario and
 precision tiers before completing a tuning round.</p>
 </section>
 <section id="prompt-and-evaluation-overlap-audit">
