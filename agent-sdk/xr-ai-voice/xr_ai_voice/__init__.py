@@ -19,8 +19,6 @@ from ._runtime import (
     VoiceOutput,
     VoiceParticipantJoined,
     VoiceParticipantLeft,
-    VoiceSpeechStarted,
-    VoiceSpeechStopped,
     VoiceStreamClosedError,
     VoiceTranscript,
 )
@@ -39,8 +37,6 @@ __all__ = [
     "VoiceOutput",
     "VoiceParticipantJoined",
     "VoiceParticipantLeft",
-    "VoiceSpeechStarted",
-    "VoiceSpeechStopped",
     "VoiceStreamClosedError",
     "VoiceTranscript",
 ]

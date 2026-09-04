@@ -29,8 +29,6 @@ from xr_ai_voice import (
     VoiceOutput,
     VoiceParticipantJoined,
     VoiceParticipantLeft,
-    VoiceSpeechStarted,
-    VoiceSpeechStopped,
 )
 from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent, WebEventsAgent
 
@@ -59,10 +57,7 @@ from tea_making_worker.events import (  # noqa: E402  # pyright: ignore[reportMi
     PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
-    SPEECH_STARTED_TOPIC,
-    SPEECH_STOPPED_TOPIC,
     TRANSCRIPT_RECORD_TOPIC,
-    USER_QUERY_TOPIC,
     VIDEO_LOG_RECORD_TOPIC,
     BackgroundFact,
     ChangeWatchRecord,
@@ -75,7 +70,6 @@ from tea_making_worker.events import (  # noqa: E402  # pyright: ignore[reportMi
 )
 from tea_making_worker.file_output import FileOutputAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.foreground import ForegroundAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
-from tea_making_worker.guidance_voice import GuidanceVoiceAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.images import ParticipantImageAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.spec import load_workflow  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.transcript import TranscriptAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
@@ -903,86 +897,6 @@ async def test_heating_clear_negative_resets_positive_judgment() -> None:
 
     await _observe_caption(guidance, session.participant_id, "Reading above fifty.")
     assert session.state["heating_started"] is True
-
-
-@pytest.mark.asyncio
-async def test_guidance_notice_waits_for_speech_and_foreground_turn() -> None:
-    outputs: list[VoiceOutput] = []
-
-    class Capture(Agent):
-        def __init__(self) -> None:
-            super().__init__()
-
-        @subscribe(VOICE_CONTRIBUTION_TOPIC)
-        async def output(self, output: VoiceOutput, _ctx: RuntimeContext) -> None:
-            outputs.append(output)
-
-    participant_id = "participant-guidance-voice"
-    guidance_voice = GuidanceVoiceAgent(release_delay_s=0.01)
-    runtime = AgentRuntime()
-    runtime.register("guidance-voice", guidance_voice)
-    runtime.register("capture", Capture())
-
-    async with runtime:
-        guidance_voice.bind_runtime(runtime)
-        await runtime.publish(
-            SPEECH_STARTED_TOPIC,
-            VoiceSpeechStarted(),
-            participant_id=participant_id,
-        )
-        await runtime.publish(
-            GUIDANCE_NOTICE_TOPIC,
-            GuidanceNotice(timestamp_us=1, text="Heating is underway."),
-            participant_id=participant_id,
-        )
-        assert outputs == []
-
-        await runtime.publish(
-            SPEECH_STOPPED_TOPIC,
-            VoiceSpeechStopped(),
-            participant_id=participant_id,
-        )
-        await runtime.publish(
-            USER_QUERY_TOPIC,
-            UserQuery(text="What is the temperature?", timestamp_us=2),
-            participant_id=participant_id,
-        )
-        await asyncio.sleep(0.02)
-        assert outputs == []
-
-        await runtime.publish(
-            FOREGROUND_RECORD_TOPIC,
-            ForegroundRecord(
-                timestamp_us=2,
-                query="What is the temperature?",
-                response="It is sixty degrees Celsius.",
-            ),
-            participant_id=participant_id,
-        )
-        assert [output.text for output in outputs] == ["Heating is underway."]
-        assert outputs[0].interrupt is False
-
-        await runtime.publish(
-            SPEECH_STARTED_TOPIC,
-            VoiceSpeechStarted(),
-            participant_id=participant_id,
-        )
-        await runtime.publish(
-            GUIDANCE_NOTICE_TOPIC,
-            GuidanceNotice(timestamp_us=3, text="The timer is complete."),
-            participant_id=participant_id,
-        )
-        await runtime.publish(
-            SPEECH_STOPPED_TOPIC,
-            VoiceSpeechStopped(),
-            participant_id=participant_id,
-        )
-        await asyncio.sleep(0.02)
-        assert [output.text for output in outputs] == [
-            "Heating is underway.",
-            "The timer is complete.",
-        ]
-        await guidance_voice.stop()
 
 
 @pytest.mark.asyncio

@@ -34,8 +34,6 @@ from .events import (
     INTERRUPTED_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
-    SPEECH_STARTED_TOPIC,
-    SPEECH_STOPPED_TOPIC,
     USER_QUERY_TOPIC,
 )
 from .file_output import FileOutputAgent
@@ -147,8 +145,6 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         transport=transport,
         participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
         participant_left_topic=PARTICIPANT_LEFT_TOPIC,
-        speech_started_topic=SPEECH_STARTED_TOPIC,
-        speech_stopped_topic=SPEECH_STOPPED_TOPIC,
         interrupted_topic=INTERRUPTED_TOPIC,
         interrupt_on_supersede=True,
     )
@@ -242,7 +238,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             vlm_timeout_s=config.vlm_timeout_s,
         ),
     )
-    guidance_voice = runtime.register("guidance-voice", GuidanceVoiceAgent())
+    runtime.register("guidance-voice", GuidanceVoiceAgent())
     voice_aggregation = runtime.register(
         "voice-aggregation",
         _ParticipantVoiceAggregationAgent(llm=llm),
@@ -256,7 +252,6 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             logger.info("live events → {}", web_events.url)
             async with runtime:
                 guidance.bind_runtime(runtime)
-                guidance_voice.bind_runtime(runtime)
                 change_watch.bind_runtime(runtime)
                 transcript.bind_runtime(runtime)
                 video_log.bind_runtime(runtime)
@@ -270,7 +265,6 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                     await video_log.stop()
                     await images.stop()
                     await files.stop()
-                    await guidance_voice.stop()
                     await voice_aggregation.stop()
     logger.info("tea-making stopped")
 
