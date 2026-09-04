@@ -2147,6 +2147,11 @@ workflow.</p></li>
 <span class="nt">scene_endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tcp://127.0.0.1:8320</span>
 <span class="nt">openxr_endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tcp://127.0.0.1:8330</span>
 <span class="nt">video_memory_endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tcp://127.0.0.1:8310</span>
+<span class="c1"># Past-moment questions ("what was I holding a moment ago?") need recorded</span>
+<span class="c1"># video: enable video_recording in device_io_hub.yaml and set recordings_dir</span>
+<span class="c1"># in video_memory_service.yaml, then turn this on. Off, vision_agent answers</span>
+<span class="c1"># from the live camera only.</span>
+<span class="nt">video_history_enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="nt">text_memory_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/dev/shm/xr-ai/text-memory</span>
 
 <span class="c1"># ── Voice activity detection (Silero VAD, ONNX backend) ──────────────────────</span>
