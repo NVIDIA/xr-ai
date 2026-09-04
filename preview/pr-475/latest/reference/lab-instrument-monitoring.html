@@ -695,7 +695,8 @@ example verbatim.</p></li>
 <li><p>Detect every QR and ArUco marker in the frame.</p></li>
 <li><p>Resolve each marker through <code class="docutils literal notranslate"><span class="pre">DeviceMap</span></code>.</p></li>
 <li><p>Create one derived image that draws a distinct, bold colored X over each
-configured marker polygon.</p></li>
+configured marker polygon. The X stays aligned to the image frame even when
+the detected marker is rotated.</p></li>
 <li><p>Ask the VLM once for a strict JSON map from every requested color name to
 that X marker’s own display reading or <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code>.</p></li>
 <li><p>Return mapped <code class="docutils literal notranslate"><span class="pre">InstrumentSighting</span></code> values independently from successful
@@ -706,7 +707,9 @@ the model from guessing which instrument produced a value. Image references,
 not image bytes, pass between tools; media stays in the shared image registry.
 Color names remain internal correlation keys. User-facing results contain only
 device names resolved from scanned markers through <code class="docutils literal notranslate"><span class="pre">DeviceMap</span></code>; they never use
-the temporary color name as a device identity.</p>
+the temporary color name as a device identity. Parsed response values are
+validated independently: an invalid value is treated as <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code> without
+discarding valid readings returned for other colors in the same response.</p>
 <p>To use a different identifier, replace the marker tool and <code class="docutils literal notranslate"><span class="pre">DeviceMap</span></code> while
 preserving the one-frame <code class="docutils literal notranslate"><span class="pre">LabInstrumentReadResult</span></code> boundary. Barcode, OCR label,
 object detection, or backend inventory lookup can all feed the same reader and
