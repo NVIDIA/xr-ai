@@ -528,16 +528,28 @@ class GuidanceAgent(Agent):
                         revision=session.revision,
                     )
                 updates = dict(request.updates)
-                completion_proposed = self.store._completion_proposed(
+                invalid = self.store._invalid_commit_patch(
                     session,
+                    step,
                     updates,
                 )
-                self.store.observe(
-                    session,
-                    "accepted"
-                    if completion_proposed
-                    else (None if request.evidence == "unknown" else "rejected"),
-                )
+                if invalid:
+                    self.store.observe(session, None)
+                else:
+                    completion_proposed = self.store._completion_proposed(
+                        session,
+                        updates,
+                    )
+                    self.store.observe(
+                        session,
+                        "accepted"
+                        if completion_proposed
+                        else (
+                            None
+                            if request.evidence == "unknown"
+                            else "rejected"
+                        ),
+                    )
                 result = self.store.commit(session, updates, request.message)
             return WorkflowCommitResult(
                 accepted=result.accepted,
