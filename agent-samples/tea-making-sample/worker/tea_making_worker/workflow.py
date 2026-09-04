@@ -57,6 +57,7 @@ from .workflow_tools import (
     named_tool_set,
     participant_current_view_tool,
     rag_lookup_tool,
+    temperature_threshold_tool,
     temperature_verify_tool,
     workflow_commit_tool,
     workflow_management_tools,
@@ -255,6 +256,7 @@ class GuidanceAgent(Agent):
             rag_lookup=rag_lookup_tool(self._rag),
             clock_now=clock_now_tool(),
             clock_timer=clock_timer_tool(),
+            temperature_threshold=temperature_threshold_tool(),
             temperature_verify=temperature_verify_tool(session),
         )
 
@@ -526,12 +528,16 @@ class GuidanceAgent(Agent):
                         revision=session.revision,
                     )
                 updates = dict(request.updates)
-                judgment = (
-                    "accepted"
-                    if self.store._completion_proposed(session, updates)
-                    else "rejected"
+                completion_proposed = self.store._completion_proposed(
+                    session,
+                    updates,
                 )
-                self.store.observe(session, judgment)
+                self.store.observe(
+                    session,
+                    "accepted"
+                    if completion_proposed
+                    else (None if request.evidence == "unknown" else "rejected"),
+                )
                 result = self.store.commit(session, updates, request.message)
             return WorkflowCommitResult(
                 accepted=result.accepted,
@@ -544,7 +550,10 @@ class GuidanceAgent(Agent):
             "workflow__commit",
             (
                 "Commit one semantic judgment from the fresh observation. "
-                "Use empty updates when the observation does not support completion."
+                "Use empty updates when the observation does not support completion. "
+                "For empty updates, mark evidence unknown only when the observation "
+                "cannot establish the required fact; mark it rejected when the "
+                "observation clearly contradicts that fact."
             ),
             CommitRequest,
             WorkflowCommitResult,
@@ -558,7 +567,7 @@ class GuidanceAgent(Agent):
         step: Step,
     ) -> None:
         if step.evidence is not None:
-            self.store.observe(session, "rejected")
+            self.store.observe(session, None)
 
     @staticmethod
     def _current(

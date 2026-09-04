@@ -29,6 +29,8 @@ from xr_ai_voice import (
     VoiceOutput,
     VoiceParticipantJoined,
     VoiceParticipantLeft,
+    VoiceSpeechStarted,
+    VoiceSpeechStopped,
 )
 from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent, WebEventsAgent
 
@@ -57,7 +59,10 @@ from tea_making_worker.events import (  # noqa: E402  # pyright: ignore[reportMi
     PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
+    SPEECH_STARTED_TOPIC,
+    SPEECH_STOPPED_TOPIC,
     TRANSCRIPT_RECORD_TOPIC,
+    USER_QUERY_TOPIC,
     VIDEO_LOG_RECORD_TOPIC,
     BackgroundFact,
     ChangeWatchRecord,
@@ -70,6 +75,7 @@ from tea_making_worker.events import (  # noqa: E402  # pyright: ignore[reportMi
 )
 from tea_making_worker.file_output import FileOutputAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.foreground import ForegroundAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.guidance_voice import GuidanceVoiceAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.images import ParticipantImageAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.spec import load_workflow  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.transcript import TranscriptAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
@@ -80,7 +86,11 @@ from tea_making_worker.video_log import (  # noqa: E402  # pyright: ignore[repor
 from tea_making_worker.web_events import TeaWebEventsAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.workflow import GuidanceAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.workflow_state import WorkflowStore  # noqa: E402  # pyright: ignore[reportMissingImports]
-from tea_making_worker.workflow_tools import CurrentViewRequest  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.workflow_tools import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    CurrentViewRequest,
+    TemperatureThresholdRequest,
+    temperature_threshold_tool,
+)
 
 
 def _load_main():
@@ -707,7 +717,38 @@ def test_workflow_enforces_consecutive_model_judgments() -> None:
     assert session.step_id == "heat_water"
 
 
-def _commit_response(updates: dict[str, bool | int | float | str]) -> ChatResponse:
+@pytest.mark.asyncio
+async def test_temperature_threshold_is_independent_of_tea_target() -> None:
+    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
+    tool = temperature_threshold_tool()
+
+    at_threshold = await tool.execute(
+        TemperatureThresholdRequest(
+            reading=50,
+            unit="celsius",
+            threshold_c=50,
+        )
+    )
+    above_threshold = await tool.execute(
+        TemperatureThresholdRequest(
+            reading=55,
+            unit="celsius",
+            threshold_c=50,
+        )
+    )
+
+    assert at_threshold.above is False
+    assert above_threshold.above is True
+    assert workflow.step("heat_water").agent.tools == (
+        "temperature__threshold",
+    )
+
+
+def _commit_response(
+    updates: dict[str, bool | int | float | str],
+    *,
+    evidence: str = "rejected",
+) -> ChatResponse:
     return ChatResponse(
         "",
         None,
@@ -715,7 +756,13 @@ def _commit_response(updates: dict[str, bool | int | float | str]) -> ChatRespon
             ToolCall(
                 id="commit-1",
                 name="workflow__commit",
-                arguments=json.dumps({"updates": updates, "message": ""}),
+                arguments=json.dumps(
+                    {
+                        "updates": updates,
+                        "message": "",
+                        "evidence": evidence,
+                    }
+                ),
             )
         ],
         "tool_calls",
@@ -796,7 +843,11 @@ async def test_heating_uses_two_positive_llm_judgments() -> None:
         async def chat(self, messages, **_kwargs):
             caption = json.loads(messages[-1].content)["observation"]
             supported = caption.startswith("Current display")
-            return _commit_response({"heating_started": True} if supported else {})
+            unknown = "unclear" in caption or "No current reading" in caption
+            return _commit_response(
+                {"heating_started": True} if supported else {},
+                evidence="unknown" if unknown else "rejected",
+            )
 
     guidance = _guidance_for_observation(Llm())
     session = guidance.store.get("participant-heating-judgment")
@@ -826,14 +877,112 @@ async def test_heating_uses_two_positive_llm_judgments() -> None:
         session.participant_id,
         "Current display reads 56 degrees Celsius.",
     )
+    assert session.state["heating_started"] is True
+
+
+@pytest.mark.asyncio
+async def test_heating_clear_negative_resets_positive_judgment() -> None:
+    class Llm:
+        async def chat(self, messages, **_kwargs):
+            caption = json.loads(messages[-1].content)["observation"]
+            supported = "above fifty" in caption
+            return _commit_response(
+                {"heating_started": True} if supported else {},
+            )
+
+    guidance = _guidance_for_observation(Llm())
+    session = guidance.store.get("participant-heating-reset")
+    guidance.store.start(session)
+    guidance.store.advance(session, skip=True)
+    guidance.store.advance(session, skip=True)
+
+    await _observe_caption(guidance, session.participant_id, "Reading above fifty.")
+    await _observe_caption(guidance, session.participant_id, "Reading is forty.")
+    await _observe_caption(guidance, session.participant_id, "Reading above fifty.")
     assert session.state["heating_started"] is False
 
-    await _observe_caption(
-        guidance,
-        session.participant_id,
-        "Current display reads 57 degrees Celsius.",
-    )
+    await _observe_caption(guidance, session.participant_id, "Reading above fifty.")
     assert session.state["heating_started"] is True
+
+
+@pytest.mark.asyncio
+async def test_guidance_notice_waits_for_speech_and_foreground_turn() -> None:
+    outputs: list[VoiceOutput] = []
+
+    class Capture(Agent):
+        def __init__(self) -> None:
+            super().__init__()
+
+        @subscribe(VOICE_CONTRIBUTION_TOPIC)
+        async def output(self, output: VoiceOutput, _ctx: RuntimeContext) -> None:
+            outputs.append(output)
+
+    participant_id = "participant-guidance-voice"
+    guidance_voice = GuidanceVoiceAgent(release_delay_s=0.01)
+    runtime = AgentRuntime()
+    runtime.register("guidance-voice", guidance_voice)
+    runtime.register("capture", Capture())
+
+    async with runtime:
+        guidance_voice.bind_runtime(runtime)
+        await runtime.publish(
+            SPEECH_STARTED_TOPIC,
+            VoiceSpeechStarted(),
+            participant_id=participant_id,
+        )
+        await runtime.publish(
+            GUIDANCE_NOTICE_TOPIC,
+            GuidanceNotice(timestamp_us=1, text="Heating is underway."),
+            participant_id=participant_id,
+        )
+        assert outputs == []
+
+        await runtime.publish(
+            SPEECH_STOPPED_TOPIC,
+            VoiceSpeechStopped(),
+            participant_id=participant_id,
+        )
+        await runtime.publish(
+            USER_QUERY_TOPIC,
+            UserQuery(text="What is the temperature?", timestamp_us=2),
+            participant_id=participant_id,
+        )
+        await asyncio.sleep(0.02)
+        assert outputs == []
+
+        await runtime.publish(
+            FOREGROUND_RECORD_TOPIC,
+            ForegroundRecord(
+                timestamp_us=2,
+                query="What is the temperature?",
+                response="It is sixty degrees Celsius.",
+            ),
+            participant_id=participant_id,
+        )
+        assert [output.text for output in outputs] == ["Heating is underway."]
+        assert outputs[0].interrupt is False
+
+        await runtime.publish(
+            SPEECH_STARTED_TOPIC,
+            VoiceSpeechStarted(),
+            participant_id=participant_id,
+        )
+        await runtime.publish(
+            GUIDANCE_NOTICE_TOPIC,
+            GuidanceNotice(timestamp_us=3, text="The timer is complete."),
+            participant_id=participant_id,
+        )
+        await runtime.publish(
+            SPEECH_STOPPED_TOPIC,
+            VoiceSpeechStopped(),
+            participant_id=participant_id,
+        )
+        await asyncio.sleep(0.02)
+        assert [output.text for output in outputs] == [
+            "Heating is underway.",
+            "The timer is complete.",
+        ]
+        await guidance_voice.stop()
 
 
 @pytest.mark.asyncio
