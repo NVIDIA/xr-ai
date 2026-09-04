@@ -76,6 +76,10 @@ def _frame_size_error(
     )
 
 
+class _IncompatibleSharedMemoryError(RuntimeError):
+    """The named segment exists but is not a valid XR AI frame ring."""
+
+
 class SlotView(NamedTuple):
     """Zero-copy view into one ring-buffer slot's pixel data."""
     data:   memoryview
@@ -89,8 +93,9 @@ class ShmRingBuffer:
     """
     Shared-memory ring buffer for raw video frames.
 
-    Hub creates the buffer (create=True). Connector opens it (create=False) and
-    reads num_slots / max_frame_bytes from the global header automatically.
+    The connector creates the buffer (create=True). The hub opens it
+    (create=False) and reads num_slots / max_frame_bytes from the global header
+    automatically.
 
     The caller that uses read_slot() MUST call release_slot() before the next
     write_frame() for that slot can succeed. Both operations are O(1).
@@ -126,16 +131,66 @@ class ShmRingBuffer:
                 off = _GH_SIZE + i * slot_stride
                 _SH.pack_into(buffer, off, _MAGIC_SLOT, _STATE_FREE, 0, 0, 0, 0, 0, 0, 0)
         else:
-            self._shm                              = SharedMemory(name=name, create=False)
+            self._shm = SharedMemory(name=name, create=False)
             buffer = self._shm.buf
             assert buffer is not None
-            _, num_slots, max_frame_bytes, slot_stride = _GH.unpack_from(buffer, 0)
+            try:
+                num_slots, max_frame_bytes, slot_stride = self._validate_layout(buffer)
+            except Exception:
+                buffer.release()
+                self._shm.close()
+                raise
 
         self._buf            = buffer
         self._num_slots      = num_slots
         self._max_frame_bytes = max_frame_bytes
         self._slot_stride    = slot_stride
         self._write_pos      = 0  # local to producer; never shared
+
+    @staticmethod
+    def _validate_layout(buffer: memoryview) -> tuple[int, int, int]:
+        """Validate an attached segment before exposing it to the hub."""
+        if len(buffer) < _GH_SIZE:
+            raise _IncompatibleSharedMemoryError(
+                f"segment is too small for the global header ({len(buffer)} bytes)"
+            )
+        try:
+            magic, num_slots, max_frame_bytes, slot_stride = _GH.unpack_from(buffer, 0)
+        except struct.error as exc:
+            raise _IncompatibleSharedMemoryError("cannot read the global header") from exc
+        if magic != _MAGIC_GLOBAL:
+            raise _IncompatibleSharedMemoryError(
+                f"invalid global header magic 0x{magic:08x}"
+            )
+        if num_slots <= 0 or max_frame_bytes <= 0:
+            raise _IncompatibleSharedMemoryError(
+                "ring dimensions must be positive "
+                f"(num_slots={num_slots}, max_frame_bytes={max_frame_bytes})"
+            )
+        expected_stride = _SH_SIZE + max_frame_bytes
+        if slot_stride != expected_stride:
+            raise _IncompatibleSharedMemoryError(
+                f"invalid slot stride {slot_stride} (expected {expected_stride})"
+            )
+        expected_size = _GH_SIZE + num_slots * slot_stride
+        # Some POSIX implementations expose page-rounded mappings (macOS is a
+        # common example), so trailing capacity is valid but truncation is not.
+        if len(buffer) < expected_size:
+            raise _IncompatibleSharedMemoryError(
+                f"segment size {len(buffer)} is smaller than expected {expected_size}"
+            )
+        for slot in range(num_slots):
+            offset = _GH_SIZE + slot * slot_stride
+            slot_magic, state = _SH.unpack_from(buffer, offset)[:2]
+            if slot_magic != _MAGIC_SLOT:
+                raise _IncompatibleSharedMemoryError(
+                    f"slot {slot} has invalid header magic 0x{slot_magic:08x}"
+                )
+            if state not in (_STATE_FREE, _STATE_WRITING, _STATE_READY):
+                raise _IncompatibleSharedMemoryError(
+                    f"slot {slot} has invalid state {state}"
+                )
+        return num_slots, max_frame_bytes, slot_stride
 
     # ── producer ──────────────────────────────────────────────────────────────
 

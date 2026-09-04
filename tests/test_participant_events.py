@@ -15,6 +15,7 @@ from types import SimpleNamespace
 
 import pytest
 import device_io_hub.ipc._hub as hub_module
+from device_io_hub.ipc._connector import _CONNECTOR_REGISTER_ACK_TOPIC
 
 from xr_ai_hub import (
     ConnectorRegistration,
@@ -22,6 +23,7 @@ from xr_ai_hub import (
     MsgType,
     ParticipantEvent,
     PixelFormat,
+    decode,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -172,8 +174,8 @@ async def test_connector_reregistration_releases_held_slots(hub, make_connector,
     assert ("alice", "cam") in hub._latest_slots
 
 
-async def test_connector_reregistration_open_failure_drops_stale_ring(monkeypatch):
-    """A failed replacement must not retain the closed old ring."""
+async def test_connector_reregistration_open_failure_preserves_healthy_ring(monkeypatch):
+    """A failed replacement must not destroy the existing healthy mapping."""
 
     class CloseTrackingRing:
         def __init__(self) -> None:
@@ -189,6 +191,13 @@ async def test_connector_reregistration_open_failure_drops_stale_ring(monkeypatc
     def fail_open(*, name: str, create: bool):
         raise RuntimeError(f"cannot open {name} create={create}")
 
+    class FakePublisher:
+        def __init__(self) -> None:
+            self.messages = []
+
+        async def send_multipart(self, parts) -> None:
+            self.messages.append(parts)
+
     hub = hub_module.HubEndpoint.__new__(hub_module.HubEndpoint)
     old_ring = CloseTrackingRing()
     held_data = memoryview(b"held")
@@ -198,18 +207,27 @@ async def test_connector_reregistration_open_failure_drops_stale_ring(monkeypatc
     )
     hub._latest_slots = {("alice", "cam"): (old_ring, held_view)}
     hub._ring_registry = {"conn": old_ring}
+    hub._unhealthy_connectors = set()
+    hub._pub = FakePublisher()
     monkeypatch.setattr(hub_module, "ShmRingBuffer", fail_open)
 
-    hub._handle_registration(
-        ConnectorRegistration(connector_id="conn", shm_name="missing")
+    await hub._handle_registration(
+        ConnectorRegistration(
+            connector_id="conn",
+            shm_name="missing",
+        )
     )
 
-    assert old_ring.closed is True
-    assert old_ring.released_slots == [2]
-    assert hub._latest_slots == {}
-    with pytest.raises(ValueError, match="released memoryview"):
-        held_data.tobytes()
-    assert "conn" not in hub._ring_registry
+    assert old_ring.closed is False
+    assert old_ring.released_slots == []
+    assert hub._latest_slots == {("alice", "cam"): (old_ring, held_view)}
+    assert held_data.tobytes() == b"held"
+    assert hub._ring_registry == {"conn": old_ring}
+    type_id, ack = decode(hub._pub.messages[0][1])
+    assert type_id == MsgType.CONTROL
+    assert ack.topic == _CONNECTOR_REGISTER_ACK_TOPIC
+    assert ack.payload["success"] is False
+    assert ack.payload["error_code"] == "shm_open_failed"
 
 
 async def test_rejected_frame_signal_releases_new_ring_slot(
