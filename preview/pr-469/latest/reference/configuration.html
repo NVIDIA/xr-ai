@@ -1782,7 +1782,7 @@ workflow.</p></li>
 <span class="w">          </span><span class="no">legible, say label unreadable.</span>
 <span class="w">      </span><span class="nt">result_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">answer</span>
 <span class="w">    </span><span class="nt">evidence</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"(?is)^(?!.*\\b(none|nothing|dark|blurry|blurred|unreadable|unclear|unknown|absent|obscured|unable|cannot|can't|discern)\\b)(?!.*\\b(no|not|without)\\b.{0,32}\\b(tea|package|box|label|tag|texts?)\\b)(?=.*[a-z]{3}).+$"</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^accepted$"</span>
 <span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
@@ -1825,16 +1825,18 @@ workflow.</p></li>
 <span class="w">      </span><span class="nt">interval_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">      </span><span class="nt">arguments</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">question</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">          </span><span class="no">Decide whether water itself is visibly inside the kettle or pot.</span>
-<span class="w">          </span><span class="no">Reply exactly "water present" when it is visible, or "water absent"</span>
-<span class="w">          </span><span class="no">otherwise. Never infer from the vessel alone.</span>
+<span class="w">          </span><span class="no">Describe the visible interior and contents of the kettle or pot.</span>
+<span class="w">          </span><span class="no">State whether water is visible inside and what supports that reading.</span>
+<span class="w">          </span><span class="no">If the contents are unclear, say so. Never infer.</span>
 <span class="w">      </span><span class="nt">result_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">answer</span>
 <span class="w">    </span><span class="nt">evidence</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^water</span><span class="nv"> </span><span class="s">visible$"</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^accepted$"</span>
 <span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Set water_filled after two accepted water-present observations.</span>
+<span class="w">        </span><span class="no">Judge the fresh caption semantically without requiring particular</span>
+<span class="w">        </span><span class="no">words. Set water_filled true when it reasonably shows water inside the</span>
+<span class="w">        </span><span class="no">vessel. Otherwise commit empty updates and message.</span>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
@@ -1860,18 +1862,26 @@ workflow.</p></li>
 <span class="w">      </span><span class="nt">interval_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">      </span><span class="nt">arguments</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">question</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">          </span><span class="no">Read only the kettle or thermometer temperature. Reply "&lt;number&gt; C"</span>
-<span class="w">          </span><span class="no">or "&lt;number&gt; F" when the unit is visible, "unit ambiguous" when a</span>
-<span class="w">          </span><span class="no">number lacks a clear unit, or "no reading".</span>
+<span class="w">          </span><span class="no">Describe the visible kettle or thermometer display and transcribe its</span>
+<span class="w">          </span><span class="no">current numeric reading and unit. If either is unclear, say so. Do not</span>
+<span class="w">          </span><span class="no">confuse a printed target temperature with the current reading.</span>
 <span class="w">      </span><span class="nt">result_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">answer</span>
 <span class="w">    </span><span class="nt">evidence</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^temperature</span><span class="nv"> </span><span class="s">above</span><span class="nv"> </span><span class="s">threshold$"</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^accepted$"</span>
 <span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Set heating_started after two explicit-unit readings above 50 Celsius</span>
-<span class="w">        </span><span class="no">or 122 Fahrenheit. Ambiguous or missing units do not count.</span>
-<span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">        </span><span class="no">This step detects that heating is underway; it does not wait for the tea</span>
+<span class="w">        </span><span class="no">target temperature. Ignore target_temperature_c when deciding this</span>
+<span class="w">        </span><span class="no">step. For every fresh current reading with an explicit Celsius or</span>
+<span class="w">        </span><span class="no">Fahrenheit unit, first call temperature__threshold with that exact</span>
+<span class="w">        </span><span class="no">reading and a threshold_c of 50. If its above result is true, commit</span>
+<span class="w">        </span><span class="no">heating_started true. If above is false, commit empty updates and</span>
+<span class="w">        </span><span class="no">message with rejected evidence. For a target value, ambiguous unit,</span>
+<span class="w">        </span><span class="no">missing reading, or unclear current-versus-target value, do not call the</span>
+<span class="w">        </span><span class="no">tool; commit empty updates and message with unknown evidence so it does</span>
+<span class="w">        </span><span class="no">not erase a prior confirmed reading.</span>
+<span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">temperature__threshold</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
 <span class="w">        </span><span class="no">Explain target from state. For a reading, call current_view and</span>
@@ -1903,16 +1913,16 @@ workflow.</p></li>
 <span class="w">          </span><span class="no">it is unconfirmed. Note hazards.</span>
 <span class="w">      </span><span class="nt">result_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">answer</span>
 <span class="w">    </span><span class="nt">evidence</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|outside|cannot|can't)\\b)(?!.*\\b(no|not)\\b.{0,80}\\b(immersed|submerged|in</span><span class="nv"> </span><span class="s">(the</span><span class="nv"> </span><span class="s">)?water)\\b)(?=.*\\b(tea</span><span class="nv"> </span><span class="s">bag|infuser|leaves)\\b)(?=.*\\b(immersed|submerged|in</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">water)\\b).+$"</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^accepted$"</span>
 <span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Only when the caption explicitly confirms both visible water and a tea</span>
-<span class="w">        </span><span class="no">bag, infuser, or leaves entering or immersed in it, call clock__now once</span>
-<span class="w">        </span><span class="no">and commit epoch_us as steeping_started_at_us with steeping_started true.</span>
-<span class="w">        </span><span class="no">A tea item in an empty vessel or without visible water contact is no</span>
-<span class="w">        </span><span class="no">start: do not call clock__now; commit empty updates/message. Never</span>
-<span class="w">        </span><span class="no">replace a start time.</span>
+<span class="w">        </span><span class="no">Judge when steeping starts, not when it finishes. If the fresh caption</span>
+<span class="w">        </span><span class="no">shows tea visibly contacting liquid inside the vessel, first call</span>
+<span class="w">        </span><span class="no">clock__now. Nearby, above, or outside the liquid does not count. Then</span>
+<span class="w">        </span><span class="no">commit exactly its epoch_us as steeping_started_at_us with</span>
+<span class="w">        </span><span class="no">steeping_started true. Otherwise commit empty updates and message. Never</span>
+<span class="w">        </span><span class="no">invent or replace a start time.</span>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">clock__now</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
@@ -2171,6 +2181,11 @@ workflow.</p></li>
 <span class="nt">scene_endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tcp://127.0.0.1:8320</span>
 <span class="nt">openxr_endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tcp://127.0.0.1:8330</span>
 <span class="nt">video_memory_endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tcp://127.0.0.1:8310</span>
+<span class="c1"># Past-moment questions ("what was I holding a moment ago?") need recorded</span>
+<span class="c1"># video: enable video_recording in device_io_hub.yaml and set recordings_dir</span>
+<span class="c1"># in video_memory_service.yaml, then turn this on. Off, vision_agent answers</span>
+<span class="c1"># from the live camera only.</span>
+<span class="nt">video_history_enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="nt">text_memory_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/dev/shm/xr-ai/text-memory</span>
 
 <span class="c1"># ── Voice activity detection (Silero VAD, ONNX backend) ──────────────────────</span>

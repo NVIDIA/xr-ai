@@ -430,10 +430,11 @@ observers, and voice output. Refer to the
 architecture reference explains how to adapt the sample to another procedure
 rather than merely changing model settings.</p>
 <p>The defining pattern is a deterministic workflow around an agentic core. YAML
-declares the steps and state contract. Application code owns transitions and
-evidence. The model interprets observations and selects native tools, but it
-does not choose which workflow is active, mutate arbitrary state, or advance a
-step implicitly.</p>
+declares the steps and state contract. A VLM describes each current view, and
+the observation LLM judges that natural-language caption and selects native
+tools. Application code validates the resulting state proposal and counts any
+required consecutive confirmations. The model does not choose which workflow
+is active, mutate arbitrary state, or advance a step implicitly.</p>
 <section id="what-to-copy">
 <h2>What to copy<a class="headerlink" href="#what-to-copy" title="Link to this heading">#</a></h2>
 <p>Use this sample when your application needs one or more of these patterns:</p>
@@ -801,9 +802,10 @@ workflow step is active, the task:</p>
 <ol class="arabic simple">
 <li><p>Executes the step’s deterministic trigger, such as <code class="docutils literal notranslate"><span class="pre">current_view</span></code> or
 <code class="docutils literal notranslate"><span class="pre">clock__timer</span></code>.</p></li>
-<li><p>Applies the declared evidence rule.</p></li>
-<li><p>Calls the bounded tool loop with only the step’s observation tools.</p></li>
-<li><p>Accepts state through the controlled commit tool.</p></li>
+<li><p>Calls the bounded observation tool loop to judge the trigger result.</p></li>
+<li><p>Counts a valid completion proposal against the declared confirmation rule.</p></li>
+<li><p>Accepts state through the controlled commit tool only after the required
+confirmations.</p></li>
 <li><p>Publishes typed records and completion notices.</p></li>
 </ol>
 <p>Unavailable frames, invalid observations, and service failures record an error
@@ -814,8 +816,10 @@ model I/O run outside the participant state lock; the resulting commit is
 accepted only when the captured step and revision still match. Reset, restart,
 status, and advance controls therefore remain responsive during slow inference.</p>
 <p>To use audio, sensor, or backend evidence, add another deterministic trigger
-that returns a typed result. Keep evidence collection separate from state
-mutation so the same workflow rules remain testable without the live source.</p>
+that returns a typed result. Keep observation, semantic judgment, and guarded
+state mutation separate so the same workflow rules remain testable without the
+live source. Regex matching may guard the internal judgment token, but should
+not be the primary interpreter of natural-language captions.</p>
 </section>
 <section id="independent-background-agents">
 <h2>Independent background agents<a class="headerlink" href="#independent-background-agents" title="Link to this heading">#</a></h2>
@@ -890,7 +894,8 @@ ZMQ service rather than bypassing the repository’s service model.</p>
 <li><p>Define the new state fields and steps in <code class="docutils literal notranslate"><span class="pre">workflow.yaml</span></code>.</p></li>
 <li><p>Give every step the smallest possible <code class="docutils literal notranslate"><span class="pre">reads</span></code>, <code class="docutils literal notranslate"><span class="pre">writes</span></code>, and tool set.</p></li>
 <li><p>Put calculations and external facts behind deterministic tools.</p></li>
-<li><p>Define evidence independently of the observation prompt.</p></li>
+<li><p>Give the VLM a small factual caption prompt and the observation LLM a small
+semantic judgment prompt; use code only to validate and count proposals.</p></li>
 <li><p>Keep advancement explicit unless the product explicitly requires automatic
 transitions.</p></li>
 <li><p>Add state and routing tests before tuning prompts.</p></li>
