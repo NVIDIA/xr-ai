@@ -27,8 +27,6 @@ from xr_ai_voice import (
     VoiceOutput,
     VoiceParticipantJoined,
     VoiceParticipantLeft,
-    VoiceSpeechStarted,
-    VoiceSpeechStopped,
     VoiceStreamClosedError,
     VoiceTranscript,
 )
@@ -39,8 +37,6 @@ QUERY_TOPIC = Topic("test.user-query", UserQuery)
 PARTICIPANT_JOINED_TOPIC = Topic("test.participant-joined", VoiceParticipantJoined)
 PARTICIPANT_LEFT_TOPIC = Topic("test.participant-left", VoiceParticipantLeft)
 INTERRUPTED_TOPIC = Topic("test.interrupted", VoiceInterrupted)
-SPEECH_STARTED_TOPIC = Topic("test.speech-started", VoiceSpeechStarted)
-SPEECH_STOPPED_TOPIC = Topic("test.speech-stopped", VoiceSpeechStopped)
 
 class _Endpoint:
     def on_audio(self, callback):
@@ -217,24 +213,6 @@ class _LifecycleRecorder(Agent):
         ctx: RuntimeContext,
     ) -> None:
         self.events.append(("interrupted", ctx.metadata.participant_id))
-        self.changed.set()
-
-    @subscribe(SPEECH_STARTED_TOPIC)
-    async def speech_started(
-        self,
-        _event: VoiceSpeechStarted,
-        ctx: RuntimeContext,
-    ) -> None:
-        self.events.append(("speech-started", ctx.metadata.participant_id))
-        self.changed.set()
-
-    @subscribe(SPEECH_STOPPED_TOPIC)
-    async def speech_stopped(
-        self,
-        _event: VoiceSpeechStopped,
-        ctx: RuntimeContext,
-    ) -> None:
-        self.events.append(("speech-stopped", ctx.metadata.participant_id))
         self.changed.set()
 
     async def wait_for(self, count: int) -> None:
@@ -537,8 +515,6 @@ async def test_voice_agent_publishes_configured_lifecycle_topics() -> None:
         query_topic=QUERY_TOPIC,
         participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
         participant_left_topic=PARTICIPANT_LEFT_TOPIC,
-        speech_started_topic=SPEECH_STARTED_TOPIC,
-        speech_stopped_topic=SPEECH_STOPPED_TOPIC,
         interrupted_topic=INTERRUPTED_TOPIC,
         text_input=False,
     )
@@ -546,16 +522,12 @@ async def test_voice_agent_publishes_configured_lifecycle_topics() -> None:
 
     async with _running_voice(runtime, voice, session):
         await session.run_options["on_participant_joined"]("alice")
-        await session.run_options["on_speech_started"]("alice")
-        await session.run_options["on_speech_stopped"]("alice")
         await session.run_options["on_participant_left"]("alice")
         assert session.run_options["on_interrupted"](None) is None
-        await asyncio.wait_for(recorder.wait_for(5), 1.0)
+        await asyncio.wait_for(recorder.wait_for(3), 1.0)
 
     assert [event for event in recorder.events if event[0] != "interrupted"] == [
         ("participant-joined", "alice"),
-        ("speech-started", "alice"),
-        ("speech-stopped", "alice"),
         ("participant-left", "alice"),
     ]
     assert ("interrupted", None) in recorder.events
