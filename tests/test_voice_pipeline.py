@@ -1924,6 +1924,34 @@ async def test_assistant_notifies_external_runtime_on_interruption_frame():
 
 
 @pytest.mark.asyncio
+async def test_assistant_notifies_external_runtime_of_speech_activity():
+    activity: list[tuple[str, str]] = []
+
+    async def handle(_query: VoiceQuery) -> str:
+        return "unused"
+
+    async def on_started(pid: str) -> None:
+        activity.append(("started", pid))
+
+    async def on_stopped(pid: str) -> None:
+        activity.append(("stopped", pid))
+
+    assistant = _VoiceIOProcessor(
+        handle,
+        on_speech_started=on_started,
+        on_speech_stopped=on_stopped,
+    )
+    started = UserStartedSpeakingFrame()
+    started.transport_source = "pid-1"
+    stopped = UserStoppedSpeakingFrame()
+    stopped.transport_source = "pid-1"
+
+    await _run_chain(assistant, sends=[started, stopped])
+
+    assert activity == [("started", "pid-1"), ("stopped", "pid-1")]
+
+
+@pytest.mark.asyncio
 async def test_assistant_cancels_inflight_turn_on_pipeline_shutdown():
     """A handler task must not outlive the pipeline. Otherwise a turn keeps
     emitting text — and a turn observer keeps writing transcripts — after the

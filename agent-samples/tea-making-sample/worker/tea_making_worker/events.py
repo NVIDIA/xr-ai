@@ -14,6 +14,8 @@ from xr_ai_voice import (
     VoiceInterrupted,
     VoiceParticipantJoined,
     VoiceParticipantLeft,
+    VoiceSpeechStarted,
+    VoiceSpeechStopped,
 )
 
 
@@ -102,6 +104,8 @@ PARTICIPANT_LEFT_TOPIC = Topic(
     VoiceParticipantLeft,
 )
 INTERRUPTED_TOPIC = Topic("tea-making.interrupted", VoiceInterrupted)
+SPEECH_STARTED_TOPIC = Topic("tea-making.speech-started", VoiceSpeechStarted)
+SPEECH_STOPPED_TOPIC = Topic("tea-making.speech-stopped", VoiceSpeechStopped)
 FOREGROUND_RECORD_TOPIC = Topic("tea-making.foreground-record", ForegroundRecord)
 GUIDANCE_RECORD_TOPIC = Topic("tea-making.guidance-record", GuidanceRecord)
 GUIDANCE_NOTICE_TOPIC = Topic("tea-making.guidance-notice", GuidanceNotice)
@@ -128,6 +132,8 @@ __all__ = [
     "PARTICIPANT_JOINED_TOPIC",
     "PARTICIPANT_LEFT_TOPIC",
     "PARTICIPANT_CLEANUP_COMPLETE_TOPIC",
+    "SPEECH_STARTED_TOPIC",
+    "SPEECH_STOPPED_TOPIC",
     "TRANSCRIPT_RECORD_TOPIC",
     "USER_QUERY_TOPIC",
     "VIDEO_LOG_RECORD_TOPIC",

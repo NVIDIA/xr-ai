@@ -148,11 +148,17 @@ steps:
       consecutive: 2
     agent:
       prompt: >-
-        Judge the fresh caption semantically. Set heating_started true only for
-        a current reading above 50 Celsius or 122 Fahrenheit with an explicit
-        unit. A target value, ambiguous unit, or missing reading does not count;
-        otherwise commit empty updates and message.
-      tools: []
+        This step detects that heating is underway; it does not wait for the tea
+        target temperature. Ignore target_temperature_c when deciding this
+        step. For every fresh current reading with an explicit Celsius or
+        Fahrenheit unit, first call temperature__threshold with that exact
+        reading and a threshold_c of 50. If its above result is true, commit
+        heating_started true. If above is false, commit empty updates and
+        message with rejected evidence. For a target value, ambiguous unit,
+        missing reading, or unclear current-versus-target value, do not call the
+        tool; commit empty updates and message with unknown evidence so it does
+        not erase a prior confirmed reading.
+      tools: [temperature__threshold]
     voice:
       prompt: >-
         Explain target from state. For a reading, call current_view and

@@ -27,7 +27,14 @@ from .workflow_state import WorkflowSession, WorkflowStore
 
 ChangeCallback = Callable[[], Awaitable[None]]
 _NAMED_TOOL_NAMES = frozenset(
-    {"current_view", "rag_lookup", "clock__now", "clock__timer", "temperature__verify"}
+    {
+        "current_view",
+        "rag_lookup",
+        "clock__now",
+        "clock__timer",
+        "temperature__threshold",
+        "temperature__verify",
+    }
 )
 
 
@@ -84,6 +91,26 @@ class TemperatureVerifyResult(BaseModel):
     ready: bool
 
 
+class TemperatureThresholdRequest(StrictRequest):
+    """An exact temperature to compare with a supplied Celsius threshold."""
+
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    reading: float = Field(description="Exact observed numeric temperature.")
+    unit: Literal["celsius", "fahrenheit"] = Field(
+        description="Unit shown with the observed reading."
+    )
+    threshold_c: float = Field(description="Celsius threshold for comparison.")
+
+
+class TemperatureThresholdResult(BaseModel):
+    """Normalized reading and deterministic strict threshold result."""
+
+    reading_c: float
+    threshold_c: float
+    above: bool
+
+
 class AdvanceRequest(StrictRequest):
     """Explicit user-controlled transition request."""
 
@@ -97,6 +124,13 @@ class CommitRequest(StrictRequest):
 
     updates: dict[str, bool | int | float | str] = Field(default_factory=dict)
     message: str = Field(default="", max_length=240)
+    evidence: Literal["rejected", "unknown"] = Field(
+        default="rejected",
+        description=(
+            "Outcome for a non-completing observation. Use unknown only when "
+            "the required fact cannot be determined; completion implies acceptance."
+        ),
+    )
 
 
 class WorkflowControlResult(BaseModel):
@@ -259,6 +293,38 @@ def temperature_verify_tool(
     )
 
 
+def temperature_threshold_tool() -> Tool[
+    TemperatureThresholdRequest,
+    TemperatureThresholdResult,
+]:
+    """Compare a unit-bearing temperature with an explicit threshold."""
+
+    async def compare(
+        request: TemperatureThresholdRequest,
+    ) -> TemperatureThresholdResult:
+        reading_c = (
+            request.reading
+            if request.unit == "celsius"
+            else (request.reading - 32) * 5 / 9
+        )
+        return TemperatureThresholdResult(
+            reading_c=reading_c,
+            threshold_c=request.threshold_c,
+            above=reading_c > request.threshold_c,
+        )
+
+    return Tool(
+        "temperature__threshold",
+        (
+            "Determine whether an exact observed Celsius or Fahrenheit reading "
+            "is strictly above an explicit Celsius threshold."
+        ),
+        TemperatureThresholdRequest,
+        TemperatureThresholdResult,
+        compare,
+    )
+
+
 def workflow_start_tool(
     store: WorkflowStore,
     session: WorkflowSession,
@@ -406,6 +472,10 @@ def named_tool_set(
     rag_lookup: Tool[RAGLookupRequest, RetrieveResult],
     clock_now: Tool[EmptyRequest, NowResult],
     clock_timer: Tool[TimerRequest, TimerResult],
+    temperature_threshold: Tool[
+        TemperatureThresholdRequest,
+        TemperatureThresholdResult,
+    ],
     temperature_verify: Tool[
         TemperatureVerifyRequest,
         TemperatureVerifyResult,
@@ -420,6 +490,7 @@ def named_tool_set(
             rag_lookup,
             clock_now,
             clock_timer,
+            temperature_threshold,
             temperature_verify,
         )
     }
@@ -455,6 +526,8 @@ __all__ = [
     "CurrentViewRequest",
     "NowResult",
     "RAGLookupRequest",
+    "TemperatureThresholdRequest",
+    "TemperatureThresholdResult",
     "TemperatureVerifyRequest",
     "TemperatureVerifyResult",
     "TimerRequest",
@@ -466,6 +539,7 @@ __all__ = [
     "named_tool_set",
     "participant_current_view_tool",
     "rag_lookup_tool",
+    "temperature_threshold_tool",
     "temperature_verify_tool",
     "workflow_commit_tool",
     "workflow_management_tools",

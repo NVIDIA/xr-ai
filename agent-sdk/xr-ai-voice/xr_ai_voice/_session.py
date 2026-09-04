@@ -110,6 +110,8 @@ class _VoiceSession:
         on_transcript: Callable[[str, str, int], Awaitable[None]] | None = None,
         on_participant_joined: Callable[[str], Awaitable[None] | None] | None = None,
         on_participant_left: Callable[[str], Awaitable[None] | None] | None = None,
+        on_speech_started: Callable[[str], Awaitable[None] | None] | None = None,
+        on_speech_stopped: Callable[[str], Awaitable[None] | None] | None = None,
         on_interrupted: Callable[[str | None], Awaitable[None] | None] | None = None,
         interrupt_on_supersede: bool = False,
     ) -> None:
@@ -121,6 +123,8 @@ class _VoiceSession:
             transport=self.transport,
             on_participant_joined=on_participant_joined,
             on_participant_left=on_participant_left,
+            on_speech_started=on_speech_started,
+            on_speech_stopped=on_speech_stopped,
             on_interrupted=on_interrupted,
             interrupt_on_supersede=interrupt_on_supersede,
         )
