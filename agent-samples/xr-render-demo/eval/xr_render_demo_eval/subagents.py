@@ -493,6 +493,18 @@ CASES = (
         ),
     ),
     SubagentCase(
+        name="recolor_reports_back",
+        agent="object",
+        instruction="Make cone-0 pink.",
+        scene=(_CONE,),
+        forbid_tools=("add_primitive", "update_primitive", "remove_primitive"),
+        answer_contains="recolor",
+    ),
+    # Mixed instructions pairing a recolor with owned work ("make it pink
+    # and twice as big") are deliberately untested: the supervisor's
+    # compound-splitting rule guarantees they never reach this agent, and
+    # that rule is covered end to end by three_actions_compound.
+    SubagentCase(
         name="recolor_explicit_rgb",
         agent="appearance",
         instruction="Set cone-0 to the observed wall color: normalized RGB (1.0, 0.5, 0.0).",
@@ -730,7 +742,7 @@ async def run_case(case: SubagentCase) -> bool:
             physical_color=make_fake_physical_color(scene),
         )
         current_participant_id.set(_PARTICIPANT)
-        current_reference_time_us.set(1_700_000_000_000_000)
+        current_reference_time_us.set(harness.EVAL_REFERENCE_US)
         errored = False
         try:
             reply = await agent.execute(SubagentTask(instruction=case.instruction))

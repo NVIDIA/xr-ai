@@ -19,7 +19,7 @@ from xr_ai_voice import UserQuery
 from xr_render_demo_eval import harness
 from xr_render_demo_worker.agent import RenderAgent
 from xr_render_demo_worker.models import SceneRequest
-from xr_render_demo_worker.supervisor import SceneSupervisor
+from xr_render_demo_worker.supervisor import _TRUNCATED_ASK, SceneSupervisor
 
 
 class _RecordingMemory:
@@ -39,11 +39,11 @@ class _RecordingMemory:
     async def _recall(self, req: RecallConversationRequest) -> RecallConversationResult:
         entries = [
             ConversationEntry(
-                timestamp_us=index,
+                timestamp_us=record.timestamp_us,
                 role=record.source_id.rsplit(":", 1)[1],
                 text=record.text,
             )
-            for index, record in enumerate(self.records)
+            for record in self.records
             if record.source_id.startswith(f"{req.participant_id}:")
         ]
         return RecallConversationResult(entries=entries)
@@ -362,3 +362,146 @@ async def test_failing_supervisor_publishes_failure_notice() -> None:
     assert published[0].text == "Something went wrong. Please try again."
     assert published[0].final is True
     assert published[0].response_id == "trace-1"
+
+
+_REF_US = harness.EVAL_REFERENCE_US
+
+
+def _seed_turn(memory: _RecordingMemory, participant: str, user: str, agent: str,
+               base_us: int = _REF_US - 30_000_000) -> None:
+    memory.records.append(AddTranscriptRequest(
+        source_id=f"{participant}:user", timestamp_us=base_us, text=user))
+    memory.records.append(AddTranscriptRequest(
+        source_id=f"{participant}:agent", timestamp_us=base_us + 1, text=agent))
+
+
+async def test_stale_recalled_turns_stay_out_of_recent_conversation(monkeypatch) -> None:
+    """Turns older than the recency window never enter [Recent conversation]."""
+    memory = _RecordingMemory()
+    _seed_turn(memory, "alice", "What is in my hand?", "You are not holding anything.",
+               base_us=1)
+    supervisor, _fake = _make_supervisor(memory)
+    seen_user_messages: list[str] = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        seen_user_messages.extend(m.content for m in messages if m.role == "user")
+        return SimpleNamespace(content="Okay.", messages=list(messages), tool_calls=())
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await supervisor.handle(SceneRequest(
+        transcript="What am I holding?", participant_id="alice",
+        timestamp_us=_REF_US))
+    assert seen_user_messages
+    assert all("[Recent conversation]" not in content for content in seen_user_messages)
+    assert all("not holding anything" not in content for content in seen_user_messages)
+
+
+async def test_recency_window_boundary_is_inclusive(monkeypatch) -> None:
+    """A turn exactly at the cutoff enters [Recent conversation]; one
+    microsecond older does not."""
+    from xr_render_demo_worker.supervisor import _RECENT_WINDOW_US
+
+    memory = _RecordingMemory()
+    _seed_turn(memory, "alice", "Older question?", "Older answer.",
+               base_us=_REF_US - _RECENT_WINDOW_US - 2)
+    _seed_turn(memory, "alice", "Edge question?", "Edge answer.",
+               base_us=_REF_US - _RECENT_WINDOW_US)
+    supervisor, _fake = _make_supervisor(memory)
+    seen_user_messages: list[str] = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        seen_user_messages.extend(m.content for m in messages if m.role == "user")
+        return SimpleNamespace(content="Okay.", messages=list(messages), tool_calls=())
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await supervisor.handle(SceneRequest(
+        transcript="What did I just say?", participant_id="alice", timestamp_us=_REF_US))
+    joined = "\n".join(seen_user_messages)
+    assert "Edge question?" in joined
+    assert "Edge answer." in joined
+    assert "Older answer." not in joined
+
+
+async def test_unset_timestamp_still_excludes_stale_turns(monkeypatch) -> None:
+    """A request without a timestamp gets the wall clock, so the recency
+    window still applies."""
+    memory = _RecordingMemory()
+    _seed_turn(memory, "alice", "What is in my hand?", "You are not holding anything.",
+               base_us=1)
+    supervisor, _fake = _make_supervisor(memory)
+    seen_user_messages: list[str] = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        seen_user_messages.extend(m.content for m in messages if m.role == "user")
+        return SimpleNamespace(content="Okay.", messages=list(messages), tool_calls=())
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await supervisor.handle(SceneRequest(transcript="What am I holding?", participant_id="alice"))
+    assert seen_user_messages
+    assert all("not holding anything" not in content for content in seen_user_messages)
+
+
+async def test_departure_ends_the_session_for_recall(monkeypatch) -> None:
+    """Turns before a participant's last departure never re-enter
+    [Recent conversation], however recent."""
+    import time as _time
+
+    now_us = _time.time_ns() // 1_000
+    memory = _RecordingMemory()
+    _seed_turn(memory, "alice", "What is in my hand?", "You are holding a torch.",
+               base_us=now_us - 5_000_000)
+    supervisor, _fake = _make_supervisor(memory)
+    seen_user_messages: list[str] = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        seen_user_messages.extend(m.content for m in messages if m.role == "user")
+        return SimpleNamespace(content="Okay.", messages=list(messages), tool_calls=())
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await supervisor.handle(SceneRequest(
+        transcript="Hello again.", participant_id="alice", timestamp_us=now_us))
+    assert any("holding a torch" in content for content in seen_user_messages)
+
+    supervisor.forget_participant("alice")
+    seen_user_messages.clear()
+    await supervisor.handle(SceneRequest(
+        transcript="Hello once more.", participant_id="alice",
+        timestamp_us=_time.time_ns() // 1_000))
+    assert seen_user_messages
+    assert all("holding a torch" not in content for content in seen_user_messages)
+
+
+async def test_departure_drops_pending_truncated_ask(monkeypatch) -> None:
+    """A clipped ask left before departure never completes a reconnecting
+    participant's first words, even inside the completion window."""
+    import time as _time
+
+    now_us = _time.time_ns() // 1_000
+    memory = _RecordingMemory()
+    _seed_turn(memory, "alice", "Make a", f"{_TRUNCATED_ASK} A what?",
+               base_us=now_us - 2_000_000)
+    supervisor, _fake = _make_supervisor(memory)
+    supervisor.forget_participant("alice")
+    seen_user_messages: list[str] = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        seen_user_messages.extend(m.content for m in messages if m.role == "user")
+        return SimpleNamespace(content="Okay.", messages=list(messages), tool_calls=())
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    await supervisor.handle(SceneRequest(
+        transcript="Cube please.", participant_id="alice", timestamp_us=now_us))
+    assert seen_user_messages
+    assert all("Make a" not in content for content in seen_user_messages)
+
+
+def test_departure_records_expire_with_the_recall_window() -> None:
+    supervisor, _fake = _make_supervisor()
+    supervisor._left_at_us["stale"] = 1
+    supervisor.forget_participant("alice")
+    assert set(supervisor._left_at_us) == {"alice"}

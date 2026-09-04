@@ -19,7 +19,13 @@ from ...scene import SceneContext
 from ...spatial_ops import TurnGuard, make_appearance_tools
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
-DESCRIPTION = "Change only the color of existing XR objects."
+DESCRIPTION = (
+    "Change only the color of existing XR objects: every recolor of an existing object is this "
+    "agent, whatever the verb, never object_agent. The instruction keeps the user's color "
+    "source words verbatim: a color word, an XR object to copy (\"same as capsule-8\"), or a "
+    "physical-world phrase (\"match my jacket\") whose color this agent reads from the camera "
+    "itself; never guess a physical color and never send vision_agent to look one up."
+)
 
 
 _prompt_text = _PROMPT.read_text(encoding="utf-8").strip()
