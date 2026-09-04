@@ -215,12 +215,10 @@ class WorkflowStore:
         """Return whether a valid model proposal completes the active step."""
 
         step = self.active_step(session)
-        if self._invalid_patch(step, updates):
+        if self._invalid_commit_patch(session, step, updates):
             return False
         candidate = {**session.state, **updates}
-        return step.is_complete(candidate) and all(
-            name in candidate for name in step.writes
-        )
+        return step.is_complete(candidate)
 
     def commit(
         self,
@@ -232,7 +230,7 @@ class WorkflowStore:
 
         step = self.active_step(session)
         was_complete = step.is_complete(session.state)
-        invalid = self._invalid_patch(step, updates)
+        invalid = self._invalid_commit_patch(session, step, updates)
         if invalid:
             self._event(session, "step.commit_rejected", invalid)
             return CommitResult(False, False, invalid, session.revision)
@@ -245,12 +243,6 @@ class WorkflowStore:
             if name not in session.state or session.state[name] != value
         }
         candidate = {**session.state, **changes}
-        if step.is_complete(candidate):
-            missing = [name for name in step.writes if name not in candidate]
-            if missing:
-                reason = f"completion requires fields: {missing}"
-                self._event(session, "step.commit_rejected", reason)
-                return CommitResult(False, False, reason, session.revision)
         if (
             step.evidence is not None
             and step.is_complete(candidate)
@@ -356,6 +348,21 @@ class WorkflowStore:
             if not _valid_type(expected, value):
                 return f"{name} must be {expected.type}"
         return ""
+
+    def _invalid_commit_patch(
+        self,
+        session: WorkflowSession,
+        step: Step,
+        updates: dict[str, Any],
+    ) -> str:
+        invalid = self._invalid_patch(step, updates)
+        if invalid:
+            return invalid
+        candidate = {**session.state, **updates}
+        if not step.is_complete(candidate):
+            return ""
+        missing = [name for name in step.writes if name not in candidate]
+        return f"completion requires fields: {missing}" if missing else ""
 
     def _invalid_skip_patch(self, updates: dict[str, Any]) -> str:
         unknown = updates.keys() - self.workflow.state_fields.keys()
