@@ -74,10 +74,15 @@ jobs:
 
       - name: Regenerate Android lockfiles
         working-directory: client-samples/android
-        run: ./gradlew dependencies :app:dependencies --write-locks
+        # Gradle merges into an existing lockfile, so start from none.
+        run: |
+          rm -f ../../dependency-manifest/android/*.lockfile
+          ./gradlew dependencies :app:dependencies --write-locks
 
       - name: Check committed Android lockfiles
-        run: git diff --exit-code -- dependency-manifest/android
+        run: |
+          git add --intent-to-add -- dependency-manifest/android
+          git diff --exit-code -- dependency-manifest/android
 
   web-locks:
     name: web-xr lockfile
@@ -97,4 +102,6 @@ jobs:
         run: .github/scripts/refresh_web_lock.sh
 
       - name: Check committed web-xr lockfile
-        run: git diff --exit-code -- dependency-manifest/web-xr-build
+        run: |
+          git add --intent-to-add -- dependency-manifest/web-xr-build
+          git diff --exit-code -- dependency-manifest/web-xr-build
