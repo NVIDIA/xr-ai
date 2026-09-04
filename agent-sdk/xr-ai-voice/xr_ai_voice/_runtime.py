@@ -71,18 +71,6 @@ class VoiceParticipantLeft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class VoiceSpeechStarted(BaseModel):
-    """Notification that one participant started speaking."""
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class VoiceSpeechStopped(BaseModel):
-    """Notification that one participant stopped speaking."""
-
-    model_config = ConfigDict(extra="forbid")
-
-
 class VoiceInterrupted(BaseModel):
     """Notification that participant-scoped or global voice work was interrupted."""
 
@@ -232,8 +220,6 @@ class VoiceAgent(Agent):
         text_input: bool = True,
         participant_joined_topic: Topic[VoiceParticipantJoined] | None = None,
         participant_left_topic: Topic[VoiceParticipantLeft] | None = None,
-        speech_started_topic: Topic[VoiceSpeechStarted] | None = None,
-        speech_stopped_topic: Topic[VoiceSpeechStopped] | None = None,
         interrupted_topic: Topic[VoiceInterrupted] | None = None,
         interrupt_on_supersede: bool = False,
     ) -> None:
@@ -257,8 +243,6 @@ class VoiceAgent(Agent):
         self.text_input = text_input
         self.participant_joined_topic = participant_joined_topic
         self.participant_left_topic = participant_left_topic
-        self.speech_started_topic = speech_started_topic
-        self.speech_stopped_topic = speech_stopped_topic
         self.interrupted_topic = interrupted_topic
         self.interrupt_on_supersede = interrupt_on_supersede
         self._runtime: AgentRuntime | None = None
@@ -301,16 +285,6 @@ class VoiceAgent(Agent):
                     on_transcript=self._publish_transcript,
                     on_participant_joined=self._participant_joined,
                     on_participant_left=self._participant_left,
-                    on_speech_started=(
-                        self._speech_started
-                        if self.speech_started_topic is not None
-                        else None
-                    ),
-                    on_speech_stopped=(
-                        self._speech_stopped
-                        if self.speech_stopped_topic is not None
-                        else None
-                    ),
                     on_interrupted=(
                         self._publish_interrupted
                         if self.interrupted_topic is not None
@@ -567,40 +541,6 @@ class VoiceAgent(Agent):
             name=f"voice-participant-left:{participant_id}",
         )
 
-    async def _speech_started(self, participant_id: str) -> None:
-        topic = self.speech_started_topic
-        if topic is None:
-            return
-        runtime = self._running_runtime()
-        task = self._start_participant_lifecycle_task(
-            participant_id,
-            lambda: runtime.publish(
-                topic,
-                VoiceSpeechStarted(),
-                participant_id=participant_id,
-                source=self._source,
-            ),
-            name=f"voice-speech-started:{participant_id}",
-        )
-        await asyncio.shield(task)
-
-    async def _speech_stopped(self, participant_id: str) -> None:
-        topic = self.speech_stopped_topic
-        if topic is None:
-            return
-        runtime = self._running_runtime()
-        task = self._start_participant_lifecycle_task(
-            participant_id,
-            lambda: runtime.publish(
-                topic,
-                VoiceSpeechStopped(),
-                participant_id=participant_id,
-                source=self._source,
-            ),
-            name=f"voice-speech-stopped:{participant_id}",
-        )
-        await asyncio.shield(task)
-
     def _publish_interrupted(self, participant_id: str | None) -> None:
         runtime = self._running_runtime()
         topic = self.interrupted_topic
@@ -631,7 +571,7 @@ class VoiceAgent(Agent):
         operation: Callable[[], Awaitable[None]],
         *,
         name: str,
-    ) -> asyncio.Task[None]:
+    ) -> None:
         previous = self._participant_lifecycle_tails.get(participant_id)
 
         async def run_in_order() -> None:
@@ -648,7 +588,6 @@ class VoiceAgent(Agent):
                 completed,
             )
         )
-        return task
 
     def _participant_lifecycle_done(
         self,
@@ -773,8 +712,6 @@ __all__ = [
     "VoiceOutput",
     "VoiceParticipantJoined",
     "VoiceParticipantLeft",
-    "VoiceSpeechStarted",
-    "VoiceSpeechStopped",
     "VoiceStreamClosedError",
     "VoiceTranscript",
 ]
