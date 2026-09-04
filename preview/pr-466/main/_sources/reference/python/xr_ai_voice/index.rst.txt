@@ -44,8 +44,6 @@ Classes
    xr_ai_voice.VoiceOutput
    xr_ai_voice.VoiceParticipantJoined
    xr_ai_voice.VoiceParticipantLeft
-   xr_ai_voice.VoiceSpeechStarted
-   xr_ai_voice.VoiceSpeechStopped
    xr_ai_voice.VoiceTranscript
    xr_ai_voice.HubVoiceTransport
 
@@ -183,7 +181,7 @@ Package Contents
 
 
 
-.. py:class:: VoiceAgent(*, query_topic: xr_ai_runtime.Topic[UserQuery], stt: xr_ai_models.STTService, tts: xr_ai_models.TTSService, vad: xr_ai_voice.VadConfig, voice_gate: xr_ai_voicegate.VoiceGateConfig, probes: collections.abc.Mapping[str, collections.abc.Callable[[], collections.abc.Awaitable[bool]]] | None = None, ready_file: pathlib.Path | None = None, closeables: collections.abc.Iterable[Any] = (), text_topic: str = 'agent.response', idle_timeout_secs: float | None = None, transport: xr_ai_voice.HubVoiceTransport | None = None, response_capacity: int = 32, text_input: bool = True, participant_joined_topic: xr_ai_runtime.Topic[VoiceParticipantJoined] | None = None, participant_left_topic: xr_ai_runtime.Topic[VoiceParticipantLeft] | None = None, speech_started_topic: xr_ai_runtime.Topic[VoiceSpeechStarted] | None = None, speech_stopped_topic: xr_ai_runtime.Topic[VoiceSpeechStopped] | None = None, interrupted_topic: xr_ai_runtime.Topic[VoiceInterrupted] | None = None, interrupt_on_supersede: bool = False)
+.. py:class:: VoiceAgent(*, query_topic: xr_ai_runtime.Topic[UserQuery], stt: xr_ai_models.STTService, tts: xr_ai_models.TTSService, vad: xr_ai_voice.VadConfig, voice_gate: xr_ai_voicegate.VoiceGateConfig, probes: collections.abc.Mapping[str, collections.abc.Callable[[], collections.abc.Awaitable[bool]]] | None = None, ready_file: pathlib.Path | None = None, closeables: collections.abc.Iterable[Any] = (), text_topic: str = 'agent.response', idle_timeout_secs: float | None = None, transport: xr_ai_voice.HubVoiceTransport | None = None, response_capacity: int = 32, text_input: bool = True, participant_joined_topic: xr_ai_runtime.Topic[VoiceParticipantJoined] | None = None, participant_left_topic: xr_ai_runtime.Topic[VoiceParticipantLeft] | None = None, interrupted_topic: xr_ai_runtime.Topic[VoiceInterrupted] | None = None, interrupt_on_supersede: bool = False)
 
 
 
@@ -279,20 +277,6 @@ Package Contents
 
 
    Notification that one participant left the voice transport.
-
-
-.. py:class:: VoiceSpeechStarted
-
-
-
-   Notification that one participant started speaking.
-
-
-.. py:class:: VoiceSpeechStopped
-
-
-
-   Notification that one participant stopped speaking.
 
 
 .. py:exception:: VoiceStreamClosedError
