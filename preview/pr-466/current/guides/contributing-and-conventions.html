@@ -420,13 +420,13 @@
 <section id="contributing-and-conventions">
 <h1>Contributing and conventions<a class="headerlink" href="#contributing-and-conventions" title="Link to this heading">#</a></h1>
 <p>Refer to the root
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/a91d2f1a11433b9216c31fecec201c4bac946f6b/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/f769d46e9a22c43bcce9a1d2530d3e3ba667b470/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
 for setup, testing, pull requests, and DCO sign-off. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/a91d2f1a11433b9216c31fecec201c4bac946f6b/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> for the
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/f769d46e9a22c43bcce9a1d2530d3e3ba667b470/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> for the
 architecture and change constraints used by humans and coding agents. Refer to
 <a class="reference internal" href="documentation-style.html"><span class="doc">Documentation style</span></a> for requirements governing
 customer-facing Markdown and reStructuredText. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/a91d2f1a11433b9216c31fecec201c4bac946f6b/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/f769d46e9a22c43bcce9a1d2530d3e3ba667b470/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
 for the package dependency map.</p>
 <p>For a Python change:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>&lt;affected-project&gt;
@@ -441,7 +441,7 @@ strict documentation build rejects unresolved or undocumented exports. Update
 a narrative page when concepts, workflows, operations, or architecture change,
 and add a migration entry for a breaking change.</p>
 <p>The repository-wide README and documentation ownership rules live in the
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/a91d2f1a11433b9216c31fecec201c4bac946f6b/AGENTS.md#comments-and-documentation"><code class="docutils literal notranslate"><span class="pre">Comments</span> <span class="pre">and</span> <span class="pre">documentation</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/f769d46e9a22c43bcce9a1d2530d3e3ba667b470/AGENTS.md#comments-and-documentation"><code class="docutils literal notranslate"><span class="pre">Comments</span> <span class="pre">and</span> <span class="pre">documentation</span></code></a>
 section of <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>. Follow that contract instead of introducing another
 placement rule in a package or sample.</p>
 <p>The user-facing command catalog is generated from top-level sample
@@ -470,8 +470,8 @@ dependencies, advance the cutoff in a dedicated change, resolve every project
 with <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">--config-file</span> <span class="pre">uv.toml</span> <span class="pre">lock</span> <span class="pre">--upgrade</span> <span class="pre">--project</span> <span class="pre">&lt;directory&gt;</span></code>, and run
 the full test suite. The generated per-project lockfiles are validation
 artifacts and remain gitignored. The same change regenerates the committed
-<code class="docutils literal notranslate"><span class="pre">dependency-manifest/</span></code> lock; the pre-commit hook does this when <code class="docutils literal notranslate"><span class="pre">uv.toml</span></code> is
-staged.</p>
+locks under <code class="docutils literal notranslate"><span class="pre">dependency-manifest/</span></code>; the pre-commit hook does the Python one when
+<code class="docutils literal notranslate"><span class="pre">uv.toml</span></code> is staged.</p>
 </section>
 
 
