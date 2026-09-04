@@ -10,7 +10,13 @@ from dataclasses import replace
 
 import pytest
 from xr_ai_hub import FrameSignal, PixelFormat, ShmRingBuffer
-from xr_ai_hub._shm import _GH_SIZE, _SH, _SH_SIZE
+from xr_ai_hub._shm import (
+    _GH,
+    _GH_SIZE,
+    _SH,
+    _SH_SIZE,
+    _IncompatibleSharedMemoryError,
+)
 
 
 @pytest.fixture
@@ -58,6 +64,36 @@ def test_unlink_tolerates_repeated_same_process_cleanup():
     ) as ring:
         ring.unlink()
         ring.unlink()
+
+
+def test_attach_rejects_invalid_global_header():
+    name = f"xr_test_{uuid.uuid4().hex[:12]}"
+    owner = ShmRingBuffer(name=name, num_slots=1, max_frame_bytes=64, create=True)
+    try:
+        header = list(_GH.unpack_from(owner._buf, 0))
+        header[0] = 0
+        _GH.pack_into(owner._buf, 0, *header)
+
+        with pytest.raises(_IncompatibleSharedMemoryError, match="global header magic"):
+            ShmRingBuffer(name=name, create=False)
+    finally:
+        owner.close()
+        owner.unlink()
+
+
+def test_attach_rejects_invalid_slot_header():
+    name = f"xr_test_{uuid.uuid4().hex[:12]}"
+    owner = ShmRingBuffer(name=name, num_slots=1, max_frame_bytes=64, create=True)
+    try:
+        slot_header = list(_SH.unpack_from(owner._buf, _GH_SIZE))
+        slot_header[0] = 0
+        _SH.pack_into(owner._buf, _GH_SIZE, *slot_header)
+
+        with pytest.raises(_IncompatibleSharedMemoryError, match="slot 0.*header magic"):
+            ShmRingBuffer(name=name, create=False)
+    finally:
+        owner.close()
+        owner.unlink()
 
 
 def test_write_frame_rejects_oversized_frame_before_claiming_slot(ring):

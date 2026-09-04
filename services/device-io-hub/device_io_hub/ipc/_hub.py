@@ -46,9 +46,12 @@ import zmq
 import zmq.asyncio
 
 from xr_ai_hub import (AGENT_STATUS_TOPIC, AudioChunk, ConnectorRegistration,
-                       ControlMessage, DataMessage, FrameData, MsgType,
-                       ParticipantEvent, ReturnAudioFlush, ShmRingBuffer, SlotView,
-                       decode, encode)
+                       ControlMessage, DataMessage, FrameData,
+                       MsgType, ParticipantEvent,
+                       ReturnAudioFlush, ShmRingBuffer, SlotView, decode, encode)
+from xr_ai_hub._shm import _IncompatibleSharedMemoryError
+
+from ._connector import _CONNECTOR_REGISTER_ACK_TOPIC
 
 
 def _now_us() -> int:
@@ -106,6 +109,8 @@ class HubEndpoint:
 
         # connector_id → ShmRingBuffer (opened on CONNECTOR_REGISTER)
         self._ring_registry: dict[str, ShmRingBuffer] = {}
+        # Connector IDs whose missing ring forced hub shutdown.
+        self._unhealthy_connectors: set[str] = set()
         # participant_id → connector_id (updated on PARTICIPANT_EVENT)
         self._participant_connector: dict[str, str] = {}
         # (participant_id, track_id) → (ring, SlotView) of the latest frame.
@@ -314,7 +319,7 @@ class HubEndpoint:
 
     async def _dispatch(self, type_id: int, msg) -> None:
         if type_id == MsgType.CONNECTOR_REGISTER:
-            self._handle_registration(msg)
+            await self._handle_registration(msg)
 
         elif type_id == MsgType.FRAME_SIGNAL:
             connector_id = self._participant_connector.get(msg.participant_id)
@@ -323,7 +328,11 @@ class HubEndpoint:
                 return
             ring = self._ring_registry.get(connector_id)
             if ring is None:
-                logger.warning("Ring buffer for connector {} not found — dropped", connector_id)
+                self._mark_connector_unhealthy(
+                    connector_id,
+                    f"frame for participant {msg.participant_id!r} referenced a connector "
+                    "without a registered shared-memory ring",
+                )
                 return
 
             key = (msg.participant_id, msg.track_id)
@@ -532,34 +541,86 @@ class HubEndpoint:
                 b"participant", encode(MsgType.PARTICIPANT_EVENT, event),
             ])
 
-    def _handle_registration(self, reg: ConnectorRegistration) -> None:
-        if reg.connector_id in self._ring_registry:
-            logger.warning("Connector {} re-registered — replacing ring buffer", reg.connector_id)
-            old_ring = self._ring_registry.pop(reg.connector_id)
-            # Drop any frames still held in the old ring BEFORE closing it.
-            # A live SlotView keeps a sliced memoryview exported into the ring's
-            # mmap; closing with that outstanding makes ShmRingBuffer.close()'s
-            # self._buf.release() raise BufferError, and leaves _latest_slots
-            # referencing a half-closed ring whose slot the next FRAME_SIGNAL
-            # would write through (#197).
-            for key in [k for k, (ring, _) in self._latest_slots.items() if ring is old_ring]:
-                _, view = self._latest_slots.pop(key)
-                self._release_held_slot(
-                    old_ring,
-                    view,
-                    context=f"re-registration of {reg.connector_id}",
-                )
-            old_ring.close()
+    async def _acknowledge_registration(
+        self,
+        reg: ConnectorRegistration,
+        error_code: str = "",
+        error_message: str = "",
+    ) -> None:
+        ack = ControlMessage(
+            topic=_CONNECTOR_REGISTER_ACK_TOPIC,
+            payload={
+                "connector_id": reg.connector_id,
+                "shm_name": reg.shm_name,
+                "success": not error_code,
+                "error_code": error_code,
+                "error_message": error_message,
+            },
+        )
+        await self._pub.send_multipart([
+            f"connector.{reg.connector_id}.".encode(),
+            encode(MsgType.CONTROL, ack),
+        ])
+
+    def _mark_connector_unhealthy(
+        self,
+        connector_id: str,
+        error_message: str,
+    ) -> None:
+        self._unhealthy_connectors.add(connector_id)
+        logger.error("Connector {} unhealthy: {}", connector_id, error_message)
+        self.stop()
+
+    async def _handle_registration(self, reg: ConnectorRegistration) -> None:
         try:
-            self._ring_registry[reg.connector_id] = ShmRingBuffer(
-                name=reg.shm_name, create=False,
+            new_ring = ShmRingBuffer(name=reg.shm_name, create=False)
+        except FileNotFoundError:
+            error_code = "shm_not_found"
+            error_message = f"shared memory {reg.shm_name!r} does not exist"
+        except _IncompatibleSharedMemoryError as exc:
+            error_code = "shm_incompatible"
+            error_message = f"shared memory {reg.shm_name!r} is incompatible: {exc}"
+        except Exception as exc:
+            error_code = "shm_open_failed"
+            error_message = f"could not open shared memory {reg.shm_name!r}: {exc}"
+            logger.opt(exception=exc).error(
+                "Failed to register connector {} using shm {}",
+                reg.connector_id,
+                reg.shm_name,
             )
+        else:
+            old_ring = self._ring_registry.get(reg.connector_id)
+            if old_ring is not None:
+                logger.warning(
+                    "Connector {} re-registered — replacing ring buffer",
+                    reg.connector_id,
+                )
+                # Drop held frames before closing the old consumer mapping. A
+                # SlotView exports a memoryview into the mapping and would leave
+                # a half-closed ring behind if it survived replacement (#197).
+                for key in [
+                    k for k, (ring, _) in self._latest_slots.items()
+                    if ring is old_ring
+                ]:
+                    _, view = self._latest_slots.pop(key)
+                    self._release_held_slot(
+                        old_ring,
+                        view,
+                        context=f"re-registration of {reg.connector_id}",
+                    )
+                old_ring.close()
+            self._ring_registry[reg.connector_id] = new_ring
+            self._unhealthy_connectors.discard(reg.connector_id)
             logger.info("Connector {} registered (shm={})", reg.connector_id, reg.shm_name)
-        except Exception:
-            logger.exception(
-                "Failed to open shm {} for connector {}",
-                reg.shm_name, reg.connector_id,
-            )
+            await self._acknowledge_registration(reg)
+            return
+
+        logger.warning(
+            "Failed to register connector {}: {}",
+            reg.connector_id,
+            error_message,
+        )
+        await self._acknowledge_registration(reg, error_code, error_message)
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
@@ -575,3 +636,4 @@ class HubEndpoint:
         for ring in self._ring_registry.values():
             ring.close()
         self._ring_registry.clear()
+        self._unhealthy_connectors.clear()

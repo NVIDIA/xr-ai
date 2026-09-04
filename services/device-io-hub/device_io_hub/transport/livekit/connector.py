@@ -37,7 +37,13 @@ from typing import Awaitable, Callable
 
 from loguru import logger
 
-from device_io_hub.ipc import AudioChunk, ConnectorEndpoint, DataMessage
+from device_io_hub._errors import StartupError
+from device_io_hub.ipc import (
+    AudioChunk,
+    ConnectorEndpoint,
+    DataMessage,
+)
+from device_io_hub.ipc._connector import _ConnectorRegistrationError
 
 from ._docker import LiveKitDocker
 from ._hwcodec import require_nvidia_video_codecs
@@ -63,6 +69,7 @@ class LiveKitConnector:
             max_frame_bytes=self._cfg.shm_max_frame_bytes,
         )
         self._room_client = RoomClient(self._cfg, self._ep)
+        self._room_connected = False
 
     # ── callback registration ─────────────────────────────────────────────────
 
@@ -78,14 +85,24 @@ class LiveKitConnector:
 
     async def start(self) -> None:
         """Start Docker, optional servers, register IPC endpoint, connect room client."""
-        require_nvidia_video_codecs()
-        await self._docker.start()
-        if self._token:
-            await self._token.start()
-        if self._web:
-            await self._web.start()
-        await self._ep.register()
-        await self._room_client.connect()
+        try:
+            require_nvidia_video_codecs()
+            await self._docker.start()
+            if self._token:
+                await self._token.start()
+            if self._web:
+                await self._web.start()
+            # Ring creation happens inside register(), after the expensive
+            # services above and immediately before the IPC handshake.
+            await self._ep.register()
+            await self._room_client.connect()
+            self._room_connected = True
+        except _ConnectorRegistrationError as exc:
+            await self.stop()
+            raise StartupError(
+                "DeviceIOHub video IPC registration failed; LiveKit media was not accepted.\n"
+                f"{exc}"
+            ) from exc
         self._ep.on_return_data(self._room_client.send_return_data)
         self._ep.on_return_audio(self._room_client.send_return_audio)
         self._ep.on_return_audio_flush(self._room_client.flush_return_audio)
@@ -127,7 +144,8 @@ class LiveKitConnector:
         docker_task = asyncio.create_task(self._docker.stop(), name="docker-stop")
         self._ep.stop()
         self._room_client.stop()
-        await self._room_client.disconnect()
+        if self._room_connected:
+            await self._room_client.disconnect()
         self._ep.close()
         if self._web:
             await self._web.stop()
