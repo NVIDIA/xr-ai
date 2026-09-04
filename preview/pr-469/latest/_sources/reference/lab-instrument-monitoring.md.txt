@@ -193,6 +193,9 @@ To add a foreground capability:
 The marker determines identity before the VLM reads the display. This prevents
 the model from guessing which instrument produced a value. Image references,
 not image bytes, pass between tools; media stays in the shared image registry.
+Color names remain internal correlation keys. User-facing results contain only
+device names resolved from scanned markers through `DeviceMap`; they never use
+the temporary color name as a device identity.
 
 To use a different identifier, replace the marker tool and `DeviceMap` while
 preserving the one-frame `LabInstrumentReadResult` boundary. Barcode, OCR label,

@@ -703,7 +703,10 @@ that block’s own display reading or <code class="docutils literal notranslate"
 </ol>
 <p>The marker determines identity before the VLM reads the display. This prevents
 the model from guessing which instrument produced a value. Image references,
-not image bytes, pass between tools; media stays in the shared image registry.</p>
+not image bytes, pass between tools; media stays in the shared image registry.
+Color names remain internal correlation keys. User-facing results contain only
+device names resolved from scanned markers through <code class="docutils literal notranslate"><span class="pre">DeviceMap</span></code>; they never use
+the temporary color name as a device identity.</p>
 <p>To use a different identifier, replace the marker tool and <code class="docutils literal notranslate"><span class="pre">DeviceMap</span></code> while
 preserving the one-frame <code class="docutils literal notranslate"><span class="pre">LabInstrumentReadResult</span></code> boundary. Barcode, OCR label,
 object detection, or backend inventory lookup can all feed the same reader and
