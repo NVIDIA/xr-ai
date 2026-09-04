@@ -96,7 +96,16 @@ async def main(ready_file: Path | None = None) -> None:
     hub.on_participant(on_participant)
 
     connector = LiveKitConnector(cfg)
-    await connector.start()
+    hub_task = asyncio.create_task(hub.run(), name="hub")
+    await asyncio.sleep(0)
+    try:
+        await connector.start()
+    except BaseException:
+        hub.stop()
+        hub.close()
+        hub_task.cancel()
+        await asyncio.gather(hub_task, return_exceptions=True)
+        raise
 
     vr_cfg = cfg.video_recording or {}
     if vr_cfg.get("enabled"):
@@ -140,19 +149,37 @@ async def main(ready_file: Path | None = None) -> None:
         loop.add_signal_handler(sig, stop.set)
 
     logger.info("DeviceIOHub running — press Ctrl-C to exit")
-    hub_task   = asyncio.create_task(hub.run(),       name="hub")
     conn_task  = asyncio.create_task(connector.run(), name="connector")
     stats_task = asyncio.create_task(_stats_loop(),   name="stats")
+    stop_task  = asyncio.create_task(stop.wait(),     name="stop-signal")
 
-    await stop.wait()
+    done, _ = await asyncio.wait(
+        [stop_task, hub_task, conn_task],
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    failure: BaseException | None = None
+    if stop_task not in done:
+        failed_task = next(task for task in done if task is not stop_task)
+        if failed_task.cancelled():
+            failure = RuntimeError(f"{failed_task.get_name()} task was cancelled")
+        else:
+            failure = failed_task.exception()
+            failure = failure or RuntimeError(
+                f"{failed_task.get_name()} task exited unexpectedly"
+            )
+
     logger.info("Shutting down…")
-
+    stop_task.cancel()
     stats_task.cancel()
     hub.stop()
     hub.close()
     await connector.stop()
-
-    await asyncio.gather(hub_task, conn_task, stats_task, return_exceptions=True)
+    await asyncio.gather(
+        hub_task, conn_task, stats_task, stop_task,
+        return_exceptions=True,
+    )
+    if failure is not None:
+        raise RuntimeError(f"DeviceIOHub task failed: {failure}") from failure
 
 
 def run() -> None:
