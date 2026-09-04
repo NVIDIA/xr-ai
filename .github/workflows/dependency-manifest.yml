@@ -96,7 +96,9 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # The documented floor (docs/source/getting_started/requirements.md);
+          # the build below proves the snapshot works there.
+          node-version: '20.19.0'
 
       - name: Regenerate web-xr lockfile
         run: .github/scripts/refresh_web_lock.sh
@@ -105,3 +107,17 @@ jobs:
         run: |
           git add --intent-to-add -- dependency-manifest/web-xr-build
           git diff --exit-code -- dependency-manifest/web-xr-build
+
+      - name: Install and bundle from the lock on the Node floor
+        run: |
+          work="$(mktemp -d)"
+          cp dependency-manifest/web-xr-build/package.json \
+             dependency-manifest/web-xr-build/package-lock.json \
+             dependency-manifest/web-xr-build/sdk.tgz \
+             client-samples/web-xr-build/webpack.config.js "${work}/"
+          cp -r client-samples/web-xr-build/src "${work}/src"
+          cd "${work}"
+          npm ci --no-audit --no-fund --legacy-peer-deps
+          npx webpack --mode production
+          test -f ../web-xr/vendor/cloudxr-sdk.esm.mjs
+          test -f node_modules/livekit-client/dist/livekit-client.esm.mjs
