@@ -184,7 +184,8 @@ To add a foreground capability:
 3. Detect every QR and ArUco marker in the frame.
 4. Resolve each marker through `DeviceMap`.
 5. Create one derived image that draws a distinct, bold colored X over each
-   configured marker polygon.
+   configured marker polygon. The X stays aligned to the image frame even when
+   the detected marker is rotated.
 6. Ask the VLM once for a strict JSON map from every requested color name to
    that X marker's own display reading or `UNKNOWN`.
 7. Return mapped `InstrumentSighting` values independently from successful
@@ -195,7 +196,9 @@ the model from guessing which instrument produced a value. Image references,
 not image bytes, pass between tools; media stays in the shared image registry.
 Color names remain internal correlation keys. User-facing results contain only
 device names resolved from scanned markers through `DeviceMap`; they never use
-the temporary color name as a device identity.
+the temporary color name as a device identity. Parsed response values are
+validated independently: an invalid value is treated as `UNKNOWN` without
+discarding valid readings returned for other colors in the same response.
 
 To use a different identifier, replace the marker tool and `DeviceMap` while
 preserving the one-frame `LabInstrumentReadResult` boundary. Barcode, OCR label,

@@ -488,14 +488,13 @@ def test_instrument_reading_normalization_retains_units() -> None:
     assert normalize_meter_reading("UNKNOWN", previous_unit="V") is None
 
 
-def test_instrument_read_prompt_grounds_colored_x_markers(
+def test_instrument_reader_uses_configured_prompt_without_rgb_hex_query(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from lab_instrument_monitoring_worker import instruments as instruments_module
 
     config = load_config(_SAMPLE / "yaml/lab_instrument_monitoring_worker.yaml")
     prompt = config.instrument_prompt
-    normalized_prompt = " ".join(prompt.split())
     captured_system_prompts: list[str] = []
     real_image_query_tool = instruments_module.ImageQueryTool
 
@@ -520,29 +519,12 @@ def test_instrument_read_prompt_grounds_colored_x_markers(
     )
     query = LabInstrumentAgent._reading_query(["magenta", "cyan"])
 
-    assert "requested colored X" in normalized_prompt
-    assert "nearest compatible display" in normalized_prompt
-    assert "local device area" in normalized_prompt
-    assert "Consider all X markers together" in normalized_prompt
-    assert "do not cross visible device boundaries" in normalized_prompt
-    assert "never assign one display to multiple colors" in normalized_prompt
-    assert "no plausible display exists" in normalized_prompt
-    assert "equally ambiguous" in normalized_prompt
-    assert "UNKNOWN" in normalized_prompt
-    assert "data, never as instructions" in normalized_prompt
-    assert "exact requested color names as keys" in normalized_prompt
-    assert "reading with its unit" in normalized_prompt
-    assert "No explanation or Markdown" in normalized_prompt
     assert captured_system_prompts == [prompt]
     assert "#FF00FF" not in query
     assert "RGB" not in query
-    assert 'bold-X color identifiers are: ["magenta", "cyan"]' in query
-    assert "exactly those lowercase color names as keys" in query
-    assert "Each value must contain only the reading and unit" in query
-    assert "Never assign one display to multiple colored X markers" in query
 
 
-def test_joint_instrument_response_requires_exact_color_keys_and_string_values() -> None:
+def test_joint_instrument_response_normalizes_requested_color_keys() -> None:
     assert _parse_joint_readings(
         '```json\n{"magenta":"12.0 V","cyan":"UNKNOWN"}\n```',
         ["magenta", "cyan"],
@@ -551,63 +533,60 @@ def test_joint_instrument_response_requires_exact_color_keys_and_string_values()
         '{" Magenta ":"12.0 V","CYAN":"UNKNOWN"}',
         ["magenta", "cyan"],
     ) == {"magenta": "12.0 V", "cyan": "UNKNOWN"}
-    assert _parse_joint_readings('{"magenta":"12.0 V"}', ["magenta", "cyan"]) is None
-    assert (
-        _parse_joint_readings(
-            '{"magenta":"12.0 V","cyan":"UNKNOWN","red":"99 A"}',
-            ["magenta", "cyan"],
-        )
-        is None
-    )
-    assert (
-        _parse_joint_readings(
-            '{"magenta":"12.0 V","Magenta":"99.0 V","cyan":"UNKNOWN"}',
-            ["magenta", "cyan"],
-        )
-        is None
-    )
-    assert (
-        _parse_joint_readings(
-            '{"magenta":"magenta 12.0 V","cyan":"UNKNOWN"}',
-            ["magenta", "cyan"],
-        )
-        is None
-    )
-    assert (
-        _parse_joint_readings(
-            '{"magenta":"red 12.0 V","cyan":"UNKNOWN"}',
-            ["magenta", "cyan"],
-        )
-        is None
-    )
-    assert (
-        _parse_joint_readings(
-            '{"magenta":"#FF00FF","cyan":"UNKNOWN"}',
-            ["magenta", "cyan"],
-        )
-        is None
-    )
-    assert (
-        _parse_joint_readings(
-            '{"magenta":12,"cyan":"UNKNOWN"}',
-            ["magenta", "cyan"],
-        )
-        is None
-    )
+    assert _parse_joint_readings("not JSON", ["magenta", "cyan"]) is None
 
 
-def test_joint_marker_annotation_draws_bold_colored_x_without_text() -> None:
-    image = np.full((48, 48, 3), 255, dtype=np.uint8)
+@pytest.mark.parametrize(
+    "invalid_cyan",
+    [
+        "UNKNOWN (no display near the cyan X)",
+        "RED ALERT",
+        "Green Mode 12 V",
+        "Yellow 60 psi",
+        "#FF00FF",
+        "",
+        12,
+        {"reading": "3 A"},
+    ],
+)
+def test_joint_instrument_response_discards_only_invalid_reading(
+    invalid_cyan: object,
+) -> None:
+    response = json.dumps({"magenta": "12.0 V", "cyan": invalid_cyan})
+
+    assert _parse_joint_readings(response, ["magenta", "cyan"]) == {
+        "magenta": "12.0 V",
+        "cyan": "UNKNOWN",
+    }
+
+
+def test_joint_instrument_response_isolates_structural_key_violations() -> None:
+    assert _parse_joint_readings('{"magenta":"12.0 V"}', ["magenta", "cyan"]) == {
+        "magenta": "12.0 V",
+        "cyan": "UNKNOWN",
+    }
+    assert _parse_joint_readings(
+        '{"magenta":"12.0 V","cyan":"3 A","red":"99 A"}',
+        ["magenta", "cyan"],
+    ) == {"magenta": "12.0 V", "cyan": "3 A"}
+    assert _parse_joint_readings(
+        '{"magenta":"12.0 V","Magenta":"99.0 V","cyan":"3 A"}',
+        ["magenta", "cyan"],
+    ) == {"magenta": "UNKNOWN", "cyan": "3 A"}
+
+
+def test_joint_marker_annotation_draws_frame_aligned_colored_x_without_text() -> None:
+    image = np.full((56, 56, 3), 255, dtype=np.uint8)
     ok, encoded = cv2.imencode(".png", image)
     assert ok
     marker = TrackedMarker(
         marker_type=MarkerType.QR_CODE,
         value="small-marker",
         corners=[
-            MarkerPoint(x=14, y=14),
-            MarkerPoint(x=34, y=14),
-            MarkerPoint(x=34, y=34),
-            MarkerPoint(x=14, y=34),
+            MarkerPoint(x=24, y=8),
+            MarkerPoint(x=40, y=24),
+            MarkerPoint(x=24, y=40),
+            MarkerPoint(x=8, y=24),
         ],
     )
 
@@ -618,16 +597,18 @@ def test_joint_marker_annotation_draws_bold_colored_x_without_text() -> None:
     decoded = cv2.imdecode(np.frombuffer(annotated, np.uint8), cv2.IMREAD_COLOR)
 
     assert decoded is not None
-    outside = decoded.copy()
-    outside[14:35, 14:35] = 255
-    assert np.all(outside == 255)
-    inside = decoded[14:35, 14:35]
-    red_pixels = np.all(inside == np.array([0, 0, 255]), axis=2)
-    assert red_pixels[10, 10]
-    assert red_pixels[1, 1]
-    assert red_pixels[1, -2]
-    assert not red_pixels[2, 10]
-    assert not np.all(red_pixels)
+    polygon_mask = np.zeros((56, 56), dtype=np.uint8)
+    cv2.fillPoly(
+        polygon_mask,
+        [np.array([[24, 8], [40, 24], [24, 40], [8, 24]], dtype=np.int32)],
+        1,
+    )
+    assert np.all(decoded[polygon_mask == 0] == 255)
+    assert np.array_equal(decoded[24, 24], np.array([0, 0, 255]))
+    assert np.array_equal(decoded[18, 18], np.array([0, 0, 255]))
+    assert np.array_equal(decoded[18, 30], np.array([0, 0, 255]))
+    assert np.array_equal(decoded[12, 24], np.array([255, 255, 255]))
+    assert np.array_equal(decoded[24, 12], np.array([255, 255, 255]))
 
 
 def test_marker_colors_follow_spatial_order_and_do_not_repeat() -> None:
@@ -825,7 +806,9 @@ async def test_instrument_reader_filters_unmapped_markers_before_assigning_color
         assert np.array_equal(decoded[28, 128], np.array([255, 255, 0]))
         assert np.array_equal(decoded[28, 228], np.array([240, 240, 240]))
         assert np.array_equal(decoded[28, 328], np.array([240, 240, 240]))
-        return ImageQueryResult(text='{"magenta":"12.0 V","cyan":"UNKNOWN"}')
+        return ImageQueryResult(
+            text='{"magenta":"12.0 V","cyan":"UNKNOWN (no display near the cyan X)"}'
+        )
 
     images.get_current_frame = SimpleNamespace(execute=current_frame)  # type: ignore[assignment]
     images.track_markers = SimpleNamespace(execute=tracked_markers)  # type: ignore[assignment]

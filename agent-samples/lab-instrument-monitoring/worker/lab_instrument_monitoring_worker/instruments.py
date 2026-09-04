@@ -317,16 +317,20 @@ def _annotate_markers(
         image = opened.convert("RGB")
     for _color_name, color, marker in colored_markers:
         points = [(point.x, point.y) for point in marker.corners]
-        horizontal_span = max(point[0] for point in points) - min(point[0] for point in points)
-        vertical_span = max(point[1] for point in points) - min(point[1] for point in points)
+        left = min(point[0] for point in points)
+        top = min(point[1] for point in points)
+        right = max(point[0] for point in points)
+        bottom = max(point[1] for point in points)
+        horizontal_span = right - left
+        vertical_span = bottom - top
         stroke_width = max(3, round(min(horizontal_span, vertical_span) * 0.24))
 
         marker_mask = Image.new("L", image.size, 0)
         ImageDraw.Draw(marker_mask).polygon(points, fill=255)
         x_mask = Image.new("L", image.size, 0)
         x_draw = ImageDraw.Draw(x_mask)
-        x_draw.line((points[0], points[2]), fill=255, width=stroke_width)
-        x_draw.line((points[1], points[3]), fill=255, width=stroke_width)
+        x_draw.line((left, top, right, bottom), fill=255, width=stroke_width)
+        x_draw.line((right, top, left, bottom), fill=255, width=stroke_width)
         image.paste(color, mask=ImageChops.multiply(marker_mask, x_mask))
     output = io.BytesIO()
     image.save(output, format="PNG")
@@ -339,45 +343,53 @@ def _parse_joint_readings(text: str, color_keys: list[str]) -> dict[str, str] | 
     end = visible.rfind("}")
     if start < 0 or end < start:
         return None
-    duplicate_key = False
-
-    def normalized_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
-        nonlocal duplicate_key
-        normalized: dict[str, object] = {}
-        for key, value in pairs:
-            normalized_key = key.strip().lower()
-            if normalized_key in normalized:
-                duplicate_key = True
-            normalized[normalized_key] = value
-        return normalized
-
     try:
-        payload = json.loads(
+        pairs = json.loads(
             visible[start : end + 1],
-            object_pairs_hook=normalized_object,
+            object_pairs_hook=list,
         )
     except json.JSONDecodeError:
         return None
-    expected_keys = {color_name: color_name.strip().lower() for color_name in color_keys}
-    if duplicate_key or len(set(expected_keys.values())) != len(color_keys):
-        return None
-    if not isinstance(payload, dict) or set(payload) != set(expected_keys.values()):
-        return None
-    if not all(isinstance(value, str) and value.strip() for value in payload.values()):
-        return None
-    readings = {
-        color_name: payload[normalized_name].strip()
-        for color_name, normalized_name in expected_keys.items()
-    }
-    if any(
-        re.search(r"#[0-9A-Fa-f]{6}\b", reading)
-        or any(
-            re.search(rf"\b{re.escape(identifier)}\b", reading, flags=re.IGNORECASE)
-            for identifier, _rgb in _MARKER_COLORS
-        )
-        for reading in readings.values()
+    if not isinstance(pairs, list) or not all(
+        isinstance(pair, tuple) and len(pair) == 2 and isinstance(pair[0], str)
+        for pair in pairs
     ):
         return None
+
+    payload: dict[str, object] = {}
+    duplicate_keys: set[str] = set()
+    for key, value in pairs:
+        normalized_key = key.strip().lower()
+        if normalized_key in payload:
+            duplicate_keys.add(normalized_key)
+        payload[normalized_key] = value
+
+    expected_keys = {color_name: color_name.strip().lower() for color_name in color_keys}
+    if len(set(expected_keys.values())) != len(color_keys):
+        return None
+
+    readings: dict[str, str] = {}
+    for color_name, normalized_name in expected_keys.items():
+        value = payload.get(normalized_name)
+        if normalized_name in duplicate_keys or not isinstance(value, str):
+            readings[color_name] = "UNKNOWN"
+            continue
+        reading = value.strip()
+        if reading.upper() == "UNKNOWN":
+            readings[color_name] = "UNKNOWN"
+            continue
+        if (
+            not reading
+            or re.search(r"\bUNKNOWN\b", reading, flags=re.IGNORECASE)
+            or re.search(r"#[0-9A-Fa-f]{6}\b", reading)
+            or any(
+                re.search(rf"\b{re.escape(identifier)}\b", reading, flags=re.IGNORECASE)
+                for identifier, _rgb in _MARKER_COLORS
+            )
+        ):
+            readings[color_name] = "UNKNOWN"
+            continue
+        readings[color_name] = reading
     return readings
 
 
