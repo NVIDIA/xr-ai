@@ -819,7 +819,7 @@ async def test_instrument_reader_filters_unmapped_markers_before_assigning_color
     )
 
     assert len(requests) == 1
-    assert 'bold-X color identifiers are: ["magenta", "cyan"]' in requests[0].query
+    assert '["magenta", "cyan"]' in requests[0].query
     assert '"red"' not in requests[0].query
     assert "meter-a" not in requests[0].query
     assert "unmapped-neighbor" not in requests[0].query

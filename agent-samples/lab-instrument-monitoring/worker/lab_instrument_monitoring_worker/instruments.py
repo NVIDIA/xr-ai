@@ -272,11 +272,10 @@ class LabInstrumentAgent(Agent):
     def _reading_query(color_keys: list[str]) -> str:
         keys = json.dumps(color_keys)
         return (
-            "Read all colored-X-marked instruments together. The requested bold-X color "
-            f"identifiers are: {keys}. Return one JSON object with exactly those lowercase color "
-            "names as keys. Each value must contain only the reading and unit from that colored "
-            "X's own physical instrument, or UNKNOWN. Never assign one display to multiple "
-            "colored X markers."
+            f"The requested colored-X keys are: {keys}. "
+            "Apply the display-association rule from the system prompt to every key. "
+            "Return exactly one JSON object with exactly those lowercase keys. "
+            'Each value must contain only the reading with its unit or "UNKNOWN".'
         )
 
     @staticmethod
