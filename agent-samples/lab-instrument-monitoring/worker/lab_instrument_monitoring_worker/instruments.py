@@ -273,7 +273,11 @@ class LabInstrumentAgent(Agent):
         keys = json.dumps(color_keys)
         return (
             f"The requested colored-X keys are: {keys}. "
-            "Apply the display-association rule from the system prompt to every key. "
+            "Apply this association rule to every key: a reading belongs to a color only when "
+            "that colored X and the display are on the same visually bounded instrument. "
+            "Silently verify that every non-UNKNOWN value is visibly present on its associated "
+            "instrument's own display, that blank or powered-off displays produce UNKNOWN, and "
+            "that no display is reused. "
             "Return exactly one JSON object with exactly those lowercase keys. "
             'Each value must contain only the reading with its unit or "UNKNOWN".'
         )
