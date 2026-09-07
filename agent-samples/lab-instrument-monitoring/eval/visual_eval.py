@@ -171,6 +171,8 @@ def _image(case: dict[str, Any]) -> bytes:
         return _door_scene(open_door=True)
     if scene == "adjacent-instruments-both-readable":
         return _instrument_scene(left_reading="12.0 V", right_reading="99.0 A")
+    if scene == "adjacent-instruments-same-reading":
+        return _instrument_scene(left_reading="12.0 V", right_reading="12.0 V")
     if scene == "competing-instruments-left-only":
         return _instrument_scene(left_reading="12.0 V", right_reading=None, competing=True)
     if scene == "competing-instruments-right-only":

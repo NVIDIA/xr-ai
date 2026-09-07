@@ -271,15 +271,20 @@ class LabInstrumentAgent(Agent):
     @staticmethod
     def _reading_query(color_keys: list[str]) -> str:
         keys = json.dumps(color_keys)
+        response_template = json.dumps(
+            {color_name: {"reading": "UNKNOWN", "display_bbox": None} for color_name in color_keys}
+        )
         return (
             f"The requested colored-X keys are: {keys}. "
             "Apply this association rule to every key: a reading belongs to a color only when "
             "that colored X and the display are on the same visually bounded instrument. "
-            "Silently verify that every non-UNKNOWN value is visibly present on its associated "
-            "instrument's own display, that blank or powered-off displays produce UNKNOWN, and "
-            "that no display is reused. "
-            "Return exactly one JSON object with exactly those lowercase keys. "
-            'Each value must contain only the reading with its unit or "UNKNOWN".'
+            "For each color, directly return the associated display reading and its normalized "
+            "[left, top, right, bottom] bounding box using coordinates from 0 through 1000. "
+            "Use UNKNOWN and null when that color has no unambiguous readable display. Never use "
+            "the same physical display for more than one color; separate displays may show the "
+            "same reading. "
+            f"Return exactly this JSON shape, replacing only its values: {response_template}. "
+            "No explanation or Markdown."
         )
 
     @staticmethod
@@ -353,47 +358,105 @@ def _parse_joint_readings(text: str, color_keys: list[str]) -> dict[str, str] | 
         )
     except json.JSONDecodeError:
         return None
-    if not isinstance(pairs, list) or not all(
-        isinstance(pair, tuple) and len(pair) == 2 and isinstance(pair[0], str)
-        for pair in pairs
-    ):
+    payload_result = _unique_object(pairs)
+    if payload_result is None:
         return None
-
-    payload: dict[str, object] = {}
-    duplicate_keys: set[str] = set()
-    for key, value in pairs:
-        normalized_key = key.strip().lower()
-        if normalized_key in payload:
-            duplicate_keys.add(normalized_key)
-        payload[normalized_key] = value
+    payload, duplicate_colors = payload_result
 
     expected_keys = {color_name: color_name.strip().lower() for color_name in color_keys}
     if len(set(expected_keys.values())) != len(color_keys):
         return None
 
-    readings: dict[str, str] = {}
+    readings = dict.fromkeys(color_keys, "UNKNOWN")
+    display_regions: dict[str, tuple[float, float, float, float]] = {}
     for color_name, normalized_name in expected_keys.items():
-        value = payload.get(normalized_name)
-        if normalized_name in duplicate_keys or not isinstance(value, str):
-            readings[color_name] = "UNKNOWN"
+        if normalized_name in duplicate_colors:
             continue
-        reading = value.strip()
-        if reading.upper() == "UNKNOWN":
-            readings[color_name] = "UNKNOWN"
+        result = _unique_object(payload.get(normalized_name))
+        if result is None:
             continue
-        if (
-            not reading
-            or re.search(r"\bUNKNOWN\b", reading, flags=re.IGNORECASE)
-            or re.search(r"#[0-9A-Fa-f]{6}\b", reading)
-            or any(
-                re.search(rf"\b{re.escape(identifier)}\b", reading, flags=re.IGNORECASE)
-                for identifier, _rgb in _MARKER_COLORS
-            )
-        ):
-            readings[color_name] = "UNKNOWN"
+        value, duplicate_fields = result
+        if duplicate_fields.intersection({"reading", "display_bbox"}):
+            continue
+        raw_reading = value.get("reading")
+        if isinstance(raw_reading, str) and raw_reading.strip().upper() == "UNKNOWN":
+            continue
+        reading = _valid_reading(raw_reading)
+        bbox = _valid_bbox(value.get("display_bbox"))
+        if reading is None or bbox is None:
             continue
         readings[color_name] = reading
+        display_regions[color_name] = bbox
+
+    conflicts: set[str] = set()
+    assigned = list(display_regions.items())
+    for index, (first_color, first_bbox) in enumerate(assigned):
+        for second_color, second_bbox in assigned[index + 1 :]:
+            if _same_display_region(first_bbox, second_bbox):
+                conflicts.update((first_color, second_color))
+
+    for color_name in conflicts:
+        readings[color_name] = "UNKNOWN"
     return readings
+
+
+def _unique_object(value: object) -> tuple[dict[str, object], set[str]] | None:
+    if not isinstance(value, list) or not all(
+        isinstance(pair, tuple) and len(pair) == 2 and isinstance(pair[0], str) for pair in value
+    ):
+        return None
+    payload: dict[str, object] = {}
+    duplicate_keys: set[str] = set()
+    for key, item in value:
+        normalized_key = key.strip().lower()
+        if normalized_key in payload:
+            duplicate_keys.add(normalized_key)
+        payload[normalized_key] = item
+    return payload, duplicate_keys
+
+
+def _valid_reading(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    reading = value.strip()
+    if (
+        not reading
+        or re.search(r"\bUNKNOWN\b", reading, flags=re.IGNORECASE)
+        or re.search(r"#[0-9A-Fa-f]{6}\b", reading)
+        or any(
+            re.search(rf"\b{re.escape(identifier)}\b", reading, flags=re.IGNORECASE)
+            for identifier, _rgb in _MARKER_COLORS
+        )
+    ):
+        return None
+    return reading
+
+
+def _valid_bbox(value: object) -> tuple[float, float, float, float] | None:
+    if not isinstance(value, list) or len(value) != 4:
+        return None
+    if any(isinstance(coordinate, bool) or not isinstance(coordinate, (int, float)) for coordinate in value):
+        return None
+    left, top, right, bottom = (float(coordinate) for coordinate in value)
+    if not (0 <= left < right <= 1000 and 0 <= top < bottom <= 1000):
+        return None
+    return left, top, right, bottom
+
+
+def _same_display_region(
+    first: tuple[float, float, float, float],
+    second: tuple[float, float, float, float],
+) -> bool:
+    left = max(first[0], second[0])
+    top = max(first[1], second[1])
+    right = min(first[2], second[2])
+    bottom = min(first[3], second[3])
+    if left >= right or top >= bottom:
+        return False
+    intersection = (right - left) * (bottom - top)
+    first_area = (first[2] - first[0]) * (first[3] - first[1])
+    second_area = (second[2] - second[0]) * (second[3] - second[1])
+    return intersection / min(first_area, second_area) >= 0.8
 
 
 __all__ = [

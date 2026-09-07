@@ -29,6 +29,13 @@
     magenta: "12.0 V"
     cyan: "99.0 A"
 
+- name: instrument-two-displays-with-same-reading
+  kind: instrument
+  scene: adjacent-instruments-same-reading
+  expected_readings:
+    magenta: "12.0 V"
+    cyan: "12.0 V"
+
 - name: instrument-six-color-identifiers
   kind: instrument
   scene: six-color-instruments

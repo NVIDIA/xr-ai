@@ -522,15 +522,27 @@ def test_instrument_reader_uses_configured_prompt_without_rgb_hex_query(
     assert captured_system_prompts == [prompt]
     assert "#FF00FF" not in query
     assert "RGB" not in query
+    assert '"assignments"' not in query
+    assert '"display_bbox"' in query
 
 
 def test_joint_instrument_response_normalizes_requested_color_keys() -> None:
     assert _parse_joint_readings(
-        '```json\n{"magenta":"12.0 V","cyan":"UNKNOWN"}\n```',
+        """```json
+        {
+          "magenta":{"reading":"12.0 V","display_bbox":[10,20,110,80]},
+          "cyan":{"reading":"UNKNOWN","display_bbox":null}
+        }
+        ```""",
         ["magenta", "cyan"],
     ) == {"magenta": "12.0 V", "cyan": "UNKNOWN"}
     assert _parse_joint_readings(
-        '{" Magenta ":"12.0 V","CYAN":"UNKNOWN"}',
+        """
+        {
+          " Magenta ":{"reading":"12.0 V","display_bbox":[10,20,110,80]},
+          "CYAN":{"reading":"UNKNOWN","display_bbox":null}
+        }
+        """,
         ["magenta", "cyan"],
     ) == {"magenta": "12.0 V", "cyan": "UNKNOWN"}
     assert _parse_joint_readings("not JSON", ["magenta", "cyan"]) is None
@@ -552,7 +564,12 @@ def test_joint_instrument_response_normalizes_requested_color_keys() -> None:
 def test_joint_instrument_response_discards_only_invalid_reading(
     invalid_cyan: object,
 ) -> None:
-    response = json.dumps({"magenta": "12.0 V", "cyan": invalid_cyan})
+    response = json.dumps(
+        {
+            "magenta": {"reading": "12.0 V", "display_bbox": [10, 20, 110, 80]},
+            "cyan": {"reading": invalid_cyan, "display_bbox": [200, 20, 300, 80]},
+        }
+    )
 
     assert _parse_joint_readings(response, ["magenta", "cyan"]) == {
         "magenta": "12.0 V",
@@ -561,18 +578,62 @@ def test_joint_instrument_response_discards_only_invalid_reading(
 
 
 def test_joint_instrument_response_isolates_structural_key_violations() -> None:
-    assert _parse_joint_readings('{"magenta":"12.0 V"}', ["magenta", "cyan"]) == {
+    assert _parse_joint_readings(
+        """
+        {
+          "magenta":{"reading":"12.0 V","display_bbox":[10,20,110,80]}
+        }
+        """,
+        ["magenta", "cyan"],
+    ) == {
         "magenta": "12.0 V",
         "cyan": "UNKNOWN",
     }
     assert _parse_joint_readings(
-        '{"magenta":"12.0 V","cyan":"3 A","red":"99 A"}',
+        """
+        {
+          "magenta":{"reading":"12.0 V","display_bbox":[10,20,110,80]},
+          "cyan":{"reading":"3 A","display_bbox":[200,20,300,80]},
+          "red":{"reading":"99 A","display_bbox":[400,20,500,80]}
+        }
+        """,
         ["magenta", "cyan"],
     ) == {"magenta": "12.0 V", "cyan": "3 A"}
     assert _parse_joint_readings(
-        '{"magenta":"12.0 V","Magenta":"99.0 V","cyan":"3 A"}',
+        """
+        {
+          "magenta":{"reading":"12.0 V","display_bbox":[10,20,110,80]},
+          "Magenta":{"reading":"99.0 V","display_bbox":[400,20,500,80]},
+          "cyan":{"reading":"3 A","display_bbox":[200,20,300,80]}
+        }
+        """,
         ["magenta", "cyan"],
     ) == {"magenta": "UNKNOWN", "cyan": "3 A"}
+
+
+def test_joint_instrument_response_rejects_reused_display_but_keeps_other_readings() -> None:
+    assert _parse_joint_readings(
+        """
+        {
+          "magenta":{"reading":"12.0 V","display_bbox":[10,20,110,80]},
+          "cyan":{"reading":"3 A","display_bbox":[200,20,300,80]},
+          "red":{"reading":"3 A","display_bbox":[200,20,300,80]}
+        }
+        """,
+        ["magenta", "cyan", "red"],
+    ) == {"magenta": "12.0 V", "cyan": "UNKNOWN", "red": "UNKNOWN"}
+
+
+def test_joint_instrument_response_rejects_duplicate_display_regions() -> None:
+    assert _parse_joint_readings(
+        """
+        {
+          "magenta":{"reading":"12.0 V","display_bbox":[10,20,110,80]},
+          "cyan":{"reading":"12.0 V","display_bbox":[12,21,108,79]}
+        }
+        """,
+        ["magenta", "cyan"],
+    ) == {"magenta": "UNKNOWN", "cyan": "UNKNOWN"}
 
 
 def test_joint_marker_annotation_draws_frame_aligned_colored_x_without_text() -> None:
@@ -662,7 +723,7 @@ def test_unmapped_marker_log_identifier_redacts_payload() -> None:
     ("query_result", "expected_message"),
     [
         (
-            ImageQueryResult(text='{"magenta":"UNKNOWN"}'),
+            ImageQueryResult(text='{"magenta":{"reading":"UNKNOWN","display_bbox":null}}'),
             "Markers were found, but their instrument displays could not be read.",
         ),
         (
@@ -807,7 +868,10 @@ async def test_instrument_reader_filters_unmapped_markers_before_assigning_color
         assert np.array_equal(decoded[28, 228], np.array([240, 240, 240]))
         assert np.array_equal(decoded[28, 328], np.array([240, 240, 240]))
         return ImageQueryResult(
-            text='{"magenta":"12.0 V","cyan":"UNKNOWN (no display near the cyan X)"}'
+            text=(
+                '{"magenta":{"reading":"12.0 V","display_bbox":[10,20,110,80]},'
+                '"cyan":{"reading":"UNKNOWN","display_bbox":null}}'
+            )
         )
 
     images.get_current_frame = SimpleNamespace(execute=current_frame)  # type: ignore[assignment]
@@ -838,6 +902,97 @@ async def test_instrument_reader_filters_unmapped_markers_before_assigning_color
     rendered = LabInstrumentAgent.render_readings(result)
     assert rendered == "Device1: 12.0 V"
     assert all(color_name not in rendered.lower() for color_name, _rgb in _MARKER_COLORS)
+
+
+@pytest.mark.asyncio
+async def test_instrument_reader_reads_multiple_candidates_with_one_vlm_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from lab_instrument_monitoring_worker import instruments as instruments_module
+
+    async def run_inline(function, *args, **kwargs):
+        return function(*args, **kwargs)
+
+    monkeypatch.setattr(instruments_module.asyncio, "to_thread", run_inline)
+    markers = [
+        TrackedMarker(
+            marker_type=marker_type,
+            value=value,
+            corners=[
+                MarkerPoint(x=left, y=25),
+                MarkerPoint(x=left + 50, y=25),
+                MarkerPoint(x=left + 50, y=75),
+                MarkerPoint(x=left, y=75),
+            ],
+        )
+        for marker_type, value, left in (
+            (MarkerType.QR_CODE, "meter-a", 25),
+            (MarkerType.ARUCO, "23", 125),
+        )
+    ]
+    ok, encoded = cv2.imencode(".png", np.full((100, 200, 3), 240, dtype=np.uint8))
+    assert ok
+    images = _make_images()
+    agent = LabInstrumentAgent(
+        images=images,
+        vlm=SimpleNamespace(),  # type: ignore[arg-type]
+        device_map=_device_map(),
+        prompt="Read only the highlighted instrument.",
+    )
+    frame_reference = images.images.put(encoded.tobytes(), owner="participant-1")
+    read_requests: list[ImageQueryRequest] = []
+
+    async def current_frame(_request):
+        return ImageFrame(
+            image=frame_reference,
+            timestamp_us=13,
+            width=200,
+            height=100,
+            sequence=3,
+            participant_id="participant-1",
+        )
+
+    async def tracked_markers(_request):
+        return SimpleNamespace(available=True, markers=markers, message="")
+
+    async def joint_read(request: ImageQueryRequest):
+        read_requests.append(request)
+        return ImageQueryResult(
+            text=(
+                '{"magenta":{"reading":"12.0 V","display_bbox":[10,20,80,70]},'
+                '"cyan":{"reading":"3.0 A","display_bbox":[110,20,180,70]}}'
+            )
+        )
+
+    images.get_current_frame = SimpleNamespace(execute=current_frame)  # type: ignore[assignment]
+    images.track_markers = SimpleNamespace(execute=tracked_markers)  # type: ignore[assignment]
+    agent._query_image = SimpleNamespace(execute=joint_read)  # type: ignore[assignment]
+
+    result = await asyncio.wait_for(
+        agent._read_lab_instruments(
+            ReadLabInstrumentsRequest(participant_id="participant-1")
+        ),
+        timeout=5,
+    )
+
+    assert len(read_requests) == 1
+    assert result.readings == [
+        InstrumentReading(
+            timestamp_us=13,
+            marker_type=MarkerType.QR_CODE,
+            marker_id="meter-a",
+            device_name="Device1",
+            meter_reading="12.0 V",
+        ),
+        InstrumentReading(
+            timestamp_us=13,
+            marker_type=MarkerType.ARUCO,
+            marker_id="23",
+            device_name="Device2",
+            meter_reading="3.0 A",
+        ),
+    ]
+    assert {sighting.device_name for sighting in result.sightings} == {"Device1", "Device2"}
 
 
 @pytest.mark.asyncio
@@ -1848,6 +2003,7 @@ def test_visual_eval_covers_prompt_driven_monitor_and_instrument_rules() -> None
         ("monitor", "monitor-unchanged"),
         ("monitor", "monitor-changed"),
         ("instrument", "instrument-two-readable-devices"),
+        ("instrument", "instrument-two-displays-with-same-reading"),
         ("instrument", "instrument-six-color-identifiers"),
         ("instrument", "instrument-competing-markers-left-reading"),
         ("instrument", "instrument-competing-markers-right-reading"),
