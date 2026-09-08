@@ -1,0 +1,91 @@
+xr_ai_tools.rpc
+===============
+
+.. py:module:: xr_ai_tools.rpc
+
+.. autoapi-nested-parse::
+
+   Private correlated msgpack transport for typed capability services.
+
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   xr_ai_tools.rpc.RPCError
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_tools.rpc.RPCClient
+   xr_ai_tools.rpc.RPCServer
+
+
+Module Contents
+---------------
+
+.. py:exception:: RPCError(message: str, *, code: str = 'rpc_error')
+
+
+
+   A transport, protocol, or remote execution failure.
+
+
+.. py:class:: RPCClient(endpoint: str, *, timeout_s: float = 10.0)
+
+   Concurrent DEALER client with request correlation and bounded calls.
+
+
+   .. py:method:: call(operation: str, arguments: dict[str, Any] | None = None, *, timeout_s: float | None = None) -> dict[str, Any]
+      :async:
+
+
+      Call a remote operation and return its decoded result map.
+
+      Args:
+          operation: Remote dispatch name.
+          arguments: Msgpack-compatible operation arguments.
+          timeout_s: Per-call timeout, overriding the client default.
+
+      Raises:
+          RPCError: If transport, protocol, timeout, or remote execution fails.
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Cancel pending calls and close the transport.
+
+
+
+.. py:class:: RPCServer(endpoint: str, dispatch: Dispatch)
+
+   ROUTER server dispatching correlated requests without framework coupling.
+
+
+   .. py:method:: serve(*, ready: collections.abc.Callable[[], None] | None = None) -> None
+      :async:
+
+
+      Bind the endpoint and dispatch requests until cancelled.
+
+      Args:
+          ready: Optional callback invoked after the endpoint is bound.
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Cancel active request handlers and close the bound socket.
+
+
+
