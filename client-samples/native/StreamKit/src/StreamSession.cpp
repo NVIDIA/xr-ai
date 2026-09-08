@@ -5,11 +5,41 @@
 #include "streamkit/Backends/LiveKit/LiveKitBackend.h"
 #include "streamkit/Config/BackendConfiguration.h"
 
+#include <charconv>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
 
 namespace streamkit {
+
+namespace {
+
+std::string JsonString(std::string_view json, std::string_view key) {
+    const auto marker = std::string{"\""} + std::string(key) + "\"";
+    auto position = json.find(marker);
+    if (position == std::string_view::npos) return {};
+    position = json.find(':', position + marker.size());
+    position = json.find('"', position);
+    if (position == std::string_view::npos) return {};
+    const auto end = json.find('"', position + 1);
+    if (end == std::string_view::npos) return {};
+    return std::string(json.substr(position + 1, end - position - 1));
+}
+
+std::int64_t JsonInteger(std::string_view json, std::string_view key) {
+    const auto marker = std::string{"\""} + std::string(key) + "\"";
+    auto position = json.find(marker);
+    if (position == std::string_view::npos) return 0;
+    position = json.find(':', position + marker.size());
+    if (position == std::string_view::npos) return 0;
+    ++position;
+    while (position < json.size() && json[position] == ' ') ++position;
+    std::int64_t value = 0;
+    std::from_chars(json.data() + position, json.data() + json.size(), value);
+    return value;
+}
+
+} // namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MakeBackend (BackendConfiguration.h factory)
@@ -77,6 +107,10 @@ void StreamSession::Send(std::span<const std::byte> data,
     backend_->Send(data, reliable, topic);
 }
 
+void StreamSession::SendImage(const CapturedImage& image, std::string_view request_id) {
+    backend_->SendImage(image.data, request_id, image.mime_type, image.name);
+}
+
 // ── Private ───────────────────────────────────────────────────────────────────
 
 /// Subscribe to the backend's event hooks and forward them to this session's
@@ -91,6 +125,30 @@ void StreamSession::WireCallbacks() {
 
     backend_->on_data_received = [this](std::string_view topic,
                                         std::span<const std::byte> data) {
+        if (topic == "camera.capture.request") {
+            if (!on_image_capture_requested) return;
+            const auto payload = std::string_view(
+                reinterpret_cast<const char*>(data.data()), data.size());
+            if (JsonInteger(payload, "version") != 1) return;
+            ImageCaptureRequest request{
+                .request_id = JsonString(payload, "request_id"),
+                .timeout_ms = JsonInteger(payload, "timeout_ms"),
+            };
+            if (request.request_id.empty()) return;
+            try {
+                auto image = on_image_capture_requested(request);
+                if (!image.data.empty() &&
+                    (image.mime_type == "image/jpeg" ||
+                     image.mime_type == "image/png" ||
+                     image.mime_type == "image/webp")) {
+                    SendImage(image, request.request_id);
+                }
+            } catch (...) {
+                // Capability errors are request-local and must not escape the SDK callback.
+            }
+            return;
+        }
+        if (topic == "camera.capture.cancel") return;
         if (on_data_received) {
             on_data_received(topic, data);
         }

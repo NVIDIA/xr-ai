@@ -128,6 +128,11 @@ function installAppBrowser(model) {
   });
   globalThis.__elements = new Map([
     ['camera-preview', video],
+    ['captured-preview', {
+      classList: new FakeClassList(),
+      removeAttribute() {},
+      src: '',
+    }],
     ['preview-placeholder', element()],
     ['preview-live-badge', element()],
     ['agent-response-text', element()],

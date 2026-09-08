@@ -144,6 +144,13 @@ export function createBaseModel() {
     receivedMessages:  [],
     /** @type {string|null} */
     lastError:         null,
+    /** @type {'idle'|'starting'|'capturing'|'captured'|'failed'} */
+    captureState:      'idle',
+    /** @type {string|null} */
+    capturedImageURL:  null,
+    /** @type {Date|null} */
+    capturedAt:        null,
+    captureSequence:   0,
   };
 }
 
@@ -265,6 +272,31 @@ export function renderBase(model) {
     cameraStatus.className   = 'status-text status-idle';
   }
 
+  const captureIndicator = $('capture-indicator');
+  if (captureIndicator) {
+    const captureStatus = $('capture-status');
+    const captureThumbnail = $('capture-thumbnail');
+    const labels = {
+      idle: '',
+      starting: 'Starting camera…',
+      capturing: 'Capturing frame…',
+      captured: model.capturedAt
+        ? `Captured ${model.capturedAt.toLocaleTimeString()}`
+        : 'Frame captured',
+      failed: 'Capture failed',
+    };
+    captureIndicator.classList.toggle('active', model.captureState !== 'idle');
+    captureIndicator.dataset.state = model.captureState;
+    captureStatus.textContent = labels[model.captureState] ?? '';
+    if (model.capturedImageURL) {
+      captureThumbnail.src = model.capturedImageURL;
+      captureThumbnail.hidden = false;
+    } else {
+      captureThumbnail.removeAttribute('src');
+      captureThumbnail.hidden = true;
+    }
+  }
+
   // ── Camera selector ────────────────────────────────────────────────────────
   const selectRow = $('camera-select-row');
   const camSelect = $('camera-select');
@@ -348,21 +380,16 @@ export function resolvedTokenURL(model) {
  *   render: () => void,
  *   showError: (msg: string) => void,
  *   enumerateCameras: () => Promise<void>,
- *   startCamera?: () => Promise<void>,
  *   stopCamera: () => Promise<void>,
  *   onStateChange?: (state: string) => void,
  *   onDataReceived?: (topic: string, data: Uint8Array) => boolean,
  * }} opts
- *   `startCamera` / `stopCamera` are caller-supplied wrappers used by the
- *   on-demand `clientControl` handler so client-specific side effects (e.g.
- *   the local `<video>` preview in `web/App/app.js`) run on agent-triggered
- *   start / stop. When omitted, the on-demand start falls back to the bare
- *   transport-level `startCamera` (sufficient for clients without a local
- *   preview, such as `web-xr`).
+ *   `stopCamera` is the caller wrapper used to synchronize local UI state
+ *   when a live publication ends during disconnect or reconnect.
  */
 export async function connect(model, {
   render, showError, enumerateCameras: _ec,
-  startCamera: _startCamera, stopCamera: _sc,
+  stopCamera: _sc,
   onStateChange, onDataReceived,
 }) {
   if (model.connectionState !== ConnectionState.DISCONNECTED) return;
@@ -421,6 +448,47 @@ export async function connect(model, {
     renderNetworkMetrics(model);
   };
 
+  newSession.onImageCaptureRequested = async ({ signal }) => {
+    const sequence = ++model.captureSequence;
+    model.captureState = model.isCameraActive ? 'capturing' : 'starting';
+    render();
+    try {
+      let image;
+      if (model.isCameraActive) {
+        image = await captureCameraTrack(newSession.cameraTrack, signal);
+      } else {
+        const constraints = model.selectedCameraId
+          ? { deviceId: { exact: model.selectedCameraId }, resizeMode: 'none' }
+          : { facingMode: 'user', resizeMode: 'none' };
+        const media = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: constraints,
+        });
+        try {
+          const track = media.getVideoTracks()[0];
+          await enableContinuousExposure(track);
+          image = await captureCameraTrack(track, signal, { settleExposure: true });
+        } finally {
+          media.getTracks().forEach(track => track.stop());
+        }
+      }
+      if (sequence === model.captureSequence) {
+        if (model.capturedImageURL) URL.revokeObjectURL(model.capturedImageURL);
+        model.capturedImageURL = URL.createObjectURL(new Blob([image.data], { type: image.mimeType }));
+        model.capturedAt = new Date();
+        model.captureState = 'captured';
+        render();
+      }
+      return image;
+    } catch (error) {
+      if (sequence === model.captureSequence) {
+        model.captureState = 'failed';
+        render();
+      }
+      throw error;
+    }
+  };
+
   newSession.onDataReceived = (topic, data) => {
     // Let the caller intercept topics first (returns true to suppress list append).
     if (onDataReceived?.(topic, data)) return;
@@ -463,9 +531,100 @@ export async function connect(model, {
   render();
 }
 
+async function enableContinuousExposure(track) {
+  if (!track?.getCapabilities || !track.applyConstraints) return;
+  try {
+    const capabilities = track.getCapabilities();
+    if (capabilities.exposureMode?.includes('continuous')) {
+      await track.applyConstraints({ advanced: [{ exposureMode: 'continuous' }] });
+    }
+  } catch { /* Exposure controls are optional and browser/device-specific. */ }
+}
+
+async function waitForExposure(video, signal) {
+  const warmupMs = 600;
+  if (signal.aborted) throw new DOMException('Capture cancelled', 'AbortError');
+  if (!video.requestVideoFrameCallback) {
+    await new Promise((resolve, reject) => {
+      const done = () => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      };
+      const abort = () => {
+        clearTimeout(timer);
+        reject(new DOMException('Capture cancelled', 'AbortError'));
+      };
+      const timer = setTimeout(done, warmupMs);
+      signal.addEventListener('abort', abort, { once: true });
+    });
+    return;
+  }
+
+  await new Promise((resolve, reject) => {
+    const deadline = performance.now() + warmupMs;
+    let callbackId;
+    const abort = () => {
+      if (callbackId != null) video.cancelVideoFrameCallback(callbackId);
+      reject(new DOMException('Capture cancelled', 'AbortError'));
+    };
+    const nextFrame = now => {
+      if (now >= deadline) {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      } else {
+        callbackId = video.requestVideoFrameCallback(nextFrame);
+      }
+    };
+    signal.addEventListener('abort', abort, { once: true });
+    callbackId = video.requestVideoFrameCallback(nextFrame);
+  });
+}
+
+async function captureCameraTrack(track, signal, { settleExposure = false } = {}) {
+  if (!track) throw new Error('Camera did not provide a video track');
+  const video = document.createElement('video');
+  video.muted = true;
+  video.playsInline = true;
+  video.srcObject = new MediaStream([track]);
+  try {
+    await video.play();
+    if (!video.videoWidth || !video.videoHeight) {
+      await new Promise((resolve, reject) => {
+        const abort = () => reject(new DOMException('Capture cancelled', 'AbortError'));
+        signal.addEventListener('abort', abort, { once: true });
+        video.addEventListener('loadedmetadata', resolve, { once: true });
+      });
+    }
+    if (settleExposure) await waitForExposure(video, signal);
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    const blob = await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        value => value ? resolve(value) : reject(new Error('JPEG encoding failed')),
+        'image/jpeg',
+        0.9,
+      );
+    });
+    return {
+      data: new Uint8Array(await blob.arrayBuffer()),
+      mimeType: 'image/jpeg',
+      name: 'camera.jpg',
+    };
+  } finally {
+    video.srcObject = null;
+  }
+}
+
 /** @param {object} model @param {() => void} render */
 export async function disconnect(model, render) {
   await model.session?.disconnect();
+  model.captureSequence += 1;
+  if (model.capturedImageURL) URL.revokeObjectURL(model.capturedImageURL);
+  model.capturedImageURL = null;
+  model.capturedAt       = null;
+  model.captureState     = 'idle';
   model.session          = null;
   model.connectionState  = ConnectionState.DISCONNECTED;
   model.isAudioActive    = false;

@@ -28,6 +28,7 @@ from device_io_hub.ipc import (
     AudioChunk,
     ConnectorEndpoint,
     DataMessage,
+    ImageCaptureData,
     PixelFormat,
     ReturnAudioFlush,
 )
@@ -45,6 +46,9 @@ def _now_us() -> int:
 
 
 _RETURN_AUDIO_DROP_LOG_INTERVAL_S = 5.0
+_IMAGE_CAPTURE_TOPIC = "camera.capture.response"
+_IMAGE_CAPTURE_MAX_BYTES = 8 * 1024 * 1024
+_IMAGE_CAPTURE_MIME_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
 
 
 class _QueuedReturnAudioFrame(NamedTuple):
@@ -229,6 +233,10 @@ class RoomClient:
         self._cfg  = cfg
         self._ep   = ep
         self._room = rtc.Room()
+        self._room.register_byte_stream_handler(
+            _IMAGE_CAPTURE_TOPIC,
+            self._on_image_capture_stream,
+        )
         # track SID → streaming task; lets us cancel exactly the right task on unsubscribe.
         self._track_tasks: dict[str, asyncio.Task] = {}
         # Tasks spawned by sync event callbacks; cancelled on disconnect().
@@ -283,6 +291,62 @@ class RoomClient:
                     )
                 )
             )
+
+    def _on_image_capture_stream(
+        self,
+        reader: rtc.ByteStreamReader,
+        participant_id: str,
+    ) -> None:
+        self._spawn(self._receive_image_capture(reader, participant_id))
+
+    async def _receive_image_capture(
+        self,
+        reader: rtc.ByteStreamReader,
+        participant_id: str,
+    ) -> None:
+        info = reader.info
+        request_id = (info.attributes or {}).get("request_id", "").strip()
+        if not participant_id or not request_id:
+            logger.warning("Client image stream without sender or request ID — dropped")
+            return
+        if info.mime_type not in _IMAGE_CAPTURE_MIME_TYPES:
+            logger.warning(
+                "Client image stream {} has unsupported media type {!r} — dropped",
+                request_id,
+                info.mime_type,
+            )
+            return
+        if info.size is not None and info.size > _IMAGE_CAPTURE_MAX_BYTES:
+            logger.warning(
+                "Client image stream {} declares {} bytes (limit {}) — dropped",
+                request_id,
+                info.size,
+                _IMAGE_CAPTURE_MAX_BYTES,
+            )
+            return
+
+        image = bytearray()
+        async for chunk in reader:
+            image.extend(chunk)
+            if len(image) > _IMAGE_CAPTURE_MAX_BYTES:
+                logger.warning(
+                    "Client image stream {} exceeded {} bytes — dropped",
+                    request_id,
+                    _IMAGE_CAPTURE_MAX_BYTES,
+                )
+                return
+        if not image:
+            logger.warning("Client image stream {} was empty — dropped", request_id)
+            return
+        await self._ep.push_image_capture(
+            ImageCaptureData(
+                participant_id=participant_id,
+                request_id=request_id,
+                pts_us=_now_us(),
+                mime_type=info.mime_type,
+                data=bytes(image),
+            )
+        )
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 

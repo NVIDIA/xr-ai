@@ -64,8 +64,10 @@ import zmq.asyncio
 
 from ._codec import decode, encode
 from ._types import (AgentPresence, AudioChunk, DataMessage, FrameData,
-                     FrameRequest, FrameSignal, MsgType, ParticipantEvent,
-                     ReturnAudioFlush, RosterRequest, SubscriptionProbe)
+                     FrameRequest, FrameSignal, ImageCaptureCancel,
+                     ImageCaptureData, ImageCaptureRequest, MsgType,
+                     ParticipantEvent, ReturnAudioFlush, RosterRequest,
+                     SubscriptionProbe)
 
 log = logging.getLogger(__name__)
 
@@ -73,6 +75,7 @@ FrameSignalCallback = Callable[[FrameSignal], Awaitable[None]]
 FrameDataCallback   = Callable[[FrameData],   Awaitable[None]]
 AudioCallback       = Callable[[AudioChunk],       Awaitable[None]]
 DataCallback        = Callable[[DataMessage],      Awaitable[None]]
+ImageCaptureCallback = Callable[[ImageCaptureData], Awaitable[None]]
 ParticipantCallback = Callable[[ParticipantEvent], Awaitable[None]]
 CallbackUnsubscribe = Callable[[], None]
 
@@ -225,6 +228,7 @@ class ProcessorEndpoint:
         self._frame_data_cbs:  list[FrameDataCallback]   = []
         self._audio_cbs:       list[AudioCallback]       = []
         self._data_cbs:        list[DataCallback]        = []
+        self._image_capture_cbs: list[ImageCaptureCallback] = []
         self._participant_cbs: list[ParticipantCallback] = []
 
         # Pending request_frame() calls keyed by (participant_id, track_id).
@@ -404,6 +408,17 @@ class ProcessorEndpoint:
 
         return unsubscribe
 
+    def on_image_capture(self, cb: ImageCaptureCallback) -> CallbackUnsubscribe:
+        """Register for completed participant image-capture requests."""
+
+        self._image_capture_cbs.append(cb)
+
+        def unsubscribe() -> None:
+            if cb in self._image_capture_cbs:
+                self._image_capture_cbs.remove(cb)
+
+        return unsubscribe
+
     def on_participant(self, cb: ParticipantCallback) -> None:
         """Register an async callback for participant join and leave events."""
         self._participant_cbs.append(cb)
@@ -413,6 +428,16 @@ class ProcessorEndpoint:
     async def send_return_data(self, msg: DataMessage) -> None:
         """Send an application data message to its target participant."""
         await self._push.send(encode(MsgType.RETURN_DATA, msg))
+
+    async def request_image_capture(self, request: ImageCaptureRequest) -> None:
+        """Ask the hub to invoke one participant's image-capture capability."""
+
+        await self._push.send(encode(MsgType.IMAGE_CAPTURE_REQUEST, request))
+
+    async def cancel_image_capture(self, cancel: ImageCaptureCancel) -> None:
+        """Cancel a previously requested participant image capture."""
+
+        await self._push.send(encode(MsgType.IMAGE_CAPTURE_CANCEL, cancel))
 
     async def send_return_audio(self, chunk: AudioChunk) -> None:
         """Queue a PCM audio chunk for playback by its target participant."""
@@ -700,6 +725,9 @@ class ProcessorEndpoint:
                 self._spawn(cb(msg))
         elif type_id == MsgType.DATA_MESSAGE:
             for cb in self._data_cbs:
+                self._spawn(cb(msg))
+        elif type_id == MsgType.IMAGE_CAPTURE_DATA:
+            for cb in self._image_capture_cbs:
                 self._spawn(cb(msg))
         elif type_id == MsgType.PARTICIPANT_EVENT:
             # Update participant set + auto-subscribe state synchronously

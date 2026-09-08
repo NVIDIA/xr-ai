@@ -11,8 +11,10 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
+import com.nvidia.xrai.streamkitsample.streamkit.CapturedImage
 import com.nvidia.xrai.streamkitsample.streamkit.NetworkMetrics
 import com.nvidia.xrai.streamkitsample.streamkit.StreamSession
+import com.nvidia.xrai.streamkitsample.streamkit.encodeI420Jpeg
 import com.nvidia.xrai.streamkitsample.streamkit.config.BackendConfiguration
 import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.LiveKitConfig
@@ -188,6 +190,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 newSession.onNetworkMetrics = { metrics ->
                     networkMetrics = metrics
+                }
+                newSession.onImageCaptureRequested = {
+                    if (selectedCameraId == VIRTUAL_CAMERA_ID) {
+                        val source = SyntheticCameraSource()
+                        CapturedImage(
+                            encodeI420Jpeg(source.renderFrame(0), source.width, source.height)
+                        )
+                    } else {
+                        val info = availableCameras.firstOrNull { it.id == selectedCameraId }
+                        val facing = info?.facing ?: CameraConfig.CameraFacing.BACK
+                        newSession.captureImage(
+                            CameraConfig(deviceId = selectedCameraId, facing = facing)
+                        )
+                    }
                 }
                 newSession.onDataReceived = { topic, data ->
                     when {

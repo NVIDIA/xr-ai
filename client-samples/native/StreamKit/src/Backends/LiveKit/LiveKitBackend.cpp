@@ -37,6 +37,7 @@
 
 #if STREAMKIT_HAVE_LIVEKIT
 #include "livekit/audio_frame.h"
+#include "livekit/data_stream.h"
 #include "livekit/audio_source.h"
 #include "livekit/livekit.h"
 #include "livekit/local_audio_track.h"
@@ -526,11 +527,37 @@ void LiveKitBackend::Send(std::span<const std::byte> data,
 #if STREAMKIT_HAVE_LIVEKIT
     std::vector<std::uint8_t> payload(data.size());
     std::memcpy(payload.data(), data.data(), data.size());
+    std::vector<std::string> destinations;
+    if (config_.hub_identity) destinations.push_back(*config_.hub_identity);
     RequireLocalParticipant(room_)->publishData(
-        payload, reliable, {}, std::string(topic));
+        payload, reliable, destinations, std::string(topic));
 #else
     (void)data;
     (void)reliable;
+#endif
+}
+
+void LiveKitBackend::SendImage(std::span<const std::uint8_t> data,
+                               std::string_view request_id,
+                               std::string_view mime_type,
+                               std::string_view name) {
+    if (!is_connected_.load()) throw NotConnectedError{};
+#if STREAMKIT_HAVE_LIVEKIT
+    std::vector<std::string> destinations;
+    if (config_.hub_identity) destinations.push_back(*config_.hub_identity);
+    const auto participant = room_->localParticipant().lock();
+    if (!participant) throw NotConnectedError{};
+    livekit::ByteStreamWriter writer(
+        *participant, std::string(name), "camera.capture.response",
+        {{"request_id", std::string(request_id)}}, "", data.size(),
+        std::string(mime_type), destinations);
+    writer.write(std::vector<std::uint8_t>(data.begin(), data.end()));
+    writer.close();
+#else
+    (void)data;
+    (void)request_id;
+    (void)mime_type;
+    (void)name;
 #endif
 }
 
