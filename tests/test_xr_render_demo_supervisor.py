@@ -201,6 +201,63 @@ def test_status_questions_are_not_mutation_intent() -> None:
     assert _wants_mutation("Move the cube.")
 
 
+def test_leading_address_does_not_hide_question_openers() -> None:
+    from xr_render_demo_worker.supervisor import (
+        _is_truncated,
+        _resolve_truncation_reply,
+        _truncated_reply,
+        _wants_mutation,
+    )
+
+    assert not _wants_mutation("Hey agent, what did I ask you to move?")
+    assert not _wants_mutation("Agent, did you move the cube?")
+    assert not _wants_mutation("Hey agent")
+    assert _wants_mutation("Hey agent, move the cube.")
+    assert not _is_truncated("Hey agent, what am I looking at")
+    assert not _is_truncated("Hey, agent. What am I looking at")
+    assert not _is_truncated("Okay, so, agent, where is the cube pointing at")
+    assert _is_truncated("Hey agent, put the sphere on the")
+    assert _is_truncated("So, put it on")
+    assert not _is_truncated("Hey agent")
+    assert _truncated_reply("Hey agent, put the sphere on the") == (
+        "I think I missed the end of that. On the what?"
+    )
+    assert _resolve_truncation_reply("Put the sphere on the", "Hey agent, never mind.") is None
+    assert _resolve_truncation_reply("Put the sphere on the", "Hey agent, on the box.") == (
+        "Put the sphere on the box."
+    )
+
+
+async def test_leading_address_reaches_the_model(monkeypatch) -> None:
+    """The reported always-on failures: a vision question answered with the
+    truncation ask-back, and a memory question forced through verification."""
+    supervisor, _fake = _make_supervisor()
+    loop_calls = 0
+    seen: list[str] = []
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        nonlocal loop_calls
+        loop_calls += 1
+        seen.extend(m.content for m in messages if m.role == "user")
+        return SimpleNamespace(
+            content="You asked me to move the cube.",
+            messages=list(messages),
+            tool_calls=(SimpleNamespace(call=SimpleNamespace(name="memory_agent")),),
+        )
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="Hey agent, what did I ask you to move?", participant_id="alice"))
+    assert reply.response == "You asked me to move the cube."
+    assert loop_calls == 1
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="Hey agent, what am I looking at", participant_id="alice"))
+    assert _TRUNCATED_ASK not in reply.response
+    assert any("User request: Hey agent, what am I looking at" in c for c in seen)
+
+
 async def test_already_satisfied_reply_stands_on_evidence(monkeypatch) -> None:
     """A recolor that found the requested state already holding records
     satisfied evidence; the model's reply stands despite no scene diff."""

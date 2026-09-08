@@ -1103,6 +1103,18 @@ UTTERANCES = (
         expected_colors=(("box-1", (1.0, 1.0, 0.0)),),
     ),
     Case(
+        name="basics_addressed_vision_question",
+        # Always-on mode leaves "Hey agent" on the transcript; the address
+        # must not read as a truncated command.
+        request="Hey agent, what am I looking at",
+        scene=_BASICS_SCENE,
+        history=_BASICS_HISTORY,
+        vision="A cluttered desk with a laptop and a coffee mug.",
+        required_tools=frozenset({"look_at_current_frame"}),
+        forbidden_tools=_FORBID_MUTATIONS,
+        reply_contains="desk",
+    ),
+    Case(
         name="basics_truncated_command",
         # VAD cuts the sentence mid-word; the only correct outcome is a
         # question. The failure mode is the verification pass nudging the

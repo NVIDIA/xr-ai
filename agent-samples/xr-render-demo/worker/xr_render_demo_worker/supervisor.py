@@ -58,6 +58,12 @@ _EDGE_PUNCT = ".,!?;:\"'…“”‘’"
 
 _WH_WORDS = frozenset("what which where when why who whom whose how".split())
 
+# In always-on mode (no wake word) the voice gate leaves the spoken address
+# and any filler on the transcript.
+_LEAD_FILLER = frozenset(
+    "hey hi hello okay ok alright so um uh please agent assistant".split()
+)
+
 # Subjects that make a following -ing word a progressive verb ("the wall
 # I'm staring at" is complete; "the lamp on the ceiling in" is not).
 _PROGRESSIVE_SUBJECTS = frozenset(
@@ -96,9 +102,22 @@ _PENDING_ASK_WINDOW_US = 8 * 1_000_000
 _STATUS_OPENERS = frozenset("did have has had was were".split())
 
 
+def _content_tokens(transcript: str) -> list[str]:
+    """Transcript tokens with edge punctuation and leading filler removed, casing kept."""
+    tokens = [w.strip(_EDGE_PUNCT) for w in transcript.split()]
+    tokens = [w for w in tokens if w]
+    start = 0
+    while start < len(tokens) and tokens[start].lower() in _LEAD_FILLER:
+        start += 1
+    return tokens[start:]
+
+
+def _content_words(transcript: str) -> list[str]:
+    return [w.lower() for w in _content_tokens(transcript)]
+
+
 def _wants_mutation(transcript: str) -> bool:
-    words = [w.strip(_EDGE_PUNCT) for w in transcript.lower().split()]
-    words = [w for w in words if w]
+    words = _content_words(transcript)
     # A wh- or status question is a query even when it contains an action
     # word ("What color was the first thing I created?", "Did you move it?").
     if not words or words[0] in _WH_WORDS or words[0] in _STATUS_OPENERS:
@@ -122,8 +141,7 @@ def _is_question(text: str) -> bool:
 
 
 def _is_truncated(transcript: str) -> bool:
-    words = [w.strip(_EDGE_PUNCT) for w in transcript.strip().lower().split()]
-    words = [w for w in words if w]
+    words = _content_words(transcript)
     if not words:
         return False
     if words[-1] in _DANGLING_DETERMINERS:
@@ -145,7 +163,7 @@ def _is_truncated(transcript: str) -> bool:
 
 
 def _truncated_reply(transcript: str) -> str:
-    words = transcript.strip().rstrip(_EDGE_PUNCT).split()
+    words = _content_tokens(transcript)
     tail = words[-1]
     if tail.lower() in _ARTICLES and len(words) >= 2:
         tail = f"{words[-2]} {tail}"
@@ -168,12 +186,12 @@ def _splice_completion(prefix: str, completion: str) -> str:
 
 
 def _resolve_truncation_reply(prefix: str, transcript: str) -> str | None:
-    words = transcript.strip().rstrip(".?!,;").lower()
-    if words in _CANCEL_PHRASES:
+    words = _content_words(transcript)
+    if " ".join(words) in _CANCEL_PHRASES:
         return None
-    if any(word in _ACTION_VERBS for word in words.split()):
+    if any(word in _ACTION_VERBS for word in words):
         return transcript
-    return _splice_completion(prefix, transcript)
+    return _splice_completion(prefix, " ".join(_content_tokens(transcript)))
 
 
 class SceneSupervisor:
