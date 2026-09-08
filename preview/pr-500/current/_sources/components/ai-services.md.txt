@@ -50,8 +50,10 @@ two separate trees under the service's resolved `model_cache`:
 | STT and Magpie TTS (NeMo host processes) | `<model_cache>/huggingface/` | `<model_cache>/huggingface/hub/` |
 
 (The NeMo servers additionally cache non-HF artifacts under `<model_cache>/nemo/`.)
-These are defaults: an `HF_HOME` or `NEMO_CACHE_DIR` already set in the
-environment takes priority.
+For host processes (pip-mode vLLM, STT, Magpie TTS) these are defaults: an
+`HF_HOME` or `NEMO_CACHE_DIR` already set in the environment takes priority.
+Docker-mode vLLM always uses the YAML `model_cache`, which it mounts into the
+container.
 Piper TTS passes `<model_cache>/piper/` directly as its Hub cache and defaults
 `HF_XET_CACHE` to `<model_cache>/piper/xet/` for its Xet cache.
 

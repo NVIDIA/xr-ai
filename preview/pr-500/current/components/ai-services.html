@@ -543,8 +543,10 @@ two separate trees under the service’s resolved <code class="docutils literal 
 </table>
 </div>
 <p>(The NeMo servers additionally cache non-HF artifacts under <code class="docutils literal notranslate"><span class="pre">&lt;model_cache&gt;/nemo/</span></code>.)
-These are defaults: an <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> or <code class="docutils literal notranslate"><span class="pre">NEMO_CACHE_DIR</span></code> already set in the
-environment takes priority.
+For host processes (pip-mode vLLM, STT, Magpie TTS) these are defaults: an
+<code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> or <code class="docutils literal notranslate"><span class="pre">NEMO_CACHE_DIR</span></code> already set in the environment takes priority.
+Docker-mode vLLM always uses the YAML <code class="docutils literal notranslate"><span class="pre">model_cache</span></code>, which it mounts into the
+container.
 Piper TTS passes <code class="docutils literal notranslate"><span class="pre">&lt;model_cache&gt;/piper/</span></code> directly as its Hub cache and defaults
 <code class="docutils literal notranslate"><span class="pre">HF_XET_CACHE</span></code> to <code class="docutils literal notranslate"><span class="pre">&lt;model_cache&gt;/piper/xet/</span></code> for its Xet cache.</p>
 <p><code class="docutils literal notranslate"><span class="pre">model_cache</span></code> itself is set per YAML and resolved relative to the YAML file.

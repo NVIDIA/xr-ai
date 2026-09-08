@@ -398,8 +398,8 @@ Agent: [Changes the sphere's color or explains why it could not.]
 ```
 
 Speak naturally: the agent accepts questions, commands, and follow-up requests.
-Refer to {doc}`Connecting clients <clients>` for headset and native-client
-setup.
+The scene draws two shapes, boxes and spheres; ask for either by name. Refer to
+{doc}`Connecting clients <clients>` for headset and native-client setup.
 
 To stop the model servers when done:
 

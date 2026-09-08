@@ -276,9 +276,10 @@ Final messages are also persisted through native
 
 ## Native capability composition
 
-The sample-local scene process owns scene state and LOVR. `openxr-service`
-owns the headless tracking session, and `video-memory-service` owns recorded
-video decoding. `LiveFrameSource` supplies current-frame requests. Relay-managed
+The sample-local scene process owns scene state and LOVR. The LOVR app draws
+two primitive types, box and sphere. `openxr-service` owns the headless
+tracking session, and `video-memory-service` owns recorded video decoding.
+`LiveFrameSource` supplies current-frame requests. Relay-managed
 native tools provide the typed surface over those services; the demo does
 not launch or call MCP adapters.
 
