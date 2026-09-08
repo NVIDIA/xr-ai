@@ -1,0 +1,856 @@
+
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Architecture &#8212; XR AI</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=a95f357e85573c9b56d5"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5" />
+
+
+
+    <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'overview/architecture';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+
+    <link rel="icon" href="../_static/favicon.png"/>
+
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Getting Started" href="../getting_started/index.html" />
+    <link rel="prev" title="XR AI" href="../index.html" />
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+
+
+  </head>
+
+  <body data-default-mode="">
+
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="XR AI - Home"/>
+    <img src="../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="XR AI - Home"/>
+  
+  
+    <p class="title logo__title">XR AI</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="XR AI - Home"/>
+    <img src="../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="XR AI - Home"/>
+  
+  
+    <p class="title logo__title">XR AI</p>
+  
+</a>
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item"><!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+</div>
+        <div class="sidebar-primary-item">
+
+
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Table of Contents">
+  <p class="bd-links__title" role="heading" aria-level="1">Table of Contents</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Architecture</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../getting_started/index.html">Getting Started</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../components/index.html">Components</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../components/agent-sdk.html">Agent SDK</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../components/ai-services.html">AI inference servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../components/launcher-and-process-model.html">Launcher and process model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../components/server-runtime.html">Server runtime</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+</ul>
+</details></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Architecture</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+<section id="architecture">
+<h1>Architecture<a class="headerlink" href="#architecture" title="Link to this heading">#</a></h1>
+<p>XR AI connects interactive clients, including XR glasses and headsets, phones,
+and web browsers, to agent workers and AI services without making transport,
+media, or model implementation details part of application logic. The system
+is process-oriented: the device I/O hub, workers, model servers, and optional
+capability services run independently and communicate through small, explicit
+interfaces.</p>
+<p>This architecture overview describes the system shape, runtime paths, and
+ownership boundaries.
+The component pages linked under <a class="reference internal" href="#where-details-live">Where details live</a>
+contain configuration, protocol, and operational details.</p>
+<section id="system-context">
+<h2>System context<a class="headerlink" href="#system-context" title="Link to this heading">#</a></h2>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>                                     control plane
+                          sample orchestrator + launcher
+                         starts, orders, and monitors processes
+                                         |
+                                         v
++---------------+   media and data   +----------------+   IPC events   +----------------+
+| Clients       | &lt;----------------&gt; | DeviceIOHub    | &lt;------------&gt; | agent workers  |
+| (web/mobile/XR)|                   | + transport    |                | + agent SDK     |
++---------------+                    +----------------+                +-------+--------+
+                                                                            |
+                                               typed model and tool calls   |
+                                                +---------------------------+--------+
+                                                |                                    |
+                                                v                                    v
+                                      +-------------------+               +--------------------+
+                                      | AI model services |               | capability services |
+                                      | local or hosted   |               | or local tools     |
+                                      +-------------------+               +--------------------+
+</pre></div>
+</div>
+<p>The architecture has four cooperating planes:</p>
+<ul class="simple">
+<li><p><strong>Media plane:</strong> DeviceIOHub receives client audio, video, and data through
+a transport connector, then fans participant-tagged events out to workers.</p></li>
+<li><p><strong>Application plane:</strong> agent workers own application behavior, participant
+state, model and tool orchestration, concurrency, and cancellation.</p></li>
+<li><p><strong>Service plane:</strong> typed model clients and tools isolate workers from model
+hosting and capability-process protocols.</p></li>
+<li><p><strong>Control plane:</strong> each sample’s orchestrator uses <code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code> to start
+processes in dependency order and monitor their readiness and lifetime.</p></li>
+</ul>
+<p>These planes are boundaries of responsibility, not required deployment hosts.
+They can run on one machine, while model endpoints can also be persistent local
+services or externally hosted APIs.</p>
+</section>
+<section id="components-and-ownership">
+<h2>Components and ownership<a class="headerlink" href="#components-and-ownership" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Component</p></th>
+<th class="head"><p>Owns</p></th>
+<th class="head"><p>Does not own</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>XR clients</p></td>
+<td><p>Device capture, presentation, and user interaction</p></td>
+<td><p>Agent execution or service orchestration</p></td>
+</tr>
+<tr class="row-odd"><td><p>Transport connector</p></td>
+<td><p>Transport-specific sessions and conversion to hub events</p></td>
+<td><p>Agent-facing APIs or application policy</p></td>
+</tr>
+<tr class="row-even"><td><p>DeviceIOHub</p></td>
+<td><p>Media fan-out, participant identity, return routing, and shared-media access</p></td>
+<td><p>Agent state, model calls, or tools</p></td>
+</tr>
+<tr class="row-odd"><td><p>Agent SDK</p></td>
+<td><p>Lightweight hub IPC, typed runtime events, model protocols, voice composition, and tool primitives</p></td>
+<td><p>Application lifecycle and decision policy</p></td>
+</tr>
+<tr class="row-even"><td><p>Agent worker</p></td>
+<td><p>Application state, tasks, prompts, model and tool loops, concurrency, and cleanup</p></td>
+<td><p>Transport internals or model-server lifecycle</p></td>
+</tr>
+<tr class="row-odd"><td><p>AI model services</p></td>
+<td><p>Inference and model-specific serving behavior</p></td>
+<td><p>Participant routing or application policy</p></td>
+</tr>
+<tr class="row-even"><td><p>Tools and capability services</p></td>
+<td><p>Bounded application capabilities</p></td>
+<td><p>General agent orchestration</p></td>
+</tr>
+<tr class="row-odd"><td><p>Sample orchestrator</p></td>
+<td><p>Process declarations, startup ordering, readiness, and shutdown</p></td>
+<td><p>Runtime business logic</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The separation lets a worker change model deployment or client transport
+without rewriting its application logic. It also keeps heavy transport and
+model dependencies out of the minimal agent-to-hub IPC package.</p>
+</section>
+<section id="runtime-data-paths">
+<h2>Runtime data paths<a class="headerlink" href="#runtime-data-paths" title="Link to this heading">#</a></h2>
+<section id="client-media-and-participant-events">
+<h3>Client media and participant events<a class="headerlink" href="#client-media-and-participant-events" title="Link to this heading">#</a></h3>
+<ol class="arabic simple">
+<li><p>A client joins through the configured transport and publishes audio, video,
+and data.</p></li>
+<li><p>The transport connector converts that input into participant-tagged hub
+events. Audio, data, and participant events travel inline; video pixels stay
+in shared memory and frame notifications remain lightweight.</p></li>
+<li><p>DeviceIOHub fans subscribed events out to <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> consumers.
+Multiple agents or passive processors can subscribe to the same input.</p></li>
+<li><p>A worker requests video pixels only when its application needs a frame.</p></li>
+<li><p>Return audio and data name the originating participant. The hub validates
+the target and the connector delivers the response only to that participant.</p></li>
+</ol>
+<p>The resulting portable contract is:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>participant -&gt; hub -&gt; subscribed worker -&gt; hub -&gt; same participant
+</pre></div>
+</div>
+<p>LiveKit currently provides the client transport, but it remains behind the hub
+boundary. Workers communicate only through XR AI’s msgpack over ZMQ IPC and do
+not import or address LiveKit directly. Refer to <a class="reference internal" href="../components/server-runtime.html"><span class="doc">Server runtime</span></a> for shared-memory behavior, topics, and transport
+implementation details.</p>
+</section>
+<section id="agent-model-and-tool-execution">
+<h3>Agent, model, and tool execution<a class="headerlink" href="#agent-model-and-tool-execution" title="Link to this heading">#</a></h3>
+<p>A voice-capable application commonly composes this path:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>audio -&gt; voice input -&gt; STT -&gt; application agent -&gt; LLM/VLM -&gt; voice output -&gt; TTS
+                                  |                 ^                         |
+video -- on-demand frame access --+                 |                         |
+                                  +---- tools ------+                         v
+                                                               return audio and data
+</pre></div>
+</div>
+<p>This is composition rather than a fixed pipeline. An application may consume
+text instead of speech, omit models, execute deterministic tools locally, call
+typed capability services, or publish events for another in-process agent
+registered with the same <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code> to consume.</p>
+<p>Workers obtain LLM, VLM, STT, TTS, and embedding clients from
+<code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code>. Model profiles keep three concerns separate:</p>
+<ul class="simple">
+<li><p>adapter behavior and model-specific wire details;</p></li>
+<li><p>endpoint location, credentials, and health behavior;</p></li>
+<li><p>deployment ownership by the current stack, a reused service, or an external
+provider.</p></li>
+</ul>
+<p>Tools are ordinary in-process <code class="docutils literal notranslate"><span class="pre">Tool</span></code> or <code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> objects. A tool can perform
+local work or call a typed service, but application agents retain ownership of
+tool selection, task lifetime, retries, and participant context. Refer to
+<a class="reference internal" href="../components/agent-sdk.html"><span class="doc">Agent SDK</span></a> and <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI services</span></a> for the concrete interfaces and profiles.</p>
+</section>
+</section>
+<section id="process-and-deployment-model">
+<h2>Process and deployment model<a class="headerlink" href="#process-and-deployment-model" title="Link to this heading">#</a></h2>
+<p>Each sample is an executable process graph declared by a small orchestrator.
+DeviceIOHub always runs as its own process; workers and capability services
+run separately so their dependencies, failures, and cleanup remain isolated.</p>
+<p>Stack items start in declaration order; members of a <code class="docutils literal notranslate"><span class="pre">Parallel</span></code> item start
+concurrently, and the next item waits for every member to signal ready. Each
+ready-file reports only that process’s initialization. A premature process
+exit fails the stack and triggers coordinated shutdown. Ready-files order
+process startup; they do not determine whether a client may connect.</p>
+<p>Model services use the same ownership model without forcing every sample to
+reload large weights:</p>
+<ul class="simple">
+<li><p><strong>Managed:</strong> the current orchestrator starts and owns the service.</p></li>
+<li><p><strong>Reused:</strong> the service is expected to be running already, commonly from the
+shared <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> stack.</p></li>
+<li><p><strong>External:</strong> XR AI connects to an endpoint it neither starts nor stops.</p></li>
+</ul>
+<p>Heavy model servers can use a persistent launch mode and remain hot across
+sample restarts. The model profile co-locates process ownership and endpoint
+choices used by the orchestrator and worker, reducing configuration drift. The
+launcher does not validate an endpoint’s <code class="docutils literal notranslate"><span class="pre">base_url</span></code> against the launched
+service’s separate configuration. Detailed startup, shutdown, and persistence
+behavior belongs in <a class="reference internal" href="../components/launcher-and-process-model.html"><span class="doc">Launcher and process model</span></a>.</p>
+</section>
+<section id="architectural-invariants">
+<h2>Architectural invariants<a class="headerlink" href="#architectural-invariants" title="Link to this heading">#</a></h2>
+<p>The following constraints define the supported system boundary:</p>
+<ul class="simple">
+<li><p><strong>One hub, many clients, many agents.</strong> The hub may fan one participant’s
+input out to several consumers, but it never uses the return path to route
+one participant’s data to another.</p></li>
+<li><p><strong>Transport details stop at the hub.</strong> Workers use <code class="docutils literal notranslate"><span class="pre">xr_ai_hub</span></code>; transport
+SDKs and server packages do not enter agent APIs.</p></li>
+<li><p><strong>Raw media stays on the media path.</strong> Video pixels remain in shared memory
+until explicitly requested, and raw media is not embedded in runtime events
+or tool results.</p></li>
+<li><p><strong>Applications own behavior and resources.</strong> An agent owns its state,
+background tasks, lifecycle, queues, cancellation, and concurrency policy.
+Shared runtime packages provide delivery and composition rather than taking
+over that ownership.</p></li>
+<li><p><strong>Models are reached through typed factories.</strong> Vendor protocols and
+model-specific quirks remain behind <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code>, rather than spreading
+through workers.</p></li>
+<li><p><strong>Process dependencies are explicit.</strong> Orchestrators declare startup order,
+readiness, and ownership instead of relying on import-time side effects or
+an implicit global runtime.</p></li>
+<li><p><strong>Process and client readiness are distinct.</strong> Ready-files order launcher
+items and report only process readiness. DeviceIOHub owns client readiness.
+Agents opt in with <code class="docutils literal notranslate"><span class="pre">announces_readiness=True</span></code>, report only their own
+<code class="docutils literal notranslate"><span class="pre">_agent.status</span></code>, and gate only subscribed participants; the hub aggregates
+their status per participant. Passive processors do not gate clients.</p></li>
+</ul>
+<p>These constraints are the stable architecture. Individual transports, model
+backends, tools, and sample workflows are replaceable implementations within
+it.</p>
+</section>
+<section id="extension-points">
+<h2>Extension points<a class="headerlink" href="#extension-points" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>To add or replace</p></th>
+<th class="head"><p>Extend at this boundary</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>XR client</p></td>
+<td><p>Join through the client transport and consume participant-scoped return media and data</p></td>
+</tr>
+<tr class="row-odd"><td><p>Transport</p></td>
+<td><p>Implement the connector side of the hub IPC contract</p></td>
+</tr>
+<tr class="row-even"><td><p>Agent application</p></td>
+<td><p>Add a worker that uses <code class="docutils literal notranslate"><span class="pre">xr_ai_hub</span></code> and the relevant SDK packages</p></td>
+</tr>
+<tr class="row-odd"><td><p>Model or provider</p></td>
+<td><p>Add model configuration and an adapter behind the typed model protocols</p></td>
+</tr>
+<tr class="row-even"><td><p>Local capability</p></td>
+<td><p>Implement an in-process tool</p></td>
+</tr>
+<tr class="row-odd"><td><p>Shared or isolated capability</p></td>
+<td><p>Implement a typed service and a service-backed tool</p></td>
+</tr>
+<tr class="row-even"><td><p>Managed process</p></td>
+<td><p>Add a launcher <code class="docutils literal notranslate"><span class="pre">Process</span></code> entry and signal readiness from the process</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>For the repository conventions and concrete file layout used by new samples,
+refer to <a class="reference internal" href="../guides/adding-a-sample.html"><span class="doc">Adding a sample</span></a>.</p>
+</section>
+<section id="where-details-live">
+<h2>Where details live<a class="headerlink" href="#where-details-live" title="Link to this heading">#</a></h2>
+<p>This architecture overview intentionally stops at system structure and
+contracts. Use these references for implementation and operational detail:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Topic</p></th>
+<th class="head"><p>Authoritative page</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Hub IPC, shared memory, participant isolation, and LiveKit integration</p></td>
+<td><p><a class="reference internal" href="../components/server-runtime.html"><span class="doc">Server runtime</span></a></p></td>
+</tr>
+<tr class="row-odd"><td><p>SDK package boundaries, agents, voice, runtime events, and tools</p></td>
+<td><p><a class="reference internal" href="../components/agent-sdk.html"><span class="doc">Agent SDK</span></a></p></td>
+</tr>
+<tr class="row-even"><td><p>Model protocols, deployment profiles, NIM, vLLM, and persistent servers</p></td>
+<td><p><a class="reference internal" href="../components/ai-services.html"><span class="doc">AI services</span></a></p></td>
+</tr>
+<tr class="row-odd"><td><p>Process ordering, readiness, launch modes, and shutdown</p></td>
+<td><p><a class="reference internal" href="../components/launcher-and-process-model.html"><span class="doc">Launcher and process model</span></a></p></td>
+</tr>
+<tr class="row-even"><td><p>External ports, TLS, proxies, and firewall requirements</p></td>
+<td><p><a class="reference internal" href="../getting_started/networking.html"><span class="doc">Networking and firewall</span></a></p></td>
+</tr>
+<tr class="row-odd"><td><p>API keys and credential storage</p></td>
+<td><p><a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../index.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">XR AI</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../getting_started/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Getting Started</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+
+
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#system-context">System context</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#components-and-ownership">Components and ownership</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#runtime-data-paths">Runtime data paths</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#client-media-and-participant-events">Client media and participant events</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-model-and-tool-execution">Agent, model, and tool execution</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#process-and-deployment-model">Process and deployment model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#architectural-invariants">Architectural invariants</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#extension-points">Extension points</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#where-details-live">Where details live</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5"></script>
+
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+<a class="footer-brand logo" href="https://www.nvidia.com">
+  <img src="../_static/nvidia-logo-horiz-rgb-1c-blk-for-screen.svg" class="logo__image only-light" alt="NVIDIA"/>
+  <img src="../_static/nvidia-logo-horiz-rgb-1c-wht-for-screen.svg" class="logo__image only-dark" alt="NVIDIA"/>
+</a></div>
+      
+        <div class="footer-item">
+
+<div class="footer-links">
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/privacy-policy/">Privacy Policy</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/privacy-center/">Your Privacy Choices</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/terms-of-service/">Terms of Service</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/accessibility/">Accessibility</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/company-policies/">Corporate Policies</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/product-security/">Product Security</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/contact/">Contact</a>
+  
+  
+  
+</div>
+</div>
+      
+        <div class="footer-item">
+
+
+
+
+  <p class="copyright">
+    
+      Copyright © 2026, NVIDIA CORPORATION &amp; AFFILIATES.
+      <br/>
+    
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+  </body>
+</html>
