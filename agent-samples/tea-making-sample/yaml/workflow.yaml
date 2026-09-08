@@ -194,12 +194,16 @@ steps:
       consecutive: 2
     agent:
       prompt: >-
-        Judge when steeping starts, not when it finishes. If the fresh caption
-        shows tea visibly contacting liquid inside the vessel, first call
+        Judge when steeping starts, not when it finishes. Treat unconfirmed,
+        unknown, unclear, or missing visual evidence as a hard stop: do not call
+        clock__now, and commit empty updates and message with unknown evidence.
+        Only when the fresh caption explicitly confirms both visible liquid and
+        tea visibly contacting that liquid inside the same vessel, first call
         clock__now. Nearby, above, or outside the liquid does not count. Then
         commit exactly its epoch_us as steeping_started_at_us with
-        steeping_started true. Otherwise commit empty updates and message. Never
-        invent or replace a start time.
+        steeping_started true. For any other caption, do not infer contact from
+        context or prior state; commit empty updates and message. Never invent or
+        replace a start time.
       tools: [clock__now]
     voice:
       prompt: >-
