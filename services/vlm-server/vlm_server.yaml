@@ -15,9 +15,9 @@ hf_overrides:
 
 host: "0.0.0.0"
 port: 8100
-# Optional. Leave "" to inherit HF_TOKEN from the environment (the launcher
-# injects it from env / huggingface-cli / saved creds). Only needed for gated
-# models or to lift HF download rate limits / speed. See docs/source/getting_started/credentials.md.
+# Optional. HF_TOKEN in the environment takes priority over this value. Only
+# needed for gated models or to lift HF download rate limits. See
+# docs/source/getting_started/credentials.md.
 hf_token: ""
 
 # Shared weight cache — resolves relative to this YAML.
