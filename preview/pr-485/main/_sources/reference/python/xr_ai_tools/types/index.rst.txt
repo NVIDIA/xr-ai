@@ -1,0 +1,102 @@
+xr_ai_tools.types
+=================
+
+.. py:module:: xr_ai_tools.types
+
+.. autoapi-nested-parse::
+
+   Shared request and spatial value types for native XR tools.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_tools.types.StrictRequest
+   xr_ai_tools.types.EmptyRequest
+   xr_ai_tools.types.Vector3
+   xr_ai_tools.types.SpatialFrame
+
+
+Module Contents
+---------------
+
+.. py:class:: StrictRequest
+
+
+
+   Base model for tool requests that rejects undeclared arguments.
+
+
+.. py:class:: EmptyRequest
+
+
+
+   Request model for a tool that accepts no arguments.
+
+
+.. py:class:: Vector3
+
+
+
+   A three-dimensional Cartesian vector or position.
+
+
+   .. py:attribute:: x
+      :type:  float
+
+      Component on the x-axis.
+
+
+
+   .. py:attribute:: y
+      :type:  float
+
+      Component on the y-axis.
+
+
+
+   .. py:attribute:: z
+      :type:  float
+
+      Component on the z-axis.
+
+
+
+.. py:class:: SpatialFrame
+
+
+
+   An origin and orthogonal orientation axes in world space.
+
+
+   .. py:attribute:: origin
+      :type:  Vector3
+
+      World-space origin of the frame.
+
+
+
+   .. py:attribute:: forward
+      :type:  Vector3
+
+      Forward direction of the frame.
+
+
+
+   .. py:attribute:: right
+      :type:  Vector3
+
+      Right direction of the frame.
+
+
+
+   .. py:attribute:: up
+      :type:  Vector3
+
+      Up direction of the frame.
+
+
+
