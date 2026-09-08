@@ -154,7 +154,7 @@ trusting the certificate permanently or running over plain HTTP instead.
 Leave **Token URL** blank — the web client fetches a token from the server
 automatically. Click **Connect**.
 
-### Step 3 — Meet the VLM agent
+### Step 3 — Meet the agent
 
 The checked-in voice gate requires “Agent” or “Hey Agent” at the start of a
 spoken request. Typed requests do not use the voice gate. Begin by asking the
