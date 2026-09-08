@@ -539,10 +539,14 @@ used as the base for relative paths like <code class="docutils literal notransla
 <span class="sig-prename descclassname"><span class="pre">xr_ai_vllm.</span></span><span class="sig-name descname"><span class="pre">setup_hf_env</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_cache</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_vllm.setup_hf_env" title="Link to this definition">#</a></dt>
 <dd><p>Apply the shared HuggingFace / CUDA env block.</p>
 <p>Sets <code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code> (when configured), <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> (when
-provided), <code class="docutils literal notranslate"><span class="pre">HF_HUB_ENABLE_HF_TRANSFER</span></code>, <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code>, and
+provided), <code class="docutils literal notranslate"><span class="pre">HF_XET_HIGH_PERFORMANCE</span></code>, <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code>, and
 <code class="docutils literal notranslate"><span class="pre">TRANSFORMERS_CACHE</span></code>.</p>
-<p>Both <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> and <code class="docutils literal notranslate"><span class="pre">TRANSFORMERS_CACHE</span></code> are set via <code class="docutils literal notranslate"><span class="pre">setdefault</span></code>, so
-an externally-set value wins over the YAML default. This intentionally
+<p>The Xet setting uses <code class="docutils literal notranslate"><span class="pre">setdefault</span></code> so callers can disable high-performance
+mode explicitly. <code class="docutils literal notranslate"><span class="pre">HF_HUB_DISABLE_XET</span></code> is the separate Xet off switch.
+A deliberate <code class="docutils literal notranslate"><span class="pre">HF_HUB_ENABLE_HF_TRANSFER</span></code> opt-in is preserved for
+environments where the operator installed <code class="docutils literal notranslate"><span class="pre">hf_transfer</span></code> as a fallback.
+Both <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> and <code class="docutils literal notranslate"><span class="pre">TRANSFORMERS_CACHE</span></code> also use <code class="docutils literal notranslate"><span class="pre">setdefault</span></code>, so an
+externally-set value wins over the YAML default. This intentionally
 differs from the pre-consolidation per-server code where the LLM wrappers
 used an unconditional assignment for <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code>; callers that need the
 YAML value to take priority must unset the env var before calling.
@@ -627,13 +631,13 @@ to tell the launcher not to kill the wrapper on shutdown.</p>
 <p><em>container_name</em> is only consulted in docker mode. Use a stable,
 service-specific name (e.g. <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm-&lt;entry-point&gt;</span></code>) so the stop
 helper can find it.</p>
-<p><em>extra_pip</em> is docker-mode only: a list of pip-installable package
-specs that get installed into the container right before <code class="docutils literal notranslate"><span class="pre">vllm</span>
-<span class="pre">serve</span></code> runs (same shell line that already installs <code class="docutils literal notranslate"><span class="pre">hf_transfer</span></code>).
-Use it for models whose architecture imports a wheel the NGC image
-doesn’t bundle — e.g. <code class="docutils literal notranslate"><span class="pre">[&quot;mamba-ssm&quot;,</span> <span class="pre">&quot;causal-conv1d&quot;]</span></code> for
-Nemotron-Omni’s hybrid SSM backbone. Silently ignored in pip mode
-(deps belong in the wrapper’s pyproject.toml there).</p>
+<p>Docker mode verifies a Xet-capable Hub inside the container and repairs a
+missing or incompatible <code class="docutils literal notranslate"><span class="pre">hf-xet</span></code> wheel. <em>extra_pip</em> is an additional
+docker-only list of pip-installable package specs for model architectures
+whose wheels the image doesn’t bundle — e.g.
+<code class="docutils literal notranslate"><span class="pre">[&quot;mamba-ssm&quot;,</span> <span class="pre">&quot;causal-conv1d&quot;]</span></code> for Nemotron-Omni’s hybrid SSM
+backbone. Silently ignored in pip mode (deps belong in the wrapper’s
+pyproject.toml there).</p>
 </dd></dl>
 
 <dl class="py function">
