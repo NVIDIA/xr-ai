@@ -43,33 +43,10 @@ from .scene import SceneContext
 
 _PROMPT = Path(__file__).with_name("supervisor_prompt.txt")
 
-_DANGLING_DETERMINERS = frozenset("a an the my your its".split())
-
-_DANGLING_PREPOSITIONS = frozenset(
-    "of to on in at by and or with near under over "
-    "onto into between behind above below beside toward towards from".split()
-)
-
-_ARTICLES = frozenset({"a", "an", "the", "my", "your", "its"})
-
 # Shared punctuation strip set, unicode ellipsis and quotes included.
-# Detection strips per word; the ask-back strips the transcript tail.
 _EDGE_PUNCT = ".,!?;:\"'…“”‘’"
 
-_WH_WORDS = frozenset("what which where when why who whom whose how".split())
-
-# Subjects that make a following -ing word a progressive verb ("the wall
-# I'm staring at" is complete; "the lamp on the ceiling in" is not).
-_PROGRESSIVE_SUBJECTS = frozenset(
-    "am is are was were be been being "
-    "i'm im he's she's it's you're we're they're user user's".split()
-)
-
-_TRUNCATED_ASK = "I think I missed the end of that."
-
-_CANCEL_PHRASES = frozenset({
-    "never mind", "nevermind", "forget it", "forget that", "cancel", "cancel that", "no", "stop",
-})
+_WH_WORDS = frozenset("what what's whats which where when why who whom whose how".split())
 
 _ACTION_VERBS = frozenset(
     "put place move make create add remove delete drop turn rotate resize double halve shrink "
@@ -87,9 +64,6 @@ _SCENE_SETTLE_S = 0.15
 # persists across sessions, and older turns read as answers to new
 # questions. History beyond the window is memory_agent's to recall.
 _RECENT_WINDOW_US = 10 * 60 * 1_000_000
-
-_PENDING_ASK_WINDOW_US = 8 * 1_000_000
-
 
 # Leading words that mark a status question about past work ("Did you move
 # the cube?"); unlike can/could/will, they cannot open a polite command.
@@ -119,61 +93,6 @@ def _claims_completion(text: str) -> bool:
 
 def _is_question(text: str) -> bool:
     return text.rstrip().rstrip("\"'”’)").rstrip().endswith("?")
-
-
-def _is_truncated(transcript: str) -> bool:
-    words = [w.strip(_EDGE_PUNCT) for w in transcript.strip().lower().split()]
-    words = [w for w in words if w]
-    if not words:
-        return False
-    if words[-1] in _DANGLING_DETERMINERS:
-        return True
-    if words[-1] in _DANGLING_PREPOSITIONS:
-        # Only a recognized complete tail construction exempts a trailing
-        # preposition: a leading wh-question ("What am I looking at") or a
-        # progressive construction right before it ("the wall I'm staring
-        # at"). Terminal punctuation, embedded wh-words, and bare -ing nouns
-        # ("the ceiling in") all appear on cut input.
-        if words[0] in _WH_WORDS:
-            return False
-        prev = words[-2] if len(words) >= 2 else ""
-        subject = words[-3] if len(words) >= 3 else ""
-        if prev.endswith("ing") and subject in _PROGRESSIVE_SUBJECTS:
-            return False
-        return True
-    return False
-
-
-def _truncated_reply(transcript: str) -> str:
-    words = transcript.strip().rstrip(_EDGE_PUNCT).split()
-    tail = words[-1]
-    if tail.lower() in _ARTICLES and len(words) >= 2:
-        tail = f"{words[-2]} {tail}"
-    return f"{_TRUNCATED_ASK} {tail.capitalize()} what?"
-
-
-def _splice_completion(prefix: str, completion: str) -> str:
-    head = prefix.strip().rstrip(".?!,;")
-    tail_words = completion.strip().rstrip(".?!,;").split()
-    head_words = head.split()
-    for overlap in (3, 2, 1):
-        if (
-            len(head_words) >= overlap
-            and len(tail_words) >= overlap
-            and [w.lower() for w in head_words[-overlap:]] == [w.lower() for w in tail_words[:overlap]]
-        ):
-            tail_words = tail_words[overlap:]
-            break
-    return f"{head} {' '.join(tail_words)}".strip() + "."
-
-
-def _resolve_truncation_reply(prefix: str, transcript: str) -> str | None:
-    words = transcript.strip().rstrip(".?!,;").lower()
-    if words in _CANCEL_PHRASES:
-        return None
-    if any(word in _ACTION_VERBS for word in words.split()):
-        return transcript
-    return _splice_completion(prefix, transcript)
 
 
 class SceneSupervisor:
@@ -236,38 +155,27 @@ class SceneSupervisor:
 
     async def _recent_conversation(
         self, participant_id: str, reference_us: int
-    ) -> tuple[str, str]:
+    ) -> str:
         recalled = await self._text_memory.recall_conversation.execute(
             RecallConversationRequest(participant_id=participant_id)
         )
-        # A departure ends the session: turns before the last leave neither
-        # re-enter the block nor complete a clipped ask, however recent.
+        # A departure ends the session: turns before the last leave do not
+        # re-enter the block, however recent.
         left_us = self._left_at_us.get(participant_id, 0)
         session = [e for e in recalled.entries if e.timestamp_us >= left_us]
-        # A clipped utterance is completed within seconds or not at all.
-        pending = ""
-        tail = session[-2:]
-        if (
-            len(tail) == 2
-            and tail[1].role == "agent"
-            and tail[1].text.startswith(_TRUNCATED_ASK)
-            and tail[1].timestamp_us >= reference_us - _PENDING_ASK_WINDOW_US
-            and tail[0].role == "user"
-        ):
-            pending = tail[0].text
         # User turns carry the hub's clock, agent turns the worker's; the
         # window assumes both are wall-clock microseconds. The age window
         # covers worker restarts, which leave no departure record.
         cutoff_us = reference_us - _RECENT_WINDOW_US
         entries = [e for e in session if e.timestamp_us >= cutoff_us][-8:]
         if not entries:
-            return "", pending
+            return ""
         lines = [f"  {'User' if e.role == 'user' else 'Agent'}: {e.text}" for e in entries]
         block = (
             "[Recent conversation] (already handled; never a source of new work)\n"
             + "\n".join(lines) + "\n\n"
         )
-        return block, pending
+        return block
 
     async def _persist_turn(self, request: SceneRequest, user_text: str, reply_text: str) -> None:
         await self._text_memory.add_transcript.execute(
@@ -292,13 +200,6 @@ class SceneSupervisor:
         current_trace_id.set(request.trace_id)
         current_participant_id.set(request.participant_id)
         current_reference_time_us.set(request.timestamp_us)
-        if _is_truncated(request.transcript):
-            # The ask must reach memory: the next turn's completion splice
-            # keys off the recalled truncated-ask reply.
-            reply = _truncated_reply(request.transcript)
-            await self._persist_turn(request, request.transcript, reply)
-            return SceneReply(response=reply)
-
         async with self._participant_locks[request.participant_id]:
             return await self._handle(request)
 
@@ -307,17 +208,10 @@ class SceneSupervisor:
             "supervisor turn participant={} trace={} transcript={!r}",
             request.participant_id, request.trace_id, request.transcript[:80],
         )
-        conversation, pending_truncation = await self._recent_conversation(
+        conversation = await self._recent_conversation(
             request.participant_id, request.timestamp_us
         )
         transcript = request.transcript
-        if pending_truncation:
-            resolved = _resolve_truncation_reply(pending_truncation, transcript)
-            if resolved is None:
-                reply = "Okay, never mind that."
-                await self._persist_turn(request, request.transcript, reply)
-                return SceneReply(response=reply)
-            transcript = resolved
 
         async with self._scene_lock:
             return await self._handle_scene(request, transcript, conversation)
