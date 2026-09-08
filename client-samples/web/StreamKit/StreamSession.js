@@ -79,6 +79,18 @@ export class StreamSession {
    */
   onNetworkMetrics = null;
 
+  /**
+   * Opt-in image capture capability invoked by a remote agent.
+   * Return `{ data, mimeType, name? }`, where data is encoded JPEG, PNG, or WebP.
+   *
+   * @type {((request: {requestId: string, timeoutMs: number, signal: AbortSignal}) =>
+   *   Promise<{data: ArrayBuffer|Uint8Array, mimeType: string, name?: string}>) | null}
+   */
+  onImageCaptureRequested = null;
+
+  /** @type {Map<string, AbortController>} */
+  #captureRequests = new Map();
+
   // ── Constructor ─────────────────────────────────────────────────────────────
 
   /**
@@ -167,6 +179,8 @@ export class StreamSession {
    * @returns {Promise<void>}
    */
   async disconnect() {
+    for (const controller of this.#captureRequests.values()) controller.abort();
+    this.#captureRequests.clear();
     await this.#backend.disconnect();
   }
 
@@ -240,6 +254,14 @@ export class StreamSession {
     };
 
     this.#backend.onDataReceived = (topic, data) => {
+      if (topic === 'camera.capture.request') {
+        this.#handleCaptureRequest(data);
+        return;
+      }
+      if (topic === 'camera.capture.cancel') {
+        this.#handleCaptureCancel(data);
+        return;
+      }
       this.onDataReceived?.(topic, data);
     };
 
@@ -250,5 +272,52 @@ export class StreamSession {
     this.#backend.onNetworkMetrics = (metrics) => {
       this.onNetworkMetrics?.(metrics);
     };
+  }
+
+  async #handleCaptureRequest(data) {
+    let request;
+    try {
+      request = JSON.parse(new TextDecoder().decode(data));
+    } catch {
+      return;
+    }
+    const requestId = request?.request_id;
+    if (request?.version !== 1 || typeof requestId !== 'string' || !requestId) return;
+    const handler = this.onImageCaptureRequested;
+    if (!handler || typeof this.#backend.sendImage !== 'function') return;
+
+    this.#captureRequests.get(requestId)?.abort();
+    const controller = new AbortController();
+    this.#captureRequests.set(requestId, controller);
+    try {
+      const image = await handler({
+        requestId,
+        timeoutMs: Number(request.timeout_ms) || 0,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      if (!image || !['image/jpeg', 'image/png', 'image/webp'].includes(image.mimeType)) {
+        throw new TypeError('image capture must return encoded JPEG, PNG, or WebP data');
+      }
+      await this.#backend.sendImage(image.data, {
+        requestId,
+        mimeType: image.mimeType,
+        name: image.name,
+      });
+    } catch (error) {
+      if (!controller.signal.aborted) console.warn('StreamSession image capture failed', error);
+    } finally {
+      if (this.#captureRequests.get(requestId) === controller) {
+        this.#captureRequests.delete(requestId);
+      }
+    }
+  }
+
+  #handleCaptureCancel(data) {
+    try {
+      const request = JSON.parse(new TextDecoder().decode(data));
+      this.#captureRequests.get(request?.request_id)?.abort();
+      this.#captureRequests.delete(request?.request_id);
+    } catch { /* malformed cancellation */ }
   }
 }
