@@ -250,9 +250,12 @@ services. On each accepted `xr-render.user-query` event:
    mutating subagent was delegated, or a non-question utterance contains a
    change-requesting verb): if no scene change is observed within 150 ms
    of the loop completing, a second `run_tool_loop` call is made so the
-   supervisor can delegate remaining work or confirm a no-op turn. Success
-   is then evidence-backed: unless a scene write was applied somewhere in
-   the turn (or a recolor found the requested color already in place), a
+   supervisor can delegate remaining work or confirm a no-op turn. A turn
+   in which a tool refused a shape word skips this pass: the refusal is the
+   answer, and any later creation of a shape the utterance never named is
+   rejected as a substitute. Success is then evidence-backed: unless a
+   scene write was applied somewhere in the turn (or a recolor found the
+   requested color already in place), a
    completion claim is replaced with a fixed honest no-change sentence and
    any other non-question reply gets the no-change fact appended. Evidence
    is counted per turn, not per delegated task.

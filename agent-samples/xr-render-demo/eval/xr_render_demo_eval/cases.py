@@ -422,7 +422,7 @@ CASES = [
         "name":  "three_objects_around_me",
         "scene": [],
         "user":  "Put a red sphere in front of me, a blue cube to my right, "
-                 "and a green pyramid behind me.",
+                 "and a green ball behind me.",
         "result": [
             {"tool": "add_primitive",
              "args": {"prim_type": "sphere",
@@ -433,7 +433,7 @@ CASES = [
                       "b": (0.5, 1.0), "r": (0.0, 0.3), "g": (0.0, 0.5),
                       "x": (0.3, 3.0)}},
             {"tool": "add_primitive",
-             "args": {"prim_type": "pyramid",
+             "args": {"prim_type": "sphere",
                       "g": (0.5, 1.0), "r": (0.0, 0.4), "b": (0.0, 0.4),
                       "z": (0.3, 3.0)}},
         ],
@@ -791,10 +791,10 @@ CASES = [
             {"id": "box-0", "type": "box",
              "pos": [-2.0, 1.6, 0.0], "color": [1, 1, 0], "size": 0.1},
         ],
-        "user":  "Put a green pyramid between the red sphere and the blue sphere.",
+        "user":  "Put a green cube between the red sphere and the blue sphere.",
         "result": [
             {"tool": "add_primitive",
-             "args": {"prim_type": "pyramid",
+             "args": {"prim_type": "box",
                       "g": (0.5, 1.0), "r": (0.0, 0.4), "b": (0.0, 0.4),
                       "x": (-0.05, 0.05),
                       "y": ( 1.55, 1.65),

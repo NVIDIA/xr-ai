@@ -51,12 +51,33 @@ _COLOR_WORDS = {
     "white": (1, 1, 1), "black": (0, 0, 0), "teal": (0, 0.8, 0.8), "turquoise": (0.2, 0.9, 1),
     "lavender": (0.6, 0.4, 1), "pink": (1, 0.5, 0.8), "gray": (0.5, 0.5, 0.5), "grey": (0.5, 0.5, 0.5),
 }
+# LOVR draws box and sphere, so creation accepts only words for those two.
+_DRAWN_SHAPES = ("box", "sphere")
 _SHAPE_WORDS = {
-    "box": "box", "cube": "box", "block": "box", "crate": "box",
-    "sphere": "sphere", "ball": "sphere", "orb": "sphere",
-    "cone": "cone", "cylinder": "cylinder", "capsule": "capsule",
-    "ring": "ring", "pyramid": "pyramid", "torus": "torus", "donut": "torus",
+    "box": "box", "cube": "box", "block": "box", "crate": "box", "brick": "box",
+    "cuboid": "box", "rectangle": "box", "rectangular": "box", "prism": "box", "square": "box",
+    "sphere": "sphere", "ball": "sphere", "orb": "sphere", "globe": "sphere", "circle": "sphere",
 }
+# Fuzzy matching repairs misspellings of these nouns only; against every synonym,
+# "triangle" matches rectangle and "star" matches square.
+_FUZZY_SHAPE_NOUNS = ("ball", "box", "cube", "sphere")
+
+
+def _shape_word(word: str, scene_types: frozenset[str] = frozenset()) -> str | None:
+    """Canonical shape for one word: a creation synonym, or the type of an object
+    already in the scene so seeded objects of other types stay addressable."""
+    if word in _SHAPE_WORDS:
+        return _SHAPE_WORDS[word]
+    if word in scene_types:
+        return word
+    close = difflib.get_close_matches(word, _FUZZY_SHAPE_NOUNS, n=1, cutoff=0.7)
+    return _SHAPE_WORDS[close[0]] if close else None
+
+
+def canonical_shapes(text: str) -> set[str]:
+    """Every renderer shape the text names, misspellings repaired."""
+    words = re.findall(r"[a-z]+", text.lower())
+    return {shape for word in words if (shape := _shape_word(word)) is not None}
 
 # A discriminated color source: the subagent LLM picks the kind through the
 # tool schema; the code dispatches on it without reinterpreting the phrase.
@@ -201,7 +222,12 @@ class _Leaves:
             logger.debug("spatial op lookup failed: {!r} not in {}", object_ref, known)
             raise ValueError(f"No scene object with id {object_ref!r}; the scene has {known}")
         words = re.findall(r"[a-z]+", wanted)
-        exact_shape = next((_SHAPE_WORDS[word] for word in words if word in _SHAPE_WORDS), None)
+        scene_types = frozenset(item.type for item in state.objects)
+        exact_shape = next(
+            (_shape_word(word, scene_types) for word in reversed(words)
+             if word in _SHAPE_WORDS or word in scene_types),
+            None,
+        )
         color = next((_COLOR_WORDS[word] for word in words if word in _COLOR_WORDS), None)
 
         def select(shape: str | None) -> list[SceneObject]:
@@ -221,9 +247,8 @@ class _Leaves:
             for word in words:
                 if word in _COLOR_WORDS:
                     continue
-                close = difflib.get_close_matches(word, _SHAPE_WORDS, n=1, cutoff=0.6)
-                if close:
-                    fuzzy = select(_SHAPE_WORDS[close[0]])
+                if (shape := _shape_word(word, scene_types)) is not None:
+                    fuzzy = select(shape)
                     if fuzzy and (not candidates or len(fuzzy) < len(candidates)):
                         candidates = fuzzy
                     break
@@ -244,23 +269,39 @@ class _Leaves:
         )
 
     def shape(self, shape_words: str) -> str:
+        # The last shape word is the noun ("square pyramid" is a pyramid).
         words = re.findall(r"[a-z]+", shape_words.lower())
-        for word in words:
+        for word in reversed(words):
             if word in _SHAPE_WORDS:
-                return _SHAPE_WORDS[word]
+                return self._not_substituted(_SHAPE_WORDS[word], shape_words)
         for word in words:
             if word in _COLOR_WORDS:
                 raise ValueError(
                     f"{word!r} is a color, not a shape. Do not change the shape; "
                     "report the color change back as a recolor for appearance_agent."
                 )
-        for word in words:
-            close = difflib.get_close_matches(word, _SHAPE_WORDS, n=1, cutoff=0.6)
-            if close:
-                logger.debug("shape words resolved {!r} -> {}", shape_words, _SHAPE_WORDS[close[0]])
-                return _SHAPE_WORDS[close[0]]
-        shapes = ", ".join(sorted(set(_SHAPE_WORDS.values())))
-        raise ValueError(f"Unknown shape {shape_words!r}; the renderer draws: {shapes}")
+        for word in reversed(words):
+            if (shape := _shape_word(word)) is not None:
+                logger.debug("shape words resolved {!r} -> {}", shape_words, shape)
+                return self._not_substituted(shape, shape_words)
+        logger.debug("shape words refused {!r}", shape_words)
+        _record("refused")
+        shapes = ", ".join(_DRAWN_SHAPES)
+        raise ValueError(
+            f"Unknown shape {shape_words!r}; the renderer draws only: {shapes}. Never substitute "
+            "another shape; make no further tool call and report back asking which of those is meant."
+        )
+
+    @staticmethod
+    def _not_substituted(shape: str, shape_words: str) -> str:
+        evidence = current_mutation_evidence.get()
+        if evidence is None or not evidence.refused or shape in evidence.uttered_shapes:
+            return shape
+        raise ValueError(
+            f"{shape_words!r} is a substitute: this turn already refused a shape the user asked "
+            "for, and the user never said this one. Make no further tool call and report that "
+            "refusal back."
+        )
 
     async def resolve_color(self, kind: _ColorKind, value: str) -> tuple[float, float, float]:
         if kind == "literal":
@@ -753,5 +794,5 @@ def make_object_tools(
 __all__ = [
     "CreatedObject", "CreationLedger", "MovedObject", "RecoloredObject", "RemovedObject",
     "SwappedObjects", "TurnGuard",
-    "make_appearance_tools", "make_object_tools", "make_placement_tools",
+    "canonical_shapes", "make_appearance_tools", "make_object_tools", "make_placement_tools",
 ]

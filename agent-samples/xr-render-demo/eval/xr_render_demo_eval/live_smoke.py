@@ -10,7 +10,7 @@ import time
 from xr_ai_hub import DataMessage
 from xr_render_scene import EmptyRequest, SceneClient
 
-from ._live_endpoint import LiveEvalEndpoint, live_participant
+from ._live_endpoint import LiveEvalEndpoint, live_participant, simulated_pose
 
 
 async def main() -> None:
@@ -18,12 +18,11 @@ async def main() -> None:
     participant = f"live-smoke-{int(time.time())}"
     endpoint = LiveEvalEndpoint()
     scene = SceneClient("tcp://127.0.0.1:8320")
-    before = {item.id: item for item in (await scene.get_scene_state(EmptyRequest())).objects}
-
-    await asyncio.sleep(0.5)
     changed = False
     try:
-        async with live_participant(endpoint, participant):
+        before = {item.id: item for item in (await scene.get_scene_state(EmptyRequest())).objects}
+        await asyncio.sleep(0.5)
+        async with simulated_pose(), live_participant(endpoint, participant):
             await endpoint.inject_data(DataMessage(
                 participant_id=participant,
                 topic="",

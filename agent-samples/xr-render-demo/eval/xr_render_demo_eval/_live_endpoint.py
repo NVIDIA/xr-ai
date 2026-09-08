@@ -18,6 +18,11 @@ import zmq
 import zmq.asyncio
 from xr_ai_hub._codec import encode
 from xr_ai_hub._types import DataMessage, MsgType, ParticipantEvent
+from xr_ai_tools.rpc import RPCClient
+
+CANONICAL_POSE = {"position": {"x": 0, "y": 1.6, "z": 0}, "forward": {"x": 0, "y": 0, "z": -1},
+                  "right": {"x": 1, "y": 0, "z": 0}, "up": {"x": 0, "y": 1, "z": 0},
+                  "yaw_deg": 0.0, "pitch_deg": 0.0, "ts": 1}
 
 
 class LiveEvalEndpoint:
@@ -44,6 +49,27 @@ class LiveEvalEndpoint:
 
     async def close(self) -> None:
         self._push.close(linger=0)
+
+
+@asynccontextmanager
+async def simulated_pose(pose: dict = CANONICAL_POSE, endpoint: str = "tcp://127.0.0.1:8330"):
+    """Inject a head pose for one driver run and always clear it afterwards."""
+    tracking = RPCClient(endpoint, timeout_s=10.0)
+    try:
+        await tracking.call("set_sim_pose", pose)
+    except Exception as error:
+        print(f"openxr service refused set_sim_pose ({error}); set allow_sim_pose: true in "
+              "agent-samples/xr-render-demo/yaml/openxr_service.yaml and restart the stack")
+        await tracking.close()
+        raise SystemExit(2) from None
+    try:
+        yield tracking
+    finally:
+        try:
+            await tracking.call("clear_sim_pose", {})
+        except Exception:
+            pass
+        await tracking.close()
 
 
 @asynccontextmanager

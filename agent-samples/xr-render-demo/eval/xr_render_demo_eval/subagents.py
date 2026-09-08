@@ -208,11 +208,11 @@ CASES = (
     SubagentCase(
         name="misspelled_color_create",
         agent="object",
-        instruction="Create a teel capsule, no position stated.",
+        instruction="Create a teel cube, no position stated.",
         forbid_tools=("resolve_physical_color",),
         expect=(
             {"tool": "add_primitive",
-             "args": {"prim_type": "capsule", "r": (0.0, 0.1), "g": (0.75, 0.85), "b": (0.75, 0.85)}},
+             "args": {"prim_type": "box", "r": (0.0, 0.1), "g": (0.75, 0.85), "b": (0.75, 0.85)}},
         ),
     ),
     SubagentCase(

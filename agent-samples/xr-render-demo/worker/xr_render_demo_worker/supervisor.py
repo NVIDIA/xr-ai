@@ -18,6 +18,7 @@ from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.text_memory import AddTranscriptRequest, RecallConversationRequest, TextMemoryTools
 from xr_ai_tools.tool_calling import ToolLoopError, run_tool_loop
+from xr_ai_tools.tools import ToolInvocationResult
 from xr_ai_tools.tracking import TrackingTools
 from xr_ai_tools.video_memory import VideoMemoryTools
 from xr_ai_tools.vision import ImageQueryTool
@@ -40,6 +41,7 @@ from .agents import (
 )
 from .models import SceneReply, SceneRequest
 from .scene import SceneContext
+from .spatial_ops import canonical_shapes
 
 _PROMPT = Path(__file__).with_name("supervisor_prompt.txt")
 
@@ -56,6 +58,29 @@ _ACTION_VERBS = frozenset(
 
 
 _MUTATING_AGENTS = frozenset({"placement_agent", "appearance_agent", "object_agent"})
+
+_REFUSAL_REPLY = "I can only make a box or a sphere. Which would you like?"
+
+
+class _FinalOnRefusal(Tool):
+    """End the turn once a shape was refused and nothing was written: left to
+    the model, the supervisor re-delegates substitute shapes until the
+    iteration limit."""
+
+    async def invoke(self, arguments: str) -> ToolInvocationResult:
+        result = await super().invoke(arguments)
+        evidence = current_mutation_evidence.get()
+        if evidence is not None and evidence.refused and not (evidence.applied or evidence.satisfied):
+            return ToolInvocationResult(content=_REFUSAL_REPLY, return_direct=True)
+        return result
+
+
+def _final_on_refusal(tools: list[Tool]) -> ToolSet:
+    return ToolSet([
+        _FinalOnRefusal(tool.name, tool.description, tool.request_model, tool.result_model,
+                        tool.handler, return_direct=tool.return_direct)
+        for tool in tools
+    ])
 
 # Seconds to let a scene RPC propagate before diffing snapshots.
 _SCENE_SETTLE_S = 0.15
@@ -137,7 +162,7 @@ class SceneSupervisor:
         self._llm = llm
         self._context = context
         self._text_memory = text_memory
-        self._toolset = ToolSet(subagent_tools)
+        self._toolset = _final_on_refusal(subagent_tools)
         self._prompt = _PROMPT.read_text(encoding="utf-8").strip()
         self._participant_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._scene_lock: asyncio.Lock = asyncio.Lock()
@@ -220,6 +245,7 @@ class SceneSupervisor:
         self, request: SceneRequest, transcript: str, conversation: str
     ) -> SceneReply:
         evidence = MutationEvidence()
+        evidence.uttered_shapes = canonical_shapes(transcript)
         current_mutation_evidence.set(evidence)
         before = await self._context.snapshot()
 
@@ -257,7 +283,9 @@ class SceneSupervisor:
 
         await asyncio.sleep(_SCENE_SETTLE_S)
         if needs_verification and not SceneContext.changes(before, await self._context.snapshot()):
-            if delegated & _MUTATING_AGENTS:
+            if evidence.refused:
+                nudge = None
+            elif delegated & _MUTATING_AGENTS:
                 nudge = (
                     "Verified scene changes this turn: none. If the request needed a"
                     " scene change, delegate the remaining work now; if it needed"
@@ -273,18 +301,19 @@ class SceneSupervisor:
                     " be done, say plainly that nothing was changed and why; never"
                     " reply that a change was made."
                 )
-            verification_messages = list(result.messages) + [
-                ChatMessage(role="user", content=nudge),
-            ]
-            try:
-                result2 = await run_tool_loop(
-                    verification_messages, self._toolset, _call_model, max_iterations=6
-                )
-            except ToolLoopError as exc:
-                logger.warning("supervisor verification failed ({})", exc)
-            else:
-                output = result2.content
-            await asyncio.sleep(_SCENE_SETTLE_S)
+            if nudge is not None:
+                verification_messages = list(result.messages) + [
+                    ChatMessage(role="user", content=nudge),
+                ]
+                try:
+                    result2 = await run_tool_loop(
+                        verification_messages, self._toolset, _call_model, max_iterations=6
+                    )
+                except ToolLoopError as exc:
+                    logger.warning("supervisor verification failed ({})", exc)
+                else:
+                    output = result2.content
+                await asyncio.sleep(_SCENE_SETTLE_S)
             # Success is evidence-backed: a completion claim may stand only
             # when a scene write was applied (or the requested state already
             # held), never on the model's wording alone. A claim-free

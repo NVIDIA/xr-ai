@@ -283,7 +283,7 @@ CASES = (
     ),
     Case(
         name="create_in_front_of_moved_user",
-        request="Add a yellow cone ahead of me.",
+        request="Add a yellow cube ahead of me.",
         pose=SpatialFrame(
             origin=Vector3(x=2.0, y=1.6, z=1.5),
             forward=Vector3(x=0, y=0, z=-1),
@@ -379,6 +379,58 @@ CASES = (
         expected_colors=(("cylinder-0", (0.0, 0.8, 0.8)),),
     ),
     Case(
+        name="scene_question_reads_scene_objects_not_camera",
+        request="What's in the scene right now?",
+        scene=(
+            {"id": "sphere-0", "type": "sphere",
+             "position": {"x": 0.0, "y": 1.6, "z": -1.5},
+             "color": {"r": 1, "g": 0, "b": 0}, "size": 0.1},
+        ),
+        forbidden_tools=frozenset({
+            "look_at_current_frame", "look_at_past_frame",
+            "add_primitive", "update_primitive", "remove_primitive",
+        }),
+        reply_contains="sphere",
+    ),
+    Case(
+        name="generic_creation_asks_for_shape",
+        request="Create an object.",
+        forbidden_tools=frozenset({"add_primitive", "update_primitive", "remove_primitive"}),
+        reply_contains="?",
+    ),
+    Case(
+        name="rectangle_creates_box",
+        request="Create a red rectangle.",
+        expected_call_counts=(("add_primitive", 1),),
+        expected_colors=(("box-0", (1.0, 0.0, 0.0)),),
+    ),
+    Case(
+        name="rectangle_recolor_finds_box",
+        request="Make the rectangle green.",
+        scene=(
+            {"id": "box-0", "type": "box",
+             "position": {"x": 0.0, "y": 1.6, "z": -1.5},
+             "color": {"r": 1, "g": 0, "b": 0}, "size": 0.1},
+        ),
+        history=(("Create a red rectangle.", "Added a red rectangle in front of you."),),
+        forbidden_tools=frozenset({"add_primitive", "remove_primitive"}),
+        expected_colors=(("box-0", (0.0, 0.8, 0.0)),),
+    ),
+    Case(
+        name="unknown_shape_never_substitutes",
+        request="Create a red hexagon.",
+        forbidden_tools=frozenset({"add_primitive", "update_primitive", "remove_primitive"}),
+        reply_contains="sphere",
+        reply_excludes="cone",
+    ),
+    Case(
+        name="unknown_shape_keeps_the_rest_of_the_request",
+        request="Create a red hexagon and a blue sphere.",
+        expected_call_counts=(("add_primitive", 1),),
+        expected_colors=(("sphere-0", (0.0, 0.4, 1.0)),),
+        reply_contains="hexagon",
+    ),
+    Case(
         name="create_between_two_xr_objects",
         request="Put a green sphere between the red box and the blue capsule.",
         scene=(
@@ -415,9 +467,9 @@ CASES = (
                 "size": 0.1,
             },
         ),
-        required_tools=frozenset({"add_primitive"}),
-        forbidden_tools=frozenset({"update_primitive", "remove_primitive"}),
-        expected_call_counts=(("add_primitive", 1),),
+        forbidden_tools=frozenset({"add_primitive", "update_primitive", "remove_primitive"}),
+        expected_colors=(("sphere-0", (1.0, 0.0, 0.0)),),
+        reply_contains="?",
     ),
     Case(
         name="unavailable_live_camera",
@@ -867,10 +919,10 @@ UTTERANCES = (
         name="basics_compound_one_part_blocked",
         # One blocked part of a compound turn never blocks the others: the
         # creation still lands while the perception part reports the outage.
-        request="Create a purple ring, then tell me what is printed on my shirt.",
+        request="Create a purple cube, then tell me what is printed on my shirt.",
         camera_error="RPCError: camera feed unavailable",
         required_tools=frozenset({"add_primitive"}),
-        expected_colors=(("ring-0", (0.6, 0.0, 1.0)),),
+        expected_colors=(("box-0", (0.6, 0.0, 1.0)),),
     ),
     Case(
         name="basics_physical_source_camera_down",
@@ -1267,7 +1319,7 @@ async def run_case(case: Case) -> bool:
 # memorizes as templates; any overlap with case inputs, history turns, or
 # fixture text means the eval scores recall, not behavior.
 _EVAL_VOCAB_COLORS = ("red", "green", "blue", "yellow", "cyan", "orange", "purple", "white", "black")
-_EVAL_VOCAB_SHAPES = ("sphere", "cube", "box", "ball")
+_EVAL_VOCAB_SHAPES = ("sphere", "cube", "box", "ball", "rectangle", "hexagon")
 
 
 def audit_prompts() -> None:

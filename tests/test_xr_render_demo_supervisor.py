@@ -16,6 +16,7 @@ from xr_ai_tools.text_memory import (
 )
 from xr_ai_voice import UserQuery
 from xr_render_demo_eval import harness
+from xr_render_demo_worker._trace import current_mutation_evidence
 from xr_render_demo_worker.agent import RenderAgent
 from xr_render_demo_worker.models import SceneRequest
 from xr_render_demo_worker.supervisor import SceneSupervisor
@@ -138,6 +139,80 @@ async def test_mixed_vision_and_mutation_request_still_verifies(monkeypatch) -> 
     assert loop_calls == 2
 
 
+def _refusing_loop(content: str):
+    calls = {"n": 0, "uttered": None}
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        calls["n"] += 1
+        evidence = current_mutation_evidence.get()
+        evidence.refused += 1
+        calls["uttered"] = evidence.uttered_shapes
+        return SimpleNamespace(
+            content=content,
+            messages=list(messages),
+            tool_calls=(SimpleNamespace(call=SimpleNamespace(name="object_agent")),),
+        )
+
+    return fake_loop, calls
+
+
+async def test_refused_shape_skips_verification_nudge(monkeypatch) -> None:
+    supervisor, _fake = _make_supervisor()
+    fake_loop, calls = _refusing_loop("I can't draw a xylophone. Would you like a box or a sphere?")
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="Create a red xylophone next to the spear.", participant_id="alice"))
+    assert calls["n"] == 1
+    assert calls["uttered"] == {"sphere"}
+    assert reply.response == "I can't draw a xylophone. Would you like a box or a sphere?"
+
+
+async def test_refused_shape_completion_claim_is_replaced(monkeypatch) -> None:
+    supervisor, _fake = _make_supervisor()
+    fake_loop, calls = _refusing_loop("Added a red box.")
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+
+    reply = await supervisor.handle(SceneRequest(
+        transcript="Create a red xylophone.", participant_id="alice"))
+    assert calls["n"] == 1
+    assert reply.response == "I couldn't make that change; nothing in the scene was changed."
+
+
+async def test_refusal_ends_the_turn_with_a_fixed_question() -> None:
+    from xr_render_demo_worker._trace import MutationEvidence
+    from xr_render_demo_worker.models import SubagentResult, SubagentTask
+    from xr_render_demo_worker.supervisor import _REFUSAL_REPLY, _final_on_refusal
+
+    async def refuse(request: SubagentTask) -> SubagentResult:
+        current_mutation_evidence.get().refused += 1
+        return SubagentResult(result="Unknown shape.")
+
+    async def create(request: SubagentTask) -> SubagentResult:
+        current_mutation_evidence.get().applied += 1
+        return SubagentResult(result="Created sphere-0.")
+
+    toolset = _final_on_refusal([
+        Tool("object_agent", "Objects.", SubagentTask, SubagentResult, refuse),
+        Tool("other_agent", "Other.", SubagentTask, SubagentResult, create),
+    ])
+    tools = dict(toolset.items())
+    token = current_mutation_evidence.set(MutationEvidence())
+    try:
+        first = await tools["other_agent"].invoke('{"instruction": "Create a sphere."}')
+        assert not first.return_direct and "sphere-0" in first.content
+        second = await tools["object_agent"].invoke('{"instruction": "Create a hexagon."}')
+        assert not second.return_direct
+    finally:
+        current_mutation_evidence.reset(token)
+    token = current_mutation_evidence.set(MutationEvidence())
+    try:
+        only = await tools["object_agent"].invoke('{"instruction": "Create a hexagon."}')
+    finally:
+        current_mutation_evidence.reset(token)
+    assert only.return_direct and only.content == _REFUSAL_REPLY
+
+
 async def test_verification_never_offers_repeat_when_mutation_undelegated(monkeypatch) -> None:
     """A change-requesting utterance whose first pass delegated no mutating
     subagent must get a verification nudge with no repeat-your-answer out."""
@@ -199,7 +274,6 @@ def test_status_questions_are_not_mutation_intent() -> None:
 async def test_already_satisfied_reply_stands_on_evidence(monkeypatch) -> None:
     """A recolor that found the requested state already holding records
     satisfied evidence; the model's reply stands despite no scene diff."""
-    from xr_render_demo_worker._trace import current_mutation_evidence
 
     supervisor, _fake = _make_supervisor()
 

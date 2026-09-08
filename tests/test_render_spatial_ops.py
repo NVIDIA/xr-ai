@@ -11,7 +11,15 @@ directly.
 import pytest
 from xr_ai_tools import Tool
 from xr_ai_tools.types import EmptyRequest, SpatialFrame, Vector3
-from xr_render_demo_worker.spatial_ops import CreationLedger, TurnGuard, _Leaves
+from xr_render_demo_worker._trace import MutationEvidence, current_mutation_evidence
+from xr_render_demo_worker.spatial_ops import (
+    CreationLedger,
+    TurnGuard,
+    _CreateUserRelativeRequest,
+    _Leaves,
+    canonical_shapes,
+    make_object_tools,
+)
 from xr_render_scene import (
     AddPrimitiveRequest,
     AddPrimitiveResult,
@@ -208,9 +216,71 @@ def test_shape_words_resolve_and_reject():
     leaves, _ = _leaves([])
     assert leaves.shape("spear") == "sphere"
     assert leaves.shape("kube") == "box"
-    assert leaves.shape("cone") == "cone"
+    for word in ("xylophone", "triangle", "star", "tile", "quad", "thing", "cone", "pyramid"):
+        with pytest.raises(ValueError, match="Unknown shape"):
+            leaves.shape(word)
+
+
+def test_flat_and_solid_synonyms_resolve_explicitly():
+    leaves, _ = _leaves([])
+    for word in ("rectangle", "rectangular prism", "cuboid", "square", "brick"):
+        assert leaves.shape(word) == "box", word
+    for word in ("circle", "globe"):
+        assert leaves.shape(word) == "sphere", word
+
+
+async def test_last_shape_word_is_the_noun():
+    leaves, _ = _leaves([_obj("sphere-0", "sphere", (1, 0, 0)), _obj("box-0", "box", (1, 0, 0))])
+    assert leaves.shape("square ball") == "sphere"
+    assert (await leaves.find("the square ball")).id == "sphere-0"
+
+
+async def test_seeded_scene_types_stay_addressable_by_name():
+    leaves, _ = _leaves([_obj("cone-0", "cone", (0, 0.8, 0.8)), _obj("box-0", "box", (0, 0.8, 0.8))])
+    assert (await leaves.find("the teal cone")).id == "cone-0"
     with pytest.raises(ValueError, match="Unknown shape"):
-        leaves.shape("xylophone")
+        leaves.shape("cone")
+
+
+def test_canonical_shapes_from_utterance():
+    assert canonical_shapes("Create a red hexagon and a blue spear.") == {"sphere"}
+    assert canonical_shapes("Create an object.") == set()
+
+
+def test_unknown_shape_records_refusal_without_halting():
+    guard = TurnGuard()
+    leaves, _ = _leaves([], guard=guard)
+    evidence = MutationEvidence()
+    token = current_mutation_evidence.set(evidence)
+    try:
+        with pytest.raises(ValueError, match="Unknown shape"):
+            leaves.shape("xylophone")
+    finally:
+        current_mutation_evidence.reset(token)
+    assert evidence.refused == 1 and evidence.applied == 0
+    assert not guard.halted
+
+
+async def test_refused_turn_rejects_shapes_the_user_never_said():
+    fake = _FakeScene([])
+    tools = {tool.name: tool for tool in make_object_tools(_FakeSceneTools(fake), _FakeTrackingTools())}
+    evidence = MutationEvidence()
+    evidence.uttered_shapes = canonical_shapes("Create a red hexagon and a blue sphere.")
+    token = current_mutation_evidence.set(evidence)
+    try:
+        with pytest.raises(ValueError, match="Unknown shape"):
+            await tools["create_user_relative"].handler(_CreateUserRelativeRequest(
+                prim_type="hexagon", direction="front", distance=1.5))
+        with pytest.raises(ValueError, match="substitute"):
+            await tools["create_user_relative"].handler(_CreateUserRelativeRequest(
+                prim_type="box", direction="front", distance=1.5))
+        assert not fake.calls
+        created = await tools["create_user_relative"].handler(_CreateUserRelativeRequest(
+            prim_type="sphere", direction="front", distance=1.5))
+    finally:
+        current_mutation_evidence.reset(token)
+    assert created.id == "sphere-0"
+    assert [name for name, _args in fake.calls] == ["add_primitive"]
 
 
 async def test_ledger_dedupes_identical_creates():
@@ -324,7 +394,6 @@ async def test_empty_value_required_for_non_literal_kinds():
 
 
 async def test_recolor_records_applied_and_satisfied_evidence():
-    from xr_render_demo_worker._trace import MutationEvidence, current_mutation_evidence
     from xr_render_demo_worker.spatial_ops import _RecolorRequest, make_appearance_tools
 
     fake = _FakeScene([_obj("cone-0", "cone", (0, 0.8, 0))])

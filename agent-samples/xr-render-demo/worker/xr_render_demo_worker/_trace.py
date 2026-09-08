@@ -18,13 +18,16 @@ current_reference_time_us: ContextVar[int] = ContextVar("current_reference_time_
 
 
 class MutationEvidence:
-    """Count of scene writes actually applied (or found already satisfied)
-    this turn; the supervisor's success gate reads it instead of trusting
-    the model's wording."""
+    """Per-turn counts of scene writes applied, writes found already satisfied,
+    and shape refusals, plus the renderer shapes the user's utterance named;
+    the supervisor's success gate reads these instead of trusting the model's
+    wording."""
 
     def __init__(self) -> None:
         self.applied = 0
         self.satisfied = 0
+        self.refused = 0
+        self.uttered_shapes: set[str] = set()
 
 
 current_mutation_evidence: ContextVar[MutationEvidence | None] = ContextVar(
