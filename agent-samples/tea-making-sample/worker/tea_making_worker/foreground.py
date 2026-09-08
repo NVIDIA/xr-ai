@@ -10,9 +10,7 @@ import json
 import re
 from contextlib import suppress
 from dataclasses import dataclass
-from inspect import isawaitable
 from pathlib import Path
-from typing import Literal
 
 import nemo_relay
 from loguru import logger
@@ -23,7 +21,6 @@ from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameRequest
 from xr_ai_tools.rag import RAGTools
 from xr_ai_tools.tool_calling import ToolLoopIterationLimitError, run_tool_loop
-from xr_ai_tools.types import StrictRequest
 from xr_ai_tools.vision import (
     ImageQueryRequest,
     ImageQueryResult,
@@ -53,25 +50,28 @@ from .spec import Workflow
 from .transcript import TranscriptAgent
 from .video_log import VideoLogAgent
 from .workflow import GuidanceAgent
-from .workflow_tools import (
-    AdvanceRequest,
-    CurrentViewRequest,
-    WorkflowControlResult,
-    rag_lookup_tool,
-)
+from .workflow_tools import CurrentViewRequest, rag_lookup_tool
 
 _MAX_TOOL_ROUNDS = 4
 _PROMPTS = Path(__file__).resolve().parent / "prompts"
 _IDLE_PROMPT = (_PROMPTS / "foreground_idle.txt").read_text(encoding="utf-8").strip()
+_CURRENT_VIEW_PROMPT = (_PROMPTS / "current_view.txt").read_text(
+    encoding="utf-8"
+).strip()
 _WORKFLOW_CONTROLS = frozenset(
     {"workflow__advance", "workflow__reset", "workflow__restart", "workflow__status"}
 )
 _TEA_PROMPT = (
-    "Next/continue/advance: workflow__advance(skip=false). Skip: "
-    "workflow__advance(skip=true). Exit/stop/reset guide: workflow__reset. "
-    "Restart: workflow__restart. Guide status: workflow__status. Questions "
-    "using these words are not commands. If a workflow tool is exposed, call "
-    "it immediately; do not judge readiness or answer the command in prose."
+    "Workflow controls change guide state. Call one only when the user's main "
+    "intent directly requests that change now; otherwise answer without a control. "
+    "Questions about how, whether, or what would happen are informational; only "
+    "'can/could/would you' followed by an action asks you to act. Never act on "
+    "negated, quoted, hypothetical, reported, deliberative, or unrelated wording. "
+    "For example, 'please stop the guide' acts, while 'how do I stop?', 'someone "
+    "said stop', and discussion of the word stop do not. "
+    "Next or continue advances with skip false; skip advances with skip true. Exit, "
+    "stop, reset, or cancel the guide resets it. Restart restarts it. Status reports "
+    "status. The tool, not you, decides whether an authorized change is ready."
 )
 _VOICE_PROMPT = (
     "Answer in at most two short sentences. Use a tool for requested live "
@@ -118,128 +118,6 @@ class _PreparedTurn:
     route: str
 
 
-@dataclass(frozen=True, slots=True)
-class _WorkflowControl:
-    """One query-authorized workflow operation and its fixed arguments."""
-
-    name: str
-    skip: bool | None = None
-
-
-class _NextRequest(StrictRequest):
-    skip: Literal[False] = False
-
-
-class _SkipRequest(StrictRequest):
-    skip: Literal[True] = True
-
-
-def _requested_workflow_control(query: str) -> _WorkflowControl | None:
-    """Return only a workflow control explicitly requested by the utterance."""
-
-    raw = " ".join(query.casefold().strip().split())
-    text = raw.rstrip(" .!?")
-    polite = (
-        r"(?:(?:please|kindly)\s+)?"
-        r"(?:(?:can|could|would)\s+you(?:\s+(?:please|kindly))?\s+)?"
-    )
-    indirect_request = (
-        re.match(
-            r"^(?:can|could|would)\s+you(?:\s+(?:please|kindly))?\s+",
-            text,
-        )
-        is not None
-    )
-    mutation_allowed = not raw.endswith("?") or indirect_request
-    if mutation_allowed:
-        if re.fullmatch(
-            polite
-            + r"(?:next|continue|advance|proceed|move on|go on)"
-            r"(?:\s+(?:to\s+)?(?:the\s+)?(?:next|following)?\s*"
-            r"(?:tea\s+)?(?:step|guide))?",
-            text,
-        ):
-            return _WorkflowControl("workflow__advance", skip=False)
-        if re.fullmatch(
-            polite
-            + r"skip(?:\s+(?:(?:this|the|current|next)\s+)?"
-            r"(?:tea\s+)?step)?",
-            text,
-        ):
-            return _WorkflowControl("workflow__advance", skip=True)
-        if re.fullmatch(
-            polite
-            + r"(?:end|exit|stop|reset|cancel)(?:\s+(?:(?:the|this|my|our)\s+)?"
-            r"(?:tea(?:-making)?\s+)?(?:guide|guidance|session|demo))",
-            text,
-        ):
-            return _WorkflowControl("workflow__reset")
-        if re.fullmatch(
-            polite
-            + r"(?:restart|start over|begin again)(?:\s+"
-            r"(?:(?:the|this|my|our)\s+)?(?:tea\s+)?"
-            r"(?:guide|guidance|instructions?))?",
-            text,
-        ) or re.fullmatch(
-            polite
-            + r"begin\s+(?:(?:the|this|my|our)\s+)?(?:tea\s+)?"
-            r"(?:guide|guidance|instructions?)\s+again"
-            r"(?:\s+from\s+(?:the\s+)?first\s+step)?",
-            text,
-        ):
-            return _WorkflowControl("workflow__restart")
-    if re.fullmatch(
-        polite
-        + r"(?:(?:what(?:'s| is)\s+)?(?:the\s+)?(?:tea\s+)?guide\s+status|"
-        r"(?:what(?:'s| is)\s+)?(?:the\s+)?status\s+of\s+(?:the|my)\s+tea\s+guide|"
-        r"report\s+(?:the\s+)?(?:tea\s+)?guide\s+status)",
-        text,
-    ):
-        return _WorkflowControl("workflow__status")
-    return None
-
-
-def _workflow_tools_for_query(tools: ToolSet, query: str) -> ToolSet:
-    requested = _requested_workflow_control(query)
-    selected: dict[str, Tool] = {}
-    for name, tool in tools.items():
-        if requested is not None and name != requested.name:
-            continue
-        if name in _WORKFLOW_CONTROLS and (
-            requested is None or name != requested.name
-        ):
-            continue
-        if name == "workflow__advance" and requested is not None:
-            if requested.skip is None:
-                raise AssertionError("advance authorization requires skip")
-            tool = _bound_advance_tool(tool, skip=requested.skip)
-        selected[name] = tool
-    return ToolSet(selected)
-
-
-def _bound_advance_tool(tool: Tool, *, skip: bool) -> Tool:
-    """Bind the model-visible advance schema to the authorized transition."""
-
-    request_model = _SkipRequest if skip else _NextRequest
-
-    async def advance(_request: _NextRequest | _SkipRequest) -> WorkflowControlResult:
-        result = tool.handler(AdvanceRequest(skip=skip))
-        if isawaitable(result):
-            return await result
-        return result
-
-    return Tool(
-        tool.name,
-        "The user's command was already authorized. Call this tool now; it "
-        f"requires skip={str(skip).lower()} and decides the transition result.",
-        request_model,
-        WorkflowControlResult,
-        advance,
-        return_direct=True,
-        render_result=lambda result: result.message,
-    )
-
-
 class ForegroundAgent(Agent):
     """Select the idle root or active tea tool set before invoking the model."""
 
@@ -260,7 +138,11 @@ class ForegroundAgent(Agent):
     ) -> None:
         if vlm_timeout_s <= 0:
             raise ValueError("vlm_timeout_s must be positive")
-        self._vision = StreamingImageQueryTool(images=images.images, vlm=vlm)
+        self._vision = StreamingImageQueryTool(
+            images=images.images,
+            vlm=vlm,
+            system_prompt=_CURRENT_VIEW_PROMPT,
+        )
         super().__init__((self._vision,))
         self._llm = llm
         self._images = images
@@ -493,7 +375,6 @@ class ForegroundAgent(Agent):
         if active_tools is None:
             raise RuntimeError("active tea context has no active tool set")
         tools = _select_tools(active_tools, agent.tool_names)
-        tools = _workflow_tools_for_query(tools, query)
         tools = _guide_tools_for_query(tools, query)
         background_tools = self._background_tools_for_query(participant_id, query)
         background_items = tuple(background_tools.items())
@@ -554,7 +435,8 @@ class ForegroundAgent(Agent):
 
         return Tool(
             "current_view",
-            "Inspect this participant's current camera frame to answer a question about the current scene.",
+            "Inspect the participant's camera only when answering requires "
+            "evidence from the visible present scene.",
             CurrentViewRequest,
             ImageQueryResult,
             inspect,
