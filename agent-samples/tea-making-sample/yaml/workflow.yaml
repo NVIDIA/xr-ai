@@ -64,7 +64,8 @@ steps:
     agent:
       prompt: >-
         Identify tea only from the current caption, never state or RAG.
-        If the tea name is unreadable, commit nothing; do not retrieve. Prefer
+        If the tea name is unreadable, commit empty updates; do not retrieve or
+        write placeholder values. Prefer
         visible values. If temperature/time is missing,
         call rag_lookup once with "<exact name> water temperature steep time",
         top_k 2; accept only a section naming it. If every writable field is

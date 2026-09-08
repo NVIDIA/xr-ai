@@ -1033,101 +1033,45 @@ def test_active_context_remains_sparse_for_legacy_callers() -> None:
     assert "public_guide" not in context
 
 
-@pytest.mark.parametrize(
-    ("query", "expected_name", "expected_skip"),
-    [
-        ("What are the instructions?", None, None),
-        ("What are the teammaking instructions?", None, None),
-        ("What is the next step?", None, None),
-        ("What's the next step?", None, None),
-        ("What was the previous step?", None, None),
-        ("Please stop monitoring the kettle.", None, None),
-        ("Next?", None, None),
-        ("Next step?", None, None),
-        ("Restart?", None, None),
-        ("Next.", "workflow__advance", False),
-        ("Move on to the following tea step.", "workflow__advance", False),
-        ("Could you please continue?", "workflow__advance", False),
-        ("Proceed to the next tea step.", "workflow__advance", False),
-        ("Can you skip?", "workflow__advance", True),
-        ("Skip this tea step.", "workflow__advance", True),
-        ("End this tea-making session.", "workflow__reset", None),
-        (
-            "Begin the tea instructions again from the first step.",
-            "workflow__restart",
-            None,
-        ),
-        ("Please restart my tea guide.", "workflow__restart", None),
-        ("What is the status of my tea guide?", "workflow__status", None),
-    ],
-)
-def test_workflow_controls_require_an_explicit_request(
-    query: str,
-    expected_name: str | None,
-    expected_skip: bool | None,
+def test_active_route_leaves_workflow_control_semantics_to_model() -> None:
+    foreground = _foreground_for_route_test("shared", step_id="identify")
+    expected_controls = {
+        "workflow__advance",
+        "workflow__reset",
+        "workflow__restart",
+        "workflow__status",
+    }
+    for query in ("Reset the workflow.", "Do not reset the workflow."):
+        turn = foreground._prepare_turn(
+            "active",
+            query=query,
+            ctx=None,
+            timestamp_us=None,
+        )
+        assert expected_controls <= {name for name, _tool in turn.tools.items()}
+    assert "directly requests" in foreground_module._TEA_PROMPT
+    assert "negated" in foreground_module._TEA_PROMPT
+
+
+def test_foreground_current_view_uses_first_person_system_prompt(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    control = foreground_module._requested_workflow_control(query)
-    actual_name = None if control is None else control.name
-    assert actual_name == expected_name
-    if control is not None:
-        assert control.skip is expected_skip
+    captured: list[str] = []
+    image_query = foreground_module.StreamingImageQueryTool
 
+    def capture_image_query(**kwargs):
+        captured.append(kwargs["system_prompt"])
+        return image_query(**kwargs)
 
-@pytest.mark.asyncio
-async def test_informational_request_cannot_receive_workflow_controls() -> None:
-    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
-    guidance = GuidanceAgent(
-        workflow=workflow,
-        llm=SimpleNamespace(),  # type: ignore[arg-type]
-        current_frame=SimpleNamespace(),  # type: ignore[arg-type]
-        image_query=SimpleNamespace(),  # type: ignore[arg-type]
-        rag=SimpleNamespace(),  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        foreground_module,
+        "StreamingImageQueryTool",
+        capture_image_query,
     )
-    session = guidance.store.get("participant-tool-guard")
-    guidance.store.start(session)
-    tools = guidance.active_tools("participant-tool-guard")
-    assert tools is not None
 
-    question_tools = foreground_module._workflow_tools_for_query(
-        tools,
-        "What's the next step?",
-    )
-    question_names = {name for name, _tool in question_tools.items()}
-    assert not question_names & {
-        "workflow__advance",
-        "workflow__reset",
-        "workflow__restart",
-        "workflow__status",
-    }
-    assert {"current_view", "rag_lookup"} <= question_names
+    _foreground_for_route_test("shared", step_id="identify")
 
-    command_tools = foreground_module._workflow_tools_for_query(tools, "Next.")
-    command_names = {name for name, _tool in command_tools.items()}
-    assert command_names & {
-        "workflow__advance",
-        "workflow__reset",
-        "workflow__restart",
-        "workflow__status",
-    } == {
-        "workflow__advance"
-    }
-    advance = command_tools.get("workflow__advance")
-    assert advance is not None
-    assert advance.request_model.model_validate({"skip": False}).skip is False
-    rejected = await advance.invoke('{"skip":true}')
-    assert "invalid_tool_arguments" in rejected.content
-    assert session.step_id == "identify"
-
-    skip_tools = foreground_module._workflow_tools_for_query(
-        tools,
-        "Skip this tea step.",
-    )
-    skip = skip_tools.get("workflow__advance")
-    assert skip is not None
-    assert skip.request_model.model_validate({"skip": True}).skip is True
-    rejected = await skip.invoke('{"skip":false}')
-    assert "invalid_tool_arguments" in rejected.content
-    assert session.step_id == "identify"
+    assert captured == [foreground_module._CURRENT_VIEW_PROMPT]
 
 
 def test_procedural_filter_preserves_mixed_and_live_requests() -> None:
@@ -1146,31 +1090,27 @@ def test_procedural_filter_preserves_mixed_and_live_requests() -> None:
     assert tools is not None
 
     mixed = foreground_module._guide_tools_for_query(
-        foreground_module._workflow_tools_for_query(
-            tools,
-            "What is the next step, and is the water hot enough?",
-        ),
+        tools,
         "What is the next step, and is the water hot enough?",
     )
     assert mixed.get("current_view") is not None
 
     live_details = foreground_module._guide_tools_for_query(
-        foreground_module._workflow_tools_for_query(
-            tools,
-            "Read the details on the kettle gauge.",
-        ),
+        tools,
         "Read the details on the kettle gauge.",
     )
     assert live_details.get("current_view") is not None
 
     procedural = foreground_module._guide_tools_for_query(
-        foreground_module._workflow_tools_for_query(
-            tools,
-            "What is the next step?",
-        ),
+        tools,
         "What is the next step?",
     )
-    assert not tuple(procedural.items())
+    assert {name for name, _tool in procedural.items()} == {
+        "workflow__advance",
+        "workflow__reset",
+        "workflow__restart",
+        "workflow__status",
+    }
 
 
 @pytest.mark.asyncio
@@ -2040,6 +1980,7 @@ async def test_relay_event_log_buffers_and_excludes_stream_chunks(
 def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:
     config = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
     prompt_dir = _WORKER / "tea_making_worker/prompts"
+    current_view_prompt = (prompt_dir / "current_view.txt").read_text().strip()
     assert (
         config.foreground_prompt
         == (prompt_dir / "foreground_prompt.txt").read_text().strip()
@@ -2056,6 +1997,9 @@ def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:
     assert "tool-only visual-delta classifier" in config.video_delta_prompt
     assert "return no assistant text" in config.video_delta_prompt
     assert "transcript__commit_summary exactly once" in config.transcript_summary_prompt
+    assert "user's first-person view" in current_view_prompt
+    assert "only visible evidence" in current_view_prompt
+    assert "what am I looking at" not in current_view_prompt.lower()
 
     override = tmp_path / "worker.yaml"
     override.write_text("foreground_prompt: Explicit override\n")
@@ -2097,7 +2041,12 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     assert "answer tea-making questions" in active_prompt.lower()
     assert {"decline", "unrelated"} <= set(active_prompt.lower().split())
 
-    root_cases = [case for case in cases if case.get("route", "root") == "root"]
+    root_cases = [
+        case
+        for case in cases
+        if case.get("kind") != "observation"
+        and case.get("route", "root") == "root"
+    ]
     assert {case["expected_tool"] for case in root_cases} == {
         None,
         "application_context__query",
@@ -2133,6 +2082,9 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     ]
     assert advance_cases
     assert all(isinstance(case.get("expected_skip"), bool) for case in advance_cases)
+    observation_cases = [case for case in cases if case.get("kind") == "observation"]
+    assert len(observation_cases) >= 4
+    assert all(case["expected_updates"] == {} for case in observation_cases)
 
     positive_active_names = {
         case["name"]
@@ -2164,6 +2116,12 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     )
     assert idle_visual["expected_tool"] == "current_view"
     assert idle_visual["forbidden_response"] == legacy_refusal
+    first_person_view = next(
+        case
+        for case in root_cases
+        if case["name"] == "idle-routes-first-person-view"
+    )
+    assert first_person_view["expected_tool"] == "current_view"
     active_visual = next(
         case
         for case in active_cases
@@ -2257,7 +2215,12 @@ def test_every_focused_step_selects_its_declared_live_tools(
     )
 
     assert turn.agent.name == f"foreground_tea_{step_id}"
-    assert {name for name, _tool in turn.tools.items()} == expected_tools
+    assert {name for name, _tool in turn.tools.items()} == expected_tools | {
+        "workflow__advance",
+        "workflow__reset",
+        "workflow__restart",
+        "workflow__status",
+    }
 
 
 def test_workflow_tool_typo_fails_when_guidance_is_built(tmp_path: Path) -> None:
@@ -2301,7 +2264,12 @@ def test_foreground_route_appends_policy_through_constructor() -> None:
             "water_filled": False,
         },
     }
-    assert not tuple(active_turn.tools.items())
+    assert {name for name, _tool in active_turn.tools.items()} == {
+        "workflow__advance",
+        "workflow__reset",
+        "workflow__restart",
+        "workflow__status",
+    }
 
 
 def test_foreground_route_appends_policy_to_prompt_override(tmp_path: Path) -> None:

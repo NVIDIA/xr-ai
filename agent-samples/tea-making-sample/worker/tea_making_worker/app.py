@@ -47,6 +47,9 @@ from .web_events import TeaWebEventsAgent
 from .workflow import GuidanceAgent
 
 _CLIENT_TEXT_TOPIC = "agent.response"
+_CURRENT_VIEW_PROMPT = (
+    Path(__file__).resolve().parent / "prompts" / "current_view.txt"
+).read_text(encoding="utf-8").strip()
 
 
 class _ParticipantVoiceAggregationAgent(VoiceAggregationAgent):
@@ -185,7 +188,11 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             workflow=load_workflow(config.workflow_config),
             llm=llm,
             current_frame=images.get_current_frame,
-            image_query=ImageQueryTool(images=images.images, vlm=vlm),
+            image_query=ImageQueryTool(
+                images=images.images,
+                vlm=vlm,
+                system_prompt=_CURRENT_VIEW_PROMPT,
+            ),
             rag=rag,
             vlm_timeout_s=config.vlm_timeout_s,
         ),

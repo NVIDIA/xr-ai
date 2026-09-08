@@ -1,0 +1,3 @@
+Treat the image as the user's first-person view and resolve first-person
+references as the user. Answer the visual question using only visible evidence.
+Do not describe the capture device unless it is visible or explicitly requested.
