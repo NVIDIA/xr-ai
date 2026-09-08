@@ -192,8 +192,8 @@ async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> Non
 
     model_cache = _resolve_model_cache(cfg, yaml_dir)
 
-    os.environ["NEMO_CACHE_DIR"] = str(model_cache / "nemo")
-    os.environ["HF_HOME"]        = str(model_cache / "huggingface")
+    os.environ.setdefault("NEMO_CACHE_DIR", str(model_cache / "nemo"))
+    os.environ.setdefault("HF_HOME", str(model_cache / "huggingface"))
     os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
 
     port = int(cfg.get("port", _DEFAULT_PORT))

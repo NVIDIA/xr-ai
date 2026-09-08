@@ -19,6 +19,7 @@ use_bf16: false
 
 host: "0.0.0.0"
 port: 8108
+# Optional. HF_TOKEN in the environment takes priority over this value.
 hf_token: ""
 
 # Weight cache — resolves relative to this YAML.
