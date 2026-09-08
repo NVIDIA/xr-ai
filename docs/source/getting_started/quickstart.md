@@ -24,6 +24,13 @@ the session using the token printed on startup. Each procedure below starts
 with a `cd` from the repository root; keep running that procedure's commands
 from the selected sample directory.
 
+Each interactive procedure includes one concrete spoken request that exercises
+the sample's main path. After it succeeds, you can ask “What can you do?” to
+explore further. In samples with wake-word gating, prefix that spoken question
+with “Hey Agent”; one follow-up utterance within five seconds can omit the wake
+phrase. Typed requests bypass the voice gate. Treat the reply as a
+conversational introduction rather than an exhaustive capability reference.
+
 ## Model servers (shared AI services)
 
 `model-servers` starts the shared inference services used across demos and exits
@@ -152,9 +159,18 @@ private" warning the first time — click **Advanced → Proceed** (Chrome or Ed
 trusting the certificate permanently or running over plain HTTP instead.
 
 Leave **Token URL** blank — the web client fetches a token from the server
-automatically. Click **Connect**.
+automatically. Click **Connect**, then click **Start Camera** and allow camera
+access. For a spoken interaction, click **Start Microphone** and allow
+microphone access.
 
-You are now live in the XR session. To test the agent:
+### Step 3 — Meet the agent
+
+Try this first spoken interaction:
+
+```text
+You: Hey Agent, what am I looking at?
+Agent: [Answers from the current camera frame.]
+```
 
 - Type any question → sent verbatim to the VLM.
 - Speak into your mic → speech is transcribed and sent as a query.
@@ -217,6 +233,18 @@ the {doc}`lab instrument architecture guide </reference/lab-instrument-monitorin
 for reusable agent patterns, marker setup, output contracts, and adaptation
 recipes.
 
+### Try the lab agent
+
+Point the camera at instruments carrying the configured markers, then try this
+spoken interaction:
+
+```text
+You: Hey Agent, read the instruments.
+Agent: [Reports the visible marker-associated readings or their availability.]
+```
+
+Inspect the JSONL artifacts while trying additional interactions.
+
 ## Tea-making guidance (voice + visual workflow)
 
 This sample combines an interactive tea guide with optional background change,
@@ -263,6 +291,15 @@ advance the workflow silently. Refer to the
 {doc}`tea-making architecture guide </reference/tea-making-sample>` for
 reusable workflow patterns, background-agent contracts, backend integration,
 and adaptation recipes.
+
+### Try the tea agent
+
+Try this first spoken interaction:
+
+```text
+You: Hey Agent, help me make tea.
+Agent: [Starts the tea guide and presents the first step.]
+```
 
 ## XR render demo (voice-driven sphere in CloudXR)
 
@@ -341,6 +378,28 @@ uv run xr_render_demo
 the pin to its own process and writes the selectors into `cloudxr.env`;
 the scene process and LOVR inherit from that file. Refer to the
 {doc}`xr-render-demo reference </reference/xr-render-demo>` for full details.
+
+### Step 3 — Connect and meet the agent
+
+Open the authenticated web-client URL printed by DeviceIOHub. Accept the
+port-8080 development certificate on first use, leave **Token URL** blank, and
+click **Connect**. Wait for the agent status to report ready, then click **Start
+Microphone**. In the **XR Stream** section, follow the **accept the CloudXR
+cert** link to accept the second development certificate, return to the client,
+and click **Launch XR**.
+
+With the default always-on setting, ordinary finalized speech is dispatched
+without a wake phrase; stop commands are intercepted by the voice gate. Try
+this first spoken interaction:
+
+```text
+You: Make the sphere red.
+Agent: [Changes the sphere's color or explains why it could not.]
+```
+
+Speak naturally: the agent accepts questions, commands, and follow-up requests.
+Refer to {doc}`Connecting clients <clients>` for headset and native-client
+setup.
 
 To stop the model servers when done:
 
