@@ -1,8 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Supervisor turn-lifecycle tests: scene-lock serialization, failure
-publishing, and two-turn memory persistence — all over fakes, no LLM."""
+"""Supervisor turn-lifecycle tests over fakes, without an LLM."""
 from __future__ import annotations
 
 import asyncio
@@ -19,7 +18,7 @@ from xr_ai_voice import UserQuery
 from xr_render_demo_eval import harness
 from xr_render_demo_worker.agent import RenderAgent
 from xr_render_demo_worker.models import SceneRequest
-from xr_render_demo_worker.supervisor import _TRUNCATED_ASK, SceneSupervisor
+from xr_render_demo_worker.supervisor import SceneSupervisor
 
 
 class _RecordingMemory:
@@ -87,9 +86,8 @@ async def test_scene_mutations_serialize_across_participants(monkeypatch) -> Non
     assert max_active == 1
 
 
-async def test_two_turn_memory_without_preseeding(monkeypatch) -> None:
-    """A truncated turn is persisted by the supervisor itself, so the next
-    turn's completion splices against real recalled memory."""
+async def test_every_transcript_reaches_the_supervisor_loop(monkeypatch) -> None:
+    """Transcript shape never triggers a canned response before the model."""
     memory = _RecordingMemory()
     supervisor, _fake = _make_supervisor(memory)
     seen_user_messages: list[str] = []
@@ -100,21 +98,18 @@ async def test_two_turn_memory_without_preseeding(monkeypatch) -> None:
 
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
 
-    first = await supervisor.handle(
-        SceneRequest(transcript="Put the sphere on the", participant_id="alice"))
-    assert "what?" in first.response.lower()
-    assert [record.source_id for record in memory.records] == ["alice:user", "alice:agent"]
-
-    second = await supervisor.handle(
-        SceneRequest(transcript="On the box.", participant_id="alice"))
-    assert second.response == "Placed it?"
-    assert any(
-        "User request: Put the sphere on the box." in content
-        for content in seen_user_messages
+    transcripts = (
+        "Hey Agent, what am I looking at?",
+        "Assistant, tell me what object I'm looking at.",
+        "Put the sphere on the",
+        "Move the cube to",
     )
-    assert [record.source_id for record in memory.records] == [
-        "alice:user", "alice:agent", "alice:user", "alice:agent",
-    ]
+    for transcript in transcripts:
+        reply = await supervisor.handle(
+            SceneRequest(transcript=transcript, participant_id="alice")
+        )
+        assert reply.response == "Placed it?"
+        assert any(f"User request: {transcript}" in content for content in seen_user_messages)
 
 
 async def test_mixed_vision_and_mutation_request_still_verifies(monkeypatch) -> None:
@@ -473,31 +468,6 @@ async def test_departure_ends_the_session_for_recall(monkeypatch) -> None:
         timestamp_us=_time.time_ns() // 1_000))
     assert seen_user_messages
     assert all("holding a torch" not in content for content in seen_user_messages)
-
-
-async def test_departure_drops_pending_truncated_ask(monkeypatch) -> None:
-    """A clipped ask left before departure never completes a reconnecting
-    participant's first words, even inside the completion window."""
-    import time as _time
-
-    now_us = _time.time_ns() // 1_000
-    memory = _RecordingMemory()
-    _seed_turn(memory, "alice", "Make a", f"{_TRUNCATED_ASK} A what?",
-               base_us=now_us - 2_000_000)
-    supervisor, _fake = _make_supervisor(memory)
-    supervisor.forget_participant("alice")
-    seen_user_messages: list[str] = []
-
-    async def fake_loop(messages, toolset, call_model, max_iterations=12):
-        seen_user_messages.extend(m.content for m in messages if m.role == "user")
-        return SimpleNamespace(content="Okay.", messages=list(messages), tool_calls=())
-
-    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
-
-    await supervisor.handle(SceneRequest(
-        transcript="Cube please.", participant_id="alice", timestamp_us=now_us))
-    assert seen_user_messages
-    assert all("Make a" not in content for content in seen_user_messages)
 
 
 def test_departure_records_expire_with_the_recall_window() -> None:
