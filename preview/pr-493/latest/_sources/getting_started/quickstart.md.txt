@@ -163,7 +163,7 @@ agent to introduce the sample:
 ```text
 You: Hey Agent, what can you do?
 Agent: [Describes the capabilities currently available in the sample.]
-You: Hey Agent, [Ask a question based on that answer.]
+You: Hey Agent, what am I looking at?
 ```
 
 The exact response comes from the running agent rather than this documentation,
@@ -238,7 +238,7 @@ request. Use capability discovery as the first interaction:
 ```text
 You: Hey Agent, what can you do?
 Agent: [Describes the capabilities currently available in the sample.]
-You: Hey Agent, [Ask a question or give a command based on that answer.]
+You: Hey Agent, read the instruments.
 ```
 
 The exact answer comes from the running agent and changes with its available
@@ -300,7 +300,7 @@ request. Begin with capability discovery:
 ```text
 You: Hey Agent, what can you do?
 Agent: [Describes the capabilities currently available in the sample.]
-You: Hey Agent, [Ask a question or give a command based on that answer.]
+You: Hey Agent, help me make tea.
 ```
 
 The exact answer comes from the running agent, so it remains useful as the tea
@@ -407,7 +407,7 @@ request instead of memorizing a fixed command list:
 ```text
 You: What can you do?
 Agent: [Describes the capabilities currently available in the sample.]
-You: [Ask a question or give a command based on that answer.]
+You: Make the sphere red.
 ```
 
 Speak naturally: the agent accepts questions, commands, and follow-up requests.
