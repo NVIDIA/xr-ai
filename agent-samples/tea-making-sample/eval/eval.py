@@ -20,8 +20,10 @@ from tea_making_worker.foreground import ForegroundAgent
 from tea_making_worker.spec import load_workflow
 from tea_making_worker.transcript import TranscriptAgent
 from tea_making_worker.video_log import VideoLogAgent
-from tea_making_worker.workflow import GuidanceAgent
+from tea_making_worker.workflow import GuidanceAgent, _state_contract
+from tea_making_worker.workflow_tools import workflow_commit_tool
 from xr_ai_models import ChatMessage, LLMService, load_models_config, make_llm
+from xr_ai_tools import ToolSet
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.tool_calling import tool_definitions
 
@@ -118,6 +120,44 @@ def _normalize_response(text: str) -> str:
     return " ".join(text.split())
 
 
+def _observation_turn(
+    guidance: GuidanceAgent,
+    case: dict[str, Any],
+    participant_id: str,
+) -> tuple[tuple[ChatMessage, ...], ToolSet]:
+    session = guidance.store.get(participant_id)
+    guidance.store.start(session)
+    step = guidance.workflow.step(str(case["step"]))
+    quick = guidance._named_tools(session, step.agent.tools)
+    commit = workflow_commit_tool(
+        guidance.store,
+        session,
+        expected_step_id=step.id,
+        expected_revision=session.revision,
+    )
+    tools = ToolSet({commit.name: commit, **dict(quick.items())})
+    request = json.dumps(
+        {
+            "observation": case["observation"],
+            "already_complete": False,
+            "state": guidance.workflow.project(step, session.state),
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    system = "\n".join(
+        (
+            guidance._observation_prompt,
+            _state_contract(guidance.workflow, step),
+            step.agent.prompt,
+        )
+    )
+    return (
+        ChatMessage(role="system", content=system),
+        ChatMessage(role="user", content=request),
+    ), tools
+
+
 async def main() -> None:
     cases = yaml.safe_load((_SAMPLE / "eval" / "cases.yaml").read_text(encoding="utf-8"))
     llm = make_llm(load_models_config(_SAMPLE / "yaml" / "models.local.json"), "llm")
@@ -126,29 +166,37 @@ async def main() -> None:
     try:
         for index, case in enumerate(cases):
             participant_id = f"tea-eval-{index}"
-            if case.get("route", "root") == "active":
-                _active_route(
-                    guidance,
-                    case,
+            observation_case = case.get("kind") == "observation"
+            if observation_case:
+                messages, tools = _observation_turn(guidance, case, participant_id)
+            else:
+                if case.get("route", "root") == "active":
+                    _active_route(
+                        guidance,
+                        case,
+                        participant_id,
+                    )
+                turn = foreground._prepare_turn(
                     participant_id,
+                    query=case["query"],
+                    ctx=None,
+                    timestamp_us=None,
                 )
-            turn = foreground._prepare_turn(
-                participant_id,
-                query=case["query"],
-                ctx=None,
-                timestamp_us=None,
-            )
-            expected_route = "tea" if case.get("route", "root") == "active" else "root"
-            if turn.route != expected_route:
-                raise ValueError(
-                    f"case {case['name']!r} prepared route {turn.route!r}, expected {expected_route!r}"
+                expected_route = (
+                    "tea" if case.get("route", "root") == "active" else "root"
                 )
-            response = await llm.chat(
-                (
+                if turn.route != expected_route:
+                    raise ValueError(
+                        f"case {case['name']!r} prepared route {turn.route!r}, expected {expected_route!r}"
+                    )
+                messages = (
                     ChatMessage(role="system", content=turn.agent.system_prompt),
                     ChatMessage(role="user", content=turn.user_message),
-                ),
-                tools=tool_definitions(turn.tools),
+                )
+                tools = turn.tools
+            response = await llm.chat(
+                messages,
+                tools=tool_definitions(tools),
                 max_tokens=512,
                 temperature=0.0,
                 enable_thinking=False,
@@ -160,7 +208,7 @@ async def main() -> None:
             expected_tools = [] if expected_tool is None else [expected_tool]
             errors: list[str] = []
             for call in calls:
-                tool = turn.tools.get(call.name)
+                tool = tools.get(call.name)
                 if tool is None:
                     errors.append(f"unknown tool {call.name!r}")
                     continue
@@ -179,6 +227,17 @@ async def main() -> None:
                         errors.append(
                             f"advance skip was {arguments.get('skip')!r}, "
                             f"expected {bool(expected_skip)!r}"
+                        )
+            if observation_case and calls:
+                try:
+                    arguments = json.loads(calls[0].arguments)
+                except json.JSONDecodeError:
+                    pass
+                else:
+                    if arguments.get("updates") != case.get("expected_updates"):
+                        errors.append(
+                            f"observation updates were {arguments.get('updates')!r}, "
+                            f"expected {case.get('expected_updates')!r}"
                         )
             normalized_content = _normalize_response(content)
             expected_response = case.get("expected_response")

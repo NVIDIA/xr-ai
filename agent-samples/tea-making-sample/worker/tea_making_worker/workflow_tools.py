@@ -375,21 +375,27 @@ def workflow_management_tools(
         _control_tool(
             "workflow__advance",
             (
-                "Advance after an explicit next or continue command. Set "
-                "skip true only for an explicit skip command."
+                "Change steps only when the user's main intent directly commands "
+                "advance, continue, or skip now. Never call for a question, "
+                "hypothetical, deliberation, negation, or unrelated use. Set skip "
+                "true only for a direct skip command; the tool decides readiness."
             ),
             AdvanceRequest,
             advance,
         ),
         _control_tool(
             "workflow__reset",
-            "Exit, stop, or reset tea guidance and return to the root assistant.",
+            "Call only when the user asks you to exit, stop, reset, or cancel the "
+            "guide now. A statement about words or another person's instruction is "
+            "not the user's request. A capability, how-to, hypothetical, quoted, "
+            "reported, or negated statement must not call this tool.",
             EmptyRequest,
             reset,
         ),
         _control_tool(
             "workflow__restart",
-            "Clear progress and restart tea guidance from its first step.",
+            "Clear progress only when the user directly asks to restart the guide "
+            "now; never for questions, hypotheticals, reports, or negations.",
             EmptyRequest,
             restart,
         ),
@@ -410,7 +416,9 @@ def workflow_status_tool(
 
     return _control_tool(
         "workflow__status",
-        "Report whether tea guidance is idle or its current step and readiness.",
+        "Report state only for an explicit guide-status request. Never substitute "
+        "this for another unavailable tool, timer/readiness questions, or "
+        "instructions about what to do.",
         EmptyRequest,
         status,
     )
