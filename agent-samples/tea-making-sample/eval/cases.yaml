@@ -4,16 +4,52 @@
 - name: idle-conversation
   query: Hello there.
   expected_tool: null
+- name: unreadable-label-commits-no-placeholders
+  kind: observation
+  step: identify
+  observation: No product name or preparation text is legible in the frame.
+  expected_tool: workflow__commit
+  expected_updates: {}
+- name: missing-package-commits-no-placeholders
+  kind: observation
+  step: identify
+  observation: A seated person is visible, but there is no tea package or tag.
+  expected_tool: workflow__commit
+  expected_updates: {}
+- name: unrelated-logo-commits-no-placeholders
+  kind: observation
+  step: identify
+  observation: A clothing logo is readable; no beverage label is visible.
+  expected_tool: workflow__commit
+  expected_updates: {}
+- name: obscured-label-commits-no-placeholders
+  kind: observation
+  step: identify
+  observation: The possible package is turned away and its label cannot be read.
+  expected_tool: workflow__commit
+  expected_updates: {}
 - name: idle-answers-unrelated-general-knowledge
   query: What is the capital of France?
   expected_tool: null
   forbidden_response: I can only help with the active tea guide right now.
+- name: idle-clarifies-malformed-geography-without-camera
+  query: Which capital city belongs to Berlin?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:Berlin|Germany|capital)\\b"
+- name: idle-describes-capabilities-without-internal-names
+  query: What kinds of things can you help me with?
+  expected_tool: null
+  max_response_chars: 220
+  forbidden_response: __
 - name: idle-routes-visible-shirt-color
   query: What color is the shirt?
   expected_tool: current_view
   forbidden_response: I can only help with the active tea guide right now.
 - name: idle-routes-open-ended-scene-question
   query: Describe my surroundings.
+  expected_tool: current_view
+- name: idle-routes-first-person-view
+  query: Tell me what lies directly ahead from where I am.
   expected_tool: current_view
 - name: idle-routes-visual-reference
   query: What is this?
@@ -288,6 +324,92 @@
   step: heat_water
   query: End this tea-making session.
   expected_tool: workflow__reset
+
+- name: active-ends-brewing-guide-semantically
+  route: active
+  step: identify
+  query: Please end my brewing guide now.
+  expected_tool: workflow__reset
+
+- name: active-leaves-tea-walkthrough-semantically
+  route: active
+  step: fill_water
+  query: Leave the tea walkthrough.
+  expected_tool: workflow__reset
+
+- name: active-cancels-brewing-session-semantically
+  route: active
+  step: heat_water
+  query: Cancel this brewing session.
+  expected_tool: workflow__reset
+
+- name: active-stops-guidance-semantically
+  route: active
+  step: start_steeping
+  query: Could you stop guiding me through the tea now?
+  expected_tool: workflow__reset
+
+- name: active-resets-brewing-instructions-semantically
+  route: active
+  step: steep_timer
+  query: Reset my brewing instructions.
+  expected_tool: workflow__reset
+
+- name: active-clears-guide-progress-semantically
+  route: active
+  step: fill_water
+  query: Clear the tea-guide progress and take me back to the assistant.
+  expected_tool: workflow__reset
+
+- name: active-does-not-reset-on-how-to-question
+  route: active
+  step: identify
+  query: How would I leave the brewing walkthrough?
+  expected_tool: null
+  forbidden_response: workflow__
+
+- name: active-does-not-reset-on-hypothetical
+  route: active
+  step: fill_water
+  query: If I asked you to stop the guide, what would happen?
+  expected_tool: null
+
+- name: active-does-not-reset-on-quoted-command
+  route: active
+  step: heat_water
+  query: The manual contains the phrase "reset the guide."
+  expected_tool: null
+
+- name: active-does-not-reset-on-word-discussion
+  route: active
+  step: start_steeping
+  query: The word reset has five letters.
+  expected_tool: null
+
+- name: active-does-not-reset-on-capability-question
+  route: active
+  step: steep_timer
+  query: Can this walkthrough be reset?
+  expected_tool: null
+
+- name: active-does-not-reset-on-reported-speech
+  route: active
+  step: fill_water
+  query: My friend told me to cancel the guide.
+  expected_tool: null
+
+- name: active-does-not-reset-on-negated-cancel
+  route: active
+  step: heat_water
+  query: Please do not cancel; explain the current step.
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:heat|water|step)\\b"
+
+- name: active-does-not-reset-on-unrelated-reset
+  route: active
+  step: identify
+  query: My phone reset during breakfast.
+  expected_tool: null
 
 - name: active-restarts-on-direct-command
   route: active
