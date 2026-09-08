@@ -551,7 +551,20 @@ private” warning the first time — click <strong>Advanced → Proceed</strong
 trusting the certificate permanently or running over plain HTTP instead.</p>
 <p>Leave <strong>Token URL</strong> blank — the web client fetches a token from the server
 automatically. Click <strong>Connect</strong>.</p>
-<p>You are now live in the XR session. To test the agent:</p>
+</section>
+<section id="step-3-meet-the-vlm-agent">
+<h3>Step 3 — Meet the VLM agent<a class="headerlink" href="#step-3-meet-the-vlm-agent" title="Link to this heading">#</a></h3>
+<p>The checked-in voice gate requires “Agent” or “Hey Agent” at the start of a
+spoken request. Typed requests do not use the voice gate. Begin by asking the
+agent to introduce the sample:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Hey Agent, what can you do in this sample? Give me a short tour and
+     suggest three things to try.
+Agent: [Describes the capabilities currently available in the sample.]
+You: Hey Agent, [Ask a question based on one of those suggestions.]
+</pre></div>
+</div>
+<p>The exact response comes from the running agent rather than this documentation,
+so the tour reflects its current behavior. After the introduction:</p>
 <ul class="simple">
 <li><p>Type any question → sent verbatim to the VLM.</p></li>
 <li><p>Speak into your mic → speech is transcribed and sent as a query.</p></li>
@@ -603,6 +616,20 @@ available on port 8080 together with the shared connection web client. Refer to
 the <a class="reference internal" href="../reference/lab-instrument-monitoring.html"><span class="doc">lab instrument architecture guide</span></a>
 for reusable agent patterns, marker setup, output contracts, and adaptation
 recipes.</p>
+<section id="try-the-lab-agent">
+<h3>Try the lab agent<a class="headerlink" href="#try-the-lab-agent" title="Link to this heading">#</a></h3>
+<p>The default voice gate requires “Agent” or “Hey Agent” at the start of a spoken
+request. Use capability discovery as the first interaction:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Hey Agent, what can you do in this sample? Give me a short tour and
+     suggest three things to try.
+Agent: [Describes the capabilities currently available in the sample.]
+You: Hey Agent, [Ask a question or give a command based on one suggestion.]
+</pre></div>
+</div>
+<p>The exact tour comes from the running agent and changes with its available
+tools. You can then inspect the live event viewer or JSONL artifacts while
+trying the suggested interactions.</p>
+</section>
 </section>
 <section id="tea-making-guidance-voice-visual-workflow">
 <h2>Tea-making guidance (voice + visual workflow)<a class="headerlink" href="#tea-making-guidance-voice-visual-workflow" title="Link to this heading">#</a></h2>
@@ -641,6 +668,19 @@ advance the workflow silently. Refer to the
 <a class="reference internal" href="../reference/tea-making-sample.html"><span class="doc">tea-making architecture guide</span></a> for
 reusable workflow patterns, background-agent contracts, backend integration,
 and adaptation recipes.</p>
+<section id="try-the-tea-agent">
+<h3>Try the tea agent<a class="headerlink" href="#try-the-tea-agent" title="Link to this heading">#</a></h3>
+<p>The default voice gate requires “Agent” or “Hey Agent” at the start of a spoken
+request. Begin with a tour, then choose one of the agent’s current suggestions:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Hey Agent, what can you do in this sample? Give me a short tour and
+     suggest three things to try.
+Agent: [Describes the capabilities currently available in the sample.]
+You: Hey Agent, [Ask a question or give a command based on one suggestion.]
+</pre></div>
+</div>
+<p>The exact tour comes from the running agent, so it remains useful as the tea
+workflow and background tools evolve.</p>
+</section>
 </section>
 <section id="xr-render-demo-voice-driven-sphere-in-cloudxr">
 <h2>XR render demo (voice-driven sphere in CloudXR)<a class="headerlink" href="#xr-render-demo-voice-driven-sphere-in-cloudxr" title="Link to this heading">#</a></h2>
@@ -724,9 +764,9 @@ Microphone</strong> and <strong>Launch XR</strong>.</p>
 <p>After you start the microphone, every finalized utterance goes to the agent by
 default, so no wake phrase is required. Start with a capability-discovery
 request instead of memorizing a fixed command list:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: What can you do in this demo? Give me a short tour and suggest three
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: What can you do in this sample? Give me a short tour and suggest three
      things to try.
-Agent: [Describes the capabilities currently available in the demo.]
+Agent: [Describes the capabilities currently available in the sample.]
 You: [Ask a question or give a command based on one of those suggestions.]
 </pre></div>
 </div>
@@ -803,10 +843,17 @@ documented beside its value.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simple-vlm-example-vision-q-a-over-voice-text">Simple VLM example (vision Q&amp;A over voice + text)</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-start-the-server">Step 1 — Start the server</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-connect-a-client">Step 2 — Connect a client</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-3-meet-the-vlm-agent">Step 3 — Meet the VLM agent</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lab-instrument-monitoring-marker-associated-readings-foreground-voice">Lab instrument monitoring (marker-associated readings + foreground voice)</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tea-making-guidance-voice-visual-workflow">Tea-making guidance (voice + visual workflow)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lab-instrument-monitoring-marker-associated-readings-foreground-voice">Lab instrument monitoring (marker-associated readings + foreground voice)</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#try-the-lab-agent">Try the lab agent</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tea-making-guidance-voice-visual-workflow">Tea-making guidance (voice + visual workflow)</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#try-the-tea-agent">Try the tea agent</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-render-demo-voice-driven-sphere-in-cloudxr">XR render demo (voice-driven sphere in CloudXR)</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-start-model-servers-once">Step 1 — Start model servers (once)</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-start-the-demo">Step 2 — Start the demo</a></li>

@@ -154,7 +154,21 @@ trusting the certificate permanently or running over plain HTTP instead.
 Leave **Token URL** blank — the web client fetches a token from the server
 automatically. Click **Connect**.
 
-You are now live in the XR session. To test the agent:
+### Step 3 — Meet the VLM agent
+
+The checked-in voice gate requires “Agent” or “Hey Agent” at the start of a
+spoken request. Typed requests do not use the voice gate. Begin by asking the
+agent to introduce the sample:
+
+```text
+You: Hey Agent, what can you do in this sample? Give me a short tour and
+     suggest three things to try.
+Agent: [Describes the capabilities currently available in the sample.]
+You: Hey Agent, [Ask a question based on one of those suggestions.]
+```
+
+The exact response comes from the running agent rather than this documentation,
+so the tour reflects its current behavior. After the introduction:
 
 - Type any question → sent verbatim to the VLM.
 - Speak into your mic → speech is transcribed and sent as a query.
@@ -217,6 +231,22 @@ the {doc}`lab instrument architecture guide </reference/lab-instrument-monitorin
 for reusable agent patterns, marker setup, output contracts, and adaptation
 recipes.
 
+### Try the lab agent
+
+The default voice gate requires “Agent” or “Hey Agent” at the start of a spoken
+request. Use capability discovery as the first interaction:
+
+```text
+You: Hey Agent, what can you do in this sample? Give me a short tour and
+     suggest three things to try.
+Agent: [Describes the capabilities currently available in the sample.]
+You: Hey Agent, [Ask a question or give a command based on one suggestion.]
+```
+
+The exact tour comes from the running agent and changes with its available
+tools. You can then inspect the live event viewer or JSONL artifacts while
+trying the suggested interactions.
+
 ## Tea-making guidance (voice + visual workflow)
 
 This sample combines an interactive tea guide with optional background change,
@@ -263,6 +293,21 @@ advance the workflow silently. Refer to the
 {doc}`tea-making architecture guide </reference/tea-making-sample>` for
 reusable workflow patterns, background-agent contracts, backend integration,
 and adaptation recipes.
+
+### Try the tea agent
+
+The default voice gate requires “Agent” or “Hey Agent” at the start of a spoken
+request. Begin with a tour, then choose one of the agent's current suggestions:
+
+```text
+You: Hey Agent, what can you do in this sample? Give me a short tour and
+     suggest three things to try.
+Agent: [Describes the capabilities currently available in the sample.]
+You: Hey Agent, [Ask a question or give a command based on one suggestion.]
+```
+
+The exact tour comes from the running agent, so it remains useful as the tea
+workflow and background tools evolve.
 
 ## XR render demo (voice-driven sphere in CloudXR)
 
@@ -363,9 +408,9 @@ default, so no wake phrase is required. Start with a capability-discovery
 request instead of memorizing a fixed command list:
 
 ```text
-You: What can you do in this demo? Give me a short tour and suggest three
+You: What can you do in this sample? Give me a short tour and suggest three
      things to try.
-Agent: [Describes the capabilities currently available in the demo.]
+Agent: [Describes the capabilities currently available in the sample.]
 You: [Ask a question or give a command based on one of those suggestions.]
 ```
 
