@@ -24,6 +24,13 @@ the session using the token printed on startup. Each procedure below starts
 with a `cd` from the repository root; keep running that procedure's commands
 from the selected sample directory.
 
+Each interactive procedure includes one concrete spoken request that exercises
+the sample's main path. After it succeeds, you can ask “What can you do?” to
+explore further. In samples with wake-word gating, prefix that spoken question
+with “Hey Agent”; one follow-up utterance within five seconds can omit the wake
+phrase. Typed requests bypass the voice gate. Treat the reply as a
+conversational introduction rather than an exhaustive capability reference.
+
 ## Model servers (shared AI services)
 
 `model-servers` starts the shared inference services used across demos and exits
@@ -152,22 +159,18 @@ private" warning the first time — click **Advanced → Proceed** (Chrome or Ed
 trusting the certificate permanently or running over plain HTTP instead.
 
 Leave **Token URL** blank — the web client fetches a token from the server
-automatically. Click **Connect**.
+automatically. Click **Connect**, then click **Start Camera** and allow camera
+access. For a spoken interaction, click **Start Microphone** and allow
+microphone access.
 
 ### Step 3 — Meet the agent
 
-The checked-in voice gate requires “Agent” or “Hey Agent” at the start of a
-spoken request. Typed requests do not use the voice gate. Begin by asking the
-agent to introduce the sample:
+Try this first spoken interaction:
 
 ```text
-You: Hey Agent, what can you do?
-Agent: [Describes the capabilities currently available in the sample.]
 You: Hey Agent, what am I looking at?
+Agent: [Answers from the current camera frame.]
 ```
-
-The exact response comes from the running agent rather than this documentation,
-so the tour reflects its current behavior. After the introduction:
 
 - Type any question → sent verbatim to the VLM.
 - Speak into your mic → speech is transcribed and sent as a query.
@@ -232,18 +235,15 @@ recipes.
 
 ### Try the lab agent
 
-The default voice gate requires “Agent” or “Hey Agent” at the start of a spoken
-request. Use capability discovery as the first interaction:
+Point the camera at instruments carrying the configured markers, then try this
+spoken interaction:
 
 ```text
-You: Hey Agent, what can you do?
-Agent: [Describes the capabilities currently available in the sample.]
 You: Hey Agent, read the instruments.
+Agent: [Reports the visible marker-associated readings or their availability.]
 ```
 
-The exact answer comes from the running agent and changes with its available
-tools. You can then inspect the live event viewer or JSONL artifacts while
-trying the agent's capabilities.
+Inspect the JSONL artifacts while trying additional interactions.
 
 ## Tea-making guidance (voice + visual workflow)
 
@@ -294,17 +294,12 @@ and adaptation recipes.
 
 ### Try the tea agent
 
-The default voice gate requires “Agent” or “Hey Agent” at the start of a spoken
-request. Begin with capability discovery:
+Try this first spoken interaction:
 
 ```text
-You: Hey Agent, what can you do?
-Agent: [Describes the capabilities currently available in the sample.]
 You: Hey Agent, help me make tea.
+Agent: [Starts the tea guide and presents the first step.]
 ```
-
-The exact answer comes from the running agent, so it remains useful as the tea
-workflow and background tools evolve.
 
 ## XR render demo (voice-driven sphere in CloudXR)
 
@@ -384,6 +379,28 @@ the pin to its own process and writes the selectors into `cloudxr.env`;
 the scene process and LOVR inherit from that file. Refer to the
 {doc}`xr-render-demo reference </reference/xr-render-demo>` for full details.
 
+### Step 3 — Connect and meet the agent
+
+Open the authenticated web-client URL printed by DeviceIOHub. Accept the
+port-8080 development certificate on first use, leave **Token URL** blank, and
+click **Connect**. Wait for the agent status to report ready, then click **Start
+Microphone**. In the **XR Stream** section, follow the **accept the CloudXR
+cert** link to accept the second development certificate, return to the client,
+and click **Launch XR**.
+
+With the default always-on setting, ordinary finalized speech is dispatched
+without a wake phrase; stop commands are intercepted by the voice gate. Try
+this first spoken interaction:
+
+```text
+You: Make the sphere red.
+Agent: [Changes the sphere's color or explains why it could not.]
+```
+
+Speak naturally: the agent accepts questions, commands, and follow-up requests.
+Refer to {doc}`Connecting clients <clients>` for headset and native-client
+setup.
+
 To stop the model servers when done:
 
 ```bash
@@ -392,28 +409,6 @@ uv run --project ../model-servers model_servers --stop
 
 XR Render uses the fixed reuse-only endpoints in `yaml/models.json`; it does
 not select or own model deployment profiles.
-
-### Step 3 — Connect and meet the agent
-
-Open the authenticated web-client URL printed by DeviceIOHub. Accept the
-development certificates on first use, leave **Token URL** blank, and click
-**Connect**. Wait for the agent status to report ready, then click **Start
-Microphone** and **Launch XR**.
-
-After you start the microphone, every finalized utterance goes to the agent by
-default, so no wake phrase is required. Start with a capability-discovery
-request instead of memorizing a fixed command list:
-
-```text
-You: What can you do?
-Agent: [Describes the capabilities currently available in the sample.]
-You: Make the sphere red.
-```
-
-Speak naturally: the agent accepts questions, commands, and follow-up requests.
-Asking about its capabilities keeps this first interaction useful when the
-sample's tools change. Refer to {doc}`Connecting clients <clients>` for headset
-and native-client setup.
 
 ## Hub only (standalone)
 
