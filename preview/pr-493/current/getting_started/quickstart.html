@@ -557,10 +557,9 @@ automatically. Click <strong>Connect</strong>.</p>
 <p>The checked-in voice gate requires “Agent” or “Hey Agent” at the start of a
 spoken request. Typed requests do not use the voice gate. Begin by asking the
 agent to introduce the sample:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Hey Agent, what can you do in this sample? Give me a short tour and
-     suggest three things to try.
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Hey Agent, what can you do?
 Agent: [Describes the capabilities currently available in the sample.]
-You: Hey Agent, [Ask a question based on one of those suggestions.]
+You: Hey Agent, [Ask a question based on that answer.]
 </pre></div>
 </div>
 <p>The exact response comes from the running agent rather than this documentation,
@@ -620,15 +619,14 @@ recipes.</p>
 <h3>Try the lab agent<a class="headerlink" href="#try-the-lab-agent" title="Link to this heading">#</a></h3>
 <p>The default voice gate requires “Agent” or “Hey Agent” at the start of a spoken
 request. Use capability discovery as the first interaction:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Hey Agent, what can you do in this sample? Give me a short tour and
-     suggest three things to try.
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Hey Agent, what can you do?
 Agent: [Describes the capabilities currently available in the sample.]
-You: Hey Agent, [Ask a question or give a command based on one suggestion.]
+You: Hey Agent, [Ask a question or give a command based on that answer.]
 </pre></div>
 </div>
-<p>The exact tour comes from the running agent and changes with its available
+<p>The exact answer comes from the running agent and changes with its available
 tools. You can then inspect the live event viewer or JSONL artifacts while
-trying the suggested interactions.</p>
+trying the agent’s capabilities.</p>
 </section>
 </section>
 <section id="tea-making-guidance-voice-visual-workflow">
@@ -671,14 +669,13 @@ and adaptation recipes.</p>
 <section id="try-the-tea-agent">
 <h3>Try the tea agent<a class="headerlink" href="#try-the-tea-agent" title="Link to this heading">#</a></h3>
 <p>The default voice gate requires “Agent” or “Hey Agent” at the start of a spoken
-request. Begin with a tour, then choose one of the agent’s current suggestions:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Hey Agent, what can you do in this sample? Give me a short tour and
-     suggest three things to try.
+request. Begin with capability discovery:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Hey Agent, what can you do?
 Agent: [Describes the capabilities currently available in the sample.]
-You: Hey Agent, [Ask a question or give a command based on one suggestion.]
+You: Hey Agent, [Ask a question or give a command based on that answer.]
 </pre></div>
 </div>
-<p>The exact tour comes from the running agent, so it remains useful as the tea
+<p>The exact answer comes from the running agent, so it remains useful as the tea
 workflow and background tools evolve.</p>
 </section>
 </section>
@@ -764,16 +761,15 @@ Microphone</strong> and <strong>Launch XR</strong>.</p>
 <p>After you start the microphone, every finalized utterance goes to the agent by
 default, so no wake phrase is required. Start with a capability-discovery
 request instead of memorizing a fixed command list:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: What can you do in this sample? Give me a short tour and suggest three
-     things to try.
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: What can you do?
 Agent: [Describes the capabilities currently available in the sample.]
-You: [Ask a question or give a command based on one of those suggestions.]
+You: [Ask a question or give a command based on that answer.]
 </pre></div>
 </div>
 <p>Speak naturally: the agent accepts questions, commands, and follow-up requests.
-Asking it for a tour keeps this first interaction useful when the sample’s
-tools change. Refer to <a class="reference internal" href="clients.html"><span class="doc">Connecting clients</span></a> for headset and
-native-client setup.</p>
+Asking about its capabilities keeps this first interaction useful when the
+sample’s tools change. Refer to <a class="reference internal" href="clients.html"><span class="doc">Connecting clients</span></a> for headset
+and native-client setup.</p>
 </section>
 </section>
 <section id="hub-only-standalone">
