@@ -216,6 +216,13 @@ CASES = (
         ),
     ),
     SubagentCase(
+        name="unsupported_shape_does_not_substitute",
+        agent="object",
+        instruction="Create a yellow rectangle ahead of the user.",
+        forbid_tools=("add_primitive", "update_primitive", "remove_primitive"),
+        answer_contains="supported",
+    ),
+    SubagentCase(
         name="physical_color_create",
         agent="object",
         instruction="Create a small sphere the color of the user's scarf, no position stated.",

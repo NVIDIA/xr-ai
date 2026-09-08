@@ -744,6 +744,29 @@ _FORBID_MUTATIONS = _MUTATING
 
 UTTERANCES = (
     Case(
+        name="basics_generic_creation_clarifies",
+        request="Add an object for me.",
+        forbidden_tools=_FORBID_MUTATIONS,
+        reply_contains="shape",
+    ),
+    Case(
+        name="basics_scene_inventory_uses_scene_state",
+        request="What is currently inside the XR scene?",
+        scene=(
+            {"id": "sphere-0", "type": "sphere",
+             "position": {"x": 0.0, "y": 1.6, "z": -1.5},
+             "color": {"r": 1, "g": 0, "b": 0}, "size": 0.1},
+        ),
+        forbidden_tools=frozenset({"look_at_current_frame", *_FORBID_MUTATIONS}),
+        reply_contains="sphere",
+    ),
+    Case(
+        name="basics_unsupported_shape_rejected",
+        request="Create a yellow rectangle ahead of me.",
+        forbidden_tools=_FORBID_MUTATIONS,
+        reply_contains="supported",
+    ),
+    Case(
         name="basics_physical_color_source",
         request="Make the cylinder the same color as the ceiling.",
         scene=(
