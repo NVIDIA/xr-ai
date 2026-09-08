@@ -456,6 +456,25 @@ export class LiveKitBackend {
     await room.localParticipant.publishData(bytes, opts);
   }
 
+  /** Send one encoded image through LiveKit's chunked byte-stream transport. */
+  async sendImage(data, { requestId, mimeType, name = 'capture' }) {
+    const room = this.#room;
+    if (!room || room.state !== 'connected') {
+      throw StreamError.notConnected();
+    }
+    const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+    const options = {
+      topic: 'camera.capture.response',
+      attributes: { request_id: requestId },
+      mimeType,
+      name,
+    };
+    if (this.#config.hubIdentity) {
+      options.destinationIdentities = [this.#config.hubIdentity];
+    }
+    await room.localParticipant.sendBytes(bytes, options);
+  }
+
   // ── Private helpers ─────────────────────────────────────────────────────────
 
   /**

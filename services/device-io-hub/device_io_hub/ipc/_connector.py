@@ -29,9 +29,21 @@ import zmq
 import zmq.asyncio
 from loguru import logger
 
-from xr_ai_hub import (AudioChunk, ConnectorRegistration, ControlMessage,
-                         DataMessage, FrameSignal, MsgType, ParticipantEvent, PixelFormat,
-                         ReturnAudioFlush, ShmRingBuffer, decode, encode)
+from xr_ai_hub import (
+    AudioChunk,
+    ConnectorRegistration,
+    ControlMessage,
+    DataMessage,
+    FrameSignal,
+    ImageCaptureData,
+    MsgType,
+    ParticipantEvent,
+    PixelFormat,
+    ReturnAudioFlush,
+    ShmRingBuffer,
+    decode,
+    encode,
+)
 
 ReturnAudioCallback      = Callable[[AudioChunk],        Awaitable[None]]
 ReturnDataCallback       = Callable[[DataMessage],       Awaitable[None]]
@@ -157,6 +169,11 @@ class ConnectorEndpoint:
 
     async def push_data(self, msg: DataMessage) -> None:
         await self._push.send(encode(MsgType.DATA_MESSAGE, msg))
+
+    async def push_image_capture(self, image: ImageCaptureData) -> None:
+        """Deliver one complete client-captured encoded image to processors."""
+
+        await self._push.send(encode(MsgType.IMAGE_CAPTURE_DATA, image))
 
     async def send_control(self, msg: ControlMessage) -> None:
         await self._push.send(encode(MsgType.CONTROL, msg))

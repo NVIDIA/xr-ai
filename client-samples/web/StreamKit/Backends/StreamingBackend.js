@@ -173,3 +173,13 @@
  * @returns {Promise<void>}
  * @throws {import('../StreamError.js').StreamError}
  */
+
+/**
+ * Send an encoded image as a chunked stream correlated to a capture request.
+ *
+ * @function
+ * @name StreamingBackend#sendImage
+ * @param {ArrayBuffer | Uint8Array} data
+ * @param {{requestId: string, mimeType: string, name?: string}} opts
+ * @returns {Promise<void>}
+ */

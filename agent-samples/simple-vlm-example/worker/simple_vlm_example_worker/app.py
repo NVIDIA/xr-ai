@@ -149,16 +149,17 @@ async def run_app(
 
     runtime = AgentRuntime()
     images = ImageRegistry()
+    frames = CurrentFrameTool(
+        endpoint=transport.endpoint,
+        images=images,
+        frame_max_age_s=config.frame_max_age_s,
+        frame_timeout_s=config.frame_timeout_s,
+    )
     simple_vlm = runtime.register(
         "simple-vlm",
         SimpleVlmAgent(
             lambda: (
-                CurrentFrameTool(
-                    endpoint=transport.endpoint,
-                    images=images,
-                    frame_max_age_s=config.frame_max_age_s,
-                    frame_timeout_s=config.frame_timeout_s,
-                ),
+                frames,
                 StreamingImageQueryTool(
                     images=images,
                     vlm=vlm,

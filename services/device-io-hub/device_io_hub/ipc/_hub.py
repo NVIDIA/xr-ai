@@ -436,6 +436,42 @@ class HubEndpoint:
             topic = f"data.{msg.participant_id}.{msg.topic}".encode()
             await self._pub.send_multipart([topic, encode(MsgType.DATA_MESSAGE, msg)])
 
+        elif type_id == MsgType.IMAGE_CAPTURE_REQUEST:
+            await self.send_return_data(DataMessage(
+                participant_id=msg.participant_id,
+                topic="camera.capture.request",
+                pts_us=_now_us(),
+                data=json.dumps({
+                    "version": 1,
+                    "request_id": msg.request_id,
+                    "timeout_ms": msg.timeout_ms,
+                }).encode(),
+            ))
+
+        elif type_id == MsgType.IMAGE_CAPTURE_CANCEL:
+            await self.send_return_data(DataMessage(
+                participant_id=msg.participant_id,
+                topic="camera.capture.cancel",
+                pts_us=_now_us(),
+                data=json.dumps({
+                    "version": 1,
+                    "request_id": msg.request_id,
+                }).encode(),
+            ))
+
+        elif type_id == MsgType.IMAGE_CAPTURE_DATA:
+            if not self._is_connected(msg.participant_id):
+                logger.warning(
+                    "Image capture for disconnected participant {!r} — dropped",
+                    msg.participant_id,
+                )
+                return
+            topic = f"data.{msg.participant_id}.camera.capture.response".encode()
+            await self._pub.send_multipart([
+                topic,
+                encode(MsgType.IMAGE_CAPTURE_DATA, msg),
+            ])
+
         elif type_id == MsgType.PARTICIPANT_EVENT:
             if msg.joined:
                 self._participant_connector[msg.participant_id] = msg.connector_id

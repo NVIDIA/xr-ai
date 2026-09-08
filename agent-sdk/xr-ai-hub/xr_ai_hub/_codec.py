@@ -16,10 +16,25 @@ from typing import Any, Callable, cast
 
 import msgpack
 
-from ._types import (AgentPresence, AudioChunk, ConnectorRegistration, ControlMessage,
-                     DataMessage, FrameData, FrameRequest, FrameSignal, MsgType,
-                     ParticipantEvent, PixelFormat, ReturnAudioFlush, RosterRequest,
-                     SubscriptionProbe)
+from ._types import (
+    AgentPresence,
+    AudioChunk,
+    ConnectorRegistration,
+    ControlMessage,
+    DataMessage,
+    FrameData,
+    FrameRequest,
+    FrameSignal,
+    ImageCaptureCancel,
+    ImageCaptureData,
+    ImageCaptureRequest,
+    MsgType,
+    ParticipantEvent,
+    PixelFormat,
+    ReturnAudioFlush,
+    RosterRequest,
+    SubscriptionProbe,
+)
 
 _TYPE_HDR = struct.Struct("=B")
 
@@ -142,3 +157,19 @@ register_encoder(MsgType.AGENT_PRESENCE, lambda m: [m.agent_id, m.attached, m.sc
 register_decoder(MsgType.AGENT_PRESENCE,
                  lambda p: AgentPresence(p[0], p[1],
                                          None if p[2] is None else list(p[2])))
+
+register_encoder(MsgType.IMAGE_CAPTURE_REQUEST,
+                 lambda m: [m.participant_id, m.request_id, m.timeout_ms])
+register_decoder(MsgType.IMAGE_CAPTURE_REQUEST,
+                 lambda p: ImageCaptureRequest(p[0], p[1], p[2]))
+
+register_encoder(MsgType.IMAGE_CAPTURE_DATA,
+                 lambda m: [m.participant_id, m.request_id, m.pts_us,
+                            m.mime_type, m.data])
+register_decoder(MsgType.IMAGE_CAPTURE_DATA,
+                 lambda p: ImageCaptureData(p[0], p[1], p[2], p[3], bytes(p[4])))
+
+register_encoder(MsgType.IMAGE_CAPTURE_CANCEL,
+                 lambda m: [m.participant_id, m.request_id])
+register_decoder(MsgType.IMAGE_CAPTURE_CANCEL,
+                 lambda p: ImageCaptureCancel(p[0], p[1]))

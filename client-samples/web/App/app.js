@@ -104,14 +104,24 @@ function render() {
 
   // Camera preview elements.
   const video       = $('camera-preview');
+  const captured    = $('captured-preview');
   const placeholder = $('preview-placeholder');
   const liveBadge   = $('preview-live-badge');
   if (model.isCameraActive) {
     video.classList.add('active');
+    captured.classList.remove('active');
     placeholder.style.display = 'none';
     liveBadge.classList.add('active');
+  } else if (model.capturedImageURL) {
+    video.classList.remove('active');
+    captured.src = model.capturedImageURL;
+    captured.classList.add('active');
+    placeholder.style.display = 'none';
+    liveBadge.classList.remove('active');
   } else {
     video.classList.remove('active');
+    captured.removeAttribute('src');
+    captured.classList.remove('active');
     placeholder.style.display = '';
     liveBadge.classList.remove('active');
   }

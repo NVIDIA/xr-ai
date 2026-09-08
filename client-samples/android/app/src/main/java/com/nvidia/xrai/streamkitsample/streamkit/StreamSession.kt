@@ -4,6 +4,7 @@
 package com.nvidia.xrai.streamkitsample.streamkit
 
 import android.content.Context
+import android.util.Log
 import com.nvidia.xrai.streamkitsample.streamkit.backends.StreamingBackend
 import com.nvidia.xrai.streamkitsample.streamkit.backends.livekit.LiveKitBackend
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
@@ -12,6 +13,13 @@ import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
 import io.livekit.android.renderer.TextureViewRenderer
 import io.livekit.android.room.track.LocalVideoTrack
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import org.json.JSONObject
 import java.nio.ByteBuffer
 
 /**
@@ -46,6 +54,9 @@ import java.nio.ByteBuffer
  */
 class StreamSession(private val backend: StreamingBackend) {
 
+    private val captureScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val captureJobs = mutableMapOf<String, Job>()
+
     /**
      * Creates a session backed by a [BackendConfiguration].
      * The [context] is used to instantiate the backend (stored as applicationContext).
@@ -79,6 +90,9 @@ class StreamSession(private val backend: StreamingBackend) {
     /** Called about once per second with LiveKit-native network telemetry. */
     var onNetworkMetrics: ((metrics: NetworkMetrics) -> Unit)? = null
 
+    /** Opt-in handler invoked when the remote agent asks this client for a still image. */
+    var onImageCaptureRequested: (suspend (ImageCaptureRequest) -> CapturedImage)? = null
+
     init {
         wireCallbacks()
     }
@@ -101,6 +115,8 @@ class StreamSession(private val backend: StreamingBackend) {
      * Safe to call at any time, including before [connect].
      */
     suspend fun disconnect() {
+        captureJobs.values.forEach { it.cancel() }
+        captureJobs.clear()
         backend.disconnect()
     }
 
@@ -185,6 +201,16 @@ class StreamSession(private val backend: StreamingBackend) {
         (backend as? LiveKitBackend)?.initVideoRenderer(view)
     }
 
+    /** Capture the next frame from the active local camera as a JPEG still. */
+    suspend fun captureCurrentCameraImage(): CapturedImage {
+        val track = localCameraTrack ?: throw IllegalStateException("Camera is not active.")
+        return CapturedImage(track.captureJpeg())
+    }
+
+    /** Capture a local still without publishing video when the camera is off. */
+    suspend fun captureImage(config: CameraConfig = CameraConfig.DEFAULT): CapturedImage =
+        backend.captureImage(config)
+
     // ── Data channel ──────────────────────────────────────────────────────────
 
     /**
@@ -202,8 +228,48 @@ class StreamSession(private val backend: StreamingBackend) {
 
     private fun wireCallbacks() {
         backend.onConnectionStateChanged = { state -> onConnectionStateChanged?.invoke(state) }
-        backend.onDataReceived = { topic, data -> onDataReceived?.invoke(topic, data) }
+        backend.onDataReceived = { topic, data ->
+            when (topic) {
+                "camera.capture.request" -> handleCaptureRequest(data)
+                "camera.capture.cancel" -> handleCaptureCancel(data)
+                else -> onDataReceived?.invoke(topic, data)
+            }
+        }
         backend.onAgentStatus = { status -> onAgentStatus?.invoke(status) }
         backend.onNetworkMetrics = { metrics -> onNetworkMetrics?.invoke(metrics) }
+    }
+
+    private fun handleCaptureRequest(data: ByteArray) {
+        val request = runCatching { JSONObject(String(data, Charsets.UTF_8)) }.getOrNull() ?: return
+        if (request.optInt("version") != 1) return
+        val requestId = request.optString("request_id")
+        if (requestId.isBlank()) return
+        val handler = onImageCaptureRequested ?: return
+        captureJobs.remove(requestId)?.cancel()
+        captureJobs[requestId] = captureScope.launch {
+            try {
+                val image = handler(
+                    ImageCaptureRequest(requestId, request.optLong("timeout_ms"))
+                )
+                require(image.data.isNotEmpty()) { "image capture returned no data" }
+                require(image.mimeType in setOf("image/jpeg", "image/png", "image/webp")) {
+                    "image capture returned an unsupported media type"
+                }
+                backend.sendImage(image.data, requestId, image.mimeType, image.name)
+            } catch (_: CancellationException) {
+                // Cancellation is the normal outcome for a superseded request.
+            } catch (error: Exception) {
+                Log.w("StreamSession", "Image capture request failed", error)
+            } finally {
+                captureJobs.remove(requestId)
+            }
+        }
+    }
+
+    private fun handleCaptureCancel(data: ByteArray) {
+        val requestId = runCatching {
+            JSONObject(String(data, Charsets.UTF_8)).optString("request_id")
+        }.getOrNull() ?: return
+        captureJobs.remove(requestId)?.cancel()
     }
 }

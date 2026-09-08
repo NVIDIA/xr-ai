@@ -277,6 +277,14 @@ final class AppModel {
             guard let self, self.session === newSession else { return }
             self.networkMetrics = metrics
         }
+        newSession.onImageCaptureRequested = { [weak self, weak newSession] _ in
+            guard let self, let newSession, self.session === newSession else {
+                throw CancellationError()
+            }
+            return try await newSession.captureImage(
+                config: CameraConfig(position: self.cameraPosition)
+            )
+        }
         newSession.onDataReceived = { [weak self, weak newSession] topic, data in
             guard let self, self.session === newSession else { return }
 

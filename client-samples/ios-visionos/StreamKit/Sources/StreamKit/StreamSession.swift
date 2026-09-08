@@ -8,8 +8,10 @@
  * Runs on @MainActor so it is safe to bind directly to SwiftUI.
  */
 
+import CoreImage
 import CoreMedia
 import Foundation
+import ImageIO
 import LiveKit
 
 // MARK: - StreamSession
@@ -68,9 +70,14 @@ public final class StreamSession: ObservableObject {
     /// Called on the main actor when a new network telemetry snapshot is ready.
     public var onNetworkMetrics: ((NetworkMetrics) -> Void)?
 
+    /// Opt-in handler invoked when the remote agent asks this client for a still image.
+    public var onImageCaptureRequested:
+        (@MainActor (ImageCaptureRequest) async throws -> CapturedImage)?
+
     // MARK: - Private
 
     private var backend: any StreamingBackend
+    private var captureTasks: [String: Task<Void, Never>] = [:]
 
     // MARK: - Init
 
@@ -97,6 +104,8 @@ public final class StreamSession: ObservableObject {
 
     /// Disconnects and releases all resources.
     public func disconnect() async {
+        captureTasks.values.forEach { $0.cancel() }
+        captureTasks.removeAll()
         await backend.disconnect()
         agentStatus = nil
         networkMetrics = nil
@@ -139,6 +148,19 @@ public final class StreamSession: ObservableObject {
     /// the camera is stopped.
     public var localCameraTrack: LocalVideoTrack? {
         (backend as? LiveKitBackend)?.localCameraTrack
+    }
+
+    /// Capture the next frame from the active local camera as a JPEG still.
+    public func captureCurrentCameraImage() async throws -> CapturedImage {
+        guard let track = localCameraTrack else {
+            throw StreamError.imageCaptureUnavailable("Camera is not active.")
+        }
+        return try await StillImageCapture.capture(track: track)
+    }
+
+    /// Capture one local still without publishing video when the camera is off.
+    public func captureImage(config: CameraConfig = .default) async throws -> CapturedImage {
+        try await backend.captureImage(config: config)
     }
 
     // MARK: - Frame injection
@@ -192,7 +214,12 @@ public final class StreamSession: ObservableObject {
         }
         backend.onDataReceived = { [weak self] topic, data in
             Task { @MainActor [weak self] in
-                self?.onDataReceived?(topic, data)
+                guard let self else { return }
+                switch topic {
+                case "camera.capture.request": handleCaptureRequest(data)
+                case "camera.capture.cancel": handleCaptureCancel(data)
+                default: onDataReceived?(topic, data)
+                }
             }
         }
         backend.onAgentStatus = { [weak self] status in
@@ -210,5 +237,143 @@ public final class StreamSession: ObservableObject {
                 onNetworkMetrics?(metrics)
             }
         }
+    }
+
+    private func handleCaptureRequest(_ data: Data) {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              object["version"] as? Int == 1,
+              let requestID = object["request_id"] as? String,
+              !requestID.isEmpty,
+              let handler = onImageCaptureRequested else { return }
+        captureTasks[requestID]?.cancel()
+        captureTasks[requestID] = Task { @MainActor [weak self] in
+            defer { self?.captureTasks.removeValue(forKey: requestID) }
+            do {
+                let image = try await handler(ImageCaptureRequest(
+                    requestID: requestID,
+                    timeoutMilliseconds: object["timeout_ms"] as? Int ?? 0
+                ))
+                try Task.checkCancellation()
+                guard !image.data.isEmpty,
+                      ["image/jpeg", "image/png", "image/webp"].contains(image.mimeType) else {
+                    return
+                }
+                try await self?.backend.sendImage(
+                    image.data,
+                    requestID: requestID,
+                    mimeType: image.mimeType,
+                    name: image.name
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                return
+            }
+        }
+    }
+
+    private func handleCaptureCancel(_ data: Data) {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let requestID = object["request_id"] as? String else { return }
+        captureTasks.removeValue(forKey: requestID)?.cancel()
+    }
+}
+
+final class StillImageCapture: NSObject, VideoRenderer, @unchecked Sendable {
+    @MainActor var isAdaptiveStreamEnabled: Bool { false }
+    @MainActor var adaptiveStreamSize: CGSize { .zero }
+
+    private let track: LocalVideoTrack
+    private let continuation: CheckedContinuation<CapturedImage, Error>
+    private let lock = NSLock()
+    private var completed = false
+    private var retainedSelf: StillImageCapture?
+
+    private init(
+        track: LocalVideoTrack,
+        continuation: CheckedContinuation<CapturedImage, Error>
+    ) {
+        self.track = track
+        self.continuation = continuation
+    }
+
+    static func capture(track: LocalVideoTrack) async throws -> CapturedImage {
+        let holder = StillImageCaptureHolder()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let renderer = StillImageCapture(track: track, continuation: continuation)
+                renderer.retainedSelf = renderer
+                track.add(videoRenderer: renderer)
+                holder.install(renderer)
+            }
+        } onCancel: {
+            holder.cancel()
+        }
+    }
+
+    nonisolated func render(frame: VideoFrame) {
+        guard claimCompletion() else { return }
+        track.remove(videoRenderer: self)
+        guard let pixelBuffer = frame.toCVPixelBuffer(),
+              let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else {
+            continuation.resume(throwing: StreamError.imageCaptureUnavailable("JPEG encoding failed."))
+            return
+        }
+        let orientation: CGImagePropertyOrientation = switch frame.rotation {
+        case ._0: .up
+        case ._90: .right
+        case ._180: .down
+        case ._270: .left
+        }
+        guard let jpeg = CIContext().jpegRepresentation(
+            of: CIImage(cvPixelBuffer: pixelBuffer).oriented(orientation),
+            colorSpace: colorSpace,
+            options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: 0.9]
+        ) else {
+            continuation.resume(throwing: StreamError.imageCaptureUnavailable("JPEG encoding failed."))
+            return
+        }
+        continuation.resume(returning: CapturedImage(data: jpeg))
+    }
+
+    nonisolated func cancel() {
+        guard claimCompletion() else { return }
+        track.remove(videoRenderer: self)
+        continuation.resume(throwing: CancellationError())
+    }
+
+    nonisolated private func claimCompletion() -> Bool {
+        lock.lock()
+        guard !completed else { lock.unlock(); return false }
+        completed = true
+        retainedSelf = nil
+        lock.unlock()
+        return true
+    }
+}
+
+private final class StillImageCaptureHolder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var renderer: StillImageCapture?
+    private var cancelled = false
+
+    func install(_ renderer: StillImageCapture) {
+        lock.lock()
+        if cancelled {
+            lock.unlock()
+            renderer.cancel()
+            return
+        }
+        self.renderer = renderer
+        lock.unlock()
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        let renderer = renderer
+        self.renderer = nil
+        lock.unlock()
+        renderer?.cancel()
     }
 }

@@ -74,6 +74,13 @@ class _Endpoint:
     def on_frame(self, callback) -> None:
         self.frame_callback = callback
 
+    def on_image_capture(self, _callback):
+        return lambda: None
+
+    @property
+    def connected_participants(self):
+        return frozenset({"alice"})
+
     def on_participant(self, _callback) -> None:
         pass
 

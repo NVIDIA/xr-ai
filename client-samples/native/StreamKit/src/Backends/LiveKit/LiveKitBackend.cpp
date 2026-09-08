@@ -37,6 +37,7 @@
 
 #if STREAMKIT_HAVE_LIVEKIT
 #include "livekit/audio_frame.h"
+#include "livekit/data_stream.h"
 #include "livekit/audio_source.h"
 #include "livekit/livekit.h"
 #include "livekit/local_audio_track.h"
@@ -163,7 +164,7 @@ public:
     void onConnectionQualityChanged(
         livekit::Room& room,
         const livekit::ConnectionQualityChangedEvent& e) override {
-        const auto* local = room.localParticipant();
+        const auto local = room.localParticipant().lock();
         if (local && e.participant && e.participant->identity() == local->identity()) {
             owner_->HandleNetworkQualityChange(static_cast<int>(e.quality));
         }
@@ -295,8 +296,10 @@ void LiveKitBackend::StartAudio(const AudioConfig& config) {
     // through AudioProcessingModule, tracked as a follow-up.
     StopAudio();
     std::scoped_lock lock(tracks_mutex_);
+    const auto participant = room_->localParticipant().lock();
+    if (!participant) throw NotConnectedError{};
     audio_source_ = std::make_shared<livekit::AudioSource>(48000, 1, 0);
-    audio_track_ = room_->localParticipant()->publishAudioTrack(
+    audio_track_ = participant->publishAudioTrack(
         "mic", audio_source_, livekit::TrackSource::SOURCE_MICROPHONE);
     audio_armed_.store(true);
 #else
@@ -309,7 +312,9 @@ void LiveKitBackend::StopAudio() {
 #if STREAMKIT_HAVE_LIVEKIT
     std::scoped_lock lock(tracks_mutex_);
     if (audio_track_ && room_) {
-        room_->localParticipant()->unpublishTrack(audio_track_->sid());
+        if (const auto participant = room_->localParticipant().lock()) {
+            participant->unpublishTrack(audio_track_->sid());
+        }
     }
     audio_track_.reset();
     audio_source_.reset();
@@ -341,7 +346,9 @@ void LiveKitBackend::StopCamera() {
 #if STREAMKIT_HAVE_LIVEKIT
     std::scoped_lock lock(tracks_mutex_);
     if (video_track_ && room_) {
-        room_->localParticipant()->unpublishTrack(video_track_->sid());
+        if (const auto participant = room_->localParticipant().lock()) {
+            participant->unpublishTrack(video_track_->sid());
+        }
     }
     video_track_.reset();
     video_source_.reset();
@@ -428,7 +435,9 @@ void LiveKitBackend::InjectVideoFrame(std::vector<std::uint8_t>&& data,
                     options.simulcast = encoding.simulcast;
                 }
             }
-            room_->localParticipant()->publishTrack(video_track_, options);
+            const auto participant = room_->localParticipant().lock();
+            if (!participant) throw NotConnectedError{};
+            participant->publishTrack(video_track_, options);
         }
         source = video_source_;
     }
@@ -510,10 +519,38 @@ void LiveKitBackend::Send(std::span<const std::byte> data,
 #if STREAMKIT_HAVE_LIVEKIT
     std::vector<std::uint8_t> payload(data.size());
     std::memcpy(payload.data(), data.data(), data.size());
-    room_->localParticipant()->publishData(payload, reliable, {}, std::string(topic));
+    std::vector<std::string> destinations;
+    if (config_.hub_identity) destinations.push_back(*config_.hub_identity);
+    const auto participant = room_->localParticipant().lock();
+    if (!participant) throw NotConnectedError{};
+    participant->publishData(payload, reliable, destinations, std::string(topic));
 #else
     (void)data;
     (void)reliable;
+#endif
+}
+
+void LiveKitBackend::SendImage(std::span<const std::uint8_t> data,
+                               std::string_view request_id,
+                               std::string_view mime_type,
+                               std::string_view name) {
+    if (!is_connected_.load()) throw NotConnectedError{};
+#if STREAMKIT_HAVE_LIVEKIT
+    std::vector<std::string> destinations;
+    if (config_.hub_identity) destinations.push_back(*config_.hub_identity);
+    const auto participant = room_->localParticipant().lock();
+    if (!participant) throw NotConnectedError{};
+    livekit::ByteStreamWriter writer(
+        *participant, std::string(name), "camera.capture.response",
+        {{"request_id", std::string(request_id)}}, "", data.size(),
+        std::string(mime_type), destinations);
+    writer.write(std::vector<std::uint8_t>(data.begin(), data.end()));
+    writer.close();
+#else
+    (void)data;
+    (void)request_id;
+    (void)mime_type;
+    (void)name;
 #endif
 }
 
@@ -699,7 +736,8 @@ void LiveKitBackend::PublishNetworkMetrics(std::uint64_t connection_epoch) {
             if (audio_track_) tracks.push_back(audio_track_);
             if (video_track_) tracks.push_back(video_track_);
         }
-        for (const auto& participant : room->remoteParticipants()) {
+        for (const auto& participant_handle : room->remoteParticipants()) {
+            const auto participant = participant_handle.lock();
             if (!participant) continue;
             for (const auto& [_, publication] : participant->trackPublications()) {
                 if (publication && publication->track()) {
