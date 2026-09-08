@@ -39,16 +39,55 @@ class TestParseConfigBool:
 
 
 class TestSetupHfEnv:
+    _ENV_KEYS = (
+        "HF_TOKEN",
+        "HF_XET_HIGH_PERFORMANCE",
+        "HF_HUB_DISABLE_XET",
+        "HF_HUB_ENABLE_HF_TRANSFER",
+        "HF_HOME",
+        "TRANSFORMERS_CACHE",
+    )
+
     @pytest.fixture(autouse=True)
     def _guard_hf_environment(self, monkeypatch):
-        for key in (
-            "HF_XET_HIGH_PERFORMANCE",
-            "HF_HUB_DISABLE_XET",
-            "HF_HUB_ENABLE_HF_TRANSFER",
-            "HF_HOME",
-            "TRANSFORMERS_CACHE",
-        ):
+        # monkeypatch only restores keys that existed at setup; setup_hf_env
+        # writes new ones, so pop those explicitly.
+        for key in self._ENV_KEYS:
             monkeypatch.delenv(key, raising=False)
+        yield
+        for key in self._ENV_KEYS:
+            os.environ.pop(key, None)
+
+    def test_env_token_beats_yaml_token(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HF_TOKEN", "env_tok")
+
+        setup_hf_env({"hf_token": "yaml_tok"}, tmp_path)
+
+        assert os.environ["HF_TOKEN"] == "env_tok"
+
+    def test_yaml_token_used_when_env_unset(self, tmp_path):
+        setup_hf_env({"hf_token": "yaml_tok"}, tmp_path)
+
+        assert os.environ["HF_TOKEN"] == "yaml_tok"
+
+    def test_empty_env_token_falls_back_to_yaml(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HF_TOKEN", "")
+
+        setup_hf_env({"hf_token": "yaml_tok"}, tmp_path)
+
+        assert os.environ["HF_TOKEN"] == "yaml_tok"
+
+    def test_no_token_leaves_env_unset(self, tmp_path):
+        setup_hf_env({"hf_token": ""}, tmp_path)
+
+        assert "HF_TOKEN" not in os.environ
+
+    def test_env_hf_home_beats_model_cache(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HF_HOME", "/external/cache")
+
+        setup_hf_env({}, tmp_path)
+
+        assert os.environ["HF_HOME"] == "/external/cache"
 
     def test_preserves_legacy_transfer_opt_in(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HF_HUB_ENABLE_HF_TRANSFER", "1")

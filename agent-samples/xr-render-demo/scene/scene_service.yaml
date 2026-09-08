@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Sample-local scene process reference configuration.
-# lovr_bin may also be supplied through LOVR_BIN.
+# LOVR_BIN in the environment takes priority over lovr_bin.
 # lovr_bin: /home/you/hub/lovr/build/bin/lovr
 
 xr_app_dir: ./lovr
