@@ -1,0 +1,1032 @@
+
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>xr_ai_launcher &#8212; XR AI</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=da1a55c7" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../_static/scripts/fontawesome.js?digest=a95f357e85573c9b56d5"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5" />
+
+
+
+    <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/python/xr_ai_launcher/index';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+
+    <link rel="icon" href="../../../_static/favicon.png"/>
+
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="xr_ai_voicegate" href="../xr_ai_voicegate/index.html" />
+    <link rel="prev" title="xr_ai_logging" href="../xr_ai_logging/index.html" />
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="../../../_static/searchtools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script src="../../../searchindex.js"></script>
+  
+
+
+  </head>
+
+  <body data-default-mode="">
+
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="XR AI - Home"/>
+    <img src="../../../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="XR AI - Home"/>
+  
+  
+    <p class="title logo__title">XR AI</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="XR AI - Home"/>
+    <img src="../../../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="XR AI - Home"/>
+  
+  
+    <p class="title logo__title">XR AI</p>
+  
+</a>
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item"><!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+</div>
+        <div class="sidebar-primary-item">
+
+
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Table of Contents">
+  <p class="bd-links__title" role="heading" aria-level="1">Table of Contents</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../overview/architecture.html">Architecture</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../getting_started/index.html">Getting Started</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/skills.html">Skills</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/requirements.html">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/clients.html">Connecting clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/networking.html">Networking and firewall</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/credentials.html">Credentials</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../components/index.html">Components</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../components/agent-sdk.html">Agent SDK</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../components/ai-services.html">AI inference servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../components/launcher-and-process-model.html">Launcher and process model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../components/server-runtime.html">Server runtime</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/adding-a-sample.html">Adding a new sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/testing.html">Testing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../command-line.html">Command-line reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../simple-vlm-example.html">Simple VLM example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../xr-render-demo.html">xr-render-demo — architecture</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">API Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_vllm/index.html">xr_ai_vllm</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+</ul>
+</details></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">API Reference</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">xr_ai_launcher</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="module-xr_ai_launcher">
+<span id="xr-ai-launcher"></span><h1>xr_ai_launcher<a class="headerlink" href="#module-xr_ai_launcher" title="Link to this heading">#</a></h1>
+<p>xr-ai-launcher — process management for the xr-ai stack.</p>
+<p>Intentionally stdlib-only so it can be added to any sample without pulling
+in the dependency chain of the processes it manages.</p>
+<p>Typical usage:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_launcher</span><span class="w"> </span><span class="kn">import</span> <span class="n">Parallel</span><span class="p">,</span> <span class="n">Process</span><span class="p">,</span> <span class="n">run_stack</span>
+
+<span class="n">_BASE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span>
+
+<span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/device-io-hub"</span><span class="p">,</span> <span class="s2">"device_io_hub"</span><span class="p">),</span>
+    <span class="n">Parallel</span><span class="p">([</span>
+        <span class="n">Process</span><span class="p">(</span><span class="s2">"stt"</span><span class="p">,</span> <span class="s2">"../../services/stt-server"</span><span class="p">,</span> <span class="s2">"stt_server"</span><span class="p">),</span>
+        <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span> <span class="s2">"../../services/piper-tts"</span><span class="p">,</span>  <span class="s2">"piper_tts_server"</span><span class="p">),</span>
+    <span class="p">]),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"my_agent_worker"</span><span class="p">),</span>
+<span class="p">]</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">run_stack</span><span class="p">(</span><span class="n">PROCESSES</span><span class="p">,</span> <span class="n">_BASE</span><span class="p">)</span>
+</pre></div>
+</div>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.NATIVE_DEVICE_PROFILES" title="xr_ai_launcher.NATIVE_DEVICE_PROFILES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NATIVE_DEVICE_PROFILES</span></code></a></p></td>
+<td><p>CloudXR device profiles that use direct native transport instead of WSS.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.XR_RUNTIME_VAR" title="xr_ai_launcher.XR_RUNTIME_VAR"><code class="xref py py-obj docutils literal notranslate"><span class="pre">XR_RUNTIME_VAR</span></code></a></p></td>
+<td><p>OpenXR runtime selector written by the CloudXR runtime service.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="exceptions">
+<h2>Exceptions<a class="headerlink" href="#exceptions" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.GPUInventoryError" title="xr_ai_launcher.GPUInventoryError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GPUInventoryError</span></code></a></p></td>
+<td><p>Raised when visible GPUs cannot be inventoried or safely classified.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.ModelDeployment" title="xr_ai_launcher.ModelDeployment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelDeployment</span></code></a></p></td>
+<td><p>Launcher-facing process ownership and credentials for model endpoints.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.Parallel" title="xr_ai_launcher.Parallel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Parallel</span></code></a></p></td>
+<td><p>A group of processes that start simultaneously.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.Process" title="xr_ai_launcher.Process"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Process</span></code></a></p></td>
+<td><p>Declare one process in a launcher-managed stack.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.is_native_profile" title="xr_ai_launcher.is_native_profile"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_native_profile</span></code></a>(→ bool)</p></td>
+<td><p>True if <em>profile</em> names a native-transport CloudXR device profile.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.load_cloudxr_env" title="xr_ai_launcher.load_cloudxr_env"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_cloudxr_env</span></code></a>(→ None)</p></td>
+<td><p>Parse an <code class="docutils literal notranslate"><span class="pre">export</span> <span class="pre">KEY=VALUE</span></code> env file and merge into <code class="docutils literal notranslate"><span class="pre">os.environ</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.read_device_profile" title="xr_ai_launcher.read_device_profile"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_device_profile</span></code></a>(→ str)</p></td>
+<td><p>Return NV_DEVICE_PROFILE from the environment, or from <em>yaml_path</em> when unset.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.read_config_scalar" title="xr_ai_launcher.read_config_scalar"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_config_scalar</span></code></a>(→ str)</p></td>
+<td><p>Read one scalar from a top-level YAML worker configuration.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.ensure_credentials" title="xr_ai_launcher.ensure_credentials"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ensure_credentials</span></code></a>(→ None)</p></td>
+<td><p>Ensure each named token is available in os.environ.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.load_credentials" title="xr_ai_launcher.load_credentials"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_credentials</span></code></a>(→ None)</p></td>
+<td><p>Inject saved credentials into os.environ.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.require_credentials" title="xr_ai_launcher.require_credentials"><code class="xref py py-obj docutils literal notranslate"><span class="pre">require_credentials</span></code></a>(→ None)</p></td>
+<td><p>Exit non-zero unless each named token is available; NEVER prompts.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.warn_if_missing" title="xr_ai_launcher.warn_if_missing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">warn_if_missing</span></code></a>(→ None)</p></td>
+<td><p>Non-interactively surface missing optional tokens — NEVER prompts.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.detect_gpu_config" title="xr_ai_launcher.detect_gpu_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">detect_gpu_config</span></code></a>(→ str)</p></td>
+<td><p>Select an existing config only when the complete topology is supported.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.load_deployment_profile" title="xr_ai_launcher.load_deployment_profile"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_deployment_profile</span></code></a>(→ ModelDeployment)</p></td>
+<td><p>Load a JSON deployment profile directly (no worker YAML indirection).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.load_model_deployment" title="xr_ai_launcher.load_model_deployment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_model_deployment</span></code></a>(→ ModelDeployment)</p></td>
+<td><p>Load the JSON profile selected by a YAML worker configuration.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.ManagedProcess" title="xr_ai_launcher.ManagedProcess"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ManagedProcess</span></code></a>(name, cmd[, cwd, env])</p></td>
+<td><p>Run <em>cmd</em> as a subprocess and terminate it cleanly when the context exits.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.run_stack" title="xr_ai_launcher.run_stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_stack</span></code></a>(→ None)</p></td>
+<td><p>Start <em>processes</em> in declaration order, waiting for each item to signal</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="package-contents">
+<h2>Package Contents<a class="headerlink" href="#package-contents" title="Link to this heading">#</a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="xr_ai_launcher.NATIVE_DEVICE_PROFILES">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">NATIVE_DEVICE_PROFILES</span></span><a class="headerlink" href="#xr_ai_launcher.NATIVE_DEVICE_PROFILES" title="Link to this definition">#</a></dt>
+<dd><p>CloudXR device profiles that use direct native transport instead of WSS.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="xr_ai_launcher.XR_RUNTIME_VAR">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">XR_RUNTIME_VAR</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'XR_RUNTIME_JSON'</span></em><a class="headerlink" href="#xr_ai_launcher.XR_RUNTIME_VAR" title="Link to this definition">#</a></dt>
+<dd><p>OpenXR runtime selector written by the CloudXR runtime service.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_launcher.is_native_profile">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">is_native_profile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">profile</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#xr_ai_launcher.is_native_profile" title="Link to this definition">#</a></dt>
+<dd><p>True if <em>profile</em> names a native-transport CloudXR device profile.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_launcher.load_cloudxr_env">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">load_cloudxr_env</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_launcher.load_cloudxr_env" title="Link to this definition">#</a></dt>
+<dd><p>Parse an <code class="docutils literal notranslate"><span class="pre">export</span> <span class="pre">KEY=VALUE</span></code> env file and merge into <code class="docutils literal notranslate"><span class="pre">os.environ</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_launcher.read_device_profile">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">read_device_profile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">yaml_path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#xr_ai_launcher.read_device_profile" title="Link to this definition">#</a></dt>
+<dd><p>Return NV_DEVICE_PROFILE from the environment, or from <em>yaml_path</em> when unset.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_launcher.read_config_scalar">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">read_config_scalar</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#xr_ai_launcher.read_config_scalar" title="Link to this definition">#</a></dt>
+<dd><p>Read one scalar from a top-level YAML worker configuration.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_launcher.ensure_credentials">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">ensure_credentials</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_launcher.ensure_credentials" title="Link to this definition">#</a></dt>
+<dd><p>Ensure each named token is available in os.environ.</p>
+<dl class="simple">
+<dt>Priority (highest first):</dt><dd><ol class="arabic simple">
+<li><p>Already set in os.environ</p></li>
+<li><p>Saved in ~/.config/xr-ai/credentials.json</p></li>
+<li><p>Stored in ~/.cache/huggingface/token  (HF_TOKEN only)</p></li>
+<li><p>Prompted interactively and then saved to both locations</p></li>
+</ol>
+</dd>
+</dl>
+<p>Any token entered interactively is saved so future runs are non-interactive.
+Pressing Enter without typing skips the token (left unset, not saved).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_launcher.load_credentials">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">load_credentials</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_launcher.load_credentials" title="Link to this definition">#</a></dt>
+<dd><p>Inject saved credentials into os.environ.</p>
+<p>Values already set in os.environ are left unchanged.  For HF_TOKEN, also
+checks ~/.cache/huggingface/token (written by <cite>huggingface-cli login</cite>) as a
+fallback so existing HuggingFace logins are picked up automatically.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_launcher.require_credentials">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">require_credentials</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allow_missing</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_launcher.require_credentials" title="Link to this definition">#</a></dt>
+<dd><p>Exit non-zero unless each named token is available; NEVER prompts.</p>
+<p><em>allow_missing</em> (wired to the orchestrators’ <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code> flag)
+downgrades to <code class="docutils literal notranslate"><span class="pre">warn_if_missing</span></code> behavior.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_launcher.warn_if_missing">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">warn_if_missing</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_launcher.warn_if_missing" title="Link to this definition">#</a></dt>
+<dd><p>Non-interactively surface missing optional tokens — NEVER prompts.</p>
+<p>Loads saved / <cite>huggingface-cli login</cite> / env tokens, then prints an
+actionable notice per still-missing token and continues, so a missing
+token is visible early without blocking startup on an interactive prompt.</p>
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="xr_ai_launcher.GPUInventoryError">
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">GPUInventoryError</span></span><a class="headerlink" href="#xr_ai_launcher.GPUInventoryError" title="Link to this definition">#</a></dt>
+<dd><p>Raised when visible GPUs cannot be inventoried or safely classified.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_launcher.detect_gpu_config">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">detect_gpu_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#xr_ai_launcher.detect_gpu_config" title="Link to this definition">#</a></dt>
+<dd><p>Select an existing config only when the complete topology is supported.</p>
+<p>This compatibility bridge remains until capability-based service planning
+replaces named config selection. It deliberately has no fallback.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_launcher.ModelDeployment">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">ModelDeployment</span></span><a class="headerlink" href="#xr_ai_launcher.ModelDeployment" title="Link to this definition">#</a></dt>
+<dd><p>Launcher-facing process ownership and credentials for model endpoints.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_launcher.ModelDeployment.profile_path">
+<span class="sig-name descname"><span class="pre">profile_path</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">pathlib.Path</span></em><a class="headerlink" href="#xr_ai_launcher.ModelDeployment.profile_path" title="Link to this definition">#</a></dt>
+<dd><p>Resolved path of the selected model profile.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_launcher.ModelDeployment.services">
+<span class="sig-name descname"><span class="pre">services</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'own'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'reuse'</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#xr_ai_launcher.ModelDeployment.services" title="Link to this definition">#</a></dt>
+<dd><p>Launcher ownership mode keyed by managed service name.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_launcher.ModelDeployment.required_credentials">
+<span class="sig-name descname"><span class="pre">required_credentials</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ellipsis</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#xr_ai_launcher.ModelDeployment.required_credentials" title="Link to this definition">#</a></dt>
+<dd><p>Environment-variable names required by configured model endpoints.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_launcher.ModelDeployment.launch_mode">
+<span class="sig-name descname"><span class="pre">launch_mode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">service</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'own'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'reuse'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_launcher.ModelDeployment.launch_mode" title="Link to this definition">#</a></dt>
+<dd><p>Return the configured ownership mode for <em>service</em>, if managed.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_launcher.load_deployment_profile">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">load_deployment_profile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">profile_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_launcher.ModelDeployment" title="xr_ai_launcher.ModelDeployment"><span class="pre">ModelDeployment</span></a></span></span><a class="headerlink" href="#xr_ai_launcher.load_deployment_profile" title="Link to this definition">#</a></dt>
+<dd><p>Load a JSON deployment profile directly (no worker YAML indirection).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_launcher.load_model_deployment">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">load_model_deployment</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">worker_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_launcher.ModelDeployment" title="xr_ai_launcher.ModelDeployment"><span class="pre">ModelDeployment</span></a></span></span><a class="headerlink" href="#xr_ai_launcher.load_model_deployment" title="Link to this definition">#</a></dt>
+<dd><p>Load the JSON profile selected by a YAML worker configuration.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_launcher.ManagedProcess">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">ManagedProcess</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">cmd</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">cwd</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_launcher.ManagedProcess" title="Link to this definition">#</a></dt>
+<dd><p>Run <em>cmd</em> as a subprocess and terminate it cleanly when the context exits.</p>
+<p>Output routing: when the parent has called
+<a class="reference internal" href="../xr_ai_logging/index.html#xr_ai_logging.setup_logging" title="xr_ai_logging.setup_logging"><code class="xref py py-func docutils literal notranslate"><span class="pre">xr_ai_logging.setup_logging()</span></code></a> (per-run env vars stamped), stdout
+and stderr are appended line-by-line to <code class="docutils literal notranslate"><span class="pre">&lt;log_dir&gt;/&lt;name&gt;.log</span></code> with
+<code class="docutils literal notranslate"><span class="pre">HH:MM:SS.mmm</span></code> timestamps. Lines emitted via a custom <code class="docutils literal notranslate"><span class="pre">lovr.log</span></code>
+callback (<code class="docutils literal notranslate"><span class="pre">LOVR_LOG\t&lt;level&gt;\t&lt;tag&gt;\t&lt;msg&gt;</span></code>) are parsed for
+authoritative severity; <code class="docutils literal notranslate"><span class="pre">warn</span></code>/<code class="docutils literal notranslate"><span class="pre">error</span></code> records are also mirrored to
+the parent’s stdout so they reach the terminal. Native bytes that don’t
+carry the marker fall back to a regex match on LOVR’s level vocabulary
+(case-insensitive <code class="docutils literal notranslate"><span class="pre">error|warn|warning|fatal|panic</span></code>) before being
+mirrored.</p>
+<p>When the env vars are unset (standalone use), output is not lost: lines
+fall back to prefixed <code class="docutils literal notranslate"><span class="pre">[name]</span> <span class="pre">…</span></code> prints on the parent’s stdout.</p>
+<p>Sends SIGTERM on exit; escalates to SIGKILL after <code class="docutils literal notranslate"><span class="pre">_STOP_TIMEOUT</span></code>
+seconds. <em>env</em>, if given, replaces the child’s environment entirely;
+otherwise the child inherits the parent’s.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_launcher.Parallel">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">Parallel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">processes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_launcher.Process" title="xr_ai_launcher.Process"><span class="pre">Process</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_launcher.Parallel" title="Link to this definition">#</a></dt>
+<dd><p>A group of processes that start simultaneously.</p>
+<p>The launcher spawns every member at once and waits for <em>all</em> of them to
+signal readiness before advancing to the next item in the stack sequence.
+If any member exits before signaling ready the launcher shuts everything
+down, just as it would for a serial process.</p>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Parallel</span><span class="p">([</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"stt"</span><span class="p">,</span> <span class="s2">"../../services/stt-server"</span><span class="p">,</span> <span class="s2">"stt_server"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span> <span class="s2">"../../services/piper-tts"</span><span class="p">,</span>  <span class="s2">"piper_tts_server"</span><span class="p">),</span>
+<span class="p">])</span>
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_launcher.Parallel.processes">
+<span class="sig-name descname"><span class="pre">processes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_launcher.Process" title="xr_ai_launcher.Process"><span class="pre">Process</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ellipsis</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#xr_ai_launcher.Parallel.processes" title="Link to this definition">#</a></dt>
+<dd><p>Processes started together before the launcher advances.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_launcher.Process">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">Process</span></span><a class="headerlink" href="#xr_ai_launcher.Process" title="Link to this definition">#</a></dt>
+<dd><p>Declare one process in a launcher-managed stack.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_launcher.Process.name">
+<span class="sig-name descname"><span class="pre">name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_launcher.Process.name" title="Link to this definition">#</a></dt>
+<dd><p>Label used in launcher output and readiness diagnostics.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_launcher.Process.project">
+<span class="sig-name descname"><span class="pre">project</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">pathlib.Path</span></em><a class="headerlink" href="#xr_ai_launcher.Process.project" title="Link to this definition">#</a></dt>
+<dd><p>uv project path, relative to the sample root or absolute.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_launcher.Process.command">
+<span class="sig-name descname"><span class="pre">command</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_launcher.Process.command" title="Link to this definition">#</a></dt>
+<dd><p>Entry-point command to run inside the project’s environment.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_launcher.Process.config">
+<span class="sig-name descname"><span class="pre">config</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">pathlib.Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#xr_ai_launcher.Process.config" title="Link to this definition">#</a></dt>
+<dd><p>Optional YAML path, relative to the sample root or absolute.</p>
+<p>The launcher passes the resolved path to the process as <code class="docutils literal notranslate"><span class="pre">--config</span></code>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_launcher.Process.gpu">
+<span class="sig-name descname"><span class="pre">gpu</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#xr_ai_launcher.Process.gpu" title="Link to this definition">#</a></dt>
+<dd><p>Optional <code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code> value, such as <code class="docutils literal notranslate"><span class="pre">&quot;0&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;0,1&quot;</span></code>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_launcher.Process.launch_mode">
+<span class="sig-name descname"><span class="pre">launch_mode</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'own'</span></em><a class="headerlink" href="#xr_ai_launcher.Process.launch_mode" title="Link to this definition">#</a></dt>
+<dd><p>Spawn and shutdown behavior.</p>
+<p><code class="docutils literal notranslate"><span class="pre">own</span></code> starts the process and stops it with the stack. <code class="docutils literal notranslate"><span class="pre">persist</span></code> starts
+it but leaves it running at shutdown. <code class="docutils literal notranslate"><span class="pre">reuse</span></code> assumes the process is
+already running and neither starts nor stops it.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_launcher.Process.port">
+<span class="sig-name descname"><span class="pre">port</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#xr_ai_launcher.Process.port" title="Link to this definition">#</a></dt>
+<dd><p>Optional service port metadata.</p>
+<p>The launcher stores but does not inspect this value or stop persistent
+services by port.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_launcher.Process.quiet_native_output">
+<span class="sig-name descname"><span class="pre">quiet_native_output</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#xr_ai_launcher.Process.quiet_native_output" title="Link to this definition">#</a></dt>
+<dd><p>Route unformatted native output to DEBUG instead of the terminal.</p>
+<p>Use this for processes that interleave native C/C++ output with Python
+loguru records. All output remains available in the per-process log file.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_launcher.run_stack">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">run_stack</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">processes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_launcher.Process" title="xr_ai_launcher.Process"><span class="pre">Process</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="#xr_ai_launcher.Parallel" title="xr_ai_launcher.Parallel"><span class="pre">Parallel</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">base</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">exit_after_ready</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_launcher.run_stack" title="Link to this definition">#</a></dt>
+<dd><p>Start <em>processes</em> in declaration order, waiting for each item to signal
+readiness before advancing to the next.</p>
+<p>Each item is either a single <code class="docutils literal notranslate"><span class="pre">Process</span></code> (started and awaited alone) or a
+<code class="docutils literal notranslate"><span class="pre">Parallel</span></code> group (all members started at once; the launcher waits for
+<em>every</em> member before moving on).</p>
+<p>Each process receives <code class="docutils literal notranslate"><span class="pre">--ready-file</span> <span class="pre">&lt;path&gt;</span></code>.  When fully initialized
+it must <code class="docutils literal notranslate"><span class="pre">Path(ready_file).touch()</span></code> to signal the launcher.  Progress
+is printed every five seconds so model-loading or CloudXR start-up
+remains visible.</p>
+<p>After all processes are ready the launcher monitors them: if any exits,
+all others are terminated and the launcher exits.  Pass
+<code class="docutils literal notranslate"><span class="pre">exit_after_ready=True</span></code> to return immediately once everything is ready
+instead — useful for launchers whose processes are all <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;persist&quot;</span></code>
+and should outlive the orchestrator (e.g. <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>).</p>
+<p><em>base</em> is the sample root — all relative paths in <code class="docutils literal notranslate"><span class="pre">Process.project</span></code>
+and <code class="docutils literal notranslate"><span class="pre">Process.config</span></code> are resolved against it:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">_BASE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span>
+
+<span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/device-io-hub"</span><span class="p">,</span> <span class="s2">"device_io_hub"</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/device_io_hub.yaml"</span><span class="p">),</span>
+    <span class="n">Parallel</span><span class="p">([</span>
+        <span class="n">Process</span><span class="p">(</span><span class="s2">"stt"</span><span class="p">,</span> <span class="s2">"../../services/stt-server"</span><span class="p">,</span> <span class="s2">"stt_server"</span><span class="p">),</span>
+        <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span> <span class="s2">"../../services/piper-tts"</span><span class="p">,</span>  <span class="s2">"piper_tts_server"</span><span class="p">),</span>
+    <span class="p">]),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"my_worker"</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/my_worker.yaml"</span><span class="p">),</span>
+<span class="p">]</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">run_stack</span><span class="p">(</span><span class="n">PROCESSES</span><span class="p">,</span> <span class="n">_BASE</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../xr_ai_logging/index.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">xr_ai_logging</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../xr_ai_voicegate/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">xr_ai_voicegate</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+
+
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#attributes">Attributes</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exceptions">Exceptions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#classes">Classes</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#functions">Functions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#package-contents">Package Contents</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.NATIVE_DEVICE_PROFILES"><code class="docutils literal notranslate"><span class="pre">NATIVE_DEVICE_PROFILES</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.XR_RUNTIME_VAR"><code class="docutils literal notranslate"><span class="pre">XR_RUNTIME_VAR</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.is_native_profile"><code class="docutils literal notranslate"><span class="pre">is_native_profile()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.load_cloudxr_env"><code class="docutils literal notranslate"><span class="pre">load_cloudxr_env()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.read_device_profile"><code class="docutils literal notranslate"><span class="pre">read_device_profile()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.read_config_scalar"><code class="docutils literal notranslate"><span class="pre">read_config_scalar()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.ensure_credentials"><code class="docutils literal notranslate"><span class="pre">ensure_credentials()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.load_credentials"><code class="docutils literal notranslate"><span class="pre">load_credentials()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.require_credentials"><code class="docutils literal notranslate"><span class="pre">require_credentials()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.warn_if_missing"><code class="docutils literal notranslate"><span class="pre">warn_if_missing()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.GPUInventoryError"><code class="docutils literal notranslate"><span class="pre">GPUInventoryError</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.detect_gpu_config"><code class="docutils literal notranslate"><span class="pre">detect_gpu_config()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.ModelDeployment"><code class="docutils literal notranslate"><span class="pre">ModelDeployment</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.ModelDeployment.profile_path"><code class="docutils literal notranslate"><span class="pre">profile_path</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.ModelDeployment.services"><code class="docutils literal notranslate"><span class="pre">services</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.ModelDeployment.required_credentials"><code class="docutils literal notranslate"><span class="pre">required_credentials</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.ModelDeployment.launch_mode"><code class="docutils literal notranslate"><span class="pre">launch_mode()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.load_deployment_profile"><code class="docutils literal notranslate"><span class="pre">load_deployment_profile()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.load_model_deployment"><code class="docutils literal notranslate"><span class="pre">load_model_deployment()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.ManagedProcess"><code class="docutils literal notranslate"><span class="pre">ManagedProcess()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.Parallel"><code class="docutils literal notranslate"><span class="pre">Parallel</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.Parallel.processes"><code class="docutils literal notranslate"><span class="pre">processes</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.Process"><code class="docutils literal notranslate"><span class="pre">Process</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.Process.name"><code class="docutils literal notranslate"><span class="pre">name</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.Process.project"><code class="docutils literal notranslate"><span class="pre">project</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.Process.command"><code class="docutils literal notranslate"><span class="pre">command</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.Process.config"><code class="docutils literal notranslate"><span class="pre">config</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.Process.gpu"><code class="docutils literal notranslate"><span class="pre">gpu</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.Process.launch_mode"><code class="docutils literal notranslate"><span class="pre">launch_mode</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.Process.port"><code class="docutils literal notranslate"><span class="pre">port</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.Process.quiet_native_output"><code class="docutils literal notranslate"><span class="pre">quiet_native_output</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.run_stack"><code class="docutils literal notranslate"><span class="pre">run_stack()</span></code></a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5"></script>
+
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+<a class="footer-brand logo" href="https://www.nvidia.com">
+  <img src="../../../_static/nvidia-logo-horiz-rgb-1c-blk-for-screen.svg" class="logo__image only-light" alt="NVIDIA"/>
+  <img src="../../../_static/nvidia-logo-horiz-rgb-1c-wht-for-screen.svg" class="logo__image only-dark" alt="NVIDIA"/>
+</a></div>
+      
+        <div class="footer-item">
+
+<div class="footer-links">
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/privacy-policy/">Privacy Policy</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/privacy-center/">Your Privacy Choices</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/terms-of-service/">Terms of Service</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/accessibility/">Accessibility</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/company-policies/">Corporate Policies</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/product-security/">Product Security</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/contact/">Contact</a>
+  
+  
+  
+</div>
+</div>
+      
+        <div class="footer-item">
+
+
+
+
+  <p class="copyright">
+    
+      Copyright © 2026, NVIDIA CORPORATION &amp; AFFILIATES.
+      <br/>
+    
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+  </body>
+</html>
