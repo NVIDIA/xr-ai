@@ -881,7 +881,9 @@ could not be stopped. Absent servers are silently skipped.</p>
 </table>
 </div>
 <p>Both modes honor identical configuration keys — same model, same port, same vLLM
-flags. The dispatcher lives in <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-vllm/</span></code>. Switching is one YAML edit:</p>
+flags. Docker-only lifecycle settings such as <code class="docutils literal notranslate"><span class="pre">vllm_image</span></code>, <code class="docutils literal notranslate"><span class="pre">extra_pip</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">spark_uma</span></code> are accepted and ignored in pip mode. The dispatcher lives in
+<code class="docutils literal notranslate"><span class="pre">utils/xr-ai-vllm/</span></code>. Switching is one YAML edit:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># vlm-server (Cosmos3)</span>
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
 <span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.07-py3</span>
