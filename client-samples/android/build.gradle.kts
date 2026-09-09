@@ -34,6 +34,26 @@ allprojects {
     configurations.configureEach { forceNettyVersion() }
 }
 
+// Opt-in only: the locks under dependency-manifest/android are a cutoff snapshot
+// for dependency analysis, not a build input (see DEPENDENCIES.md). The Kotlin
+// plugin's ABI validation classpath resolves a floating version, so it stays out.
+if (gradle.startParameter.isWriteDependencyLocks) {
+    val lockDir = rootDir.resolve("../../dependency-manifest/android").normalize()
+    buildscript.dependencyLocking {
+        lockAllConfigurations()
+        lockFile.set(lockDir.resolve("buildscript-gradle.lockfile"))
+    }
+    project(":app") {
+        dependencyLocking {
+            lockAllConfigurations()
+            lockFile.set(lockDir.resolve("gradle.lockfile"))
+        }
+        configurations.matching { it.name.startsWith("kotlinAbiValidation") }.configureEach {
+            resolutionStrategy.deactivateDependencyLocking()
+        }
+    }
+}
+
 // CI runs this so the lift fails loudly if a Gradle or AGP change stops it applying.
 tasks.register("verifyNettyPin") {
     doLast {

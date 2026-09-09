@@ -109,6 +109,20 @@ def test_omni_supplies_both_language_and_vision() -> None:
     assert "cosmos" not in json.dumps(models).lower()
 
 
+def test_materialized_config_stays_inside_runtime_dir(tmp_path: Path) -> None:
+    sample_main = _load_main()
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir()
+
+    assert sample_main._materialize_worker_config(runtime_dir) == runtime_dir / "tea_making_worker.yaml"
+
+    escaped = tmp_path / "escaped"
+    escaped.mkdir()
+    (escaped / "tea_making_worker.yaml").symlink_to(tmp_path / "elsewhere.yaml")
+    with pytest.raises(ValueError, match="is outside"):
+        sample_main._materialize_worker_config(escaped)
+
+
 def test_launcher_declares_one_omni_and_no_monitoring_ui(tmp_path: Path) -> None:
     sample_main = _load_main()
     worker_config = sample_main._materialize_worker_config(

@@ -49,21 +49,40 @@ most nested projects define one through `[tool.uv.sources]`, so pass the root
 config explicitly. All generated per-project lockfiles remain gitignored
 validation artifacts; do not commit them.
 
-The one committed lockfile is `dependency-manifest/uv.lock`. The
-`dependency-manifest/` project depends on every package in the repository, so
+Committed lockfiles live only under `dependency-manifest/`. The Python one is
+`dependency-manifest/uv.lock`: the `dependency-manifest/` project depends on
+every package in the repository, so
 its lock records the complete resolved runtime dependency set at the
 qualification cutoff for dependency analysis tooling; build-system requirements
-such as `hatchling` are not part of a uv lock. Both files describe the
-repository as of the last cutoff change: projects and dependencies added since
-then appear at the next cutoff, and a release yanked from the index changes the
-next fresh resolution. `uv run --script .github/scripts/generate_dependency_manifest.py`
-generates them and always resolves with the uv version pinned inside the script,
+such as `hatchling` are not part of a uv lock. That project's `pyproject.toml`
+and `uv.lock` describe the repository as of the last cutoff change: projects and
+dependencies added since then appear at the next cutoff, and a release yanked
+from the index changes the next fresh resolution.
+`uv run --script .github/scripts/generate_dependency_manifest.py` generates both
+files and always resolves with the uv version pinned inside the script,
 because lock output varies across uv releases. The manifest's `requires-python`
 is the range of interpreters every project accepts, so a project with a narrower
 declaration narrows the manifest. The pre-commit hook runs the script when
 `uv.toml` is staged, and the `dependency-manifest` workflow verifies both files
 with `--check` on changes that touch `uv.toml`, `dependency-manifest/`, or the
 generator scripts. Nothing installs from the directory.
+
+The same directory holds the client lockfiles. Refresh them by hand in the same
+cutoff change; the `dependency-manifest` workflow repeats each step and fails on
+drift:
+
+- `dependency-manifest/android/*.lockfile`: delete the existing files, then from
+  `client-samples/android/` run `./gradlew dependencies :app:dependencies
+  --write-locks`. Gradle merges into an existing lockfile, and it has no
+  publish-date bound: its selection rules see version strings, not upload
+  times. The snapshot is a function of the catalog, the plugin versions, and
+  their published transitive metadata; the workflow regenerates it from
+  nothing and fails on any difference, which is what catches a floating version.
+- `dependency-manifest/web-xr-build/package-lock.json`: run
+  `.github/scripts/refresh_web_lock.sh`; it resolves at the `uv.toml` cutoff
+  with a pinned npm. This is a point-in-time snapshot: `build.sh` in the real
+  sample resolves unbounded and may install newer versions. An exact transitive
+  pin published after the cutoff fails the resolve rather than floating.
 
 ## Generated Python project inventory
 
@@ -767,6 +786,10 @@ remain owned by their platform manifests:
 - Web: the vendored, gitignored `livekit-client` and NVIDIA CloudXR bundles
   produced by `client-samples/web-xr-build/build.sh`.
 
+Resolved snapshots for Android and Web are committed under
+`dependency-manifest/` and refreshed only at the dependency cutoff; see
+Dependency qualification.
+
 See each client's README for setup, supported versions, and platform-specific
 entitlements.
 
@@ -784,7 +807,7 @@ Keep non-obvious fan-out in the same change:
 | CloudXR configuration or native-profile helpers | xr-render configuration and orchestrator, [Adding CloudXR](docs/source/guides/adding-cloudxr.md), and [xr-render reference](docs/source/reference/xr-render-demo.md) |
 | Scene-service configuration | Scene YAML, xr-render orchestrator, and [xr-render reference](docs/source/reference/xr-render-demo.md) |
 | Any `pyproject.toml` dependency or project metadata | Regenerate this map and the affected project's gitignored `uv.lock` |
-| `uv.toml` dependency cutoff | Regenerate `dependency-manifest/` with `.github/scripts/generate_dependency_manifest.py` |
+| `uv.toml` dependency cutoff | Regenerate `dependency-manifest/` with `.github/scripts/generate_dependency_manifest.py` and refresh the Android and web-xr locks per Dependency qualification |
 | New sample or reusable service | Root and local READMEs and the relevant Sphinx guide |
 | `xr-ai-models` protocol, profile schema, or preset | Generated API reference, preset registry, sample profiles, and architecture rules |
 

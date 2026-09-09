@@ -91,8 +91,8 @@ def _build_processes(worker_config: Path) -> list[Process]:
 
 
 def _write_config(
-    source: Path, target: Path, overrides: Mapping[str, str | Path]
-) -> None:
+    source: Path, target_dir: Path, overrides: Mapping[str, str | Path]
+) -> Path:
     pending = set(overrides)
     lines: list[str] = []
     for line in source.read_text(encoding="utf-8").splitlines():
@@ -104,7 +104,12 @@ def _write_config(
             lines.append(line)
     if pending:
         raise ValueError(f"{source} has no top-level fields: {sorted(pending)}")
+    target_dir = target_dir.resolve()
+    target = (target_dir / "tea_making_worker.yaml").resolve()
+    if target.parent != target_dir:
+        raise ValueError(f"{target} is outside {target_dir}")
     target.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return target
 
 
 def _resolve_worker_path(key: str) -> Path:
@@ -122,10 +127,9 @@ def _materialize_worker_config(
     *,
     expose_web_events: bool = False,
 ) -> Path:
-    worker_config = runtime_dir / "tea_making_worker.yaml"
-    _write_config(
+    return _write_config(
         _WORKER_CONFIG,
-        worker_config,
+        runtime_dir,
         {
             "models_config": _resolve_worker_path("models_config"),
             "workflow_config": _resolve_worker_path("workflow_config"),
@@ -134,7 +138,6 @@ def _materialize_worker_config(
             "web_events_host": "0.0.0.0" if expose_web_events else "127.0.0.1",
         },
     )
-    return worker_config
 
 
 def run(argv: Sequence[str] | None = None) -> None:

@@ -3,9 +3,10 @@
 
 name: dependency-manifest
 
-# dependency-manifest/ is the committed, fully resolved dependency set as of the
-# last uv.toml cutoff change, so ordinary pull requests never trigger this check;
-# only the cutoff, the manifest, or the files that generate it do.
+# dependency-manifest/ holds the committed, fully resolved dependency set as of
+# the last uv.toml cutoff change, so ordinary pull requests never trigger these
+# checks; only the cutoff, the manifest, or the files that generate it do. Each
+# job regenerates one lock the way DEPENDENCIES.md describes and fails on drift.
 
 on:
   push:
@@ -15,6 +16,7 @@ on:
       - 'dependency-manifest/**'
       - '.github/scripts/generate_dependency_map.py'
       - '.github/scripts/generate_dependency_manifest.py'
+      - '.github/scripts/refresh_web_lock.sh'
       - '.github/workflows/dependency-manifest.yml'
   pull_request:
     paths:
@@ -22,6 +24,7 @@ on:
       - 'dependency-manifest/**'
       - '.github/scripts/generate_dependency_map.py'
       - '.github/scripts/generate_dependency_manifest.py'
+      - '.github/scripts/refresh_web_lock.sh'
       - '.github/workflows/dependency-manifest.yml'
 
 concurrency:
@@ -29,8 +32,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
-    name: generated dependency manifest and lock
+  python-lock:
+    name: python lockfile
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -48,5 +51,73 @@ jobs:
             **/pyproject.toml
             uv.toml
 
-      - name: Check generated dependency manifest and lock
+      - name: Check manifest and Python lockfile
         run: uv run --script .github/scripts/generate_dependency_manifest.py --check
+
+  android-locks:
+    name: android lockfiles
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
+
+      - name: Regenerate Android lockfiles
+        working-directory: client-samples/android
+        # Gradle merges into an existing lockfile, so start from none.
+        run: |
+          rm -f ../../dependency-manifest/android/*.lockfile
+          ./gradlew dependencies :app:dependencies --write-locks
+
+      - name: Check committed Android lockfiles
+        run: |
+          git add --intent-to-add -- dependency-manifest/android
+          git diff --exit-code -- dependency-manifest/android
+
+  web-locks:
+    name: web-xr lockfile
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # The documented floor (docs/source/getting_started/requirements.md);
+          # the build below proves the snapshot works there.
+          node-version: '20.19.0'
+
+      - name: Regenerate web-xr lockfile
+        run: .github/scripts/refresh_web_lock.sh
+
+      - name: Check committed web-xr lockfile
+        run: |
+          git add --intent-to-add -- dependency-manifest/web-xr-build
+          git diff --exit-code -- dependency-manifest/web-xr-build
+
+      - name: Install and bundle from the lock on the Node floor
+        run: |
+          work="$(mktemp -d)"
+          cp dependency-manifest/web-xr-build/package.json \
+             dependency-manifest/web-xr-build/package-lock.json \
+             dependency-manifest/web-xr-build/sdk.tgz \
+             client-samples/web-xr-build/webpack.config.js "${work}/"
+          cp -r client-samples/web-xr-build/src "${work}/src"
+          cd "${work}"
+          npm ci --no-audit --no-fund --legacy-peer-deps
+          npx webpack --mode production
+          test -f ../web-xr/vendor/cloudxr-sdk.esm.mjs
+          test -f node_modules/livekit-client/dist/livekit-client.esm.mjs
