@@ -5,10 +5,44 @@
 from __future__ import annotations
 
 import os
+from unittest.mock import Mock
 
 import pytest
 
 import xr_ai_launcher._stack as _stack
+
+
+def test_spawn_marks_the_launcher_owned_process_group(monkeypatch, tmp_path):
+    spawned = Mock()
+    spawned.stdout = None
+    spawned.stderr = None
+    popen = Mock(return_value=spawned)
+    thread = Mock()
+    monkeypatch.setattr(_stack.shutil, "which", lambda _command: "/usr/bin/uv")
+    monkeypatch.setattr(_stack.subprocess, "Popen", popen)
+    monkeypatch.setattr(_stack.threading, "Thread", Mock(return_value=thread))
+
+    process = _stack.Process("tts", tmp_path, "piper_tts_server")
+    _stack._spawn(process, tmp_path, tmp_path / "ready")
+
+    kwargs = popen.call_args.kwargs
+    assert kwargs["start_new_session"] is True
+    assert (
+        kwargs["env"][_stack._PROCESS_GROUP_OWNER_ENV]
+        == "piper_tts_server"
+    )
+    assert _stack._READY_PROCESS_MAY_EXIT_ENV not in kwargs["env"]
+
+    _stack._spawn(
+        process,
+        tmp_path,
+        tmp_path / "ready",
+        ready_process_may_exit=True,
+    )
+    assert (
+        popen.call_args.kwargs["env"][_stack._READY_PROCESS_MAY_EXIT_ENV]
+        == "1"
+    )
 
 
 class TestProcessDataclass:
@@ -90,13 +124,18 @@ class TestRunStackShutdownContract:
     def stub_stack(self, monkeypatch, tmp_path):
         # load_credentials reads real ~/.config/~/.cache — neutralize it.
         monkeypatch.setattr(_stack, "load_credentials", lambda: None)
-        monkeypatch.setattr(
-            _stack, "_spawn",
-            lambda proc, base, ready_file: _FakePopen(proc.name),
-        )
-        monkeypatch.setattr(_stack, "_print_ready_banner", lambda names: None)
-
         calls: dict[str, object] = {}
+        spawn_options: dict[str, bool] = {}
+
+        def _fake_spawn(
+            proc, base, ready_file, *, ready_process_may_exit=False,
+        ):
+            spawn_options[proc.name] = ready_process_may_exit
+            return _FakePopen(proc.name)
+
+        monkeypatch.setattr(_stack, "_spawn", _fake_spawn)
+        monkeypatch.setattr(_stack, "_print_ready_banner", lambda names: None)
+        calls["spawn_options"] = spawn_options
 
         def _spy_shutdown(procs, no_kill=None):
             calls["procs"] = procs
@@ -124,6 +163,7 @@ class TestRunStackShutdownContract:
         # Despite a persist process, abort must tear down EVERYTHING.
         assert stub_stack["no_kill"] == set()
         assert "vlm" in stub_stack["procs"]
+        assert stub_stack["spawn_options"] == {"vlm": False}
 
     def test_clean_exit_after_ready_keeps_persist_alive(
         self, stub_stack, tmp_path, monkeypatch,
@@ -131,14 +171,23 @@ class TestRunStackShutdownContract:
         # Ready file appears immediately; no interruption.
         monkeypatch.setattr(_stack, "_wait_ready", lambda name, rf, proc: None)
 
-        processes = [_stack.Process("vlm", "../../vlm", "vlm_server",
-                             launch_mode="persist", port=8100)]
+        processes = [
+            _stack.Process(
+                "vlm",
+                "../../vlm",
+                "vlm_server",
+                launch_mode="persist",
+                port=8100,
+            ),
+            _stack.Process("worker", "../../worker", "worker"),
+        ]
 
         # exit_after_ready returns normally (no SystemExit) after readiness.
         _stack.run_stack(processes, tmp_path, exit_after_ready=True)
 
         # Clean exit preserves the persist set so the container outlives us.
         assert stub_stack["no_kill"] == {"vlm"}
+        assert stub_stack["spawn_options"] == {"vlm": True, "worker": False}
 class TestStripConflictingCudnn:
     """LD_LIBRARY_PATH sanitization so a host cuDNN can't shadow the venv one."""
 
