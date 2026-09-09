@@ -12,10 +12,11 @@ VAD start/stop edges are forwarded as pipecat's built-in
 ``UserStartedSpeakingFrame`` / ``UserStoppedSpeakingFrame`` so the assistant
 can cancel in-flight work on the moment speech starts.
 
-Also runs bounded early STT probes shortly after speech-start. Brief STOP
-utterances interrupt without waiting for VAD finalization, while an optional
-partial-transcript callback can acknowledge a wake phrase before the user
-finishes the command. Normal query dispatch still uses the final transcript.
+Also runs bounded early STT probes shortly after speech-start. A stop-like
+partial interrupts without waiting for VAD finalization but does not commit the
+user's intent; final STT still decides between a global stop and an application
+query. An optional partial-transcript callback can apply configured wake-phrase
+rules and acknowledge a wake phrase before the user finishes the command.
 """
 from __future__ import annotations
 
@@ -45,21 +46,12 @@ from xr_ai_voicegate._phrases import STOP_RE
 from .._frames import ParticipantLeftFrame
 
 
-# True acknowledges and False requests another bounded probe.
+# True means the gate matched STOP; False requests another bounded probe.
 PartialTranscriptHandler = Callable[[str, str], Awaitable[bool]]
 FinalTranscriptHandler = Callable[[str, str, int], Awaitable[None]]
 _MAX_PARTIAL_PROBES = 3
 _PARTIAL_PROBE_TAIL_S = 0.12
 _PARTIAL_PROBE_FINISH_GRACE_S = 0.15
-
-
-def _is_unambiguous_partial_stop(text: str) -> bool:
-    """Reserve an ambiguous bare STOP for final-transcript routing."""
-
-    if not STOP_RE.match(text):
-        return False
-    words = text.rstrip(" \t\r\n.!?").casefold().split()
-    return not (words[-1] == "stop" and words.count("stop") == 1)
 
 
 @dataclass(frozen=True)
@@ -70,9 +62,11 @@ class VadConfig:
     values match the in-tree samples' current behavior.
 
     ``stop_probe_after_s`` — cadence in seconds for up to three STT probes of
-    the partial audio buffer. This gives STOP commands a fast interrupt path
-    and lets a configured wake phrase be acknowledged before the utterance
-    ends. Set to ``0`` or negative to disable probes.
+    the partial audio buffer. This gives STOP commands a fast interruption path
+    without replacing final transcription, and lets a configured wake phrase
+    be acknowledged before the utterance ends. A phrase-gated utterance can
+    make up to three partial STT requests plus the final request. Set to ``0``
+    or negative to disable probes.
     """
     silence_duration:   float = 0.8
     """Seconds of silence that finalize an utterance."""
@@ -121,19 +115,13 @@ class VadSttProcessor(FrameProcessor):
         self._current_pid: str | None = None
         # Per-pid mutable audio buffer for the early STOP probe — present
         # only while an utterance is in flight. ``on_speech_start`` opens
-        # the entry; ``on_utterance`` (and the probe itself, after firing)
-        # close it.
+        # the entry and ``on_utterance`` closes it.
         self._probe_buffer:   dict[str, bytearray] = {}
         self._probe_sr:       dict[str, int]       = {}
         # One probe task per pid, so a fresh speech_start can cancel a
         # lingering task before scheduling the next.
         self._probe_task:     dict[str, asyncio.Task] = {}
         self._probe_inflight: set[str] = set()
-        # Pids whose probe has already pushed a STOP for the current
-        # utterance — suppresses the duplicate that would fire when VAD
-        # eventually finalizes the same speech run. Cleared on the next
-        # ``on_speech_start`` for the pid.
-        self._stop_fired_for_current_utterance: set[str] = set()
         # Presentation timestamp (ns) of the most recent audio frame per pid, and
         # the one captured at speech onset. The onset value anchors the resulting
         # transcript to when the participant started speaking rather than to when
@@ -152,9 +140,9 @@ class VadSttProcessor(FrameProcessor):
 
         if isinstance(frame, (EndFrame, CancelFrame)):
             # Pipeline shutdown: tear down every pending probe task so a probe
-            # cannot push a transcript (and trigger a turn) after the session has
-            # ended. The frame is still forwarded so the rest of the pipeline
-            # stops normally.
+            # cannot emit an interruption or wake acknowledgement after the
+            # session has ended. The frame is still forwarded so the rest of
+            # the pipeline stops normally.
             for pid in list(self._probe_task):
                 await self._cancel_probe_task(pid)
             await self.push_frame(frame, direction)
@@ -182,7 +170,6 @@ class VadSttProcessor(FrameProcessor):
             self._current_pid = pid
             # Await the cancelled task before scheduling the next probe so
             # the two tasks never overlap mid-push_frame.
-            self._stop_fired_for_current_utterance.discard(pid)
             onset_pts = self._last_frame_pts.get(pid)
             if onset_pts is not None:
                 self._utterance_pts[pid] = onset_pts
@@ -218,23 +205,6 @@ class VadSttProcessor(FrameProcessor):
 
             dur_s = (len(audio_bytes) // 2) / max(sample_rate, 1)
             logger.info("utterance finalize pid={!r} dur={:.2f}s", pid, dur_s)
-
-            # If the probe already pushed STOP for this utterance, the
-            # frames downstream (InterruptionFrame + TranscriptionFrame
-            # to the gate + UserStoppedSpeakingFrame) have already done
-            # their job. Re-firing UserStoppedSpeakingFrame + a fresh
-            # TranscriptionFrame (gate sees STOP again → re-fires the ack
-            # TTS) would double the stop-ack. Suppress.
-            if pid in self._stop_fired_for_current_utterance:
-                self._stop_fired_for_current_utterance.discard(pid)
-                logger.info(
-                    "suppressed duplicate utterance after probe STOP pid={!r}", pid,
-                )
-                logger.debug(
-                    "VadSttProcessor suppressing duplicate VAD-finalize "
-                    "STOP pid={!r} (probe already fired)", pid,
-                )
-                return
 
             # Order matters: pipecat consumers expect "user stopped speaking"
             # before the transcript so they can finalize turn state.
@@ -306,8 +276,8 @@ class VadSttProcessor(FrameProcessor):
 
         # Accumulate audio for the probe only while speech is active —
         # the dict entry is opened in on_speech_start and closed in
-        # on_utterance (or by the probe itself after firing STOP). Append
-        # AFTER ``feed`` so the chunk that synchronously triggered
+        # on_utterance. Append AFTER ``feed`` so the chunk that synchronously
+        # triggered
         # on_speech_start lands in the buffer. (In production
         # on_speech_start runs as a task and may not have created the
         # entry yet — at most we lose ~20-30ms of audio, which is fine
@@ -351,14 +321,14 @@ class VadSttProcessor(FrameProcessor):
                     logger.exception("partial-probe stt transcribe failed pid={!r}", pid)
                     return
 
-                stop_matched = bool(text and _is_unambiguous_partial_stop(text))
+                stop_matched = bool(text and STOP_RE.match(text))
                 logger.info(
                     "early transcript probe fired pid={!r} attempt={} latency_ms={} stop_matched={}",
                     pid, attempt, round((time.monotonic() - before) * 1000),
                     stop_matched,
                 )
                 if stop_matched:
-                    await self._emit_early_stop(pid, text)
+                    await self._emit_early_interruption(pid, text)
                     return
 
                 if text and self._on_partial_transcript is not None:
@@ -370,7 +340,8 @@ class VadSttProcessor(FrameProcessor):
                         logger.exception("partial-transcript handler failed pid={!r}", pid)
                         return
                     if decision is True:
-                        logger.info("early wake phrase acknowledged pid={!r}", pid)
+                        logger.info("gate-aware partial STOP matched pid={!r}", pid)
+                        await self._emit_early_interruption(pid, text)
                         return
             finally:
                 self._probe_inflight.discard(pid)
@@ -413,8 +384,8 @@ class VadSttProcessor(FrameProcessor):
             )
             return text
 
-    async def _emit_early_stop(self, pid: str, text: str) -> None:
-        """Emit the interrupt sequence for a STOP matched by a partial probe."""
+    async def _emit_early_interruption(self, pid: str, text: str) -> None:
+        """Cancel active output without treating partial STT as final intent."""
 
         # Race guard: if on_utterance already closed the buffer between
         # the STT await returning and this check, the cancellation simply
@@ -424,44 +395,13 @@ class VadSttProcessor(FrameProcessor):
             return
 
         logger.debug(
-            "VadSttProcessor early-probe STOP match pid={!r}",
+            "VadSttProcessor early-probe interruption pid={!r} text={!r}",
             pid,
+            text,
         )
-
-        # Mark before pushing so the suppression flag is set if the VAD
-        # racing-finalize lands while frames are still queueing downstream.
-        self._stop_fired_for_current_utterance.add(pid)
-
-        # Close the probe buffer now — on_utterance will see the empty
-        # entry and skip its own buffering work, but the suppression flag
-        # is what actually gates the duplicate frame emission.
-        self._probe_buffer.pop(pid, None)
-        self._probe_sr.pop(pid, None)
-
-        # Frame order intentionally differs from ``on_utterance``'s
-        # USSF-first convention: the probe is a fast-path interruption,
-        # not a clean end-of-turn. InterruptionFrame goes first so the
-        # assistant cancels any in-flight reasoning before the gate sees the
-        # STOP transcript and re-issues its own InterruptionFrame +
-        # canned ack. UserStoppedSpeakingFrame tails as a hint to
-        # downstream turn-state consumers that the partial-audio turn
-        # has ended.
         f = InterruptionFrame()
         f.transport_source = pid
         await self.push_frame(f)
-        tf = TranscriptionFrame(
-            text      = text,
-            user_id   = pid,
-            timestamp = _now_iso(),
-        )
-        tf.transport_source = pid
-        # Same onset anchor as the final-utterance path. Kept (not popped) so a
-        # subsequent VAD finalize for the same run still carries it.
-        tf.pts = self._utterance_pts.get(pid)
-        await self.push_frame(tf)
-        ssf = UserStoppedSpeakingFrame()
-        ssf.transport_source = pid
-        await self.push_frame(ssf)
 
     async def _evict_participant(self, pid: str) -> None:
         """Drop all per-pid state when a participant leaves.
@@ -476,7 +416,6 @@ class VadSttProcessor(FrameProcessor):
         self._detectors.pop(pid, None)
         self._probe_buffer.pop(pid, None)
         self._probe_sr.pop(pid, None)
-        self._stop_fired_for_current_utterance.discard(pid)
         self._last_frame_pts.pop(pid, None)
         self._utterance_pts.pop(pid, None)
         if self._current_pid == pid:
