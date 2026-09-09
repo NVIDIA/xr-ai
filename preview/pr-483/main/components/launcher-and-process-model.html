@@ -281,17 +281,15 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.2.0-beta.1</option>
-    <option value="1" >v0.2.0-beta</option>
-    <option value="2" >v0.1.0-beta</option>
-    <option value="3" selected>main (development)</option>
+    <option value="0" >v0.1.0-beta</option>
+    <option value="1" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.2.0-beta.1/components/launcher-and-process-model.html", "../../v0.2.0-beta/components/launcher-and-process-model.html", "../../v0.1.0-beta/components/launcher-and-process-model.html", "launcher-and-process-model.html"];
+    var urls = ["../../v0.1.0-beta/components/launcher-and-process-model.html", "launcher-and-process-model.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -577,7 +575,10 @@ after the IPC socket connects, after the HTTP server starts listening, etc.</p>
 <p>Pass <code class="docutils literal notranslate"><span class="pre">exit_after_ready=True</span></code> to <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> to return immediately once
 everything is ready instead of monitoring — useful for launchers whose
 processes are all <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;persist&quot;</span></code> and are designed to outlive the
-orchestrator (e.g. <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>).</p>
+orchestrator (e.g. <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>). For a persistent process, this also tells
+a bootstrap that reused an already-running service that it may exit after
+signaling readiness. Without <code class="docutils literal notranslate"><span class="pre">exit_after_ready=True</span></code>, the bootstrap remains
+alive so the launcher can continue monitoring it.</p>
 <section id="the-ready-file-protocol">
 <h3>The <code class="docutils literal notranslate"><span class="pre">--ready-file</span></code> protocol<a class="headerlink" href="#the-ready-file-protocol" title="Link to this heading">#</a></h3>
 <p>The launcher injects <code class="docutils literal notranslate"><span class="pre">--ready-file</span> <span class="pre">&lt;path&gt;</span></code> into every spawned command. The
