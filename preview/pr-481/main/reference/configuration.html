@@ -281,17 +281,15 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.2.0-beta.1</option>
-    <option value="1" >v0.2.0-beta</option>
-    <option value="2" >v0.1.0-beta</option>
-    <option value="3" selected>main (development)</option>
+    <option value="0" >v0.1.0-beta</option>
+    <option value="1" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.2.0-beta.1/reference/configuration.html", "../../v0.2.0-beta/reference/configuration.html", "../../v0.1.0-beta/index.html", "configuration.html"];
+    var urls = ["../../v0.1.0-beta/index.html", "configuration.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -1545,7 +1543,9 @@ workflow.</p></li>
 <span class="c1"># with one of these or contain one after '.', '?', or '!' followed by</span>
 <span class="c1"># whitespace or a closing quote. Matching is case-insensitive. Text through</span>
 <span class="c1"># the matched phrase is stripped before the agent sees the query; commas and</span>
-<span class="c1"># other mid-sentence mentions do not match.</span>
+<span class="c1"># other mid-sentence mentions do not match. The same stripped tail is used for</span>
+<span class="c1"># early global-STOP detection; the complete final transcript still determines</span>
+<span class="c1"># whether a stop-like opening is a global stop or a scoped agent command.</span>
 <span class="nt">magic_phrases</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"agent"</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"hey</span><span class="nv"> </span><span class="s">agent"</span>
