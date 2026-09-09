@@ -493,8 +493,8 @@ dependencies, advance the cutoff in a dedicated change, resolve every project
 with <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">--config-file</span> <span class="pre">uv.toml</span> <span class="pre">lock</span> <span class="pre">--upgrade</span> <span class="pre">--project</span> <span class="pre">&lt;directory&gt;</span></code>, and run
 the full test suite. The generated per-project lockfiles are validation
 artifacts and remain gitignored. The same change regenerates the committed
-<code class="docutils literal notranslate"><span class="pre">dependency-manifest/</span></code> lock; the pre-commit hook does this when <code class="docutils literal notranslate"><span class="pre">uv.toml</span></code> is
-staged.</p>
+locks under <code class="docutils literal notranslate"><span class="pre">dependency-manifest/</span></code>; the pre-commit hook does the Python one when
+<code class="docutils literal notranslate"><span class="pre">uv.toml</span></code> is staged.</p>
 </section>
 
 
