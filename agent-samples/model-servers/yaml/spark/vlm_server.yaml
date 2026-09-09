@@ -5,7 +5,14 @@
 #
 # vlm is THIRD in load order: STT → Omni → vlm.
 # free_at_startup ≈ 120 − 30 (Omni) − 2 (STT) ≈ 88 GiB.
-# 0.20 × 120 = 24 GiB cap: ~16 GiB Cosmos3 Reasoner weights + ~8 GiB KV.
+# Cosmos3 requires about 1.12 GiB of KV cache for one 8,192-token request.
+# Pin 1.5 GiB because vLLM's fractional memory profiler can misattribute
+# filesystem page-cache changes as model overhead on unified-memory systems.
+# Keep four sequences for concurrent shorter requests. The fixed cache is
+# shared, so concurrent maximum-length requests can queue, preempt, or
+# recompute when their aggregate token demand exceeds its capacity.
+# The 0.20 utilization remains vLLM's startup admission threshold; the fixed
+# byte value controls the KV-cache allocation.
 # hf_overrides selects the Reasoner runtime; details are documented in
 # docs/source/components/ai-services.md#per-server-notes.
 
@@ -18,6 +25,7 @@ port: 8100
 host: "0.0.0.0"
 model_cache: ../../../../models
 gpu_memory_utilization: 0.20
+kv_cache_memory_bytes: 1610612736
 max_num_seqs: 4
 enforce_eager: true
 async_scheduling: true
@@ -30,3 +38,7 @@ max_images_per_prompt: 4
 # See services/vlm-server/vlm_server.yaml for the full toggle docs.
 vllm_backend: docker
 vllm_image:   nvcr.io/nvidia/vllm:26.07-py3
+
+# Prefetch and sync the snapshot before CUDA initialization, then retry once
+# only if the driver rejects a CUDA allocation without an OOM-killed container.
+spark_uma: true

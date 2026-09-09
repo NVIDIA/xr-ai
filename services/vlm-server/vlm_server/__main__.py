@@ -25,6 +25,9 @@ Config keys
     tensor_parallel_size:    int    vLLM --tensor-parallel-size (default: 1).
     max_model_len:           int    vLLM --max-model-len (default: 8192).
     gpu_memory_utilization:  float  vLLM --gpu-memory-utilization (default: 0.85).
+    kv_cache_memory_bytes:   int    Explicit vLLM KV-cache size in bytes (optional).
+                                    When set, gpu_memory_utilization remains the
+                                    startup free-memory admission threshold.
     enforce_eager:           bool   Skip CUDA graph capture (default: false).
     async_scheduling:        bool   Enable vLLM async scheduling (default: false).
     hf_overrides:            dict   Hugging Face config overrides passed as JSON.
@@ -37,6 +40,8 @@ Config keys
     vllm_backend:            str    "pip" (default) or "docker".
     vllm_image:              str    NGC image when vllm_backend=docker
                                     (default: nvcr.io/nvidia/vllm:26.07-py3).
+    spark_uma:               bool   Enable DGX Spark cold-start safeguards
+                                    (docker backend only; default: false).
 """
 import json
 import os
@@ -88,6 +93,19 @@ def run() -> None:
     tp_size       = int(cfg.get("tensor_parallel_size", _DEFAULT_TP))
     max_ctx       = int(cfg.get("max_model_len",    _DEFAULT_CTX))
     gpu_mem       = float(cfg.get("gpu_memory_utilization", _DEFAULT_GPU_MEM))
+    kv_cache_memory_bytes = cfg.get("kv_cache_memory_bytes")
+    if kv_cache_memory_bytes is not None:
+        if isinstance(kv_cache_memory_bytes, bool):
+            logger.error("'kv_cache_memory_bytes' must be a positive integer")
+            sys.exit(1)
+        try:
+            kv_cache_memory_bytes = int(kv_cache_memory_bytes)
+        except (TypeError, ValueError):
+            logger.error("'kv_cache_memory_bytes' must be a positive integer")
+            sys.exit(1)
+        if kv_cache_memory_bytes <= 0:
+            logger.error("'kv_cache_memory_bytes' must be a positive integer")
+            sys.exit(1)
     enforce_eager = parse_config_bool(
         cfg.get("enforce_eager", _DEFAULT_EAGER), "enforce_eager"
     )
@@ -100,6 +118,7 @@ def run() -> None:
     max_videos    = int(cfg.get("max_videos_per_prompt", _DEFAULT_MAX_VIDEOS))
     backend       = cfg.get("vllm_backend",         "pip")
     image         = cfg.get("vllm_image",           _DEFAULT_VLLM_IMAGE)
+    spark_uma     = parse_config_bool(cfg.get("spark_uma", False), "spark_uma")
 
     model_cache = resolve_model_cache(cfg, yaml_dir, default="../../models")
     cuda_devices = setup_hf_env(cfg, model_cache)
@@ -127,6 +146,10 @@ def run() -> None:
         "--gpu-memory-utilization", str(gpu_mem),
         "--limit-mm-per-prompt", json.dumps({"image": max_images, "video": max_videos}),
     ]
+    if kv_cache_memory_bytes is not None:
+        extra_serve_args.extend(
+            ["--kv-cache-memory-bytes", str(kv_cache_memory_bytes)]
+        )
     if enforce_eager:
         extra_serve_args.append("--enforce-eager")
     if async_sched:
@@ -150,6 +173,7 @@ def run() -> None:
         hf_token=os.environ.get("HF_TOKEN") or None,
         cuda_visible_devices=cuda_devices,
         ready_file=ready_file,
+        spark_uma=spark_uma,
     )
 
 

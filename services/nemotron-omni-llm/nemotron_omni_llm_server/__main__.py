@@ -24,6 +24,9 @@ Config keys (nemotron_omni_llm_server.yaml)
     tensor_parallel_size:     int    vLLM --tensor-parallel-size (default: 1).
     max_model_len:            int    vLLM --max-model-len (default: 131072).
     gpu_memory_utilization:   float  vLLM --gpu-memory-utilization (default: 0.85).
+    kv_cache_memory_bytes:    int    Explicit vLLM KV-cache size in bytes (optional).
+                                     When set, gpu_memory_utilization remains the
+                                     startup free-memory admission threshold.
     enforce_eager:            bool   Skip CUDA graph capture (default: false).
     video_pruning_rate:       float  --video-pruning-rate (default: 0.5).
     video_fps:                int    FPS for video input sampling (default: 2).
@@ -38,9 +41,12 @@ Config keys (nemotron_omni_llm_server.yaml)
                                      ["mamba-ssm", "causal-conv1d"] since
                                      Nemotron-Omni's hybrid SSM backbone
                                      requires both at model-load time).
+    spark_uma:                bool   Enable DGX Spark cold-start safeguards
+                                     (docker backend only; default: false).
 """
 import json
 import os
+import sys
 
 from loguru import logger
 from xr_ai_logging import setup_logging
@@ -107,6 +113,19 @@ def run() -> None:
     tp_size       = int(cfg.get("tensor_parallel_size", _DEFAULT_TP))
     max_ctx       = int(cfg.get("max_model_len",    _DEFAULT_CTX))
     gpu_mem       = float(cfg.get("gpu_memory_utilization", _DEFAULT_GPU_MEM))
+    kv_cache_memory_bytes = cfg.get("kv_cache_memory_bytes")
+    if kv_cache_memory_bytes is not None:
+        if isinstance(kv_cache_memory_bytes, bool):
+            logger.error("'kv_cache_memory_bytes' must be a positive integer")
+            sys.exit(1)
+        try:
+            kv_cache_memory_bytes = int(kv_cache_memory_bytes)
+        except (TypeError, ValueError):
+            logger.error("'kv_cache_memory_bytes' must be a positive integer")
+            sys.exit(1)
+        if kv_cache_memory_bytes <= 0:
+            logger.error("'kv_cache_memory_bytes' must be a positive integer")
+            sys.exit(1)
     enforce_eager = parse_config_bool(
         cfg.get("enforce_eager", _DEFAULT_EAGER), "enforce_eager"
     )
@@ -116,6 +135,7 @@ def run() -> None:
     moe_backend   = cfg.get("moe_backend")
     backend       = cfg.get("vllm_backend",         "pip")
     image         = cfg.get("vllm_image",           DEFAULT_IMAGE)
+    spark_uma     = parse_config_bool(cfg.get("spark_uma", False), "spark_uma")
     # Nemotron-Omni's hybrid SSM/Transformer backbone imports `mamba_ssm`
     # at model-load time, and `causal_conv1d` is its required CUDA-kernel
     # peer dep. Neither ships in the NGC vLLM image, so we install both
@@ -139,6 +159,10 @@ def run() -> None:
         "--enable-auto-tool-choice",
         "--tool-call-parser", "qwen3_coder",
     ]
+    if kv_cache_memory_bytes is not None:
+        extra_serve_args.extend(
+            ["--kv-cache-memory-bytes", str(kv_cache_memory_bytes)]
+        )
     if use_kv_fp8:
         extra_serve_args += ["--kv-cache-dtype", "fp8"]
     if moe_backend:
@@ -161,6 +185,7 @@ def run() -> None:
         cuda_visible_devices=cuda_devices,
         extra_pip=extra_pip,
         ready_file=ready_file,
+        spark_uma=spark_uma,
     )
 
 

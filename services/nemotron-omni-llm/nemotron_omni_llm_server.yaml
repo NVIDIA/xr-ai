@@ -33,6 +33,9 @@ max_num_seqs:           384
 tensor_parallel_size:   1
 max_model_len:          131072
 gpu_memory_utilization: 0.85
+# Optional fixed KV-cache size in bytes per GPU. When this is set, vLLM still
+# uses gpu_memory_utilization for its initial free-memory admission check.
+# kv_cache_memory_bytes: 2147483648
 enforce_eager:          false
 
 # Video input — controls how video frames are sampled and pruned.
