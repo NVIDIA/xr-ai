@@ -6,7 +6,7 @@
 # Shared model servers
 
 This sample starts the reusable inference services consumed by the agent
-samples. The default deployment includes Parakeet STT, Piper TTS, Nemotron-3
+samples. The default deployment includes Parakeet STT, Pocket TTS, Nemotron-3
 Nano Omni, Cosmos3 Nano Reasoner, and the Nemotron embedding model.
 
 The launcher waits for every selected service to become healthy. It then prints

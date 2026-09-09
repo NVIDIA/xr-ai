@@ -37,6 +37,15 @@ first launch. A token is also required outright for:
 - **Gated models** — any model whose HuggingFace page requires accepting a
   license or requesting access (plus license acceptance on your account).
 
+Pocket TTS first attempts to load voice-cloning weights from the gated
+[`kyutai/pocket-tts`](https://huggingface.co/kyutai/pocket-tts) model. If access
+is unavailable, the upstream package automatically loads its ungated
+no-voice-cloning weights; the checked-in predefined voice works with either
+variant. Review the current acceptable-use terms before accepting gated access.
+The terms and artifact revisions reviewed for this release are recorded in
+the repository's
+[`THIRD_PARTY_NOTICES.md`](https://github.com/NVIDIA/xr-ai/blob/main/THIRD_PARTY_NOTICES.md).
+
 The samples **do not prompt** for it. If `HF_TOKEN` is not set, the
 orchestrator prints an actionable error and exits; pass `--allow-anonymous`
 to start without a token anyway (all weights already cached, or you accept

@@ -22,14 +22,14 @@ def test_spawn_marks_the_launcher_owned_process_group(monkeypatch, tmp_path):
     monkeypatch.setattr(_stack.subprocess, "Popen", popen)
     monkeypatch.setattr(_stack.threading, "Thread", Mock(return_value=thread))
 
-    process = _stack.Process("tts", tmp_path, "piper_tts_server")
+    process = _stack.Process("tts", tmp_path, "pocket_tts_server")
     _stack._spawn(process, tmp_path, tmp_path / "ready")
 
     kwargs = popen.call_args.kwargs
     assert kwargs["start_new_session"] is True
     assert (
         kwargs["env"][_stack._PROCESS_GROUP_OWNER_ENV]
-        == "piper_tts_server"
+        == "pocket_tts_server"
     )
     assert _stack._READY_PROCESS_MAY_EXIT_ENV not in kwargs["env"]
 
@@ -83,7 +83,7 @@ class TestProcessDataclass:
 class TestParallelDataclass:
     def test_stores_processes_as_tuple(self):
         p1 = _stack.Process("stt", "../../services/stt-server", "stt_server")
-        p2 = _stack.Process("tts", "../../services/piper-tts", "piper_tts_server")
+        p2 = _stack.Process("tts", "../../services/pocket-tts", "pocket_tts_server")
         group = _stack.Parallel([p1, p2])
         assert isinstance(group.processes, tuple)
         assert group.processes == (p1, p2)

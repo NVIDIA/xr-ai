@@ -51,9 +51,9 @@ def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch) -
     ]
     assert [process.port for process in processes] == [8103, 8105, 8108, 8100, 8109]
     tts = next(process for process in processes if process.name == "tts")
-    assert tts.project == "../../services/piper-tts"
-    assert tts.command == "piper_tts_server"
-    assert Path(tts.config).name == "piper_tts_server.yaml"
+    assert tts.project == "../../services/pocket-tts"
+    assert tts.command == "pocket_tts_server"
+    assert Path(tts.config).name == "pocket_tts_server.yaml"
     assert tts.launch_mode == "persist"
     assert credentials == ()
 

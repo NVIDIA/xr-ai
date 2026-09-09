@@ -11,7 +11,7 @@ and modify scene objects, tracking, spatial state, and recorded visual context
 through native `xr-ai-tools` functions.
 
 The sample launches DeviceIOHub, the CloudXR runtime, the scene and capability
-services, and its worker. It reuses STT, Piper TTS, Nemotron-3 Nano Omni, and
+services, and its worker. It reuses STT, Pocket TTS, Nemotron-3 Nano Omni, and
 Cosmos3 Nano Reasoner from the shared model stack. The default client is the
 browser-based Web-XR experience.
 

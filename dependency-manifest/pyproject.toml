@@ -37,7 +37,7 @@ dependencies = [
     "nemotron3-nano-llm-server",
     "nim-server",
     "xr-openxr-service",
-    "piper-tts-server",
+    "pocket-tts-server",
     "xr-rag-service",
     "stt-server",
     "xr-video-memory-service",
@@ -80,7 +80,7 @@ package = false
 "nemotron3-nano-llm-server"        = { path = "../services/nemotron3-nano-llm", editable = true }
 "nim-server"                       = { path = "../services/nim-server", editable = true }
 "xr-openxr-service"                = { path = "../services/openxr-service", editable = true }
-"piper-tts-server"                 = { path = "../services/piper-tts", editable = true }
+"pocket-tts-server"                = { path = "../services/pocket-tts", editable = true }
 "xr-rag-service"                   = { path = "../services/rag-service", editable = true }
 "stt-server"                       = { path = "../services/stt-server", editable = true }
 "xr-video-memory-service"          = { path = "../services/video-memory-service", editable = true }

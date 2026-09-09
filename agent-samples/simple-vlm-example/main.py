@@ -47,8 +47,8 @@ PROCESSES = [
     ),
     Process(
         "tts",
-        "../../services/piper-tts",
-        "piper_tts_server",
+        "../../services/pocket-tts",
+        "pocket_tts_server",
         launch_mode="reuse",
     ),
     Process(
