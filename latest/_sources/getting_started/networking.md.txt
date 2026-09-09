@@ -143,15 +143,23 @@ use only this path. It is also the supported native C++ path when the executable
 runs with `--secure --port 8080`; the native executable's port 7880 default is
 an insecure debugging exception.
 
-On first run a self-signed certificate is generated at
-`~/.local/share/xr-ai/web-server.crt`. To use your own, set `cert_file`
-and `key_file` in `device_io_hub.yaml`.
+On first run DeviceIOHub generates a stable development root CA and a server
+leaf signed by that root under `~/.local/share/xr-ai/`:
 
-The generated certificate covers `localhost`, the hostname, and automatically
+- `root-ca.crt` and `root-ca.key` are the stable trust anchor. Only the public
+  certificate is available from `/cert`; the private key never leaves the hub.
+- `web-server.crt` and `web-server.key` are the CA-signed server leaf and its
+  private key. The web server presents this leaf for HTTPS and WSS.
+
+To use your own certificate, set `cert_file` and `key_file` in
+`device_io_hub.yaml`. Externally managed TLS continues to work unchanged;
+`/cert` returns 404 because DeviceIOHub does not own that certificate's root.
+
+The generated leaf covers `localhost`, the hostname, and automatically
 discovered local IPv4 addresses. When clients dial an address that discovery
 misses, or one that is not local (the public IP of a NAT'd cloud VM such as Brev,
 a forwarding proxy's address, or a DNS name), list it in `device_io_hub.yaml` and
-the certificate is regenerated to include it on the next hub start:
+the leaf is regenerated to include it on the next hub start:
 
 ```yaml
 web_server_extra_sans:
@@ -159,19 +167,33 @@ web_server_extra_sans:
   - hub.example.com
 ```
 
+Changing these addresses never rotates `root-ca.crt`, so clients do not need to
+reinstall the root after a Brev public-IP change.
+
+DeviceIOHub checks the generated certificates daily. It renews the server leaf
+30 days before expiration and reloads it for new HTTPS and WSS connections
+without restarting the hub; the root CA remains unchanged. Existing connections
+can finish using the certificate negotiated when they connected.
+
+If `root-ca.crt` or `root-ca.key` is missing, unreadable, mismatched, or within
+30 days of expiration, DeviceIOHub replaces the root and server leaf and logs a
+warning. Previously enrolled clients reject the new chain. Reinstall the new
+`root-ca.crt` on every client using the platform-specific steps below; `/cert`
+serves the current root after the replacement.
+
 To **disable** TLS for `localhost`-only dev where the certificate warning is
 noise, set `web_server_tls: false`. With TLS off, the same-origin proxy
 serves plain `ws://` instead of `wss://`, and `localhost` is the only
 context where camera and mic permissions are granted without HTTPS.
 
-To **trust the self-signed certificate** so you stop seeing the warning:
+To **trust the development root CA** so you stop seeing the warning:
 
 - **Chrome or Edge**: navigate to `https://<host>:8080`, click **Advanced →
   Proceed to … (unsafe)**.
 - **Firefox**: click **Advanced → Accept the Risk and Continue**.
 - **Android**: tap **Install hub certificate** in the app's Connection
   section (visible before the first connection). The app fetches the
-  certificate from `https://<host>:<port>/cert` and opens the system install
+  public root CA from `https://<host>:<port>/cert` and opens the system install
   dialog. After confirming, connect normally — the LiveKit SDK validates
   against the system + user CA store automatically.
 
@@ -194,24 +216,23 @@ Until the certificate is trusted at the OS level, the wss handshake fails.
 ### Linux native certificate trust
 
 The native C++ client validates the hub through the Linux system CA bundle.
-Before copying the certificate, ensure the address passed to `--host` appears
-in its subject alternative names. If the native client uses another IP address
+Before connecting, ensure the address passed to `--host` appears in the server
+leaf's subject alternative names. If the native client uses another IP address
 or DNS name, configure `web_server_extra_sans` and restart the hub to regenerate
-the certificate and key.
+only the leaf and leaf key.
 
-Copy the resulting `~/.local/share/xr-ai/web-server.crt` securely from the hub
+Copy the resulting `~/.local/share/xr-ai/root-ca.crt` from the hub
 host to the native client host. On Ubuntu or Debian, install that copy and
 refresh the bundle:
 
 ```bash
-sudo install -m 0644 /path/to/web-server.crt \
+sudo install -m 0644 /path/to/root-ca.crt \
   /usr/local/share/ca-certificates/xr-ai-hub.crt
 sudo update-ca-certificates
 ```
 
-Restart the native client after updating the bundle. If the SAN configuration
-changes later, regenerate the certificate, copy it again, and repeat the trust
-installation.
+Restart the native client after updating the bundle. Later SAN changes rotate
+only the server leaf and do not require another trust installation.
 
 For production deployments on any platform, replace the auto-generated
 certificate with one from a public CA by setting `cert_file` and `key_file` in

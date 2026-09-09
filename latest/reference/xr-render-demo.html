@@ -281,16 +281,15 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" selected>v0.2.0-beta.1</option>
-    <option value="1" >v0.1.0-beta</option>
-    <option value="2" >main (development)</option>
+    <option value="0" >v0.1.0-beta</option>
+    <option value="1" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["xr-render-demo.html", "../../v0.1.0-beta/reference/xr-render-demo.html", "../../main/reference/xr-render-demo.html"];
+    var urls = ["../../v0.1.0-beta/reference/xr-render-demo.html", "xr-render-demo.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -779,10 +778,9 @@ text memory without model scratch output or tool traces.</p>
 </section>
 <section id="native-capability-composition">
 <h2>Native capability composition<a class="headerlink" href="#native-capability-composition" title="Link to this heading">#</a></h2>
-<p>The sample-local scene process owns scene state and LOVR. The LOVR app draws
-two primitive types, box and sphere. <code class="docutils literal notranslate"><span class="pre">openxr-service</span></code> owns the headless
-tracking session, and <code class="docutils literal notranslate"><span class="pre">video-memory-service</span></code> owns recorded video decoding.
-<code class="docutils literal notranslate"><span class="pre">LiveFrameSource</span></code> supplies current-frame requests. Relay-managed
+<p>The sample-local scene process owns scene state and LOVR. <code class="docutils literal notranslate"><span class="pre">openxr-service</span></code>
+owns the headless tracking session, and <code class="docutils literal notranslate"><span class="pre">video-memory-service</span></code> owns recorded
+video decoding. <code class="docutils literal notranslate"><span class="pre">LiveFrameSource</span></code> supplies current-frame requests. Relay-managed
 native tools provide the typed surface over those services; the demo does
 not launch or call MCP adapters.</p>
 <section id="spatial-tool-surface">

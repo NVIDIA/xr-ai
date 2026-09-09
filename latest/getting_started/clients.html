@@ -281,16 +281,15 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" selected>v0.2.0-beta.1</option>
-    <option value="1" >v0.1.0-beta</option>
-    <option value="2" >main (development)</option>
+    <option value="0" >v0.1.0-beta</option>
+    <option value="1" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["clients.html", "../../v0.1.0-beta/getting_started/clients.html", "../../main/getting_started/clients.html"];
+    var urls = ["../../v0.1.0-beta/getting_started/clients.html", "clients.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -516,10 +515,10 @@ token from:</p>
 <p>The response is a JSON object containing <code class="docutils literal notranslate"><span class="pre">token</span></code>, <code class="docutils literal notranslate"><span class="pre">room</span></code>, and <code class="docutils literal notranslate"><span class="pre">url</span></code>. StreamKit
 token fetchers also accept a plain JWT response. The room is encoded in the
 token; clients do not send a separate room query parameter.</p>
-<p id="self-signed-certificate-trust">The default HTTPS certificate is self-signed and stored under
+<p id="self-signed-certificate-trust">The default HTTPS server leaf is signed by a development root CA stored under
 <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/</span></code>. Browsers allow a development click-through; Android
-and Apple devices require the platform trust procedures below. Use a public or
-managed certificate for production.</p>
+and Apple devices install the public root from <code class="docutils literal notranslate"><span class="pre">/cert</span></code> using the platform trust
+procedures below. Use a public or managed certificate for production.</p>
 </section>
 <section id="web">
 <span id="web-basic-sample"></span><h2>Web<a class="headerlink" href="#web" title="Link to this heading">#</a></h2>

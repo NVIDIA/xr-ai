@@ -100,11 +100,17 @@ Package Contents
    provided), ``HF_XET_HIGH_PERFORMANCE``, ``HF_HOME``, and
    ``TRANSFORMERS_CACHE``.
 
-   A non-empty env value for ``HF_TOKEN``, ``HF_HOME``, or
-   ``TRANSFORMERS_CACHE`` wins over the YAML value, per
-   docs/source/getting_started/credentials.md. ``TRANSFORMERS_CACHE`` mirrors
-   ``HF_HOME`` for Transformers <4.36 and libraries that have not adopted
-   ``HF_HOME``.
+   The Xet setting uses ``setdefault`` so callers can disable high-performance
+   mode explicitly. ``HF_HUB_DISABLE_XET`` is the separate Xet off switch.
+   A deliberate ``HF_HUB_ENABLE_HF_TRANSFER`` opt-in is preserved for
+   environments where the operator installed ``hf_transfer`` as a fallback.
+   Both ``HF_HOME`` and ``TRANSFORMERS_CACHE`` also use ``setdefault``, so an
+   externally-set value wins over the YAML default. This intentionally
+   differs from the pre-consolidation per-server code where the LLM wrappers
+   used an unconditional assignment for ``HF_HOME``; callers that need the
+   YAML value to take priority must unset the env var before calling.
+   ``TRANSFORMERS_CACHE`` mirrors ``HF_HOME`` for Transformers <4.36 and
+   third-party libraries that have not yet adopted the ``HF_HOME`` superset.
 
    Returns the resolved ``cuda_visible_devices`` string (or ``None``) so
    callers that run GPU detection can confirm the device filter is applied.
@@ -128,7 +134,7 @@ Package Contents
    Individual services may pin a newer image when required by their model.
 
 
-.. py:function:: serve(*, backend: str, persistent: bool, image: str = DEFAULT_IMAGE, container_name: str, log_prefix: str, model: str, extra_serve_args: list[str], host: str, port: int, model_cache: pathlib.Path, hf_token: str | None = None, cuda_visible_devices: str | None = None, extra_env: dict[str, str] | None = None, extra_pip: list[str] | None = None, ready_file: pathlib.Path | None = None, spark_uma: bool = False) -> None
+.. py:function:: serve(*, backend: str, persistent: bool, image: str = DEFAULT_IMAGE, container_name: str, log_prefix: str, model: str, extra_serve_args: list[str], host: str, port: int, model_cache: pathlib.Path, hf_token: str | None = None, cuda_visible_devices: str | None = None, extra_env: dict[str, str] | None = None, extra_pip: list[str] | None = None, ready_file: pathlib.Path | None = None) -> None
 
    Launch vLLM via *backend* (`"pip"` or `"docker"`).
 
@@ -162,13 +168,6 @@ Package Contents
    backbone. Silently ignored in pip mode (deps belong in the wrapper's
    pyproject.toml there).
 
-   *spark_uma* enables the DGX Spark cold-start safeguards in docker mode:
-   prefetching and syncing the Hugging Face snapshot before CUDA starts, and
-   one bounded restart of a container attempt launched by this wrapper after
-   a non-container-OOM CUDA driver-allocation failure. Pip mode ignores this
-   Docker lifecycle option, preserving the one-field backend switch used by
-   the service YAML files.
-
 
 .. py:function:: stop_persistent_servers(services: list[tuple[str, int]]) -> bool
 
@@ -178,9 +177,8 @@ Package Contents
 
    1. Look for a docker container labelled ``xr-ai-vllm.port=<port>``
       (stamped at start time by the vLLM wrapper) and ``docker stop`` it.
-   2. Fall back to port → pid for pip-mode vLLM or in-process servers
-      (e.g. STT). Piper is signalled as a complete process group; other
-      local servers are signalled by PID.
+   2. Fall back to port → pid → SIGTERM → SIGKILL for pip-mode vLLM or
+      in-process servers (e.g. STT).
 
    A missing container and listener is already stopped. Output is print-style
    with ``[<label>] …`` prefixes. Discovery errors and listeners that are not

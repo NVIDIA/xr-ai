@@ -281,16 +281,15 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.2.0-beta.1</option>
-    <option value="1" >v0.1.0-beta</option>
-    <option value="2" selected>main (development)</option>
+    <option value="0" >v0.1.0-beta</option>
+    <option value="1" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../../../v0.2.0-beta.1/index.html", "../../../../v0.1.0-beta/index.html", "index.html"];
+    var urls = ["../../../../v0.1.0-beta/index.html", "index.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -565,11 +564,17 @@ used as the base for relative paths like <code class="docutils literal notransla
 <p>Sets <code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code> (when configured), <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> (when
 provided), <code class="docutils literal notranslate"><span class="pre">HF_XET_HIGH_PERFORMANCE</span></code>, <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code>, and
 <code class="docutils literal notranslate"><span class="pre">TRANSFORMERS_CACHE</span></code>.</p>
-<p>A non-empty env value for <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code>, <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code>, or
-<code class="docutils literal notranslate"><span class="pre">TRANSFORMERS_CACHE</span></code> wins over the YAML value, per
-docs/source/getting_started/credentials.md. <code class="docutils literal notranslate"><span class="pre">TRANSFORMERS_CACHE</span></code> mirrors
-<code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> for Transformers &lt;4.36 and libraries that have not adopted
-<code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code>.</p>
+<p>The Xet setting uses <code class="docutils literal notranslate"><span class="pre">setdefault</span></code> so callers can disable high-performance
+mode explicitly. <code class="docutils literal notranslate"><span class="pre">HF_HUB_DISABLE_XET</span></code> is the separate Xet off switch.
+A deliberate <code class="docutils literal notranslate"><span class="pre">HF_HUB_ENABLE_HF_TRANSFER</span></code> opt-in is preserved for
+environments where the operator installed <code class="docutils literal notranslate"><span class="pre">hf_transfer</span></code> as a fallback.
+Both <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> and <code class="docutils literal notranslate"><span class="pre">TRANSFORMERS_CACHE</span></code> also use <code class="docutils literal notranslate"><span class="pre">setdefault</span></code>, so an
+externally-set value wins over the YAML default. This intentionally
+differs from the pre-consolidation per-server code where the LLM wrappers
+used an unconditional assignment for <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code>; callers that need the
+YAML value to take priority must unset the env var before calling.
+<code class="docutils literal notranslate"><span class="pre">TRANSFORMERS_CACHE</span></code> mirrors <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> for Transformers &lt;4.36 and
+third-party libraries that have not yet adopted the <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> superset.</p>
 <p>Returns the resolved <code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> string (or <code class="docutils literal notranslate"><span class="pre">None</span></code>) so
 callers that run GPU detection can confirm the device filter is applied.</p>
 </dd></dl>
@@ -626,7 +631,6 @@ mounted <em>nim_cache</em> makes subsequent starts fast.</p>
 <dd><em class="sig-param"><span class="n"><span class="pre">extra_env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">extra_pip</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">ready_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">spark_uma</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>,</dd>
 </dl>
 
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_vllm.serve" title="Link to this definition">#</a></dt>
@@ -657,12 +661,6 @@ whose wheels the image doesn’t bundle — e.g.
 <code class="docutils literal notranslate"><span class="pre">[&quot;mamba-ssm&quot;,</span> <span class="pre">&quot;causal-conv1d&quot;]</span></code> for Nemotron-Omni’s hybrid SSM
 backbone. Silently ignored in pip mode (deps belong in the wrapper’s
 pyproject.toml there).</p>
-<p><em>spark_uma</em> enables the DGX Spark cold-start safeguards in docker mode:
-prefetching and syncing the Hugging Face snapshot before CUDA starts, and
-one bounded restart of a container attempt launched by this wrapper after
-a non-container-OOM CUDA driver-allocation failure. Pip mode ignores this
-Docker lifecycle option, preserving the one-field backend switch used by
-the service YAML files.</p>
 </dd></dl>
 
 <dl class="py function">
@@ -673,9 +671,8 @@ the service YAML files.</p>
 <ol class="arabic simple">
 <li><p>Look for a docker container labelled <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm.port=&lt;port&gt;</span></code>
 (stamped at start time by the vLLM wrapper) and <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span></code> it.</p></li>
-<li><p>Fall back to port → pid for pip-mode vLLM or in-process servers
-(e.g. STT). Piper is signalled as a complete process group; other
-local servers are signalled by PID.</p></li>
+<li><p>Fall back to port → pid → SIGTERM → SIGKILL for pip-mode vLLM or
+in-process servers (e.g. STT).</p></li>
 </ol>
 <p>A missing container and listener is already stopped. Output is print-style
 with <code class="docutils literal notranslate"><span class="pre">[&lt;label&gt;]</span> <span class="pre">…</span></code> prefixes. Discovery errors and listeners that are not
