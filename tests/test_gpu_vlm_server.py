@@ -147,7 +147,7 @@ async def test_vlm_server_chat_completions_smoke():
             "max_videos_per_prompt": 0,
             # docker backend: nvcc + flashinfer are pre-built in the NGC image.
             "vllm_backend": "docker",
-            "vllm_image": "nvcr.io/nvidia/vllm:26.07-py3",
+            "vllm_image": "nvcr.io/nvidia/vllm:26.08-py3",
         }
         cfg_yaml.write_text(yaml.safe_dump(cfg))
 

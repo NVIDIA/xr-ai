@@ -5,8 +5,8 @@
 # The NVFP4 model shares unified memory with the rest of the stack. vLLM's
 # fractional profiler is unreliable while cold checkpoint reads change the
 # filesystem page cache, so reserve 2 GiB explicitly for the 32K hybrid
-# Mamba/attention cache. This covers four full 32K requests with the pinned
-# vLLM 0.20 cache layout; max_num_seqs still permits more shorter requests.
+# Mamba/attention cache. NGC 26.08 limits Nemotron Nano V3 on DGX Spark to
+# four concurrent sequences.
 # gpu_memory_utilization remains the vLLM startup admission threshold; it does
 # not size the cache when the byte value is set.
 
@@ -15,7 +15,7 @@ port: 8108
 hf_token: ""
 model_cache: ../../../../models
 
-max_num_seqs: 8
+max_num_seqs: 4
 tensor_parallel_size: 1
 max_model_len: 32768
 gpu_memory_utilization: 0.25
@@ -27,7 +27,7 @@ video_fps: 2
 video_num_frames: 64
 
 vllm_backend: docker
-vllm_image: vllm/vllm-openai:v0.20.0
+vllm_image: nvcr.io/nvidia/vllm:26.08-py3
 extra_pip: []
 
 # Prefetch and sync the snapshot before CUDA initialization, then retry once

@@ -55,7 +55,7 @@ def test_default_cosmos3_service_uses_reasoner_only_path(monkeypatch, tmp_path) 
 
     args = captured["extra_serve_args"]
     assert captured["model"] == "nvidia/Cosmos3-Nano"
-    assert captured["image"] == "nvcr.io/nvidia/vllm:26.07-py3"
+    assert captured["image"] == "nvcr.io/nvidia/vllm:26.08-py3"
     assert "--async-scheduling" in args
     overrides_index = args.index("--hf-overrides")
     assert json.loads(args[overrides_index + 1]) == {
@@ -104,7 +104,7 @@ def test_all_local_profiles_select_cosmos3_reasoner_runtime() -> None:
     for config_path in _LOCAL_VLM_CONFIGS:
         cfg = yaml.safe_load(config_path.read_text())
         assert cfg["model"] == "nvidia/Cosmos3-Nano", config_path
-        assert cfg["vllm_image"] == "nvcr.io/nvidia/vllm:26.07-py3", config_path
+        assert cfg["vllm_image"] == "nvcr.io/nvidia/vllm:26.08-py3", config_path
         assert cfg["async_scheduling"] is True, config_path
         assert cfg["hf_overrides"] == {
             "architectures": ["Cosmos3ForConditionalGeneration"],

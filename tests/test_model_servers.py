@@ -30,6 +30,15 @@ assert _OMNI_SPEC and _OMNI_SPEC.loader
 _omni = importlib.util.module_from_spec(_OMNI_SPEC)
 _OMNI_SPEC.loader.exec_module(_omni)
 
+_NANO_PATH = (
+    _REPO_ROOT
+    / "services/nemotron3-nano-llm/nemotron3_nano_llm_server/__main__.py"
+)
+_NANO_SPEC = importlib.util.spec_from_file_location("nemotron3_nano_main", _NANO_PATH)
+assert _NANO_SPEC and _NANO_SPEC.loader
+_nano = importlib.util.module_from_spec(_NANO_SPEC)
+_NANO_SPEC.loader.exec_module(_nano)
+
 _EMBEDDING_PATH = (
     _REPO_ROOT / "services/embedding-server/embedding_server/__main__.py"
 )
@@ -251,14 +260,20 @@ def test_omni_profiles_select_supported_vllm_configuration(profile_path: Path) -
     config = yaml.safe_load(profile_path.read_text())
 
     assert config["vllm_backend"] == "docker"
-    assert config["vllm_image"] == "vllm/vllm-openai:v0.20.0"
+    assert config["vllm_image"] == "nvcr.io/nvidia/vllm:26.08-py3"
     assert config["extra_pip"] == []
-    assert "moe_backend" not in config
     if profile_path.parent.name == "spark":
+        assert config["max_num_seqs"] == 4
+        assert "moe_backend" not in config
         assert config["gpu_memory_utilization"] == 0.25
         assert config["kv_cache_memory_bytes"] == 2147483648
         assert config["spark_uma"] is True
+    elif profile_path.parent.name == "96G_blackwell":
+        assert config["moe_backend"] == "flashinfer_cutlass"
+        assert "kv_cache_memory_bytes" not in config
+        assert "spark_uma" not in config
     else:
+        assert "moe_backend" not in config
         assert "kv_cache_memory_bytes" not in config
         assert "spark_uma" not in config
 
@@ -540,6 +555,45 @@ def test_omni_only_forwards_configured_moe_backend(
         assert "--moe-backend" not in args
     else:
         assert args[args.index("--moe-backend") + 1] == moe_backend
+
+
+@pytest.mark.parametrize(
+    ("compute_major", "expected_moe_backend"),
+    [(8, None), (10, "flashinfer_cutlass"), (12, None)],
+)
+def test_nano_standalone_forwards_ngc_compatibility_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    compute_major: int,
+    expected_moe_backend: str | None,
+) -> None:
+    captured: dict[str, object] = {}
+    config_path = (
+        _REPO_ROOT
+        / "services/nemotron3-nano-llm/nemotron3_nano_llm_server.yaml"
+    )
+    config = yaml.safe_load(config_path.read_text())
+    monkeypatch.setattr(_nano, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        _nano, "load_config", lambda: (config, config_path.parent, None)
+    )
+    monkeypatch.setattr(_nano, "resolve_model_cache", lambda *_a, **_k: Path("models"))
+    monkeypatch.setattr(_nano, "setup_hf_env", lambda *_a, **_k: None)
+    monkeypatch.setattr(_nano, "gpu_compute_major", lambda: compute_major)
+    monkeypatch.setattr(
+        _nano,
+        "_ensure_reasoning_parser",
+        lambda *_a, **_k: Path("parser.py"),
+    )
+    monkeypatch.setattr(_nano, "serve", lambda **kwargs: captured.update(kwargs))
+
+    _nano.run()
+
+    args = captured["extra_serve_args"]
+    assert args[args.index("--max-num-seqs") + 1] == "4"
+    if expected_moe_backend is None:
+        assert "--moe-backend" not in args
+    else:
+        assert args[args.index("--moe-backend") + 1] == expected_moe_backend
 
 
 def test_spark_omni_uses_explicit_kv_cache(

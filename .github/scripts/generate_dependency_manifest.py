@@ -22,6 +22,19 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
 MANIFEST_NAME = "xr-ai-dependency-manifest"
+# vLLM and the remaining repository projects run in separate environments and
+# have incompatible PyNvVideoCodec and protobuf constraints. Mutually exclusive
+# extras let one universal lock inventory both resolved environments without
+# overriding either service's real dependency versions.
+VLLM_PROJECTS = frozenset(
+    {
+        "embedding-server",
+        "llama-nemotron-llm-server",
+        "nemotron-omni-llm-server",
+        "nemotron3-nano-llm-server",
+        "vlm-server",
+    }
+)
 # Lock output varies across uv releases, so the lock is always produced by this
 # exact version, whatever `uv` is on PATH.
 UV_VERSION = "0.10.7"
@@ -67,10 +80,13 @@ def manifest_toml(projects: Sequence[Project]) -> str:
         raise ValueError("no projects found to aggregate")
     python_range = common_python_range([project.requires_python for project in members])
 
-    dependencies = []
+    repository_dependencies = []
+    vllm_dependencies = []
     for project in members:
         extras = ",".join(sorted(project.optional_dependencies))
-        dependencies.append(f"{project.name}[{extras}]" if extras else project.name)
+        dependency = f"{project.name}[{extras}]" if extras else project.name
+        target = vllm_dependencies if project.name in VLLM_PROJECTS else repository_dependencies
+        target.append(dependency)
     # Keys are quoted because distribution names may contain dots, which TOML
     # would otherwise read as nested tables.
     keys = [f'"{project.name}"' for project in members]
@@ -89,12 +105,19 @@ def manifest_toml(projects: Sequence[Project]) -> str:
         'version = "0.0.0"',
         'description = "Repository-wide resolved dependency manifest."',
         f'requires-python = "{python_range}"',
-        "dependencies = [",
-        *(f'    "{dependency}",' for dependency in dependencies),
+        "dependencies = []",
+        "",
+        "[project.optional-dependencies]",
+        "repository = [",
+        *(f'    "{dependency}",' for dependency in repository_dependencies),
+        "]",
+        "vllm = [",
+        *(f'    "{dependency}",' for dependency in vllm_dependencies),
         "]",
         "",
         "[tool.uv]",
         "package = false",
+        'conflicts = [[{ extra = "repository" }, { extra = "vllm" }]]',
         "",
         "[tool.uv.sources]",
         *sources,
