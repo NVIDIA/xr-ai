@@ -34,13 +34,15 @@ and command to `device_io_hub`. Rename `xr_media_hub.yaml` to
   decrease it for a tighter memory and latency bound when using a compatible
   custom producer.
 
-## Removed SDK compatibility surfaces
+## Local speech service
 
 The local speech service changed from Piper to Pocket TTS with no compatibility
 alias. Replace the `piper_tts` model preset, `piper_tts_server` command, and
 `services/piper-tts/` path with `pocket_tts`, `pocket_tts_server`, and
 `services/pocket-tts/`. Pocket TTS voice names differ from Piper voice names;
 the checked-in profiles use the CC0 `bill_boerst` voice.
+
+## Removed SDK compatibility surfaces
 
 This release removes deprecated SDK aliases and the standalone Pipecat
 compatibility package. Update out-of-tree code as follows:

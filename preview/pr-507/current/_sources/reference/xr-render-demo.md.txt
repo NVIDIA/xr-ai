@@ -195,6 +195,7 @@ LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceAgent
 The STT server serializes inference with a process-local lock because its shared
 NeMo model is not reentrant.
 
+(tts-piper)=
 ## TTS — Pocket TTS
 
 Served on port 8105. The voice runtime streams the supervisor's final
