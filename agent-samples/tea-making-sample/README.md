@@ -10,10 +10,12 @@ guide answers questions and applies explicit workflow controls, while
 independent background agents can record transcripts, watch for visual
 changes, and produce periodic video observations.
 
-The workflow keeps state transitions deterministic: visual evidence can satisfy
-the current step, but only an explicit user command advances the procedure. The
-sample launches its application services and reuses STT, Piper TTS, Nemotron-3
-Nano Omni, and embedding endpoints from the shared model stack.
+The workflow keeps state transitions deterministic: the VLM describes the
+current view, the observation LLM judges whether that description satisfies the
+current step, and guarded commits count any required confirmations. Only an
+explicit user command advances the procedure. The sample launches its
+application services and reuses STT, Piper TTS, Nemotron-3 Nano Omni, and
+embedding endpoints from the shared model stack.
 
 ## Configure
 

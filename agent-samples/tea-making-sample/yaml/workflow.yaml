@@ -59,7 +59,7 @@ steps:
           legible, say label unreadable.
       result_field: answer
     evidence:
-      pattern: "(?is)^(?!.*\\b(none|nothing|dark|blurry|blurred|unreadable|unclear|unknown|absent|obscured|unable|cannot|can't|discern)\\b)(?!.*\\b(no|not|without)\\b.{0,32}\\b(tea|package|box|label|tag|texts?)\\b)(?=.*[a-z]{3}).+$"
+      pattern: "^accepted$"
       consecutive: 1
     agent:
       prompt: >-
@@ -102,16 +102,18 @@ steps:
       interval_s: 2
       arguments:
         question: >-
-          Decide whether water itself is visibly inside the kettle or pot.
-          Reply exactly "water present" when it is visible, or "water absent"
-          otherwise. Never infer from the vessel alone.
+          Describe the visible interior and contents of the kettle or pot.
+          State whether water is visible inside and what supports that reading.
+          If the contents are unclear, say so. Never infer.
       result_field: answer
     evidence:
-      pattern: "^water visible$"
+      pattern: "^accepted$"
       consecutive: 2
     agent:
       prompt: >-
-        Set water_filled after two accepted water-present observations.
+        Judge the fresh caption semantically without requiring particular
+        words. Set water_filled true when it reasonably shows water inside the
+        vessel. Otherwise commit empty updates and message.
       tools: []
     voice:
       prompt: >-
@@ -137,18 +139,26 @@ steps:
       interval_s: 2
       arguments:
         question: >-
-          Read only the kettle or thermometer temperature. Reply "<number> C"
-          or "<number> F" when the unit is visible, "unit ambiguous" when a
-          number lacks a clear unit, or "no reading".
+          Describe the visible kettle or thermometer display and transcribe its
+          current numeric reading and unit. If either is unclear, say so. Do not
+          confuse a printed target temperature with the current reading.
       result_field: answer
     evidence:
-      pattern: "^temperature above threshold$"
+      pattern: "^accepted$"
       consecutive: 2
     agent:
       prompt: >-
-        Set heating_started after two explicit-unit readings above 50 Celsius
-        or 122 Fahrenheit. Ambiguous or missing units do not count.
-      tools: []
+        This step detects that heating is underway; it does not wait for the tea
+        target temperature. Ignore target_temperature_c when deciding this
+        step. For every fresh current reading with an explicit Celsius or
+        Fahrenheit unit, first call temperature__threshold with that exact
+        reading and a threshold_c of 50. If its above result is true, commit
+        heating_started true. If above is false, commit empty updates and
+        message with rejected evidence. For a target value, ambiguous unit,
+        missing reading, or unclear current-versus-target value, do not call the
+        tool; commit empty updates and message with unknown evidence so it does
+        not erase a prior confirmed reading.
+      tools: [temperature__threshold]
     voice:
       prompt: >-
         Explain target from state. For a reading, call current_view and
@@ -180,16 +190,16 @@ steps:
           it is unconfirmed. Note hazards.
       result_field: answer
     evidence:
-      pattern: "(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|outside|cannot|can't)\\b)(?!.*\\b(no|not)\\b.{0,80}\\b(immersed|submerged|in (the )?water)\\b)(?=.*\\b(tea bag|infuser|leaves)\\b)(?=.*\\b(immersed|submerged|in the water)\\b).+$"
+      pattern: "^accepted$"
       consecutive: 2
     agent:
       prompt: >-
-        Only when the caption explicitly confirms both visible water and a tea
-        bag, infuser, or leaves entering or immersed in it, call clock__now once
-        and commit epoch_us as steeping_started_at_us with steeping_started true.
-        A tea item in an empty vessel or without visible water contact is no
-        start: do not call clock__now; commit empty updates/message. Never
-        replace a start time.
+        Judge when steeping starts, not when it finishes. If the fresh caption
+        shows tea visibly contacting liquid inside the vessel, first call
+        clock__now. Nearby, above, or outside the liquid does not count. Then
+        commit exactly its epoch_us as steeping_started_at_us with
+        steeping_started true. Otherwise commit empty updates and message. Never
+        invent or replace a start time.
       tools: [clock__now]
     voice:
       prompt: >-

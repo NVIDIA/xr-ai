@@ -177,27 +177,48 @@ class WorkflowStore:
     def observe(
         self,
         session: WorkflowSession,
-        observation: Any,
+        observation: Any | None,
     ) -> None:
-        """Update consecutive evidence without letting the model control it."""
+        """Update consecutive conclusive evidence while preserving unknowns."""
 
         step = self.active_step(session)
         if step.evidence is None:
             return
-        value = (
-            observation
-            if isinstance(observation, str)
-            else json.dumps(observation, separators=(",", ":"))
-        )
-        matched = re.fullmatch(step.evidence.pattern, value.strip()) is not None
-        session.evidence_hits = session.evidence_hits + 1 if matched else 0
+        matched: bool | None
+        if observation is None:
+            matched = None
+        else:
+            value = (
+                observation
+                if isinstance(observation, str)
+                else json.dumps(observation, separators=(",", ":"))
+            )
+            matched = re.fullmatch(step.evidence.pattern, value.strip()) is not None
+        if matched is True:
+            session.evidence_hits += 1
+        elif matched is False:
+            session.evidence_hits = 0
+        outcome = "unknown" if matched is None else str(matched).lower()
         self._event(
             session,
             "step.evidence",
             (
-                f"matched={str(matched).lower()} consecutive={session.evidence_hits}/{step.evidence.consecutive}"
+                f"matched={outcome} consecutive={session.evidence_hits}/{step.evidence.consecutive}"
             ),
         )
+
+    def _completion_proposed(
+        self,
+        session: WorkflowSession,
+        updates: dict[str, Any],
+    ) -> bool:
+        """Return whether a valid model proposal completes the active step."""
+
+        step = self.active_step(session)
+        if self._invalid_commit_patch(session, step, updates):
+            return False
+        candidate = {**session.state, **updates}
+        return step.is_complete(candidate)
 
     def commit(
         self,
@@ -209,7 +230,7 @@ class WorkflowStore:
 
         step = self.active_step(session)
         was_complete = step.is_complete(session.state)
-        invalid = self._invalid_patch(step, updates)
+        invalid = self._invalid_commit_patch(session, step, updates)
         if invalid:
             self._event(session, "step.commit_rejected", invalid)
             return CommitResult(False, False, invalid, session.revision)
@@ -222,12 +243,6 @@ class WorkflowStore:
             if name not in session.state or session.state[name] != value
         }
         candidate = {**session.state, **changes}
-        if step.is_complete(candidate):
-            missing = [name for name in step.writes if name not in candidate]
-            if missing:
-                reason = f"completion requires fields: {missing}"
-                self._event(session, "step.commit_rejected", reason)
-                return CommitResult(False, False, reason, session.revision)
         if (
             step.evidence is not None
             and step.is_complete(candidate)
@@ -333,6 +348,21 @@ class WorkflowStore:
             if not _valid_type(expected, value):
                 return f"{name} must be {expected.type}"
         return ""
+
+    def _invalid_commit_patch(
+        self,
+        session: WorkflowSession,
+        step: Step,
+        updates: dict[str, Any],
+    ) -> str:
+        invalid = self._invalid_patch(step, updates)
+        if invalid:
+            return invalid
+        candidate = {**session.state, **updates}
+        if not step.is_complete(candidate):
+            return ""
+        missing = [name for name in step.writes if name not in candidate]
+        return f"completion requires fields: {missing}" if missing else ""
 
     def _invalid_skip_patch(self, updates: dict[str, Any]) -> str:
         unknown = updates.keys() - self.workflow.state_fields.keys()

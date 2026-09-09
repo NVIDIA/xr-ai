@@ -75,7 +75,7 @@ class AgentPolicy:
 
 @dataclass(frozen=True, slots=True)
 class Evidence:
-    """Deterministic gate applied before a completion commit."""
+    """Deterministic gate over consecutive conclusive observations."""
 
     pattern: str
     consecutive: int
