@@ -28,7 +28,7 @@ Config keys
     enable_tool_choice:      bool   Pass --enable-auto-tool-choice (default: true).
     vllm_backend:            str    "pip" (default) or "docker".
     vllm_image:              str    NGC image when vllm_backend=docker
-                                    (default: nvcr.io/nvidia/vllm:26.04-py3).
+                                    (default: nvcr.io/nvidia/vllm:26.08-py3).
 """
 import os
 import sys

@@ -56,7 +56,7 @@ from ._nim import serve_nim
 
 log = logging.getLogger(__name__)
 
-DEFAULT_IMAGE = "nvcr.io/nvidia/vllm:26.04-py3"
+DEFAULT_IMAGE = "nvcr.io/nvidia/vllm:26.08-py3"
 """Default NGC vLLM image used when a service does not override ``vllm_image``.
 
 Individual services may pin a newer image when required by their model.

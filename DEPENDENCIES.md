@@ -292,7 +292,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `vllm>=0.14.0`
+  - `vllm>=0.27.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
@@ -308,7 +308,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `vllm>=0.12.0`
+  - `vllm>=0.27.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
@@ -344,7 +344,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `vllm>=0.12.0`
+  - `vllm>=0.27.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
@@ -360,7 +360,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `vllm>=0.12.0`
+  - `vllm>=0.27.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
@@ -472,7 +472,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `vllm>=0.23.0`
+  - `vllm>=0.27.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
@@ -710,45 +710,47 @@ drift:
 
 - Python: `>=3.11,<3.13`
 - Build dependencies: none
-- Runtime dependencies:
-  - `lab-instrument-monitoring` → [`lab-instrument-monitoring`](agent-samples/lab-instrument-monitoring/) (local, editable)
-  - `lab-instrument-monitoring-worker` → [`lab-instrument-monitoring-worker`](agent-samples/lab-instrument-monitoring/worker/) (local, editable)
-  - `model-servers` → [`model-servers`](agent-samples/model-servers/) (local, editable)
-  - `simple-vlm-example` → [`simple-vlm-example`](agent-samples/simple-vlm-example/) (local, editable)
-  - `simple-vlm-example-worker` → [`simple-vlm-example-worker`](agent-samples/simple-vlm-example/worker/) (local, editable)
-  - `tea-making-sample` → [`tea-making-sample`](agent-samples/tea-making-sample/) (local, editable)
-  - `tea-making-worker` → [`tea-making-worker`](agent-samples/tea-making-sample/worker/) (local, editable)
-  - `xr-render-demo` → [`xr-render-demo`](agent-samples/xr-render-demo/) (local, editable)
-  - `xr-render-demo-eval` → [`xr-render-demo-eval`](agent-samples/xr-render-demo/eval/) (local, editable)
-  - `xr-render-scene` → [`xr-render-scene`](agent-samples/xr-render-demo/scene/) (local, editable)
-  - `xr-render-demo-worker` → [`xr-render-demo-worker`](agent-samples/xr-render-demo/worker/) (local, editable)
-  - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
-  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
-  - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
-  - `xr-ai-tools[frames,image-editing,marker-tracking,relay,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
-  - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
-  - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
-  - `cloudxr-runtime` → [`cloudxr-runtime`](services/cloudxr-runtime/) (local, editable)
-  - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
-  - `embedding-server` → [`embedding-server`](services/embedding-server/) (local, editable)
-  - `llama-nemotron-llm-server` → [`llama-nemotron-llm-server`](services/llama-nemotron-llm/) (local, editable)
-  - `magpie-tts-server` → [`magpie-tts-server`](services/magpie-tts/) (local, editable)
-  - `nemotron-omni-llm-server` → [`nemotron-omni-llm-server`](services/nemotron-omni-llm/) (local, editable)
-  - `nemotron3-nano-llm-server` → [`nemotron3-nano-llm-server`](services/nemotron3-nano-llm/) (local, editable)
-  - `nim-server` → [`nim-server`](services/nim-server/) (local, editable)
-  - `xr-openxr-service` → [`xr-openxr-service`](services/openxr-service/) (local, editable)
-  - `pocket-tts-server` → [`pocket-tts-server`](services/pocket-tts/) (local, editable)
-  - `xr-rag-service` → [`xr-rag-service`](services/rag-service/) (local, editable)
-  - `stt-server` → [`stt-server`](services/stt-server/) (local, editable)
-  - `xr-video-memory-service` → [`xr-video-memory-service`](services/video-memory-service/) (local, editable)
-  - `vlm-server` → [`vlm-server`](services/vlm-server/) (local, editable)
-  - `xr-ai-tests` → [`xr-ai-tests`](tests/) (local, editable)
-  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
-  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)
-  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
-  - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
-- Optional dependency groups: none
+- Runtime dependencies: none
+- Optional dependency groups:
+  - `repository`:
+    - `lab-instrument-monitoring` → [`lab-instrument-monitoring`](agent-samples/lab-instrument-monitoring/) (local, editable)
+    - `lab-instrument-monitoring-worker` → [`lab-instrument-monitoring-worker`](agent-samples/lab-instrument-monitoring/worker/) (local, editable)
+    - `model-servers` → [`model-servers`](agent-samples/model-servers/) (local, editable)
+    - `simple-vlm-example` → [`simple-vlm-example`](agent-samples/simple-vlm-example/) (local, editable)
+    - `simple-vlm-example-worker` → [`simple-vlm-example-worker`](agent-samples/simple-vlm-example/worker/) (local, editable)
+    - `tea-making-sample` → [`tea-making-sample`](agent-samples/tea-making-sample/) (local, editable)
+    - `tea-making-worker` → [`tea-making-worker`](agent-samples/tea-making-sample/worker/) (local, editable)
+    - `xr-render-demo` → [`xr-render-demo`](agent-samples/xr-render-demo/) (local, editable)
+    - `xr-render-demo-eval` → [`xr-render-demo-eval`](agent-samples/xr-render-demo/eval/) (local, editable)
+    - `xr-render-scene` → [`xr-render-scene`](agent-samples/xr-render-demo/scene/) (local, editable)
+    - `xr-render-demo-worker` → [`xr-render-demo-worker`](agent-samples/xr-render-demo/worker/) (local, editable)
+    - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
+    - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+    - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
+    - `xr-ai-tools[frames,image-editing,marker-tracking,relay,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
+    - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
+    - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
+    - `cloudxr-runtime` → [`cloudxr-runtime`](services/cloudxr-runtime/) (local, editable)
+    - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
+    - `magpie-tts-server` → [`magpie-tts-server`](services/magpie-tts/) (local, editable)
+    - `nim-server` → [`nim-server`](services/nim-server/) (local, editable)
+    - `xr-openxr-service` → [`xr-openxr-service`](services/openxr-service/) (local, editable)
+    - `pocket-tts-server` → [`pocket-tts-server`](services/pocket-tts/) (local, editable)
+    - `xr-rag-service` → [`xr-rag-service`](services/rag-service/) (local, editable)
+    - `stt-server` → [`stt-server`](services/stt-server/) (local, editable)
+    - `xr-video-memory-service` → [`xr-video-memory-service`](services/video-memory-service/) (local, editable)
+    - `xr-ai-tests` → [`xr-ai-tests`](tests/) (local, editable)
+    - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+    - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+    - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)
+    - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+    - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
+  - `vllm`:
+    - `embedding-server` → [`embedding-server`](services/embedding-server/) (local, editable)
+    - `llama-nemotron-llm-server` → [`llama-nemotron-llm-server`](services/llama-nemotron-llm/) (local, editable)
+    - `nemotron-omni-llm-server` → [`nemotron-omni-llm-server`](services/nemotron-omni-llm/) (local, editable)
+    - `nemotron3-nano-llm-server` → [`nemotron3-nano-llm-server`](services/nemotron3-nano-llm/) (local, editable)
+    - `vlm-server` → [`vlm-server`](services/vlm-server/) (local, editable)
 - Commands: none
 
 <!-- END GENERATED PYTHON DEPENDENCY MAP -->

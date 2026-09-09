@@ -14,7 +14,7 @@ dependencies = [
     # tool-call parser, the nano_v3 reasoning parser plugin, and the
     # FlashInfer NVFP4 MoE kernels.  0.12.0 is the minimum the model
     # card (nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4) calls for.
-    "vllm>=0.12.0",
+    "vllm>=0.27.0",
     "pyyaml>=6.0",
     # Xet speeds up weight download on first run.
     "huggingface-hub>=0.32.0",

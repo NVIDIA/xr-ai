@@ -10,7 +10,7 @@ name = "embedding-server"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "vllm>=0.14.0",
+    "vllm>=0.27.0",
     "pyyaml>=6.0",
     "huggingface-hub>=0.32.0",
     "hf-xet>=1.1.2,<2.0.0",
