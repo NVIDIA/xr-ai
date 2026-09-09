@@ -43,8 +43,10 @@ Advance the timestamp only in a dedicated dependency refresh; it never updates
 automatically. Set `exclude-newer` to the current UTC value from
 `date -u +%Y-%m-%dT%H:%M:%SZ`, then resolve every project from the repository
 root with `uv --config-file uv.toml lock --upgrade --project <directory>`.
-Inspect the resolved version changes and run the full CPU and GPU test suites
-before merging. uv stops upward config discovery at a nearer `[tool.uv]` table;
+Inspect the resolved version changes, audit their license and attribution
+metadata (including bundled native libraries), update `THIRD_PARTY_NOTICES.md`
+and `third_party_licenses/`, and run the full CPU and GPU test suites before
+merging. uv stops upward config discovery at a nearer `[tool.uv]` table;
 most nested projects define one through `[tool.uv.sources]`, so pass the root
 config explicitly. All generated per-project lockfiles remain gitignored
 validation artifacts; do not commit them.
@@ -808,7 +810,7 @@ Keep non-obvious fan-out in the same change:
 | CloudXR configuration or native-profile helpers | xr-render configuration and orchestrator, [Adding CloudXR](docs/source/guides/adding-cloudxr.md), and [xr-render reference](docs/source/reference/xr-render-demo.md) |
 | Scene-service configuration | Scene YAML, xr-render orchestrator, and [xr-render reference](docs/source/reference/xr-render-demo.md) |
 | Any `pyproject.toml` dependency or project metadata | Regenerate this map and the affected project's gitignored `uv.lock` |
-| `uv.toml` dependency cutoff | Regenerate `dependency-manifest/` with `.github/scripts/generate_dependency_manifest.py` and refresh the Android and web-xr locks per Dependency qualification |
+| `uv.toml` dependency cutoff | Regenerate `dependency-manifest/` with `.github/scripts/generate_dependency_manifest.py`, refresh the Android and web-xr locks, audit and update third-party notices and license texts, and run the notice guard per Dependency qualification |
 | New sample or reusable service | Root and local READMEs and the relevant Sphinx guide |
 | `xr-ai-models` protocol, profile schema, or preset | Generated API reference, preset registry, sample profiles, and architecture rules |
 

@@ -112,6 +112,7 @@ _SKIP_EXTS = {
 _SKIP_PATH_SUFFIXES = (
     "gradle/wrapper/gradle-wrapper.properties",
 )
+_SKIP_ROOT_DIRS = {"third_party_licenses"}
 
 # ── Walk pruning ────────────────────────────────────────────────────────────
 # Explicit set rather than "any dotted directory" — we want to scan `.github/`
@@ -133,6 +134,13 @@ def comment_style(path: Path) -> str | None:
     suffix = path.suffix
     s = str(path).replace("\\", "/")
 
+    try:
+        relative_parts = path.resolve().relative_to(_REPO_ROOT).parts
+    except ValueError:
+        relative_parts = ()
+
+    if relative_parts[:1] and relative_parts[0] in _SKIP_ROOT_DIRS:
+        return None
     if name in _SKIP_NAMES or suffix in _SKIP_EXTS:
         return None
     if any(s.endswith(suf) for suf in _SKIP_PATH_SUFFIXES):
