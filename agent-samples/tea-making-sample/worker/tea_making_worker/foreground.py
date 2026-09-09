@@ -324,7 +324,7 @@ class ForegroundAgent(Agent):
 
         return Tool(
             "current_view",
-            "Inspect this participant's current camera frame for a specific visible fact.",
+            "Inspect this participant's current camera frame to answer a question about the current scene.",
             CurrentViewRequest,
             ImageQueryResult,
             inspect,
