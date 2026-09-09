@@ -194,11 +194,11 @@ def test_make_vlm_from_config_cosmos_preset_has_enable_thinking_false(tmp_path) 
 
 
 def test_make_tts_from_config_resolves_preset(tmp_path) -> None:
-    """piper_tts preset resolves to a TTS spec with the supplied base_url."""
+    """pocket_tts preset resolves to a TTS spec with the supplied base_url."""
     models_yaml = tmp_path / "models.yaml"
     models_yaml.write_text(
         "tts:\n"
-        "  kind: preset:piper_tts\n"
+        "  kind: preset:pocket_tts\n"
         "  base_url: http://localhost:8105\n"
     )
     cfg  = load_models_config(models_yaml)

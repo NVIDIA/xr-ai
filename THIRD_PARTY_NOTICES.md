@@ -31,9 +31,53 @@ For the per-package dependency mapping, see [`DEPENDENCIES.md`](DEPENDENCIES.md)
 | `nemo-relay`   | >=0.7.2,<0.8 | Apache-2.0  | https://github.com/NVIDIA/NeMo-Relay |
 | `Pillow`       | 10.0.0   | HPND          | https://github.com/python-pillow/Pillow |
 | `pipecat-ai`   | >=1.3    | BSD-2-Clause  | https://github.com/pipecat-ai/pipecat |
+| `pocket-tts`   | 3.0.2    | MIT           | https://github.com/kyutai-labs/pocket-tts |
 | `pydantic`     | >=2.10   | MIT           | https://github.com/pydantic/pydantic |
 | `python-multipart` | >=0.0.9 | Apache-2.0 | https://github.com/Kludex/python-multipart |
 | `websockets`   | 12.0     | BSD-3-Clause  | https://github.com/python-websockets/websockets |
+
+### Pocket TTS model and voice
+
+Pocket TTS 3.0.2 pins the following downloaded artifacts for the default
+English configuration. XR AI does not redistribute them.
+
+- Gated weights from `kyutai/pocket-tts` at revision
+  `39592ff23c9ef80098bb74895d104c26275fe2c9`.
+- Ungated fallback weights and the tokenizer from
+  `kyutai/pocket-tts-without-voice-cloning` at revision
+  `d29db7978e464fb90cb3359ee0c69a273b9142cc`.
+- The predefined `bill_boerst` voice embedding from
+  `kyutai/pocket-tts-without-voice-cloning` at revision
+  `e81d79e8194ad4c7ce879c87a4258ef20cbf2487`.
+
+Both model repositories are licensed under CC-BY-4.0. The `bill_boerst`
+embedding derives from the CC0-1.0 Voice-Zero recording identified in the
+[`kyutai/tts-voices` model card](https://huggingface.co/kyutai/tts-voices), but
+the default service downloads the precomputed embedding rather than that
+recording.
+
+The model records reviewed at repository revisions
+`492522650173a0653b7575cdc25ae09810e5d741` (`kyutai/pocket-tts`) and
+`e81d79e8194ad4c7ce879c87a4258ef20cbf2487`
+(`kyutai/pocket-tts-without-voice-cloning`) carried the following
+acceptable-use text on 2026-09-09:
+
+> Prohibited use: Use of our model must comply with all applicable laws and
+> regulations and must not result in, involve, or facilitate any illegal,
+> harmful, deceptive, fraudulent, or unauthorized activity. Prohibited uses
+> include, without limitation, voice impersonation or cloning without explicit
+> and lawful consent; misinformation, disinformation, or deception (including
+> fake news, fraudulent calls, or presenting generated content as genuine
+> recordings of real people or events); and the generation of unlawful,
+> harmful, libelous, abusive, harassing, discriminatory, hateful, or
+> privacy-invasive content. We disclaim all liability for any non-compliant use.
+
+The exact UTF-8 text, without a trailing newline, has SHA-256
+`8febd058c61bdeebf64b22d5a7bd3a78081e9b136a845fd98a2daf1de9d6381e`.
+Review the live [gated model record](https://huggingface.co/api/models/kyutai/pocket-tts)
+before accepting the terms because upstream may revise them. This release
+accepts only the reviewed `bill_boerst` voice; it does not expose Pocket TTS's
+other predefined voices or arbitrary voice-cloning inputs.
 
 ## Swift (iOS / visionOS client)
 
@@ -75,6 +119,8 @@ available at:
 - **BSD-2-Clause**: https://opensource.org/license/bsd-2-clause
 - **HPND**: https://opensource.org/license/historical-ntu-disclaimer
 - **MIT**: https://opensource.org/license/mit
+- **CC-BY-4.0**: https://creativecommons.org/licenses/by/4.0/
+- **CC0-1.0**: https://creativecommons.org/publicdomain/zero/1.0/
 - **CDDL-1.1**: https://spdx.org/licenses/CDDL-1.1.html
 
 Each upstream project repository linked above includes its own canonical

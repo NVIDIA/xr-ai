@@ -2,30 +2,29 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-piper_tts_server — Piper TTS HTTP server.
+pocket_tts_server — Pocket TTS HTTP server.
 
-Non-autoregressive ONNX-based TTS: ~50-150 ms per sentence on CPU,
-vs. 2-5 s for autoregressive models like Magpie.  Drop-in replacement
-for tts-server — serves the same OpenAI-compatible API:
+Pocket TTS is a compact, streaming-capable CPU model. This wrapper exposes the
+repository's existing OpenAI-compatible API:
 
     POST /v1/audio/speech
     GET  /v1/models
     GET  /health
 
-Voices are ONNX models from the rhasspy/piper-voices HuggingFace repo.
-The server downloads the requested voice on first startup if it is not
-already present in model_cache.
+Model weights and the precomputed voice embedding come from Kyutai model
+repositories on Hugging Face. The selected model and voice are loaded before
+the service reports ready.
 
 Accepts --config <path>.yaml (auto-passed by xr-ai-launcher).
 
 Config keys
 -----------
-    voice:        str   Piper voice name, e.g. "en_US-lessac-medium" (required)
+    voice:        str   Must be "bill_boerst" (required)
+    language:     str   Pocket TTS language/model variant (default: "english")
     port:         int   HTTP port (default: 8105)
     host:         str   Bind address (default: "0.0.0.0")
-    use_cuda:     bool  Run ONNX on CUDA (default: false — CPU is fast enough)
     startup_timeout_s: float  Seconds allowed for a cold start (default: 600)
-    model_cache:  str   Voice model cache path, resolved relative to this YAML.
+    model_cache:  str   Hugging Face cache path, resolved relative to this YAML.
                         Default: ../../models
 """
 import argparse
@@ -45,23 +44,18 @@ import yaml
 from loguru import logger
 from xr_ai_logging import setup_logging
 
-_DEFAULT_PORT              = 8105
+_DEFAULT_PORT = 8105
 _DEFAULT_STARTUP_TIMEOUT_S = 600.0
-_HF_REPO                   = "rhasspy/piper-voices"
-_PROCESS_GROUP_ENV         = "_XR_AI_PIPER_PROCESS_GROUP"
-_LAUNCHER_GROUP_OWNER_ENV  = "_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER"
-_LAUNCHER_GROUP_OWNER      = "piper_tts_server"
+_PROCESS_GROUP_ENV = "_XR_AI_POCKET_PROCESS_GROUP"
+_LAUNCHER_GROUP_OWNER_ENV = "_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER"
+_LAUNCHER_GROUP_OWNER = "pocket_tts_server"
 _READY_PROCESS_MAY_EXIT_ENV = "_XR_AI_LAUNCHER_READY_PROCESS_MAY_EXIT"
 _REUSE_HEALTH_FAILURE_LIMIT = 3
+_SUPPORTED_VOICES = frozenset({"bill_boerst"})
 
-# Exit code for "the voice could not be obtained for environmental reasons"
-# (offline with an empty cache, or a transient HuggingFace download failure),
-# as distinct from a genuine misconfiguration (unknown voice name → exit 1).
-# Callers/tests can treat this as retry-or-skip rather than a hard failure.
-_EXIT_VOICE_UNAVAILABLE = 3
 
-_TRUE_BOOL_STRINGS = {"1", "true", "yes", "on"}
-_FALSE_BOOL_STRINGS = {"0", "false", "no", "off"}
+class _SynthesisCancelled(RuntimeError):
+    """A queued request was abandoned before generation started."""
 
 
 def _parse_startup_timeout(value: object) -> float:
@@ -79,189 +73,129 @@ def _parse_startup_timeout(value: object) -> float:
     return timeout_s
 
 
-def _parse_config_bool(value: object, key: str) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in _TRUE_BOOL_STRINGS:
-            return True
-        if normalized in _FALSE_BOOL_STRINGS:
-            return False
-    accepted = sorted(_TRUE_BOOL_STRINGS | _FALSE_BOOL_STRINGS)
-    raise ValueError(
-        f"{key} must be a boolean or one of {accepted} (got {value!r})"
-    )
-
-
 def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
     raw = cfg.get("model_cache", "../../models")
-    p   = Path(raw)
+    p = Path(raw)
     if not p.is_absolute():
         p = (yaml_dir / p).resolve()
     p.mkdir(parents=True, exist_ok=True)
     return p
 
 
-def _hf_path_for_voice(voice: str) -> tuple[str, str]:
-    """Return (onnx_hf_path, json_hf_path) within the rhasspy/piper-voices repo.
+class _PocketTTSBackend:
+    """Thread-safe Pocket TTS voice loader and synthesizer."""
 
-    Voice name format: <locale>-<speaker>-<quality>  e.g. en_US-lessac-medium
-    HF tree structure: <lang>/<locale>/<speaker>/<quality>/<voice>.onnx[.json]
-    """
-    parts = voice.split("-")
-    if len(parts) < 3:
-        raise ValueError(
-            f"Voice name {voice!r} must be <locale>-<speaker>-<quality>, "
-            "e.g. en_US-lessac-medium"
-        )
-    locale, speaker, quality = parts[0], parts[1], "-".join(parts[2:])
-    lang = locale.split("_")[0]
-    base = f"{lang}/{locale}/{speaker}/{quality}/{voice}"
-    return f"{base}.onnx", f"{base}.onnx.json"
-
-
-def _ensure_voice(voice: str, cache_dir: Path) -> tuple[Path, Path]:
-    """Return (onnx_path, json_path), downloading from HF if necessary.
-
-    Failures are surfaced as a clear single-line error and SystemExit at
-    startup — without this, a typo in the voice name only manifests as a
-    cryptic huggingface_hub stack trace on the first /v1/audio/speech call.
-
-    Exit codes:
-      1  unknown voice name / repo (a misconfiguration — fix the config).
-      3  voice unavailable for environmental reasons: offline with an empty
-         cache, or a transient HF download failure (network / rate-limit).
-         Retryable, not a code bug — see ``_EXIT_VOICE_UNAVAILABLE``.
-    """
-    from huggingface_hub import hf_hub_download
-    from huggingface_hub.errors import (
-        EntryNotFoundError,
-        LocalEntryNotFoundError,
-        RepositoryNotFoundError,
-    )
-
-    hf_cache = cache_dir / "piper"
-    hf_cache.mkdir(parents=True, exist_ok=True)
-    onnx_hf, json_hf = _hf_path_for_voice(voice)
-    logger.info("Resolving voice {!r} from {}…", voice, _HF_REPO)
-    try:
-        onnx_path = Path(hf_hub_download(_HF_REPO, onnx_hf, cache_dir=str(hf_cache)))
-        json_path = Path(hf_hub_download(_HF_REPO, json_hf, cache_dir=str(hf_cache)))
-    # LocalEntryNotFoundError subclasses EntryNotFoundError, so it MUST be caught
-    # first — otherwise the (EntryNotFoundError, …) handler below swallows it and
-    # exits 1 (hard fail) instead of the retryable _EXIT_VOICE_UNAVAILABLE. A
-    # transient HF 429 with no cached copy surfaces as LocalEntryNotFoundError,
-    # which is exactly the flake this ordering prevents.
-    except LocalEntryNotFoundError:
-        logger.error(
-            "Voice {!r} is not cached in {} and could not be downloaded "
-            "(HF_HUB_OFFLINE / no network / transient HF failure). Pre-fetch it "
-            "on a connected host or retry.",
-            voice, hf_cache,
-        )
-        sys.exit(_EXIT_VOICE_UNAVAILABLE)
-    except (EntryNotFoundError, RepositoryNotFoundError) as exc:
-        logger.error(
-            "Voice {!r} not found in {} ({}). "
-            "Check the voice name — format is <locale>-<speaker>-<quality>, "
-            "e.g. en_US-lessac-medium.",
-            voice, _HF_REPO, exc.__class__.__name__,
-        )
-        sys.exit(1)
-    except Exception as exc:
-        # Any other huggingface_hub error (HfHubHTTPError, connection reset,
-        # read timeout, 429 rate-limit, …) is a transient download problem,
-        # not a misconfiguration. Surface a clear single line and exit with the
-        # retryable code instead of dumping a raw traceback as exit 1.
-        logger.error(
-            "Could not download voice {!r} from {} ({}: {}). This is usually a "
-            "transient network or HuggingFace availability problem — retry, or "
-            "pre-fetch the voice on a connected host.",
-            voice, _HF_REPO, exc.__class__.__name__, exc,
-        )
-        sys.exit(_EXIT_VOICE_UNAVAILABLE)
-    logger.info("Voice files ready")
-    return onnx_path, json_path
-
-
-class _PiperBackend:
-    """Thread-safe Piper voice loader and synthesizer."""
-
-    def __init__(self, voice: str, cache_dir: Path, use_cuda: bool) -> None:
+    def __init__(self, voice: str, language: str) -> None:
         self._voice_name = voice
-        self._cache_dir  = cache_dir
-        self._use_cuda   = use_cuda
-        self._voice      = None
-        self._lock       = threading.Lock()
+        self._language = language
+        self._model = None
+        self._voice_state = None
+        self._load_lock = threading.Lock()
+        self._generation_lock = threading.Lock()
 
     def _ensure_loaded(self) -> None:
-        if self._voice is not None:
+        if self._model is not None:
             return
-        with self._lock:
-            if self._voice is not None:
+        with self._load_lock:
+            if self._model is not None:
                 return
-            from piper import PiperVoice
+            if self._voice_name not in _SUPPORTED_VOICES:
+                choices = ", ".join(sorted(_SUPPORTED_VOICES))
+                raise ValueError(
+                    f"unsupported Pocket TTS voice {self._voice_name!r}; "
+                    f"this release supports: {choices}"
+                )
 
-            onnx_path, json_path = _ensure_voice(self._voice_name, self._cache_dir)
+            from pocket_tts import TTSModel
+
+            logger.info("Loading Pocket TTS language {!r}…", self._language)
+            model = TTSModel.load_model(language=self._language)
             logger.info("Loading voice {!r}…", self._voice_name)
-            self._voice = PiperVoice.load(
-                str(onnx_path),
-                config_path=str(json_path),
-                use_cuda=self._use_cuda,
+            voice_state = model.get_state_for_audio_prompt(self._voice_name)
+            self._model = model
+            self._voice_state = voice_state
+            weights = (
+                "gated voice-cloning"
+                if model.has_voice_cloning
+                else "ungated no-voice-cloning fallback"
             )
-            logger.info("Voice ready  sample_rate={}", self._voice.config.sample_rate)
+            logger.info(
+                "Pocket TTS ready  sample_rate={} weights={}",
+                model.sample_rate,
+                weights,
+            )
 
     @property
     def ready(self) -> bool:
-        return self._voice is not None
+        return self._model is not None
 
     @property
     def sample_rate(self) -> int:
         self._ensure_loaded()
-        return self._voice.config.sample_rate
+        return self._model.sample_rate
 
-    def synthesize(self, text: str) -> bytes:
-        """Synthesize text → WAV bytes. Synchronous — call from a thread pool."""
+    def synthesize(
+        self,
+        text: str,
+        response_format: str = "wav",
+        cancelled: threading.Event | None = None,
+    ) -> bytes:
+        """Synthesize text to WAV or signed 16-bit mono PCM bytes."""
+        if response_format not in {"wav", "pcm"}:
+            raise ValueError(
+                f"Pocket TTS supports response_format 'wav' or 'pcm', "
+                f"got {response_format!r}"
+            )
         self._ensure_loaded()
+
+        pcm = b""
+        if text.strip():
+            with self._generation_lock:
+                if cancelled is not None and cancelled.is_set():
+                    raise _SynthesisCancelled
+                audio = self._model.generate_audio(self._voice_state, text)
+            pcm = (
+                (audio.reshape(-1).clamp(-1, 1) * 32767)
+                .short()
+                .detach()
+                .cpu()
+                .numpy()
+                .tobytes()
+            )
+        if response_format == "pcm":
+            return pcm
+
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wf:
-            if text.strip():
-                self._voice.synthesize_wav(text, wf)
-            else:
-                # Empty/whitespace input yields no synthesized chunks, and
-                # Piper's synthesize_wav sets the WAV format params only on the
-                # first chunk — so they'd never be set and wave.close() would
-                # raise "# channels not specified" (→ unhandled HTTP 500, #194).
-                # Emit a valid, empty (silent) WAV instead, matching magpie.
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                wf.setframerate(self.sample_rate)
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(self.sample_rate)
+            wf.writeframes(pcm)
         return buf.getvalue()
 
 
-def _build_app(cfg: dict, model_cache: Path):
-    from fastapi import FastAPI
+def _build_app(cfg: dict, _model_cache: Path):
+    from fastapi import FastAPI, HTTPException, Request
     from fastapi.responses import Response
     from pydantic import BaseModel
 
     voice_name = cfg["voice"]
-    use_cuda   = _parse_config_bool(cfg.get("use_cuda", False), "use_cuda")
-    backend    = _PiperBackend(voice_name, model_cache, use_cuda)
+    language = str(cfg.get("language", "english"))
+    backend = _PocketTTSBackend(voice_name, language)
+    generation_lock = asyncio.Lock()
 
-    app = FastAPI(title="Piper TTS Server", version="0.1.0")
+    app = FastAPI(title="Pocket TTS Server", version="0.1.0")
 
     class SpeechRequest(BaseModel):
         model:           str   = voice_name
         input:           str
         voice:           str   = "default"
-        speed:           float = 1.0          # not yet supported by piper-tts Python API
+        speed:           float = 1.0
         response_format: str   = "wav"
 
     @app.get("/health")
     def health():
         if not backend.ready:
-            from fastapi import HTTPException
             raise HTTPException(status_code=503, detail="model not loaded")
         return {"status": "ok"}
 
@@ -273,16 +207,32 @@ def _build_app(cfg: dict, model_cache: Path):
         }
 
     @app.post("/v1/audio/speech")
-    async def synthesize(req: SpeechRequest):
+    async def synthesize(req: SpeechRequest, request: Request):
         loop = asyncio.get_running_loop()
-        wav_bytes = await loop.run_in_executor(None, backend.synthesize, req.input)
-
-        if req.response_format == "pcm":
-            import soundfile as sf
-            audio, _ = sf.read(io.BytesIO(wav_bytes), dtype="int16")
-            return Response(content=audio.tobytes(), media_type="audio/pcm")
-
-        return Response(content=wav_bytes, media_type="audio/wav")
+        cancelled = threading.Event()
+        try:
+            # Waiting for this lock is cancellable, unlike a worker blocked on
+            # the model's thread lock. Re-check the connection after acquiring
+            # it so abandoned queued sentences never enter Pocket generation.
+            async with generation_lock:
+                if await request.is_disconnected():
+                    raise HTTPException(status_code=499, detail="request disconnected")
+                audio_bytes = await loop.run_in_executor(
+                    None,
+                    backend.synthesize,
+                    req.input,
+                    req.response_format,
+                    cancelled,
+                )
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+        except _SynthesisCancelled as exc:
+            raise HTTPException(status_code=499, detail="request cancelled") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        media_type = "audio/pcm" if req.response_format == "pcm" else "audio/wav"
+        return Response(content=audio_bytes, media_type=media_type)
 
     return app, backend
 
@@ -324,9 +274,9 @@ def _ensure_owned_process_group() -> int | None:
     """Return the current safely signalable process group, if verified.
 
     A launcher child remains in the dedicated session created around ``uv`` so
-    abort-time SIGKILL can still reach it. A directly started Piper process is
-    accepted only when it already leads its own session; otherwise cleanup
-    falls back to the listener PID.
+    abort-time SIGKILL can still reach it. A directly started Pocket TTS
+    process is accepted only when it already leads its own session; otherwise
+    cleanup falls back to the listener PID.
     """
     pid = os.getpid()
     try:
@@ -355,20 +305,20 @@ def _monitor_reused_server(health_url: str, poll_s: float = 5.0) -> None:
         failures += 1
         if failures < _REUSE_HEALTH_FAILURE_LIMIT:
             print(
-                f"[piper_tts_server] reused server health endpoint unreachable "
+                f"[pocket_tts_server] reused server health endpoint unreachable "
                 f"({failures}/{_REUSE_HEALTH_FAILURE_LIMIT}); retrying",
                 flush=True,
             )
     raise SystemExit(
-        f"[piper_tts_server] reused server failed "
+        f"[pocket_tts_server] reused server failed "
         f"{_REUSE_HEALTH_FAILURE_LIMIT} consecutive health checks"
     )
 
 
 async def _load_backend(
-    backend: _PiperBackend,
+    backend: _PocketTTSBackend,
 ) -> None:
-    """Load Piper without letting a stuck native initializer block shutdown."""
+    """Load Pocket TTS without letting a stuck native initializer block shutdown."""
     loop = asyncio.get_running_loop()
     loaded = loop.create_future()
 
@@ -393,7 +343,7 @@ async def _load_backend(
             # still unwinding. The process is already exiting in that case.
             pass
 
-    threading.Thread(target=_load, name="piper-model-loader", daemon=True).start()
+    threading.Thread(target=_load, name="pocket-model-loader", daemon=True).start()
     await loaded
 
 
@@ -410,7 +360,8 @@ async def _run(
 
     model_cache = _resolve_model_cache(cfg, yaml_dir)
     os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
-    os.environ.setdefault("HF_XET_CACHE", str(model_cache / "piper" / "xet"))
+    os.environ.setdefault("HF_XET_CACHE", str(model_cache / "pocket" / "xet"))
+    os.environ.setdefault("HF_HOME", str(model_cache / "pocket" / "huggingface"))
     startup_timeout_s = _parse_startup_timeout(
         cfg.get("startup_timeout_s", _DEFAULT_STARTUP_TIMEOUT_S)
     )
@@ -459,7 +410,7 @@ def run() -> None:
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
 
-    setup_logging("tts-piper")
+    setup_logging("tts-pocket")
 
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--config",     type=Path, default=None)
@@ -479,7 +430,7 @@ def run() -> None:
         try:
             asyncio.run(_run(cfg, yaml_dir, ready_file=ns.ready_file))
         except Exception as exc:
-            raise SystemExit(f"[piper_tts_server] {exc}") from None
+            raise SystemExit(f"[pocket_tts_server] {exc}") from None
         return
 
     port = int(cfg.get("port", _DEFAULT_PORT))
@@ -489,12 +440,12 @@ def run() -> None:
             cfg.get("startup_timeout_s", _DEFAULT_STARTUP_TIMEOUT_S)
         )
     except ValueError as exc:
-        raise SystemExit(f"[piper_tts_server] {exc}") from exc
+        raise SystemExit(f"[pocket_tts_server] {exc}") from exc
     health_url = _health_url(probe_host, port)
 
     if _health_url_ok(health_url):
         print(
-            f"[piper_tts_server] already running on port {port} — reusing",
+            f"[pocket_tts_server] already running on port {port} — reusing",
             flush=True,
         )
         if ns.ready_file:
@@ -505,17 +456,17 @@ def run() -> None:
 
     if _port_open(probe_host, port):
         raise SystemExit(
-            f"[piper_tts_server] port {port} is already in use, but its "
+            f"[pocket_tts_server] port {port} is already in use, but its "
             "/health endpoint is not healthy"
         )
 
-    cmd = [sys.executable, "-m", "piper_tts_server", "--_serve"]
+    cmd = [sys.executable, "-m", "pocket_tts_server", "--_serve"]
     if ns.config:
         cmd += ["--config", str(ns.config)]
     if ns.ready_file:
         cmd += ["--ready-file", str(ns.ready_file)]
     print(
-        f"[piper_tts_server] starting managed server on port {port} "
+        f"[pocket_tts_server] starting managed server on port {port} "
         f"(startup timeout: {startup_timeout_s:g}s)…",
         flush=True,
     )

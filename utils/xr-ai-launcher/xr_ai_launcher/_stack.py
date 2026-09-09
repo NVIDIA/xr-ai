@@ -122,7 +122,7 @@ class Parallel:
 
         Parallel([
             Process("stt", "../../services/stt-server", "stt_server"),
-            Process("tts", "../../services/piper-tts",  "piper_tts_server"),
+            Process("tts", "../../services/pocket-tts",  "pocket_tts_server"),
         ])
     """
     processes: tuple[Process, ...]
@@ -452,7 +452,7 @@ def run_stack(
                     config="yaml/device_io_hub.yaml"),
             Parallel([
                 Process("stt", "../../services/stt-server", "stt_server"),
-                Process("tts", "../../services/piper-tts",  "piper_tts_server"),
+                Process("tts", "../../services/pocket-tts",  "pocket_tts_server"),
             ]),
             Process("worker", "worker", "my_worker",
                     config="yaml/my_worker.yaml"),

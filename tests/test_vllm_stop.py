@@ -69,11 +69,11 @@ def test_pip_ownership_marker_matches_service_port(tmp_path, monkeypatch) -> Non
     assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "omni", 8107)
 
 
-def test_unmarked_piper_process_is_not_owned(tmp_path, monkeypatch) -> None:
+def test_unmarked_pocket_process_is_not_owned(tmp_path, monkeypatch) -> None:
     proc_root = tmp_path / "proc" / "1234"
     proc_root.mkdir(parents=True)
     (proc_root / "cmdline").write_text(
-        "uv\0run\0--project\0services/piper-tts\0piper_tts_server"
+        "uv\0run\0--project\0services/pocket-tts\0pocket_tts_server"
     )
     (proc_root / "environ").write_bytes(b"PATH=/bin\0")
     monkeypatch.setattr(
@@ -85,10 +85,10 @@ def test_unmarked_piper_process_is_not_owned(tmp_path, monkeypatch) -> None:
     assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "tts", 8105)
 
 
-def test_piper_ownership_marker_matches_service_port(tmp_path, monkeypatch) -> None:
+def test_pocket_ownership_marker_matches_service_port(tmp_path, monkeypatch) -> None:
     proc_root = tmp_path / "proc" / "1234"
     proc_root.mkdir(parents=True)
-    (proc_root / "cmdline").write_text("python\0-m\0piper_tts_server\0--_serve")
+    (proc_root / "cmdline").write_text("python\0-m\0pocket_tts_server\0--_serve")
     (proc_root / "environ").write_bytes(
         b"XR_AI_VLLM_MANAGED=1\0XR_AI_VLLM_PORT=8105\0"
     )
@@ -102,7 +102,7 @@ def test_piper_ownership_marker_matches_service_port(tmp_path, monkeypatch) -> N
     assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "tts", 8104)
 
 
-def test_piper_process_group_requires_matching_owned_session(
+def test_pocket_process_group_requires_matching_owned_session(
     tmp_path, monkeypatch,
 ) -> None:
     proc_root = tmp_path / "proc" / "1234"
@@ -110,7 +110,7 @@ def test_piper_process_group_requires_matching_owned_session(
     (proc_root / "environ").write_bytes(
         b"XR_AI_VLLM_MANAGED=1\0"
         b"XR_AI_VLLM_PORT=8105\0"
-        b"_XR_AI_PIPER_PROCESS_GROUP=1234\0"
+        b"_XR_AI_POCKET_PROCESS_GROUP=1234\0"
     )
     monkeypatch.setattr(
         xr_ai_vllm._docker,
@@ -120,13 +120,13 @@ def test_piper_process_group_requires_matching_owned_session(
     monkeypatch.setattr(xr_ai_vllm._docker.os, "getpgid", lambda _pid: 1234)
     monkeypatch.setattr(xr_ai_vllm._docker.os, "getsid", lambda _pid: 1234)
 
-    assert xr_ai_vllm._docker._piper_owned_process_group(1234, 8105) == 1234
+    assert xr_ai_vllm._docker._pocket_owned_process_group(1234, 8105) == 1234
 
     monkeypatch.setattr(xr_ai_vllm._docker.os, "getsid", lambda _pid: 4321)
-    assert xr_ai_vllm._docker._piper_owned_process_group(1234, 8105) is None
+    assert xr_ai_vllm._docker._pocket_owned_process_group(1234, 8105) is None
 
 
-def test_piper_process_group_accepts_verified_launcher_session(
+def test_pocket_process_group_accepts_verified_launcher_session(
     tmp_path, monkeypatch,
 ) -> None:
     listener = tmp_path / "proc" / "1234"
@@ -136,10 +136,10 @@ def test_piper_process_group_accepts_verified_launcher_session(
     (listener / "environ").write_bytes(
         b"XR_AI_VLLM_MANAGED=1\0"
         b"XR_AI_VLLM_PORT=8105\0"
-        b"_XR_AI_PIPER_PROCESS_GROUP=4321\0"
+        b"_XR_AI_POCKET_PROCESS_GROUP=4321\0"
     )
     (leader / "environ").write_bytes(
-        b"_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER=piper_tts_server\0"
+        b"_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER=pocket_tts_server\0"
     )
     monkeypatch.setattr(
         xr_ai_vllm._docker,
@@ -149,12 +149,12 @@ def test_piper_process_group_accepts_verified_launcher_session(
     monkeypatch.setattr(xr_ai_vllm._docker.os, "getpgid", lambda _pid: 4321)
     monkeypatch.setattr(xr_ai_vllm._docker.os, "getsid", lambda _pid: 4321)
 
-    assert xr_ai_vllm._docker._piper_owned_process_group(1234, 8105) == 4321
+    assert xr_ai_vllm._docker._pocket_owned_process_group(1234, 8105) == 4321
 
     (leader / "environ").write_bytes(
         b"_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER=other_server\0"
     )
-    assert xr_ai_vllm._docker._piper_owned_process_group(1234, 8105) is None
+    assert xr_ai_vllm._docker._pocket_owned_process_group(1234, 8105) is None
 
 
 def test_stop_signals_complete_managed_process_group(monkeypatch) -> None:
@@ -176,7 +176,7 @@ def test_stop_signals_complete_managed_process_group(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         xr_ai_vllm._docker,
-        "_piper_owned_process_group",
+        "_pocket_owned_process_group",
         lambda *_args: 4321,
     )
     monkeypatch.setattr(
@@ -200,7 +200,7 @@ def test_stop_signals_complete_managed_process_group(monkeypatch) -> None:
     assert calls == [(4321, signal.SIGTERM)]
 
 
-def test_stop_keeps_unverified_piper_process_pid_scoped(monkeypatch) -> None:
+def test_stop_keeps_unverified_pocket_process_pid_scoped(monkeypatch) -> None:
     calls: list[tuple[int, int]] = []
     monkeypatch.setattr(
         xr_ai_vllm._docker,
@@ -219,14 +219,14 @@ def test_stop_keeps_unverified_piper_process_pid_scoped(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         xr_ai_vllm._docker,
-        "_piper_owned_process_group",
+        "_pocket_owned_process_group",
         lambda *_args: None,
     )
     monkeypatch.setattr(
         xr_ai_vllm.os,
         "killpg",
         lambda *_args: (_ for _ in ()).throw(
-            AssertionError("unverified Piper cleanup must remain PID-scoped")
+            AssertionError("unverified Pocket TTS cleanup must remain PID-scoped")
         ),
     )
     monkeypatch.setattr(time, "sleep", lambda _seconds: None)
@@ -263,7 +263,7 @@ def test_pid_cleanup_waits_for_exit_after_sigkill(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         xr_ai_vllm._docker,
-        "_piper_owned_process_group",
+        "_pocket_owned_process_group",
         lambda *_args: None,
     )
     monkeypatch.setattr(time, "sleep", lambda _seconds: None)
@@ -290,7 +290,7 @@ def test_pid_cleanup_waits_for_exit_after_sigkill(monkeypatch) -> None:
     assert probes_after_sigkill == 3
 
 
-def test_stop_keeps_non_piper_managed_process_pid_scoped(monkeypatch) -> None:
+def test_stop_keeps_non_pocket_managed_process_pid_scoped(monkeypatch) -> None:
     calls: list[tuple[int, int]] = []
     monkeypatch.setattr(
         xr_ai_vllm._docker,
@@ -311,14 +311,14 @@ def test_stop_keeps_non_piper_managed_process_pid_scoped(monkeypatch) -> None:
         xr_ai_vllm.os,
         "getpgid",
         lambda _pid: (_ for _ in ()).throw(
-            AssertionError("non-Piper cleanup must remain PID-scoped")
+            AssertionError("non-Pocket TTS cleanup must remain PID-scoped")
         ),
     )
     monkeypatch.setattr(
         xr_ai_vllm.os,
         "killpg",
         lambda *_args: (_ for _ in ()).throw(
-            AssertionError("non-Piper cleanup must not signal a process group")
+            AssertionError("non-Pocket TTS cleanup must not signal a process group")
         ),
     )
     monkeypatch.setattr(time, "sleep", lambda _seconds: None)
@@ -338,12 +338,12 @@ def test_process_group_liveness_ignores_zombies(tmp_path) -> None:
     proc_root = tmp_path / "proc"
     zombie = proc_root / "1234"
     zombie.mkdir(parents=True)
-    (zombie / "stat").write_text("1234 (piper worker) Z 1 4321 4321 0 0\n")
+    (zombie / "stat").write_text("1234 (pocket worker) Z 1 4321 4321 0 0\n")
 
     assert not xr_ai_vllm._docker.process_group_alive(4321, proc_root)
 
     live = proc_root / "1235"
     live.mkdir()
-    (live / "stat").write_text("1235 (piper worker) S 1 4321 4321 0 0\n")
+    (live / "stat").write_text("1235 (pocket worker) S 1 4321 4321 0 0\n")
 
     assert xr_ai_vllm._docker.process_group_alive(4321, proc_root)

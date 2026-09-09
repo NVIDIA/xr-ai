@@ -17,7 +17,7 @@ Typical usage::
         Process("hub",    "../../services/device-io-hub", "device_io_hub"),
         Parallel([
             Process("stt", "../../services/stt-server", "stt_server"),
-            Process("tts", "../../services/piper-tts",  "piper_tts_server"),
+            Process("tts", "../../services/pocket-tts",  "pocket_tts_server"),
         ]),
         Process("worker", "worker", "my_agent_worker"),
     ]

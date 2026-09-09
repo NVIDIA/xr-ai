@@ -7,11 +7,11 @@
 
 This sample is the smallest complete voice-and-vision application in the
 repository. A participant can ask a spoken or typed question about the latest
-camera frame. The response streams to Piper TTS and to the `vlm.response` data
+camera frame. The response streams to Pocket TTS and to the `vlm.response` data
 topic.
 
 The sample launches DeviceIOHub and its worker. It reuses Parakeet STT,
-Cosmos3 Nano Reasoner, and Piper TTS from the shared model stack. Before the
+Cosmos3 Nano Reasoner, and Pocket TTS from the shared model stack. Before the
 agent reports ready, the worker sends a representative image request through
 the VLM so the first user query does not pay the multimodal warmup cost.
 

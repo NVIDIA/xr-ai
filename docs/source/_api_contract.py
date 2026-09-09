@@ -50,7 +50,7 @@ PUBLIC_API_EXCLUSIONS = (
     "xr_ai_models.presets.nemotron_embedding",
     "xr_ai_models.presets.nemotron_omni",
     "xr_ai_models.presets.parakeet_stt",
-    "xr_ai_models.presets.piper_tts",
+    "xr_ai_models.presets.pocket_tts",
     "xr_ai_runtime.agent",
     "xr_ai_runtime.events",
     "xr_ai_runtime.runtime",

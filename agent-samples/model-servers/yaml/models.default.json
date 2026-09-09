@@ -15,7 +15,7 @@
     },
     "tts": {
       "adapter": {
-        "preset": "piper_tts"
+        "preset": "pocket_tts"
       },
       "endpoint": {
         "base_url": "http://localhost:8105",
