@@ -19,7 +19,7 @@ runs alongside as its own stream; neither stack passes through the other.
 Prerequisites
 -------------
 All model services must already be running before this demo starts. The sample
-never starts or stops them. The shared model stack includes Piper TTS:
+never starts or stops them. The shared model stack includes Pocket TTS:
 
     uv run --project agent-samples/model-servers model_servers
 
@@ -85,7 +85,7 @@ _MODEL_PROCESSES = [
         launch_mode="reuse",
     ),
     Process(
-        "tts", "../../services/piper-tts", "piper_tts_server",
+        "tts", "../../services/pocket-tts", "pocket_tts_server",
         launch_mode="reuse",
     ),
 ]

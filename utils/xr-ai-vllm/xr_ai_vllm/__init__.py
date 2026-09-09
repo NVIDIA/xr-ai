@@ -169,7 +169,7 @@ def stop_persistent_servers(
     1. Look for a docker container labelled ``xr-ai-vllm.port=<port>``
        (stamped at start time by the vLLM wrapper) and ``docker stop`` it.
     2. Fall back to port → pid for pip-mode vLLM or in-process servers
-       (e.g. STT). Piper is signalled as a complete process group; other
+       (e.g. STT). Pocket TTS is signalled as a complete process group; other
        local servers are signalled by PID.
 
     A missing container and listener is already stopped. Output is print-style
@@ -233,7 +233,7 @@ def stop_persistent_servers(
             continue
 
         pgid = (
-            _docker._piper_owned_process_group(pid, port)
+            _docker._pocket_owned_process_group(pid, port)
             if label == "tts"
             else None
         )

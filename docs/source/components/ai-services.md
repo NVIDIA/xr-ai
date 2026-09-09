@@ -23,7 +23,7 @@ recorded video, and document retrieval.
 | `services/vlm-server/` | `vlm_server` | 8100 | Cosmos3 Nano Reasoner | vLLM (pip or docker) |
 | `services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `services/magpie-tts/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
-| `services/piper-tts/` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
+| `services/pocket-tts/` | `pocket_tts_server` | 8105 | kyutai/pocket-tts | Pocket TTS in-process |
 | `services/llama-nemotron-llm/` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
@@ -54,8 +54,8 @@ For host processes (pip-mode vLLM, STT, Magpie TTS) these are defaults: an
 `HF_HOME` or `NEMO_CACHE_DIR` already set in the environment takes priority.
 Docker-mode vLLM always uses the YAML `model_cache`, which it mounts into the
 container.
-Piper TTS passes `<model_cache>/piper/` directly as its Hub cache and defaults
-`HF_XET_CACHE` to `<model_cache>/piper/xet/` for its Xet cache.
+Pocket TTS defaults `HF_HOME` to `<model_cache>/pocket/huggingface/` and
+`HF_XET_CACHE` to `<model_cache>/pocket/xet/`.
 
 `model_cache` itself is set per YAML and resolved relative to the YAML file.
 Both the model-servers profiles and the standalone service YAMLs resolve it to
@@ -239,7 +239,7 @@ uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim
 ```
 
 - `vlm_llm_nim`: Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner as NIM
-  containers, with STT, Piper TTS, and embedding served locally. Samples reuse
+  containers, with STT, Pocket TTS, and embedding served locally. Samples reuse
   these endpoints; they never launch or stop the containers.
 
 To adapt a sample, copy the relevant `llm` and `vlm` entries from
@@ -335,13 +335,13 @@ its persistent process with `start_new_session=True`, reuses a healthy server
 that survived a previous stack run, and is stopped by the same
 `model_servers --stop` cleanup.
 
-Piper uses the launcher's persistent process group directly. Its bootstrap
+Pocket TTS uses the launcher's persistent process group directly. Its bootstrap
 reuses an existing healthy listener. In a monitored stack, the reuse invocation
 remains alive as a health proxy so the launcher can detect service loss. A
 persistent-only launcher that uses `exit_after_ready=True` explicitly permits
 that proxy to exit after readiness, so repeated `model-servers` starts do not
 leave idle wrappers behind. When no server exists, the bootstrap replaces
-itself with the foreground Uvicorn and ONNX process.
+itself with the foreground Uvicorn and Pocket TTS process.
 
 Docker containers carry a fingerprint of their image, GPU assignment, model
 cache, environment, bootstrap packages, complete vLLM command, and a versioned
@@ -357,17 +357,18 @@ uv run --project agent-samples/model-servers model_servers --stop
 
 Cleanup locates labelled Docker containers before inspecting ports, then
 stops them with `docker stop` (escalating to `docker kill` after 20 s).
-Locally persisted processes (pip-mode vLLM and Piper) must carry the
+Locally persisted processes (pip-mode vLLM and Pocket TTS) must carry the
 `XR_AI_VLLM_MANAGED` and `XR_AI_VLLM_PORT` ownership markers before cleanup
-sends `SIGTERM` or `SIGKILL`. Piper records the dedicated process group created
-by the launcher without leaving that group. Cleanup signals the complete group
-only after verifying both the listener marker and, when separate, the launcher's
-group-leader marker, so inference descendants cannot survive as orphans and
-launcher abort-time escalation can still reach Piper. It falls back to PID-only
-cleanup if group ownership cannot be verified; other local servers always
-retain PID-only cleanup. Unknown listeners and failed inspection abort cleanup
-without sending a signal, and `model_servers --stop` exits nonzero if any target
-could not be stopped. Absent servers are silently skipped.
+sends `SIGTERM` or `SIGKILL`. Pocket TTS records the dedicated process group
+created by the launcher without leaving that group. Cleanup signals the
+complete group only after verifying both the listener marker and, when
+separate, the launcher's group-leader marker, so inference descendants cannot
+survive as orphans and launcher abort-time escalation can still reach Pocket
+TTS. It falls back to PID-only cleanup if group ownership cannot be verified;
+other local servers always retain PID-only cleanup. Unknown listeners and
+failed inspection abort cleanup without sending a signal, and
+`model_servers --stop` exits nonzero if any target could not be stopped. Absent
+servers are silently skipped.
 
 The target ports and container names match the defaults in the per-profile YAML files.
 
@@ -538,8 +539,12 @@ cleanup.
   ignored. Set `startup_timeout_s` to a positive finite number to override the
   600-second cold-start budget.
 - **magpie-tts** loads magpie_tts_multilingual_357m via NeMo TTS in-process.
-- **piper-tts** serves any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
-  All inference runs in a thread pool so the asyncio loop is never blocked.
+- **pocket-tts** loads the compact `kyutai/pocket-tts` model on CPU and serves
+  the configured voice through the repository's OpenAI-compatible TTS API.
+  Model loading and synthesis run outside the asyncio event loop. The default
+  `bill_boerst` voice derives from a CC0 Voice-Zero recording and is the only
+  voice accepted by this release. The service logs whether it loaded the gated
+  voice-cloning weights or the ungated fallback.
 - **embedding-server** serves `nvidia/llama-nemotron-embed-1b-v2` through
   `/v1/embeddings`. It emits 2048-dimensional Matryoshka embeddings and can
   truncate them to 384, 512, 768, 1024, or 2048 dimensions. The checked-in

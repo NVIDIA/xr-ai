@@ -22,7 +22,7 @@ _REQUIRED_SERVICES = {
     "nemotron-omni-llm",
     "nemotron3-nano-llm",
     "openxr-service",
-    "piper-tts",
+    "pocket-tts",
     "rag-service",
     "stt-server",
     "video-memory-service",
@@ -47,7 +47,7 @@ _MODEL_SERVICES = {
         "nemotron3_nano_llm_server",
         8107,
     ),
-    "piper-tts": ("piper-tts-server", "piper_tts_server", 8105),
+    "pocket-tts": ("pocket-tts-server", "pocket_tts_server", 8105),
     "stt-server": ("stt-server", "stt_server", 8103),
     "vlm-server": ("vlm-server", "vlm_server", 8100),
 }

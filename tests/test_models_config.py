@@ -51,7 +51,7 @@ def test_nine_presets_registered() -> None:
         "nemotron3_nano",
         "nemotron_omni",
         "parakeet_stt",
-        "piper_tts",
+        "pocket_tts",
         "nemotron_embedding",
     }
 
@@ -394,7 +394,7 @@ stt:
   kind:     preset:parakeet_stt
   base_url: http://localhost:8103
 tts:
-  kind:     preset:piper_tts
+  kind:     preset:pocket_tts
   base_url: http://localhost:8105
 """))
     assert isinstance(cfg.stt("stt"), STTSpec)
@@ -456,7 +456,7 @@ stt:
   kind:     preset:parakeet_stt
   base_url: http://localhost:8103
 tts:
-  kind:     preset:piper_tts
+  kind:     preset:pocket_tts
   base_url: http://localhost:8105
 """))
     vlm = make_vlm(cfg, "vlm")
@@ -494,7 +494,7 @@ embedding:
         ("llm", "llm", "nemotron3_nano", LLMSpec, "llm", "http://localhost:8107"),
         ("vlm", "vlm", "cosmos_vlm", VLMSpec, "vlm", "http://localhost:8100"),
         ("stt", "stt", "parakeet_stt", STTSpec, "stt", "http://localhost:8103"),
-        ("tts", "tts", "piper_tts", TTSSpec, "tts", "http://localhost:8105"),
+        ("tts", "tts", "pocket_tts", TTSSpec, "tts", "http://localhost:8105"),
         (
             "embedding",
             "embedding",
@@ -625,7 +625,7 @@ def test_render_shape_fixture_remains_compatible() -> None:
             "base_url": "http://localhost:8103",
         },
         "tts": {
-            "kind": "preset:piper_tts",
+            "kind": "preset:pocket_tts",
             "base_url": "http://localhost:8105",
         },
         "vlm": {

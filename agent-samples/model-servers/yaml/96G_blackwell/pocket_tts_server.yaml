@@ -1,9 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Shared CPU Piper TTS service.
-voice: en_US-lessac-medium
+# Shared CPU Pocket TTS service. bill_boerst is a CC0 Voice-Zero recording.
+voice: bill_boerst
+language: english
 port: 8105
-use_cuda: false
 startup_timeout_s: 600
 model_cache: ../../../../models

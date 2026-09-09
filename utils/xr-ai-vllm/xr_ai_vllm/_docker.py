@@ -1153,8 +1153,8 @@ def has_xr_ai_ownership_marker(pid: int, port: int) -> bool:
     )
 
 
-def _piper_owned_process_group(pid: int, port: int) -> int | None:
-    """Return Piper's verified dedicated process group, if present.
+def _pocket_owned_process_group(pid: int, port: int) -> int | None:
+    """Return Pocket TTS's verified dedicated process group, if present.
 
     The listener may lead its own session or remain in the launcher's session.
     In the latter case the group leader must carry the matching private
@@ -1163,7 +1163,7 @@ def _piper_owned_process_group(pid: int, port: int) -> int | None:
     try:
         environment = Path(f"/proc/{pid}/environ").read_bytes()
         entries = environment.split(b"\0")
-        prefix = b"_XR_AI_PIPER_PROCESS_GROUP="
+        prefix = b"_XR_AI_POCKET_PROCESS_GROUP="
         raw_group = next(
             entry.removeprefix(prefix)
             for entry in entries
@@ -1194,7 +1194,7 @@ def _piper_owned_process_group(pid: int, port: int) -> int | None:
     except OSError:
         return None
     if (
-        b"_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER=piper_tts_server"
+        b"_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER=pocket_tts_server"
         not in group_entries
         or leader_group != group_id
         or leader_session != group_id
