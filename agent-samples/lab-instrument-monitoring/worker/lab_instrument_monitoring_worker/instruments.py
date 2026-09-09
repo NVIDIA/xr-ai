@@ -9,14 +9,13 @@ import asyncio
 import hashlib
 import io
 import json
-import math
 import re
 import time
 from collections import Counter
 from pathlib import Path
 
 from loguru import logger
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_models import VLMService
 from xr_ai_runtime import Agent
@@ -24,6 +23,7 @@ from xr_ai_tools import Tool
 from xr_ai_tools.current_frame import CurrentFrameRequest
 from xr_ai_tools.marker_tracking import (
     MarkerTrackingRequest,
+    MarkerType,
     TrackedMarker,
 )
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
@@ -31,6 +31,18 @@ from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 from .device_map import DeviceMap
 from .events import InstrumentReading, InstrumentSighting
 from .images import ParticipantImageAgent
+
+RGBColor = tuple[int, int, int]
+ColoredMarker = tuple[str, RGBColor, TrackedMarker]
+
+_MARKER_COLORS: tuple[tuple[str, RGBColor], ...] = (
+    ("magenta", (255, 0, 255)),
+    ("cyan", (0, 255, 255)),
+    ("red", (255, 0, 0)),
+    ("green", (0, 128, 0)),
+    ("blue", (0, 0, 255)),
+    ("yellow", (255, 255, 0)),
+)
 
 
 class ReadLabInstrumentsRequest(BaseModel):
@@ -127,17 +139,10 @@ class LabInstrumentAgent(Agent):
         if not markers:
             return LabInstrumentReadResult(message="No readable marker-labelled lab instruments were found.")
 
-        labeled_markers = [
-            (f"M{index}", marker)
-            for index, marker in enumerate(
-                sorted(markers, key=_marker_position),
-                start=1,
-            )
-        ]
-        labels = [label for label, _marker in labeled_markers]
-        mapped: dict[str, tuple[TrackedMarker, str]] = {}
+        mapped_markers: list[TrackedMarker] = []
+        device_names: dict[tuple[MarkerType, str], str] = {}
         sightings: list[InstrumentSighting] = []
-        for label, marker in labeled_markers:
+        for marker in markers:
             identity = self._device_map.resolve(marker.marker_type, marker.value)
             if identity is None:
                 logger.warning(
@@ -145,7 +150,8 @@ class LabInstrumentAgent(Agent):
                     _marker_log_id(marker),
                 )
                 continue
-            mapped[label] = (marker, identity.device_name)
+            mapped_markers.append(marker)
+            device_names[(marker.marker_type, marker.value)] = identity.device_name
             sightings.append(
                 InstrumentSighting(
                     timestamp_us=frame.timestamp_us,
@@ -155,19 +161,37 @@ class LabInstrumentAgent(Agent):
                 )
             )
 
-        if not mapped:
+        if not mapped_markers:
             return LabInstrumentReadResult(
                 sightings=sightings,
                 available=False,
                 message="No configured marker-labelled lab instruments were found.",
             )
 
+        if len(mapped_markers) > len(_MARKER_COLORS):
+            logger.warning(
+                "instrument marker palette exhausted pid={!r} mapped={} supported={} ignored={}",
+                request.participant_id,
+                len(mapped_markers),
+                len(_MARKER_COLORS),
+                len(mapped_markers) - len(_MARKER_COLORS),
+            )
+        colored_markers = _assign_marker_colors(mapped_markers)
+        color_keys = [color_name for color_name, _color, _marker in colored_markers]
+        mapped = {
+            color_name: (
+                marker,
+                device_names[(marker.marker_type, marker.value)],
+            )
+            for color_name, _color, marker in colored_markers
+        }
+
         result = None
         try:
             annotated_bytes = await asyncio.to_thread(
                 _annotate_markers,
                 source,
-                labeled_markers,
+                colored_markers,
             )
             annotated = self._images.images.put_derived(
                 annotated_bytes,
@@ -176,10 +200,10 @@ class LabInstrumentAgent(Agent):
             result = await self._query_image.execute(
                 ImageQueryRequest(
                     image=annotated,
-                    query=self._reading_query(labels),
+                    query=self._reading_query(color_keys),
                 )
             )
-            parsed = _parse_joint_readings(result.text, labels) if result.available else None
+            parsed = _parse_joint_readings(result.text, color_keys) if result.available else None
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -214,10 +238,10 @@ class LabInstrumentAgent(Agent):
                 marker_type=marker.marker_type,
                 marker_id=marker.value,
                 device_name=device_name,
-                meter_reading=parsed[label],
+                meter_reading=parsed[color_name],
             )
-            for label, (marker, device_name) in mapped.items()
-            if parsed[label].upper() != "UNKNOWN"
+            for color_name, (marker, device_name) in mapped.items()
+            if parsed[color_name].upper() != "UNKNOWN"
         ]
         if not readings:
             return LabInstrumentReadResult(
@@ -245,12 +269,22 @@ class LabInstrumentAgent(Agent):
         return path
 
     @staticmethod
-    def _reading_query(labels: list[str]) -> str:
-        keys = json.dumps(labels)
+    def _reading_query(color_keys: list[str]) -> str:
+        keys = json.dumps(color_keys)
+        response_template = json.dumps(
+            {color_name: {"reading": "UNKNOWN", "display_bbox": None} for color_name in color_keys}
+        )
         return (
-            "Read all marker-labelled instruments together. Return one JSON object with exactly "
-            f"these keys: {keys}. Each value must be the reading and unit from that marker's own "
-            "physical instrument, or UNKNOWN. Never assign one display to multiple markers."
+            f"The requested colored-X keys are: {keys}. "
+            "Apply this association rule to every key: a reading belongs to a color only when "
+            "that colored X and the display are on the same visually bounded instrument. "
+            "For each color, directly return the associated display reading and its normalized "
+            "[left, top, right, bottom] bounding box using coordinates from 0 through 1000. "
+            "Use UNKNOWN and null when that color has no unambiguous readable display. Never use "
+            "the same physical display for more than one color; separate displays may show the "
+            "same reading. "
+            f"Return exactly this JSON shape, replacing only its values: {response_template}. "
+            "No explanation or Markdown."
         )
 
     @staticmethod
@@ -272,80 +306,157 @@ def _marker_position(marker: TrackedMarker) -> tuple[float, float]:
     )
 
 
+def _assign_marker_colors(markers: list[TrackedMarker]) -> list[ColoredMarker]:
+    return [
+        (color_name, color, marker)
+        for (color_name, color), marker in zip(
+            _MARKER_COLORS,
+            sorted(markers, key=_marker_position),
+            strict=False,
+        )
+    ]
+
+
 def _annotate_markers(
     source: bytes,
-    labeled_markers: list[tuple[str, TrackedMarker]],
+    colored_markers: list[ColoredMarker],
 ) -> bytes:
-    palette = (
-        (255, 0, 255),
-        (0, 255, 255),
-        (255, 180, 0),
-        (80, 220, 80),
-        (255, 90, 90),
-        (100, 160, 255),
-    )
     with Image.open(io.BytesIO(source)) as opened:
         image = opened.convert("RGB")
-    draw = ImageDraw.Draw(image)
-    for index, (label, marker) in enumerate(labeled_markers):
+    for _color_name, color, marker in colored_markers:
         points = [(point.x, point.y) for point in marker.corners]
-        draw.polygon(points, fill=palette[index % len(palette)])
         left = min(point[0] for point in points)
-        right = max(point[0] for point in points)
         top = min(point[1] for point in points)
+        right = max(point[0] for point in points)
         bottom = max(point[1] for point in points)
-        edges = [
-            math.hypot(following[0] - point[0], following[1] - point[1])
-            for point, following in zip(points, (*points[1:], points[0]), strict=True)
-        ]
-        usable_width = max(1, int(min(right - left, min(edges))) - 4)
-        usable_height = max(1, int(min(bottom - top, min(edges))) - 4)
-        font = _fit_label_font(draw, label, usable_width, usable_height)
-        if font is None:
-            continue
-        draw.text(
-            ((left + right) / 2, (top + bottom) / 2),
-            label,
-            fill=(0, 0, 0),
-            font=font,
-            anchor="mm",
-            stroke_width=1,
-            stroke_fill=(255, 255, 255),
-        )
+        horizontal_span = right - left
+        vertical_span = bottom - top
+        stroke_width = max(3, round(min(horizontal_span, vertical_span) * 0.24))
+
+        marker_mask = Image.new("L", image.size, 0)
+        ImageDraw.Draw(marker_mask).polygon(points, fill=255)
+        x_mask = Image.new("L", image.size, 0)
+        x_draw = ImageDraw.Draw(x_mask)
+        x_draw.line((left, top, right, bottom), fill=255, width=stroke_width)
+        x_draw.line((right, top, left, bottom), fill=255, width=stroke_width)
+        image.paste(color, mask=ImageChops.multiply(marker_mask, x_mask))
     output = io.BytesIO()
     image.save(output, format="PNG")
     return output.getvalue()
 
 
-def _fit_label_font(
-    draw: ImageDraw.ImageDraw,
-    label: str,
-    max_width: int,
-    max_height: int,
-) -> ImageFont.ImageFont | ImageFont.FreeTypeFont | None:
-    for size in range(min(42, max_height), 0, -1):
-        font = ImageFont.load_default(size=size)
-        bounds = draw.textbbox((0, 0), label, font=font, stroke_width=1)
-        if bounds[2] - bounds[0] <= max_width and bounds[3] - bounds[1] <= max_height:
-            return font
-    return None
-
-
-def _parse_joint_readings(text: str, labels: list[str]) -> dict[str, str] | None:
+def _parse_joint_readings(text: str, color_keys: list[str]) -> dict[str, str] | None:
     visible = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
     start = visible.find("{")
     end = visible.rfind("}")
     if start < 0 or end < start:
         return None
     try:
-        payload = json.loads(visible[start : end + 1])
+        pairs = json.loads(
+            visible[start : end + 1],
+            object_pairs_hook=list,
+        )
     except json.JSONDecodeError:
         return None
-    if not isinstance(payload, dict) or set(payload) != set(labels):
+    payload_result = _unique_object(pairs)
+    if payload_result is None:
         return None
-    if not all(isinstance(value, str) and value.strip() for value in payload.values()):
+    payload, duplicate_colors = payload_result
+
+    expected_keys = {color_name: color_name.strip().lower() for color_name in color_keys}
+    if len(set(expected_keys.values())) != len(color_keys):
         return None
-    return {label: payload[label].strip() for label in labels}
+
+    readings = dict.fromkeys(color_keys, "UNKNOWN")
+    display_regions: dict[str, tuple[float, float, float, float]] = {}
+    for color_name, normalized_name in expected_keys.items():
+        if normalized_name in duplicate_colors:
+            continue
+        result = _unique_object(payload.get(normalized_name))
+        if result is None:
+            continue
+        value, duplicate_fields = result
+        if duplicate_fields.intersection({"reading", "display_bbox"}):
+            continue
+        raw_reading = value.get("reading")
+        if isinstance(raw_reading, str) and raw_reading.strip().upper() == "UNKNOWN":
+            continue
+        reading = _valid_reading(raw_reading)
+        bbox = _valid_bbox(value.get("display_bbox"))
+        if reading is None or bbox is None:
+            continue
+        readings[color_name] = reading
+        display_regions[color_name] = bbox
+
+    conflicts: set[str] = set()
+    assigned = list(display_regions.items())
+    for index, (first_color, first_bbox) in enumerate(assigned):
+        for second_color, second_bbox in assigned[index + 1 :]:
+            if _same_display_region(first_bbox, second_bbox):
+                conflicts.update((first_color, second_color))
+
+    for color_name in conflicts:
+        readings[color_name] = "UNKNOWN"
+    return readings
+
+
+def _unique_object(value: object) -> tuple[dict[str, object], set[str]] | None:
+    if not isinstance(value, list) or not all(
+        isinstance(pair, tuple) and len(pair) == 2 and isinstance(pair[0], str) for pair in value
+    ):
+        return None
+    payload: dict[str, object] = {}
+    duplicate_keys: set[str] = set()
+    for key, item in value:
+        normalized_key = key.strip().lower()
+        if normalized_key in payload:
+            duplicate_keys.add(normalized_key)
+        payload[normalized_key] = item
+    return payload, duplicate_keys
+
+
+def _valid_reading(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    reading = value.strip()
+    if (
+        not reading
+        or re.search(r"\bUNKNOWN\b", reading, flags=re.IGNORECASE)
+        or re.search(r"#[0-9A-Fa-f]{6}\b", reading)
+        or any(
+            re.search(rf"\b{re.escape(identifier)}\b", reading, flags=re.IGNORECASE)
+            for identifier, _rgb in _MARKER_COLORS
+        )
+    ):
+        return None
+    return reading
+
+
+def _valid_bbox(value: object) -> tuple[float, float, float, float] | None:
+    if not isinstance(value, list) or len(value) != 4:
+        return None
+    if any(isinstance(coordinate, bool) or not isinstance(coordinate, (int, float)) for coordinate in value):
+        return None
+    left, top, right, bottom = (float(coordinate) for coordinate in value)
+    if not (0 <= left < right <= 1000 and 0 <= top < bottom <= 1000):
+        return None
+    return left, top, right, bottom
+
+
+def _same_display_region(
+    first: tuple[float, float, float, float],
+    second: tuple[float, float, float, float],
+) -> bool:
+    left = max(first[0], second[0])
+    top = max(first[1], second[1])
+    right = min(first[2], second[2])
+    bottom = min(first[3], second[3])
+    if left >= right or top >= bottom:
+        return False
+    intersection = (right - left) * (bottom - top)
+    first_area = (first[2] - first[0]) * (first[3] - first[1])
+    second_area = (second[2] - second[0]) * (second[3] - second[1])
+    return intersection / min(first_area, second_area) >= 0.8
 
 
 __all__ = [
