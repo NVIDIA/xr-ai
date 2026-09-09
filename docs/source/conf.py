@@ -16,6 +16,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 _API_CONTRACT = run_path(str(Path(__file__).with_name("_api_contract.py")))
 API_PACKAGE_DIRS = _API_CONTRACT["API_PACKAGE_DIRS"]
 PUBLIC_API_MODULES = _API_CONTRACT["PUBLIC_API_MODULES"]
+_RELEASE_POLICY = run_path(
+    str(Path(__file__).resolve().parents[2] / ".github/scripts/docs_release_policy.py")
+)
 _PUBLIC_PACKAGE_EXPORTS = {
     package_dir.name: frozenset(
         _API_CONTRACT["_literal_exports"](
@@ -154,7 +157,7 @@ myst_heading_anchors = 3
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 # Keep release documentation immutable and publish main as development docs.
-smv_tag_whitelist = rf"^{_SEMVER_TAG}$"
+smv_tag_whitelist = _RELEASE_POLICY["tag_whitelist"](_SEMVER_TAG)
 smv_branch_whitelist = r"^main$"
 smv_remote_whitelist = None
 smv_released_pattern = r"^tags/.*$"
