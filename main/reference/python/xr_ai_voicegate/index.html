@@ -281,7 +281,7 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.2.0-beta</option>
+    <option value="0" >v0.2.0-beta.1</option>
     <option value="1" >v0.1.0-beta</option>
     <option value="2" selected>main (development)</option>
   </select>
@@ -290,7 +290,7 @@
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../../../v0.2.0-beta/index.html", "../../../../v0.1.0-beta/index.html", "index.html"];
+    var urls = ["../../../../v0.2.0-beta.1/index.html", "../../../../v0.1.0-beta/index.html", "index.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -579,6 +579,12 @@ utterance dispatches straight to <code class="docutils literal notranslate"><spa
 <code class="docutils literal notranslate"><span class="pre">fresh_match=True</span></code>. The follow-up / phrase-only / drop branches
 are inert in this mode — they only make sense once a phrase exists
 to gate against.</p>
+<p>STOP is a closed imperative grammar: direct requests such as <code class="docutils literal notranslate"><span class="pre">stop</span></code>,
+<code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">it</span></code>, <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">talking</span></code>, <code class="docutils literal notranslate"><span class="pre">be</span> <span class="pre">quiet</span></code>, and <code class="docutils literal notranslate"><span class="pre">shut</span> <span class="pre">up</span></code> may use a
+bounded set of conversational prefixes and punctuation. Negations,
+questions, reported speech, unconfigured arbitrary prefixes, and scoped or
+multi-action commands such as <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">monitoring</span></code> are ordinary queries,
+not global stops.</p>
 <p>Handler exceptions are logged and swallowed so one bad handler does
 not kill the gate.</p>
 <dl class="py method">
