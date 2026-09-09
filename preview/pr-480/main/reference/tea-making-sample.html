@@ -281,17 +281,15 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.2.0-beta.1</option>
-    <option value="1" >v0.2.0-beta</option>
-    <option value="2" >v0.1.0-beta</option>
-    <option value="3" selected>main (development)</option>
+    <option value="0" >v0.1.0-beta</option>
+    <option value="1" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.2.0-beta.1/reference/tea-making-sample.html", "../../v0.2.0-beta/reference/tea-making-sample.html", "../../v0.1.0-beta/index.html", "tea-making-sample.html"];
+    var urls = ["../../v0.1.0-beta/index.html", "tea-making-sample.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -865,8 +863,11 @@ readiness. Open <code class="docutils literal notranslate"><span class="pre">htt
 <code class="docutils literal notranslate"><span class="pre">http://&lt;xr-host&gt;:8092</span></code> from a trusted development network.
 <code class="docutils literal notranslate"><span class="pre">TeaWebEventsAgent</span></code> explicitly subscribes to the
 foreground, guidance, background, transcript, video-log, and participant
-lifecycle topics and publishes compact <code class="docutils literal notranslate"><span class="pre">WebEvent</span></code> payloads. There is no runtime
-wildcard subscription and no file tailing.</p>
+lifecycle topics and publishes compact <code class="docutils literal notranslate"><span class="pre">WebEvent</span></code> payloads. Visual panes show
+only application lifecycle and material <code class="docutils literal notranslate"><span class="pre">BackgroundFact</span></code> results; every-frame
+captions, no-change observations, unavailable frames, and errors remain in the
+durable records and worker log. There is no runtime wildcard subscription and
+no file tailing.</p>
 <p>The viewer keeps only a bounded in-memory history for the current process. The
 participant JSONL files under <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code> remain the durable record and include
 events that may not be selected for live presentation. The listener is
