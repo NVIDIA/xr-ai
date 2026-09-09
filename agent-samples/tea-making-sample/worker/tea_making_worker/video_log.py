@@ -39,6 +39,13 @@ if TYPE_CHECKING:
     from .images import ParticipantImageAgent
 
 _NO_CHANGE = "no meaningful visual change"
+_NO_CHANGE_RESPONSES = frozenset(
+    {
+        _NO_CHANGE,
+        f"{_NO_CHANGE}s; the scene remains stable",
+        f"there was {_NO_CHANGE}",
+    }
+)
 
 
 class VideoLogControlRequest(BaseModel):
@@ -71,7 +78,7 @@ class _VideoState:
 
 
 def _is_no_change(delta: str) -> bool:
-    return delta.rstrip(". ").casefold() == _NO_CHANGE
+    return delta.strip().rstrip(".").casefold() in _NO_CHANGE_RESPONSES
 
 
 class VideoLogAgent(Agent):
@@ -302,6 +309,17 @@ class VideoLogAgent(Agent):
                     ),
                 )
                 return
+            if not state.captions:
+                state.captions.append(caption)
+                await self._publish_record(
+                    participant_id,
+                    VideoLogRecord(
+                        timestamp_us=now_us,
+                        record_type="observation",
+                        caption=caption,
+                    ),
+                )
+                return
             try:
                 delta = await self._generate_delta(state, caption)
             except asyncio.CancelledError:
@@ -317,7 +335,6 @@ class VideoLogAgent(Agent):
                     caption=caption,
                 )
                 return
-
             state.captions.append(caption)
             await self._publish_record(
                 participant_id,

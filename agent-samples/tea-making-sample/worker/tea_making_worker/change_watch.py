@@ -376,7 +376,6 @@ class ChangeWatchAgent(Agent):
                     caption=caption,
                 )
                 return
-
             state.captions.append(caption)
             record = ChangeWatchRecord(
                 timestamp_us=now_us,
@@ -390,7 +389,11 @@ class ChangeWatchAgent(Agent):
             if decision.important:
                 await self._publish_fact(participant_id, now_us, decision.summary)
 
-    async def _decide(self, state: _WatchState, caption: str) -> ChangeDecision:
+    async def _decide(
+        self,
+        state: _WatchState,
+        caption: str,
+    ) -> ChangeDecision:
         async def commit(request: ChangeDecision) -> ChangeDecision:
             return request
 

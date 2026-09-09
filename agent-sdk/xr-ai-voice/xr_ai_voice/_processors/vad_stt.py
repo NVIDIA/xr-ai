@@ -53,6 +53,15 @@ _PARTIAL_PROBE_TAIL_S = 0.12
 _PARTIAL_PROBE_FINISH_GRACE_S = 0.15
 
 
+def _is_unambiguous_partial_stop(text: str) -> bool:
+    """Reserve an ambiguous bare STOP for final-transcript routing."""
+
+    if not STOP_RE.match(text):
+        return False
+    words = text.rstrip(" \t\r\n.!?").casefold().split()
+    return not (words[-1] == "stop" and words.count("stop") == 1)
+
+
 @dataclass(frozen=True)
 class VadConfig:
     """Tuning knobs for the Silero-VAD utterance detector.
@@ -342,7 +351,7 @@ class VadSttProcessor(FrameProcessor):
                     logger.exception("partial-probe stt transcribe failed pid={!r}", pid)
                     return
 
-                stop_matched = bool(text and STOP_RE.match(text))
+                stop_matched = bool(text and _is_unambiguous_partial_stop(text))
                 logger.info(
                     "early transcript probe fired pid={!r} attempt={} latency_ms={} stop_matched={}",
                     pid, attempt, round((time.monotonic() - before) * 1000),

@@ -220,6 +220,21 @@ def test_phrase_only_utterance_strips_to_empty_string():
     "be quiet",
     "shut up",
     "stop talking",
+    "stop it",
+    "stop that",
+    "stop this",
+    "wait, stop",
+    "no, stop",
+    "stop stop",
+    "stop stop stop",
+    "just stop",
+    "stop already",
+    "I said stop",
+    "please stop",
+    "alright stop",
+    "sorry, stop",
+    "whoa stop",
+    "hang on stop",
 ])
 def test_stop_regex_canonical_forms_match(text: str):
     """Case 9: all the canonical interruption phrases match."""
@@ -240,6 +255,17 @@ def test_stop_regex_mid_sentence_real_question_does_not_match():
     """Case 11: 'what should we stop doing about climate change' is a
     genuine question that mentions 'stop' mid-sentence; must not trigger."""
     assert STOP_RE.match("what should we stop doing about climate change") is None
+
+
+@pytest.mark.parametrize("text", [
+    "stop visual monitoring.",
+    "stop transcript recording",
+    "stop video logging",
+    "stop the timer",
+])
+def test_stop_regex_application_commands_do_not_match(text: str):
+    """Application lifecycle commands must reach the agent's tools."""
+    assert STOP_RE.match(text) is None
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -513,6 +539,24 @@ async def test_feed_stop_matched_on_magic_stripped_tail():
     await gate.feed("p1", "hey agent stop")
 
     assert events == [("stop", "p1")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("phrases,text", [
+    (("hey agent",), "hey agent stop visual monitoring."),
+    ((), "stop visual monitoring."),
+])
+async def test_feed_application_stop_command_dispatches_to_agent(
+    phrases: tuple[str, ...],
+    text: str,
+):
+    """A scoped stop request is an agent command, not a speech interrupt."""
+    gate, _, _ = _gate(phrases=phrases)
+    events = _recording_handlers(gate)
+
+    await gate.feed("p1", text)
+
+    assert events == [("query", "p1", "stop visual monitoring.", True)]
 
 
 @pytest.mark.asyncio
