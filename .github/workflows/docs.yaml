@@ -30,6 +30,9 @@
 # refs are rejected.
 name: Docs
 
+env:
+  XR_AI_DOCS_WITHDRAWN_TAGS: ${{ vars.XR_AI_DOCS_WITHDRAWN_TAGS }}
+
 on:
   push:
     branches: [main]
@@ -49,6 +52,7 @@ on:
       - "agent-samples/**/*.yml"
       - ".github/workflows/docs.yaml"
       - ".github/scripts/check_latest_docs_links.py"
+      - ".github/scripts/docs_release_policy.py"
       - ".github/scripts/select_latest_docs_release.py"
       - ".github/scripts/publish_docs.sh"
       - ".github/scripts/remove_docs_preview.sh"
@@ -70,6 +74,7 @@ on:
       - "agent-samples/**/*.yml"
       - ".github/workflows/docs.yaml"
       - ".github/scripts/check_latest_docs_links.py"
+      - ".github/scripts/docs_release_policy.py"
       - ".github/scripts/select_latest_docs_release.py"
       - ".github/scripts/publish_docs.sh"
       - ".github/scripts/remove_docs_preview.sh"

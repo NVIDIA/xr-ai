@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Tests for documentation release selection policy."""
+import os
 import re
 import runpy
 import subprocess
@@ -45,12 +46,15 @@ def _sample_projects() -> list[tuple[Path, str]]:
     return projects
 
 
-def _select(*tags: str) -> str:
+def _select(*tags: str, withdrawn: str = "") -> str:
+    environment = os.environ.copy()
+    environment["XR_AI_DOCS_WITHDRAWN_TAGS"] = withdrawn
     result = subprocess.run(
         [sys.executable, str(_SELECTOR)],
         input="\n".join(tags),
         check=True,
         capture_output=True,
+        env=environment,
         text=True,
     )
     return result.stdout.strip()
@@ -74,13 +78,46 @@ def test_invalid_semver_tags_are_ignored() -> None:
     assert _select("release-2", "v1.0", "v1.0.0-01") == ""
 
 
-def test_tag_whitelist_rejects_the_same_invalid_semver_tags() -> None:
+def test_withdrawn_release_is_not_selected_as_latest() -> None:
+    assert (
+        _select(
+            "v0.1.0-beta",
+            "v0.2.0-beta",
+            withdrawn="v0.2.0-beta",
+        )
+        == "v0.1.0-beta"
+    )
+    assert (
+        _select(
+            "v0.2.0-beta",
+            "v0.2.0-beta.1",
+            withdrawn="v0.2.0-beta, v0.1.0-beta",
+        )
+        == "v0.2.0-beta.1"
+    )
+
+
+def test_tag_whitelist_rejects_invalid_and_withdrawn_tags(monkeypatch) -> None:
+    monkeypatch.setenv("XR_AI_DOCS_WITHDRAWN_TAGS", "v0.2.0-beta v0.3.0-beta")
     whitelist = runpy.run_path(str(_CONF))["smv_tag_whitelist"]
 
     assert re.fullmatch(whitelist, "v1.0.0")
     assert re.fullmatch(whitelist, "v1.0.0-rc.1")
+    assert re.fullmatch(whitelist, "v0.2.0-beta.1")
     assert not re.fullmatch(whitelist, "v01.0.0")
     assert not re.fullmatch(whitelist, "v1.0.0-01")
+    assert not re.fullmatch(whitelist, "v0.2.0-beta")
+    assert not re.fullmatch(whitelist, "v0.3.0-beta")
+
+
+def test_docs_workflow_supplies_withdrawn_release_policy() -> None:
+    workflow = (_ROOT / ".github" / "workflows" / "docs.yaml").read_text()
+
+    assert (
+        "XR_AI_DOCS_WITHDRAWN_TAGS: ${{ vars.XR_AI_DOCS_WITHDRAWN_TAGS }}"
+        in workflow
+    )
+    assert workflow.count('- ".github/scripts/docs_release_policy.py"') == 2
 
 
 def test_source_links_use_the_current_documentation_ref(monkeypatch) -> None:
