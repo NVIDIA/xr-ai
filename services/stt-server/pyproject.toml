@@ -18,6 +18,8 @@ dependencies = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.29",
     "python-multipart>=0.0.9",
+    "huggingface-hub>=0.32.0",
+    "hf-xet>=1.1.2,<2.0.0",
     "pyyaml>=6.0",
     "xr-ai-logging",
 ]

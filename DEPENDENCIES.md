@@ -257,7 +257,8 @@ artifacts; do not commit them.
 - Runtime dependencies:
   - `vllm>=0.14.0`
   - `pyyaml>=6.0`
-  - `hf-transfer>=0.1.4`
+  - `huggingface-hub>=0.32.0`
+  - `hf-xet>=1.1.2,<2.0.0`
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
 - Optional dependency groups: none
@@ -272,7 +273,8 @@ artifacts; do not commit them.
 - Runtime dependencies:
   - `vllm>=0.12.0`
   - `pyyaml>=6.0`
-  - `hf-transfer>=0.1.4`
+  - `huggingface-hub>=0.32.0`
+  - `hf-xet>=1.1.2,<2.0.0`
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
 - Optional dependency groups: none
@@ -291,7 +293,8 @@ artifacts; do not commit them.
   - `numpy>=1.24`
   - `fastapi>=0.111`
   - `uvicorn[standard]>=0.29`
-  - `hf-transfer>=0.1.4`
+  - `huggingface-hub>=0.32.0`
+  - `hf-xet>=1.1.2,<2.0.0`
   - `pyyaml>=6.0`
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
 - Optional dependency groups: none
@@ -306,7 +309,8 @@ artifacts; do not commit them.
 - Runtime dependencies:
   - `vllm>=0.12.0`
   - `pyyaml>=6.0`
-  - `hf-transfer>=0.1.4`
+  - `huggingface-hub>=0.32.0`
+  - `hf-xet>=1.1.2,<2.0.0`
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
 - Optional dependency groups: none
@@ -321,7 +325,8 @@ artifacts; do not commit them.
 - Runtime dependencies:
   - `vllm>=0.12.0`
   - `pyyaml>=6.0`
-  - `hf-transfer>=0.1.4`
+  - `huggingface-hub>=0.32.0`
+  - `hf-xet>=1.1.2,<2.0.0`
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
 - Optional dependency groups: none
@@ -363,7 +368,8 @@ artifacts; do not commit them.
   - `hatchling`
 - Runtime dependencies:
   - `piper-tts>=1.4.0`
-  - `huggingface-hub>=0.22`
+  - `huggingface-hub>=0.32.0`
+  - `hf-xet>=1.1.2,<2.0.0`
   - `fastapi>=0.111`
   - `uvicorn[standard]>=0.29`
   - `pyyaml>=6.0`
@@ -398,6 +404,8 @@ artifacts; do not commit them.
   - `fastapi>=0.111`
   - `uvicorn[standard]>=0.29`
   - `python-multipart>=0.0.9`
+  - `huggingface-hub>=0.32.0`
+  - `hf-xet>=1.1.2,<2.0.0`
   - `pyyaml>=6.0`
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
 - Optional dependency groups: none
@@ -428,7 +436,8 @@ artifacts; do not commit them.
 - Runtime dependencies:
   - `vllm>=0.23.0`
   - `pyyaml>=6.0`
-  - `hf-transfer>=0.1.4`
+  - `huggingface-hub>=0.32.0`
+  - `hf-xet>=1.1.2,<2.0.0`
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
 - Optional dependency groups: none

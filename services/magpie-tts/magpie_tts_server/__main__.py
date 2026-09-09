@@ -194,7 +194,7 @@ async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> Non
 
     os.environ["NEMO_CACHE_DIR"] = str(model_cache / "nemo")
     os.environ["HF_HOME"]        = str(model_cache / "huggingface")
-    os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
+    os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
 
     port = int(cfg.get("port", _DEFAULT_PORT))
     host = cfg.get("host", "0.0.0.0")

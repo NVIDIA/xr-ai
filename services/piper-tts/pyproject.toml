@@ -11,7 +11,8 @@ version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "piper-tts>=1.4.0",
-    "huggingface-hub>=0.22",
+    "huggingface-hub>=0.32.0",
+    "hf-xet>=1.1.2,<2.0.0",
     "fastapi>=0.111",
     "uvicorn[standard]>=0.29",
     "pyyaml>=6.0",
