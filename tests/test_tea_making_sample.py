@@ -38,6 +38,7 @@ _WORKER = _SAMPLE / "worker"
 sys.path.insert(0, str(_WORKER))
 
 import tea_making_worker.foreground as foreground_module  # noqa: E402  # pyright: ignore[reportMissingImports]
+import tea_making_worker.workflow as workflow_module  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     _CLIENT_TEXT_TOPIC,
     _ParticipantVoiceAggregationAgent,
@@ -678,9 +679,8 @@ def test_workflow_enforces_consecutive_visual_evidence() -> None:
     session = store.get("participant-2")
     store.start(session)
     store.advance(session, skip=True)
-    observation = "The kettle contains water inside with a visible surface and level."
+    observation = "water visible"
 
-    store.observe(session, observation)
     store.observe(session, observation)
     rejected = store.commit(session, {"water_filled": True}, "")
     assert not rejected.accepted
@@ -692,6 +692,163 @@ def test_workflow_enforces_consecutive_visual_evidence() -> None:
     assert accepted.complete
     assert session.state["water_filled"] is True
     assert session.step_id == "fill_water"
+
+
+@pytest.mark.parametrize(
+    ("observation", "expected"),
+    [
+        ("water present", True),
+        ("Water Present", True),
+        ("`water present`", True),
+        ("water not visible", False),
+        ("water absent", False),
+        ("water visible: yes", False),
+        ("water visible: the kettle appears empty", False),
+        ("water visible: the lid is open", False),
+        ("The kettle contains water.", False),
+    ],
+)
+def test_water_observation_protocol(observation: str, expected: bool) -> None:
+    assert workflow_module._water_visible(observation) is expected
+
+
+@pytest.mark.parametrize(
+    ("observation", "reading_c", "ambiguous"),
+    [
+        ("51 C", 51.0, False),
+        ("123 F", pytest.approx(50.56, abs=0.01), False),
+        ("65 degrees Celsius", 65.0, False),
+        ("unit ambiguous", None, True),
+        ("The display reads 65", None, True),
+        ("No current reading; the target is 93 Celsius.", None, False),
+        ("The target is 93 Celsius.", None, True),
+        ("no reading", None, False),
+    ],
+)
+def test_temperature_observation_protocol(
+    observation: str,
+    reading_c: float | None,
+    ambiguous: bool,
+) -> None:
+    actual_reading, actual_ambiguous = workflow_module._temperature_reading_c(
+        observation
+    )
+    assert actual_reading == reading_c
+    assert actual_ambiguous is ambiguous
+
+
+def _guidance_for_direct_evidence() -> GuidanceAgent:
+    return GuidanceAgent(
+        workflow=load_workflow(_SAMPLE / "yaml/workflow.yaml"),
+        llm=SimpleNamespace(),  # type: ignore[arg-type]
+        current_frame=SimpleNamespace(),  # type: ignore[arg-type]
+        image_query=SimpleNamespace(),  # type: ignore[arg-type]
+        rag=SimpleNamespace(),  # type: ignore[arg-type]
+    )
+
+
+def test_water_detection_uses_two_confirming_vlm_observations() -> None:
+    guidance = _guidance_for_direct_evidence()
+    session = guidance.store.get("participant-water-evidence")
+    guidance.store.start(session)
+    guidance.store.advance(session, skip=True)
+    step = guidance.workflow.step("fill_water")
+
+    for observation in (
+        "water visible: the kettle appears empty",
+        "water visible: the lid is open",
+    ):
+        guidance._apply_direct_evidence(
+            session,
+            step,
+            observation,
+            session.revision,
+        )
+    assert session.state["water_filled"] is False
+
+    guidance._apply_direct_evidence(
+        session,
+        step,
+        "water present",
+        session.revision,
+    )
+    assert session.state["water_filled"] is False
+
+    guidance._apply_direct_evidence(
+        session,
+        step,
+        "water present",
+        session.revision,
+    )
+    assert session.state["water_filled"] is True
+
+
+def test_heating_detection_requires_two_hot_explicit_unit_readings() -> None:
+    guidance = _guidance_for_direct_evidence()
+    session = guidance.store.get("participant-heating-evidence")
+    guidance.store.start(session)
+    guidance.store.advance(session, skip=True)
+    guidance.store.advance(session, skip=True)
+    step = guidance.workflow.step("heat_water")
+
+    for observation in ("51 C", "122 F", "51 C"):
+        guidance._apply_direct_evidence(
+            session,
+            step,
+            observation,
+            session.revision,
+        )
+    assert session.state["heating_started"] is False
+
+    guidance._apply_direct_evidence(
+        session,
+        step,
+        "123 F",
+        session.revision,
+    )
+    assert session.state["heating_started"] is True
+
+
+def test_heating_detection_rejects_target_temperature_as_current_reading() -> None:
+    guidance = _guidance_for_direct_evidence()
+    session = guidance.store.get("participant-target-temperature")
+    guidance.store.start(session)
+    guidance.store.advance(session, skip=True)
+    guidance.store.advance(session, skip=True)
+    step = guidance.workflow.step("heat_water")
+
+    for _ in range(3):
+        guidance._apply_direct_evidence(
+            session,
+            step,
+            "No current reading; the target is 93 Celsius.",
+            session.revision,
+        )
+
+    assert session.state["heating_started"] is False
+    assert session.notices == []
+
+
+def test_heating_detection_retries_then_reports_ambiguous_unit_once() -> None:
+    guidance = _guidance_for_direct_evidence()
+    session = guidance.store.get("participant-ambiguous-temperature")
+    guidance.store.start(session)
+    guidance.store.advance(session, skip=True)
+    guidance.store.advance(session, skip=True)
+    step = guidance.workflow.step("heat_water")
+
+    for _ in range(4):
+        guidance._apply_direct_evidence(
+            session,
+            step,
+            "unit ambiguous",
+            session.revision,
+        )
+
+    assert session.state["heating_started"] is False
+    assert session.notices == [
+        "The temperature unit is ambiguous. Keep Celsius or Fahrenheit visible."
+    ]
 
 
 def test_guidance_exposes_one_foreground_stack_at_a_time() -> None:
@@ -721,6 +878,179 @@ def test_guidance_exposes_one_foreground_stack_at_a_time() -> None:
         "rag_lookup",
     } <= active_names
     assert guidance.active_context("participant-3") is not None
+
+    guidance.store.advance(session, skip=True)
+    fill_tools = guidance.active_tools("participant-3")
+    assert fill_tools is not None
+    fill_names = {name for name, _tool in fill_tools.items()}
+    assert "current_view" in fill_names
+    assert "rag_lookup" not in fill_names
+
+
+def test_active_context_remains_sparse_for_legacy_callers() -> None:
+    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
+    guidance = GuidanceAgent(
+        workflow=workflow,
+        llm=SimpleNamespace(),  # type: ignore[arg-type]
+        current_frame=SimpleNamespace(),  # type: ignore[arg-type]
+        image_query=SimpleNamespace(),  # type: ignore[arg-type]
+        rag=SimpleNamespace(),  # type: ignore[arg-type]
+    )
+    session = guidance.store.get("participant-guide-context")
+    guidance.store.start(session)
+    guidance.store.advance(session, skip=True)
+
+    context = json.loads(guidance.active_context("participant-guide-context") or "{}")
+
+    assert context["step"] == {"id": "fill_water", "title": "Fill the heating vessel"}
+    assert context["workflow"] == "This workflow guides tea making."
+    assert context["state"] == {
+        "tea_name": "generic tea",
+        "target_temperature_c": 93,
+        "steep_duration_s": 180,
+        "water_filled": False,
+    }
+    assert "public_guide" not in context
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_name", "expected_skip"),
+    [
+        ("What are the instructions?", None, None),
+        ("What are the teammaking instructions?", None, None),
+        ("What is the next step?", None, None),
+        ("What's the next step?", None, None),
+        ("What was the previous step?", None, None),
+        ("Please stop monitoring the kettle.", None, None),
+        ("Next?", None, None),
+        ("Next step?", None, None),
+        ("Restart?", None, None),
+        ("Next.", "workflow__advance", False),
+        ("Move on to the following tea step.", "workflow__advance", False),
+        ("Could you please continue?", "workflow__advance", False),
+        ("Proceed to the next tea step.", "workflow__advance", False),
+        ("Can you skip?", "workflow__advance", True),
+        ("Skip this tea step.", "workflow__advance", True),
+        ("End this tea-making session.", "workflow__reset", None),
+        (
+            "Begin the tea instructions again from the first step.",
+            "workflow__restart",
+            None,
+        ),
+        ("Please restart my tea guide.", "workflow__restart", None),
+        ("What is the status of my tea guide?", "workflow__status", None),
+    ],
+)
+def test_workflow_controls_require_an_explicit_request(
+    query: str,
+    expected_name: str | None,
+    expected_skip: bool | None,
+) -> None:
+    control = foreground_module._requested_workflow_control(query)
+    actual_name = None if control is None else control.name
+    assert actual_name == expected_name
+    if control is not None:
+        assert control.skip is expected_skip
+
+
+@pytest.mark.asyncio
+async def test_informational_request_cannot_receive_workflow_controls() -> None:
+    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
+    guidance = GuidanceAgent(
+        workflow=workflow,
+        llm=SimpleNamespace(),  # type: ignore[arg-type]
+        current_frame=SimpleNamespace(),  # type: ignore[arg-type]
+        image_query=SimpleNamespace(),  # type: ignore[arg-type]
+        rag=SimpleNamespace(),  # type: ignore[arg-type]
+    )
+    session = guidance.store.get("participant-tool-guard")
+    guidance.store.start(session)
+    tools = guidance.active_tools("participant-tool-guard")
+    assert tools is not None
+
+    question_tools = foreground_module._workflow_tools_for_query(
+        tools,
+        "What's the next step?",
+    )
+    question_names = {name for name, _tool in question_tools.items()}
+    assert not question_names & {
+        "workflow__advance",
+        "workflow__reset",
+        "workflow__restart",
+        "workflow__status",
+    }
+    assert {"current_view", "rag_lookup"} <= question_names
+
+    command_tools = foreground_module._workflow_tools_for_query(tools, "Next.")
+    command_names = {name for name, _tool in command_tools.items()}
+    assert command_names & {
+        "workflow__advance",
+        "workflow__reset",
+        "workflow__restart",
+        "workflow__status",
+    } == {
+        "workflow__advance"
+    }
+    advance = command_tools.get("workflow__advance")
+    assert advance is not None
+    assert advance.request_model.model_validate({"skip": False}).skip is False
+    rejected = await advance.invoke('{"skip":true}')
+    assert "invalid_tool_arguments" in rejected.content
+    assert session.step_id == "identify"
+
+    skip_tools = foreground_module._workflow_tools_for_query(
+        tools,
+        "Skip this tea step.",
+    )
+    skip = skip_tools.get("workflow__advance")
+    assert skip is not None
+    assert skip.request_model.model_validate({"skip": True}).skip is True
+    rejected = await skip.invoke('{"skip":false}')
+    assert "invalid_tool_arguments" in rejected.content
+    assert session.step_id == "identify"
+
+
+def test_procedural_filter_preserves_mixed_and_live_requests() -> None:
+    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
+    guidance = GuidanceAgent(
+        workflow=workflow,
+        llm=SimpleNamespace(),  # type: ignore[arg-type]
+        current_frame=SimpleNamespace(),  # type: ignore[arg-type]
+        image_query=SimpleNamespace(),  # type: ignore[arg-type]
+        rag=SimpleNamespace(),  # type: ignore[arg-type]
+    )
+    session = guidance.store.get("participant-mixed-query")
+    guidance.store.start(session)
+    guidance.store.advance(session, skip=True)
+    tools = guidance.active_tools(session.participant_id)
+    assert tools is not None
+
+    mixed = foreground_module._guide_tools_for_query(
+        foreground_module._workflow_tools_for_query(
+            tools,
+            "What is the next step, and is the water hot enough?",
+        ),
+        "What is the next step, and is the water hot enough?",
+    )
+    assert mixed.get("current_view") is not None
+
+    live_details = foreground_module._guide_tools_for_query(
+        foreground_module._workflow_tools_for_query(
+            tools,
+            "Read the details on the kettle gauge.",
+        ),
+        "Read the details on the kettle gauge.",
+    )
+    assert live_details.get("current_view") is not None
+
+    procedural = foreground_module._guide_tools_for_query(
+        foreground_module._workflow_tools_for_query(
+            tools,
+            "What is the next step?",
+        ),
+        "What is the next step?",
+    )
+    assert not tuple(procedural.items())
 
 
 @pytest.mark.asyncio
@@ -881,20 +1211,21 @@ async def test_active_workflow_keeps_background_stop_and_status_tools() -> None:
         prompt="Route.",
     )
 
-    await foreground._answer("Is recording running?", "participant-controls")
+    await foreground._answer(
+        "Is conversation recording running?",
+        "participant-controls",
+    )
 
     active_tools = guidance.active_tools("participant-controls")
     assert active_tools is not None
     current_view = active_tools.get("current_view")
 
-    assert {
-        "change_watch__stop",
-        "change_watch__status",
+    assert observed_tools == {
+        "application_context__query",
+        "transcript__start",
         "transcript__stop",
         "transcript__status",
-        "video_log__stop",
-        "video_log__status",
-    } <= observed_tools
+    }
     assert current_view is not None and current_view.return_direct is False
 
 
@@ -978,9 +1309,12 @@ async def test_mixed_tool_turn_with_streamed_current_view_is_already_spoken(
 
     monkeypatch.setattr(foreground_module, "run_tool_loop", run_loop)
     foreground = object.__new__(ForegroundAgent)
-    foreground._guidance = SimpleNamespace(active_context=lambda _pid: None)
-    foreground._root_tools = lambda *_args, **_kwargs: ToolSet(())
-    foreground._prompt = "Route."
+    foreground._prepare_turn = lambda *_args, **_kwargs: SimpleNamespace(
+        agent=SimpleNamespace(system_prompt="Route.", name="foreground_root"),
+        user_message='{"request":"Use the reference, then tell me what you see."}',
+        tools=ToolSet(()),
+        route="root",
+    )
     foreground._llm = SimpleNamespace()
 
     response, calls, spoken = await foreground._answer(
@@ -1622,19 +1956,26 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     idle_prompt = (
         _WORKER / "tea_making_worker/prompts/foreground_idle.txt"
     ).read_text()
-    active_prompt = (
-        _WORKER / "tea_making_worker/prompts/foreground_active.txt"
-    ).read_text()
-    refusal = "I can only help with the active tea guide right now."
+    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
+    active_prompt = "\n".join(
+        (
+            foreground_module._TEA_PROMPT,
+            foreground_module._VOICE_PROMPT,
+            foreground_module._ACTIVE_POLICY,
+            *(step.voice.prompt for step in workflow.steps.values()),
+        )
+    )
+    legacy_refusal = "I can only help with the active tea guide right now."
     idle_model_prompt = f"{common_prompt}\n\n{idle_prompt}".lower()
     active_model_prompt = f"{common_prompt}\n\n{active_prompt}".lower()
-    assert refusal not in common_prompt
-    assert refusal not in idle_prompt
+    assert legacy_refusal not in common_prompt
+    assert legacy_refusal not in idle_prompt
     for worked_example_term in ("holding", "color", "shirt", "clothing"):
         assert worked_example_term not in idle_model_prompt
         assert worked_example_term not in active_model_prompt
     assert "general-purpose assistant" in idle_prompt
-    assert f"reply exactly:\n{refusal}" in active_prompt
+    assert "answer tea-making questions" in active_prompt.lower()
+    assert {"decline", "unrelated"} <= set(active_prompt.lower().split())
 
     root_cases = [case for case in cases if case.get("route", "root") == "root"]
     assert {case["expected_tool"] for case in root_cases} == {
@@ -1651,7 +1992,9 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     active_cases = [case for case in cases if case.get("route") == "active"]
     assert {case["expected_tool"] for case in active_cases} == {
         None,
+        "application_context__query",
         "change_watch__start",
+        "change_watch__stop",
         "clock__timer",
         "current_view",
         "workflow__advance",
@@ -1659,16 +2002,22 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
         "workflow__restart",
         "workflow__status",
     }
-    unrelated_cases = [case for case in active_cases if "expected_response" in case]
+    unrelated_cases = [
+        case for case in active_cases if case["name"].startswith("active-rejects-")
+    ]
     assert len(unrelated_cases) >= 4
     assert all(case["expected_tool"] is None for case in unrelated_cases)
-    assert all(case["expected_response"] == refusal for case in unrelated_cases)
-    assert all("expected_response_pattern" not in case for case in cases)
+    assert all("expected_response" not in case for case in unrelated_cases)
+    advance_cases = [
+        case for case in active_cases if case["expected_tool"] == "workflow__advance"
+    ]
+    assert advance_cases
+    assert all(isinstance(case.get("expected_skip"), bool) for case in advance_cases)
 
     positive_active_names = {
         case["name"]
         for case in active_cases
-        if case.get("forbidden_response") == refusal
+        if case.get("forbidden_response") == legacy_refusal
         or case["expected_tool"] in {
             "change_watch__start",
             "current_view",
@@ -1687,36 +2036,65 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
         for case in root_cases
         if case["name"] == "idle-answers-unrelated-general-knowledge"
     )
-    assert idle_unrelated["forbidden_response"] == refusal
+    assert idle_unrelated["forbidden_response"] == legacy_refusal
     idle_visual = next(
         case
         for case in root_cases
         if case["name"] == "idle-routes-visible-shirt-color"
     )
     assert idle_visual["expected_tool"] == "current_view"
-    assert idle_visual["forbidden_response"] == refusal
+    assert idle_visual["forbidden_response"] == legacy_refusal
     active_visual = next(
         case
         for case in active_cases
         if case["name"] == "active-rejects-unrelated-visual-question"
     )
     assert active_visual["expected_tool"] is None
-    assert active_visual["expected_response"] == refusal
+    assert "expected_response_pattern" in active_visual
+    assert "expected_response" not in active_visual
 
 
-def _foreground_for_route_test(prompt: str) -> ForegroundAgent:
-    images = SimpleNamespace(images=ImageRegistry())
+def _activate_test_step(guidance: GuidanceAgent, step_id: str) -> None:
+    session = guidance.store.get("active")
+    guidance.store.start(session)
+    while session.step_id != step_id:
+        assert session.step_id is not None
+        if session.step_id == "start_steeping" and step_id == "steep_timer":
+            observation = "A tea bag is immersed in the water."
+            guidance.store.observe(session, observation)
+            guidance.store.observe(session, observation)
+            committed = guidance.store.commit(
+                session,
+                {"steeping_started_at_us": 1, "steeping_started": True},
+                "",
+            )
+            assert committed.complete
+            guidance.store.advance(session, skip=False)
+        else:
+            guidance.store.advance(session, skip=True)
+
+
+def _foreground_for_route_test(
+    prompt: str,
+    *,
+    step_id: str = "fill_water",
+) -> ForegroundAgent:
+    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
+    guidance = GuidanceAgent(
+        workflow=workflow,
+        llm=SimpleNamespace(),  # type: ignore[arg-type]
+        current_frame=SimpleNamespace(),  # type: ignore[arg-type]
+        image_query=SimpleNamespace(),  # type: ignore[arg-type]
+        rag=SimpleNamespace(),  # type: ignore[arg-type]
+    )
+    _activate_test_step(guidance, step_id)
+    images = SimpleNamespace(images=ImageRegistry(), get_current_frame=SimpleNamespace())
     foreground = ForegroundAgent(
         llm=SimpleNamespace(),  # type: ignore[arg-type]
         images=images,  # type: ignore[arg-type]
         vlm=SimpleNamespace(),  # type: ignore[arg-type]
         rag=SimpleNamespace(),  # type: ignore[arg-type]
-        guidance=SimpleNamespace(
-            active_context=lambda participant_id: (
-                None if participant_id == "idle" else '{"step":"fill_water"}'
-            ),
-            active_tools=lambda _participant_id: ToolSet(()),
-        ),  # type: ignore[arg-type]
+        guidance=guidance,
         background_context=SimpleNamespace(),  # type: ignore[arg-type]
         change_watch=SimpleNamespace(),  # type: ignore[arg-type]
         transcript=SimpleNamespace(),  # type: ignore[arg-type]
@@ -1724,8 +2102,59 @@ def _foreground_for_route_test(prompt: str) -> ForegroundAgent:
         prompt=prompt,
     )
     foreground._root_tools = lambda *_args, **_kwargs: ToolSet(())
-    foreground._background_tools = lambda *_args, **_kwargs: ToolSet(())
     return foreground
+
+
+@pytest.mark.parametrize(
+    ("step_id", "query", "expected_tools"),
+    [
+        ("identify", "Read the visible tea label.", {"current_view", "rag_lookup"}),
+        ("fill_water", "Check whether water is visible.", {"current_view"}),
+        (
+            "heat_water",
+            "Read the visible temperature.",
+            {"current_view", "temperature__verify"},
+        ),
+        ("start_steeping", "Check whether the tea is immersed.", {"current_view"}),
+        ("steep_timer", "Monitor the steeping timer.", {"clock__timer"}),
+    ],
+)
+def test_every_focused_step_selects_its_declared_live_tools(
+    step_id: str,
+    query: str,
+    expected_tools: set[str],
+) -> None:
+    config = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
+    foreground = _foreground_for_route_test(
+        config.foreground_prompt,
+        step_id=step_id,
+    )
+
+    turn = foreground._prepare_turn(
+        "active",
+        query=query,
+        ctx=None,
+        timestamp_us=None,
+    )
+
+    assert turn.agent.name == f"foreground_tea_{step_id}"
+    assert {name for name, _tool in turn.tools.items()} == expected_tools
+
+
+def test_workflow_tool_typo_fails_when_guidance_is_built(tmp_path: Path) -> None:
+    raw = yaml.safe_load((_SAMPLE / "yaml/workflow.yaml").read_text())
+    raw["steps"][0]["voice"]["tools"].append("current_veiw")
+    path = tmp_path / "workflow.yaml"
+    path.write_text(yaml.safe_dump(raw))
+
+    with pytest.raises(ValueError, match="current_veiw"):
+        GuidanceAgent(
+            workflow=load_workflow(path),
+            llm=SimpleNamespace(),  # type: ignore[arg-type]
+            current_frame=SimpleNamespace(),  # type: ignore[arg-type]
+            image_query=SimpleNamespace(),  # type: ignore[arg-type]
+            rag=SimpleNamespace(),  # type: ignore[arg-type]
+        )
 
 
 def test_foreground_route_appends_policy_through_constructor() -> None:
@@ -1733,19 +2162,27 @@ def test_foreground_route_appends_policy_through_constructor() -> None:
     foreground = _foreground_for_route_test(config.foreground_prompt)
 
     idle_prompt, _, idle_route = foreground._prepare_route(
-        "idle", ctx=None, timestamp_us=None
+        "idle", query="Hello", ctx=None, timestamp_us=None
     )
-    active_prompt, _, active_route = foreground._prepare_route(
-        "active", ctx=None, timestamp_us=None
+    active_turn = foreground._prepare_turn(
+        "active", query="What should I do?", ctx=None, timestamp_us=None
     )
-    refusal = "I can only help with the active tea guide right now."
-
     assert idle_route == "root"
     assert "general-purpose assistant" in idle_prompt
-    assert refusal not in idle_prompt
-    assert active_route == "tea"
-    assert "general-purpose assistant" not in active_prompt
-    assert refusal in active_prompt
+    assert active_turn.route == "tea"
+    assert active_turn.agent.name == "foreground_tea_fill_water"
+    assert "general-purpose assistant" not in active_turn.agent.system_prompt
+    assert "Give instructions or verify with current_view" in active_turn.agent.system_prompt
+    assert json.loads(active_turn.user_message) == {
+        "request": "What should I do?",
+        "state": {
+            "tea_name": "generic tea",
+            "target_temperature_c": 93,
+            "steep_duration_s": 180,
+            "water_filled": False,
+        },
+    }
+    assert not tuple(active_turn.tools.items())
 
 
 def test_foreground_route_appends_policy_to_prompt_override(tmp_path: Path) -> None:
@@ -1755,20 +2192,14 @@ def test_foreground_route_appends_policy_to_prompt_override(tmp_path: Path) -> N
     foreground = _foreground_for_route_test(config.foreground_prompt)
 
     idle_prompt, _, idle_route = foreground._prepare_route(
-        "idle", ctx=None, timestamp_us=None
+        "idle", query="Hello", ctx=None, timestamp_us=None
     )
-    active_prompt, _, active_route = foreground._prepare_route(
-        "active", ctx=None, timestamp_us=None
+    active_turn = foreground._prepare_turn(
+        "active", query="What should I do?", ctx=None, timestamp_us=None
     )
-    refusal = "I can only help with the active tea guide right now."
-
     assert idle_route == "root"
     assert idle_prompt.startswith("Explicit override\n\n")
     assert "general-purpose assistant" in idle_prompt
-    assert refusal not in idle_prompt
-    assert active_route == "tea"
-    assert active_prompt.startswith("Explicit override\n\n")
-    assert refusal in active_prompt
-    assert active_prompt.endswith(
-        'Active tea guide:\n{"step":"fill_water"}'
-    )
+    assert active_turn.route == "tea"
+    assert not active_turn.agent.system_prompt.startswith("Explicit override")
+    assert active_turn.agent.name == "foreground_tea_fill_water"

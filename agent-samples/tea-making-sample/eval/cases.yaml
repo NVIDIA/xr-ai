@@ -51,6 +51,172 @@
   step: fill_water
   query: What should I do at this step?
   expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:fill|water|vessel)\\b"
+  forbidden_response: I can only help with the active tea guide right now.
+
+- name: active-answers-tea-instructions-question
+  route: active
+  step: fill_water
+  query: What are the tea instructions?
+  expected_tool: null
+  expected_response_pattern: "(?is)(?=.*(?:93|ninety[- ]three))(?=.*(?:(?:3|three)\\s*minutes?|180\\s*seconds?))(?=.*\\b(?:fill|water)\\b)(?=.*\\bheat\\w*\\b)(?=.*\\bsteep\\w*\\b).+"
+  max_response_chars: 300
+  forbidden_response: I can only help with the active tea guide right now.
+
+- name: active-answers-next-step-question
+  route: active
+  step: fill_water
+  query: What is the next step?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\bheat\\w*\\b"
+  forbidden_response: I can only help with the active tea guide right now.
+
+- name: completed-identification-answers-transcribed-instructions-question
+  route: active
+  step: identify
+  observations:
+    - Twinings English Breakfast tea label, 93 Celsius, 3 minutes.
+  state_updates:
+    tea_name: English breakfast tea
+    target_temperature_c: 93
+    steep_duration_s: 180
+    guidance_source: package
+    tea_ready: true
+  query: What are the T instructions?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:fill|water|heat|steep)\\b"
+  max_response_chars: 180
+  forbidden_response: I can only help with the active tea guide right now.
+
+- name: completed-identification-answers-noisy-teammaking-question
+  route: active
+  step: identify
+  observations:
+    - Twinings English Breakfast tea label, 93 Celsius, 3 minutes.
+  state_updates:
+    tea_name: English breakfast tea
+    target_temperature_c: 93
+    steep_duration_s: 180
+    guidance_source: package
+    tea_ready: true
+  query: What are the teammaking instructions?
+  expected_tool: null
+  expected_response_pattern: "(?is)(?=.*\\benglish breakfast\\b)(?=.*(?:93|ninety[- ]three))(?=.*(?:(?:3|three)\\s*minutes?|180\\s*seconds?))(?=.*\\b(?:fill|water)\\b)(?=.*\\bheat\\w*\\b)(?=.*\\bsteep\\w*\\b).+"
+  max_response_chars: 300
+  forbidden_response: I can only help with the active tea guide right now.
+
+- name: completed-identification-answers-next-step-question
+  route: active
+  step: identify
+  observations:
+    - Twinings English Breakfast tea label, 93 Celsius, 3 minutes.
+  state_updates:
+    tea_name: English breakfast tea
+    target_temperature_c: 93
+    steep_duration_s: 180
+    guidance_source: package
+    tea_ready: true
+  query: What is the next step?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:fill|vessel|kettle|pot)\\b"
+  forbidden_response: I can only help with the active tea guide right now.
+
+- name: completed-identification-answers-what-to-do-now
+  route: active
+  step: identify
+  observations:
+    - Twinings English Breakfast tea label, 93 Celsius, 3 minutes.
+  state_updates:
+    tea_name: English breakfast tea
+    target_temperature_c: 93
+    steep_duration_s: 180
+    guidance_source: package
+    tea_ready: true
+  query: What do I do now?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:fill|vessel|kettle|pot)\\b"
+  max_response_chars: 80
+
+- name: completed-identification-answers-whats-next
+  route: active
+  step: identify
+  observations:
+    - Twinings English Breakfast tea label, 93 Celsius, 3 minutes.
+  state_updates:
+    tea_name: English breakfast tea
+    target_temperature_c: 93
+    steep_duration_s: 180
+    guidance_source: package
+    tea_ready: true
+  query: What's next?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:fill|vessel|kettle|pot)\\b"
+  max_response_chars: 80
+
+- name: completed-identification-answers-specific-tea-instructions-question
+  route: active
+  step: identify
+  observations:
+    - Twinings English Breakfast tea label, 93 Celsius, 3 minutes.
+  state_updates:
+    tea_name: English breakfast tea
+    target_temperature_c: 93
+    steep_duration_s: 180
+    guidance_source: package
+    tea_ready: true
+  query: What are the instructions for the tea?
+  expected_tool: null
+  expected_response_pattern: "(?is)(?=.*\\benglish breakfast\\b)(?=.*(?:93|ninety[- ]three))(?=.*(?:(?:3|three)\\s*minutes?|180\\s*seconds?))(?=.*\\b(?:fill|water)\\b)(?=.*\\bheat\\w*\\b)(?=.*\\bsteep\\w*\\b).+"
+  max_response_chars: 300
+  forbidden_response: I can only help with the active tea guide right now.
+
+- name: completed-identification-summarizes-guide
+  route: active
+  step: identify
+  observations:
+    - Twinings English Breakfast tea label, 93 Celsius, 3 minutes.
+  state_updates:
+    tea_name: English breakfast tea
+    target_temperature_c: 93
+    steep_duration_s: 180
+    guidance_source: package
+    tea_ready: true
+  query: Give me some details.
+  expected_tool: null
+  expected_response_pattern: "(?is)(?=.*\\benglish breakfast\\b)(?=.*(?:93|ninety[- ]three))(?=.*(?:(?:3|three)\\s*minutes?|180\\s*seconds?))(?=.*\\b(?:fill|water)\\b)(?=.*\\bheat\\w*\\b)(?=.*\\bsteep\\w*\\b).+"
+  max_response_chars: 300
+  forbidden_response: I can only help with the active tea guide right now.
+
+- name: completed-identification-answers-bare-instructions-question
+  route: active
+  step: identify
+  observations:
+    - Twinings English Breakfast tea label, 93 Celsius, 3 minutes.
+  state_updates:
+    tea_name: English breakfast tea
+    target_temperature_c: 93
+    steep_duration_s: 180
+    guidance_source: package
+    tea_ready: true
+  query: What are the instructions?
+  expected_tool: null
+  expected_response_pattern: "(?is)(?=.*\\benglish breakfast\\b)(?=.*(?:93|ninety[- ]three))(?=.*(?:(?:3|three)\\s*minutes?|180\\s*seconds?))(?=.*\\b(?:fill|water)\\b)(?=.*\\bheat\\w*\\b)(?=.*\\bsteep\\w*\\b).+"
+  max_response_chars: 300
+
+- name: active-routes-relevant-tea-making-question
+  route: active
+  step: fill_water
+  query: Why does water temperature matter when brewing tea?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:temperature|extract|flavor|flavour|brew)\\b"
+  forbidden_response: I can only help with the active tea guide right now.
+
+- name: active-routes-relevant-visual-question-outside-step
+  route: active
+  step: steep_timer
+  query: Check whether the water in my kettle is boiling.
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:can't|cannot|unable|unavailable|not available)\\b"
   forbidden_response: I can only help with the active tea guide right now.
 
 - name: active-routes-workflow-status
@@ -58,6 +224,7 @@
   step: heat_water
   query: What is the status of my tea guide?
   expected_tool: workflow__status
+  forbidden_response: I can only help with the active tea guide right now.
 
 - name: active-routes-step-visual-question
   route: active
@@ -77,41 +244,44 @@
   state_updates: {steeping_complete: true}
   query: What is the capital of France?
   expected_tool: null
-  expected_response: I can only help with the active tea guide right now.
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
+  forbidden_response: Paris
 
 - name: active-rejects-unrelated-explanation
   route: active
   step: heat_water
   query: Could you explain how eclipses happen?
   expected_tool: null
-  expected_response: I can only help with the active tea guide right now.
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
 
 - name: active-rejects-unrelated-control-word
   route: active
   step: fill_water
   query: My supervisor said I should advance my career. Any advice?
   expected_tool: null
-  expected_response: I can only help with the active tea guide right now.
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
 
 - name: active-rejects-unrelated-translation
   route: active
   step: start_steeping
   query: Please translate good morning into Japanese.
   expected_tool: null
-  expected_response: I can only help with the active tea guide right now.
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
+  forbidden_response: Ohayou
 
 - name: active-rejects-unrelated-visual-question
   route: active
   step: fill_water
   query: What color is the person's shirt?
   expected_tool: null
-  expected_response: I can only help with the active tea guide right now.
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help|not sure|isn['’]t)\\b"
 
 - name: active-advances-on-direct-command
   route: active
   step: fill_water
   query: Move on to the following tea step.
   expected_tool: workflow__advance
+  expected_skip: false
 
 - name: active-resets-on-direct-command
   route: active
@@ -130,3 +300,247 @@
   step: steep_timer
   query: How many seconds are left before steeping is done?
   expected_tool: clock__timer
+
+- name: idle-answers-general-science
+  query: Why does ice float on water?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:density|dense|expand)\\b"
+
+- name: idle-inspects-user-appearance
+  query: Do I appear to be wearing glasses?
+  expected_tool: current_view
+
+- name: idle-retrieves-another-tea-fact
+  query: Is green tea usually caffeinated?
+  expected_tool: rag_lookup
+
+- name: idle-answers-simple-calculation
+  query: What is twelve times seven?
+  expected_tool: null
+  expected_response_pattern: "(?i)(?:\\b84\\b|\\beighty-four\\b)"
+
+- name: active-identify-explains-current-action
+  route: active
+  step: identify
+  query: Where should I begin?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:package|label|tea|view)\\b"
+
+- name: active-recalls-identified-tea
+  route: active
+  step: identify
+  observations:
+    - Twinings English Breakfast tea label, 93 Celsius, 3 minutes.
+  state_updates:
+    tea_name: English breakfast tea
+    target_temperature_c: 93
+    steep_duration_s: 180
+    guidance_source: package
+    tea_ready: true
+  query: Which tea did you identify?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\benglish breakfast\\b"
+
+- name: active-recalls-brewing-values
+  route: active
+  step: identify
+  observations:
+    - Twinings English Breakfast tea label, 93 Celsius, 3 minutes.
+  state_updates:
+    tea_name: English breakfast tea
+    target_temperature_c: 93
+    steep_duration_s: 180
+    guidance_source: package
+    tea_ready: true
+  query: Remind me of the temperature and steeping time.
+  expected_tool: null
+  expected_response_pattern: "(?i)(?:93|ninety-three).*(?:3|three)"
+
+- name: active-explains-previous-step
+  route: active
+  step: fill_water
+  query: What came before this step?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:identify|tea|package)\\b"
+
+- name: active-explains-current-action-naturally
+  route: active
+  step: fill_water
+  query: Remind me what I am doing right now.
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:fill|vessel|kettle|pot)\\b"
+
+- name: active-explains-following-step
+  route: active
+  step: fill_water
+  query: What comes after this step?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\bheat\\w*\\b"
+
+- name: active-summarizes-procedure-from-middle
+  route: active
+  step: fill_water
+  query: Give me a quick overview of the tea-making process.
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:fill|water|heat|steep)\\b"
+  max_response_chars: 280
+
+- name: active-understands-noisy-next-step-question
+  route: active
+  step: fill_water
+  query: Whats the nex step
+  expected_tool: null
+  expected_response_pattern: "(?i)\\bheat\\w*\\b"
+
+- name: active-explains-temperature-choice
+  route: active
+  step: heat_water
+  query: Why are we heating the water to this temperature?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:temperature|extract|flavor|flavour|brew|tea)\\b"
+
+- name: active-explains-steeping-readiness
+  route: active
+  step: start_steeping
+  query: How will you know that steeping has started?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:water|tea|immerse|contact|view|visible)\\b"
+
+- name: active-recalls-prior-step-at-timer
+  route: active
+  step: steep_timer
+  query: What did we do immediately before this?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:tea|steep|water|immerse)\\b"
+
+- name: active-does-not-advance-on-deliberative-question
+  route: active
+  step: heat_water
+  query: Should I continue heating the water?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:temperature|heat|target|water)\\b"
+
+- name: active-does-not-advance-on-hypothetical
+  route: active
+  step: fill_water
+  query: If I say next, will you advance the guide?
+  expected_tool: null
+
+- name: active-does-not-reset-on-negated-command
+  route: active
+  step: heat_water
+  query: Do not reset the tea guide; just tell me where we are.
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:heat|water|step|guide)\\b"
+
+- name: active-does-not-skip-unrelated-object
+  route: active
+  step: fill_water
+  query: I usually skip sugar in my tea. Is that okay?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:sugar|sweet|tea)\\b"
+
+- name: active-stops-background-monitor-not-guide
+  route: active
+  step: fill_water
+  query: Stop monitoring the kettle in the background.
+  expected_tool: change_watch__stop
+
+- name: active-accepts-polite-advance-command
+  route: active
+  step: fill_water
+  query: Could you move on to the next tea step?
+  expected_tool: workflow__advance
+  expected_skip: false
+
+- name: active-accepts-skip-command
+  route: active
+  step: heat_water
+  query: Skip this tea step.
+  expected_tool: workflow__advance
+  expected_skip: true
+
+- name: active-accepts-reset-command
+  route: active
+  step: start_steeping
+  query: Reset the tea guide.
+  expected_tool: workflow__reset
+
+- name: active-accepts-short-restart-command
+  route: active
+  step: steep_timer
+  query: Start over.
+  expected_tool: workflow__restart
+
+- name: active-routes-live-temperature-check
+  route: active
+  step: heat_water
+  query: Is the visible water temperature high enough yet?
+  expected_tool: current_view
+
+- name: active-declines-unavailable-live-view
+  route: active
+  step: steep_timer
+  query: Look at the kettle and tell me whether it is still boiling.
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|unable|unavailable|not available)\\b"
+
+- name: active-routes-natural-timer-question
+  route: active
+  step: steep_timer
+  query: Is my tea ready yet?
+  expected_tool: clock__timer
+
+- name: active-queries-background-history
+  route: active
+  step: fill_water
+  query: What have the background monitors noticed recently?
+  expected_tool: application_context__query
+
+- name: active-rejects-weather-request
+  route: active
+  step: heat_water
+  query: Will it rain tomorrow?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
+
+- name: active-rejects-arithmetic-request
+  route: active
+  step: fill_water
+  query: What is seventeen multiplied by nine?
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
+  forbidden_response: "153"
+
+- name: active-rejects-unrelated-scene-description
+  route: active
+  step: fill_water
+  query: Describe the artwork on the wall behind me.
+  expected_tool: null
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
+
+- name: active-does-not-advance-on-bare-next-question
+  route: active
+  step: fill_water
+  query: Next?
+  expected_tool: null
+
+- name: active-accepts-polite-continue-command
+  route: active
+  step: fill_water
+  query: Could you please continue?
+  expected_tool: workflow__advance
+  expected_skip: false
+
+- name: active-accepts-proceed-command
+  route: active
+  step: fill_water
+  query: Proceed to the next tea step.
+  expected_tool: workflow__advance
+  expected_skip: false
+
+- name: active-accepts-restart-my-guide-command
+  route: active
+  step: steep_timer
+  query: Please restart my tea guide.
+  expected_tool: workflow__restart

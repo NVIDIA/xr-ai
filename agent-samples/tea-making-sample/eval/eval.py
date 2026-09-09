@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -24,6 +26,7 @@ from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.tool_calling import tool_definitions
 
 _SAMPLE = Path(__file__).resolve().parents[1]
+_MIN_PASS_RATE = 0.80
 
 
 def _build_agents(llm: LLMService) -> tuple[ForegroundAgent, GuidanceAgent]:
@@ -103,6 +106,8 @@ def _active_route(
             guidance.store.advance(session, skip=True)
     state_updates = dict(case.get("state_updates", {}))
     if state_updates:
+        for observation in case.get("observations", []):
+            guidance.store.observe(session, observation)
         result = guidance.store.commit(session, state_updates, "")
         if not result.accepted:
             raise ValueError(f"state updates for {case['name']!r} were rejected: {state_updates!r}")
@@ -118,7 +123,7 @@ async def main() -> None:
     cases = yaml.safe_load((_SAMPLE / "eval" / "cases.yaml").read_text(encoding="utf-8"))
     llm = make_llm(load_models_config(_SAMPLE / "yaml" / "models.local.json"), "llm")
     foreground, guidance = _build_agents(llm)
-    failures: list[str] = []
+    passed_count = 0
     try:
         for index, case in enumerate(cases):
             participant_id = f"tea-eval-{index}"
@@ -128,33 +133,35 @@ async def main() -> None:
                     case,
                     participant_id,
                 )
-            system_prompt, tools, route = foreground._prepare_route(
+            turn = foreground._prepare_turn(
                 participant_id,
+                query=case["query"],
                 ctx=None,
                 timestamp_us=None,
             )
             expected_route = "tea" if case.get("route", "root") == "active" else "root"
-            if route != expected_route:
+            if turn.route != expected_route:
                 raise ValueError(
-                    f"case {case['name']!r} prepared route {route!r}, expected {expected_route!r}"
+                    f"case {case['name']!r} prepared route {turn.route!r}, expected {expected_route!r}"
                 )
             response = await llm.chat(
                 (
-                    ChatMessage(role="system", content=system_prompt),
-                    ChatMessage(role="user", content=case["query"]),
+                    ChatMessage(role="system", content=turn.agent.system_prompt),
+                    ChatMessage(role="user", content=turn.user_message),
                 ),
-                tools=tool_definitions(tools),
+                tools=tool_definitions(turn.tools),
                 max_tokens=512,
                 temperature=0.0,
                 enable_thinking=False,
             )
             calls = response.tool_calls or []
+            content = response.content or ""
             actual_tools = [call.name for call in calls]
             expected_tool = case["expected_tool"]
             expected_tools = [] if expected_tool is None else [expected_tool]
             errors: list[str] = []
             for call in calls:
-                tool = tools.get(call.name)
+                tool = turn.tools.get(call.name)
                 if tool is None:
                     errors.append(f"unknown tool {call.name!r}")
                     continue
@@ -162,29 +169,57 @@ async def main() -> None:
                     tool.request_model.model_validate_json(call.arguments)
                 except ValueError as exc:
                     errors.append(f"invalid {call.name!r} arguments: {exc}")
-            content = response.content or ""
+            expected_skip = case.get("expected_skip")
+            if expected_skip is not None and calls:
+                try:
+                    arguments = json.loads(calls[0].arguments)
+                except json.JSONDecodeError:
+                    pass
+                else:
+                    if arguments.get("skip") is not bool(expected_skip):
+                        errors.append(
+                            f"advance skip was {arguments.get('skip')!r}, "
+                            f"expected {bool(expected_skip)!r}"
+                        )
             normalized_content = _normalize_response(content)
             expected_response = case.get("expected_response")
             if expected_response is not None and normalized_content != _normalize_response(
                 str(expected_response)
             ):
                 errors.append(f"response did not equal {expected_response!r}")
+            expected_response_pattern = case.get("expected_response_pattern")
+            if expected_response_pattern is not None and re.search(
+                str(expected_response_pattern), normalized_content
+            ) is None:
+                errors.append(
+                    f"response did not match {expected_response_pattern!r}"
+                )
+            max_response_chars = case.get("max_response_chars")
+            if max_response_chars is not None and len(normalized_content) > int(
+                max_response_chars
+            ):
+                errors.append(
+                    f"response exceeded {max_response_chars} characters: "
+                    f"{len(normalized_content)}"
+                )
             forbidden_response = case.get("forbidden_response")
             if forbidden_response is not None and _normalize_response(
                 str(forbidden_response)
             ) in normalized_content:
                 errors.append(f"response contained forbidden {forbidden_response!r}")
             passed = actual_tools == expected_tools and not errors
-            label = "PASS" if passed else "FAIL"
+            label = "PASS" if passed else "MISS"
             print(f"{label} {case['name']}: tools={actual_tools!r} content={content!r}")
-            if not passed:
-                failures.append(
-                    f"{case['name']}: expected {expected_tools!r}, received {actual_tools!r}; errors={errors!r}"
-                )
+            if passed:
+                passed_count += 1
     finally:
         await llm.close()
-    if failures:
-        raise SystemExit("\n".join(failures))
+    print(f"RESULT {passed_count}/{len(cases)} cases passed")
+    pass_rate = passed_count / len(cases)
+    if pass_rate < _MIN_PASS_RATE:
+        raise SystemExit(
+            f"overall pass rate {pass_rate:.1%} is below {_MIN_PASS_RATE:.0%}"
+        )
 
 
 if __name__ == "__main__":

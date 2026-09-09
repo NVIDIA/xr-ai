@@ -74,6 +74,8 @@ steps:
     voice:
       prompt: >-
         Tea identity comes only from state tea_name or current_view, never RAG.
+        tea_ready means the tea instructions were identified, not that the
+        drink has been prepared.
         If the exact name is unknown, inspect the current frame. Retrieve only
         missing temperature or duration after the exact name is known. Never
         replace package values. Answer only what was asked.
@@ -93,27 +95,23 @@ steps:
 
   - id: fill_water
     title: Fill the heating vessel
-    reads: []
+    reads: [tea_name, target_temperature_c, steep_duration_s]
     writes: [water_filled]
     trigger:
       function: current_view
       interval_s: 2
       arguments:
         question: >-
-          Describe visible heating vessel interior and contents. Report
-          concrete water cues: surface, level, reflections, or active
-          pouring into it. Water outside or beside it does not count. Say when
-          interior or water is not visible. Never infer.
+          Decide whether water itself is visibly inside the kettle or pot.
+          Reply exactly "water present" when it is visible, or "water absent"
+          otherwise. Never infer from the vessel alone.
       result_field: answer
     evidence:
-      pattern: "(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|empty|obscured|cannot|can't)\\b)(?!.*\\b(no|not)\\s+(visible\\s+)?water\\b)(?=.*\\b(kettle|pot|vessel|container)\\b)(?=.*\\bwater\\b)(?=.*\\b(surface|level|reflection|pouring|inside|contains)\\b).+$"
-      consecutive: 3
+      pattern: "^water visible$"
+      consecutive: 2
     agent:
       prompt: >-
-        Set water_filled true only when this caption clearly shows the vessel
-        interior plus a water surface, level, reflection, or pouring into it.
-        Water nearby, a closed vessel, a user report, or unclear contents do
-        not count. Otherwise commit empty updates/message.
+        Set water_filled after two accepted water-present observations.
       tools: []
     voice:
       prompt: >-
@@ -132,27 +130,24 @@ steps:
 
   - id: heat_water
     title: Heat the water
-    reads: [target_temperature_c]
+    reads: [tea_name, target_temperature_c, steep_duration_s]
     writes: [heating_started]
     trigger:
       function: current_view
       interval_s: 2
       arguments:
         question: >-
-          Describe visible heater-on indicators and transcribe the exact current
-          numeric kettle or thermometer reading. Write the unit as Celsius or
-          Fahrenheit. Mention hazards. If missing, say what is not visible. Do
-          not convert or judge readiness.
+          Read only the kettle or thermometer temperature. Reply "<number> C"
+          or "<number> F" when the unit is visible, "unit ambiguous" when a
+          number lacks a clear unit, or "no reading".
       result_field: answer
     evidence:
-      pattern: "(?is)^(?:(?=.*\\b\\d{2,3}\\s*(°|degrees|c|f)\\b).+|(?!(?:.*\\b(no|not|without)\\b.{0,24}\\b(heater|heating|power|indicator|display|light)\\b|.*\\b(heater|heating|power|indicator|display|light)\\b.{0,24}\\b(off|inactive|not)\\b))(?=.*\\b(heater|heating|power|indicator|display|light)\\b.{0,24}\\b(on|active|running|lit|illuminated)\\b).+)$"
+      pattern: "^temperature above threshold$"
       consecutive: 2
     agent:
       prompt: >-
-        Set heating_started true only when input is false and the caption shows
-        an active heater indicator or a numeric temperature followed by Celsius
-        or Fahrenheit. Otherwise commit empty updates/message. Do not compare
-        temperatures or track whether the water is ready.
+        Set heating_started after two explicit-unit readings above 50 Celsius
+        or 122 Fahrenheit. Ambiguous or missing units do not count.
       tools: []
     voice:
       prompt: >-
@@ -172,7 +167,7 @@ steps:
 
   - id: start_steeping
     title: Start steeping
-    reads: [steep_duration_s]
+    reads: [tea_name, target_temperature_c, steep_duration_s]
     writes: [steeping_started_at_us, steeping_started]
     trigger:
       function: current_view
@@ -214,7 +209,8 @@ steps:
 
   - id: steep_timer
     title: Wait for steeping
-    reads: [steeping_started_at_us, steep_duration_s]
+    reads:
+      [tea_name, target_temperature_c, steeping_started_at_us, steep_duration_s]
     writes: [steeping_complete]
     trigger:
       function: clock__timer
