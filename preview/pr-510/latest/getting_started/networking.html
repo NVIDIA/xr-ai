@@ -568,31 +568,50 @@ LiveKit signaling to the internal plaintext port. Browsers and mobile clients
 use only this path. It is also the supported native C++ path when the executable
 runs with <code class="docutils literal notranslate"><span class="pre">--secure</span> <span class="pre">--port</span> <span class="pre">8080</span></code>; the native executable’s port 7880 default is
 an insecure debugging exception.</p>
-<p>On first run a self-signed certificate is generated at
-<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code>. To use your own, set <code class="docutils literal notranslate"><span class="pre">cert_file</span></code>
-and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>.</p>
-<p>The generated certificate covers <code class="docutils literal notranslate"><span class="pre">localhost</span></code>, the hostname, and automatically
+<p>On first run DeviceIOHub generates a stable development root CA and a server
+leaf signed by that root under <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">root-ca.crt</span></code> and <code class="docutils literal notranslate"><span class="pre">root-ca.key</span></code> are the stable trust anchor. Only the public
+certificate is available from <code class="docutils literal notranslate"><span class="pre">/cert</span></code>; the private key never leaves the hub.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">web-server.crt</span></code> and <code class="docutils literal notranslate"><span class="pre">web-server.key</span></code> are the CA-signed server leaf and its
+private key. The web server presents this leaf for HTTPS and WSS.</p></li>
+</ul>
+<p>To use your own certificate, set <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in
+<code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>. Externally managed TLS continues to work unchanged;
+<code class="docutils literal notranslate"><span class="pre">/cert</span></code> returns 404 because DeviceIOHub does not own that certificate’s root.</p>
+<p>The generated leaf covers <code class="docutils literal notranslate"><span class="pre">localhost</span></code>, the hostname, and automatically
 discovered local IPv4 addresses. When clients dial an address that discovery
 misses, or one that is not local (the public IP of a NAT’d cloud VM such as Brev,
 a forwarding proxy’s address, or a DNS name), list it in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> and
-the certificate is regenerated to include it on the next hub start:</p>
+the leaf is regenerated to include it on the next hub start:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">web_server_extra_sans</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">203.0.113.7</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub.example.com</span>
 </pre></div>
 </div>
+<p>Changing these addresses never rotates <code class="docutils literal notranslate"><span class="pre">root-ca.crt</span></code>, so clients do not need to
+reinstall the root after a Brev public-IP change.</p>
+<p>DeviceIOHub checks the generated certificates daily. It renews the server leaf
+30 days before expiration and reloads it for new HTTPS and WSS connections
+without restarting the hub; the root CA remains unchanged. Existing connections
+can finish using the certificate negotiated when they connected.</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">root-ca.crt</span></code> or <code class="docutils literal notranslate"><span class="pre">root-ca.key</span></code> is missing, unreadable, mismatched, or within
+30 days of expiration, DeviceIOHub replaces the root and server leaf and logs a
+warning. Previously enrolled clients reject the new chain. Reinstall the new
+<code class="docutils literal notranslate"><span class="pre">root-ca.crt</span></code> on every client using the platform-specific steps below; <code class="docutils literal notranslate"><span class="pre">/cert</span></code>
+serves the current root after the replacement.</p>
 <p>To <strong>disable</strong> TLS for <code class="docutils literal notranslate"><span class="pre">localhost</span></code>-only dev where the certificate warning is
 noise, set <code class="docutils literal notranslate"><span class="pre">web_server_tls:</span> <span class="pre">false</span></code>. With TLS off, the same-origin proxy
 serves plain <code class="docutils literal notranslate"><span class="pre">ws://</span></code> instead of <code class="docutils literal notranslate"><span class="pre">wss://</span></code>, and <code class="docutils literal notranslate"><span class="pre">localhost</span></code> is the only
 context where camera and mic permissions are granted without HTTPS.</p>
-<p>To <strong>trust the self-signed certificate</strong> so you stop seeing the warning:</p>
+<p>To <strong>trust the development root CA</strong> so you stop seeing the warning:</p>
 <ul class="simple">
 <li><p><strong>Chrome or Edge</strong>: navigate to <code class="docutils literal notranslate"><span class="pre">https://&lt;host&gt;:8080</span></code>, click <strong>Advanced →
 Proceed to … (unsafe)</strong>.</p></li>
 <li><p><strong>Firefox</strong>: click <strong>Advanced → Accept the Risk and Continue</strong>.</p></li>
 <li><p><strong>Android</strong>: tap <strong>Install hub certificate</strong> in the app’s Connection
 section (visible before the first connection). The app fetches the
-certificate from <code class="docutils literal notranslate"><span class="pre">https://&lt;host&gt;:&lt;port&gt;/cert</span></code> and opens the system install
+public root CA from <code class="docutils literal notranslate"><span class="pre">https://&lt;host&gt;:&lt;port&gt;/cert</span></code> and opens the system install
 dialog. After confirming, connect normally — the LiveKit SDK validates
 against the system + user CA store automatically.</p></li>
 <li><p><strong>iOS, iPadOS, and visionOS</strong>: tap <strong>Install hub certificate</strong> in the
@@ -613,21 +632,20 @@ Until the certificate is trusted at the OS level, the wss handshake fails.</p>
 <section id="linux-native-certificate-trust">
 <span id="id1"></span><h3>Linux native certificate trust<a class="headerlink" href="#linux-native-certificate-trust" title="Link to this heading">#</a></h3>
 <p>The native C++ client validates the hub through the Linux system CA bundle.
-Before copying the certificate, ensure the address passed to <code class="docutils literal notranslate"><span class="pre">--host</span></code> appears
-in its subject alternative names. If the native client uses another IP address
+Before connecting, ensure the address passed to <code class="docutils literal notranslate"><span class="pre">--host</span></code> appears in the server
+leaf’s subject alternative names. If the native client uses another IP address
 or DNS name, configure <code class="docutils literal notranslate"><span class="pre">web_server_extra_sans</span></code> and restart the hub to regenerate
-the certificate and key.</p>
-<p>Copy the resulting <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code> securely from the hub
+only the leaf and leaf key.</p>
+<p>Copy the resulting <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/root-ca.crt</span></code> from the hub
 host to the native client host. On Ubuntu or Debian, install that copy and
 refresh the bundle:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>install<span class="w"> </span>-m<span class="w"> </span><span class="m">0644</span><span class="w"> </span>/path/to/web-server.crt<span class="w"> </span><span class="se">\</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>install<span class="w"> </span>-m<span class="w"> </span><span class="m">0644</span><span class="w"> </span>/path/to/root-ca.crt<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>/usr/local/share/ca-certificates/xr-ai-hub.crt
 sudo<span class="w"> </span>update-ca-certificates
 </pre></div>
 </div>
-<p>Restart the native client after updating the bundle. If the SAN configuration
-changes later, regenerate the certificate, copy it again, and repeat the trust
-installation.</p>
+<p>Restart the native client after updating the bundle. Later SAN changes rotate
+only the server leaf and do not require another trust installation.</p>
 <p>For production deployments on any platform, replace the auto-generated
 certificate with one from a public CA by setting <code class="docutils literal notranslate"><span class="pre">cert_file</span></code> and <code class="docutils literal notranslate"><span class="pre">key_file</span></code> in
 <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>.</p>

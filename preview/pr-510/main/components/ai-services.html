@@ -485,11 +485,11 @@ recorded video, and document retrieval.</p>
 <td><p>magpie_tts_multilingual_357m</p></td>
 <td><p>NeMo TTS in-process</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/piper-tts/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">piper_tts_server</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/pocket-tts/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pocket_tts_server</span></code></p></td>
 <td><p>8105</p></td>
-<td><p>rhasspy/piper-voices (ONNX)</p></td>
-<td><p>piper-tts in-process</p></td>
+<td><p>kyutai/pocket-tts</p></td>
+<td><p>Pocket TTS in-process</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">llama_nemotron_llm_server</span></code></p></td>
@@ -566,8 +566,12 @@ two separate trees under the service’s resolved <code class="docutils literal 
 </table>
 </div>
 <p>(The NeMo servers additionally cache non-HF artifacts under <code class="docutils literal notranslate"><span class="pre">&lt;model_cache&gt;/nemo/</span></code>.)
-Piper TTS passes <code class="docutils literal notranslate"><span class="pre">&lt;model_cache&gt;/piper/</span></code> directly as its Hub cache and defaults
-<code class="docutils literal notranslate"><span class="pre">HF_XET_CACHE</span></code> to <code class="docutils literal notranslate"><span class="pre">&lt;model_cache&gt;/piper/xet/</span></code> for its Xet cache.</p>
+For host processes (pip-mode vLLM, STT, Magpie TTS) these are defaults: an
+<code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> or <code class="docutils literal notranslate"><span class="pre">NEMO_CACHE_DIR</span></code> already set in the environment takes priority.
+Docker-mode vLLM always uses the YAML <code class="docutils literal notranslate"><span class="pre">model_cache</span></code>, which it mounts into the
+container.
+Pocket TTS defaults <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> to <code class="docutils literal notranslate"><span class="pre">&lt;model_cache&gt;/pocket/huggingface/</span></code> and
+<code class="docutils literal notranslate"><span class="pre">HF_XET_CACHE</span></code> to <code class="docutils literal notranslate"><span class="pre">&lt;model_cache&gt;/pocket/xet/</span></code>.</p>
 <p><code class="docutils literal notranslate"><span class="pre">model_cache</span></code> itself is set per YAML and resolved relative to the YAML file.
 Both the model-servers profiles and the standalone service YAMLs resolve it to
 <code class="docutils literal notranslate"><span class="pre">models/</span></code> at the repository root. For a manual <code class="docutils literal notranslate"><span class="pre">hf</span> <span class="pre">download</span></code>, set <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> to
@@ -730,7 +734,7 @@ image and ports) or as a local server:</p>
 </div>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code>: Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner as NIM
-containers, with STT, Piper TTS, and embedding served locally. Samples reuse
+containers, with STT, Pocket TTS, and embedding served locally. Samples reuse
 these endpoints; they never launch or stop the containers.</p></li>
 </ul>
 <p>To adapt a sample, copy the relevant <code class="docutils literal notranslate"><span class="pre">llm</span></code> and <code class="docutils literal notranslate"><span class="pre">vlm</span></code> entries from
@@ -819,13 +823,13 @@ Either way vLLM keeps running after the orchestrator exits.</p>
 its persistent process with <code class="docutils literal notranslate"><span class="pre">start_new_session=True</span></code>, reuses a healthy server
 that survived a previous stack run, and is stopped by the same
 <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> cleanup.</p>
-<p>Piper uses the launcher’s persistent process group directly. Its bootstrap
+<p>Pocket TTS uses the launcher’s persistent process group directly. Its bootstrap
 reuses an existing healthy listener. In a monitored stack, the reuse invocation
 remains alive as a health proxy so the launcher can detect service loss. A
 persistent-only launcher that uses <code class="docutils literal notranslate"><span class="pre">exit_after_ready=True</span></code> explicitly permits
 that proxy to exit after readiness, so repeated <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> starts do not
 leave idle wrappers behind. When no server exists, the bootstrap replaces
-itself with the foreground Uvicorn and ONNX process.</p>
+itself with the foreground Uvicorn and Pocket TTS process.</p>
 <p>Docker containers carry a fingerprint of their image, GPU assignment, model
 cache, environment, bootstrap packages, complete vLLM command, and a versioned
 launcher-controlled Docker contract. This prevents a failed container created
@@ -837,17 +841,18 @@ with stale memory limits, entrypoint, setup commands, or model arguments.</p>
 </div>
 <p>Cleanup locates labelled Docker containers before inspecting ports, then
 stops them with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span></code> (escalating to <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">kill</span></code> after 20 s).
-Locally persisted processes (pip-mode vLLM and Piper) must carry the
+Locally persisted processes (pip-mode vLLM and Pocket TTS) must carry the
 <code class="docutils literal notranslate"><span class="pre">XR_AI_VLLM_MANAGED</span></code> and <code class="docutils literal notranslate"><span class="pre">XR_AI_VLLM_PORT</span></code> ownership markers before cleanup
-sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code>. Piper records the dedicated process group created
-by the launcher without leaving that group. Cleanup signals the complete group
-only after verifying both the listener marker and, when separate, the launcher’s
-group-leader marker, so inference descendants cannot survive as orphans and
-launcher abort-time escalation can still reach Piper. It falls back to PID-only
-cleanup if group ownership cannot be verified; other local servers always
-retain PID-only cleanup. Unknown listeners and failed inspection abort cleanup
-without sending a signal, and <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> exits nonzero if any target
-could not be stopped. Absent servers are silently skipped.</p>
+sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code>. Pocket TTS records the dedicated process group
+created by the launcher without leaving that group. Cleanup signals the
+complete group only after verifying both the listener marker and, when
+separate, the launcher’s group-leader marker, so inference descendants cannot
+survive as orphans and launcher abort-time escalation can still reach Pocket
+TTS. It falls back to PID-only cleanup if group ownership cannot be verified;
+other local servers always retain PID-only cleanup. Unknown listeners and
+failed inspection abort cleanup without sending a signal, and
+<code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> exits nonzero if any target could not be stopped. Absent
+servers are silently skipped.</p>
 <p>The target ports and container names match the defaults in the per-profile YAML files.</p>
 </section>
 <section id="choosing-the-vllm-runtime-pip-vs-docker">
@@ -1054,8 +1059,12 @@ English-only; the <code class="docutils literal notranslate"><span class="pre">l
 ignored. Set <code class="docutils literal notranslate"><span class="pre">startup_timeout_s</span></code> to a positive finite number to override the
 600-second cold-start budget.</p></li>
 <li><p><strong>magpie-tts</strong> loads magpie_tts_multilingual_357m via NeMo TTS in-process.</p></li>
-<li><p><strong>piper-tts</strong> serves any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
-All inference runs in a thread pool so the asyncio loop is never blocked.</p></li>
+<li><p><strong>pocket-tts</strong> loads the compact <code class="docutils literal notranslate"><span class="pre">kyutai/pocket-tts</span></code> model on CPU and serves
+the configured voice through the repository’s OpenAI-compatible TTS API.
+Model loading and synthesis run outside the asyncio event loop. The default
+<code class="docutils literal notranslate"><span class="pre">bill_boerst</span></code> voice derives from a CC0 Voice-Zero recording and is the only
+voice accepted by this release. The service logs whether it loaded the gated
+voice-cloning weights or the ungated fallback.</p></li>
 <li><p><strong>embedding-server</strong> serves <code class="docutils literal notranslate"><span class="pre">nvidia/llama-nemotron-embed-1b-v2</span></code> through
 <code class="docutils literal notranslate"><span class="pre">/v1/embeddings</span></code>. It emits 2048-dimensional Matryoshka embeddings and can
 truncate them to 384, 512, 768, 1024, or 2048 dimensions. The checked-in
