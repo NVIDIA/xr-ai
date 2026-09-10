@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Pocket TTS server reference configuration.
+# Copy to your agent sample root as pocket_tts_server.yaml and edit as needed.
+#
+# This release accepts only bill_boerst. Its source Voice-Zero recording is CC0.
+
+voice:       bill_boerst
+language:    english
+port:        8105
+startup_timeout_s: 600
+model_cache: ../../models

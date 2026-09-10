@@ -16,7 +16,7 @@
       "deployment": {"ownership": "reused", "service": "stt"}
     },
     "tts": {
-      "adapter": {"preset": "piper_tts"},
+      "adapter": {"preset": "pocket_tts"},
       "endpoint": {"base_url": "http://localhost:8105", "readiness": "health"},
       "deployment": {"ownership": "reused", "service": "tts"}
     }

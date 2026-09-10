@@ -3,7 +3,7 @@
 
 """Shared subprocess-test helpers — port selection + HTTP health probe.
 
-The server-under-subprocess tests (GPU LLM servers, Piper TTS, the LiveKit
+The server-under-subprocess tests (GPU LLM servers, Pocket TTS, the LiveKit
 integration suite) each picked a free port and polled an HTTP ``/health``
 endpoint with near-identical code. Those primitives live here so the three
 suites share one implementation.

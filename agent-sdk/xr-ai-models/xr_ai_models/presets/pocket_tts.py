@@ -1,9 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Preset for ``services/piper-tts`` (Piper ONNX voices)."""
+"""Preset for the local Pocket TTS service."""
 
-PIPER_TTS = {
+POCKET_TTS = {
     "category": "tts",
     "kind":     "openai_compat",
     "timeout":  30.0,

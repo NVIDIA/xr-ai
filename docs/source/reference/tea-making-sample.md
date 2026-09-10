@@ -38,7 +38,7 @@ ownership, and event composition are reusable.
 ## Quick start
 
 Run commands from `agent-samples/tea-making-sample/`. The tea sample reuses all
-model services, so start the shared stack, including Piper TTS, first:
+model services, so start the shared stack, including Pocket TTS, first:
 
 ```bash
 uv run --project ../model-servers model_servers

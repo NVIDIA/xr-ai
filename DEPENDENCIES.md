@@ -396,13 +396,14 @@ drift:
 - Commands:
   - `openxr_service` → `openxr_service.__main__:run`
 
-#### `piper-tts-server` — [`services/piper-tts/`](services/piper-tts/)
+#### `pocket-tts-server` — [`services/pocket-tts/`](services/pocket-tts/)
 
 - Python: `>=3.11,<3.13`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `piper-tts>=1.4.0`
+  - `pocket-tts==3.0.2`
+  - `torch>=2.5.0` (index: `pytorch-cpu`)
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
   - `fastapi>=0.111`
@@ -411,7 +412,7 @@ drift:
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
 - Optional dependency groups: none
 - Commands:
-  - `piper_tts_server` → `piper_tts_server.__main__:run`
+  - `pocket_tts_server` → `pocket_tts_server.__main__:run`
 
 #### `xr-rag-service` — [`services/rag-service/`](services/rag-service/)
 
@@ -734,7 +735,7 @@ drift:
   - `nemotron3-nano-llm-server` → [`nemotron3-nano-llm-server`](services/nemotron3-nano-llm/) (local, editable)
   - `nim-server` → [`nim-server`](services/nim-server/) (local, editable)
   - `xr-openxr-service` → [`xr-openxr-service`](services/openxr-service/) (local, editable)
-  - `piper-tts-server` → [`piper-tts-server`](services/piper-tts/) (local, editable)
+  - `pocket-tts-server` → [`pocket-tts-server`](services/pocket-tts/) (local, editable)
   - `xr-rag-service` → [`xr-rag-service`](services/rag-service/) (local, editable)
   - `stt-server` → [`stt-server`](services/stt-server/) (local, editable)
   - `xr-video-memory-service` → [`xr-video-memory-service`](services/video-memory-service/) (local, editable)
@@ -760,7 +761,7 @@ Python dependency metadata, so they remain curated here.
 | `services/vlm-server/` | `vlm-server` | `vlm_server` | 8100 | Cosmos3 Nano Reasoner | vLLM (pip or docker) |
 | `services/stt-server/` | `stt-server` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `services/magpie-tts/` | `magpie-tts-server` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
-| `services/piper-tts/` | `piper-tts-server` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
+| `services/pocket-tts/` | `pocket-tts-server` | `pocket_tts_server` | 8105 | kyutai/pocket-tts | Pocket TTS in-process |
 | `services/llama-nemotron-llm/` | `llama-nemotron-llm-server` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `services/nemotron3-nano-llm/` | `nemotron3-nano-llm-server` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B (GPU-selected quantization) | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron-omni-llm-server` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning | vLLM (pip or docker), multimodal |

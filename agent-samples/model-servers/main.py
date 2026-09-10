@@ -14,7 +14,7 @@ containers. Shipped profiles (yaml/models.<name>.json):
 
   default
     stt        — nvidia/parakeet-tdt-0.6b-v3        port 8103  (NeMo ASR)
-    tts        — en_US-lessac-medium                 port 8105  (Piper; CPU)
+    tts        — Pocket TTS, bill_boerst voice       port 8105  (CPU)
     omni       — Nemotron-3-Nano-Omni-30B-A3B       port 8108  (vLLM; llm + agent_llm)
     vlm        — nvidia/Cosmos3-Nano Reasoner       port 8100  (vLLM)
     embedding  — nvidia/llama-nemotron-embed-1b-v2  port 8109  (vLLM)
@@ -83,7 +83,7 @@ _MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
     "llm-nim":   ("../../services/nim-server", "nim_server", "nim_llm_server"),
     "vlm-nim":   ("../../services/nim-server", "nim_server", "nim_vlm_server"),
     "stt":       ("../../services/stt-server", "stt_server", "stt_server"),
-    "tts":       ("../../services/piper-tts", "piper_tts_server", "piper_tts_server"),
+    "tts":       ("../../services/pocket-tts", "pocket_tts_server", "pocket_tts_server"),
     "agent-llm": (
         "../../services/nemotron3-nano-llm",
         "nemotron3_nano_llm_server",
