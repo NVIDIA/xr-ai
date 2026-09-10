@@ -431,7 +431,7 @@ in the dependency chain of the processes it manages.</p>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"hub"</span><span class="p">,</span>    <span class="s2">"../../services/device-io-hub"</span><span class="p">,</span> <span class="s2">"device_io_hub"</span><span class="p">),</span>
     <span class="n">Parallel</span><span class="p">([</span>
         <span class="n">Process</span><span class="p">(</span><span class="s2">"stt"</span><span class="p">,</span> <span class="s2">"../../services/stt-server"</span><span class="p">,</span> <span class="s2">"stt_server"</span><span class="p">),</span>
-        <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span> <span class="s2">"../../services/piper-tts"</span><span class="p">,</span>  <span class="s2">"piper_tts_server"</span><span class="p">),</span>
+        <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span> <span class="s2">"../../services/pocket-tts"</span><span class="p">,</span>  <span class="s2">"pocket_tts_server"</span><span class="p">),</span>
     <span class="p">]),</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"my_agent_worker"</span><span class="p">),</span>
 <span class="p">]</span>
@@ -715,7 +715,7 @@ down, just as it would for a serial process.</p>
 <p>Example:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Parallel</span><span class="p">([</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"stt"</span><span class="p">,</span> <span class="s2">"../../services/stt-server"</span><span class="p">,</span> <span class="s2">"stt_server"</span><span class="p">),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span> <span class="s2">"../../services/piper-tts"</span><span class="p">,</span>  <span class="s2">"piper_tts_server"</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span> <span class="s2">"../../services/pocket-tts"</span><span class="p">,</span>  <span class="s2">"pocket_tts_server"</span><span class="p">),</span>
 <span class="p">])</span>
 </pre></div>
 </div>
@@ -824,7 +824,7 @@ and <code class="docutils literal notranslate"><span class="pre">Process.config<
             <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/device_io_hub.yaml"</span><span class="p">),</span>
     <span class="n">Parallel</span><span class="p">([</span>
         <span class="n">Process</span><span class="p">(</span><span class="s2">"stt"</span><span class="p">,</span> <span class="s2">"../../services/stt-server"</span><span class="p">,</span> <span class="s2">"stt_server"</span><span class="p">),</span>
-        <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span> <span class="s2">"../../services/piper-tts"</span><span class="p">,</span>  <span class="s2">"piper_tts_server"</span><span class="p">),</span>
+        <span class="n">Process</span><span class="p">(</span><span class="s2">"tts"</span><span class="p">,</span> <span class="s2">"../../services/pocket-tts"</span><span class="p">,</span>  <span class="s2">"pocket_tts_server"</span><span class="p">),</span>
     <span class="p">]),</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"worker"</span><span class="p">,</span> <span class="s2">"my_worker"</span><span class="p">,</span>
             <span class="n">config</span><span class="o">=</span><span class="s2">"yaml/my_worker.yaml"</span><span class="p">),</span>

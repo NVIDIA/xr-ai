@@ -7,7 +7,7 @@
 
 The simple VLM example is the smallest complete voice-and-vision application in
 the repository. It answers spoken or typed questions about each participant's
-current camera view and streams the answer to both Piper TTS and the
+current camera view and streams the answer to both Pocket TTS and the
 `vlm.response` data topic. Refer to the {doc}`quickstart
 </getting_started/quickstart>` to run the sample. This reference owns the
 sample's design and operational details.
@@ -15,7 +15,7 @@ sample's design and operational details.
 ## Composition
 
 The orchestrator starts only DeviceIOHub and the worker. The fixed
-`yaml/models.json` profile marks Parakeet STT, Cosmos3 Nano, and Piper TTS as
+`yaml/models.json` profile marks Parakeet STT, Cosmos3 Nano, and Pocket TTS as
 reused services. Start those endpoints together with the shared model-server
 stack.
 
