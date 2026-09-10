@@ -7,6 +7,11 @@ from __future__ import annotations
 import re
 import sys
 from dataclasses import dataclass
+from pathlib import Path
+from runpy import run_path
+
+_POLICY = run_path(str(Path(__file__).with_name("docs_release_policy.py")))
+_withdrawn_tags = _POLICY["withdrawn_tags"]
 
 _SEMVER = re.compile(
     r"^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
@@ -59,7 +64,12 @@ def _parse(tag: str) -> _Version | None:
 
 
 def select_latest(tags: list[str]) -> str | None:
-    versions = [version for tag in tags if (version := _parse(tag))]
+    withdrawn = _withdrawn_tags()
+    versions = [
+        version
+        for tag in tags
+        if tag not in withdrawn and (version := _parse(tag))
+    ]
     stable = [version for version in versions if version.prerelease is None]
     candidates = stable or versions
     if not candidates:
