@@ -74,7 +74,7 @@ tens of minutes). On subsequent runs the containers restart in under a minute.
 
 Which servers start is a deployment profile selected with
 `--models <name|path>`. The default starts Nemotron-3 Nano Omni (8108,
-serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), Piper TTS
+serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), Pocket TTS
 (8105), and embeddings (8109). `vlm_llm_nim` serves the LLM and VLM as
 self-hosted NIM containers (Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner;
 requires Docker and `NGC_API_KEY`). Starting a profile stops persisted servers
@@ -101,14 +101,14 @@ uv run model_servers --stop
 
 End-to-end voice + vision sample. Speak into the mic or type into the data
 channel; both routes use the same VLM pipeline against the latest video frame.
-Replies arrive as streaming Piper TTS audio plus a `vlm.response` text message.
+Replies arrive as streaming Pocket TTS audio plus a `vlm.response` text message.
 
 Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. Refer to
 {doc}`AI services </components/ai-services>` for runtime-selection details.
 
 The sample always reuses model services and never starts or stops them. Its
 fixed `yaml/models.json` expects Parakeet STT on port 8103, Cosmos3-Nano on
-port 8100, and Piper TTS on port 8105. From the sample directory, start the
+port 8100, and Pocket TTS on port 8105. From the sample directory, start the
 repository defaults first:
 
 ```bash
@@ -205,7 +205,7 @@ final pre-gate transcript, foreground-turn, and Relay JSONL files under `artifac
 and intentionally serves no sample-specific monitoring web UI. Its fixed model
 configuration uses Cosmos for visual inference.
 
-Start the shared `model-servers` stack, which includes Piper TTS:
+Start the shared `model-servers` stack, which includes Pocket TTS:
 
 ```bash
 cd agent-samples/lab-instrument-monitoring
@@ -253,7 +253,7 @@ and visual inference. Records are written as JSON Lines under the sample's
 `artifacts/` directory. A separate live event viewer presents selected runtime
 events without replacing those durable records.
 
-Start the shared model services, including Piper TTS:
+Start the shared model services, including Pocket TTS:
 
 ```bash
 cd agent-samples/tea-making-sample

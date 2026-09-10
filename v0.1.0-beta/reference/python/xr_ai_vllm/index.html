@@ -661,7 +661,7 @@ the service YAML files.</p>
 <li><p>Look for a docker container labelled <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm.port=&lt;port&gt;</span></code>
 (stamped at start time by the vLLM wrapper) and <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span></code> it.</p></li>
 <li><p>Fall back to port → pid for pip-mode vLLM or in-process servers
-(e.g. STT). Piper is signalled as a complete process group; other
+(e.g. STT). Pocket TTS is signalled as a complete process group; other
 local servers are signalled by PID.</p></li>
 </ol>
 <p>A missing container and listener is already stopped. Output is print-style
