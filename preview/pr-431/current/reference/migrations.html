@@ -441,7 +441,7 @@ Set <code class="docutils literal notranslate"><span class="pre">api_key</span><
 <code class="docutils literal notranslate"><span class="pre">false</span></code>, <code class="docutils literal notranslate"><span class="pre">yes</span></code>, <code class="docutils literal notranslate"><span class="pre">no</span></code>, <code class="docutils literal notranslate"><span class="pre">on</span></code>, <code class="docutils literal notranslate"><span class="pre">off</span></code>, <code class="docutils literal notranslate"><span class="pre">1</span></code>, or <code class="docutils literal notranslate"><span class="pre">0</span></code> (case-insensitive). Numeric
 <code class="docutils literal notranslate"><span class="pre">1</span></code>/<code class="docutils literal notranslate"><span class="pre">0</span></code>, null values, and arbitrary strings now fail at startup instead of
 being interpreted by Python truthiness. This applies to vLLM eager, tool, and
-scheduling flags, Nemotron-Omni BF16 selection, Piper CUDA, voice-gate
+scheduling flags, Nemotron-Omni BF16 selection, voice-gate
 <code class="docutils literal notranslate"><span class="pre">listening_chime</span></code>, lab-monitoring <code class="docutils literal notranslate"><span class="pre">capture_marker_scans</span></code>, and tea-workflow
 <code class="docutils literal notranslate"><span class="pre">complete_on_skip</span></code>.</p></li>
 <li><p>Return audio is paced before IPC by the built-in voice transport and bounded
@@ -453,6 +453,14 @@ reserve. Increase the value for intentionally bursty custom producers, or
 decrease it for a tighter memory and latency bound when using a compatible
 custom producer.</p></li>
 </ul>
+</section>
+<section id="local-speech-service">
+<h2>Local speech service<a class="headerlink" href="#local-speech-service" title="Link to this heading">#</a></h2>
+<p>The local speech service changed from Piper to Pocket TTS with no compatibility
+alias. Replace the <code class="docutils literal notranslate"><span class="pre">piper_tts</span></code> model preset, <code class="docutils literal notranslate"><span class="pre">piper_tts_server</span></code> command, and
+<code class="docutils literal notranslate"><span class="pre">services/piper-tts/</span></code> path with <code class="docutils literal notranslate"><span class="pre">pocket_tts</span></code>, <code class="docutils literal notranslate"><span class="pre">pocket_tts_server</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">services/pocket-tts/</span></code>. Pocket TTS voice names differ from Piper voice names;
+the checked-in profiles use the CC0 <code class="docutils literal notranslate"><span class="pre">bill_boerst</span></code> voice.</p>
 </section>
 <section id="removed-sdk-compatibility-surfaces">
 <h2>Removed SDK compatibility surfaces<a class="headerlink" href="#removed-sdk-compatibility-surfaces" title="Link to this heading">#</a></h2>
@@ -598,6 +606,7 @@ reuse the ignored caches rather than downloading them again.</p>
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deviceiohub-rename">DeviceIOHub rename</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#operator-visible-runtime-changes">Operator-visible runtime changes</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#local-speech-service">Local speech service</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#removed-sdk-compatibility-surfaces">Removed SDK compatibility surfaces</a></li>
 </ul>
   </nav></div>

@@ -142,6 +142,13 @@ Package Contents
    are inert in this mode — they only make sense once a phrase exists
    to gate against.
 
+   STOP is a closed imperative grammar: direct requests such as ``stop``,
+   ``stop it``, ``stop talking``, ``be quiet``, and ``shut up`` may use a
+   bounded set of conversational prefixes and punctuation. Negations,
+   questions, reported speech, unconfigured arbitrary prefixes, and scoped or
+   multi-action commands such as ``stop monitoring`` are ordinary queries,
+   not global stops.
+
    Handler exceptions are logged and swallowed so one bad handler does
    not kill the gate.
 
