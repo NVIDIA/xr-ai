@@ -281,17 +281,15 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.2.0-beta.1</option>
-    <option value="1" >v0.2.0-beta</option>
-    <option value="2" >v0.1.0-beta</option>
-    <option value="3" selected>main (development)</option>
+    <option value="0" >v0.1.0-beta</option>
+    <option value="1" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.2.0-beta.1/reference/configuration.html", "../../v0.2.0-beta/reference/configuration.html", "../../v0.1.0-beta/index.html", "configuration.html"];
+    var urls = ["../../v0.1.0-beta/index.html", "configuration.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -1235,6 +1233,10 @@ workflow.</p></li>
 <span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
 <span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.04-py3</span>
+
+<span class="c1"># Prefetch and sync the snapshot before CUDA initialization, then retry once</span>
+<span class="c1"># only if the driver rejects a CUDA allocation without an OOM-killed container.</span>
+<span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
 </section>
@@ -1244,8 +1246,13 @@ workflow.</p></li>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
 <span class="c1"># Nemotron-3-Nano-Omni — DGX Spark (GB10).</span>
-<span class="c1"># The NVFP4 model shares unified memory with STT and the runtime, so retain the</span>
-<span class="c1"># conservative allocation used by the standard Nano stack.</span>
+<span class="c1"># The NVFP4 model shares unified memory with the rest of the stack. vLLM's</span>
+<span class="c1"># fractional profiler is unreliable while cold checkpoint reads change the</span>
+<span class="c1"># filesystem page cache, so reserve 2 GiB explicitly for the 32K hybrid</span>
+<span class="c1"># Mamba/attention cache. This covers four full 32K requests with the pinned</span>
+<span class="c1"># vLLM 0.20 cache layout; max_num_seqs still permits more shorter requests.</span>
+<span class="c1"># gpu_memory_utilization remains the vLLM startup admission threshold; it does</span>
+<span class="c1"># not size the cache when the byte value is set.</span>
 
 <span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
 <span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8108</span>
@@ -1256,6 +1263,7 @@ workflow.</p></li>
 <span class="nt">tensor_parallel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32768</span>
 <span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.25</span>
+<span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2147483648</span>
 <span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 
 <span class="nt">video_pruning_rate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
@@ -1265,6 +1273,10 @@ workflow.</p></li>
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
 <span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vllm/vllm-openai:v0.20.0</span>
 <span class="nt">extra_pip</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+
+<span class="c1"># Prefetch and sync the snapshot before CUDA initialization, then retry once</span>
+<span class="c1"># only if the driver rejects a CUDA allocation without an OOM-killed container.</span>
+<span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
 </section>
@@ -1405,7 +1417,14 @@ workflow.</p></li>
 <span class="c1">#</span>
 <span class="c1"># vlm is THIRD in load order: STT → Omni → vlm.</span>
 <span class="c1"># free_at_startup ≈ 120 − 30 (Omni) − 2 (STT) ≈ 88 GiB.</span>
-<span class="c1"># 0.20 × 120 = 24 GiB cap: ~16 GiB Cosmos3 Reasoner weights + ~8 GiB KV.</span>
+<span class="c1"># Cosmos3 requires about 1.12 GiB of KV cache for one 8,192-token request.</span>
+<span class="c1"># Pin 1.5 GiB because vLLM's fractional memory profiler can misattribute</span>
+<span class="c1"># filesystem page-cache changes as model overhead on unified-memory systems.</span>
+<span class="c1"># Keep four sequences for concurrent shorter requests. The fixed cache is</span>
+<span class="c1"># shared, so concurrent maximum-length requests can queue, preempt, or</span>
+<span class="c1"># recompute when their aggregate token demand exceeds its capacity.</span>
+<span class="c1"># The 0.20 utilization remains vLLM's startup admission threshold; the fixed</span>
+<span class="c1"># byte value controls the KV-cache allocation.</span>
 <span class="c1"># hf_overrides selects the Reasoner runtime; details are documented in</span>
 <span class="c1"># docs/source/components/ai-services.md#per-server-notes.</span>
 
@@ -1418,6 +1437,7 @@ workflow.</p></li>
 <span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
 <span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
 <span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.20</span>
+<span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
 <span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
 <span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">async_scheduling</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
@@ -1430,6 +1450,10 @@ workflow.</p></li>
 <span class="c1"># See services/vlm-server/vlm_server.yaml for the full toggle docs.</span>
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
 <span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.07-py3</span>
+
+<span class="c1"># Prefetch and sync the snapshot before CUDA initialization, then retry once</span>
+<span class="c1"># only if the driver rejects a CUDA allocation without an OOM-killed container.</span>
+<span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
 </section>
@@ -1545,7 +1569,9 @@ workflow.</p></li>
 <span class="c1"># with one of these or contain one after '.', '?', or '!' followed by</span>
 <span class="c1"># whitespace or a closing quote. Matching is case-insensitive. Text through</span>
 <span class="c1"># the matched phrase is stripped before the agent sees the query; commas and</span>
-<span class="c1"># other mid-sentence mentions do not match.</span>
+<span class="c1"># other mid-sentence mentions do not match. The same stripped tail is used for</span>
+<span class="c1"># early global-STOP detection; the complete final transcript still determines</span>
+<span class="c1"># whether a stop-like opening is a global stop or a scoped agent command.</span>
 <span class="nt">magic_phrases</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"agent"</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"hey</span><span class="nv"> </span><span class="s">agent"</span>
@@ -1661,8 +1687,8 @@ workflow.</p></li>
 <span class="nt">workflow_config</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workflow.yaml</span>
 <span class="nt">voice_gate_yaml</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">voice_gate.yaml</span>
 
-<span class="c1"># Choose one to replace the shared foreground instructions. The packaged idle</span>
-<span class="c1"># or active route policy is always appended after the configured shared prompt.</span>
+<span class="c1"># Choose one to replace the idle and explicit background-action instructions.</span>
+<span class="c1"># Active tea guidance comes from the focused step policies in workflow.yaml.</span>
 <span class="c1"># foreground_prompt: &lt;inline shared foreground instructions&gt;</span>
 <span class="c1"># foreground_prompt_file: ../worker/tea_making_worker/prompts/foreground_prompt.txt</span>
 
@@ -1779,12 +1805,13 @@ workflow.</p></li>
 <span class="w">          </span><span class="no">legible, say label unreadable.</span>
 <span class="w">      </span><span class="nt">result_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">answer</span>
 <span class="w">    </span><span class="nt">evidence</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"(?is)^(?!.*\\b(none|nothing|dark|blurry|blurred|unreadable|unclear|unknown|absent|obscured|unable|cannot|can't|discern)\\b)(?!.*\\b(no|not|without)\\b.{0,32}\\b(tea|package|box|label|tag|texts?)\\b)(?=.*[a-z]{3}).+$"</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^accepted$"</span>
 <span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
 <span class="w">        </span><span class="no">Identify tea only from the current caption, never state or RAG.</span>
-<span class="w">        </span><span class="no">If the tea name is unreadable, commit nothing; do not retrieve. Prefer</span>
+<span class="w">        </span><span class="no">If the tea name is unreadable, commit empty updates; do not retrieve or</span>
+<span class="w">        </span><span class="no">write placeholder values. Prefer</span>
 <span class="w">        </span><span class="no">visible values. If temperature/time is missing,</span>
 <span class="w">        </span><span class="no">call rag_lookup once with "&lt;exact name&gt; water temperature steep time",</span>
 <span class="w">        </span><span class="no">top_k 2; accept only a section naming it. If every writable field is</span>
@@ -1794,6 +1821,8 @@ workflow.</p></li>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
 <span class="w">        </span><span class="no">Tea identity comes only from state tea_name or current_view, never RAG.</span>
+<span class="w">        </span><span class="no">tea_ready means the tea instructions were identified, not that the</span>
+<span class="w">        </span><span class="no">drink has been prepared.</span>
 <span class="w">        </span><span class="no">If the exact name is unknown, inspect the current frame. Retrieve only</span>
 <span class="w">        </span><span class="no">missing temperature or duration after the exact name is known. Never</span>
 <span class="w">        </span><span class="no">replace package values. Answer only what was asked.</span>
@@ -1813,27 +1842,25 @@ workflow.</p></li>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fill_water</span>
 <span class="w">    </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Fill the heating vessel</span>
-<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">tea_name</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">target_temperature_c</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">writes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">water_filled</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">trigger</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">current_view</span>
 <span class="w">      </span><span class="nt">interval_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">      </span><span class="nt">arguments</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">question</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">          </span><span class="no">Describe visible heating vessel interior and contents. Report</span>
-<span class="w">          </span><span class="no">concrete water cues: surface, level, reflections, or active</span>
-<span class="w">          </span><span class="no">pouring into it. Water outside or beside it does not count. Say when</span>
-<span class="w">          </span><span class="no">interior or water is not visible. Never infer.</span>
+<span class="w">          </span><span class="no">Describe the visible interior and contents of the kettle or pot.</span>
+<span class="w">          </span><span class="no">State whether water is visible inside and what supports that reading.</span>
+<span class="w">          </span><span class="no">If the contents are unclear, say so. Never infer.</span>
 <span class="w">      </span><span class="nt">result_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">answer</span>
 <span class="w">    </span><span class="nt">evidence</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|empty|obscured|cannot|can't)\\b)(?!.*\\b(no|not)\\s+(visible\\s+)?water\\b)(?=.*\\b(kettle|pot|vessel|container)\\b)(?=.*\\bwater\\b)(?=.*\\b(surface|level|reflection|pouring|inside|contains)\\b).+$"</span>
-<span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^accepted$"</span>
+<span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Set water_filled true only when this caption clearly shows the vessel</span>
-<span class="w">        </span><span class="no">interior plus a water surface, level, reflection, or pouring into it.</span>
-<span class="w">        </span><span class="no">Water nearby, a closed vessel, a user report, or unclear contents do</span>
-<span class="w">        </span><span class="no">not count. Otherwise commit empty updates/message.</span>
+<span class="w">        </span><span class="no">Judge the fresh caption semantically without requiring particular</span>
+<span class="w">        </span><span class="no">words. Set water_filled true when it reasonably shows water inside the</span>
+<span class="w">        </span><span class="no">vessel. Otherwise commit empty updates and message.</span>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
@@ -1852,28 +1879,33 @@ workflow.</p></li>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">heat_water</span>
 <span class="w">    </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Heat the water</span>
-<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">target_temperature_c</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">tea_name</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">target_temperature_c</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">writes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">heating_started</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">trigger</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">current_view</span>
 <span class="w">      </span><span class="nt">interval_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">      </span><span class="nt">arguments</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">question</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">          </span><span class="no">Describe visible heater-on indicators and transcribe the exact current</span>
-<span class="w">          </span><span class="no">numeric kettle or thermometer reading. Write the unit as Celsius or</span>
-<span class="w">          </span><span class="no">Fahrenheit. Mention hazards. If missing, say what is not visible. Do</span>
-<span class="w">          </span><span class="no">not convert or judge readiness.</span>
+<span class="w">          </span><span class="no">Describe the visible kettle or thermometer display and transcribe its</span>
+<span class="w">          </span><span class="no">current numeric reading and unit. If either is unclear, say so. Do not</span>
+<span class="w">          </span><span class="no">confuse a printed target temperature with the current reading.</span>
 <span class="w">      </span><span class="nt">result_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">answer</span>
 <span class="w">    </span><span class="nt">evidence</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"(?is)^(?:(?=.*\\b\\d{2,3}\\s*(°|degrees|c|f)\\b).+|(?!(?:.*\\b(no|not|without)\\b.{0,24}\\b(heater|heating|power|indicator|display|light)\\b|.*\\b(heater|heating|power|indicator|display|light)\\b.{0,24}\\b(off|inactive|not)\\b))(?=.*\\b(heater|heating|power|indicator|display|light)\\b.{0,24}\\b(on|active|running|lit|illuminated)\\b).+)$"</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^accepted$"</span>
 <span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Set heating_started true only when input is false and the caption shows</span>
-<span class="w">        </span><span class="no">an active heater indicator or a numeric temperature followed by Celsius</span>
-<span class="w">        </span><span class="no">or Fahrenheit. Otherwise commit empty updates/message. Do not compare</span>
-<span class="w">        </span><span class="no">temperatures or track whether the water is ready.</span>
-<span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">        </span><span class="no">This step detects that heating is underway; it does not wait for the tea</span>
+<span class="w">        </span><span class="no">target temperature. Ignore target_temperature_c when deciding this</span>
+<span class="w">        </span><span class="no">step. For every fresh current reading with an explicit Celsius or</span>
+<span class="w">        </span><span class="no">Fahrenheit unit, first call temperature__threshold with that exact</span>
+<span class="w">        </span><span class="no">reading and a threshold_c of 50. If its above result is true, commit</span>
+<span class="w">        </span><span class="no">heating_started true. If above is false, commit empty updates and</span>
+<span class="w">        </span><span class="no">message with rejected evidence. For a target value, ambiguous unit,</span>
+<span class="w">        </span><span class="no">missing reading, or unclear current-versus-target value, do not call the</span>
+<span class="w">        </span><span class="no">tool; commit empty updates and message with unknown evidence so it does</span>
+<span class="w">        </span><span class="no">not erase a prior confirmed reading.</span>
+<span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">temperature__threshold</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
 <span class="w">        </span><span class="no">Explain target from state. For a reading, call current_view and</span>
@@ -1892,7 +1924,7 @@ workflow.</p></li>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">start_steeping</span>
 <span class="w">    </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Start steeping</span>
-<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">tea_name</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">target_temperature_c</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">writes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">steeping_started_at_us</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steeping_started</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">trigger</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">current_view</span>
@@ -1905,15 +1937,19 @@ workflow.</p></li>
 <span class="w">          </span><span class="no">it is unconfirmed. Note hazards.</span>
 <span class="w">      </span><span class="nt">result_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">answer</span>
 <span class="w">    </span><span class="nt">evidence</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|outside|cannot|can't)\\b)(?!.*\\b(no|not)\\b.{0,80}\\b(immersed|submerged|in</span><span class="nv"> </span><span class="s">(the</span><span class="nv"> </span><span class="s">)?water)\\b)(?=.*\\b(tea</span><span class="nv"> </span><span class="s">bag|infuser|leaves)\\b)(?=.*\\b(immersed|submerged|in</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">water)\\b).+$"</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^accepted$"</span>
 <span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Only when the caption explicitly confirms both visible water and a tea</span>
-<span class="w">        </span><span class="no">bag, infuser, or leaves entering or immersed in it, call clock__now once</span>
-<span class="w">        </span><span class="no">and commit epoch_us as steeping_started_at_us with steeping_started true.</span>
-<span class="w">        </span><span class="no">A tea item in an empty vessel or without visible water contact is no</span>
-<span class="w">        </span><span class="no">start: do not call clock__now; commit empty updates/message. Never</span>
+<span class="w">        </span><span class="no">Judge when steeping starts, not when it finishes. Treat unconfirmed,</span>
+<span class="w">        </span><span class="no">unknown, unclear, or missing visual evidence as a hard stop: do not call</span>
+<span class="w">        </span><span class="no">clock__now, and commit empty updates and message with unknown evidence.</span>
+<span class="w">        </span><span class="no">Only when the fresh caption explicitly confirms both visible liquid and</span>
+<span class="w">        </span><span class="no">tea visibly contacting that liquid inside the same vessel, first call</span>
+<span class="w">        </span><span class="no">clock__now. Nearby, above, or outside the liquid does not count. Then</span>
+<span class="w">        </span><span class="no">commit exactly its epoch_us as steeping_started_at_us with</span>
+<span class="w">        </span><span class="no">steeping_started true. For any other caption, do not infer contact from</span>
+<span class="w">        </span><span class="no">context or prior state; commit empty updates and message. Never invent or</span>
 <span class="w">        </span><span class="no">replace a start time.</span>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">clock__now</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
@@ -1934,7 +1970,8 @@ workflow.</p></li>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">steep_timer</span>
 <span class="w">    </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Wait for steeping</span>
-<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">steeping_started_at_us</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">reads</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">[</span><span class="nv">tea_name</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">target_temperature_c</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steeping_started_at_us</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">writes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">steeping_complete</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">trigger</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">clock__timer</span>
