@@ -281,17 +281,15 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.2.0-beta.1</option>
-    <option value="1" >v0.2.0-beta</option>
-    <option value="2" >v0.1.0-beta</option>
-    <option value="3" selected>main (development)</option>
+    <option value="0" >v0.1.0-beta</option>
+    <option value="1" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.2.0-beta.1/guides/troubleshooting.html", "../../v0.2.0-beta/guides/troubleshooting.html", "../../v0.1.0-beta/guides/troubleshooting.html", "troubleshooting.html"];
+    var urls = ["../../v0.1.0-beta/guides/troubleshooting.html", "troubleshooting.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -463,6 +461,100 @@ headers.</p>
 </pre></div>
 </div>
 <p>This applies to the <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/spark/</span></code> profile.</p>
+</section>
+<section id="dgx-spark-cuda-allocation-fails-during-a-vllm-cold-start">
+<h3>DGX Spark — CUDA allocation fails during a vLLM cold start<a class="headerlink" href="#dgx-spark-cuda-allocation-fails-during-a-vllm-cold-start" title="Link to this heading">#</a></h3>
+<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> aborts while starting a vLLM service, often the
+embedding server after the larger services have started. The traceback reaches
+<code class="docutils literal notranslate"><span class="pre">MemorySnapshot.measure()</span></code>, then ends in <code class="docutils literal notranslate"><span class="pre">torch.cuda.mem_get_info()</span></code> or
+<code class="docutils literal notranslate"><span class="pre">cudaMemGetInfo</span></code> with a CUDA out-of-memory error. Another form ends in
+<code class="docutils literal notranslate"><span class="pre">torch.AcceleratorError</span></code> and references <code class="docutils literal notranslate"><span class="pre">cudaErrorMemoryAllocation</span></code> after the
+kernel driver reports <code class="docutils literal notranslate"><span class="pre">NV_ERR_NO_MEMORY</span></code>. Docker reports that the container was
+not OOM-killed, and <code class="docutils literal notranslate"><span class="pre">htop</span></code> can still show tens of gigabytes of available memory.</p>
+<p><strong>Cause:</strong> these tracebacks are not model-weight or KV-cache allocation
+failures. The CUDA driver fails to obtain immediately usable memory before or
+during initialization. The <code class="docutils literal notranslate"><span class="pre">CUDA_LAUNCH_BLOCKING=1</span></code> line in the traceback is
+generic debugging advice, not the cause.</p>
+<p>DGX Spark uses a unified memory architecture: the CPU, GPU, filesystem cache,
+and model servers share the same DRAM. Linux <code class="docutils literal notranslate"><span class="pre">MemAvailable</span></code> includes memory that
+the kernel can reclaim, while <code class="docutils literal notranslate"><span class="pre">cudaMemGetInfo</span></code> can report a smaller immediately
+free amount. NVIDIA documents this behavior in its <a class="reference external" href="https://docs.nvidia.com/dgx/dgx-spark/known-issues.html#guidance-for-reporting-memory-resources-with-unified-memory-architecture">DGX Spark unified-memory
+guidance</a>,
+and a <a class="reference external" href="https://github.com/vllm-project/vllm/issues/48140">related vLLM issue</a>
+describes how checkpoint reads held in the filesystem page cache can trigger a
+startup failure on UMA systems.</p>
+<p><strong>Diagnosis:</strong> inspect the host memory counters immediately after the failure:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>grep<span class="w"> </span>-E<span class="w"> </span><span class="s1">'^(MemTotal|MemFree|MemAvailable|Cached|SReclaimable|SwapFree):'</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/proc/meminfo
+</pre></div>
+</div>
+<p>If <code class="docutils literal notranslate"><span class="pre">MemAvailable</span></code> is much larger than <code class="docutils literal notranslate"><span class="pre">MemFree</span></code> and <code class="docutils literal notranslate"><span class="pre">Cached</span></code> is large, the
+failure is consistent with reclaimable-cache pressure rather than the next
+model being too large for the configured profile.</p>
+<p><strong>Fix:</strong> the bundled <code class="docutils literal notranslate"><span class="pre">spark</span></code> profile enables <code class="docutils literal notranslate"><span class="pre">spark_uma</span></code> for each Docker-backed
+vLLM service. The wrapper downloads and syncs the complete Hugging Face
+snapshot before vLLM initializes CUDA, so transfer, reconstruction, and dirty
+writeback allocations do not overlap the CUDA context allocation. If the
+driver allocation still fails, the wrapper waits for reclamation and restarts
+the stopped container once. Only the wrapper that launched the current
+container attempt may restart it; another wrapper that adopts the running
+container observes it without taking ownership. The retry applies only when
+Docker reports that the container was not OOM-killed and the traceback reaches
+the initial vLLM memory snapshot through <code class="docutils literal notranslate"><span class="pre">mem_get_info</span></code>; model-weight and
+KV-cache OOMs are not retried.</p>
+<p>If the retry is exhausted, first install the current DGX OS and driver updates.
+The <a class="reference external" href="https://docs.nvidia.com/dgx/dgx-spark/release-notes.html">DGX Spark release
+notes</a> identify
+improved GB10 UMA out-of-memory handling in the July 2026 release. Stop
+unrelated memory-intensive workloads before retrying the stack.</p>
+<p>For diagnosis and recovery, NVIDIA recommends flushing clean filesystem caches
+and then restarting the application:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>sh<span class="w"> </span>-c<span class="w"> </span><span class="s1">'sync; echo 3 &gt; /proc/sys/vm/drop_caches'</span>
+</pre></div>
+</div>
+<p>The leading <code class="docutils literal notranslate"><span class="pre">sync</span></code> flushes dirty filesystem buffers. Dropping caches makes
+subsequent filesystem reads cold, so use this as a diagnostic workaround, not
+as routine launcher behavior.</p>
+<p>Do not lower <code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code> solely for this traceback. That setting
+cannot be evaluated when <code class="docutils literal notranslate"><span class="pre">cudaMemGetInfo</span></code> itself fails. Lower the setting only
+for later failures that report insufficient memory for the requested
+utilization or KV cache.</p>
+</section>
+<section id="dgx-spark-vllm-reports-insufficient-kv-cache-only-on-a-cold-start">
+<h3>DGX Spark — vLLM reports insufficient KV cache only on a cold start<a class="headerlink" href="#dgx-spark-vllm-reports-insufficient-kv-cache-only-on-a-cold-start" title="Link to this heading">#</a></h3>
+<p><strong>Symptom:</strong> Nemotron Omni or the Cosmos VLM reports a negative or smaller
+KV-cache capacity on its first start than on a later start with the same
+configuration. The first start can reject the configured context even while
+Linux reports substantial available memory.</p>
+<p><strong>Cause:</strong> vLLM derives non-Torch usage from changes in globally available
+memory while it loads and profiles a model. On a unified-memory system, model
+downloads and checkpoint reads change the Linux filesystem page cache. vLLM
+can attribute part of that global change to the model and subtract it from the
+automatically sized KV cache. The behavior is tracked in <a class="reference external" href="https://github.com/vllm-project/vllm/issues/35920">vLLM issue
+#35920</a>.
+The model-server launcher starts these services sequentially, so concurrent
+startup is not required to trigger the page-cache accounting error.</p>
+<p><strong>Fix:</strong> the bundled <code class="docutils literal notranslate"><span class="pre">spark</span></code> profile sets <code class="docutils literal notranslate"><span class="pre">kv_cache_memory_bytes</span></code> explicitly
+for both Nemotron Omni and Cosmos instead of using the fractional profiler to
+size their caches. Keep the fixed allocations when copying or modifying the
+profile. The values are 2 GiB for Omni’s 32,768-token hybrid Mamba/attention
+cache and 1.5 GiB for Cosmos’s 8,192-token cache. The Cosmos budget supports
+one maximum-length request while <code class="docutils literal notranslate"><span class="pre">max_num_seqs:</span> <span class="pre">4</span></code> retains concurrency for
+shorter requests. Concurrent requests near the context limit can queue,
+preempt, or recompute when their aggregate token demand exceeds the fixed
+cache. Increase the fixed cache when a custom Spark deployment needs parallel
+full-context requests.</p>
+<p>The Spark files intentionally retain <code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code>. In the bundled
+vLLM versions, <code class="docutils literal notranslate"><span class="pre">kv_cache_memory_bytes</span></code> controls the cache allocation and skips
+the unreliable profiling calculation, but vLLM still evaluates
+<code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code> during its initial free-memory admission check. Do
+not remove the profile value and fall back to vLLM’s higher default.</p>
+<p>Enable <code class="docutils literal notranslate"><span class="pre">spark_uma</span></code> on each Docker-backed vLLM service when copying the bundled
+settings into a custom Spark profile. Do not flush the filesystem cache
+routinely for this symptom: doing so makes the next checkpoint read cold and
+can reproduce the profiling variation. An explicit KV cache cannot bypass an
+earlier CUDA driver-allocation failure; the prefetch and bounded retry are
+separate safeguards for that stage.</p>
 </section>
 <section id="dgx-spark-lovr-auto-download-is-not-supported">
 <h3>DGX Spark — LOVR auto-download is not supported<a class="headerlink" href="#dgx-spark-lovr-auto-download-is-not-supported" title="Link to this heading">#</a></h3>
@@ -782,10 +874,14 @@ persistence</em>.</p>
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
-<p>For pip-mode servers this sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> to each persisted process, waits up
-to 20 s, then <code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code>s. For docker-mode servers it runs
+<p>For Piper this sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> to its verified launcher-owned process group,
+waits up to 20 s, then sends <code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code>. Piper remains in that group so the same
+escalation also reaches it during an aborted stack startup. Cleanup falls back
+to the listener PID if process-group ownership cannot be verified, and other
+local servers always use PID-only cleanup. For docker-mode servers it runs
 <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span> <span class="pre">&lt;container_name&gt;</span></code> (escalating to <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">kill</span></code> after 20 s). Safe
-to run while the stack is down.</p>
+to run while the stack is down. The command exits nonzero rather than reporting
+success if server ownership cannot be verified or any target remains running.</p>
 </section>
 <section id="first-run-downloads-models-silently">
 <h3>First run downloads models silently<a class="headerlink" href="#first-run-downloads-models-silently" title="Link to this heading">#</a></h3>
@@ -853,6 +949,8 @@ stall indefinitely; set <code class="docutils literal notranslate"><span class="
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup-time-issues">Setup-time issues</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-uv-sync-fails-to-build-a-wheel">DGX Spark — <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> fails to build a wheel</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-cuda-allocation-fails-during-a-vllm-cold-start">DGX Spark — CUDA allocation fails during a vLLM cold start</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-vllm-reports-insufficient-kv-cache-only-on-a-cold-start">DGX Spark — vLLM reports insufficient KV cache only on a cold start</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-lovr-auto-download-is-not-supported">DGX Spark — LOVR auto-download is not supported</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#blackwell-gpus-b200-rtx-pro-6000-vlm-fails-to-start">Blackwell GPUs (B200, RTX PRO 6000) — VLM fails to start</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#gpu-service-aborts-with-cudnn-version-incompatibility">GPU service aborts with <code class="docutils literal notranslate"><span class="pre">cuDNN</span> <span class="pre">version</span> <span class="pre">incompatibility</span></code></a></li>

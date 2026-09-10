@@ -126,7 +126,10 @@ after the IPC socket connects, after the HTTP server starts listening, etc.
 Pass `exit_after_ready=True` to `run_stack` to return immediately once
 everything is ready instead of monitoring — useful for launchers whose
 processes are all `launch_mode="persist"` and are designed to outlive the
-orchestrator (e.g. `model-servers`).
+orchestrator (e.g. `model-servers`). For a persistent process, this also tells
+a bootstrap that reused an already-running service that it may exit after
+signaling readiness. Without `exit_after_ready=True`, the bootstrap remains
+alive so the launcher can continue monitoring it.
 
 ### The `--ready-file` protocol
 

@@ -277,17 +277,15 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.2.0-beta.1</option>
-    <option value="1" >v0.2.0-beta</option>
-    <option value="2" selected>v0.1.0-beta</option>
-    <option value="3" >main (development)</option>
+    <option value="0" selected>v0.1.0-beta</option>
+    <option value="1" >main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.2.0-beta.1/index.html", "../../v0.2.0-beta/index.html", "changelog.html", "../../main/index.html"];
+    var urls = ["changelog.html", "../../main/index.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
