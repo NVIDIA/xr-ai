@@ -208,6 +208,48 @@
     .status-active { color: var(--green);    font-weight: 500; }
     .status-idle   { color: var(--secondary); }
 
+    .capture-indicator {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 16px;
+      border-top: 1px solid var(--separator);
+      color: var(--secondary);
+      font-size: 13px;
+    }
+
+    .capture-indicator.active { display: flex; }
+
+    .capture-status-copy {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .capture-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .capture-indicator[data-state="starting"] .capture-dot,
+    .capture-indicator[data-state="capturing"] .capture-dot {
+      background: var(--blue);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    .capture-indicator[data-state="failed"] .capture-dot { background: var(--red); }
+
+    .capture-thumbnail {
+      width: 72px;
+      height: 48px;
+      border-radius: 6px;
+      object-fit: cover;
+      background: #000;
+    }
+
     /* ── Data channel row ─────────────────────────────────────────────── */
     .input-send-row {
       display: flex;
@@ -508,6 +550,14 @@
         <div class="labeled-row">
           <span class="row-label">Camera</span>
           <span id="camera-status" class="status-text status-idle">Not connected</span>
+        </div>
+
+        <div id="capture-indicator" class="capture-indicator" data-state="idle" aria-live="polite">
+          <span class="capture-status-copy">
+            <span class="capture-dot"></span>
+            <span id="capture-status"></span>
+          </span>
+          <img id="capture-thumbnail" class="capture-thumbnail" alt="Last captured camera frame" hidden>
         </div>
 
       </div>

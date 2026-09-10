@@ -15,6 +15,9 @@ from xr_ai_hub._types import (
     FrameData,
     FrameRequest,
     FrameSignal,
+    ImageCaptureCancel,
+    ImageCaptureData,
+    ImageCaptureRequest,
     MsgType,
     ParticipantEvent,
     PixelFormat,
@@ -87,6 +90,26 @@ class TestTypeIdPreservation:
     def test_roster_request_type_id(self):
         msg = RosterRequest()
         assert rt_type_id(MsgType.ROSTER_REQUEST, msg) == MsgType.ROSTER_REQUEST
+
+    def test_image_capture_type_ids(self):
+        request = ImageCaptureRequest("alice", "request-1", 5000)
+        image = ImageCaptureData("alice", "request-1", 42, "image/jpeg", b"jpeg")
+        cancel = ImageCaptureCancel("alice", "request-1")
+        assert rt_type_id(MsgType.IMAGE_CAPTURE_REQUEST, request) == MsgType.IMAGE_CAPTURE_REQUEST
+        assert rt_type_id(MsgType.IMAGE_CAPTURE_DATA, image) == MsgType.IMAGE_CAPTURE_DATA
+        assert rt_type_id(MsgType.IMAGE_CAPTURE_CANCEL, cancel) == MsgType.IMAGE_CAPTURE_CANCEL
+
+
+class TestImageCaptureCodec:
+    def test_fields_preserved(self):
+        original = ImageCaptureData(
+            participant_id="alice",
+            request_id="request-1",
+            pts_us=42,
+            mime_type="image/webp",
+            data=b"encoded-image",
+        )
+        assert rt(MsgType.IMAGE_CAPTURE_DATA, original) == original
 
 # ── payload field round-trips ──────────────────────────────────────────────────
 

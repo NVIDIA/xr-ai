@@ -299,6 +299,44 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         localCameraTrack = nil
     }
 
+    public func captureImage(config: CameraConfig) async throws -> CapturedImage {
+        guard room?.connectionState == .connected else { throw StreamError.notConnected }
+        if let localCameraTrack {
+            return try await StillImageCapture.capture(track: localCameraTrack)
+        }
+
+        #if targetEnvironment(simulator)
+        let track = LocalVideoTrack.createBufferTrack(name: "still-capture", source: .camera)
+        let pending = Task { try await StillImageCapture.capture(track: track) }
+        await Task.yield()
+        let pts = CMClockGetTime(CMClockGetHostTimeClock())
+        let sample = Self.loadGIFFrames().flatMap { Self.sampleBuffer(from: $0[0].image, pts: pts) }
+            ?? Self.makeSyntheticSampleBuffer(frameIndex: 0)
+        guard let sample, let capturer = track.capturer as? BufferCapturer else {
+            pending.cancel()
+            throw StreamError.imageCaptureUnavailable("Simulator still capture failed.")
+        }
+        capturer.capture(sample)
+        return try await pending.value
+        #elseif os(visionOS)
+        let track = makeVisionOSTrack()
+        #else
+        let track = makeIOSTrack(config: config)
+        #endif
+
+        #if !targetEnvironment(simulator)
+        try await track.start()
+        do {
+            let image = try await StillImageCapture.capture(track: track)
+            try? await track.stop()
+            return image
+        } catch {
+            try? await track.stop()
+            throw error
+        }
+        #endif
+    }
+
     // MARK: - FrameInjectable
 
     /// Push a ``CMSampleBuffer`` from an external camera source into the LiveKit video stream.
@@ -356,6 +394,35 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         let destinations = config.hubIdentity.map { [Participant.Identity(from: $0)] } ?? []
         let options = DataPublishOptions(destinationIdentities: destinations, topic: topic, reliable: reliable)
         try await room.localParticipant.publish(data: data, options: options)
+    }
+
+    public func sendImage(
+        _ data: Data,
+        requestID: String,
+        mimeType: String,
+        name: String
+    ) async throws {
+        guard let room, room.connectionState == .connected else {
+            throw StreamError.notConnected
+        }
+        let destinations = config.hubIdentity.map { [Participant.Identity(from: $0)] } ?? []
+        let writer = try await room.localParticipant.streamBytes(
+            options: StreamByteOptions(
+                topic: "camera.capture.response",
+                attributes: ["request_id": requestID],
+                destinationIdentities: destinations,
+                mimeType: mimeType,
+                name: name,
+                totalSize: data.count
+            )
+        )
+        do {
+            try await writer.write(data)
+            try await writer.close()
+        } catch {
+            if await writer.isOpen { try? await writer.close(reason: error.localizedDescription) }
+            throw error
+        }
     }
 
     // MARK: - Private helpers

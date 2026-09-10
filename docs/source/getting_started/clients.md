@@ -25,7 +25,37 @@ agent sample and {doc}`networking` for firewall and TLS configuration.
 The clients share a StreamKit shape: one transport-neutral `StreamSession`
 delegates to a `StreamingBackend`, and `LiveKitBackend` is the only layer that
 imports a LiveKit SDK. Connection, microphone, camera, participant status, data,
-and network metrics remain separate operations.
+network metrics, and request-driven image capture remain separate operations.
+
+(request-driven-image-capture)=
+## Request-driven image capture
+
+Every StreamKit client can opt in to an image-capture handler. When an agent
+needs a picture for a participant whose video is not already streaming,
+DeviceIOHub sends a targeted `camera.capture.request`. The handler captures and
+encodes one JPEG, PNG, or WebP image; StreamKit returns it to the hub with
+LiveKit's chunked byte-stream transport. Requests include an opaque correlation
+ID and deadline. The web, Android, and Apple SDKs cancel pending asynchronous
+capture work on disconnect or when a superseding turn expires the request.
+
+The web, Android, and Apple sample apps install handlers that briefly open the
+selected camera when necessary and stop it after the still is encoded. The
+native StreamKit API exposes the same callback for the host application's camera
+pipeline. The native LiveKit backend requires client-sdk-cpp v1.10.2 or newer.
+Capture streams are targeted to the configured hub identity and are limited to
+8 MiB at the connector. They are not broadcast to peer participants.
+
+This capability is independent of visual inference. An agent calls the existing
+`CurrentFrameTool` and can pass its returned `ImageReference` to a VLM, an
+image-processing tool, a workflow, or another participant-scoped agent. The
+tool resolves a fresh hub frame when video is streaming and requests a client
+capture only when one is not available. Agents do not branch on transport or
+camera state.
+
+The same resolution rule can extend to a future short-video selector: resolve a
+recorded hub window first, then ask a capable client to record and upload a
+bounded segment when no local window exists. Client video capture is not
+implemented yet, and no provisional video protocol is exposed.
 
 (network-telemetry)=
 Graphical clients display LiveKit connection quality, round-trip time, and

@@ -15,9 +15,13 @@
  */
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <span>
+#include <stdexcept>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "streamkit/Config/AudioConfig.h"
 #include "streamkit/Config/CameraConfig.h"
@@ -170,6 +174,14 @@ public:
     virtual void Send(std::span<const std::byte> data,
                       bool reliable = true,
                       std::string_view topic = "") = 0;
+
+    /// Send an encoded image through the backend's chunked stream transport.
+    virtual void SendImage(std::span<const std::uint8_t>,
+                           std::string_view,
+                           std::string_view,
+                           std::string_view) {
+        throw std::runtime_error("This backend does not support image streams.");
+    }
 };
 
 } // namespace streamkit

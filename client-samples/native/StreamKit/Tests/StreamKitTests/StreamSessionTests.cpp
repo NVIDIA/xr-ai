@@ -42,6 +42,8 @@ struct MockBackend : streamkit::StreamingBackend {
     streamkit::CameraConfig last_camera_config;
     std::vector<std::string> sent_topics;
     std::vector<std::string> sent_payloads;
+    std::vector<std::uint8_t> sent_image;
+    std::string sent_image_request_id;
 
     void Connect(const streamkit::SessionConfig&) override {
         ++connect_calls;
@@ -66,6 +68,13 @@ struct MockBackend : streamkit::StreamingBackend {
     void Send(std::span<const std::byte> data, bool, std::string_view topic) override {
         sent_topics.emplace_back(topic);
         sent_payloads.emplace_back(BytesToString(data));
+    }
+    void SendImage(std::span<const std::uint8_t> data,
+                   std::string_view request_id,
+                   std::string_view,
+                   std::string_view) override {
+        sent_image.assign(data.begin(), data.end());
+        sent_image_request_id = request_id;
     }
 
     // Helpers for tests to drive the event hooks the backend would normally
@@ -176,6 +185,26 @@ int main() {
     ExpectEq(data_calls, 1);
     ExpectEq(last_topic, std::string("incoming.topic"));
     ExpectEq(last_payload, std::string("world"));
+
+    int capture_calls = 0;
+    session.on_image_capture_requested = [&capture_calls](const auto& request) {
+        ++capture_calls;
+        ExpectEq(request.request_id, std::string("capture-1"));
+        ExpectEq(request.timeout_ms, std::int64_t{5000});
+        return streamkit::CapturedImage{.data = {1, 2, 3}};
+    };
+    raw->fire_data(
+        "camera.capture.request",
+        R"({"version":1,"request_id":"capture-1","timeout_ms":5000})");
+    ExpectEq(capture_calls, 1);
+    ExpectEq(raw->sent_image, std::vector<std::uint8_t>({1, 2, 3}));
+    ExpectEq(raw->sent_image_request_id, std::string("capture-1"));
+    ExpectEq(data_calls, 1);
+
+    raw->fire_data(
+        "camera.capture.request",
+        R"({"version":2,"request_id":"capture-2","timeout_ms":5000})");
+    ExpectEq(capture_calls, 1);
 
     raw->fire_agent_status("processing");
     ExpectEq(agent_calls, 1);

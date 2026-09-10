@@ -7,7 +7,7 @@
 
 The simple VLM example is the smallest complete voice-and-vision application in
 the repository. It answers spoken or typed questions about each participant's
-latest camera frame and streams the answer to both Pocket TTS and the
+current camera view and streams the answer to both Pocket TTS and the
 `vlm.response` data topic. Refer to the {doc}`quickstart
 </getting_started/quickstart>` to run the sample. This reference owns the
 sample's design and operational details.
@@ -21,11 +21,19 @@ stack.
 
 `VoiceAgent` owns service readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
-`UserQuery`. `SimpleVlmAgent` selects the participant's current image with
-`CurrentFrameTool`, passes its opaque reference to
-`StreamingImageQueryTool`, and publishes response chunks to voice output.
+`UserQuery`. `SimpleVlmAgent` always invokes `CurrentFrameTool`. The tool uses
+the hub's fresh frame when DeviceIOHub is already observing video for that
+participant. When video is off, the same tool asks StreamKit to capture one
+image and return it through a targeted LiveKit byte stream. The fallback is
+invisible to the agent: it receives the same opaque image-reference shape and
+passes it to `StreamingImageQueryTool` before publishing response chunks to
+voice output.
 Camera bytes remain on the hub path, image locations are redacted from VLM
 telemetry, and the sample has no MCP path.
+
+The voice query therefore determines when a still is needed. A spoken “what is
+this?” does not require an always-on video publication, while clients that are
+already streaming do not receive a redundant capture request.
 
 A newer participant turn cancels the superseded vision request and interrupts
 its voice response. Participant departure releases the sample agent's cached

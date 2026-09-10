@@ -8,7 +8,7 @@ coreKtx = "1.13.1"
 lifecycleRuntimeKtx = "2.8.7"
 activityCompose = "1.9.3"
 composeBom = "2024.11.00"
-livekit = "2.7.0"
+livekit = "2.28.2"
 netty = "4.2.17.Final"
 
 [libraries]

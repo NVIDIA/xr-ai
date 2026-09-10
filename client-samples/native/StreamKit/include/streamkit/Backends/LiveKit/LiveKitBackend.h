@@ -86,6 +86,11 @@ public:
               bool reliable = true,
               std::string_view topic = "") override;
 
+    void SendImage(std::span<const std::uint8_t> data,
+                   std::string_view request_id,
+                   std::string_view mime_type,
+                   std::string_view name) override;
+
     // ── FrameSink ──────────────────────────────────────────────────────────
 
     /// Push a video frame into the published video track. The first call

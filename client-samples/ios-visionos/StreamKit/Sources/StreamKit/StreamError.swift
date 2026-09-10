@@ -29,6 +29,9 @@ public enum StreamError: Error, LocalizedError, Sendable {
     /// *(simulator)* `injectVideoFrame(_:)` was called before `startCamera()`.
     case cameraNotStarted
 
+    /// A requested still image could not be captured or encoded.
+    case imageCaptureUnavailable(String)
+
     // MARK: - LocalizedError
 
     public var errorDescription: String? {
@@ -43,6 +46,8 @@ public enum StreamError: Error, LocalizedError, Sendable {
                    "Call openImmersiveSpace() in your app before startCamera()."
         case .cameraNotStarted:
             return "Call startCamera() before injecting frames."
+        case .imageCaptureUnavailable(let detail):
+            return detail
         }
     }
 }

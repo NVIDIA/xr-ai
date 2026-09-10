@@ -18,6 +18,7 @@ Typical usage::
     await ep.run()
 """
 
+from ._capture import ClientImageCaptureSource, ImageCaptureUnavailable
 from ._codec import decode, encode, register_decoder, register_encoder
 from ._live_frames import FrameUnavailable, LiveFrameSource
 from ._processor import AGENT_STATUS_TOPIC, ProcessorEndpoint, Subscribe
@@ -31,6 +32,9 @@ from ._types import (
     FrameData,
     FrameRequest,
     FrameSignal,
+    ImageCaptureCancel,
+    ImageCaptureData,
+    ImageCaptureRequest,
     MsgType,
     ParticipantEvent,
     PixelFormat,
@@ -44,6 +48,7 @@ __all__ = [
     "ProcessorEndpoint",
     "Subscribe",
     "AGENT_STATUS_TOPIC",
+    "ClientImageCaptureSource",
     # shared memory (for agents that read raw pixels)
     "ShmRingBuffer",
     "SlotView",
@@ -62,6 +67,10 @@ __all__ = [
     "FrameUnavailable",
     "FrameRequest",
     "FrameSignal",
+    "ImageCaptureCancel",
+    "ImageCaptureData",
+    "ImageCaptureRequest",
+    "ImageCaptureUnavailable",
     "LiveFrameSource",
     "MsgType",
     "ParticipantEvent",
