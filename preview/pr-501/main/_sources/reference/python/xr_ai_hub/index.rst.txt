@@ -83,6 +83,32 @@ Functions
 Package Contents
 ----------------
 
+.. py:class:: ClientImageCaptureSource(endpoint: xr_ai_hub.ProcessorEndpoint, *, timeout_s: float = 10.0)
+
+   Request encoded still images from participant clients through the hub.
+
+
+   .. py:method:: capture(participant_id: str) -> xr_ai_hub.ImageCaptureData
+      :async:
+
+
+      Ask a connected participant for one still image.
+
+
+
+   .. py:method:: close() -> None
+
+      Detach the capture callback and fail outstanding requests.
+
+
+
+.. py:exception:: ImageCaptureUnavailable
+
+
+
+   Raised when a client image capture does not complete successfully.
+
+
 .. py:function:: decode(raw: bytes) -> tuple[int, Any]
 
    Decode a wire message into its numeric type identifier and payload object.
@@ -125,32 +151,6 @@ Package Contents
        Numeric wire identifier, normally a :class:`~xr_ai_hub.MsgType` value.
    fn :
        Callable that converts a message object to a msgpack-serializable list.
-
-
-.. py:class:: ClientImageCaptureSource(endpoint: xr_ai_hub.ProcessorEndpoint, *, timeout_s: float = 10.0)
-
-   Request encoded still images from participant clients through the hub.
-
-
-   .. py:method:: capture(participant_id: str) -> xr_ai_hub.ImageCaptureData
-      :async:
-
-
-      Ask a connected participant for one still image.
-
-
-
-   .. py:method:: close() -> None
-
-      Detach the capture callback and fail outstanding requests.
-
-
-
-.. py:exception:: ImageCaptureUnavailable
-
-
-
-   Raised when a client image capture does not complete successfully.
 
 
 .. py:exception:: FrameUnavailable
