@@ -22,7 +22,7 @@ and command to `device_io_hub`. Rename `xr_media_hub.yaml` to
   `false`, `yes`, `no`, `on`, `off`, `1`, or `0` (case-insensitive). Numeric
   `1`/`0`, null values, and arbitrary strings now fail at startup instead of
   being interpreted by Python truthiness. This applies to vLLM eager, tool, and
-  scheduling flags, Nemotron-Omni BF16 selection, Piper CUDA, voice-gate
+  scheduling flags, Nemotron-Omni BF16 selection, voice-gate
   `listening_chime`, lab-monitoring `capture_marker_scans`, and tea-workflow
   `complete_on_skip`.
 - Return audio is paced before IPC by the built-in voice transport and bounded
@@ -33,6 +33,14 @@ and command to `device_io_hub`. Rename `xr_media_hub.yaml` to
   reserve. Increase the value for intentionally bursty custom producers, or
   decrease it for a tighter memory and latency bound when using a compatible
   custom producer.
+
+## Local speech service
+
+The local speech service changed from Piper to Pocket TTS with no compatibility
+alias. Replace the `piper_tts` model preset, `piper_tts_server` command, and
+`services/piper-tts/` path with `pocket_tts`, `pocket_tts_server`, and
+`services/pocket-tts/`. Pocket TTS voice names differ from Piper voice names;
+the checked-in profiles use the CC0 `bill_boerst` voice.
 
 ## Removed SDK compatibility surfaces
 

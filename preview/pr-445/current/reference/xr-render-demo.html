@@ -463,8 +463,8 @@ any owned process exit terminates the application stack.</p>
 </tr>
 <tr class="row-odd"><td><p>tts</p></td>
 <td><p>reused</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">services/piper-tts/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">piper_tts_server</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">services/pocket-tts/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pocket_tts_server</span></code></p></td>
 <td><p>8105</p></td>
 </tr>
 <tr class="row-even"><td><p>omni</p></td>
@@ -679,10 +679,10 @@ settled before LOVR starts its Vulkan device, preventing a transient OOM race.</
 <p>The STT server serializes inference with a process-local lock because its shared
 NeMo model is not reentrant.</p>
 </section>
-<section id="tts-piper">
-<h2>TTS — Piper<a class="headerlink" href="#tts-piper" title="Link to this heading">#</a></h2>
+<section id="tts-pocket-tts">
+<span id="tts-piper"></span><h2>TTS — Pocket TTS<a class="headerlink" href="#tts-pocket-tts" title="Link to this heading">#</a></h2>
 <p>Served on port 8105. The voice runtime streams the supervisor’s final
-reply to Piper and returns the audio to the participant.</p>
+reply to Pocket TTS and returns the audio to the participant.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>voice.output topic (final response)
   → VoiceAgent → private media-session TTS
       sentence-batched synthesis
@@ -755,9 +755,10 @@ text memory without model scratch output or tool traces.</p>
 </section>
 <section id="native-capability-composition">
 <h2>Native capability composition<a class="headerlink" href="#native-capability-composition" title="Link to this heading">#</a></h2>
-<p>The sample-local scene process owns scene state and LOVR. <code class="docutils literal notranslate"><span class="pre">openxr-service</span></code>
-owns the headless tracking session, and <code class="docutils literal notranslate"><span class="pre">video-memory-service</span></code> owns recorded
-video decoding. <code class="docutils literal notranslate"><span class="pre">LiveFrameSource</span></code> supplies current-frame requests. Relay-managed
+<p>The sample-local scene process owns scene state and LOVR. The LOVR app draws
+two primitive types, box and sphere. <code class="docutils literal notranslate"><span class="pre">openxr-service</span></code> owns the headless
+tracking session, and <code class="docutils literal notranslate"><span class="pre">video-memory-service</span></code> owns recorded video decoding.
+<code class="docutils literal notranslate"><span class="pre">LiveFrameSource</span></code> supplies current-frame requests. Relay-managed
 native tools provide the typed surface over those services; the demo does
 not launch or call MCP adapters.</p>
 <section id="spatial-tool-surface">
@@ -1113,7 +1114,7 @@ turns from different participants queue rather than interleave.</p>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vlm-cosmos3-nano-reasoner">VLM — Cosmos3 Nano Reasoner</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stt-parakeet-tdt-0-6b-v3">STT — parakeet-tdt-0.6b-v3</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tts-piper">TTS — Piper</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tts-pocket-tts">TTS — Pocket TTS</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-runtime-and-voice-topology">Agent runtime and voice topology</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agentic-loop">Agentic loop</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-capability-composition">Native capability composition</a><ul class="nav section-nav flex-column">
