@@ -7,8 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 
 This file lists the third-party open-source software distributed with or
 required by `xr-ai`. Each entry gives the upstream project, version, SPDX
-license identifier, and a link to the upstream source repository, where the
-canonical license text is available.
+license identifier, and a link to the upstream source repository. Complete
+license and attribution texts for reciprocal-license dependencies are bundled
+under [`third_party_licenses/`](third_party_licenses/).
 
 `xr-ai` itself is licensed under Apache-2.0 — see [`LICENSE`](LICENSE).
 
@@ -18,10 +19,15 @@ Used by `agent-sdk/`, `utils/`, `services/`,
 `agent-samples/` and `tests/`.
 For the per-package dependency mapping, see [`DEPENDENCIES.md`](DEPENDENCIES.md).
 
+The versions below follow the dependency declarations where a package is
+listed with a minimum or range. Exact transitive versions are taken from the
+qualified lock; the reciprocal-license table records exact resolved versions.
+
 | Package        | Version  | License       | Upstream |
 |---             |---       |---            |---|
 | `msgpack`      | 1.0.0    | Apache-2.0    | https://github.com/msgpack/msgpack-python |
-| `pyzmq`        | 27.0.0   | BSD-3-Clause  | https://github.com/zeromq/pyzmq |
+| `certifi`      | 2026.7.22 | MPL-2.0      | https://github.com/certifi/python-certifi |
+| `pyzmq`        | 27.2.0   | BSD-3-Clause  | https://github.com/zeromq/pyzmq |
 | `uvicorn`      | 0.29.0   | BSD-3-Clause  | https://github.com/encode/uvicorn |
 | `fastapi`      | 0.111.0  | MIT           | https://github.com/fastapi/fastapi |
 | `httpx`        | 0.27.0   | BSD-3-Clause  | https://github.com/encode/httpx |
@@ -32,6 +38,13 @@ For the per-package dependency mapping, see [`DEPENDENCIES.md`](DEPENDENCIES.md)
 | `Pillow`       | 10.0.0   | HPND          | https://github.com/python-pillow/Pillow |
 | `pipecat-ai`   | >=1.3    | BSD-2-Clause  | https://github.com/pipecat-ai/pipecat |
 | `pocket-tts`   | 3.0.2    | MIT           | https://github.com/kyutai-labs/pocket-tts |
+| `num2words`    | 0.5.14   | LGPL-2.1-or-later | https://github.com/savoirfairelinux/num2words |
+| `pycountry`    | 26.2.16  | LGPL-2.1-only | https://github.com/pycountry/pycountry |
+| `soxr`         | 1.0.0    | LGPL-2.1-or-later | https://github.com/dofuuz/python-soxr |
+| `soundfile`    | 0.14.0   | BSD-3-Clause  | https://github.com/bastibe/python-soundfile |
+| `text-unidecode` | 1.3    | Artistic-1.0-Perl (elected) | https://github.com/kmike/text-unidecode |
+| `tqdm`         | 4.70.0   | MPL-2.0 AND MIT | https://github.com/tqdm/tqdm |
+| `opencv-python-headless` | 5.0.0.93 | Apache-2.0 and MIT packaging terms (wheel includes other licenses) | https://github.com/opencv/opencv-python |
 | `pydantic`     | >=2.10   | MIT           | https://github.com/pydantic/pydantic |
 | `python-multipart` | >=0.0.9 | Apache-2.0 | https://github.com/Kludex/python-multipart |
 | `websockets`   | 12.0     | BSD-3-Clause  | https://github.com/python-websockets/websockets |
@@ -79,6 +92,48 @@ before accepting the terms because upstream may revise them. This release
 accepts only the reviewed `bill_boerst` voice; it does not expose Pocket TTS's
 other predefined voices or arbitrary voice-cloning inputs.
 
+### Reciprocal licenses and bundled native libraries
+
+The resolved Python environment contains the following reciprocal-license
+components. They are unmodified upstream dependencies; no source from them is
+copied into XR AI. Their complete license and attribution texts are bundled in
+this repository.
+
+| Component | How it is used | License and notices | Corresponding source |
+|---|---|---|---|
+| `num2words` 0.5.14 | Python dependency of `pipecat-ai` | LGPL-2.1-or-later; [`COPYING`](third_party_licenses/num2words-0.5.14/COPYING) | [0.5.14 source distribution](https://pypi.org/project/num2words/0.5.14/#files) |
+| `pycountry` 26.2.16 | Python dependency of `pydantic-extra-types` | LGPL-2.1-only; [`LICENSE.txt` and data attributions](third_party_licenses/pycountry-26.2.16/) | [26.2.16 source distribution](https://pypi.org/project/pycountry/26.2.16/#files) |
+| `tqdm` 4.70.0 | Progress reporting used by AI dependencies | MPL-2.0 AND MIT; [`LICENCE`](third_party_licenses/tqdm-4.70.0/LICENCE) | [4.70.0 source distribution](https://pypi.org/project/tqdm/4.70.0/#files) |
+| `soxr` 1.0.0 / libsoxr 0.1.3 / PFFFT | Python extension used through `pipecat-ai` and `librosa`; its wheel includes PFFFT and Python-SoXR's modified libsoxr fork | LGPL-2.1-or-later for libsoxr and permissive PFFFT terms; [`license files`](third_party_licenses/soxr-1.0.0/) | [`soxr` 1.0.0 source distribution](https://pypi.org/project/soxr/1.0.0/#files); its `libsoxr/` directory is the applicable fork source |
+| `soundfile` 0.14.0 / libsndfile 1.2.2 | Platform wheels include libsndfile, which statically includes libmp3lame 3.100 and libmpg123 | LGPL-2.1-or-later for libsndfile, LGPL-2.0-or-later for libmp3lame, and LGPL-2.1 for libmpg123; [`COPYING`](third_party_licenses/libsndfile-1.2.2/COPYING), [wrapper license and native-library source notes](third_party_licenses/soundfile-0.14.0/) | [libsndfile 1.2.2 source](https://github.com/libsndfile/libsndfile/releases/tag/1.2.2) and [SoundFile 0.14.0 source distribution](https://pypi.org/project/soundfile/0.14.0/#files) |
+| `opencv-python-headless` 5.0.0.93 / FFmpeg | Platform wheels include FFmpeg shared libraries | LGPL-2.1-or-later; [`OpenCV wheel and bundled-library notices`](third_party_licenses/opencv-python-headless-5.0.0.93/) | [5.0.0.93 source distribution](https://pypi.org/project/opencv-python-headless/5.0.0.93/#files) and [FFmpeg source](https://ffmpeg.org/download.html) |
+| `certifi` 2026.7.22 | CA certificate bundle used by HTTP clients | MPL-2.0; [`LICENSE`](third_party_licenses/certifi-2026.7.22/LICENSE) | [2026.7.22 source distribution](https://pypi.org/project/certifi/2026.7.22/#files) |
+| `pyzmq` 27.2.0 / libzmq 4.3.5 / libsodium 1.0.22 | Platform wheels include libzmq and libsodium shared libraries | MPL-2.0 for libzmq and ISC for libsodium; [`PyZMQ and bundled-library notices`](third_party_licenses/pyzmq-27.2.0/) | [libzmq 4.3.5 source](https://github.com/zeromq/libzmq/releases/tag/v4.3.5), [libsodium 1.0.22 source](https://github.com/jedisct1/libsodium/releases/tag/1.0.22-RELEASE), and [PyZMQ 27.2.0 source distribution](https://pypi.org/project/pyzmq/27.2.0/#files) |
+
+These obligations apply to downstream redistributors of installed environments,
+containers, or other binary bundles; they do not change XR AI's Apache-2.0
+license. The standard Python installation keeps the LGPL native components in
+replaceable shared-library or extension files rather than incorporating them
+into XR AI source files. Anyone redistributing a built environment, container,
+or other binary bundle must preserve these notices, permit replacement and
+reverse engineering for debugging modifications as required by LGPL-2.1, and
+accompany the LGPL components with their complete corresponding source. A
+redistributor that modifies an LGPL or MPL component must also publish the
+applicable modified source under that component's license. The source links
+above identify the unmodified versions resolved for this release; artifact
+URLs and SHA-256 hashes are pinned in
+[`dependency-manifest/uv.lock`](dependency-manifest/uv.lock).
+
+### `text-unidecode` license election
+
+`text-unidecode` 1.3 is available under the Artistic License or GPLv2+. XR AI
+elects the **Artistic-1.0-Perl** option and does not rely on the GPL grant. The
+package is an unmodified transitive dependency of NeMo Toolkit. Its complete
+dual-license notice and Artistic License text are bundled as
+[`third_party_licenses/text-unidecode-1.3/LICENSE`](third_party_licenses/text-unidecode-1.3/LICENSE),
+and its corresponding source is the
+[`text-unidecode` 1.3 source distribution](https://pypi.org/project/text-unidecode/1.3/#files).
+
 ## Swift (iOS / visionOS client)
 
 Used by `client-samples/ios-visionos/`. Resolved via Swift Package Manager.
@@ -122,6 +177,14 @@ available at:
 - **CC-BY-4.0**: https://creativecommons.org/licenses/by/4.0/
 - **CC0-1.0**: https://creativecommons.org/publicdomain/zero/1.0/
 - **CDDL-1.1**: https://spdx.org/licenses/CDDL-1.1.html
+- **LGPL-2.1-or-later**: bundled with the applicable components under
+  [`third_party_licenses/`](third_party_licenses/)
+- **LGPL-2.1-only** and **LGPL-2.0-or-later**: bundled with the applicable
+  components under [`third_party_licenses/`](third_party_licenses/)
+- **MPL-2.0**: bundled with the applicable components under
+  [`third_party_licenses/`](third_party_licenses/)
+- **Artistic-1.0-Perl**: bundled as
+  [`third_party_licenses/text-unidecode-1.3/LICENSE`](third_party_licenses/text-unidecode-1.3/LICENSE)
 
 Each upstream project repository linked above includes its own canonical
 license file (typically `LICENSE`, `LICENSE.txt`, or `COPYING`).
@@ -135,7 +198,11 @@ When adding, removing, or upgrading a third-party dependency:
    web client's manifest.
 2. Update [`DEPENDENCIES.md`](DEPENDENCIES.md) — the internal/external
    dependency map.
-3. Update this file with the new package name, version, license, and upstream
-   URL.
+3. Inspect the resolved wheel and source metadata, including bundled native
+   libraries and their native versions, for license and attribution terms.
+4. Update this file and copy the exact upstream license, attribution, and
+   native-library source notices into [`third_party_licenses/`](third_party_licenses/).
+5. Run `uv run pytest tests/test_third_party_notices.py` to verify that the
+   notice versions and bundled texts match the qualified lock.
 
-All three changes belong in the same commit.
+All updates belong in the same commit.
