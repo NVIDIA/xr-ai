@@ -14,7 +14,7 @@ import msgpack
 import pytest
 import zmq
 import zmq.asyncio
-from xr_render_scene.engine import Config, SceneDispatcher
+from xr_render_scene.engine import Config, SceneDispatcher, _build_config
 
 _asyncio = pytest.mark.asyncio
 
@@ -33,6 +33,34 @@ async def _cancel_task(task: asyncio.Task[object] | None) -> None:
 async def _recv_op(pull: zmq.asyncio.Socket, timeout: float = 1.0) -> dict:
     raw = await asyncio.wait_for(pull.recv(), timeout=timeout)
     return msgpack.unpackb(raw, raw=False)
+
+
+def _lovr_stub(tmp_path: Path, name: str) -> Path:
+    stub = tmp_path / name
+    stub.write_text("#!/bin/sh\nsleep 999\n")
+    stub.chmod(0o755)
+    return stub
+
+
+def test_build_config_env_lovr_bin_beats_yaml(tmp_path: Path, monkeypatch):
+    env_bin  = _lovr_stub(tmp_path, "env_lovr.sh")
+    yaml_bin = _lovr_stub(tmp_path, "yaml_lovr.sh")
+    (tmp_path / "lovr").mkdir()
+    monkeypatch.setenv("LOVR_BIN", str(env_bin))
+
+    cfg = _build_config(tmp_path / "scene_service.yaml", {"lovr_bin": str(yaml_bin)})
+
+    assert cfg.lovr_bin == env_bin
+
+
+def test_build_config_yaml_lovr_bin_used_when_env_unset(tmp_path: Path, monkeypatch):
+    yaml_bin = _lovr_stub(tmp_path, "yaml_lovr.sh")
+    (tmp_path / "lovr").mkdir()
+    monkeypatch.delenv("LOVR_BIN", raising=False)
+
+    cfg = _build_config(tmp_path / "scene_service.yaml", {"lovr_bin": str(yaml_bin)})
+
+    assert cfg.lovr_bin == yaml_bin
 
 
 class _FakeLovrProc:

@@ -14,4 +14,4 @@ check `gh pr checks`; the change is not complete until required CI is green.
 Never launch models ad hoc (bare `vllm serve`, `from_pretrained` scripts).
 Start servers only through the repo entry points (sample orchestrators and
 the `services/` wrappers): those are the paths that must be tested, and they
-pin the HuggingFace cache to the repo `models/` dir.
+default the HuggingFace cache to the repo `models/` dir.

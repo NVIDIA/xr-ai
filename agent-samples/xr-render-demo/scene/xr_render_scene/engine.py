@@ -71,8 +71,7 @@ def _resolve(base: Path, value: str) -> Path:
 def _build_config(yaml_path: Path, raw: dict) -> Config:
     yaml_dir = yaml_path.resolve().parent
 
-    # LOVR binary: scene_service.yaml lovr_bin > $LOVR_BIN > fail.
-    lovr_bin_raw = raw.get("lovr_bin") or os.environ.get("LOVR_BIN")
+    lovr_bin_raw = os.environ.get("LOVR_BIN") or raw.get("lovr_bin")
     if not lovr_bin_raw:
         sys.exit(
             "xr-render-scene: LOVR binary not configured.\n"
