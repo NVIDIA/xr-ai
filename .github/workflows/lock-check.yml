@@ -19,6 +19,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 concurrency:
   group: lock-check-${{ github.ref }}
@@ -30,7 +31,7 @@ env:
 jobs:
   dependency-map:
     name: generated dependency map
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && contains(github.event.pull_request.labels.*.name, 'ci:self-hosted') && '["self-hosted","Linux","X64"]' || '["ubuntu-latest"]') }}
     timeout-minutes: 5
 
     steps:
@@ -45,7 +46,7 @@ jobs:
 
   uv-lock:
     name: uv lock (every project)
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && contains(github.event.pull_request.labels.*.name, 'ci:self-hosted') && '["self-hosted","Linux","X64"]' || '["ubuntu-latest"]') }}
     timeout-minutes: 30
 
     steps:
