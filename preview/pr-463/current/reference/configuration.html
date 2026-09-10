@@ -326,6 +326,7 @@
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="workflow-recorder.html">Workflow recorder</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
@@ -535,7 +536,7 @@ workflow.</p></li>
 <span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stt"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">},</span>
 <span class="w">    </span><span class="nt">"tts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"piper_tts"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pocket_tts"</span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8105"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tts"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
@@ -711,15 +712,15 @@ workflow.</p></li>
 </pre></div>
 </div>
 </section>
-<section id="config-model-servers-yaml-96g-blackwell-piper-tts-server-yaml">
-<h3>yaml/96G_blackwell/piper_tts_server.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-piper-tts-server-yaml" title="Link to this heading">#</a></h3>
+<section id="config-model-servers-yaml-96g-blackwell-pocket-tts-server-yaml">
+<h3>yaml/96G_blackwell/pocket_tts_server.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-pocket-tts-server-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># Shared CPU Piper TTS service.</span>
-<span class="nt">voice</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">en_US-lessac-medium</span>
+<span class="c1"># Shared CPU Pocket TTS service. bill_boerst is a CC0 Voice-Zero recording.</span>
+<span class="nt">voice</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bill_boerst</span>
+<span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">english</span>
 <span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8105</span>
-<span class="nt">use_cuda</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="nt">startup_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">600</span>
 <span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
 </pre></div>
@@ -926,15 +927,15 @@ workflow.</p></li>
 </pre></div>
 </div>
 </section>
-<section id="config-model-servers-yaml-dual-48g-ada-piper-tts-server-yaml">
-<h3>yaml/dual_48G_ada/piper_tts_server.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-piper-tts-server-yaml" title="Link to this heading">#</a></h3>
+<section id="config-model-servers-yaml-dual-48g-ada-pocket-tts-server-yaml">
+<h3>yaml/dual_48G_ada/pocket_tts_server.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-pocket-tts-server-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># Shared CPU Piper TTS service.</span>
-<span class="nt">voice</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">en_US-lessac-medium</span>
+<span class="c1"># Shared CPU Pocket TTS service. bill_boerst is a CC0 Voice-Zero recording.</span>
+<span class="nt">voice</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bill_boerst</span>
+<span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">english</span>
 <span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8105</span>
-<span class="nt">use_cuda</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="nt">startup_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">600</span>
 <span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
 </pre></div>
@@ -1035,7 +1036,7 @@ workflow.</p></li>
 <span class="w">    </span><span class="p">},</span>
 <span class="w">    </span><span class="nt">"tts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"piper_tts"</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pocket_tts"</span>
 <span class="w">      </span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8105"</span><span class="p">,</span>
@@ -1122,7 +1123,7 @@ workflow.</p></li>
 <span class="w">    </span><span class="p">},</span>
 <span class="w">    </span><span class="nt">"tts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"piper_tts"</span>
+<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pocket_tts"</span>
 <span class="w">      </span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8105"</span><span class="p">,</span>
@@ -1210,6 +1211,10 @@ workflow.</p></li>
 <span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
 <span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.04-py3</span>
+
+<span class="c1"># Prefetch and sync the snapshot before CUDA initialization, then retry once</span>
+<span class="c1"># only if the driver rejects a CUDA allocation without an OOM-killed container.</span>
+<span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
 </section>
@@ -1219,8 +1224,13 @@ workflow.</p></li>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
 <span class="c1"># Nemotron-3-Nano-Omni — DGX Spark (GB10).</span>
-<span class="c1"># The NVFP4 model shares unified memory with STT and the runtime, so retain the</span>
-<span class="c1"># conservative allocation used by the standard Nano stack.</span>
+<span class="c1"># The NVFP4 model shares unified memory with the rest of the stack. vLLM's</span>
+<span class="c1"># fractional profiler is unreliable while cold checkpoint reads change the</span>
+<span class="c1"># filesystem page cache, so reserve 2 GiB explicitly for the 32K hybrid</span>
+<span class="c1"># Mamba/attention cache. This covers four full 32K requests with the pinned</span>
+<span class="c1"># vLLM 0.20 cache layout; max_num_seqs still permits more shorter requests.</span>
+<span class="c1"># gpu_memory_utilization remains the vLLM startup admission threshold; it does</span>
+<span class="c1"># not size the cache when the byte value is set.</span>
 
 <span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
 <span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8108</span>
@@ -1231,6 +1241,7 @@ workflow.</p></li>
 <span class="nt">tensor_parallel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32768</span>
 <span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.25</span>
+<span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2147483648</span>
 <span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 
 <span class="nt">video_pruning_rate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
@@ -1240,6 +1251,10 @@ workflow.</p></li>
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
 <span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vllm/vllm-openai:v0.20.0</span>
 <span class="nt">extra_pip</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+
+<span class="c1"># Prefetch and sync the snapshot before CUDA initialization, then retry once</span>
+<span class="c1"># only if the driver rejects a CUDA allocation without an OOM-killed container.</span>
+<span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
 </section>
@@ -1342,15 +1357,15 @@ workflow.</p></li>
 </pre></div>
 </div>
 </section>
-<section id="config-model-servers-yaml-spark-piper-tts-server-yaml">
-<h3>yaml/spark/piper_tts_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-piper-tts-server-yaml" title="Link to this heading">#</a></h3>
+<section id="config-model-servers-yaml-spark-pocket-tts-server-yaml">
+<h3>yaml/spark/pocket_tts_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-pocket-tts-server-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># Shared CPU Piper TTS service.</span>
-<span class="nt">voice</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">en_US-lessac-medium</span>
+<span class="c1"># Shared CPU Pocket TTS service. bill_boerst is a CC0 Voice-Zero recording.</span>
+<span class="nt">voice</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bill_boerst</span>
+<span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">english</span>
 <span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8105</span>
-<span class="nt">use_cuda</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="nt">startup_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">600</span>
 <span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
 </pre></div>
@@ -1380,7 +1395,14 @@ workflow.</p></li>
 <span class="c1">#</span>
 <span class="c1"># vlm is THIRD in load order: STT → Omni → vlm.</span>
 <span class="c1"># free_at_startup ≈ 120 − 30 (Omni) − 2 (STT) ≈ 88 GiB.</span>
-<span class="c1"># 0.20 × 120 = 24 GiB cap: ~16 GiB Cosmos3 Reasoner weights + ~8 GiB KV.</span>
+<span class="c1"># Cosmos3 requires about 1.12 GiB of KV cache for one 8,192-token request.</span>
+<span class="c1"># Pin 1.5 GiB because vLLM's fractional memory profiler can misattribute</span>
+<span class="c1"># filesystem page-cache changes as model overhead on unified-memory systems.</span>
+<span class="c1"># Keep four sequences for concurrent shorter requests. The fixed cache is</span>
+<span class="c1"># shared, so concurrent maximum-length requests can queue, preempt, or</span>
+<span class="c1"># recompute when their aggregate token demand exceeds its capacity.</span>
+<span class="c1"># The 0.20 utilization remains vLLM's startup admission threshold; the fixed</span>
+<span class="c1"># byte value controls the KV-cache allocation.</span>
 <span class="c1"># hf_overrides selects the Reasoner runtime; details are documented in</span>
 <span class="c1"># docs/source/components/ai-services.md#per-server-notes.</span>
 
@@ -1393,6 +1415,7 @@ workflow.</p></li>
 <span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
 <span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
 <span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.20</span>
+<span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
 <span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
 <span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">async_scheduling</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
@@ -1405,6 +1428,10 @@ workflow.</p></li>
 <span class="c1"># See services/vlm-server/vlm_server.yaml for the full toggle docs.</span>
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
 <span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.07-py3</span>
+
+<span class="c1"># Prefetch and sync the snapshot before CUDA initialization, then retry once</span>
+<span class="c1"># only if the driver rejects a CUDA allocation without an OOM-killed container.</span>
+<span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
 </section>
@@ -1464,7 +1491,7 @@ workflow.</p></li>
 <span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">},</span>
 <span class="w">    </span><span class="nt">"tts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"piper_tts"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pocket_tts"</span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8105"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tts"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
@@ -1520,7 +1547,9 @@ workflow.</p></li>
 <span class="c1"># with one of these or contain one after '.', '?', or '!' followed by</span>
 <span class="c1"># whitespace or a closing quote. Matching is case-insensitive. Text through</span>
 <span class="c1"># the matched phrase is stripped before the agent sees the query; commas and</span>
-<span class="c1"># other mid-sentence mentions do not match.</span>
+<span class="c1"># other mid-sentence mentions do not match. The same stripped tail is used for</span>
+<span class="c1"># early global-STOP detection; the complete final transcript still determines</span>
+<span class="c1"># whether a stop-like opening is a global stop or a scoped agent command.</span>
 <span class="nt">magic_phrases</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"agent"</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"hey</span><span class="nv"> </span><span class="s">agent"</span>
@@ -1599,7 +1628,7 @@ workflow.</p></li>
 <span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"embedding"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">},</span>
 <span class="w">    </span><span class="nt">"tts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"piper_tts"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pocket_tts"</span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8105"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tts"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
@@ -1636,8 +1665,8 @@ workflow.</p></li>
 <span class="nt">workflow_config</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workflow.yaml</span>
 <span class="nt">voice_gate_yaml</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">voice_gate.yaml</span>
 
-<span class="c1"># Choose one to replace the shared foreground instructions. The packaged idle</span>
-<span class="c1"># or active route policy is always appended after the configured shared prompt.</span>
+<span class="c1"># Choose one to replace the idle and explicit background-action instructions.</span>
+<span class="c1"># Active tea guidance comes from the focused step policies in workflow.yaml.</span>
 <span class="c1"># foreground_prompt: &lt;inline shared foreground instructions&gt;</span>
 <span class="c1"># foreground_prompt_file: ../worker/tea_making_worker/prompts/foreground_prompt.txt</span>
 
@@ -1754,12 +1783,13 @@ workflow.</p></li>
 <span class="w">          </span><span class="no">legible, say label unreadable.</span>
 <span class="w">      </span><span class="nt">result_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">answer</span>
 <span class="w">    </span><span class="nt">evidence</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"(?is)^(?!.*\\b(none|nothing|dark|blurry|blurred|unreadable|unclear|unknown|absent|obscured|unable|cannot|can't|discern)\\b)(?!.*\\b(no|not|without)\\b.{0,32}\\b(tea|package|box|label|tag|texts?)\\b)(?=.*[a-z]{3}).+$"</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^accepted$"</span>
 <span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
 <span class="w">        </span><span class="no">Identify tea only from the current caption, never state or RAG.</span>
-<span class="w">        </span><span class="no">If the tea name is unreadable, commit nothing; do not retrieve. Prefer</span>
+<span class="w">        </span><span class="no">If the tea name is unreadable, commit empty updates; do not retrieve or</span>
+<span class="w">        </span><span class="no">write placeholder values. Prefer</span>
 <span class="w">        </span><span class="no">visible values. If temperature/time is missing,</span>
 <span class="w">        </span><span class="no">call rag_lookup once with "&lt;exact name&gt; water temperature steep time",</span>
 <span class="w">        </span><span class="no">top_k 2; accept only a section naming it. If every writable field is</span>
@@ -1769,6 +1799,8 @@ workflow.</p></li>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
 <span class="w">        </span><span class="no">Tea identity comes only from state tea_name or current_view, never RAG.</span>
+<span class="w">        </span><span class="no">tea_ready means the tea instructions were identified, not that the</span>
+<span class="w">        </span><span class="no">drink has been prepared.</span>
 <span class="w">        </span><span class="no">If the exact name is unknown, inspect the current frame. Retrieve only</span>
 <span class="w">        </span><span class="no">missing temperature or duration after the exact name is known. Never</span>
 <span class="w">        </span><span class="no">replace package values. Answer only what was asked.</span>
@@ -1788,27 +1820,25 @@ workflow.</p></li>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fill_water</span>
 <span class="w">    </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Fill the heating vessel</span>
-<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">tea_name</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">target_temperature_c</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">writes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">water_filled</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">trigger</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">current_view</span>
 <span class="w">      </span><span class="nt">interval_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">      </span><span class="nt">arguments</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">question</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">          </span><span class="no">Describe visible heating vessel interior and contents. Report</span>
-<span class="w">          </span><span class="no">concrete water cues: surface, level, reflections, or active</span>
-<span class="w">          </span><span class="no">pouring into it. Water outside or beside it does not count. Say when</span>
-<span class="w">          </span><span class="no">interior or water is not visible. Never infer.</span>
+<span class="w">          </span><span class="no">Describe the visible interior and contents of the kettle or pot.</span>
+<span class="w">          </span><span class="no">State whether water is visible inside and what supports that reading.</span>
+<span class="w">          </span><span class="no">If the contents are unclear, say so. Never infer.</span>
 <span class="w">      </span><span class="nt">result_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">answer</span>
 <span class="w">    </span><span class="nt">evidence</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|empty|obscured|cannot|can't)\\b)(?!.*\\b(no|not)\\s+(visible\\s+)?water\\b)(?=.*\\b(kettle|pot|vessel|container)\\b)(?=.*\\bwater\\b)(?=.*\\b(surface|level|reflection|pouring|inside|contains)\\b).+$"</span>
-<span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^accepted$"</span>
+<span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Set water_filled true only when this caption clearly shows the vessel</span>
-<span class="w">        </span><span class="no">interior plus a water surface, level, reflection, or pouring into it.</span>
-<span class="w">        </span><span class="no">Water nearby, a closed vessel, a user report, or unclear contents do</span>
-<span class="w">        </span><span class="no">not count. Otherwise commit empty updates/message.</span>
+<span class="w">        </span><span class="no">Judge the fresh caption semantically without requiring particular</span>
+<span class="w">        </span><span class="no">words. Set water_filled true when it reasonably shows water inside the</span>
+<span class="w">        </span><span class="no">vessel. Otherwise commit empty updates and message.</span>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
@@ -1827,28 +1857,33 @@ workflow.</p></li>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">heat_water</span>
 <span class="w">    </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Heat the water</span>
-<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">target_temperature_c</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">tea_name</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">target_temperature_c</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">writes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">heating_started</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">trigger</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">current_view</span>
 <span class="w">      </span><span class="nt">interval_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">      </span><span class="nt">arguments</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">question</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">          </span><span class="no">Describe visible heater-on indicators and transcribe the exact current</span>
-<span class="w">          </span><span class="no">numeric kettle or thermometer reading. Write the unit as Celsius or</span>
-<span class="w">          </span><span class="no">Fahrenheit. Mention hazards. If missing, say what is not visible. Do</span>
-<span class="w">          </span><span class="no">not convert or judge readiness.</span>
+<span class="w">          </span><span class="no">Describe the visible kettle or thermometer display and transcribe its</span>
+<span class="w">          </span><span class="no">current numeric reading and unit. If either is unclear, say so. Do not</span>
+<span class="w">          </span><span class="no">confuse a printed target temperature with the current reading.</span>
 <span class="w">      </span><span class="nt">result_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">answer</span>
 <span class="w">    </span><span class="nt">evidence</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"(?is)^(?:(?=.*\\b\\d{2,3}\\s*(°|degrees|c|f)\\b).+|(?!(?:.*\\b(no|not|without)\\b.{0,24}\\b(heater|heating|power|indicator|display|light)\\b|.*\\b(heater|heating|power|indicator|display|light)\\b.{0,24}\\b(off|inactive|not)\\b))(?=.*\\b(heater|heating|power|indicator|display|light)\\b.{0,24}\\b(on|active|running|lit|illuminated)\\b).+)$"</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^accepted$"</span>
 <span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Set heating_started true only when input is false and the caption shows</span>
-<span class="w">        </span><span class="no">an active heater indicator or a numeric temperature followed by Celsius</span>
-<span class="w">        </span><span class="no">or Fahrenheit. Otherwise commit empty updates/message. Do not compare</span>
-<span class="w">        </span><span class="no">temperatures or track whether the water is ready.</span>
-<span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">        </span><span class="no">This step detects that heating is underway; it does not wait for the tea</span>
+<span class="w">        </span><span class="no">target temperature. Ignore target_temperature_c when deciding this</span>
+<span class="w">        </span><span class="no">step. For every fresh current reading with an explicit Celsius or</span>
+<span class="w">        </span><span class="no">Fahrenheit unit, first call temperature__threshold with that exact</span>
+<span class="w">        </span><span class="no">reading and a threshold_c of 50. If its above result is true, commit</span>
+<span class="w">        </span><span class="no">heating_started true. If above is false, commit empty updates and</span>
+<span class="w">        </span><span class="no">message with rejected evidence. For a target value, ambiguous unit,</span>
+<span class="w">        </span><span class="no">missing reading, or unclear current-versus-target value, do not call the</span>
+<span class="w">        </span><span class="no">tool; commit empty updates and message with unknown evidence so it does</span>
+<span class="w">        </span><span class="no">not erase a prior confirmed reading.</span>
+<span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">temperature__threshold</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
 <span class="w">        </span><span class="no">Explain target from state. For a reading, call current_view and</span>
@@ -1867,7 +1902,7 @@ workflow.</p></li>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">start_steeping</span>
 <span class="w">    </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Start steeping</span>
-<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">tea_name</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">target_temperature_c</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">writes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">steeping_started_at_us</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steeping_started</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">trigger</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">current_view</span>
@@ -1880,15 +1915,19 @@ workflow.</p></li>
 <span class="w">          </span><span class="no">it is unconfirmed. Note hazards.</span>
 <span class="w">      </span><span class="nt">result_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">answer</span>
 <span class="w">    </span><span class="nt">evidence</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|outside|cannot|can't)\\b)(?!.*\\b(no|not)\\b.{0,80}\\b(immersed|submerged|in</span><span class="nv"> </span><span class="s">(the</span><span class="nv"> </span><span class="s">)?water)\\b)(?=.*\\b(tea</span><span class="nv"> </span><span class="s">bag|infuser|leaves)\\b)(?=.*\\b(immersed|submerged|in</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">water)\\b).+$"</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^accepted$"</span>
 <span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Only when the caption explicitly confirms both visible water and a tea</span>
-<span class="w">        </span><span class="no">bag, infuser, or leaves entering or immersed in it, call clock__now once</span>
-<span class="w">        </span><span class="no">and commit epoch_us as steeping_started_at_us with steeping_started true.</span>
-<span class="w">        </span><span class="no">A tea item in an empty vessel or without visible water contact is no</span>
-<span class="w">        </span><span class="no">start: do not call clock__now; commit empty updates/message. Never</span>
+<span class="w">        </span><span class="no">Judge when steeping starts, not when it finishes. Treat unconfirmed,</span>
+<span class="w">        </span><span class="no">unknown, unclear, or missing visual evidence as a hard stop: do not call</span>
+<span class="w">        </span><span class="no">clock__now, and commit empty updates and message with unknown evidence.</span>
+<span class="w">        </span><span class="no">Only when the fresh caption explicitly confirms both visible liquid and</span>
+<span class="w">        </span><span class="no">tea visibly contacting that liquid inside the same vessel, first call</span>
+<span class="w">        </span><span class="no">clock__now. Nearby, above, or outside the liquid does not count. Then</span>
+<span class="w">        </span><span class="no">commit exactly its epoch_us as steeping_started_at_us with</span>
+<span class="w">        </span><span class="no">steeping_started true. For any other caption, do not infer contact from</span>
+<span class="w">        </span><span class="no">context or prior state; commit empty updates and message. Never invent or</span>
 <span class="w">        </span><span class="no">replace a start time.</span>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">clock__now</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
@@ -1909,7 +1948,8 @@ workflow.</p></li>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">steep_timer</span>
 <span class="w">    </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Wait for steeping</span>
-<span class="w">    </span><span class="nt">reads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">steeping_started_at_us</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">reads</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">[</span><span class="nv">tea_name</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">target_temperature_c</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steeping_started_at_us</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">steep_duration_s</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">writes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">steeping_complete</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">trigger</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">clock__timer</span>
@@ -1940,6 +1980,102 @@ workflow.</p></li>
 </div>
 </section>
 </section>
+<section id="config-workflow-recorder">
+<h2>workflow-recorder<a class="headerlink" href="#config-workflow-recorder" title="Link to this heading">#</a></h2>
+<section id="config-workflow-recorder-yaml-device-io-hub-yaml">
+<h3>yaml/device_io_hub.yaml<a class="headerlink" href="#config-workflow-recorder-yaml-device-io-hub-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="nt">api_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">devkey</span>
+<span class="nt">api_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">devsecret-xr-livekit-prototype-2026</span>
+<span class="nt">room_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xr-workflow-recorder</span>
+
+<span class="nt">lk_port_ws</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7880</span>
+<span class="nt">lk_port_tcp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7881</span>
+<span class="nt">lk_port_udp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7882</span>
+
+<span class="nt">enable_web_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">web_server_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="nt">web_client_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../client-samples/web</span>
+
+<span class="nt">enable_token_server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+</section>
+<section id="config-workflow-recorder-yaml-models-json">
+<h3>yaml/models.json<a class="headerlink" href="#config-workflow-recorder-yaml-models-json" title="Link to this heading">#</a></h3>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8108"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"omni"</span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"stt"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"parakeet_stt"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8103"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stt"</span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"cosmos3_nano_reasoner"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8100"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"tts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"piper_tts"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8105"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tts"</span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="config-workflow-recorder-yaml-voice-gate-yaml">
+<h3>yaml/voice_gate.yaml<a class="headerlink" href="#config-workflow-recorder-yaml-voice-gate-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Keep the phrase list empty so commands and all narration reach the recorder.</span>
+<span class="c1"># Speech is saved only between "start workflow" and "finish workflow".</span>
+<span class="nt">magic_phrases</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="nt">listening_chime</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="nt">followup_grace_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+</pre></div>
+</div>
+</section>
+<section id="config-workflow-recorder-yaml-workflow-recorder-worker-yaml">
+<h3>yaml/workflow_recorder_worker.yaml<a class="headerlink" href="#config-workflow-recorder-yaml-workflow-recorder-worker-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="nt">models_config</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">models.json</span>
+<span class="nt">voice_gate_yaml</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">voice_gate.yaml</span>
+
+<span class="c1"># Paths resolve relative to this YAML file.</span>
+<span class="nt">artifacts_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../artifacts</span>
+<span class="nt">guides_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../guides</span>
+
+<span class="c1"># Raw frame sampling and looser semantic observation cadence.</span>
+<span class="nt">capture_fps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+<span class="nt">caption_interval_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
+<span class="nt">guide_scan_interval_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+
+<span class="c1"># Maximum time for the LLM conversion after "finish workflow".</span>
+<span class="nt">guide_generation_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">120.0</span>
+
+<span class="nt">frame_max_age_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+<span class="nt">frame_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3.0</span>
+
+<span class="nt">silero_threshold</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.4</span>
+<span class="nt">silence_duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.6</span>
+<span class="nt">min_speech</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.15</span>
+<span class="nt">idle_timeout_secs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+</pre></div>
+</div>
+</section>
+</section>
 <section id="config-xr-render-demo">
 <h2>xr-render-demo<a class="headerlink" href="#config-xr-render-demo" title="Link to this heading">#</a></h2>
 <section id="config-xr-render-demo-scene-scene-service-yaml">
@@ -1948,7 +2084,7 @@ workflow.</p></li>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
 <span class="c1"># Sample-local scene process reference configuration.</span>
-<span class="c1"># lovr_bin may also be supplied through LOVR_BIN.</span>
+<span class="c1"># LOVR_BIN in the environment takes priority over lovr_bin.</span>
 <span class="c1"># lovr_bin: /home/you/hub/lovr/build/bin/lovr</span>
 
 <span class="nt">xr_app_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./lovr</span>
@@ -2063,7 +2199,7 @@ workflow.</p></li>
 <span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stt"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">},</span>
 <span class="w">    </span><span class="nt">"tts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"piper_tts"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pocket_tts"</span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8105"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tts"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">},</span>
@@ -2241,7 +2377,7 @@ workflow.</p></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-nim-stt-server-yaml">yaml/96G_blackwell/nim_stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-nim-tts-server-yaml">yaml/96G_blackwell/nim_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-nim-vlm-server-yaml">yaml/96G_blackwell/nim_vlm_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-piper-tts-server-yaml">yaml/96G_blackwell/piper_tts_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-pocket-tts-server-yaml">yaml/96G_blackwell/pocket_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-stt-server-yaml">yaml/96G_blackwell/stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-vlm-server-yaml">yaml/96G_blackwell/vlm_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-embedding-server-yaml">yaml/dual_48G_ada/embedding_server.yaml</a></li>
@@ -2250,7 +2386,7 @@ workflow.</p></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-nim-stt-server-yaml">yaml/dual_48G_ada/nim_stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-nim-tts-server-yaml">yaml/dual_48G_ada/nim_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-nim-vlm-server-yaml">yaml/dual_48G_ada/nim_vlm_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-piper-tts-server-yaml">yaml/dual_48G_ada/piper_tts_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-pocket-tts-server-yaml">yaml/dual_48G_ada/pocket_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-stt-server-yaml">yaml/dual_48G_ada/stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-vlm-server-yaml">yaml/dual_48G_ada/vlm_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-models-default-json">yaml/models.default.json</a></li>
@@ -2261,7 +2397,7 @@ workflow.</p></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-nim-stt-server-yaml">yaml/spark/nim_stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-nim-tts-server-yaml">yaml/spark/nim_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-nim-vlm-server-yaml">yaml/spark/nim_vlm_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-piper-tts-server-yaml">yaml/spark/piper_tts_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-pocket-tts-server-yaml">yaml/spark/pocket_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-stt-server-yaml">yaml/spark/stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-vlm-server-yaml">yaml/spark/vlm_server.yaml</a></li>
 </ul>
@@ -2281,6 +2417,13 @@ workflow.</p></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-voice-gate-always-on-yaml">yaml/voice_gate.always-on.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-voice-gate-yaml">yaml/voice_gate.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-workflow-yaml">yaml/workflow.yaml</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-workflow-recorder">workflow-recorder</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-workflow-recorder-yaml-device-io-hub-yaml">yaml/device_io_hub.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-workflow-recorder-yaml-models-json">yaml/models.json</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-workflow-recorder-yaml-voice-gate-yaml">yaml/voice_gate.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-workflow-recorder-yaml-workflow-recorder-worker-yaml">yaml/workflow_recorder_worker.yaml</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo">xr-render-demo</a><ul class="nav section-nav flex-column">

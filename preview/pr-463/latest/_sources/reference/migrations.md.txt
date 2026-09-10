@@ -5,6 +5,42 @@
 
 # Release migration
 
+## Short workflow names
+
+Generated guides now use a short spoken `task.name`. Completion announcements
+and `list guides` use that name instead of the hash ID. Edit `task.name` in
+an existing guide YAML to rename it, then use `start guide <name>`. Internal
+IDs and filenames are unchanged, and ID-based selection still works. No
+numbering or new YAML field is required. Refer to {doc}`workflow-recorder`.
+
+## Workflow recording finish command
+
+Use `finish workflow` instead of `end workflow` to stop a demonstration and
+generate its draft SOP. The old ending command is no longer recognized as a
+recording control. The sample now welcomes participants on connection and
+explains the recording commands; connecting alone still does not record.
+
+## Standalone workflow recorder
+
+The workflow recorder now lives at `agent-samples/workflow-recorder/`, moved
+from `agent-samples/simple-vlm-example/workflow-recorder/`. Run
+`uv sync` and `uv run workflow_recorder` from the new directory. Start shared
+models there with `uv run --project ../model-servers model_servers`.
+
+Stop the recorder before moving an existing installation. Preserve its
+gitignored `artifacts/` and any local `guides/` files in the new sample
+directory. Recreate the orchestrator and worker virtual environments at their
+new paths; existing environment scripts can refer to the old location. The
+sample discovers guides again at startup. Refer to {doc}`workflow-recorder`
+for recording and SOP execution.
+
+Recording no longer starts on connection or completes on disconnect. Say
+`start workflow` to record a demonstration and `finish workflow` to stop and
+automatically generate a draft SOP. Disconnecting mid-recording preserves an
+interrupted packet without generating a guide. Keep the default empty
+voice-gate phrase list to capture narration, and review and approve generated
+guides before running them.
+
 ## DeviceIOHub rename
 
 Update `services/xr-media-hub/` to `services/device-io-hub/`, the
@@ -22,7 +58,7 @@ and command to `device_io_hub`. Rename `xr_media_hub.yaml` to
   `false`, `yes`, `no`, `on`, `off`, `1`, or `0` (case-insensitive). Numeric
   `1`/`0`, null values, and arbitrary strings now fail at startup instead of
   being interpreted by Python truthiness. This applies to vLLM eager, tool, and
-  scheduling flags, Nemotron-Omni BF16 selection, Piper CUDA, voice-gate
+  scheduling flags, Nemotron-Omni BF16 selection, voice-gate
   `listening_chime`, lab-monitoring `capture_marker_scans`, and tea-workflow
   `complete_on_skip`.
 - Return audio is paced before IPC by the built-in voice transport and bounded
@@ -33,6 +69,14 @@ and command to `device_io_hub`. Rename `xr_media_hub.yaml` to
   reserve. Increase the value for intentionally bursty custom producers, or
   decrease it for a tighter memory and latency bound when using a compatible
   custom producer.
+
+## Local speech service
+
+The local speech service changed from Piper to Pocket TTS with no compatibility
+alias. Replace the `piper_tts` model preset, `piper_tts_server` command, and
+`services/piper-tts/` path with `pocket_tts`, `pocket_tts_server`, and
+`services/pocket-tts/`. Pocket TTS voice names differ from Piper voice names;
+the checked-in profiles use the CC0 `bill_boerst` voice.
 
 ## Removed SDK compatibility surfaces
 

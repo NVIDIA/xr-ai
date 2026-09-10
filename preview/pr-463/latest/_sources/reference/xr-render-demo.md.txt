@@ -22,7 +22,7 @@ any owned process exit terminates the application stack.
 | hub | sample | `services/device-io-hub/` | `device_io_hub` | 8080 (HTTPS and `/rtc` WSS proxy); 7880 (plaintext LiveKit direct-debug path; firewall-restricted) |
 | cloudxr | sample | `services/cloudxr-runtime/` | `cloudxr_runtime` | 48322 (WSS proxy for WebRTC profiles; unused by `auto-native`) |
 | stt | reused | `services/stt-server/` | `stt_server` | 8103 |
-| tts | reused | `services/piper-tts/` | `piper_tts_server` | 8105 |
+| tts | reused | `services/pocket-tts/` | `pocket_tts_server` | 8105 |
 | omni | reused | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 (LLM) |
 | vlm | reused | `services/vlm-server/` | `vlm_server` | 8100 (Cosmos VLM) |
 | video-memory | sample | `services/video-memory-service/` | `video_memory_service` | 8310 (recorded-video typed RPC) |
@@ -195,10 +195,11 @@ LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceAgent
 The STT server serializes inference with a process-local lock because its shared
 NeMo model is not reentrant.
 
-## TTS — Piper
+(tts-piper)=
+## TTS — Pocket TTS
 
 Served on port 8105. The voice runtime streams the supervisor's final
-reply to Piper and returns the audio to the participant.
+reply to Pocket TTS and returns the audio to the participant.
 
 ```
 voice.output topic (final response)
@@ -276,9 +277,10 @@ Final messages are also persisted through native
 
 ## Native capability composition
 
-The sample-local scene process owns scene state and LOVR. `openxr-service`
-owns the headless tracking session, and `video-memory-service` owns recorded
-video decoding. `LiveFrameSource` supplies current-frame requests. Relay-managed
+The sample-local scene process owns scene state and LOVR. The LOVR app draws
+two primitive types, box and sphere. `openxr-service` owns the headless
+tracking session, and `video-memory-service` owns recorded video decoding.
+`LiveFrameSource` supplies current-frame requests. Relay-managed
 native tools provide the typed surface over those services; the demo does
 not launch or call MCP adapters.
 
