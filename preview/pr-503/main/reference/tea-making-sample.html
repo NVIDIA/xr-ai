@@ -281,17 +281,15 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.2.0-beta.1</option>
-    <option value="1" >v0.2.0-beta</option>
-    <option value="2" >v0.1.0-beta</option>
-    <option value="3" selected>main (development)</option>
+    <option value="0" >v0.1.0-beta</option>
+    <option value="1" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.2.0-beta.1/reference/tea-making-sample.html", "../../v0.2.0-beta/reference/tea-making-sample.html", "../../v0.1.0-beta/index.html", "tea-making-sample.html"];
+    var urls = ["../../v0.1.0-beta/index.html", "tea-making-sample.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -455,10 +453,11 @@ observers, and voice output. Refer to the
 architecture reference explains how to adapt the sample to another procedure
 rather than merely changing model settings.</p>
 <p>The defining pattern is a deterministic workflow around an agentic core. YAML
-declares the steps and state contract. Application code owns transitions and
-evidence. The model interprets observations and selects native tools, but it
-does not choose which workflow is active, mutate arbitrary state, or advance a
-step implicitly.</p>
+declares the steps and state contract. A VLM describes each current view, and
+the observation LLM judges that natural-language caption and selects native
+tools. Application code validates the resulting state proposal and counts any
+required consecutive confirmations. The model does not choose which workflow
+is active, mutate arbitrary state, or advance a step implicitly.</p>
 <section id="what-to-copy">
 <h2>What to copy<a class="headerlink" href="#what-to-copy" title="Link to this heading">#</a></h2>
 <p>Use this sample when your application needs one or more of these patterns:</p>
@@ -766,18 +765,21 @@ participant has an active step.</p>
 <ul class="simple">
 <li><p>With no active workflow, the model receives root tools: start/status,
 current view, RAG, recent background facts, and background controls.</p></li>
-<li><p>With an active workflow, it receives the current step’s tools plus explicit
-workflow controls and compact sparse state.</p></li>
+<li><p>With an active workflow, it receives the focused current-step policy and
+compact sparse state. Read-only step tools remain available unless the whole
+utterance is a procedural guide question. A state-changing workflow tool is
+exposed only for an explicit command, with advance-versus-skip arguments
+fixed before the model call.</p></li>
 </ul>
 <p>Active turns may address the current step, guide status and controls, or the
 independent background applications. For a request unrelated to all of those,
-the model must call no tool, leave guide state unchanged, and reply exactly “I
-can only help with the active tea guide right now.” The rule is scoped to the
-active route; the idle root assistant can answer ordinary questions.</p>
-<p>An inline <code class="docutils literal notranslate"><span class="pre">foreground_prompt</span></code> or <code class="docutils literal notranslate"><span class="pre">foreground_prompt_file</span></code> overrides only the
-shared foreground instructions. The packaged idle or active policy is appended
-after that shared prompt so configuration overrides cannot remove route
-selection, active-guide refusal, or workflow-control safeguards.</p>
+the model must call no tool, leave guide state unchanged, and briefly decline.
+The wording is intentionally not fixed. The rule is scoped to the active route;
+the idle root assistant can answer ordinary questions.</p>
+<p>An inline <code class="docutils literal notranslate"><span class="pre">foreground_prompt</span></code> or <code class="docutils literal notranslate"><span class="pre">foreground_prompt_file</span></code> supplies the root
+assistant and explicit background-route instructions. Active tea behavior comes
+from the focused policies built from <code class="docutils literal notranslate"><span class="pre">workflow.yaml</span></code>; configuration overrides
+cannot replace the active-guide scope or workflow-control safeguards.</p>
 <p>There is exactly one model loop. The foreground agent does not ask one model to
 route to another agent, and background agents never capture a foreground turn.
 <code class="docutils literal notranslate"><span class="pre">current_view</span></code> is a direct-return exception within that loop: after the route is
@@ -823,9 +825,10 @@ workflow step is active, the task:</p>
 <ol class="arabic simple">
 <li><p>Executes the step’s deterministic trigger, such as <code class="docutils literal notranslate"><span class="pre">current_view</span></code> or
 <code class="docutils literal notranslate"><span class="pre">clock__timer</span></code>.</p></li>
-<li><p>Applies the declared evidence rule.</p></li>
-<li><p>Calls the bounded tool loop with only the step’s observation tools.</p></li>
-<li><p>Accepts state through the controlled commit tool.</p></li>
+<li><p>Calls the bounded observation tool loop to judge the trigger result.</p></li>
+<li><p>Counts a valid completion proposal against the declared confirmation rule.</p></li>
+<li><p>Accepts state through the controlled commit tool only after the required
+confirmations.</p></li>
 <li><p>Publishes typed records and completion notices.</p></li>
 </ol>
 <p>Unavailable frames, invalid observations, and service failures record an error
@@ -836,8 +839,10 @@ model I/O run outside the participant state lock; the resulting commit is
 accepted only when the captured step and revision still match. Reset, restart,
 status, and advance controls therefore remain responsive during slow inference.</p>
 <p>To use audio, sensor, or backend evidence, add another deterministic trigger
-that returns a typed result. Keep evidence collection separate from state
-mutation so the same workflow rules remain testable without the live source.</p>
+that returns a typed result. Keep observation, semantic judgment, and guarded
+state mutation separate so the same workflow rules remain testable without the
+live source. Regex matching may guard the internal judgment token, but should
+not be the primary interpreter of natural-language captions.</p>
 </section>
 <section id="independent-background-agents">
 <h2>Independent background agents<a class="headerlink" href="#independent-background-agents" title="Link to this heading">#</a></h2>
@@ -865,8 +870,11 @@ readiness. Open <code class="docutils literal notranslate"><span class="pre">htt
 <code class="docutils literal notranslate"><span class="pre">http://&lt;xr-host&gt;:8092</span></code> from a trusted development network.
 <code class="docutils literal notranslate"><span class="pre">TeaWebEventsAgent</span></code> explicitly subscribes to the
 foreground, guidance, background, transcript, video-log, and participant
-lifecycle topics and publishes compact <code class="docutils literal notranslate"><span class="pre">WebEvent</span></code> payloads. There is no runtime
-wildcard subscription and no file tailing.</p>
+lifecycle topics and publishes compact <code class="docutils literal notranslate"><span class="pre">WebEvent</span></code> payloads. Visual panes show
+only application lifecycle and material <code class="docutils literal notranslate"><span class="pre">BackgroundFact</span></code> results; every-frame
+captions, no-change observations, unavailable frames, and errors remain in the
+durable records and worker log. There is no runtime wildcard subscription and
+no file tailing.</p>
 <p>The viewer keeps only a bounded in-memory history for the current process. The
 participant JSONL files under <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code> remain the durable record and include
 events that may not be selected for live presentation. The listener is
@@ -909,7 +917,8 @@ ZMQ service rather than bypassing the repository’s service model.</p>
 <li><p>Define the new state fields and steps in <code class="docutils literal notranslate"><span class="pre">workflow.yaml</span></code>.</p></li>
 <li><p>Give every step the smallest possible <code class="docutils literal notranslate"><span class="pre">reads</span></code>, <code class="docutils literal notranslate"><span class="pre">writes</span></code>, and tool set.</p></li>
 <li><p>Put calculations and external facts behind deterministic tools.</p></li>
-<li><p>Define evidence independently of the observation prompt.</p></li>
+<li><p>Give the VLM a small factual caption prompt and the observation LLM a small
+semantic judgment prompt; use code only to validate and count proposals.</p></li>
 <li><p>Keep advancement explicit unless the product explicitly requires automatic
 transitions.</p></li>
 <li><p>Add state and routing tests before tuning prompts.</p></li>
@@ -992,15 +1001,16 @@ history.</p></li>
 </ol>
 <p>The checked-in live-model routing eval shares the production foreground’s
 root-versus-active prompt and tool preparation. It validates the first model
-action, tool arguments, exact active-guide refusal, and positive active-guide
-routes. Start <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> so the configured Omni LLM endpoint on port 8108
-is healthy, then run from <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/</span></code>:</p>
+action, bound workflow arguments, semantic active-guide refusals, and positive
+active-guide routes. The suite must maintain an 80 percent pass rate so
+occasional language-model variation remains visible without making the
+evaluation unusable. Start <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> so the configured Omni LLM endpoint
+on port 8108 is healthy, then run from <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>worker<span class="w"> </span>python<span class="w"> </span>eval/eval.py
 </pre></div>
 </div>
-<p>The command prints one <code class="docutils literal notranslate"><span class="pre">PASS</span></code> or <code class="docutils literal notranslate"><span class="pre">FAIL</span></code> line for each case and exits with a
-nonzero status when a tool choice, argument schema, or response contract does
-not match.</p>
+<p>The command prints <code class="docutils literal notranslate"><span class="pre">PASS</span></code> or <code class="docutils literal notranslate"><span class="pre">MISS</span></code> for each case. It exits nonzero when the
+overall pass rate drops below 80 percent.</p>
 <p>When debugging, inspect the workflow, background, foreground, and Relay JSONL
 files as separate stages. This shows whether the problem came from evidence,
 tool selection, state policy, event delivery, or presentation.</p>
