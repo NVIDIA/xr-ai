@@ -1940,12 +1940,16 @@ workflow.</p></li>
 <span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Judge when steeping starts, not when it finishes. If the fresh caption</span>
-<span class="w">        </span><span class="no">shows tea visibly contacting liquid inside the vessel, first call</span>
+<span class="w">        </span><span class="no">Judge when steeping starts, not when it finishes. Treat unconfirmed,</span>
+<span class="w">        </span><span class="no">unknown, unclear, or missing visual evidence as a hard stop: do not call</span>
+<span class="w">        </span><span class="no">clock__now, and commit empty updates and message with unknown evidence.</span>
+<span class="w">        </span><span class="no">Only when the fresh caption explicitly confirms both visible liquid and</span>
+<span class="w">        </span><span class="no">tea visibly contacting that liquid inside the same vessel, first call</span>
 <span class="w">        </span><span class="no">clock__now. Nearby, above, or outside the liquid does not count. Then</span>
 <span class="w">        </span><span class="no">commit exactly its epoch_us as steeping_started_at_us with</span>
-<span class="w">        </span><span class="no">steeping_started true. Otherwise commit empty updates and message. Never</span>
-<span class="w">        </span><span class="no">invent or replace a start time.</span>
+<span class="w">        </span><span class="no">steeping_started true. For any other caption, do not infer contact from</span>
+<span class="w">        </span><span class="no">context or prior state; commit empty updates and message. Never invent or</span>
+<span class="w">        </span><span class="no">replace a start time.</span>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">clock__now</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
