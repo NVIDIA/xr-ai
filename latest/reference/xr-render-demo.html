@@ -778,9 +778,10 @@ text memory without model scratch output or tool traces.</p>
 </section>
 <section id="native-capability-composition">
 <h2>Native capability composition<a class="headerlink" href="#native-capability-composition" title="Link to this heading">#</a></h2>
-<p>The sample-local scene process owns scene state and LOVR. <code class="docutils literal notranslate"><span class="pre">openxr-service</span></code>
-owns the headless tracking session, and <code class="docutils literal notranslate"><span class="pre">video-memory-service</span></code> owns recorded
-video decoding. <code class="docutils literal notranslate"><span class="pre">LiveFrameSource</span></code> supplies current-frame requests. Relay-managed
+<p>The sample-local scene process owns scene state and LOVR. The LOVR app draws
+two primitive types, box and sphere. <code class="docutils literal notranslate"><span class="pre">openxr-service</span></code> owns the headless
+tracking session, and <code class="docutils literal notranslate"><span class="pre">video-memory-service</span></code> owns recorded video decoding.
+<code class="docutils literal notranslate"><span class="pre">LiveFrameSource</span></code> supplies current-frame requests. Relay-managed
 native tools provide the typed surface over those services; the demo does
 not launch or call MCP adapters.</p>
 <section id="spatial-tool-surface">
