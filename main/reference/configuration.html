@@ -1810,7 +1810,8 @@ workflow.</p></li>
 <span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
 <span class="w">        </span><span class="no">Identify tea only from the current caption, never state or RAG.</span>
-<span class="w">        </span><span class="no">If the tea name is unreadable, commit nothing; do not retrieve. Prefer</span>
+<span class="w">        </span><span class="no">If the tea name is unreadable, commit empty updates; do not retrieve or</span>
+<span class="w">        </span><span class="no">write placeholder values. Prefer</span>
 <span class="w">        </span><span class="no">visible values. If temperature/time is missing,</span>
 <span class="w">        </span><span class="no">call rag_lookup once with "&lt;exact name&gt; water temperature steep time",</span>
 <span class="w">        </span><span class="no">top_k 2; accept only a section naming it. If every writable field is</span>
