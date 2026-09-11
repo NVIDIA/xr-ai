@@ -557,6 +557,7 @@ drift:
 - Runtime dependencies:
   - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
   - `fastapi>=0.115`
   - `uvicorn>=0.30`
   - `pyyaml>=6.0`
