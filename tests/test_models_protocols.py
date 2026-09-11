@@ -13,6 +13,8 @@ from xr_ai_models import (
     OpenAICompatSTT,
     OpenAICompatTTS,
     OpenAICompatVLM,
+    PocketTTS,
+    StreamingTTSService,
     STTService,
     TTSService,
     VLMService,
@@ -42,6 +44,11 @@ def test_openai_compat_stt_satisfies_stt_service() -> None:
 def test_openai_compat_tts_satisfies_tts_service() -> None:
     tts = OpenAICompatTTS("http://stub")
     assert isinstance(tts, TTSService)
+
+
+def test_pocket_tts_satisfies_streaming_tts_service() -> None:
+    tts = PocketTTS("http://stub")
+    assert isinstance(tts, StreamingTTSService)
 
 
 def test_capabilities_defaults_to_text_streaming_only() -> None:

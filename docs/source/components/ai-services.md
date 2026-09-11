@@ -539,12 +539,14 @@ cleanup.
   ignored. Set `startup_timeout_s` to a positive finite number to override the
   600-second cold-start budget.
 - **magpie-tts** loads magpie_tts_multilingual_357m via NeMo TTS in-process.
-- **pocket-tts** loads the compact `kyutai/pocket-tts` model on CPU and serves
-  the configured voice through the repository's OpenAI-compatible TTS API.
-  Model loading and synthesis run outside the asyncio event loop. The default
-  `bill_boerst` voice derives from a CC0 Voice-Zero recording and is the only
-  voice accepted by this release. The service logs whether it loaded the gated
-  voice-cloning weights or the ungated fallback.
+- **pocket-tts** loads the compact `kyutai/pocket-tts` model on the configured
+  `cpu`, `cuda`, or automatically selected device. The checked-in deployment
+  profiles use CUDA and warm up the model before reporting ready. Its native
+  PCM streaming path emits audio during generation; non-streaming WAV requests
+  remain supported. Model loading and synthesis run outside the asyncio event
+  loop. The default `bill_boerst` voice derives from a CC0 Voice-Zero recording
+  and is the only voice accepted by this release. The service logs whether it
+  loaded the gated voice-cloning weights or the ungated fallback.
 - **embedding-server** serves `nvidia/llama-nemotron-embed-1b-v2` through
   `/v1/embeddings`. It emits 2048-dimensional Matryoshka embeddings and can
   truncate them to 384, 512, 768, 1024, or 2048 dimensions. The checked-in

@@ -8,6 +8,8 @@
 
 voice:       bill_boerst
 language:    english
+# Select cuda when available, with a CPU fallback.
+device:      auto
 port:        8105
 startup_timeout_s: 600
 model_cache: ../../models

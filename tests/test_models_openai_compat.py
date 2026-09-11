@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import wave
+
+import httpx
 import pytest
 
 from _stub_openai import StubOpenAI
@@ -23,8 +26,35 @@ from xr_ai_models import (
     OpenAICompatSTT,
     OpenAICompatTTS,
     OpenAICompatVLM,
+    PocketTTS,
     ToolDef,
 )
+
+
+async def test_pocket_tts_streams_pcm_chunks() -> None:
+    request_body = {}
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        request_body.update(json.loads(request.read()))
+        return httpx.Response(
+            200,
+            content=b"\x01\x00\x02\x00",
+            headers={"x-audio-sample-rate": "24000", "x-audio-channels": "1"},
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handle))
+    async with PocketTTS("http://stub", client=client) as tts:
+        chunks = [chunk async for chunk in tts.stream("Hello.")]
+    await client.aclose()
+
+    assert request_body == {
+        "input": "Hello.",
+        "response_format": "pcm",
+        "stream": True,
+    }
+    assert [(chunk.data, chunk.sample_rate, chunk.channels) for chunk in chunks] == [
+        (b"\x01\x00\x02\x00", 24000, 1),
+    ]
 
 
 async def test_embedding_batches_inputs_and_preserves_response_order() -> None:

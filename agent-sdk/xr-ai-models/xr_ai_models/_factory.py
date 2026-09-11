@@ -4,13 +4,14 @@
 """``make_*`` constructors that dispatch a :class:`Spec` to a concrete client."""
 from __future__ import annotations
 
-from ._config import KIND_OPENAI_COMPAT, KIND_RIVA_GRPC, ModelsConfig
+from ._config import KIND_OPENAI_COMPAT, KIND_POCKET_TTS, KIND_RIVA_GRPC, ModelsConfig
 from ._openai_compat import (
     OpenAICompatEmbedding,
     OpenAICompatLLM,
     OpenAICompatSTT,
     OpenAICompatTTS,
     OpenAICompatVLM,
+    PocketTTS,
 )
 from ._protocols import Capabilities, EmbeddingService, LLMService, STTService, TTSService, VLMService
 
@@ -134,6 +135,14 @@ def make_tts(config: ModelsConfig, name: str) -> TTSService:
     endpoint = spec.endpoint
     if adapter.kind == KIND_OPENAI_COMPAT:
         return OpenAICompatTTS(
+            base_url=endpoint.base_url,
+            api_key_env=endpoint.api_key_env,
+            timeout=endpoint.timeout,
+            health_check=endpoint.health_check,
+            health_path=endpoint.health_path,
+        )
+    if adapter.kind == KIND_POCKET_TTS:
+        return PocketTTS(
             base_url=endpoint.base_url,
             api_key_env=endpoint.api_key_env,
             timeout=endpoint.timeout,

@@ -33,6 +33,7 @@ from ._protocols import (
     TextPart,
     ToolCall,
     ToolDef,
+    TTSChunk,
     VideoInput,
     VideoPart,
 )
@@ -811,6 +812,45 @@ class OpenAICompatTTS:
 
     async def __aexit__(self, *exc: Any) -> None:
         await self.close()
+
+
+class PocketTTS(OpenAICompatTTS):
+    """Streaming client for the repository's Pocket TTS HTTP service."""
+
+    async def stream(
+        self,
+        text: str,
+        *,
+        timeout: float | None = None,
+    ) -> AsyncIterator[TTSChunk]:
+        """Yield signed 16-bit PCM chunks as Pocket TTS generates them."""
+
+        kwargs: dict[str, Any] = {
+            "json": {
+                "input": text,
+                "response_format": "pcm",
+                "stream": True,
+            },
+            "headers": _auth_headers(self._api_key),
+        }
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        async with self._client.stream("POST", self._url, **kwargs) as resp:
+            if resp.is_error:
+                body = await resp.aread()
+                logger.error("tts {}: {}", resp.status_code, body[:300])
+                resp.raise_for_status()
+            sample_rate = int(resp.headers["x-audio-sample-rate"])
+            channels = int(resp.headers.get("x-audio-channels", "1"))
+            pending = b""
+            async for block in resp.aiter_bytes():
+                block = pending + block
+                complete = len(block) - len(block) % (2 * channels)
+                if complete:
+                    yield TTSChunk(block[:complete], sample_rate, channels)
+                pending = block[complete:]
+            if pending:
+                raise ValueError("Pocket TTS returned an incomplete PCM sample")
 
 
 # ── Embeddings ────────────────────────────────────────────────────────────

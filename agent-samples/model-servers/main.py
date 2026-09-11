@@ -14,7 +14,7 @@ containers. Shipped profiles (yaml/models.<name>.json):
 
   default
     stt        — nvidia/parakeet-tdt-0.6b-v3        port 8103  (NeMo ASR)
-    tts        — Pocket TTS, bill_boerst voice       port 8105  (CPU)
+    tts        — Pocket TTS, bill_boerst voice       port 8105  (GPU)
     omni       — Nemotron-3-Nano-Omni-30B-A3B       port 8108  (vLLM; llm + agent_llm)
     vlm        — nvidia/Cosmos3-Nano Reasoner       port 8100  (vLLM)
     embedding  — nvidia/llama-nemotron-embed-1b-v2  port 8109  (vLLM)

@@ -1,12 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""``StreamingTtsProcessor`` — per-participant sentence-batched parallel TTS.
+"""``StreamingTtsProcessor`` — per-participant sentence-batched TTS.
 
 Consumes ``TextFrame``s (assistant output, one per chunk/token) and emits
 ``OutputAudioRawFrame``s. Buffers text per participant until a sentence
-boundary, synthesizes each sentence in parallel, then streams the WAVs out in
-order so each participant's playback stays monotonic.
+boundary, then emits audio in order so each participant's playback stays
+monotonic. Streaming TTS adapters emit PCM as the model generates it; other
+adapters synthesize sentences in parallel and emit completed WAVs.
 
 All streaming state — pending text, the synth/order queue, and the sender task
 — is keyed by participant id, so concurrent participants never share a buffer
@@ -19,15 +20,18 @@ each of their hub audio. A ``ParticipantLeftFrame`` releases just that
 participant's state, and a pipeline ``EndFrame``/``CancelFrame`` tears down all
 sender tasks.
 
-Every synthesized WAV is offered to ``VoiceGate.observe_tts_wav`` so the gate's
-listening chime can lazily build at the right sample rate. When constructed with
-a non-empty ``text_topic`` and a ``transport``, the processor also echoes each
-assistant turn's full assembled response on the data channel under that topic.
+The first available audio is offered to ``VoiceGate.observe_tts_wav`` so the
+gate's listening chime can lazily build at the right sample rate. When
+constructed with a non-empty ``text_topic`` and a ``transport``, the processor
+also echoes each assistant turn's full assembled response on the data channel
+under that topic.
 """
 from __future__ import annotations
 
 import asyncio
+import io
 import re
+import wave
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -38,13 +42,14 @@ from pipecat.frames.frames import (
     EndFrame,
     Frame,
     InterruptionFrame,
+    OutputAudioRawFrame,
     TextFrame,
     TTSStoppedFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from xr_ai_hub import DataMessage
-from xr_ai_models import TTSService
+from xr_ai_models import StreamingTTSService, TTSChunk, TTSService
 from xr_ai_voicegate import VoiceGate
 
 from .._audio import wav_to_output_frames
@@ -73,6 +78,12 @@ class _TtsResponseBoundary:
     pid: str
 
 
+@dataclass(frozen=True, slots=True)
+class _TtsStreamRequest:
+    text: str
+    pid: str
+
+
 class _TtsPidState:
     """Per-participant streaming state: pending text + its ordered sender."""
 
@@ -95,7 +106,7 @@ class _TtsPidState:
 
 
 class StreamingTtsProcessor(FrameProcessor):
-    """Per-participant sentence-batched parallel TTS at the pipeline tail.
+    """Per-participant sentence-batched TTS at the pipeline tail.
 
     ``transport`` and ``text_topic`` are optional; when both are supplied (and
     the topic is non-empty), the processor emits one ``send_return_data`` per
@@ -277,12 +288,15 @@ class StreamingTtsProcessor(FrameProcessor):
             st.active_responses += 1
         st.response_sentences += 1
         st.synth_seq += 1
-        task  = asyncio.create_task(
-            self._synthesize(sentence, pid=pid),
-            name=f"tts-synth-{pid}-{st.synth_seq}",
-            context=nemo_relay.fork_asyncio_context(),
-        )
-        await queue.put((task, pid))
+        if isinstance(self._tts, StreamingTTSService):
+            await queue.put(_TtsStreamRequest(sentence, pid))
+        else:
+            task = asyncio.create_task(
+                self._synthesize(sentence, pid=pid),
+                name=f"tts-synth-{pid}-{st.synth_seq}",
+                context=nemo_relay.fork_asyncio_context(),
+            )
+            await queue.put((task, pid))
 
     async def _synthesize(self, text: str, *, pid: str) -> bytes:
         with nemo_relay.scope.scope(
@@ -309,6 +323,14 @@ class StreamingTtsProcessor(FrameProcessor):
                     if st is not None and st.active_responses:
                         st.active_responses -= 1
                     continue
+                if isinstance(item, _TtsStreamRequest):
+                    try:
+                        await self._send_stream(item.text, pid=item.pid)
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception:
+                        logger.exception("streaming tts synth failed pid={!r}", item.pid)
+                    continue
                 task, pid = item
                 try:
                     wav = await task
@@ -328,6 +350,36 @@ class StreamingTtsProcessor(FrameProcessor):
                 await self._push_wav(wav, pid=pid)
         except asyncio.CancelledError:
             return
+
+    async def _send_stream(self, text: str, *, pid: str) -> None:
+        assert isinstance(self._tts, StreamingTTSService)
+        first = True
+        with nemo_relay.scope.scope(
+            "voice.tts",
+            nemo_relay.ScopeType.Function,
+            input={"text": text},
+            metadata={"participant_id": pid or None},
+        ):
+            async for chunk in self._tts.stream(text):
+                if first:
+                    self._observe_pcm(chunk)
+                    first = False
+                out = OutputAudioRawFrame(
+                    audio=chunk.data,
+                    sample_rate=chunk.sample_rate,
+                    num_channels=chunk.channels,
+                )
+                out.transport_destination = pid
+                await self.push_frame(out)
+
+    def _observe_pcm(self, chunk: TTSChunk) -> None:
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as wav:
+            wav.setnchannels(chunk.channels)
+            wav.setsampwidth(2)
+            wav.setframerate(chunk.sample_rate)
+            wav.writeframes(chunk.data)
+        self._voice_gate.observe_tts_wav(buffer.getvalue())
 
     async def _push_wav(self, wav_bytes: bytes, *, pid: str) -> None:
         try:
@@ -359,6 +411,8 @@ class StreamingTtsProcessor(FrameProcessor):
                 if item is None:
                     continue
                 if isinstance(item, _TtsResponseBoundary):
+                    continue
+                if isinstance(item, _TtsStreamRequest):
                     continue
                 synth_task, _ = item
                 synth_task.cancel()
