@@ -536,6 +536,13 @@ Package Contents
        Create and initialize the segment instead of attaching to an existing
        one. The creator is responsible for eventually calling :meth:`unlink`.
 
+   Raises
+   ------
+   FileNotFoundError
+       If the named segment does not exist when attaching.
+   ValueError
+       If an existing segment has an invalid or incompatible ring layout.
+
 
    .. py:method:: write_frame(data: bytes | memoryview, width: int, height: int, fmt: xr_ai_hub.PixelFormat, pts_us: int, seq: int) -> int
 

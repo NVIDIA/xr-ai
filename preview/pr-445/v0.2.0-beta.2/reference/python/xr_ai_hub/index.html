@@ -1040,6 +1040,15 @@ write_frame() for that slot can succeed. Both operations are O(1).</p>
 one. The creator is responsible for eventually calling <a class="reference internal" href="#xr_ai_hub.ShmRingBuffer.unlink" title="xr_ai_hub.ShmRingBuffer.unlink"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unlink()</span></code></a>.</p>
 </dd>
 </dl>
+</section>
+<section id="id9">
+<h3>Raises<a class="headerlink" href="#id9" title="Link to this heading">#</a></h3>
+<dl class="simple">
+<dt>FileNotFoundError</dt><dd><p>If the named segment does not exist when attaching.</p>
+</dd>
+<dt>ValueError</dt><dd><p>If an existing segment has an invalid or incompatible ring layout.</p>
+</dd>
+</dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_hub.ShmRingBuffer.write_frame">
 <span class="sig-name descname"><span class="pre">write_frame</span></span><span class="sig-paren">(</span>
@@ -1055,8 +1064,8 @@ one. The creator is responsible for eventually calling <a class="reference inter
 
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#xr_ai_hub.ShmRingBuffer.write_frame" title="Link to this definition">#</a></dt>
 <dd><p>Write a frame into the next free slot and return its index.</p>
-<section id="id9">
-<h4>Raises<a class="headerlink" href="#id9" title="Link to this heading">#</a></h4>
+<section id="id10">
+<h4>Raises<a class="headerlink" href="#id10" title="Link to this heading">#</a></h4>
 <dl class="simple">
 <dt>RuntimeError</dt><dd><p>If every slot is occupied. This is the producer’s back-pressure
 signal; consumers release occupied slots with <a class="reference internal" href="#xr_ai_hub.ShmRingBuffer.release_slot" title="xr_ai_hub.ShmRingBuffer.release_slot"><code class="xref py py-meth docutils literal notranslate"><span class="pre">release_slot()</span></code></a>.</p>
@@ -1073,8 +1082,8 @@ signal; consumers release occupied slots with <a class="reference internal" href
 <dd><p>Return a zero-copy view of a ready slot’s pixel data.</p>
 <p>The view remains valid until <a class="reference internal" href="#xr_ai_hub.ShmRingBuffer.release_slot" title="xr_ai_hub.ShmRingBuffer.release_slot"><code class="xref py py-meth docutils literal notranslate"><span class="pre">release_slot()</span></code></a> is called for the
 slot and must not be retained afterward.</p>
-<section id="id10">
-<h4>Raises<a class="headerlink" href="#id10" title="Link to this heading">#</a></h4>
+<section id="id11">
+<h4>Raises<a class="headerlink" href="#id11" title="Link to this heading">#</a></h4>
 <dl class="simple">
 <dt>RuntimeError</dt><dd><p>If the indicated slot header is invalid or not ready for consumption.</p>
 </dd>

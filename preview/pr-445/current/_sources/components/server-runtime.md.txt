@@ -34,11 +34,17 @@ The hub is one hub, many clients, many agents. A single instance fans the
 inbound media stream out to every connected agent and routes any return
 traffic back to the originating client only.
 
-On startup, `__main__.py` constructs a `HubEndpoint` (the IPC server),
-registers hub-local callbacks (`on_frame`, `on_audio`, `on_data`,
-`on_participant`), loads the configuration, and brings up the `LiveKitConnector`.
-The hub task and the connector task then run concurrently until `SIGINT` or
-`SIGTERM`. A periodic stats loop logs per-participant video, audio, and data
+On startup, `__main__.py` loads the configuration, constructs a `HubEndpoint`
+(the IPC server), registers hub-local callbacks (`on_frame`, `on_audio`,
+`on_data`, `on_participant`), and starts the hub receive loop before bringing
+up the `LiveKitConnector`. The connector waits for the hub to acknowledge
+shared-memory attachment and layout validation before connecting the LiveKit
+room. The ready file is created only after connector startup and the remaining
+startup configuration succeed.
+
+The hub task and connector task run concurrently, and the process waits for
+`SIGINT` or `SIGTERM` to shut down. Startup failures clean up the started
+components. A periodic stats loop logs per-participant video, audio, and data
 rates.
 
 ### Isolation contract
@@ -87,7 +93,8 @@ which transport carries the media.
    generated configuration does not restrict the signaling listener to
    loopback, so deployment firewalls must control direct access.
 2. Optionally starts the browser-facing web server and/or token server.
-3. Registers itself as a `ConnectorEndpoint` with the IPC layer.
+3. Creates its shared-memory ring and registers itself as a `ConnectorEndpoint`
+   with the IPC layer, waiting for the hub acknowledgement before proceeding.
 4. Connects a Python `RoomClient` to the LiveKit room. The room client is
    subscribe-only — it never publishes media of its own except per-participant
    return-audio tracks.
@@ -128,7 +135,9 @@ connector_N ──PUSH──┘    ↓ dispatch
 
 Each connector owns and creates its own shared-memory ring buffer and
 announces it to the hub with a `ConnectorRegistration` message; the hub opens
-that buffer on demand. Video frames travel zero-copy through the ring buffer:
+and validates that buffer before acknowledging registration. Duplicate
+registrations for the same connector and segment are acknowledged without
+replacing the mapping. Video frames travel zero-copy through the ring buffer:
 the connector writes pixels into a slot and pushes a lightweight
 `FRAME_SIGNAL` (metadata) at full frame rate; consumers that want the pixels
 issue a `FRAME_REQUEST`, and the hub replies with the held slot's
