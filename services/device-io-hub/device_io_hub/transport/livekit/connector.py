@@ -68,6 +68,9 @@ class LiveKitConnector:
             sub_addr=self._cfg.hub_sub_addr,
             num_slots=self._cfg.shm_num_slots,
             max_frame_bytes=self._cfg.shm_max_frame_bytes,
+            file_push_addr=self._cfg.hub_file_push_addr,
+            file_hwm=self._cfg.incoming_file_ipc_hwm,
+            file_max_bytes=self._cfg.incoming_file_max_bytes,
         )
         self._room_client = RoomClient(self._cfg, self._ep)
         self._room_connect_started = False

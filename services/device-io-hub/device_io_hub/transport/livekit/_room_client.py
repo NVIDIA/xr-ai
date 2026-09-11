@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from collections import deque
 from typing import NamedTuple
 
@@ -28,6 +29,7 @@ from device_io_hub.ipc import (
     AudioChunk,
     ConnectorEndpoint,
     DataMessage,
+    FileMessage,
     PixelFormat,
     ReturnAudioFlush,
 )
@@ -218,6 +220,53 @@ class _ReturnAudioPipe:
             pass
 
 
+_FILE_STREAM_TOPIC = "_streamkit.file"
+_FILE_APPLICATION_TOPIC_ATTRIBUTE = "_streamkit.topic"
+_FILE_RESERVED_PREFIX = "_streamkit."
+_FILE_MAX_FIELD_BYTES = 255
+_FILE_MAX_ATTRIBUTE_KEY_BYTES = 128
+_FILE_MAX_ATTRIBUTE_VALUE_BYTES = 1024
+_FILE_MAX_ATTRIBUTES = 32
+_FILE_MAX_ATTRIBUTES_BYTES = 8 * 1024
+
+
+def _validate_file_string(value: object, name: str, max_bytes: int, *, empty: bool = False) -> str:
+    if not isinstance(value, str) or (not empty and not value):
+        raise ValueError(f"{name} must be a nonempty string")
+    if "\x00" in value:
+        raise ValueError(f"{name} cannot contain NUL")
+    if len(value.encode("utf-8")) > max_bytes:
+        raise ValueError(f"{name} exceeds {max_bytes} UTF-8 bytes")
+    return value
+
+
+def _validate_file_attributes(attributes: object) -> dict[str, str]:
+    if attributes is None:
+        return {}
+    if not isinstance(attributes, dict):
+        raise ValueError("file attributes must be string key/value pairs")
+    validated: dict[str, str] = {}
+    application_count = 0
+    application_bytes = 0
+    for key, value in attributes.items():
+        key = _validate_file_string(key, "file attribute key", _FILE_MAX_ATTRIBUTE_KEY_BYTES)
+        value = _validate_file_string(
+            value,
+            f"file attribute {key!r}",
+            _FILE_MAX_ATTRIBUTE_VALUE_BYTES,
+            empty=True,
+        )
+        if key != _FILE_APPLICATION_TOPIC_ATTRIBUTE:
+            application_count += 1
+            application_bytes += len(key.encode("utf-8")) + len(value.encode("utf-8"))
+        validated[key] = value
+    if application_count > _FILE_MAX_ATTRIBUTES:
+        raise ValueError(f"file attributes exceed {_FILE_MAX_ATTRIBUTES} application entries")
+    if application_bytes > _FILE_MAX_ATTRIBUTES_BYTES:
+        raise ValueError(f"file attributes exceed {_FILE_MAX_ATTRIBUTES_BYTES} UTF-8 bytes")
+    return validated
+
+
 class RoomClient:
     """
     Subscribe-only LiveKit room participant.
@@ -233,6 +282,11 @@ class RoomClient:
         self._track_tasks: dict[str, asyncio.Task] = {}
         # Tasks spawned by sync event callbacks; cancelled on disconnect().
         self._pending_tasks: set[asyncio.Task] = set()
+        self._file_tasks: dict[
+            asyncio.Task, tuple[str, str, rtc.ByteStreamReader]
+        ] = {}
+        self._participant_sessions: dict[str, str] = {}
+        self._accepting_files = True
         self._stop = asyncio.Event()
         # Per-participant return audio: pid → (AudioSource, LocalTrackPublication, ReturnPipe).
         # Lazy-published on first send_return_audio for a pid; subscribe permissions
@@ -243,15 +297,22 @@ class RoomClient:
             str, tuple[rtc.AudioSource, rtc.LocalTrackPublication, _ReturnAudioPipe]
         ] = {}
 
+        self._room.register_byte_stream_handler(_FILE_STREAM_TOPIC, self._on_file_stream)
+
         # ── room event handlers ───────────────────────────────────────────────
 
         @self._room.on("participant_connected")
         def _on_joined(participant: rtc.RemoteParticipant) -> None:
-            self._spawn(self._handle_joined(participant))
+            session_id = self._participant_sessions.setdefault(
+                participant.identity,
+                uuid.uuid4().hex,
+            )
+            self._spawn(self._handle_joined(participant, session_id))
 
         @self._room.on("participant_disconnected")
         def _on_left(participant: rtc.RemoteParticipant) -> None:
-            self._spawn(self._handle_left(participant))
+            session_id = self._participant_sessions.pop(participant.identity, "")
+            self._spawn(self._handle_left(participant, session_id))
 
         @self._room.on("track_subscribed")
         def _on_track(
@@ -287,10 +348,17 @@ class RoomClient:
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
     async def connect(self) -> None:
+        self._accepting_files = True
         await self._room.connect(
             self._cfg.lk_internal_url,
             make_client_token(self._cfg, identity=self._cfg.identity),
-            options=rtc.RoomOptions(auto_subscribe=True, connect_timeout=15.0),
+            options=rtc.RoomOptions(
+                auto_subscribe=True,
+                connect_timeout=15.0,
+                data_stream=rtc.DataStreamOptions(
+                    max_payload_byte_length=self._cfg.incoming_file_max_bytes,
+                ),
+            ),
         )
         logger.info(
             "Room client connected: url={}  room={!r}  identity={!r}",
@@ -299,7 +367,11 @@ class RoomClient:
 
         # Notify IPC about participants already in the room when we joined.
         for participant in self._room.remote_participants.values():
-            await self._handle_joined(participant)
+            session_id = self._participant_sessions.setdefault(
+                participant.identity,
+                uuid.uuid4().hex,
+            )
+            await self._handle_joined(participant, session_id)
             for pub in participant.track_publications.values():
                 if pub.track is not None and pub.subscribed:
                     self._maybe_start_track(pub.track, participant.identity)
@@ -350,6 +422,13 @@ class RoomClient:
             logger.opt(exception=exc).error("spawned room-client task failed")
 
     async def disconnect(self) -> None:
+        self._accepting_files = False
+        self._participant_sessions.clear()
+        file_tasks = list(self._file_tasks)
+        for task in file_tasks:
+            task.cancel()
+        await asyncio.gather(*file_tasks, return_exceptions=True)
+        self._file_tasks.clear()
         for t in self._track_tasks.values():
             t.cancel()
         await asyncio.gather(*self._track_tasks.values(), return_exceptions=True)
@@ -366,6 +445,191 @@ class RoomClient:
         )
         self._return_audio.clear()
         await self._room.disconnect()
+
+    def _on_file_stream(self, reader: rtc.ByteStreamReader, participant_id: str) -> None:
+        """Synchronously admit or reject a newly opened LiveKit byte stream."""
+        participant_session_id = self._participant_sessions.get(participant_id)
+        if not self._accepting_files or participant_session_id is None:
+            reader.close()
+            return
+        if len(self._file_tasks) >= self._cfg.incoming_file_max_concurrent:
+            logger.warning(
+                "File {} from {!r} rejected: concurrent transfer limit reached",
+                reader.info.stream_id,
+                participant_id,
+            )
+            reader.close()
+            return
+        participant_file_count = sum(
+            owner == participant_id
+            for owner, _session_id, _reader in self._file_tasks.values()
+        )
+        if (
+            participant_file_count
+            >= self._cfg.incoming_file_max_concurrent_per_participant
+        ):
+            logger.warning(
+                "File {} from {!r} rejected: per-participant transfer limit reached",
+                reader.info.stream_id,
+                participant_id,
+            )
+            reader.close()
+            return
+        try:
+            header = self._snapshot_file_header(reader)
+        except ValueError as exc:
+            logger.warning(
+                "File {} from {!r} rejected: {}",
+                reader.info.stream_id,
+                participant_id,
+                exc,
+            )
+            reader.close()
+            return
+        task = asyncio.create_task(
+            self._consume_file(
+                reader,
+                participant_id,
+                participant_session_id,
+                header,
+            ),
+            name=f"file-{reader.info.stream_id}",
+        )
+        self._file_tasks[task] = (participant_id, participant_session_id, reader)
+        task.add_done_callback(self._file_task_done)
+
+    def _snapshot_file_header(self, reader: rtc.ByteStreamReader) -> dict[str, object]:
+        info = reader.info
+        size = info.size
+        if size is None or size < 0:
+            raise ValueError("a nonnegative total size is required")
+        if size > self._cfg.incoming_file_max_bytes:
+            raise ValueError(
+                f"declared size exceeds {self._cfg.incoming_file_max_bytes} bytes"
+            )
+        attributes = _validate_file_attributes(info.attributes)
+        unexpected_reserved = [
+            key
+            for key in attributes
+            if key.startswith(_FILE_RESERVED_PREFIX)
+            and key != _FILE_APPLICATION_TOPIC_ATTRIBUTE
+        ]
+        if unexpected_reserved:
+            raise ValueError(f"reserved file attribute {unexpected_reserved[0]!r} is not allowed")
+        topic = _validate_file_string(
+            attributes.get(_FILE_APPLICATION_TOPIC_ATTRIBUTE),
+            "file topic",
+            _FILE_MAX_FIELD_BYTES,
+        )
+        if topic.startswith(_FILE_RESERVED_PREFIX):
+            raise ValueError(f"file topic cannot begin with {_FILE_RESERVED_PREFIX!r}")
+        name = _validate_file_string(info.name, "file name", _FILE_MAX_FIELD_BYTES)
+        mime_type = _validate_file_string(
+            info.mime_type,
+            "file MIME type",
+            _FILE_MAX_FIELD_BYTES,
+        )
+        return {
+            "transfer_id": info.stream_id,
+            "size": size,
+            "topic": topic,
+            "name": name,
+            "mime_type": mime_type,
+            "attributes": attributes,
+        }
+
+    async def _consume_file(
+        self,
+        reader: rtc.ByteStreamReader,
+        participant_id: str,
+        participant_session_id: str,
+        header: dict[str, object],
+    ) -> None:
+        data = bytearray()
+        try:
+            async with asyncio.timeout(self._cfg.incoming_file_total_timeout_s):
+                while True:
+                    try:
+                        chunk = await asyncio.wait_for(
+                            anext(reader),
+                            timeout=self._cfg.incoming_file_idle_timeout_s,
+                        )
+                    except StopAsyncIteration:
+                        break
+                    data.extend(chunk)
+                    if len(data) > self._cfg.incoming_file_max_bytes:
+                        raise ValueError(
+                            f"observed size exceeds {self._cfg.incoming_file_max_bytes} bytes"
+                        )
+
+            declared_size = int(header["size"])
+            if declared_size and len(data) != declared_size:
+                raise ValueError(
+                    f"observed size {len(data)} does not match declared size {declared_size}"
+                )
+
+            final_attributes = _validate_file_attributes(reader.info.attributes)
+            unexpected_reserved = [
+                key
+                for key in final_attributes
+                if key.startswith(_FILE_RESERVED_PREFIX)
+                and key != _FILE_APPLICATION_TOPIC_ATTRIBUTE
+            ]
+            if unexpected_reserved:
+                raise ValueError(
+                    f"reserved file attribute {unexpected_reserved[0]!r} is not allowed"
+                )
+            if final_attributes.get(_FILE_APPLICATION_TOPIC_ATTRIBUTE) != header["topic"]:
+                raise ValueError("reserved file topic changed before end of stream")
+            application_attributes = {
+                key: value
+                for key, value in final_attributes.items()
+                if not key.startswith(_FILE_RESERVED_PREFIX)
+            }
+            payload = await asyncio.to_thread(bytes, data)
+            accepted = await self._ep.push_file(FileMessage(
+                participant_id=participant_id,
+                topic=str(header["topic"]),
+                pts_us=_now_us(),
+                transfer_id=str(header["transfer_id"]),
+                name=str(header["name"]),
+                mime_type=str(header["mime_type"]),
+                attributes=application_attributes,
+                data=payload,
+                participant_session_id=participant_session_id,
+            ))
+            if accepted:
+                logger.info(
+                    "File received: participant={!r} stream={!r} name={!r} bytes={}",
+                    participant_id,
+                    header["transfer_id"],
+                    header["name"],
+                    len(data),
+                )
+        except asyncio.CancelledError:
+            raise
+        except TimeoutError:
+            logger.warning(
+                "File {} from {!r} timed out",
+                header["transfer_id"],
+                participant_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "File {} from {!r} rejected: {}",
+                header["transfer_id"],
+                participant_id,
+                exc,
+            )
+        finally:
+            reader.close()
+
+    def _file_task_done(self, task: asyncio.Task) -> None:
+        entry = self._file_tasks.pop(task, None)
+        if entry is not None:
+            _participant_id, _participant_session_id, reader = entry
+            reader.close()
+        self._log_task_exception(task)
 
     async def send_return_data(self, msg: DataMessage) -> None:
         """Publish data to the target participant via LiveKit data channel."""
@@ -451,13 +715,37 @@ class RoomClient:
 
     # ── participant events ────────────────────────────────────────────────────
 
-    async def _handle_joined(self, participant: rtc.RemoteParticipant) -> None:
+    async def _handle_joined(
+        self,
+        participant: rtc.RemoteParticipant,
+        participant_session_id: str,
+    ) -> None:
         logger.info("Participant joined: {!r}", participant.identity)
-        await self._ep.notify_participant_joined(participant.identity, _now_us())
+        await self._ep.notify_participant_joined(
+            participant.identity,
+            _now_us(),
+            participant_session_id,
+        )
 
-    async def _handle_left(self, participant: rtc.RemoteParticipant) -> None:
+    async def _handle_left(
+        self,
+        participant: rtc.RemoteParticipant,
+        participant_session_id: str,
+    ) -> None:
         logger.info("Participant left: {!r}", participant.identity)
-        await self._ep.notify_participant_left(participant.identity, _now_us())
+        participant_tasks = [
+            task
+            for task, (owner, session_id, _reader) in self._file_tasks.items()
+            if owner == participant.identity and session_id == participant_session_id
+        ]
+        for task in participant_tasks:
+            task.cancel()
+        await asyncio.gather(*participant_tasks, return_exceptions=True)
+        await self._ep.notify_participant_left(
+            participant.identity,
+            _now_us(),
+            participant_session_id,
+        )
         entry = self._return_audio.pop(participant.identity, None)
         if entry is not None:
             _src, pub, pipe = entry

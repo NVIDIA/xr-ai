@@ -72,6 +72,10 @@ struct LiveKitConfig {
     /// `LiveKitBackend` does not fetch this URL — pass an inline `token`
     /// or subclass `LiveKitBackend` to override `FetchToken`.
     std::optional<std::string> token_url;
+
+    /// Hub participant identity used for client-to-agent routing. Set nullopt
+    /// only for legacy rooms that intentionally broadcast participant data.
+    std::optional<std::string> hub_identity = "xr-hub-connector";
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

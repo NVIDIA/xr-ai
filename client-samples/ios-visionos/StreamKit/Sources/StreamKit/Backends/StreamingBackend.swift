@@ -131,10 +131,24 @@ public protocol StreamingBackend: AnyObject, Sendable {
     ///   - reliable: `true` for ordered, guaranteed delivery (default).
     ///   - topic: Optional topic name; nil means the transport-default topic.
     func send(_ data: Data, reliable: Bool, topic: String?) async throws
+
+    /// Send a complete in-memory payload using the backend's file-transfer transport.
+    func sendBytes(_ data: Data, options: FileSendOptions) async throws -> FileTransferInfo
+
+    /// Send a file using the backend's file-transfer transport.
+    func sendFile(_ fileURL: URL, options: FileSendOptions) async throws -> FileTransferInfo
 }
 
 public extension StreamingBackend {
     func send(_ data: Data, reliable: Bool, topic: String?) async throws {
         try await send(data, reliable: reliable)
+    }
+
+    func sendBytes(_ data: Data, options: FileSendOptions) async throws -> FileTransferInfo {
+        throw StreamError.fileTransferUnsupported
+    }
+
+    func sendFile(_ fileURL: URL, options: FileSendOptions) async throws -> FileTransferInfo {
+        throw StreamError.fileTransferUnsupported
     }
 }

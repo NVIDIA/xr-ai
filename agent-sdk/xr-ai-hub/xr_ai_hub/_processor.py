@@ -20,7 +20,7 @@ every client. Two knobs control this:
 
 * ``filter`` — a :class:`Subscribe` flag that drops whole categories
   (``DATA`` / ``AUDIO`` / ``VIDEO``) at the ZMQ kernel level for
-  efficiency. Default is ``Subscribe.ALL``. Set to e.g.
+  efficiency. Default is ``Subscribe.DEFAULT``. Set to e.g.
   ``Subscribe.DATA | Subscribe.AUDIO`` to skip video frames.
 * ``auto_subscribe`` — when ``True`` (default), the endpoint installs an
   internal participant handler that calls ``subscribe(pid)`` on join and
@@ -51,6 +51,7 @@ Video frame access is two-step:
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -63,7 +64,7 @@ import zmq
 import zmq.asyncio
 
 from ._codec import decode, encode
-from ._types import (AgentPresence, AudioChunk, DataMessage, FrameData,
+from ._types import (AgentPresence, AudioChunk, DataMessage, FileMessage, FrameData,
                      FrameRequest, FrameSignal, MsgType, ParticipantEvent,
                      ReturnAudioFlush, RosterRequest, SubscriptionProbe)
 
@@ -73,6 +74,7 @@ FrameSignalCallback = Callable[[FrameSignal], Awaitable[None]]
 FrameDataCallback   = Callable[[FrameData],   Awaitable[None]]
 AudioCallback       = Callable[[AudioChunk],       Awaitable[None]]
 DataCallback        = Callable[[DataMessage],      Awaitable[None]]
+FileCallback        = Callable[[FileMessage],      Awaitable[None]]
 ParticipantCallback = Callable[[ParticipantEvent], Awaitable[None]]
 CallbackUnsubscribe = Callable[[], None]
 
@@ -99,9 +101,8 @@ _GLOBAL_TOPICS: tuple[bytes, ...] = (b"participant", b"control")
 class Subscribe(Flag):
     """Per-participant message-category filter.
 
-    Each flag corresponds to a class of pid-scoped ZMQ topics on the hub
-    PUB socket. ``Subscribe.ALL`` (the default) gets every category for
-    each subscribed participant; combine flags with ``|`` to scope down.
+    The real-time flags correspond to pid-scoped topics on the hub's main PUB
+    socket. ``Subscribe.FILE`` is opt-in and uses the bounded file publisher.
 
     Example
     -------
@@ -122,12 +123,18 @@ class Subscribe(Flag):
     VIDEO = auto()  # `video.{pid}.*` AND `video_data.{pid}.*` (signal + pixels)
     """Video frame signals and requested pixel data for a participant."""
 
-    ALL   = DATA | AUDIO | VIDEO
-    """All participant-scoped message categories."""
+    FILE  = auto()  # `file.{pid}.*` on the bounded file IPC lane
+    """Completed file transfers for a participant."""
+
+    DEFAULT = DATA | AUDIO | VIDEO
+    """Existing real-time categories selected by default."""
+
+    ALL   = DEFAULT
+    """Compatibility alias for all existing real-time message categories."""
 
 
-# Topic-prefix categories used by the subscription machinery. Each Subscribe
-# flag maps to one or more pid-scoped ZMQ topic prefixes; the trailing
+# Real-time topic-prefix categories used by the main subscription socket. Each
+# listed flag maps to one or more pid-scoped ZMQ topic prefixes; the trailing
 # ``.{pid}.`` is appended at subscribe time so e.g. ``data.alice`` does not
 # accidentally match ``data.alice2.chat``.
 _PREFIXES_BY_FLAG: dict["Subscribe", tuple[bytes, ...]] = {
@@ -146,6 +153,12 @@ def _prefixes(filter_: Subscribe, pid: str) -> list[bytes]:
             for cat in categories:
                 prefixes.append(cat + b"." + pid_bytes + b".")
     return prefixes
+
+
+def _file_prefix(participant_id: str) -> bytes:
+    """Return an exact, delimiter-safe participant prefix for file IPC."""
+    encoded = base64.urlsafe_b64encode(participant_id.encode("utf-8")).rstrip(b"=")
+    return b"file." + encoded + b"."
 
 
 class ProcessorEndpoint:
@@ -180,6 +193,13 @@ class ProcessorEndpoint:
         ZMQ address of the hub publisher that supplies inbound messages.
     push_addr :
         ZMQ address of the hub receiver for outbound messages.
+    file_sub_addr :
+        ZMQ address of the bounded file publisher. Required only when the
+        constructor filter or a later per-participant filter includes
+        ``Subscribe.FILE``.
+    file_hwm :
+        Maximum complete-file messages queued in each file-subscriber and
+        callback-worker buffer. Must be a positive integer; defaults to 2.
     auto_subscribe :
         Whether participant join and leave events automatically manage
         subscriptions. Defaults to ``True``.
@@ -198,16 +218,31 @@ class ProcessorEndpoint:
         push_addr:       str,
         *,
         auto_subscribe:  bool = True,
-        filter:          Subscribe = Subscribe.ALL,
+        filter:          Subscribe = Subscribe.DEFAULT,
+        file_sub_addr:   str | None = None,
+        file_hwm:        int = 2,
         agent_id:        str | None = None,
         announces_readiness: bool = False,
     ) -> None:
+        if isinstance(file_hwm, bool) or not isinstance(file_hwm, int) or file_hwm <= 0:
+            raise ValueError("file_hwm must be a positive integer")
         ctx = zmq.asyncio.Context.instance()
 
         self._sub: zmq.asyncio.Socket = ctx.socket(zmq.SUB)
         self._sub.connect(sub_addr)      # ZMQ retries until the hub binds — startup order is irrelevant
         for t in _GLOBAL_TOPICS:
             self._sub.setsockopt(zmq.SUBSCRIBE, t)
+
+        self._file_sub: zmq.asyncio.Socket | None = None
+        if file_sub_addr is not None:
+            self._file_sub = ctx.socket(zmq.SUB)
+            self._file_sub.setsockopt(zmq.RCVHWM, file_hwm)
+            self._file_sub.connect(file_sub_addr)
+        self._file_queue: asyncio.Queue[FileMessage] = asyncio.Queue(
+            maxsize=file_hwm,
+        )
+        if filter & Subscribe.FILE and self._file_sub is None:
+            raise ValueError("file_sub_addr is required when subscribing to files")
 
         self._push: zmq.asyncio.Socket = ctx.socket(zmq.PUSH)
         self._push.connect(push_addr)    # same — outbound messages queue until hub is ready
@@ -220,11 +255,13 @@ class ProcessorEndpoint:
         self._subscribed: dict[str, Subscribe] = {}
 
         self._participants: set[str] = set()
+        self._participant_sessions: dict[str, str] = {}
 
         self._frame_cbs:       list[FrameSignalCallback] = []
         self._frame_data_cbs:  list[FrameDataCallback]   = []
         self._audio_cbs:       list[AudioCallback]       = []
         self._data_cbs:        list[DataCallback]        = []
+        self._file_cbs:        list[FileCallback]        = []
         self._participant_cbs: list[ParticipantCallback] = []
 
         # Pending request_frame() calls keyed by (participant_id, track_id).
@@ -302,10 +339,19 @@ class ProcessorEndpoint:
         added   = new_filter & ~old_filter
         removed = old_filter & ~new_filter
 
+        if added & Subscribe.FILE and self._file_sub is None:
+            raise ValueError("file_sub_addr is required when subscribing to files")
+
         for pre in _prefixes(removed, participant_id):
             self._sub.setsockopt(zmq.UNSUBSCRIBE, pre)
         for pre in _prefixes(added, participant_id):
             self._sub.setsockopt(zmq.SUBSCRIBE, pre)
+        if self._file_sub is not None:
+            file_prefix = _file_prefix(participant_id)
+            if removed & Subscribe.FILE:
+                self._file_sub.setsockopt(zmq.UNSUBSCRIBE, file_prefix)
+            if added & Subscribe.FILE:
+                self._file_sub.setsockopt(zmq.SUBSCRIBE, file_prefix)
         if added or removed:
             self._sub_generation += 1
 
@@ -321,6 +367,11 @@ class ProcessorEndpoint:
         old = self._subscribed.pop(participant_id, Subscribe(0))
         for pre in _prefixes(old, participant_id):
             self._sub.setsockopt(zmq.UNSUBSCRIBE, pre)
+        if old & Subscribe.FILE and self._file_sub is not None:
+            self._file_sub.setsockopt(
+                zmq.UNSUBSCRIBE,
+                _file_prefix(participant_id),
+            )
         if old:
             self._sub_generation += 1
             self._reannounce_scope()
@@ -352,14 +403,30 @@ class ProcessorEndpoint:
         return True
 
     async def _probe(self, timeout: float) -> bool:
-        """Round-trip one probe token through the hub. True if it came back."""
+        """Round-trip probes through every active subscription lane."""
+        deadline = asyncio.get_running_loop().time() + timeout
+        if not await self._probe_socket(self._sub, deadline):
+            return False
+        has_file_subscriptions = any(
+            filter_ & Subscribe.FILE for filter_ in self._subscribed.values()
+        )
+        if has_file_subscriptions:
+            assert self._file_sub is not None
+            return await self._probe_socket(self._file_sub, deadline)
+        return True
+
+    async def _probe_socket(
+        self,
+        socket: zmq.asyncio.Socket,
+        deadline: float,
+    ) -> bool:
+        """Round-trip one probe through a specific subscriber socket."""
         token = uuid.uuid4().hex
         topic = f"{_PROBE_TOPIC_PREFIX}{token}".encode()
-        self._sub.setsockopt(zmq.SUBSCRIBE, topic)
+        socket.setsockopt(zmq.SUBSCRIBE, topic)
         fut: asyncio.Future[None] = asyncio.get_running_loop().create_future()
         self._probe_waiters[token] = fut
         try:
-            deadline = asyncio.get_running_loop().time() + timeout
             while not fut.done():
                 await self._push.send(
                     encode(MsgType.SUBSCRIPTION_PROBE, SubscriptionProbe(token=token)),
@@ -377,7 +444,7 @@ class ProcessorEndpoint:
             return True
         finally:
             self._probe_waiters.pop(token, None)
-            self._sub.setsockopt(zmq.UNSUBSCRIBE, topic)
+            socket.setsockopt(zmq.UNSUBSCRIBE, topic)
 
     # ── callback registration ─────────────────────────────────────────────────
 
@@ -401,6 +468,16 @@ class ProcessorEndpoint:
         def unsubscribe() -> None:
             if cb in self._data_cbs:
                 self._data_cbs.remove(cb)
+
+        return unsubscribe
+
+    def on_file(self, cb: FileCallback) -> CallbackUnsubscribe:
+        """Register an async completed-file callback and return an unsubscriber."""
+        self._file_cbs.append(cb)
+
+        def unsubscribe() -> None:
+            if cb in self._file_cbs:
+                self._file_cbs.remove(cb)
 
         return unsubscribe
 
@@ -583,8 +660,9 @@ class ProcessorEndpoint:
     async def run(self) -> None:
         """Receive and dispatch messages until :meth:`stop` is called.
 
-        Registered callbacks run in independent tasks. An unhandled callback
-        exception is fatal to the processor process.
+        Real-time callbacks run in independent tasks. File callbacks run
+        serially on a bounded worker. An unhandled callback exception is fatal
+        to the processor process in either case.
         """
         self._running_event.clear()
         self._running = True
@@ -594,6 +672,19 @@ class ProcessorEndpoint:
         # as unavailable while it starts up, instead of letting an already-ready
         # peer make the room look ready on its behalf.
         self._announce_presence(attached=True)
+
+        file_tasks = []
+        if self._file_sub is not None:
+            file_tasks = [
+                asyncio.create_task(
+                    self._run_files(),
+                    name="processor-file-ipc",
+                ),
+                asyncio.create_task(
+                    self._run_file_callbacks(),
+                    name="processor-file-callbacks",
+                ),
+            ]
 
         # Ask the hub to replay PARTICIPANT_EVENTs for already-connected
         # pids so the auto-subscribe handler can scoop them up. Safe even
@@ -618,9 +709,81 @@ class ProcessorEndpoint:
                 except Exception:
                     log.exception("Error dispatching message")
         finally:
+            for task in file_tasks:
+                task.cancel()
+            await asyncio.gather(*file_tasks, return_exceptions=True)
             self._running = False
             self._running_event.clear()
             self._announce_presence(attached=False)
+
+    async def _run_files(self) -> None:
+        """Receive file-lane messages without waiting for application callbacks."""
+        assert self._file_sub is not None
+        while self._running:
+            try:
+                _topic, raw = await self._file_sub.recv_multipart()
+                type_id, msg = await asyncio.to_thread(decode, raw)
+                if type_id == MsgType.SUBSCRIPTION_PROBE:
+                    fut = self._probe_waiters.get(msg.token)
+                    if fut is not None and not fut.done():
+                        fut.set_result(None)
+                    continue
+                if type_id != MsgType.FILE_MESSAGE:
+                    log.debug("Unhandled message type %d on file endpoint", type_id)
+                    continue
+                if not self._file_session_is_active(msg):
+                    log.debug(
+                        "Dropping stale file %s for participant %s",
+                        msg.transfer_id,
+                        msg.participant_id,
+                    )
+                    continue
+                try:
+                    self._file_queue.put_nowait(msg)
+                except asyncio.QueueFull:
+                    log.warning(
+                        "Dropping file %s for participant %s: callback queue is full",
+                        msg.transfer_id,
+                        msg.participant_id,
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("Error dispatching file message")
+
+    def _file_session_is_active(self, msg: FileMessage) -> bool:
+        active_session = self._participant_sessions.get(msg.participant_id)
+        return (
+            msg.participant_id in self._participants
+            and (
+                not msg.participant_session_id
+                or active_session == msg.participant_session_id
+            )
+        )
+
+    async def _run_file_callbacks(self) -> None:
+        """Run file callbacks serially while the file receiver handles probes."""
+        while self._running:
+            msg = await self._file_queue.get()
+            try:
+                if not self._file_session_is_active(msg):
+                    log.debug(
+                        "Dropping stale queued file %s for participant %s",
+                        msg.transfer_id,
+                        msg.participant_id,
+                    )
+                    continue
+                for cb in tuple(self._file_cbs):
+                    try:
+                        await cb(msg)
+                    except Exception as exc:
+                        log.critical(
+                            "Unhandled error in processor file callback; crashing",
+                            exc_info=exc,
+                        )
+                        os._exit(1)
+            finally:
+                self._file_queue.task_done()
 
     def _answers_for(self, participant_id: str) -> bool:
         """Whether this endpoint may speak to *participant_id* about readiness.
@@ -706,9 +869,16 @@ class ProcessorEndpoint:
             # before spawning user callbacks so callbacks observe a
             # consistent roster / subscription view.
             if msg.joined:
-                if msg.participant_id in self._participants:
+                if (
+                    msg.participant_id in self._participants
+                    and self._participant_sessions.get(msg.participant_id)
+                    == msg.participant_session_id
+                ):
                     return
                 self._participants.add(msg.participant_id)
+                self._participant_sessions[msg.participant_id] = (
+                    msg.participant_session_id
+                )
                 if self._auto_subscribe:
                     self.subscribe(msg.participant_id)
                 status = self._participant_status.get(
@@ -719,7 +889,15 @@ class ProcessorEndpoint:
             else:
                 if msg.participant_id not in self._participants:
                     return
+                active_session = self._participant_sessions.get(msg.participant_id, "")
+                if (
+                    msg.participant_session_id
+                    and active_session
+                    and msg.participant_session_id != active_session
+                ):
+                    return
                 self._participants.discard(msg.participant_id)
+                self._participant_sessions.pop(msg.participant_id, None)
                 if self._auto_subscribe:
                     self.unsubscribe(msg.participant_id)
                 self._participant_status.pop(msg.participant_id, None)
@@ -760,4 +938,6 @@ class ProcessorEndpoint:
     def close(self) -> None:
         """Close the endpoint's ZMQ sockets without waiting for queued messages."""
         self._sub.close(linger=0)
+        if self._file_sub is not None:
+            self._file_sub.close(linger=0)
         self._push.close(linger=0)
