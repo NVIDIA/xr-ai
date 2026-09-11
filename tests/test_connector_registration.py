@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Shared-memory registration handshake and connector health regressions."""
+"""Shared-memory registration handshake and frame-routing regressions."""
 from __future__ import annotations
 
 import asyncio
@@ -9,11 +9,7 @@ import asyncio
 import device_io_hub.ipc._connector as connector_module
 import device_io_hub.ipc._hub as hub_module
 import pytest
-from device_io_hub.ipc import (
-    ConnectorEndpoint,
-)
-from xr_ai_hub import PixelFormat
-from xr_ai_hub._shm import _IncompatibleSharedMemoryError
+from xr_ai_hub import FrameSignal, MsgType, ParticipantEvent, PixelFormat, encode
 
 pytestmark = pytest.mark.asyncio
 
@@ -51,8 +47,7 @@ async def test_missing_ring_is_recreated_with_unique_name(
         attempted_names.append(name)
         if missing_name is None:
             missing_name = name
-        if name == missing_name:
-            raise FileNotFoundError(name)
+            connector._ring.unlink()
         return real_ring(name=name, create=create)
 
     monkeypatch.setattr(hub_module, "ShmRingBuffer", fail_first_name)
@@ -75,7 +70,7 @@ async def test_incompatible_ring_fails_without_connecting_media(
     connector = make_connector()
 
     def reject_ring(*, name: str, create: bool):
-        raise _IncompatibleSharedMemoryError(f"invalid layout in {name}")
+        raise ValueError(f"invalid layout in {name}")
 
     monkeypatch.setattr(hub_module, "ShmRingBuffer", reject_ring)
     await settle()
@@ -92,32 +87,28 @@ async def test_incompatible_ring_fails_without_connecting_media(
 
 
 async def test_registration_acknowledgement_has_bounded_timeout(
-    hub_addrs,
+    hub,
+    make_connector,
     monkeypatch,
 ):
-    pull, pub = hub_addrs
-    connector = ConnectorEndpoint(
-        push_addr=pull,
-        sub_addr=pub,
-        connector_id="no-hub",
-        shm_name="xr_test_no_hub",
-        num_slots=1,
-        max_frame_bytes=64,
-    )
-    monkeypatch.setattr(connector_module, "_DEFAULT_REGISTRATION_TIMEOUT_S", 0.05)
+    connector = make_connector()
+    registrations = []
+
+    async def withhold_ack(reg, *_args):
+        registrations.append(reg)
+
+    monkeypatch.setattr(hub, "_acknowledge_registration", withhold_ack)
+    monkeypatch.setattr(connector_module, "_REGISTRATION_RESEND_INTERVAL_S", 0.01)
+    monkeypatch.setattr(connector_module, "_DEFAULT_REGISTRATION_TIMEOUT_S", 0.1)
     monkeypatch.setattr(connector_module, "_DEFAULT_REGISTRATION_ATTEMPTS", 1)
-    try:
-        with pytest.raises(
-            connector_module._ConnectorRegistrationError,
-            match="registration_timeout",
-        ):
-            await asyncio.wait_for(
-                connector.register(),
-                timeout=0.5,
-            )
-        assert connector._registered is False
-    finally:
-        connector.close()
+    with pytest.raises(
+        connector_module._ConnectorRegistrationError,
+        match="registration_timeout",
+    ):
+        await asyncio.wait_for(connector.register(), timeout=1.0)
+    assert connector._registered is False
+    assert len(registrations) >= 2
+    assert {reg.shm_name for reg in registrations} == {connector._shm_name}
 
 
 async def test_ring_creation_failure_is_structured(
@@ -138,7 +129,7 @@ async def test_ring_creation_failure_is_structured(
     assert connector._ring is None
 
 
-async def test_frame_without_registered_ring_marks_connector_unhealthy(
+async def test_frame_without_registered_ring_does_not_stop_hub(
     hub,
     make_connector,
     settle,
@@ -149,8 +140,13 @@ async def test_frame_without_registered_ring_marks_connector_unhealthy(
     await connector.notify_participant_joined("alice", pts_us=1)
     await settle()
 
-    consumer_ring = hub._ring_registry.pop(connector._connector_id)
-    consumer_ring.close()
+    await connector._push.send(encode(MsgType.PARTICIPANT_EVENT, ParticipantEvent(
+        participant_id="foreign", joined=True, pts_us=1, connector_id="unregistered",
+    )))
+    await connector._push.send(encode(MsgType.FRAME_SIGNAL, FrameSignal(
+        slot=0, seq=1, pts_us=2, width=1, height=1, fmt=PixelFormat.RGBA,
+        data_sz=4, participant_id="foreign", track_id="camera",
+    )))
     await connector.push_frame(
         b"ABCD",
         width=1,
@@ -161,5 +157,47 @@ async def test_frame_without_registered_ring_marks_connector_unhealthy(
         track_id="camera",
     )
     await settle()
-    assert connector._connector_id in hub._unhealthy_connectors
-    assert hub._running is False
+    assert ("foreign", "camera") not in hub._latest_slots
+    assert bytes(hub._latest_slots[("alice", "camera")][1].data) == b"ABCD"
+    assert hub._running is True
+
+
+async def test_duplicate_registration_preserves_mapping_and_held_frame(
+    hub, make_connector, settle, monkeypatch,
+):
+    connector = make_connector()
+    await connector.register()
+    await connector.notify_participant_joined("alice", pts_us=1)
+    await connector.push_frame(b"ABCD", 1, 1, PixelFormat.RGBA, 2, "alice", "camera")
+    await settle()
+    ring = hub._ring_registry[connector._connector_id]
+    held = hub._latest_slots[("alice", "camera")]
+
+    def unexpected_attach(**_kwargs):
+        pytest.fail("duplicate registration must not reattach the segment")
+
+    monkeypatch.setattr(hub_module, "ShmRingBuffer", unexpected_attach)
+    await connector.register()
+
+    assert hub._ring_registry[connector._connector_id] is ring
+    assert hub._latest_slots[("alice", "camera")] is held
+    assert bytes(held[1].data) == b"ABCD"
+
+
+async def test_registration_resend_recovers_a_lost_ack(hub, make_connector, monkeypatch):
+    connector = make_connector()
+    acknowledge = hub._acknowledge_registration
+    registered_rings = []
+
+    async def drop_first_ack(reg, *args):
+        registered_rings.append(hub._ring_registry[reg.connector_id])
+        if len(registered_rings) > 1:
+            await acknowledge(reg, *args)
+
+    monkeypatch.setattr(hub, "_acknowledge_registration", drop_first_ack)
+    monkeypatch.setattr(connector_module, "_REGISTRATION_RESEND_INTERVAL_S", 0.01)
+    await asyncio.wait_for(connector.register(), timeout=1.0)
+
+    assert connector._registered is True
+    assert len(registered_rings) >= 2
+    assert all(ring is registered_rings[0] for ring in registered_rings)

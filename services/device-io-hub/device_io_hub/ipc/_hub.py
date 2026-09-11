@@ -46,12 +46,9 @@ import zmq
 import zmq.asyncio
 
 from xr_ai_hub import (AGENT_STATUS_TOPIC, AudioChunk, ConnectorRegistration,
-                       ControlMessage, DataMessage, FrameData,
-                       MsgType, ParticipantEvent,
-                       ReturnAudioFlush, ShmRingBuffer, SlotView, decode, encode)
-from xr_ai_hub._shm import _IncompatibleSharedMemoryError
-
-from ._connector import _CONNECTOR_REGISTER_ACK_TOPIC
+                       ControlMessage, DataMessage, FrameData, MsgType,
+                       ParticipantEvent, ReturnAudioFlush, ShmRingBuffer, SlotView,
+                       decode, encode)
 
 
 def _now_us() -> int:
@@ -86,6 +83,7 @@ TOPIC_CONTROL            = b"control"
 TOPIC_RETURN_AUDIO       = b"return_audio"
 TOPIC_RETURN_AUDIO_FLUSH = b"return_audio_flush"
 TOPIC_RETURN_DATA        = b"return_data"
+_CONNECTOR_REGISTER_ACK_TOPIC = "_connector.registration_ack"
 
 
 class HubEndpoint:
@@ -109,8 +107,7 @@ class HubEndpoint:
 
         # connector_id → ShmRingBuffer (opened on CONNECTOR_REGISTER)
         self._ring_registry: dict[str, ShmRingBuffer] = {}
-        # Connector IDs whose missing ring forced hub shutdown.
-        self._unhealthy_connectors: set[str] = set()
+        self._ring_names: dict[str, str] = {}
         # participant_id → connector_id (updated on PARTICIPANT_EVENT)
         self._participant_connector: dict[str, str] = {}
         # (participant_id, track_id) → (ring, SlotView) of the latest frame.
@@ -328,11 +325,7 @@ class HubEndpoint:
                 return
             ring = self._ring_registry.get(connector_id)
             if ring is None:
-                self._mark_connector_unhealthy(
-                    connector_id,
-                    f"frame for participant {msg.participant_id!r} referenced a connector "
-                    "without a registered shared-memory ring",
-                )
+                logger.warning("Ring buffer for connector {} not found — dropped", connector_id)
                 return
 
             key = (msg.participant_id, msg.track_id)
@@ -562,22 +555,16 @@ class HubEndpoint:
             encode(MsgType.CONTROL, ack),
         ])
 
-    def _mark_connector_unhealthy(
-        self,
-        connector_id: str,
-        error_message: str,
-    ) -> None:
-        self._unhealthy_connectors.add(connector_id)
-        logger.error("Connector {} unhealthy: {}", connector_id, error_message)
-        self.stop()
-
     async def _handle_registration(self, reg: ConnectorRegistration) -> None:
+        if self._ring_names.get(reg.connector_id) == reg.shm_name:
+            await self._acknowledge_registration(reg)
+            return
         try:
             new_ring = ShmRingBuffer(name=reg.shm_name, create=False)
         except FileNotFoundError:
             error_code = "shm_not_found"
             error_message = f"shared memory {reg.shm_name!r} does not exist"
-        except _IncompatibleSharedMemoryError as exc:
+        except ValueError as exc:
             error_code = "shm_incompatible"
             error_message = f"shared memory {reg.shm_name!r} is incompatible: {exc}"
         except Exception as exc:
@@ -610,7 +597,7 @@ class HubEndpoint:
                     )
                 old_ring.close()
             self._ring_registry[reg.connector_id] = new_ring
-            self._unhealthy_connectors.discard(reg.connector_id)
+            self._ring_names[reg.connector_id] = reg.shm_name
             logger.info("Connector {} registered (shm={})", reg.connector_id, reg.shm_name)
             await self._acknowledge_registration(reg)
             return
@@ -636,4 +623,4 @@ class HubEndpoint:
         for ring in self._ring_registry.values():
             ring.close()
         self._ring_registry.clear()
-        self._unhealthy_connectors.clear()
+        self._ring_names.clear()

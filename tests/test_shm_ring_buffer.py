@@ -15,7 +15,6 @@ from xr_ai_hub._shm import (
     _GH_SIZE,
     _SH,
     _SH_SIZE,
-    _IncompatibleSharedMemoryError,
 )
 
 
@@ -74,7 +73,7 @@ def test_attach_rejects_invalid_global_header():
         header[0] = 0
         _GH.pack_into(owner._buf, 0, *header)
 
-        with pytest.raises(_IncompatibleSharedMemoryError, match="global header magic"):
+        with pytest.raises(ValueError, match="global header magic"):
             ShmRingBuffer(name=name, create=False)
     finally:
         owner.close()
@@ -89,7 +88,7 @@ def test_attach_rejects_invalid_slot_header():
         slot_header[0] = 0
         _SH.pack_into(owner._buf, _GH_SIZE, *slot_header)
 
-        with pytest.raises(_IncompatibleSharedMemoryError, match="slot 0.*header magic"):
+        with pytest.raises(ValueError, match="slot 0.*header magic"):
             ShmRingBuffer(name=name, create=False)
     finally:
         owner.close()

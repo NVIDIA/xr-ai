@@ -69,7 +69,7 @@ class LiveKitConnector:
             max_frame_bytes=self._cfg.shm_max_frame_bytes,
         )
         self._room_client = RoomClient(self._cfg, self._ep)
-        self._room_connected = False
+        self._room_connect_started = False
 
     # ── callback registration ─────────────────────────────────────────────────
 
@@ -95,18 +95,26 @@ class LiveKitConnector:
             # Ring creation happens inside register(), after the expensive
             # services above and immediately before the IPC handshake.
             await self._ep.register()
+            self._room_connect_started = True
             await self._room_client.connect()
-            self._room_connected = True
-        except _ConnectorRegistrationError as exc:
+            self._ep.on_return_data(self._room_client.send_return_data)
+            self._ep.on_return_audio(self._room_client.send_return_audio)
+            self._ep.on_return_audio_flush(self._room_client.flush_return_audio)
+            logger.info("LiveKitConnector started — room={!r}", self._cfg.room_name)
+        except BaseException as exc:
             await self.stop()
-            raise StartupError(
-                "DeviceIOHub video IPC registration failed; LiveKit media was not accepted.\n"
-                f"{exc}"
-            ) from exc
-        self._ep.on_return_data(self._room_client.send_return_data)
-        self._ep.on_return_audio(self._room_client.send_return_audio)
-        self._ep.on_return_audio_flush(self._room_client.flush_return_audio)
-        logger.info("LiveKitConnector started — room={!r}", self._cfg.room_name)
+            if isinstance(exc, _ConnectorRegistrationError):
+                banner = "━" * 56
+                raise StartupError("\n".join([
+                    "",
+                    banner,
+                    "  DeviceIOHub video IPC registration failed — refusing to start",
+                    banner,
+                    "  LiveKit media was not accepted.",
+                    f"  {exc}",
+                    banner,
+                ])) from exc
+            raise
 
     async def run(self) -> None:
         """
@@ -144,7 +152,8 @@ class LiveKitConnector:
         docker_task = asyncio.create_task(self._docker.stop(), name="docker-stop")
         self._ep.stop()
         self._room_client.stop()
-        if self._room_connected:
+        if self._room_connect_started:
+            self._room_connect_started = False
             await self._room_client.disconnect()
         self._ep.close()
         if self._web:

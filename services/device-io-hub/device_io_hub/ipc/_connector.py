@@ -34,6 +34,8 @@ from xr_ai_hub import (AudioChunk, ConnectorRegistration, ControlMessage, DataMe
                        FrameSignal, MsgType, ParticipantEvent, PixelFormat,
                        ReturnAudioFlush, ShmRingBuffer, decode, encode)
 
+from ._hub import _CONNECTOR_REGISTER_ACK_TOPIC
+
 ReturnAudioCallback      = Callable[[AudioChunk],        Awaitable[None]]
 ReturnDataCallback       = Callable[[DataMessage],       Awaitable[None]]
 ReturnAudioFlushCallback = Callable[[ReturnAudioFlush],  Awaitable[None]]
@@ -43,7 +45,6 @@ _DEFAULT_MAX_FRAME_BYTES = 12_441_600  # 4K NV12
 _DEFAULT_REGISTRATION_TIMEOUT_S = 3.0
 _DEFAULT_REGISTRATION_ATTEMPTS  = 3
 _REGISTRATION_RESEND_INTERVAL_S = 0.25
-_CONNECTOR_REGISTER_ACK_TOPIC = "_connector.registration_ack"
 
 
 class _ConnectorRegistrationError(RuntimeError):
@@ -51,8 +52,6 @@ class _ConnectorRegistrationError(RuntimeError):
 
     def __init__(self, code: str, message: str) -> None:
         super().__init__(f"{code}: {message}")
-        self.code = code
-        self.message = message
 
 
 class ConnectorEndpoint:
@@ -104,7 +103,6 @@ class ConnectorEndpoint:
         self._num_slots = num_slots
         self._max_frame_bytes = max_frame_bytes
         self._ring: ShmRingBuffer | None = None
-        self._ring_generation = 0
         self._registered = False
 
         ctx = zmq.asyncio.Context.instance()
@@ -177,10 +175,9 @@ class ConnectorEndpoint:
 
     def _create_ring(self) -> None:
         """Create a connector-owned ring immediately before registration."""
-        self._ring_generation += 1
         self._shm_name = (
             self._shm_base_name
-            if self._ring_generation == 1
+            if not self._shm_name
             else f"{self._shm_base_name}_{uuid.uuid4().hex[:8]}"
         )
         try:
@@ -202,27 +199,21 @@ class ConnectorEndpoint:
         timeout: float,
     ) -> dict[str, Any]:
         """Send until a correlated ACK arrives or the bounded timeout expires."""
-        async def exchange() -> dict[str, Any]:
-            while True:
-                await self._push.send(encode(MsgType.CONNECTOR_REGISTER, reg))
-                try:
-                    _topic, raw = await asyncio.wait_for(
-                        self._sub.recv_multipart(),
-                        timeout=_REGISTRATION_RESEND_INTERVAL_S,
-                    )
-                except TimeoutError:
-                    continue
-                type_id, ack = decode(raw)
-                if type_id == MsgType.CONTROL and ack.topic == _CONNECTOR_REGISTER_ACK_TOPIC:
-                    payload = ack.payload
-                    if (payload.get("connector_id"), payload.get("shm_name")) == (
-                        self._connector_id,
-                        reg.shm_name,
-                    ):
-                        return payload
-
         try:
-            return await asyncio.wait_for(exchange(), timeout=timeout)
+            async with asyncio.timeout(timeout):
+                while True:
+                    await self._push.send(encode(MsgType.CONNECTOR_REGISTER, reg))
+                    if not await self._sub.poll(timeout=_REGISTRATION_RESEND_INTERVAL_S * 1000):
+                        continue
+                    _topic, raw = await self._sub.recv_multipart()
+                    type_id, ack = decode(raw)
+                    if type_id == MsgType.CONTROL and ack.topic == _CONNECTOR_REGISTER_ACK_TOPIC:
+                        payload = ack.payload
+                        if (payload.get("connector_id"), payload.get("shm_name")) == (
+                            self._connector_id,
+                            reg.shm_name,
+                        ):
+                            return payload
         except TimeoutError:
             self._registered = False
             raise _ConnectorRegistrationError(
@@ -360,8 +351,6 @@ class ConnectorEndpoint:
                 elif type_id == MsgType.RETURN_AUDIO_FLUSH:
                     for cb in self._return_audio_flush_cbs:
                         await cb(msg)
-                elif type_id == MsgType.CONTROL and msg.topic == _CONNECTOR_REGISTER_ACK_TOPIC:
-                    logger.debug("Ignoring stale connector registration ACK")
                 else:
                     logger.debug("Connector: unhandled return type {}", type_id)
             except Exception:

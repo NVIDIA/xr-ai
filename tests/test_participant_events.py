@@ -15,7 +15,7 @@ from types import SimpleNamespace
 
 import pytest
 import device_io_hub.ipc._hub as hub_module
-from device_io_hub.ipc._connector import _CONNECTOR_REGISTER_ACK_TOPIC
+from device_io_hub.ipc._hub import _CONNECTOR_REGISTER_ACK_TOPIC
 
 from xr_ai_hub import (
     ConnectorRegistration,
@@ -157,10 +157,7 @@ async def test_connector_reregistration_releases_held_slots(hub, make_connector,
     await settle()
     assert ("alice", "cam") in hub._latest_slots  # frame held in the ring
 
-    # Re-register the same connector (crash/reconnect while a frame is held).
-    # Pre-fix: the held slot is left dangling and close() raises BufferError
-    # (swallowed by the run loop), so the stale entry survives. Post-fix: the
-    # held slot is released and dropped before the old ring is closed.
+    conn._destroy_ring()
     await conn.register()
     await settle()
     assert ("alice", "cam") not in hub._latest_slots
@@ -207,7 +204,7 @@ async def test_connector_reregistration_open_failure_preserves_healthy_ring(monk
     )
     hub._latest_slots = {("alice", "cam"): (old_ring, held_view)}
     hub._ring_registry = {"conn": old_ring}
-    hub._unhealthy_connectors = set()
+    hub._ring_names = {"conn": "original"}
     hub._pub = FakePublisher()
     monkeypatch.setattr(hub_module, "ShmRingBuffer", fail_open)
 
@@ -223,6 +220,7 @@ async def test_connector_reregistration_open_failure_preserves_healthy_ring(monk
     assert hub._latest_slots == {("alice", "cam"): (old_ring, held_view)}
     assert held_data.tobytes() == b"held"
     assert hub._ring_registry == {"conn": old_ring}
+    assert hub._ring_names == {"conn": "original"}
     type_id, ack = decode(hub._pub.messages[0][1])
     assert type_id == MsgType.CONTROL
     assert ack.topic == _CONNECTOR_REGISTER_ACK_TOPIC

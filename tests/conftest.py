@@ -15,7 +15,7 @@ Fixtures
 ``hub``                 — a running :class:`HubEndpoint`.
 ``make_connector``      — factory yielding fresh :class:`ConnectorEndpoint`s
                           tied to ``hub_addrs`` (each represents one client
-                          on its own ring buffer).
+                          with a ring buffer created during registration).
 ``make_processor``      — factory yielding fresh :class:`ProcessorEndpoint`s
                           (each represents one agent / consumer).
 ``settle``              — small ``await asyncio.sleep`` that lets ZMQ
@@ -139,7 +139,8 @@ async def hub(hub_addrs) -> AsyncIterator[HubEndpoint]:
 async def make_connector(hub_addrs):
     """Factory creating client-side ``ConnectorEndpoint``s wired to the hub.
 
-    Each call yields a fresh connector with its own ring buffer / shm name.
+    Each call yields a fresh connector with a unique shared-memory name;
+    its ring buffer is created when registration begins.
     The fixture cleans up every connector it produced when the test exits.
     """
     pull, pub = hub_addrs

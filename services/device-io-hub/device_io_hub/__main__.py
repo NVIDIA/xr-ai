@@ -97,89 +97,72 @@ async def main(ready_file: Path | None = None) -> None:
 
     connector = LiveKitConnector(cfg)
     hub_task = asyncio.create_task(hub.run(), name="hub")
-    await asyncio.sleep(0)
-    try:
-        await connector.start()
-    except BaseException:
-        hub.stop()
-        hub.close()
-        hub_task.cancel()
-        await asyncio.gather(hub_task, return_exceptions=True)
-        raise
-
-    vr_cfg = cfg.video_recording or {}
-    if vr_cfg.get("enabled"):
-        from device_io_hub.video import VideoRecorder, VideoRecorderConfig
-        rc_defaults = VideoRecorderConfig()
-        rc = VideoRecorderConfig(
-            out_dir         = vr_cfg.get("out_dir",         rc_defaults.out_dir),
-            chunk_frames    = int(vr_cfg.get("chunk_frames",    rc_defaults.chunk_frames)),
-            max_total_bytes = int(vr_cfg.get("max_total_bytes", rc_defaults.max_total_bytes)),
-            sample_fps      = float(vr_cfg.get("sample_fps",    rc_defaults.sample_fps)),
-            bitrate         = int(vr_cfg.get("bitrate",         rc_defaults.bitrate)),
-            gpu_id          = int(vr_cfg.get("gpu_id",          rc_defaults.gpu_id)),
-        )
-        _recorder = VideoRecorder(rc)
-        logger.info("Video recording enabled  out_dir={}", rc.out_dir)
-
-    token = make_client_token(cfg, identity="ios-client")
-    web_scheme = "https" if cfg.web_server_tls else "http"
-    # External clients reach LiveKit via the web server's /rtc proxy;
-    # without that, LiveKit's native plain ws:// is the only path.
-    if cfg.enable_web_server:
-        lk_scheme   = "wss" if cfg.web_server_tls else "ws"
-        lk_url_port = cfg.web_server_port
-    else:
-        lk_scheme   = "ws"
-        lk_url_port = cfg.lk_port_ws
-    logger.info("LiveKit URL : {}://localhost:{}", lk_scheme, lk_url_port)
-    logger.info("Room        : {}", cfg.room_name)
-    logger.info("Token       : {}", token)
-    if cfg.enable_web_server:
-        logger.info("Web client  : {}://localhost:{}", web_scheme, cfg.web_server_port)
-    if _recorder is not None:
-        logger.info("Recording   : {}", rc.out_dir)
-
-    if ready_file:
-        ready_file.touch()
-
-    stop = asyncio.Event()
+    tasks = [hub_task]
+    connector_started = False
+    installed_signals = []
     loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, stop.set)
+    try:
+        await asyncio.sleep(0)
+        await connector.start()
+        connector_started = True
 
-    logger.info("DeviceIOHub running — press Ctrl-C to exit")
-    conn_task  = asyncio.create_task(connector.run(), name="connector")
-    stats_task = asyncio.create_task(_stats_loop(),   name="stats")
-    stop_task  = asyncio.create_task(stop.wait(),     name="stop-signal")
-
-    done, _ = await asyncio.wait(
-        [stop_task, hub_task, conn_task],
-        return_when=asyncio.FIRST_COMPLETED,
-    )
-    failure: BaseException | None = None
-    if stop_task not in done:
-        failed_task = next(task for task in done if task is not stop_task)
-        if failed_task.cancelled():
-            failure = RuntimeError(f"{failed_task.get_name()} task was cancelled")
-        else:
-            failure = failed_task.exception()
-            failure = failure or RuntimeError(
-                f"{failed_task.get_name()} task exited unexpectedly"
+        vr_cfg = cfg.video_recording or {}
+        if vr_cfg.get("enabled"):
+            from device_io_hub.video import VideoRecorder, VideoRecorderConfig
+            rc_defaults = VideoRecorderConfig()
+            rc = VideoRecorderConfig(
+                out_dir         = vr_cfg.get("out_dir",         rc_defaults.out_dir),
+                chunk_frames    = int(vr_cfg.get("chunk_frames",    rc_defaults.chunk_frames)),
+                max_total_bytes = int(vr_cfg.get("max_total_bytes", rc_defaults.max_total_bytes)),
+                sample_fps      = float(vr_cfg.get("sample_fps",    rc_defaults.sample_fps)),
+                bitrate         = int(vr_cfg.get("bitrate",         rc_defaults.bitrate)),
+                gpu_id          = int(vr_cfg.get("gpu_id",          rc_defaults.gpu_id)),
             )
+            _recorder = VideoRecorder(rc)
+            logger.info("Video recording enabled  out_dir={}", rc.out_dir)
 
-    logger.info("Shutting down…")
-    stop_task.cancel()
-    stats_task.cancel()
-    hub.stop()
-    hub.close()
-    await connector.stop()
-    await asyncio.gather(
-        hub_task, conn_task, stats_task, stop_task,
-        return_exceptions=True,
-    )
-    if failure is not None:
-        raise RuntimeError(f"DeviceIOHub task failed: {failure}") from failure
+        token = make_client_token(cfg, identity="ios-client")
+        web_scheme = "https" if cfg.web_server_tls else "http"
+        # External clients reach LiveKit via the web server's /rtc proxy;
+        # without that, LiveKit's native plain ws:// is the only path.
+        if cfg.enable_web_server:
+            lk_scheme   = "wss" if cfg.web_server_tls else "ws"
+            lk_url_port = cfg.web_server_port
+        else:
+            lk_scheme   = "ws"
+            lk_url_port = cfg.lk_port_ws
+        logger.info("LiveKit URL : {}://localhost:{}", lk_scheme, lk_url_port)
+        logger.info("Room        : {}", cfg.room_name)
+        logger.info("Token       : {}", token)
+        if cfg.enable_web_server:
+            logger.info("Web client  : {}://localhost:{}", web_scheme, cfg.web_server_port)
+        if _recorder is not None:
+            logger.info("Recording   : {}", rc.out_dir)
+
+        if ready_file:
+            ready_file.touch()
+
+        stop = asyncio.Event()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, stop.set)
+            installed_signals.append(sig)
+
+        logger.info("DeviceIOHub running — press Ctrl-C to exit")
+        conn_task  = asyncio.create_task(connector.run(), name="connector")
+        stats_task = asyncio.create_task(_stats_loop(),   name="stats")
+        tasks.extend([conn_task, stats_task])
+        await stop.wait()
+    finally:
+        logger.info("Shutting down…")
+        for sig in installed_signals:
+            loop.remove_signal_handler(sig)
+        hub.stop()
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        hub.close()
+        if connector_started:
+            await connector.stop()
 
 
 def run() -> None:
