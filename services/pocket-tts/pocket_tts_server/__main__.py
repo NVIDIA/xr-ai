@@ -4,7 +4,7 @@
 """
 pocket_tts_server — Pocket TTS HTTP server.
 
-Pocket TTS is a compact, streaming-capable CPU model. This wrapper exposes the
+Pocket TTS is a compact, streaming-capable model. This wrapper exposes the
 repository's existing OpenAI-compatible API:
 
     POST /v1/audio/speech
@@ -21,6 +21,7 @@ Config keys
 -----------
     voice:        str   Must be "bill_boerst" (required)
     language:     str   Pocket TTS language/model variant (default: "english")
+    device:       str   "cpu", "cuda", or "auto" (default: "cpu")
     port:         int   HTTP port (default: 8105)
     host:         str   Bind address (default: "0.0.0.0")
     startup_timeout_s: float  Seconds allowed for a cold start (default: 600)
@@ -85,9 +86,11 @@ def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
 class _PocketTTSBackend:
     """Thread-safe Pocket TTS voice loader and synthesizer."""
 
-    def __init__(self, voice: str, language: str) -> None:
+    def __init__(self, voice: str, language: str, device: str = "cpu") -> None:
         self._voice_name = voice
         self._language = language
+        self._requested_device = device
+        self._device = "cpu"
         self._model = None
         self._voice_state = None
         self._load_lock = threading.Lock()
@@ -106,22 +109,35 @@ class _PocketTTSBackend:
                     f"this release supports: {choices}"
                 )
 
+            import torch
             from pocket_tts import TTSModel
 
-            logger.info("Loading Pocket TTS language {!r}…", self._language)
+            device = self._requested_device
+            if device == "auto":
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+            if device not in {"cpu", "cuda"}:
+                raise ValueError("Pocket TTS device must be 'cpu', 'cuda', or 'auto'")
+            if device == "cuda" and not torch.cuda.is_available():
+                raise RuntimeError("Pocket TTS requested CUDA, but CUDA is unavailable")
+
+            logger.info("Loading Pocket TTS language {!r} on {}…", self._language, device)
             model = TTSModel.load_model(language=self._language)
+            if device != "cpu":
+                model.to(device)
             logger.info("Loading voice {!r}…", self._voice_name)
             voice_state = model.get_state_for_audio_prompt(self._voice_name)
             self._model = model
             self._voice_state = voice_state
+            self._device = device
             weights = (
                 "gated voice-cloning"
                 if model.has_voice_cloning
                 else "ungated no-voice-cloning fallback"
             )
             logger.info(
-                "Pocket TTS ready  sample_rate={} weights={}",
+                "Pocket TTS ready  sample_rate={} device={} weights={}",
                 model.sample_rate,
+                device,
                 weights,
             )
 
@@ -133,6 +149,42 @@ class _PocketTTSBackend:
     def sample_rate(self) -> int:
         self._ensure_loaded()
         return self._model.sample_rate
+
+    @staticmethod
+    def _pcm(audio) -> bytes:
+        return (
+            (audio.reshape(-1).clamp(-1, 1) * 32767)
+            .short()
+            .detach()
+            .cpu()
+            .numpy()
+            .tobytes()
+        )
+
+    def stream(
+        self,
+        text: str,
+        cancelled: threading.Event | None = None,
+    ):
+        """Yield signed 16-bit mono PCM as Pocket TTS generates it."""
+
+        self._ensure_loaded()
+        if not text.strip():
+            return
+        with self._generation_lock:
+            for audio in self._model.generate_audio_stream(self._voice_state, text):
+                if cancelled is not None and cancelled.is_set():
+                    return
+                yield self._pcm(audio)
+
+    def warmup(self) -> None:
+        """Pay CUDA's one-time kernel startup cost before reporting ready."""
+
+        self._ensure_loaded()
+        if self._device == "cuda":
+            logger.info("Warming Pocket TTS CUDA kernels…")
+            for _chunk in self.stream("Ready."):
+                pass
 
     def synthesize(
         self,
@@ -154,14 +206,7 @@ class _PocketTTSBackend:
                 if cancelled is not None and cancelled.is_set():
                     raise _SynthesisCancelled
                 audio = self._model.generate_audio(self._voice_state, text)
-            pcm = (
-                (audio.reshape(-1).clamp(-1, 1) * 32767)
-                .short()
-                .detach()
-                .cpu()
-                .numpy()
-                .tobytes()
-            )
+            pcm = self._pcm(audio)
         if response_format == "pcm":
             return pcm
 
@@ -176,12 +221,13 @@ class _PocketTTSBackend:
 
 def _build_app(cfg: dict, _model_cache: Path):
     from fastapi import FastAPI, HTTPException, Request
-    from fastapi.responses import Response
+    from fastapi.responses import Response, StreamingResponse
     from pydantic import BaseModel
 
     voice_name = cfg["voice"]
     language = str(cfg.get("language", "english"))
-    backend = _PocketTTSBackend(voice_name, language)
+    device = str(cfg.get("device", "cpu"))
+    backend = _PocketTTSBackend(voice_name, language, device)
     generation_lock = asyncio.Lock()
 
     app = FastAPI(title="Pocket TTS Server", version="0.1.0")
@@ -192,6 +238,7 @@ def _build_app(cfg: dict, _model_cache: Path):
         voice:           str   = "default"
         speed:           float = 1.0
         response_format: str   = "wav"
+        stream:          bool  = False
 
     @app.get("/health")
     def health():
@@ -210,6 +257,45 @@ def _build_app(cfg: dict, _model_cache: Path):
     async def synthesize(req: SpeechRequest, request: Request):
         loop = asyncio.get_running_loop()
         cancelled = threading.Event()
+        if getattr(req, "stream", False):
+            if req.response_format != "pcm":
+                raise HTTPException(
+                    status_code=400,
+                    detail="streaming Pocket TTS requires response_format 'pcm'",
+                )
+
+            async def stream_audio():
+                stream = backend.stream(req.input, cancelled)
+                try:
+                    async with generation_lock:
+                        if await request.is_disconnected():
+                            return
+                        while True:
+                            next_task = asyncio.create_task(asyncio.to_thread(next, stream, None))
+                            try:
+                                chunk = await asyncio.shield(next_task)
+                            except asyncio.CancelledError:
+                                cancelled.set()
+                                await next_task
+                                raise
+                            if chunk is None:
+                                return
+                            if await request.is_disconnected():
+                                cancelled.set()
+                                return
+                            yield chunk
+                finally:
+                    cancelled.set()
+                    stream.close()
+
+            return StreamingResponse(
+                stream_audio(),
+                media_type="audio/pcm",
+                headers={
+                    "x-audio-sample-rate": str(backend.sample_rate),
+                    "x-audio-channels": "1",
+                },
+            )
         try:
             # Waiting for this lock is cancellable, unlike a worker blocked on
             # the model's thread lock. Re-check the connection after acquiring
@@ -359,6 +445,9 @@ async def _run(
         sys.exit(1)
 
     model_cache = _resolve_model_cache(cfg, yaml_dir)
+    cuda_vis = cfg.get("cuda_visible_devices")
+    if cuda_vis is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_vis)
     os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
     os.environ.setdefault("HF_XET_CACHE", str(model_cache / "pocket" / "xet"))
     os.environ.setdefault("HF_HOME", str(model_cache / "pocket" / "huggingface"))
@@ -374,6 +463,7 @@ async def _run(
     try:
         async with asyncio.timeout(startup_timeout_s):
             await _load_backend(backend)
+            await asyncio.to_thread(backend.warmup)
 
             config = uvicorn.Config(app, host=host, port=port, log_level="warning")
             server = uvicorn.Server(config)

@@ -128,6 +128,11 @@ class _FakeModel:
         self.generated.append((state, text))
         return _FakeTensor([-2.0, -0.5, 0.5, 2.0])
 
+    def generate_audio_stream(self, state: object, text: str):
+        self.generated.append((state, text))
+        yield _FakeTensor([-0.5, 0.5])
+        yield _FakeTensor([-1.0, 1.0])
+
 
 def _loaded_backend(module, monkeypatch: pytest.MonkeyPatch):
     model = _FakeModel()
@@ -174,6 +179,19 @@ async def test_backend_returns_wav_and_pcm(monkeypatch) -> None:
         assert wav_file.getsampwidth() == 2
         assert wav_file.readframes(4) == pcm
     assert len(model.generated) == 2
+
+
+async def test_backend_streams_pcm(monkeypatch) -> None:
+    module = _load_main_module()
+    backend, model, _load_model = _loaded_backend(module, monkeypatch)
+
+    chunks = list(backend.stream("Hello"))
+
+    assert chunks == [
+        np.array([-16383, 16383], dtype=np.int16).tobytes(),
+        np.array([-32767, 32767], dtype=np.int16).tobytes(),
+    ]
+    assert len(model.generated) == 1
 
 
 async def test_backend_returns_valid_empty_wav(monkeypatch) -> None:

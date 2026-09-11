@@ -77,7 +77,7 @@ by a managed service itself use `deployment.credentials`.
 | `nemotron_omni` | Nemotron Omni | Tool calls, image and video, `reasoning_content` normalization; thinking disabled unless requested |
 | `nemotron_embedding` | Embedding server | OpenAI-compatible dense vectors |
 | `parakeet_stt` | STT server | OpenAI-compatible transcription |
-| `pocket_tts` | Pocket TTS | OpenAI-compatible speech synthesis |
+| `pocket_tts` | Pocket TTS | OpenAI-compatible synthesis plus native PCM streaming |
 | `magpie_tts` | Magpie TTS | OpenAI-compatible speech synthesis |
 
 The Cosmos adapter capability describes the supported request shape, but the

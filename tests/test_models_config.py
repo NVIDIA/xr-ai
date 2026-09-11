@@ -19,6 +19,7 @@ from xr_ai_models import (
     EmbeddingSpec,
     STTSpec,
     Spec,
+    StreamingTTSService,
     TTSSpec,
     VLMSpec,
     load_models_config,
@@ -37,7 +38,7 @@ from xr_ai_models.presets import available_presets, get_preset
 
 def test_package_root_exports_complete_config_surface() -> None:
     assert KIND_OPENAI_COMPAT == "openai_compat"
-    assert get_args(ModelKind) == ("openai_compat", "riva_grpc")
+    assert get_args(ModelKind) == ("openai_compat", "pocket_tts", "riva_grpc")
     assert set(get_args(Category)) == {"llm", "vlm", "stt", "tts", "embedding"}
     assert LLMSpec in get_args(Spec)
 
@@ -466,6 +467,7 @@ tts:
         assert vlm.capabilities.vision is True
         assert stt.health_url == "http://localhost:8103/health"
         assert tts.health_url == "http://localhost:8105/health"
+        assert isinstance(tts, StreamingTTSService)
     finally:
         await vlm.close()
         await stt.close()

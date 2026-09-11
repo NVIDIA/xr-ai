@@ -18,7 +18,7 @@ from ._utils import merge_dicts
 Category = Literal["llm", "vlm", "stt", "tts", "embedding"]
 """A model role supported by :class:`ModelsConfig`."""
 
-ModelKind = Literal["openai_compat", "riva_grpc"]
+ModelKind = Literal["openai_compat", "pocket_tts", "riva_grpc"]
 """A supported model-service adapter implementation."""
 
 Readiness = Literal["health", "none"]
@@ -26,6 +26,8 @@ Ownership = Literal["managed", "reused", "external"]
 
 KIND_OPENAI_COMPAT: ModelKind = "openai_compat"
 """The adapter kind for OpenAI-compatible HTTP endpoints."""
+KIND_POCKET_TTS: ModelKind = "pocket_tts"
+"""The adapter kind for the repository's streaming Pocket TTS service."""
 KIND_RIVA_GRPC: ModelKind = "riva_grpc"
 """The adapter kind for Riva gRPC speech clients (the ``riva`` extra)."""
 
@@ -717,7 +719,9 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
     kind = body.get("kind", KIND_OPENAI_COMPAT)
     if kind == KIND_RIVA_GRPC and category not in ("stt", "tts"):
         raise ValueError("riva_grpc is a speech kind; use it for stt/tts only")
-    if kind not in (KIND_OPENAI_COMPAT, KIND_RIVA_GRPC):
+    if kind == KIND_POCKET_TTS and category != "tts":
+        raise ValueError("pocket_tts is a TTS kind; use it for tts only")
+    if kind not in (KIND_OPENAI_COMPAT, KIND_POCKET_TTS, KIND_RIVA_GRPC):
         raise ValueError(f"unsupported adapter kind: {kind!r}")
 
     endpoint = EndpointSpec(

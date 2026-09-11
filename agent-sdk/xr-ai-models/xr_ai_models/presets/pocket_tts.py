@@ -5,6 +5,6 @@
 
 POCKET_TTS = {
     "category": "tts",
-    "kind":     "openai_compat",
+    "kind":     "pocket_tts",
     "timeout":  30.0,
 }
