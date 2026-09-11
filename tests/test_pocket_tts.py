@@ -194,6 +194,57 @@ async def test_backend_streams_pcm(monkeypatch) -> None:
     assert len(model.generated) == 1
 
 
+def test_cancelled_stream_drains_before_next_request() -> None:
+    module = _load_main_module()
+    draining = threading.Event()
+    release = threading.Event()
+    second_attempted = threading.Event()
+    second_started = threading.Event()
+
+    class BlockingModel(_FakeModel):
+        def generate_audio_stream(self, state: object, text: str):
+            if text == "first":
+                yield _FakeTensor([-0.5, 0.5])
+                draining.set()
+                release.wait(timeout=5)
+                yield _FakeTensor([-1.0, 1.0])
+                return
+            second_started.set()
+            yield _FakeTensor([-0.25, 0.25])
+
+    model = BlockingModel()
+    backend = module._PocketTTSBackend("bill_boerst", "english")
+    backend._model = model
+    backend._voice_state = {"voice": "bill_boerst"}
+    cancelled = threading.Event()
+    first_stream = backend.stream("first", cancelled)
+    assert next(first_stream)
+
+    cancelled.set()
+    close_thread = threading.Thread(target=first_stream.close)
+    close_thread.start()
+    assert draining.wait(timeout=1)
+
+    second_chunks: list[bytes] = []
+
+    def run_second_request() -> None:
+        second_attempted.set()
+        second_chunks.extend(backend.stream("second"))
+
+    second_thread = threading.Thread(target=run_second_request)
+    second_thread.start()
+    assert second_attempted.wait(timeout=1)
+    overlapped = second_started.wait(timeout=0.1)
+    release.set()
+    close_thread.join(timeout=1)
+    second_thread.join(timeout=1)
+
+    assert not overlapped
+    assert not close_thread.is_alive()
+    assert not second_thread.is_alive()
+    assert second_chunks
+
+
 async def test_backend_returns_valid_empty_wav(monkeypatch) -> None:
     module = _load_main_module()
     backend, model, _load_model = _loaded_backend(module, monkeypatch)
@@ -273,6 +324,72 @@ async def test_http_contract_and_error_mapping(monkeypatch, tmp_path) -> None:
         await routes["/v1/audio/speech"].endpoint(speech_request, request)
     assert format_error.value.status_code == 400
     assert format_error.value.detail == "unsupported format"
+
+
+async def test_http_streams_pcm_chunks(tmp_path) -> None:
+    module = _load_main_module()
+    app, backend = module._build_app({"voice": "bill_boerst"}, tmp_path)
+    route = next(route for route in app.routes if route.path == "/v1/audio/speech")
+    backend._model = SimpleNamespace(sample_rate=24000)
+    backend.stream = Mock(
+        return_value=(chunk for chunk in (b"\x01\x00", b"\x02\x00"))
+    )
+    request = SimpleNamespace(is_disconnected=AsyncMock(return_value=False))
+    speech_request = SimpleNamespace(
+        input="Hello",
+        response_format="pcm",
+        stream=True,
+    )
+
+    response = await route.endpoint(speech_request, request)
+    chunks = [chunk async for chunk in response.body_iterator]
+
+    assert chunks == [b"\x01\x00", b"\x02\x00"]
+    assert response.media_type == "audio/pcm"
+    assert response.headers["x-audio-sample-rate"] == "24000"
+    assert response.headers["x-audio-channels"] == "1"
+    backend.stream.assert_called_once()
+
+
+async def test_http_disconnect_waits_for_blocked_generation(tmp_path) -> None:
+    module = _load_main_module()
+    app, backend = module._build_app({"voice": "bill_boerst"}, tmp_path)
+    route = next(route for route in app.routes if route.path == "/v1/audio/speech")
+    backend._model = SimpleNamespace(sample_rate=24000)
+    started = threading.Event()
+    release = threading.Event()
+    closed = threading.Event()
+
+    def blocking_stream(_text: str, _cancelled: threading.Event):
+        started.set()
+        release.wait(timeout=5)
+        try:
+            yield b"\x01\x00"
+        finally:
+            closed.set()
+
+    backend.stream = blocking_stream
+    request = SimpleNamespace(is_disconnected=AsyncMock(return_value=False))
+    speech_request = SimpleNamespace(
+        input="Hello",
+        response_format="pcm",
+        stream=True,
+    )
+    response = await route.endpoint(speech_request, request)
+    read_task = asyncio.create_task(response.body_iterator.__anext__())
+    assert await asyncio.to_thread(started.wait, 1)
+
+    read_task.cancel()
+    await asyncio.sleep(0)
+    read_task.cancel()
+    await asyncio.sleep(0.01)
+    completed_before_release = read_task.done()
+    release.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(read_task, timeout=1)
+    assert not completed_before_release
+    assert closed.is_set()
 
 
 async def test_scopes_hugging_face_cache_to_model_cache(tmp_path, monkeypatch) -> None:

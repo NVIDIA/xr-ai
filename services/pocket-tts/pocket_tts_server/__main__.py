@@ -59,6 +59,16 @@ class _SynthesisCancelled(RuntimeError):
     """A queued request was abandoned before generation started."""
 
 
+async def _await_cleanup(task: asyncio.Task):
+    """Wait for a cleanup task even when the caller is repeatedly cancelled."""
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            continue
+    return task.result()
+
+
 def _parse_startup_timeout(value: object) -> float:
     """Return a positive finite startup timeout from user configuration."""
     try:
@@ -172,10 +182,20 @@ class _PocketTTSBackend:
         if not text.strip():
             return
         with self._generation_lock:
-            for audio in self._model.generate_audio_stream(self._voice_state, text):
-                if cancelled is not None and cancelled.is_set():
-                    return
-                yield self._pcm(audio)
+            if cancelled is not None and cancelled.is_set():
+                return
+            upstream = iter(self._model.generate_audio_stream(self._voice_state, text))
+            try:
+                for audio in upstream:
+                    if cancelled is not None and cancelled.is_set():
+                        break
+                    yield self._pcm(audio)
+            finally:
+                # Pocket TTS owns background generator/decoder threads until
+                # its iterator is exhausted. Drain abandoned output while
+                # retaining the model lock so another request cannot overlap.
+                for _ in upstream:
+                    pass
 
     def warmup(self) -> None:
         """Pay CUDA's one-time kernel startup cost before reporting ready."""
@@ -266,18 +286,15 @@ def _build_app(cfg: dict, _model_cache: Path):
 
             async def stream_audio():
                 stream = backend.stream(req.input, cancelled)
+                next_task: asyncio.Task | None = None
                 try:
                     async with generation_lock:
                         if await request.is_disconnected():
                             return
                         while True:
                             next_task = asyncio.create_task(asyncio.to_thread(next, stream, None))
-                            try:
-                                chunk = await asyncio.shield(next_task)
-                            except asyncio.CancelledError:
-                                cancelled.set()
-                                await next_task
-                                raise
+                            chunk = await asyncio.shield(next_task)
+                            next_task = None
                             if chunk is None:
                                 return
                             if await request.is_disconnected():
@@ -286,7 +303,10 @@ def _build_app(cfg: dict, _model_cache: Path):
                             yield chunk
                 finally:
                     cancelled.set()
-                    stream.close()
+                    if next_task is not None:
+                        await _await_cleanup(next_task)
+                    close_task = asyncio.create_task(asyncio.to_thread(stream.close))
+                    await _await_cleanup(close_task)
 
             return StreamingResponse(
                 stream_audio(),
