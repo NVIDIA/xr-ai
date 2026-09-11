@@ -17,7 +17,7 @@ from typing import Any, Callable, cast
 import msgpack
 
 from ._types import (AgentPresence, AudioChunk, ConnectorRegistration, ControlMessage,
-                     DataMessage, FrameData, FrameRequest, FrameSignal, MsgType,
+                     DataMessage, FileMessage, FrameData, FrameRequest, FrameSignal, MsgType,
                      ParticipantEvent, PixelFormat, ReturnAudioFlush, RosterRequest,
                      SubscriptionProbe)
 
@@ -106,6 +106,19 @@ register_decoder(MsgType.CONTROL,      lambda p: ControlMessage(p[0], p[1]))
 register_encoder(MsgType.DATA_MESSAGE, lambda m: [m.participant_id, m.topic, m.pts_us, m.data])
 register_decoder(MsgType.DATA_MESSAGE, lambda p: DataMessage(p[0], p[1], p[2], bytes(p[3])))
 
+register_encoder(
+    MsgType.FILE_MESSAGE,
+    lambda m: [m.participant_id, m.topic, m.pts_us, m.transfer_id, m.name,
+               m.mime_type, m.attributes, m.data, m.participant_session_id],
+)
+register_decoder(
+    MsgType.FILE_MESSAGE,
+    lambda p: FileMessage(
+        p[0], p[1], p[2], p[3], p[4], p[5], dict(p[6]), bytes(p[7]),
+        p[8] if len(p) > 8 else "",
+    ),
+)
+
 # Return-path types reuse the same wire layout as their inbound counterparts.
 register_encoder(MsgType.RETURN_AUDIO, lambda m: [m.pts_us, m.sample_rate, m.channels, m.samples, m.data, m.participant_id, m.track_id])
 register_decoder(MsgType.RETURN_AUDIO, lambda p: AudioChunk(p[0], p[1], p[2], p[3], bytes(p[4]), p[5], p[6]))
@@ -113,8 +126,17 @@ register_decoder(MsgType.RETURN_AUDIO, lambda p: AudioChunk(p[0], p[1], p[2], p[
 register_encoder(MsgType.RETURN_DATA,  lambda m: [m.participant_id, m.topic, m.pts_us, m.data])
 register_decoder(MsgType.RETURN_DATA,  lambda p: DataMessage(p[0], p[1], p[2], bytes(p[3])))
 
-register_encoder(MsgType.PARTICIPANT_EVENT,  lambda m: [m.participant_id, m.joined, m.pts_us, m.connector_id])
-register_decoder(MsgType.PARTICIPANT_EVENT,  lambda p: ParticipantEvent(p[0], p[1], p[2], p[3]))
+register_encoder(
+    MsgType.PARTICIPANT_EVENT,
+    lambda m: [
+        m.participant_id, m.joined, m.pts_us, m.connector_id,
+        m.participant_session_id,
+    ],
+)
+register_decoder(
+    MsgType.PARTICIPANT_EVENT,
+    lambda p: ParticipantEvent(p[0], p[1], p[2], p[3], p[4] if len(p) > 4 else ""),
+)
 
 register_encoder(MsgType.CONNECTOR_REGISTER, lambda m: [m.connector_id, m.shm_name])
 register_decoder(MsgType.CONNECTOR_REGISTER, lambda p: ConnectorRegistration(p[0], p[1]))

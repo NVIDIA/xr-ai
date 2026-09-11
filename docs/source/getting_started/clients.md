@@ -25,7 +25,25 @@ agent sample and {doc}`networking` for firewall and TLS configuration.
 The clients share a StreamKit shape: one transport-neutral `StreamSession`
 delegates to a `StreamingBackend`, and `LiveKitBackend` is the only layer that
 imports a LiveKit SDK. Connection, microphone, camera, participant status, data,
-and network metrics remain separate operations.
+file transfer, and network metrics remain separate operations.
+
+(client-file-transfer)=
+## Client-to-agent files
+
+Every StreamKit client exposes `sendBytes` and `sendFile` (`SendBytes` and `SendFile` in C++). Both operations require an application topic; in-memory bytes also require a name. MIME type and string attributes are optional. Send completion confirms that the local LiveKit byte stream closed, not that an agent processed the file.
+
+```javascript
+await session.sendBytes(pngBytes, {
+  topic: 'image.response',
+  name: 'capture.png',
+  mimeType: 'image/png',
+  attributes: { request_id: requestId },
+});
+```
+
+Applications can group independent transfers with attributes such as a request ID and index. StreamKit supplies transport framing and emits only complete files, but it does not impose application-specific grouping or timing.
+
+Topics, names, and MIME types are limited to 255 UTF-8 bytes. A transfer may include up to 32 application attributes; keys are limited to 128 bytes, values to 1 KiB, and their combined encoded size to 8 KiB. Every client validates these protocol limits before opening the transfer.
 
 (network-telemetry)=
 Graphical clients display LiveKit connection quality, round-trip time, and

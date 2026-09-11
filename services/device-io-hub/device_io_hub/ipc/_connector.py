@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections import defaultdict
+from dataclasses import replace
 from typing import Any, Awaitable, Callable
 
 import zmq
@@ -31,7 +32,7 @@ import zmq.asyncio
 from loguru import logger
 
 from xr_ai_hub import (AudioChunk, ConnectorRegistration, ControlMessage, DataMessage,
-                       FrameSignal, MsgType, ParticipantEvent, PixelFormat,
+                       FileMessage, FrameSignal, MsgType, ParticipantEvent, PixelFormat,
                        ReturnAudioFlush, ShmRingBuffer, decode, encode)
 
 from ._registration import _CONNECTOR_REGISTER_ACK_TOPIC
@@ -42,6 +43,7 @@ ReturnAudioFlushCallback = Callable[[ReturnAudioFlush],  Awaitable[None]]
 
 _DEFAULT_NUM_SLOTS       = 16
 _DEFAULT_MAX_FRAME_BYTES = 12_441_600  # 4K NV12
+_DEFAULT_FILE_MAX_BYTES  = 16 * 1024 * 1024
 _DEFAULT_REGISTRATION_TIMEOUT_S = 3.0
 _DEFAULT_REGISTRATION_ATTEMPTS  = 3
 _REGISTRATION_RESEND_INTERVAL_S = 0.25
@@ -89,6 +91,9 @@ class ConnectorEndpoint:
         shm_name:        str = "",
         num_slots:       int = _DEFAULT_NUM_SLOTS,
         max_frame_bytes: int = _DEFAULT_MAX_FRAME_BYTES,
+        file_push_addr:  str | None = None,
+        file_hwm:        int = 2,
+        file_max_bytes:  int = _DEFAULT_FILE_MAX_BYTES,
     ) -> None:
         """
         Parameters
@@ -99,12 +104,24 @@ class ConnectorEndpoint:
         shm_name        : Shared-memory segment name. Defaults to xr_conn_<connector_id>.
         num_slots       : Ring buffer slot count (default 16).
         max_frame_bytes : Max bytes per slot (default 4K NV12 = 12 441 600).
+        file_push_addr  : Optional bounded-file PULL address exposed by the hub.
+        file_hwm        : Maximum queued complete files; must be positive.
+        file_max_bytes  : Maximum file payload accepted for IPC; must be positive.
         """
+        if isinstance(file_hwm, bool) or not isinstance(file_hwm, int) or file_hwm <= 0:
+            raise ValueError("file_hwm must be a positive integer")
+        if (
+            isinstance(file_max_bytes, bool)
+            or not isinstance(file_max_bytes, int)
+            or file_max_bytes <= 0
+        ):
+            raise ValueError("file_max_bytes must be a positive integer")
         self._connector_id  = connector_id or uuid.uuid4().hex
         self._shm_base_name = shm_name or f"xr_conn_{self._connector_id[:8]}"
         self._shm_name      = ""
         self._num_slots = num_slots
         self._max_frame_bytes = max_frame_bytes
+        self._file_max_bytes = file_max_bytes
         self._ring: ShmRingBuffer | None = None
         self._registered = False
 
@@ -112,6 +129,12 @@ class ConnectorEndpoint:
 
         self._push: zmq.asyncio.Socket = ctx.socket(zmq.PUSH)
         self._push.connect(push_addr)
+
+        self._file_push: zmq.asyncio.Socket | None = None
+        if file_push_addr is not None:
+            self._file_push = ctx.socket(zmq.PUSH)
+            self._file_push.setsockopt(zmq.SNDHWM, file_hwm)
+            self._file_push.connect(file_push_addr)
 
         self._sub: zmq.asyncio.Socket = ctx.socket(zmq.SUB)
         self._sub.connect(sub_addr)
@@ -124,6 +147,7 @@ class ConnectorEndpoint:
         # Participant return subscriptions are added dynamically on join.
 
         self._seq: dict[tuple[str, str], int] = defaultdict(int)
+        self._participant_sessions: dict[str, str] = {}
 
         self._return_audio_cbs:       list[ReturnAudioCallback]      = []
         self._return_data_cbs:        list[ReturnDataCallback]       = []
@@ -281,12 +305,63 @@ class ConnectorEndpoint:
     async def push_data(self, msg: DataMessage) -> None:
         await self._push.send(encode(MsgType.DATA_MESSAGE, msg))
 
+    async def push_file(self, msg: FileMessage) -> bool:
+        """Queue a completed file without blocking real-time connector traffic."""
+        if self._file_push is None:
+            logger.warning(
+                "File transfer {} dropped: file IPC is not configured",
+                msg.transfer_id,
+            )
+            return False
+        if len(msg.data) > self._file_max_bytes:
+            logger.warning(
+                "File transfer {} dropped: {} bytes exceeds the {} byte IPC limit",
+                msg.transfer_id,
+                len(msg.data),
+                self._file_max_bytes,
+            )
+            return False
+        active_session = self._participant_sessions.get(msg.participant_id)
+        if active_session is None:
+            logger.warning(
+                "File transfer {} dropped: participant {!r} is not connected",
+                msg.transfer_id,
+                msg.participant_id,
+            )
+            return False
+        if msg.participant_session_id and msg.participant_session_id != active_session:
+            logger.warning(
+                "File transfer {} dropped: participant session is stale",
+                msg.transfer_id,
+            )
+            return False
+        if not msg.participant_session_id:
+            msg = replace(msg, participant_session_id=active_session)
+        raw = await asyncio.to_thread(encode, MsgType.FILE_MESSAGE, msg)
+        try:
+            await self._file_push.send(
+                raw,
+                flags=zmq.NOBLOCK,
+            )
+        except zmq.Again:
+            logger.warning(
+                "File transfer {} dropped: file IPC queue is full",
+                msg.transfer_id,
+            )
+            return False
+        return True
+
     async def send_control(self, msg: ControlMessage) -> None:
         await self._push.send(encode(MsgType.CONTROL, msg))
 
     # ── participant lifecycle ─────────────────────────────────────────────────
 
-    async def notify_participant_joined(self, participant_id: str, pts_us: int = 0) -> None:
+    async def notify_participant_joined(
+        self,
+        participant_id: str,
+        pts_us: int = 0,
+        participant_session_id: str | None = None,
+    ) -> str:
         """
         Call when a LiveKit participant connects to the room.
 
@@ -302,19 +377,33 @@ class ConnectorEndpoint:
         self._sub.setsockopt(zmq.SUBSCRIBE, f"return_audio.{participant_id}.".encode())
         self._sub.setsockopt(zmq.SUBSCRIBE, f"return_audio_flush.{participant_id}.".encode())
         self._sub.setsockopt(zmq.SUBSCRIBE, f"return_data.{participant_id}.".encode())
+        session_id = participant_session_id or uuid.uuid4().hex
+        self._participant_sessions[participant_id] = session_id
         event = ParticipantEvent(
             participant_id=participant_id, joined=True,
             pts_us=pts_us, connector_id=self._connector_id,
+            participant_session_id=session_id,
         )
         await self._push.send(encode(MsgType.PARTICIPANT_EVENT, event))
+        return session_id
 
-    async def notify_participant_left(self, participant_id: str, pts_us: int = 0) -> None:
+    async def notify_participant_left(
+        self,
+        participant_id: str,
+        pts_us: int = 0,
+        participant_session_id: str | None = None,
+    ) -> None:
         """
         Call when a LiveKit participant disconnects from the room.
 
         Unsubscribes from return traffic, cleans up sequence counters, and
         notifies the hub.
         """
+        active_session = self._participant_sessions.get(participant_id, "")
+        session_id = participant_session_id or active_session
+        if participant_session_id and active_session and participant_session_id != active_session:
+            return
+        self._participant_sessions.pop(participant_id, None)
         self._sub.setsockopt(zmq.UNSUBSCRIBE, f"return_audio.{participant_id}.".encode())
         self._sub.setsockopt(zmq.UNSUBSCRIBE, f"return_audio_flush.{participant_id}.".encode())
         self._sub.setsockopt(zmq.UNSUBSCRIBE, f"return_data.{participant_id}.".encode())
@@ -324,6 +413,7 @@ class ConnectorEndpoint:
         event = ParticipantEvent(
             participant_id=participant_id, joined=False,
             pts_us=pts_us, connector_id=self._connector_id,
+            participant_session_id=session_id,
         )
         await self._push.send(encode(MsgType.PARTICIPANT_EVENT, event))
 
@@ -384,5 +474,7 @@ class ConnectorEndpoint:
     def close(self) -> None:
         """Close sockets and release the ring buffer. Unlinks the shm segment."""
         self._push.close(linger=0)
+        if self._file_push is not None:
+            self._file_push.close(linger=0)
         self._sub.close(linger=0)
         self._destroy_ring()

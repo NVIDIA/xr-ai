@@ -40,6 +40,28 @@ therefore be idempotent. Because ZMQ subscription changes are asynchronous,
 workers that own readiness wait for `wait_for_subscriptions()` before announcing
 availability.
 
+### Completed files
+
+File transfer is opt-in and uses a bounded IPC lane separate from real-time messages. Pass the file publisher address and include `Subscribe.FILE`, then register an async callback:
+
+```python
+from xr_ai_hub import FileMessage, ProcessorEndpoint, Subscribe
+
+endpoint = ProcessorEndpoint(
+    sub_addr="ipc:///tmp/xr_hub_pub",
+    push_addr="ipc:///tmp/xr_hub_in",
+    file_sub_addr="ipc:///tmp/xr_hub_file_pub",
+    filter=Subscribe.DEFAULT | Subscribe.FILE,
+)
+
+async def on_file(message: FileMessage) -> None:
+    print(message.participant_id, message.topic, message.name, len(message.data))
+
+unsubscribe = endpoint.on_file(on_file)
+```
+
+The callback runs only after DeviceIOHub has received and validated the complete LiveKit byte stream. File callbacks are awaited serially on their own receive loop, so a slow file handler does not block audio, lifecycle, or packet-data traffic. `attributes` contains only application metadata; StreamKit's reserved routing attributes are removed.
+
 <a id="frames"></a>
 (agent-sdk-hub-frames)=
 ## Frames and return routing

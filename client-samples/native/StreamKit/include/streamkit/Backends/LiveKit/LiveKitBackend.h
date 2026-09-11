@@ -86,6 +86,11 @@ public:
               bool reliable = true,
               std::string_view topic = "") override;
 
+    FileTransferInfo SendBytes(std::span<const std::byte> data,
+                               const FileSendOptions& options) override;
+    FileTransferInfo SendFile(const std::filesystem::path& path,
+                              const FileSendOptions& options) override;
+
     // ── FrameSink ──────────────────────────────────────────────────────────
 
     /// Push a video frame into the published video track. The first call
