@@ -326,7 +326,6 @@
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
-<li class="toctree-l2"><a class="reference internal" href="workflow-recorder.html">Workflow recorder</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
@@ -424,40 +423,6 @@
 -->
 <section id="release-migration">
 <h1>Release migration<a class="headerlink" href="#release-migration" title="Link to this heading">#</a></h1>
-<section id="short-workflow-names">
-<h2>Short workflow names<a class="headerlink" href="#short-workflow-names" title="Link to this heading">#</a></h2>
-<p>Generated guides now use a short spoken <code class="docutils literal notranslate"><span class="pre">task.name</span></code>. Completion announcements
-and <code class="docutils literal notranslate"><span class="pre">list</span> <span class="pre">guides</span></code> use that name instead of the hash ID. Edit <code class="docutils literal notranslate"><span class="pre">task.name</span></code> in
-an existing guide YAML to rename it, then use <code class="docutils literal notranslate"><span class="pre">start</span> <span class="pre">guide</span> <span class="pre">&lt;name&gt;</span></code>. Internal
-IDs and filenames are unchanged, and ID-based selection still works. No
-numbering or new YAML field is required. Refer to <a class="reference internal" href="workflow-recorder.html"><span class="doc">Workflow recorder</span></a>.</p>
-</section>
-<section id="workflow-recording-finish-command">
-<h2>Workflow recording finish command<a class="headerlink" href="#workflow-recording-finish-command" title="Link to this heading">#</a></h2>
-<p>Use <code class="docutils literal notranslate"><span class="pre">finish</span> <span class="pre">workflow</span></code> instead of <code class="docutils literal notranslate"><span class="pre">end</span> <span class="pre">workflow</span></code> to stop a demonstration and
-generate its draft SOP. The old ending command is no longer recognized as a
-recording control. The sample now welcomes participants on connection and
-explains the recording commands; connecting alone still does not record.</p>
-</section>
-<section id="standalone-workflow-recorder">
-<h2>Standalone workflow recorder<a class="headerlink" href="#standalone-workflow-recorder" title="Link to this heading">#</a></h2>
-<p>The workflow recorder now lives at <code class="docutils literal notranslate"><span class="pre">agent-samples/workflow-recorder/</span></code>, moved
-from <code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/workflow-recorder/</span></code>. Run
-<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> and <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">workflow_recorder</span></code> from the new directory. Start shared
-models there with <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--project</span> <span class="pre">../model-servers</span> <span class="pre">model_servers</span></code>.</p>
-<p>Stop the recorder before moving an existing installation. Preserve its
-gitignored <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code> and any local <code class="docutils literal notranslate"><span class="pre">guides/</span></code> files in the new sample
-directory. Recreate the orchestrator and worker virtual environments at their
-new paths; existing environment scripts can refer to the old location. The
-sample discovers guides again at startup. Refer to <a class="reference internal" href="workflow-recorder.html"><span class="doc">Workflow recorder</span></a>
-for recording and SOP execution.</p>
-<p>Recording no longer starts on connection or completes on disconnect. Say
-<code class="docutils literal notranslate"><span class="pre">start</span> <span class="pre">workflow</span></code> to record a demonstration and <code class="docutils literal notranslate"><span class="pre">finish</span> <span class="pre">workflow</span></code> to stop and
-automatically generate a draft SOP. Disconnecting mid-recording preserves an
-interrupted packet without generating a guide. Keep the default empty
-voice-gate phrase list to capture narration, and review and approve generated
-guides before running them.</p>
-</section>
 <section id="deviceiohub-rename">
 <h2>DeviceIOHub rename<a class="headerlink" href="#deviceiohub-rename" title="Link to this heading">#</a></h2>
 <p>Update <code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/</span></code> to <code class="docutils literal notranslate"><span class="pre">services/device-io-hub/</span></code>, the
@@ -469,6 +434,11 @@ and command to <code class="docutils literal notranslate"><span class="pre">devi
 <section id="operator-visible-runtime-changes">
 <h2>Operator-visible runtime changes<a class="headerlink" href="#operator-visible-runtime-changes" title="Link to this heading">#</a></h2>
 <ul class="simple">
+<li><p>DeviceIOHub now waits for the hub to acknowledge shared-memory attachment
+before connecting the LiveKit room or creating its ready file. Missing
+segments trigger bounded recreation; incompatible layouts and acknowledgement
+timeouts fail startup. Check the registration error in the hub logs rather
+than treating a running process as ready.</p></li>
 <li><p>DeviceIOHub no longer falls back to embedded LiveKit development credentials.
 Set <code class="docutils literal notranslate"><span class="pre">api_key</span></code> and <code class="docutils literal notranslate"><span class="pre">api_secret</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>, or inject
 <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_SECRET</span></code> through the environment.</p></li>
@@ -639,9 +609,6 @@ reuse the ignored caches rather than downloading them again.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#short-workflow-names">Short workflow names</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#workflow-recording-finish-command">Workflow recording finish command</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#standalone-workflow-recorder">Standalone workflow recorder</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deviceiohub-rename">DeviceIOHub rename</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#operator-visible-runtime-changes">Operator-visible runtime changes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#local-speech-service">Local speech service</a></li>

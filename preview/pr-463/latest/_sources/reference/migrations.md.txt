@@ -5,42 +5,6 @@
 
 # Release migration
 
-## Short workflow names
-
-Generated guides now use a short spoken `task.name`. Completion announcements
-and `list guides` use that name instead of the hash ID. Edit `task.name` in
-an existing guide YAML to rename it, then use `start guide <name>`. Internal
-IDs and filenames are unchanged, and ID-based selection still works. No
-numbering or new YAML field is required. Refer to {doc}`workflow-recorder`.
-
-## Workflow recording finish command
-
-Use `finish workflow` instead of `end workflow` to stop a demonstration and
-generate its draft SOP. The old ending command is no longer recognized as a
-recording control. The sample now welcomes participants on connection and
-explains the recording commands; connecting alone still does not record.
-
-## Standalone workflow recorder
-
-The workflow recorder now lives at `agent-samples/workflow-recorder/`, moved
-from `agent-samples/simple-vlm-example/workflow-recorder/`. Run
-`uv sync` and `uv run workflow_recorder` from the new directory. Start shared
-models there with `uv run --project ../model-servers model_servers`.
-
-Stop the recorder before moving an existing installation. Preserve its
-gitignored `artifacts/` and any local `guides/` files in the new sample
-directory. Recreate the orchestrator and worker virtual environments at their
-new paths; existing environment scripts can refer to the old location. The
-sample discovers guides again at startup. Refer to {doc}`workflow-recorder`
-for recording and SOP execution.
-
-Recording no longer starts on connection or completes on disconnect. Say
-`start workflow` to record a demonstration and `finish workflow` to stop and
-automatically generate a draft SOP. Disconnecting mid-recording preserves an
-interrupted packet without generating a guide. Keep the default empty
-voice-gate phrase list to capture narration, and review and approve generated
-guides before running them.
-
 ## DeviceIOHub rename
 
 Update `services/xr-media-hub/` to `services/device-io-hub/`, the
@@ -51,6 +15,11 @@ and command to `device_io_hub`. Rename `xr_media_hub.yaml` to
 
 ## Operator-visible runtime changes
 
+- DeviceIOHub now waits for the hub to acknowledge shared-memory attachment
+  before connecting the LiveKit room or creating its ready file. Missing
+  segments trigger bounded recreation; incompatible layouts and acknowledgement
+  timeouts fail startup. Check the registration error in the hub logs rather
+  than treating a running process as ready.
 - DeviceIOHub no longer falls back to embedded LiveKit development credentials.
   Set `api_key` and `api_secret` in `device_io_hub.yaml`, or inject
   `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` through the environment.
