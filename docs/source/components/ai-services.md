@@ -539,12 +539,23 @@ cleanup.
   ignored. Set `startup_timeout_s` to a positive finite number to override the
   600-second cold-start budget.
 - **magpie-tts** loads magpie_tts_multilingual_357m via NeMo TTS in-process.
-- **pocket-tts** loads the compact `kyutai/pocket-tts` model on CPU and serves
+- **pocket-tts** loads the compact `kyutai/pocket-tts` model on CPU or CUDA and serves
   the configured voice through the repository's OpenAI-compatible TTS API.
   Model loading and synthesis run outside the asyncio event loop. The default
   `bill_boerst` voice derives from a CC0 Voice-Zero recording and is the only
   voice accepted by this release. The service logs whether it loaded the gated
   voice-cloning weights or the ungated fallback.
+  Set `device: cuda` to use the current visible GPU, or `device: cuda:N` to select
+  a visible device index. The portable default is `cpu`; the 96 GB Blackwell
+  profile selects `cuda:0`. CUDA requires a compatible driver and CUDA-enabled
+  PyTorch. The service no longer forces CPU-only Linux wheels and fails startup
+  instead of falling back when requested CUDA is unavailable. The model moves
+  before the voice state is loaded, and `/health` reports the active device.
+  Stop the owned persistent TTS service before switching devices: an explicit
+  device request rejects a healthy listener reporting a different device, or
+  a legacy listener without device metadata, without stopping it automatically.
+  Speech responses remain buffered WAV or PCM; selecting CUDA does not enable
+  incremental audio delivery through the voice SDK.
 - **embedding-server** serves `nvidia/llama-nemotron-embed-1b-v2` through
   `/v1/embeddings`. It emits 2048-dimensional Matryoshka embeddings and can
   truncate them to 384, 512, 768, 1024, or 2048 dimensions. The checked-in

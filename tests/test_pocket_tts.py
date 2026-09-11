@@ -65,6 +65,10 @@ def _write_fake_pocket_tts(root: Path) -> None:
     sample_rate = 24000
     has_voice_cloning = False
 
+    def to(self, device):
+        self.device = device
+        return self
+
     def get_state_for_audio_prompt(self, voice):
         return {"voice": voice}
 
@@ -120,16 +124,24 @@ class _FakeModel:
 
     def __init__(self) -> None:
         self.generated: list[tuple[object, str]] = []
+        self.device = None
+        self.load_order = []
+
+    def to(self, device):
+        self.device = device
+        self.load_order.append(("model", device))
+        return self
 
     def get_state_for_audio_prompt(self, voice: str) -> object:
-        return {"voice": voice}
+        self.load_order.append(("voice", self.device))
+        return {"voice": voice, "device": self.device}
 
     def generate_audio(self, state: object, text: str) -> _FakeTensor:
         self.generated.append((state, text))
         return _FakeTensor([-2.0, -0.5, 0.5, 2.0])
 
 
-def _loaded_backend(module, monkeypatch: pytest.MonkeyPatch):
+def _loaded_backend(module, monkeypatch: pytest.MonkeyPatch, device="cpu"):
     model = _FakeModel()
     load_model = Mock(return_value=model)
     monkeypatch.setitem(
@@ -137,7 +149,7 @@ def _loaded_backend(module, monkeypatch: pytest.MonkeyPatch):
         "pocket_tts",
         SimpleNamespace(TTSModel=SimpleNamespace(load_model=load_model)),
     )
-    backend = module._PocketTTSBackend("bill_boerst", "english")
+    backend = module._PocketTTSBackend("bill_boerst", "english", device)
     backend._ensure_loaded()
     return backend, model, load_model
 
@@ -157,6 +169,97 @@ async def test_backend_loads_selected_model_and_voice(monkeypatch) -> None:
     assert backend.ready
     assert backend.sample_rate == 24000
     load_model.assert_called_once_with(language="english")
+    assert backend.device == "cpu"
+
+
+@pytest.mark.parametrize("device,expected", [("cuda", "cuda:1"), ("cuda:0", "cuda:0")])
+async def test_cuda_model_moves_before_loading_voice(monkeypatch, device, expected) -> None:
+    module = _load_main_module()
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(cuda=SimpleNamespace(
+        is_available=lambda: True, current_device=lambda: 1, device_count=lambda: 2,
+    )))
+    backend, model, _load_model = _loaded_backend(module, monkeypatch, device)
+    assert backend.device == expected
+    assert model.load_order == [("model", expected), ("voice", expected)]
+    assert backend._voice_state["device"] == expected
+    assert backend.ready
+
+
+@pytest.mark.parametrize("available,device,message", [
+    (False, "cuda:0", "CUDA is unavailable"),
+    (True, "cuda:2", "device index 2 is not visible"),
+])
+async def test_cuda_configuration_fails_without_cpu_fallback(monkeypatch, available, device, message) -> None:
+    module = _load_main_module()
+    load_model = Mock()
+    monkeypatch.setitem(sys.modules, "pocket_tts", SimpleNamespace(TTSModel=SimpleNamespace(load_model=load_model)))
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(cuda=SimpleNamespace(
+        is_available=lambda: available, device_count=lambda: 1,
+    )))
+    backend = module._PocketTTSBackend("bill_boerst", "english", device)
+    with pytest.raises((RuntimeError, ValueError), match=message):
+        backend._ensure_loaded()
+    load_model.assert_not_called()
+    assert not backend.ready
+    assert backend.device is None
+
+
+@pytest.mark.parametrize("device", [None, True, 0, "", "auto", "mps", "cuda:-1", "cuda:one", "cpu:0"])
+async def test_rejects_invalid_device(device) -> None:
+    module = _load_main_module()
+    with pytest.raises(ValueError, match="'device' must be"):
+        module._PocketTTSBackend("bill_boerst", "english", device)
+
+
+async def test_blackwell_profile_selects_cuda() -> None:
+    config = yaml.safe_load(_PROFILE_CONFIGS[2].read_text())
+    assert config["device"] == "cuda:0"
+
+
+async def test_cpu_only_torch_index_is_not_forced() -> None:
+    import tomllib
+
+    project = tomllib.loads((_PROJECT / "pyproject.toml").read_text())
+    assert "torch" not in project["tool"]["uv"]["sources"]
+
+
+@pytest.mark.parametrize("requested,actual", [("cpu", "cpu"), ("cuda", "cuda:1"), ("cuda:1", "cuda:1")])
+async def test_reuse_accepts_matching_device(monkeypatch, requested, actual) -> None:
+    module = _load_main_module()
+    monkeypatch.setattr(module.urllib.request, "urlopen", lambda *_a, **_k: io.BytesIO(
+        json.dumps({"status": "ok", "device": actual}).encode(),
+    ))
+    module._check_reused_device("http://localhost:8105/health", requested)
+
+
+@pytest.mark.parametrize("actual", [None, "cpu", "cuda:1"])
+async def test_cuda_reuse_rejects_legacy_or_wrong_device(monkeypatch, tmp_path, actual) -> None:
+    module = _load_main_module()
+    config_path = tmp_path / "pocket.yaml"
+    config_path.write_text(yaml.safe_dump({"device": "cuda:0"}))
+    ready = tmp_path / "ready"
+    monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
+    monkeypatch.setattr(module, "_health_url_ok", lambda _url: True)
+    monkeypatch.setattr(module.urllib.request, "urlopen", lambda *_a, **_k: io.BytesIO(
+        json.dumps({"status": "ok", "device": actual}).encode(),
+    ))
+    monkeypatch.setattr(module.os, "execvpe", Mock(side_effect=AssertionError("must not replace listener")))
+    monkeypatch.setattr(module.sys, "argv", [
+        "pocket_tts_server", "--config", str(config_path), "--ready-file", str(ready),
+    ])
+    with pytest.raises(SystemExit, match="Stop the owned TTS service"):
+        module.run()
+    assert not ready.exists()
+
+
+async def test_health_reports_actual_loaded_device(monkeypatch, tmp_path) -> None:
+    module = _load_main_module()
+    app, backend = module._build_app({"voice": "bill_boerst", "device": "cuda:0"}, tmp_path)
+    assert backend._requested_device == "cuda:0"
+    backend._model = _FakeModel()
+    backend.device = "cuda:0"
+    health = next(route.endpoint for route in app.routes if route.path == "/health")
+    assert health() == {"status": "ok", "device": "cuda:0"}
 
 
 async def test_backend_returns_wav_and_pcm(monkeypatch) -> None:

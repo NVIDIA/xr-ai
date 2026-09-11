@@ -8,6 +8,10 @@
 
 voice:       bill_boerst
 language:    english
+# CPU remains the portable default. Set cuda or cuda:N to require a visible GPU.
+# CUDA needs a compatible Torch build and driver; it never silently falls back.
+# Stop the owned persistent TTS service before changing this setting.
+device:      cpu
 port:        8105
 startup_timeout_s: 600
 model_cache: ../../models

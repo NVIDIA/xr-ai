@@ -11,7 +11,7 @@ version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "pocket-tts==3.0.2",
-    # Keep this CPU-only service off PyPI's CUDA-enabled Linux Torch wheel.
+    # PyPI supplies CUDA-enabled Linux wheels; device selection belongs to YAML.
     "torch>=2.5.0",
     "huggingface-hub>=0.32.0",
     "hf-xet>=1.1.2,<2.0.0",
@@ -25,13 +25,7 @@ dependencies = [
 pocket_tts_server = "pocket_tts_server.__main__:run"
 
 [tool.uv.sources]
-torch = { index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" }
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
-
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["pocket_tts_server"]

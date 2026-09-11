@@ -405,7 +405,7 @@ drift:
   - `hatchling`
 - Runtime dependencies:
   - `pocket-tts==3.0.2`
-  - `torch>=2.5.0` (index: `pytorch-cpu`)
+  - `torch>=2.5.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
   - `fastapi>=0.111`

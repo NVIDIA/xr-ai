@@ -4,7 +4,7 @@
 """
 pocket_tts_server — Pocket TTS HTTP server.
 
-Pocket TTS is a compact, streaming-capable CPU model. This wrapper exposes the
+Pocket TTS is a compact, streaming-capable model. This wrapper exposes the
 repository's existing OpenAI-compatible API:
 
     POST /v1/audio/speech
@@ -21,6 +21,7 @@ Config keys
 -----------
     voice:        str   Must be "bill_boerst" (required)
     language:     str   Pocket TTS language/model variant (default: "english")
+    device:       str   "cpu", "cuda", or "cuda:N" (default: "cpu")
     port:         int   HTTP port (default: 8105)
     host:         str   Bind address (default: "0.0.0.0")
     startup_timeout_s: float  Seconds allowed for a cold start (default: 600)
@@ -30,8 +31,10 @@ Config keys
 import argparse
 import asyncio
 import io
+import json
 import math
 import os
+import re
 import socket
 import sys
 import threading
@@ -56,6 +59,15 @@ _SUPPORTED_VOICES = frozenset({"bill_boerst"})
 
 class _SynthesisCancelled(RuntimeError):
     """A queued request was abandoned before generation started."""
+
+
+def _parse_device(value: object) -> str:
+    """Validate the supported device choices without importing Torch at bootstrap."""
+    if value in ("cpu", "cuda"):
+        return value
+    if isinstance(value, str) and re.fullmatch(r"cuda:[0-9]+", value):
+        return f"cuda:{int(value.split(':')[1])}"
+    raise ValueError("'device' must be cpu, cuda, or cuda:N with a non-negative index")
 
 
 def _parse_startup_timeout(value: object) -> float:
@@ -85,9 +97,11 @@ def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
 class _PocketTTSBackend:
     """Thread-safe Pocket TTS voice loader and synthesizer."""
 
-    def __init__(self, voice: str, language: str) -> None:
+    def __init__(self, voice: str, language: str, device: str = "cpu") -> None:
         self._voice_name = voice
         self._language = language
+        self._requested_device = _parse_device(device)
+        self.device: str | None = None
         self._model = None
         self._voice_state = None
         self._load_lock = threading.Lock()
@@ -108,19 +122,36 @@ class _PocketTTSBackend:
 
             from pocket_tts import TTSModel
 
-            logger.info("Loading Pocket TTS language {!r}…", self._language)
-            model = TTSModel.load_model(language=self._language)
+            device = self._requested_device
+            if device.startswith("cuda"):
+                import torch
+
+                if not torch.cuda.is_available():
+                    raise RuntimeError(
+                        "Pocket TTS requested CUDA, but CUDA is unavailable. Install a CUDA-enabled "
+                        "Torch build and check the NVIDIA driver, or select device: cpu."
+                    )
+                index = int(device.split(":")[1]) if ":" in device else torch.cuda.current_device()
+                if index >= torch.cuda.device_count():
+                    raise ValueError(f"Pocket TTS CUDA device index {index} is not visible")
+                device = f"cuda:{index}"
+
+            logger.info("Loading Pocket TTS language {!r} on {}…", self._language, device)
+            model = TTSModel.load_model(language=self._language).to(device)
             logger.info("Loading voice {!r}…", self._voice_name)
+            # Precomputed voice tensors use model.device; load them after moving the model.
             voice_state = model.get_state_for_audio_prompt(self._voice_name)
             self._model = model
             self._voice_state = voice_state
+            self.device = device
             weights = (
                 "gated voice-cloning"
                 if model.has_voice_cloning
                 else "ungated no-voice-cloning fallback"
             )
             logger.info(
-                "Pocket TTS ready  sample_rate={} weights={}",
+                "Pocket TTS ready  device={} sample_rate={} weights={}",
+                device,
                 model.sample_rate,
                 weights,
             )
@@ -181,7 +212,7 @@ def _build_app(cfg: dict, _model_cache: Path):
 
     voice_name = cfg["voice"]
     language = str(cfg.get("language", "english"))
-    backend = _PocketTTSBackend(voice_name, language)
+    backend = _PocketTTSBackend(voice_name, language, cfg.get("device", "cpu"))
     generation_lock = asyncio.Lock()
 
     app = FastAPI(title="Pocket TTS Server", version="0.1.0")
@@ -197,7 +228,7 @@ def _build_app(cfg: dict, _model_cache: Path):
     def health():
         if not backend.ready:
             raise HTTPException(status_code=503, detail="model not loaded")
-        return {"status": "ok"}
+        return {"status": "ok", "device": backend.device}
 
     @app.get("/v1/models")
     def list_models():
@@ -244,6 +275,25 @@ def _health_url_ok(health_url: str) -> bool:
             return response.status == 200
     except Exception:
         return False
+
+
+def _check_reused_device(health_url: str, requested: str) -> None:
+    """Reject a mismatched or legacy listener without stopping an existing service."""
+    try:
+        with urllib.request.urlopen(health_url, timeout=2) as response:
+            info = json.load(response)
+        actual = info.get("device") if isinstance(info, dict) else None
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"cannot verify the existing Pocket TTS device: {exc}") from exc
+    matches = actual == requested or (
+        requested == "cuda" and isinstance(actual, str) and re.fullmatch(r"cuda:[0-9]+", actual)
+    )
+    if not matches:
+        raise RuntimeError(
+            f"existing TTS service reports device={actual!r}, requested {requested!r}. "
+            "Stop the owned TTS service before changing device or upgrading a legacy listener; "
+            "it has not been stopped automatically."
+        )
 
 
 def _probe_host(bind_host: str) -> str:
@@ -439,11 +489,17 @@ def run() -> None:
         startup_timeout_s = _parse_startup_timeout(
             cfg.get("startup_timeout_s", _DEFAULT_STARTUP_TIMEOUT_S)
         )
+        device = _parse_device(cfg.get("device", "cpu"))
     except ValueError as exc:
         raise SystemExit(f"[pocket_tts_server] {exc}") from exc
     health_url = _health_url(probe_host, port)
 
     if _health_url_ok(health_url):
+        if "device" in cfg:
+            try:
+                _check_reused_device(health_url, device)
+            except RuntimeError as exc:
+                raise SystemExit(f"[pocket_tts_server] {exc}") from exc
         print(
             f"[pocket_tts_server] already running on port {port} — reusing",
             flush=True,
