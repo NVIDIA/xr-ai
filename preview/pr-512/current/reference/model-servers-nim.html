@@ -9,7 +9,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Reference &#8212; XR AI</title>
+    <title>Shared model servers with NVIDIA NIM &#8212; XR AI</title>
   
   
   
@@ -52,15 +52,15 @@
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/index';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/model-servers-nim';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
 
     <link rel="icon" href="../_static/favicon.png"/>
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="xr-ai-hub" href="agent-sdk-hub.html" />
-    <link rel="prev" title="Troubleshooting" href="../guides/troubleshooting.html" />
+    <link rel="next" title="Simple VLM example" href="simple-vlm-example.html" />
+    <link rel="prev" title="Release migration" href="migrations.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -199,6 +199,10 @@
   
 
   
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
 </div>
 
     </header>
@@ -309,7 +313,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
-<li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-hub.html">xr-ai-hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-models.html">xr-ai-models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
@@ -320,7 +324,7 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Shared model servers with NVIDIA NIM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -394,7 +398,10 @@
         <i class="fa-solid fa-home"></i>
       </a>
     </li>
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Reference</span></li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Reference</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Shared model servers with NVIDIA NIM</span></li>
   </ul>
 </nav>
 </div>
@@ -415,29 +422,213 @@
   SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
   SPDX-License-Identifier: Apache-2.0
 -->
-<section id="reference">
-<h1>Reference<a class="headerlink" href="#reference" title="Link to this heading">#</a></h1>
-<p>Package, Python API, migration, and sample-stack references. The generated
-<a class="reference internal" href="command-line.html"><span class="doc">Command-line reference</span></a> reference lists the exact top-level sample invocations and
-their user-facing arguments.</p>
-<div class="toctree-wrapper compound">
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="agent-sdk-hub.html">xr-ai-hub</a></li>
-<li class="toctree-l1"><a class="reference internal" href="agent-sdk-models.html">xr-ai-models</a></li>
-<li class="toctree-l1"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
-<li class="toctree-l1"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
-<li class="toctree-l1"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
-<li class="toctree-l1"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
-<li class="toctree-l1"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
-<li class="toctree-l1"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
-<li class="toctree-l1"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
-<li class="toctree-l1"><a class="reference internal" href="migrations.html">Release migration</a></li>
-<li class="toctree-l1"><a class="reference internal" href="model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
-<li class="toctree-l1"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
-<li class="toctree-l1"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
-</ul>
+<section id="shared-model-servers-with-nvidia-nim">
+<h1>Shared model servers with NVIDIA NIM<a class="headerlink" href="#shared-model-servers-with-nvidia-nim" title="Link to this heading">#</a></h1>
+<p>This independent sample starts the same model families as <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>,
+with Magpie replacing Pocket TTS. It reuses <code class="docutils literal notranslate"><span class="pre">services/nim-server</span></code> for NIM
+container lifecycle and <code class="docutils literal notranslate"><span class="pre">services/stt-server</span></code> for the Spark STT fallback.
+The launcher waits for readiness, then exits with the model servers running.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Role</p></th>
+<th class="head"><p>Model</p></th>
+<th class="head"><p>Endpoint</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>STT</p></td>
+<td><p>Parakeet TDT 0.6B v3</p></td>
+<td><p>Riva gRPC <code class="docutils literal notranslate"><span class="pre">localhost:50051</span></code>; Spark HTTP <code class="docutils literal notranslate"><span class="pre">localhost:8103</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>TTS</p></td>
+<td><p>Magpie TTS Multilingual</p></td>
+<td><p>Riva gRPC <code class="docutils literal notranslate"><span class="pre">localhost:50052</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>LLM and agent LLM</p></td>
+<td><p>Nemotron 3 Nano Omni 30B A3B Reasoning</p></td>
+<td><p>HTTP <code class="docutils literal notranslate"><span class="pre">localhost:8108</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>VLM</p></td>
+<td><p>Cosmos3 Nano Reasoner</p></td>
+<td><p>HTTP <code class="docutils literal notranslate"><span class="pre">localhost:8100</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Embedding</p></td>
+<td><p>Llama Nemotron Embed 1B v2</p></td>
+<td><p>HTTP <code class="docutils literal notranslate"><span class="pre">localhost:8109</span></code></p></td>
+</tr>
+</tbody>
+</table>
 </div>
+<p>The embedding endpoint includes a sample-local adapter. It translates XR AI’s
+<code class="docutils literal notranslate"><span class="pre">query:</span> </code> and <code class="docutils literal notranslate"><span class="pre">passage:</span> </code> prefixes to NIM’s input types, preserving input order
+and avoiding duplicated prefixes. Unprefixed strings default to passages;
+callers can also set <code class="docutils literal notranslate"><span class="pre">input_type</span></code>. Native embedding NIM access is on port 8119.
+Speech NIM HTTP ports 9010 and 9011 are used for readiness; speech clients use
+the gRPC ports. This sample does not provide a Pocket-compatible TTS endpoint.</p>
+<section id="run">
+<h2>Run<a class="headerlink" href="#run" title="Link to this heading">#</a></h2>
+<p>Run all commands from <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers-nim/</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync
+uv<span class="w"> </span>run<span class="w"> </span>model_servers_nim<span class="w"> </span>--gpu-profile<span class="w"> </span>96G_blackwell<span class="w"> </span>--dry-run
+uv<span class="w"> </span>run<span class="w"> </span>model_servers_nim
+</pre></div>
+</div>
+<p>Alternatively, run the source file directly after synchronization:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py
+</pre></div>
+</div>
+<p>After the launcher exits, start the consuming sample from the same terminal.</p>
+<p>Docker with NVIDIA Container Toolkit and <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> are required. Spark also
+uses <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> for its local STT fallback. Credentials can be exported in the
+environment or loaded from the repository’s existing credential store.
+Refer to the <a class="reference external" href="https://nvidia.github.io/xr-ai/latest/getting_started/credentials.html">credentials reference</a>.
+First startup downloads container images and model engines and can take tens
+of minutes. The caches persist under the repository’s <code class="docutils literal notranslate"><span class="pre">models/</span></code> directory.</p>
+<p>The default GPU detection is shared with <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>. Explicit selections:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers_nim<span class="w"> </span>--gpu-profile<span class="w"> </span>96G_blackwell
+uv<span class="w"> </span>run<span class="w"> </span>model_servers_nim<span class="w"> </span>--gpu-profile<span class="w"> </span>dual_48G_ada
+uv<span class="w"> </span>run<span class="w"> </span>model_servers_nim<span class="w"> </span>--gpu-profile<span class="w"> </span>spark
+</pre></div>
+</div>
+<p>These are alternative stacks and share model ports and GPU capacity with
+<code class="docutils literal notranslate"><span class="pre">model-servers</span></code>. Stop the active stack before switching. For example, when
+switching from the original sample:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+uv<span class="w"> </span>run<span class="w"> </span>model_servers_nim
+</pre></div>
+</div>
+<p>To stop this stack before editing its configuration or switching back:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers_nim<span class="w"> </span>--stop
+</pre></div>
+</div>
+<p>Cleanup uses the ports declared in this sample’s YAML, including the embedding
+adapter and the Spark fallback. Run it before changing ports. It does not
+remove downloaded images or model caches. Do not use it while another stack
+owns those same ports.</p>
+<p>Repeated launches reuse a healthy embedding adapter only after verifying its
+managed process markers and matching backend URL and model. An unrelated,
+unhealthy, or differently configured listener causes startup to fail without
+stopping that listener. Stop this stack before changing the adapter configuration.
+The stop command terminates the marked adapter listener; wrappers from repeated
+launches then exit when that listener closes.</p>
+</section>
+<section id="use-with-an-agent-sample">
+<h2>Use with an agent sample<a class="headerlink" href="#use-with-an-agent-sample" title="Link to this heading">#</a></h2>
+<p>Export the adapters, model IDs, and endpoints for the selected hardware:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers_nim<span class="w"> </span>--export-models<span class="w"> </span>yaml/models.reused.json
+</pre></div>
+</div>
+<p>The export requires no credentials or running models. Add <code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code>
+to export for a different machine. Copy the needed entries from the export into
+the consuming sample’s <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>, preserving its other model roles.
+The exported entries use <code class="docutils literal notranslate"><span class="pre">ownership:</span> <span class="pre">reused</span></code> and do not give the consumer
+responsibility for starting these servers or holding NGC credentials. For
+example, <code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code> needs <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>, and <code class="docutils literal notranslate"><span class="pre">vlm</span></code>.</p>
+<p>Riva clients require the existing <code class="docutils literal notranslate"><span class="pre">xr-ai-models[riva]</span></code> extra <strong>in the consuming
+worker’s environment</strong>. For a local simple-VLM trial, synchronize the worker
+and add its optional Riva client before starting that sample:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>../simple-vlm-example/worker
+uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>--python<span class="w"> </span>../simple-vlm-example/worker/.venv/bin/python<span class="w"> </span>nvidia-riva-client
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../simple-vlm-example<span class="w"> </span>simple_vlm_example
+</pre></div>
+</div>
+<p>A later <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> can remove the manually installed extra. For a maintained
+consumer, declare <code class="docutils literal notranslate"><span class="pre">xr-ai-models[riva]</span></code> in its worker dependencies. The new sample
+does not edit existing workers, SDK presets, or agent configurations.</p>
+</section>
+<section id="configure">
+<h2>Configure<a class="headerlink" href="#configure" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">yaml/&lt;gpu-profile&gt;/models.json</span></code> selects the deployment and client adapters.
+The adjacent server YAML files own image versions and digests, model profiles,
+ports, GPU placement, and runtime limits. Refer to the generated
+<a class="reference external" href="https://nvidia.github.io/xr-ai/latest/reference/configuration.html">configuration reference</a>
+and the <a class="reference external" href="https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html">sample configuration guide</a>. <code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">PATH</span></code> selects a custom deployment JSON
+using the selected hardware directory. For example, reduce Omni concurrency in
+<code class="docutils literal notranslate"><span class="pre">nim_llm_server.yaml</span></code> by changing its <code class="docutils literal notranslate"><span class="pre">NIM_PASSTHROUGH_ARGS</span></code> entry:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">--max-num-seqs 2</span>
+</pre></div>
+</div>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Hardware</p></th>
+<th class="head"><p>GPU placement</p></th>
+<th class="head"><p>Initial allocation plan</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>96 GB Blackwell</p></td>
+<td><p>All models on GPU 0</p></td>
+<td><p>Omni 35%, Cosmos 24%, plus speech and embedding engines</p></td>
+</tr>
+<tr class="row-odd"><td><p>Two 48 GB Ada GPUs</p></td>
+<td><p>Speech and Cosmos on GPU 0; Omni and embeddings on GPU 1</p></td>
+<td><p>Cosmos 36% on GPU 0; Omni 80% on GPU 1</p></td>
+</tr>
+<tr class="row-even"><td><p>DGX Spark</p></td>
+<td><p>All models on GPU 0</p></td>
+<td><p>Omni 25% with a fixed 2 GiB cache; Cosmos 22%; shared system memory</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>These fractions budget <strong>weights, runtime, and cache together</strong>, relative to
+total GPU memory. Magpie uses the pinned 1.10.0 <code class="docutils literal notranslate"><span class="pre">batch_size=8</span></code> engine
+(approximately 13 GiB), and Parakeet NIM uses approximately 14 GB. The actual
+Magpie manifest has no batch-size-one profile, despite older documentation
+for this tag listing one. Embeddings use one FP8 engine on Blackwell and Ada
+(approximately 3–4 GiB). The dual-Ada plan leaves roughly 4 GB on GPU 0 and
+5 GB on GPU 1 beyond these estimates. It does not reserve capacity for a large
+renderer or unrelated GPU workloads.</p>
+<p>Omni is pinned to its generic TP=1 NVFP4 profile on Blackwell and Spark and
+its FP8 profile on Ada. Cosmos selects Nano, with an 8,192-token context and
+four image inputs. Ada explicitly selects the FP8 vLLM checkpoint profile
+shipped under L40S, which shares SM 8.9 with RTX 6000 Ada; this profile contains
+weights rather than a GPU-specific TensorRT engine. The generic BF16 fallback
+would exceed the shared-GPU budget.
+Omni has a 32,768-token context and at most four sequences. Graph capture is
+disabled for these shared-GPU profiles to reduce startup and runtime memory.</p>
+<p>Parakeet v3 NIM 1.3.0 has no ARM64 image, so Spark uses the original NeMo STT
+service and configuration. The other selected images have ARM64 manifests.
+Spark uses the generic BF16 Cosmos profile and generic FP16 ONNX embedding
+profile; that embedding profile has a <strong>4,096-token</strong> input limit. ARM64 image
+availability is distinct from validation on GB10: the complete Spark stack
+still needs hardware qualification, including cold-cache startup. Cosmos NIM
+uses fractional cache sizing and does not inherit the original sample’s Spark
+prefetch and fixed-cache safeguards.</p>
+<p>Whole-stack startup, simultaneous load, and restart still need validation on
+all three hardware profiles. The defaults are allocation estimates, not a
+claim of measured full-stack support. Refer to the
+<a class="reference external" href="https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html">model-server customization guide</a>
+for the shared lifecycle and profiling workflow.</p>
+<p>Container and profile references:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://catalog.ngc.nvidia.com/orgs/nim/nvidia/containers/cosmos3-reasoner/1.7.0">Cosmos3 Reasoner 1.7.0</a></p></li>
+<li><p><a class="reference external" href="https://docs.nvidia.com/nim/vision-language-models/2.0.4-variant/support-matrix.html">Omni NIM support matrix</a></p></li>
+<li><p><a class="reference external" href="https://docs.nvidia.com/nim/speech/latest/reference/support-matrix/tts.html">Magpie engine memory</a></p></li>
+<li><p><a class="reference external" href="https://docs.nvidia.com/nim/speech/latest/reference/support-matrix/asr.html">Parakeet v3 selection and Spark restrictions</a></p></li>
+<li><p><a class="reference external" href="https://docs.nvidia.com/nim/nemo-retriever/text-embedding/1.13.0/support-matrix.html">Embedding 1.13.0 engines and memory</a></p></li>
+</ul>
+</section>
+<section id="validate">
+<h2>Validate<a class="headerlink" href="#validate" title="Link to this heading">#</a></h2>
+<p>The CPU checks load every profile with the real SDK, construct Docker commands,
+check startup, export, and stop behavior, and exercise prefix-aware embedding calls.
+Linux lifecycle tests launch actual adapters on temporary ports with a local
+health stub, without Docker or GPUs. They verify ownership, repeated launch,
+shutdown, restart, and rejection of unhealthy or conflicting listeners:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span><span class="nb">test</span><span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>tests<span class="w"> </span>-q
+</pre></div>
+</div>
+<p>After startup, check every endpoint through the same SDK that agents use:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers_nim<span class="w"> </span>--export-models<span class="w"> </span>yaml/models.reused.json
+uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span><span class="nb">test</span><span class="w"> </span>python<span class="w"> </span>smoke_test.py<span class="w"> </span>--models<span class="w"> </span>yaml/models.reused.json
+</pre></div>
+</div>
+<p>This exercises a Magpie-to-Parakeet speech round trip, both LLM roles, a real
+image request, and query/passage embeddings. Repeat after a cold start and a
+warm restart on each target machine; monitor GPU memory under concurrent agent
+traffic as well as during startup.</p>
+</section>
 </section>
 
 
@@ -451,20 +642,20 @@ their user-facing arguments.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="../guides/troubleshooting.html"
+       href="migrations.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Troubleshooting</p>
+        <p class="prev-next-title">Release migration</p>
       </div>
     </a>
     <a class="right-next"
-       href="agent-sdk-hub.html"
+       href="simple-vlm-example.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">xr-ai-hub</p>
+        <p class="prev-next-title">Simple VLM example</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -475,9 +666,28 @@ their user-facing arguments.</p>
             
             
 
-<div class="bd-sidebar-secondary"></div>
+
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
 
 
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run">Run</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#use-with-an-agent-sample">Use with an agent sample</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configure">Configure</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validate">Validate</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
               
             
 
