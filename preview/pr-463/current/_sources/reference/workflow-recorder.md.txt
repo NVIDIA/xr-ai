@@ -8,7 +8,7 @@
 The workflow recorder is a standalone sample at
 `agent-samples/workflow-recorder/`. Its orchestrator starts DeviceIOHub and a
 worker that composes `RecorderAgent`, `SopEngineAgent`, and `VoiceAgent` in one
-runtime. It reuses Parakeet STT, Nemotron Omni, Cosmos VLM, and Piper TTS from
+runtime. It reuses Parakeet STT, Nemotron Omni, Cosmos VLM, and Pocket TTS from
 the shared model-server stack. Refer to the
 [sample README](https://github.com/NVIDIA/xr-ai/tree/main/agent-samples/workflow-recorder)
 for launch commands.
