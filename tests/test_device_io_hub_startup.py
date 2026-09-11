@@ -30,23 +30,28 @@ async def test_registration_failure_never_creates_ready_file(main_runtime):
     assert all(task.done() for task in runtime.tasks)
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("stage", ["docker", "token", "web", "register", "connect", "cancel-connect"])
-async def test_connector_start_failure_cleans_up_all_resources(
-    hub, make_connector, monkeypatch, stage,
-):
-    endpoint = make_connector()
+@pytest.fixture
+def livekit_connector(hub, make_connector, monkeypatch):
     connector = connector_module.LiveKitConnector.__new__(connector_module.LiveKitConnector)
     connector._cfg = SimpleNamespace(room_name="test")
     connector._docker = SimpleNamespace(start=AsyncMock(), stop=AsyncMock())
     connector._token = SimpleNamespace(start=AsyncMock(), stop=AsyncMock())
     connector._web = SimpleNamespace(start=AsyncMock(), stop=AsyncMock())
-    connector._ep = endpoint
+    connector._ep = make_connector()
     connector._room_connect_started = False
     connector._room_client = SimpleNamespace(
         connect=AsyncMock(), disconnect=AsyncMock(), stop=Mock(),
+        send_return_data=AsyncMock(), send_return_audio=AsyncMock(), flush_return_audio=AsyncMock(),
     )
     monkeypatch.setattr(connector_module, "require_nvidia_video_codecs", lambda: None)
+    return connector
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", ["docker", "token", "web", "register", "connect", "cancel-connect"])
+async def test_connector_start_failure_cleans_up_all_resources(livekit_connector, monkeypatch, stage):
+    connector = livekit_connector
+    endpoint = connector._ep
     failure = asyncio.CancelledError() if stage == "cancel-connect" else RuntimeError(stage)
     if stage == "register":
         failure = _ConnectorRegistrationError("shm_not_found", "segment disappeared")
@@ -77,6 +82,59 @@ async def test_connector_start_failure_cleans_up_all_resources(
     assert endpoint._sub.closed
     with pytest.raises(FileNotFoundError):
         SharedMemory(name=endpoint._shm_base_name, create=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("startup_fails", [True, False])
+@pytest.mark.parametrize(
+    "cleanup_step", ["disconnect", "endpoint-stop", "room-stop", "endpoint-close", "web", "token", "docker"],
+)
+async def test_cleanup_failure_does_not_skip_later_steps(
+    livekit_connector, monkeypatch, startup_fails, cleanup_step,
+):
+    connector = livekit_connector
+    endpoint = connector._ep
+    start_error = ValueError("room connection failed")
+    cleanup_error = RuntimeError(f"{cleanup_step} cleanup failed")
+    endpoint_stop = Mock(wraps=endpoint.stop)
+    endpoint_close = Mock(wraps=endpoint.close)
+    monkeypatch.setattr(endpoint, "stop", endpoint_stop)
+    monkeypatch.setattr(endpoint, "close", endpoint_close)
+    operation = {
+        "disconnect": connector._room_client.disconnect,
+        "endpoint-stop": endpoint_stop,
+        "room-stop": connector._room_client.stop,
+        "endpoint-close": endpoint_close,
+        "web": connector._web.stop,
+        "token": connector._token.stop,
+        "docker": connector._docker.stop,
+    }[cleanup_step]
+    operation.side_effect = cleanup_error
+    try:
+        if startup_fails:
+            connector._room_client.connect.side_effect = start_error
+            with pytest.raises(ValueError) as caught:
+                await connector.start()
+            assert caught.value is start_error
+        else:
+            await connector.start()
+            with pytest.raises(RuntimeError) as caught:
+                await connector.stop()
+            assert caught.value is cleanup_error
+
+        endpoint_stop.assert_called_once()
+        endpoint_close.assert_called_once()
+        connector._room_client.stop.assert_called_once()
+        connector._room_client.disconnect.assert_awaited_once()
+        connector._web.stop.assert_awaited_once()
+        connector._token.stop.assert_awaited_once()
+        connector._docker.stop.assert_awaited_once()
+        if cleanup_step != "endpoint-close":
+            assert endpoint._ring is None
+            assert endpoint._push.closed
+            assert endpoint._sub.closed
+    finally:
+        operation.side_effect = None
 
 
 @pytest.fixture
@@ -127,8 +185,15 @@ def main_runtime(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("stage", ["token", "recorder"])
-async def test_failure_after_connector_start_cleans_up_before_ready(main_runtime, monkeypatch, stage):
+@pytest.mark.parametrize("cleanup_failure", [None, "hub", "connector"])
+async def test_failure_after_connector_start_cleans_up_before_ready(
+    main_runtime, monkeypatch, stage, cleanup_failure,
+):
     runtime = main_runtime
+    if cleanup_failure == "hub":
+        runtime.hub.close.side_effect = RuntimeError("hub cleanup failed")
+    elif cleanup_failure == "connector":
+        runtime.connector.stop.side_effect = RuntimeError("connector cleanup failed")
     if stage == "token":
         monkeypatch.setattr(hub_main, "make_client_token", Mock(side_effect=ValueError("bad token")))
     else:

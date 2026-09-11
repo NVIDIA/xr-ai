@@ -15,6 +15,7 @@ import collections
 import signal
 import sys
 import time
+from contextlib import AsyncExitStack
 from pathlib import Path
 
 from loguru import logger
@@ -154,15 +155,22 @@ async def main(ready_file: Path | None = None) -> None:
         await stop.wait()
     finally:
         logger.info("Shutting down…")
-        for sig in installed_signals:
-            loop.remove_signal_handler(sig)
-        hub.stop()
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        hub.close()
-        if connector_started:
-            await connector.stop()
+        failure = sys.exception()
+        try:
+            async with AsyncExitStack() as cleanup:
+                if connector_started:
+                    cleanup.push_async_callback(connector.stop)
+                cleanup.callback(hub.close)
+                for sig in installed_signals:
+                    loop.remove_signal_handler(sig)
+                hub.stop()
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+        except BaseException:
+            if failure is None:
+                raise
+            logger.exception("DeviceIOHub cleanup failed while handling an earlier failure")
 
 
 def run() -> None:

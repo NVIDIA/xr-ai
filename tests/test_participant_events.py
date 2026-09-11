@@ -15,7 +15,7 @@ from types import SimpleNamespace
 
 import pytest
 import device_io_hub.ipc._hub as hub_module
-from device_io_hub.ipc._hub import _CONNECTOR_REGISTER_ACK_TOPIC
+from device_io_hub.ipc._registration import _CONNECTOR_REGISTER_ACK_TOPIC
 
 from xr_ai_hub import (
     ConnectorRegistration,

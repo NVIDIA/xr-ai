@@ -34,7 +34,7 @@ from xr_ai_hub import (AudioChunk, ConnectorRegistration, ControlMessage, DataMe
                        FrameSignal, MsgType, ParticipantEvent, PixelFormat,
                        ReturnAudioFlush, ShmRingBuffer, decode, encode)
 
-from ._hub import _CONNECTOR_REGISTER_ACK_TOPIC
+from ._registration import _CONNECTOR_REGISTER_ACK_TOPIC
 
 ReturnAudioCallback      = Callable[[AudioChunk],        Awaitable[None]]
 ReturnDataCallback       = Callable[[DataMessage],       Awaitable[None]]
@@ -61,6 +61,9 @@ class ConnectorEndpoint:
     Each instance owns a dedicated ring buffer so multiple connectors can
     write frames concurrently without any locking. The hub is agnostic to
     how many connectors exist or how many participants each carries.
+
+    Only video frames require successful shared-memory registration. Audio,
+    data, control messages, and participant events do not use the ring.
 
     Usage
     -----
@@ -136,6 +139,14 @@ class ConnectorEndpoint:
         The method returns only after the hub has attached and validated the
         ring. Missing shared memory causes bounded recreation with a fresh
         name; incompatible rings and acknowledgement timeouts fail startup.
+
+        Raises
+        ------
+        RuntimeError
+            If the ring cannot be created, the hub rejects attachment or layout
+            validation, or no matching acknowledgement arrives before the
+            timeout. Missing segments are retried a bounded number of times
+            before raising. Call :meth:`close` to release resources after failure.
         """
         timeout = _DEFAULT_REGISTRATION_TIMEOUT_S
         max_attempts = _DEFAULT_REGISTRATION_ATTEMPTS
@@ -221,14 +232,6 @@ class ConnectorEndpoint:
                 f"hub did not acknowledge shared memory {reg.shm_name!r} within {timeout:g}s",
             ) from None
 
-    def _require_registered_ring(self) -> ShmRingBuffer:
-        if not self._registered or self._ring is None:
-            raise _ConnectorRegistrationError(
-                "connector_not_registered",
-                "media cannot be accepted before shared-memory registration succeeds",
-            )
-        return self._ring
-
     # ── inbound media ─────────────────────────────────────────────────────────
 
     async def push_frame(
@@ -243,10 +246,23 @@ class ConnectorEndpoint:
     ) -> None:
         """
         Write a decoded CPU frame into this connector's ring buffer and signal
-        the hub. Raises RuntimeError if all slots are occupied — caller should
-        drop the frame and log a warning.
+        the hub.
+
+        Raises
+        ------
+        RuntimeError
+            If shared-memory registration has not succeeded, the ring has been
+            closed, or all slots are occupied. Drop the frame and log the reason.
+        ValueError
+            If the frame exceeds the slot capacity or its memoryview is not
+            contiguous.
         """
-        ring = self._require_registered_ring()
+        ring = self._ring
+        if not self._registered or ring is None:
+            raise _ConnectorRegistrationError(
+                "connector_not_registered",
+                "video cannot be accepted before shared-memory registration succeeds",
+            )
         key = (participant_id, track_id)
         self._seq[key] += 1
         seq  = self._seq[key]
@@ -260,15 +276,12 @@ class ConnectorEndpoint:
         await self._push.send(encode(MsgType.FRAME_SIGNAL, sig))
 
     async def push_audio(self, chunk: AudioChunk) -> None:
-        self._require_registered_ring()
         await self._push.send(encode(MsgType.AUDIO_CHUNK, chunk))
 
     async def push_data(self, msg: DataMessage) -> None:
-        self._require_registered_ring()
         await self._push.send(encode(MsgType.DATA_MESSAGE, msg))
 
     async def send_control(self, msg: ControlMessage) -> None:
-        self._require_registered_ring()
         await self._push.send(encode(MsgType.CONTROL, msg))
 
     # ── participant lifecycle ─────────────────────────────────────────────────
@@ -281,7 +294,6 @@ class ConnectorEndpoint:
         The hub uses the embedded connector_id to maintain its participant →
         connector mapping.
         """
-        self._require_registered_ring()
         # Trailing "." terminates the pid segment so a subscription for `alice`
         # does not byte-prefix-match a topic addressed to `alice2`. The hub
         # publishes return topics with the same trailing delimiter (see
@@ -303,7 +315,6 @@ class ConnectorEndpoint:
         Unsubscribes from return traffic, cleans up sequence counters, and
         notifies the hub.
         """
-        self._require_registered_ring()
         self._sub.setsockopt(zmq.UNSUBSCRIBE, f"return_audio.{participant_id}.".encode())
         self._sub.setsockopt(zmq.UNSUBSCRIBE, f"return_audio_flush.{participant_id}.".encode())
         self._sub.setsockopt(zmq.UNSUBSCRIBE, f"return_data.{participant_id}.".encode())

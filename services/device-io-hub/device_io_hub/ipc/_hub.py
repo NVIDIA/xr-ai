@@ -50,6 +50,8 @@ from xr_ai_hub import (AGENT_STATUS_TOPIC, AudioChunk, ConnectorRegistration,
                        ParticipantEvent, ReturnAudioFlush, ShmRingBuffer, SlotView,
                        decode, encode)
 
+from ._registration import _CONNECTOR_REGISTER_ACK_TOPIC
+
 
 def _now_us() -> int:
     return time.time_ns() // 1_000
@@ -83,7 +85,6 @@ TOPIC_CONTROL            = b"control"
 TOPIC_RETURN_AUDIO       = b"return_audio"
 TOPIC_RETURN_AUDIO_FLUSH = b"return_audio_flush"
 TOPIC_RETURN_DATA        = b"return_data"
-_CONNECTOR_REGISTER_ACK_TOPIC = "_connector.registration_ack"
 
 
 class HubEndpoint:

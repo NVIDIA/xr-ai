@@ -5,11 +5,21 @@
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import AsyncMock
 
 import device_io_hub.ipc._connector as connector_module
 import device_io_hub.ipc._hub as hub_module
 import pytest
-from xr_ai_hub import FrameSignal, MsgType, ParticipantEvent, PixelFormat, encode
+from xr_ai_hub import (
+    AudioChunk,
+    ControlMessage,
+    DataMessage,
+    FrameSignal,
+    MsgType,
+    ParticipantEvent,
+    PixelFormat,
+    encode,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -75,12 +85,12 @@ async def test_incompatible_ring_fails_without_connecting_media(
     monkeypatch.setattr(hub_module, "ShmRingBuffer", reject_ring)
     await settle()
 
-    with pytest.raises(connector_module._ConnectorRegistrationError, match="shm_incompatible"):
+    with pytest.raises(RuntimeError, match="shm_incompatible"):
         await connector.register()
 
     assert connector._registered is False
     with pytest.raises(
-        connector_module._ConnectorRegistrationError,
+        RuntimeError,
         match="before shared-memory registration",
     ):
         await connector.push_frame(b"ABCD", 1, 1, PixelFormat.RGBA, 1)
@@ -102,7 +112,7 @@ async def test_registration_acknowledgement_has_bounded_timeout(
     monkeypatch.setattr(connector_module, "_DEFAULT_REGISTRATION_TIMEOUT_S", 0.1)
     monkeypatch.setattr(connector_module, "_DEFAULT_REGISTRATION_ATTEMPTS", 1)
     with pytest.raises(
-        connector_module._ConnectorRegistrationError,
+        RuntimeError,
         match="registration_timeout",
     ):
         await asyncio.wait_for(connector.register(), timeout=1.0)
@@ -122,11 +132,42 @@ async def test_ring_creation_failure_is_structured(
 
     monkeypatch.setattr(connector_module, "ShmRingBuffer", fail_create)
 
-    with pytest.raises(connector_module._ConnectorRegistrationError, match="shm_create_failed"):
+    with pytest.raises(RuntimeError, match="shm_create_failed"):
         await connector.register()
 
     assert connector._registered is False
     assert connector._ring is None
+
+
+async def test_non_video_messages_do_not_require_a_ring(hub, make_connector, settle):
+    connector = make_connector()
+    audio_received = AsyncMock()
+    data_received = AsyncMock()
+    control_received = AsyncMock()
+    participant_received = AsyncMock()
+    hub.on_audio(audio_received)
+    hub.on_data(data_received)
+    hub.on_control(control_received)
+    hub.on_participant(participant_received)
+    chunk = AudioChunk(pts_us=1, sample_rate=16000, channels=1, samples=1, data=b"\0" * 4)
+    data = DataMessage(participant_id="default", topic="chat", pts_us=1, data=b"hello")
+    control = ControlMessage(topic="test", payload={"enabled": True})
+
+    await connector.notify_participant_joined("default", pts_us=1)
+    await connector.push_audio(chunk)
+    await connector.push_data(data)
+    await connector.send_control(control)
+    await connector.notify_participant_left("default", pts_us=2)
+    await settle()
+
+    audio_received.assert_awaited_once_with(chunk)
+    data_received.assert_awaited_once_with(data)
+    control_received.assert_awaited_once_with(control)
+    assert [call.args[0].joined for call in participant_received.await_args_list] == [True, False]
+    assert connector._ring is None
+    assert not connector._registered
+    with pytest.raises(RuntimeError, match="before shared-memory registration"):
+        await connector.push_frame(b"ABCD", 1, 1, PixelFormat.RGBA, 1)
 
 
 async def test_frame_without_registered_ring_does_not_stop_hub(

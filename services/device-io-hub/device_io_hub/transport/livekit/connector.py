@@ -33,6 +33,7 @@ Usage
 from __future__ import annotations
 
 import asyncio
+from contextlib import AsyncExitStack
 from typing import Awaitable, Callable
 
 from loguru import logger
@@ -84,7 +85,17 @@ class LiveKitConnector:
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
     async def start(self) -> None:
-        """Start Docker, optional servers, register IPC endpoint, connect room client."""
+        """Start Docker, optional servers, register IPC endpoint, connect room client.
+
+        Any startup failure triggers cleanup of owned resources. Cleanup errors
+        are logged without replacing the startup failure.
+
+        Raises
+        ------
+        RuntimeError
+            If shared-memory registration fails or a startup prerequisite is
+            not met. Operator-facing failures include a diagnostic banner.
+        """
         try:
             require_nvidia_video_codecs()
             await self._docker.start()
@@ -102,7 +113,10 @@ class LiveKitConnector:
             self._ep.on_return_audio_flush(self._room_client.flush_return_audio)
             logger.info("LiveKitConnector started — room={!r}", self._cfg.room_name)
         except BaseException as exc:
-            await self.stop()
+            try:
+                await self.stop()
+            except BaseException:
+                logger.exception("LiveKitConnector cleanup failed after startup failure")
             if isinstance(exc, _ConnectorRegistrationError):
                 banner = "━" * 56
                 raise StartupError("\n".join([
@@ -145,20 +159,24 @@ class LiveKitConnector:
                 logger.error("Connector task {!r} raised: {}", t.get_name(), exc)
 
     async def stop(self) -> None:
-        """Gracefully shut down all components in reverse-start order."""
+        """Shut down all components, attempting every cleanup even if one fails.
+
+        Cleanup errors propagate after every cleanup step has been attempted.
+        """
         logger.info("LiveKitConnector stopping…")
         # Start Docker shutdown immediately so it runs in parallel with the
         # other cleanup steps — docker compose down can take several seconds.
         docker_task = asyncio.create_task(self._docker.stop(), name="docker-stop")
-        self._ep.stop()
-        self._room_client.stop()
-        if self._room_connect_started:
-            self._room_connect_started = False
-            await self._room_client.disconnect()
-        self._ep.close()
-        if self._web:
-            await self._web.stop()
-        if self._token:
-            await self._token.stop()
-        await docker_task
+        async with AsyncExitStack() as cleanup:
+            cleanup.push_async_callback(asyncio.gather, docker_task)
+            if self._token:
+                cleanup.push_async_callback(self._token.stop)
+            if self._web:
+                cleanup.push_async_callback(self._web.stop)
+            cleanup.callback(self._ep.close)
+            if self._room_connect_started:
+                self._room_connect_started = False
+                cleanup.push_async_callback(self._room_client.disconnect)
+            cleanup.callback(self._room_client.stop)
+            cleanup.callback(self._ep.stop)
         logger.info("LiveKitConnector stopped")
