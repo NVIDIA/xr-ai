@@ -86,7 +86,7 @@ def _export_models(profile: Path, destination: Path) -> None:
     data = json.loads(profile.read_text(encoding="utf-8"))
     for model in data["models"].values():
         deployment = model["deployment"]
-        if deployment["ownership"] == "managed":
+        if deployment.get("ownership", "external") == "managed":
             deployment["ownership"] = "reused"
         # NGC and HF credentials belong to the server process, not its clients.
         deployment.pop("credentials", None)

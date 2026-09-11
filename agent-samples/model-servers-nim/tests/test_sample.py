@@ -97,6 +97,37 @@ def test_dual_ada_memory_plan_leaves_headroom_on_both_devices():
     assert configs["nim_tts_server"]["env"]["NIM_TAGS_SELECTOR"] == "batch_size=8"
 
 
+@pytest.mark.parametrize("deployment", [{}, {"credentials": ["NGC_API_KEY"]}])
+def test_cli_exports_custom_profile_with_default_external_ownership(tmp_path, monkeypatch, deployment):
+    model = {
+        "adapter": {"preset": "nemotron_omni"},
+        "endpoint": {"base_url": "https://example.com", "api_key_env": "EXTERNAL_API_KEY"},
+        "deployment": deployment,
+    }
+    profile = tmp_path / "custom.json"
+    profile.write_text(json.dumps({"models": {"llm": model}}))
+    original = profile.read_bytes()
+    processes, _, selected = sample._build_processes("96G_blackwell", profile)
+    assert processes == []
+    assert selected == profile
+
+    destination = tmp_path / "client.json"
+    monkeypatch.setattr(sys, "argv", [
+        "model_servers_nim", "--gpu-profile", "96G_blackwell", "--models", str(profile),
+        "--export-models", str(destination),
+    ])
+    sample.run()
+
+    assert profile.read_bytes() == original
+    exported = json.loads(destination.read_text())["models"]["llm"]
+    assert exported["adapter"] == model["adapter"]
+    assert exported["endpoint"] == model["endpoint"]
+    assert exported["deployment"] == {}
+    client = load_models_config(destination).llm("llm")
+    assert client.deployment.ownership == "external"
+    assert not client.deployment.credentials
+
+
 def test_export_rejects_overwriting_deployment():
     profile = BASE / "yaml/spark/models.json"
     with pytest.raises(ValueError, match="must not overwrite"):
