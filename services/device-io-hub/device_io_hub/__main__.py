@@ -90,7 +90,24 @@ async def main(ready_file: Path | None = None) -> None:
 
     cfg = load_config()
 
-    hub = HubEndpoint(pull_addr=cfg.hub_push_addr, pub_addr=cfg.hub_sub_addr)
+    # Keep startup compatible with small programmatic config objects that only
+    # configure the real-time IPC lane. The normal LiveKit config supplies all
+    # four file options below.
+    file_ipc_options = {
+        option: getattr(cfg, attribute)
+        for option, attribute in (
+            ("file_pull_addr", "hub_file_push_addr"),
+            ("file_pub_addr", "hub_file_sub_addr"),
+            ("file_hwm", "incoming_file_ipc_hwm"),
+            ("file_max_bytes", "incoming_file_max_bytes"),
+        )
+        if hasattr(cfg, attribute)
+    }
+    hub = HubEndpoint(
+        pull_addr=cfg.hub_push_addr,
+        pub_addr=cfg.hub_sub_addr,
+        **file_ipc_options,
+    )
     hub.on_frame(on_frame)
     hub.on_audio(on_audio)
     hub.on_data(on_data)

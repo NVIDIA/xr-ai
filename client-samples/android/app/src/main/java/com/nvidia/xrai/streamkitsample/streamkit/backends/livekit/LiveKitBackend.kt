@@ -6,6 +6,8 @@ package com.nvidia.xrai.streamkitsample.streamkit.backends.livekit
 import android.content.Context
 import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
 import com.nvidia.xrai.streamkitsample.streamkit.CapturedImage
+import com.nvidia.xrai.streamkitsample.streamkit.FileSendOptions
+import com.nvidia.xrai.streamkitsample.streamkit.FileTransferInfo
 import com.nvidia.xrai.streamkitsample.streamkit.NetworkMetrics
 import com.nvidia.xrai.streamkitsample.streamkit.NetworkQuality
 import com.nvidia.xrai.streamkitsample.streamkit.StreamError
@@ -44,6 +46,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.File
 import java.net.URL
 import java.net.URLEncoder
 import java.nio.ByteBuffer
@@ -367,6 +370,127 @@ internal class LiveKitBackend(
         )
     }
 
+    override suspend fun sendBytes(
+        data: ByteArray,
+        options: FileSendOptions,
+    ): FileTransferInfo {
+        val effective = makeFileOptions(options, data.size.toLong(), null)
+        if (!isConnected || room == null) throw StreamError.NotConnected
+        val streamId = try {
+            byteStreamWriter.sendBytes(data, effective.wire)
+        } catch (_: ByteStreamConnectionChanged) {
+            throw StreamError.FileTransferIncomplete
+        }
+        return effective.toTransferInfo(streamId)
+    }
+
+    override suspend fun sendFile(file: File, options: FileSendOptions): FileTransferInfo {
+        var effective = makeFileOptions(options, 0, file.name)
+        if (!isConnected || room == null) throw StreamError.NotConnected
+        if (!file.isFile) throw StreamError.InvalidFileMetadata("file is not readable")
+        val size = file.length()
+        effective = effective.copy(
+            size = size,
+            wire = effective.wire.copy(totalSize = size),
+        )
+        val streamId = try {
+            byteStreamWriter.sendFile(file, effective.wire)
+        } catch (_: ByteStreamConnectionChanged) {
+            throw StreamError.FileTransferIncomplete
+        }
+        return effective.toTransferInfo(streamId)
+    }
+
+    private data class EffectiveFileOptions(
+        val topic: String,
+        val name: String,
+        val mimeType: String,
+        val size: Long,
+        val wire: ByteStreamWireOptions,
+    ) {
+        fun toTransferInfo(streamId: String) = FileTransferInfo(
+            id = streamId,
+            topic = topic,
+            name = name,
+            mimeType = mimeType,
+            size = size,
+        )
+    }
+
+    private fun makeFileOptions(
+        options: FileSendOptions,
+        size: Long,
+        defaultName: String?,
+    ): EffectiveFileOptions {
+        val topic = validateFileField(options.topic, "topic", FILE_MAX_FIELD_BYTES)
+        if (topic.startsWith(FILE_RESERVED_PREFIX)) {
+            throw StreamError.InvalidFileMetadata("topic uses the reserved _streamkit. prefix")
+        }
+        val name = validateFileField(options.name ?: defaultName, "name", FILE_MAX_FIELD_BYTES)
+        val mimeType = validateFileField(
+            options.mimeType?.takeUnless(String::isEmpty) ?: "application/octet-stream",
+            "MIME type",
+            FILE_MAX_FIELD_BYTES,
+        )
+        val attributes = options.attributes.toMutableMap()
+        if (attributes.size > FILE_MAX_ATTRIBUTES) {
+            throw StreamError.InvalidFileMetadata("attributes exceed 32 application entries")
+        }
+        var attributeBytes = 0
+        attributes.forEach { (key, value) ->
+            validateFileField(key, "attribute key", FILE_MAX_ATTRIBUTE_KEY_BYTES)
+            validateFileField(
+                value,
+                "attribute value",
+                FILE_MAX_ATTRIBUTE_VALUE_BYTES,
+                allowsEmpty = true,
+            )
+            if (key.startsWith(FILE_RESERVED_PREFIX)) {
+                throw StreamError.InvalidFileMetadata("attribute $key is reserved")
+            }
+            attributeBytes += key.toByteArray(Charsets.UTF_8).size
+            attributeBytes += value.toByteArray(Charsets.UTF_8).size
+        }
+        if (attributeBytes > FILE_MAX_ATTRIBUTES_BYTES) {
+            throw StreamError.InvalidFileMetadata("attributes exceed 8192 UTF-8 bytes")
+        }
+        attributes[FILE_TOPIC_ATTRIBUTE] = topic
+        val destinations = config.hubIdentity
+            ?.let { listOf(Participant.Identity(it)) }
+            ?: emptyList()
+        return EffectiveFileOptions(
+            topic = topic,
+            name = name,
+            mimeType = mimeType,
+            size = size,
+            wire = ByteStreamWireOptions(
+                topic = FILE_STREAM_TOPIC,
+                attributes = attributes,
+                destinationIdentities = destinations,
+                mimeType = mimeType,
+                name = name,
+                totalSize = size,
+            ),
+        )
+    }
+
+    private fun validateFileField(
+        value: String?,
+        name: String,
+        maxBytes: Int,
+        allowsEmpty: Boolean = false,
+    ): String {
+        if (value == null || (!allowsEmpty && value.isEmpty())) {
+            throw StreamError.InvalidFileMetadata("$name must be nonempty")
+        }
+        if ('\u0000' in value) {
+            throw StreamError.InvalidFileMetadata("$name cannot contain NUL")
+        }
+        if (value.toByteArray(Charsets.UTF_8).size > maxBytes) {
+            throw StreamError.InvalidFileMetadata("$name exceeds $maxBytes UTF-8 bytes")
+        }
+        return value
+    }
     // ── Event dispatcher ───────────────────────────────────────────────────────
 
     private fun handleEvent(eventRoom: Room, event: RoomEvent) {
@@ -586,5 +710,13 @@ internal class LiveKitBackend(
     companion object {
         /** Reserved LiveKit topic for internal agent status messages. Matches web and Swift. */
         private const val AGENT_STATUS_TOPIC = "_agent.status"
+        private const val FILE_STREAM_TOPIC = "_streamkit.file"
+        private const val FILE_TOPIC_ATTRIBUTE = "_streamkit.topic"
+        private const val FILE_RESERVED_PREFIX = "_streamkit."
+        private const val FILE_MAX_FIELD_BYTES = 255
+        private const val FILE_MAX_ATTRIBUTE_KEY_BYTES = 128
+        private const val FILE_MAX_ATTRIBUTE_VALUE_BYTES = 1_024
+        private const val FILE_MAX_ATTRIBUTES = 32
+        private const val FILE_MAX_ATTRIBUTES_BYTES = 8 * 1_024
     }
 }

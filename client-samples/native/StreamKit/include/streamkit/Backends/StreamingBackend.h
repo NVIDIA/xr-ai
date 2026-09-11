@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <functional>
+#include <filesystem>
 #include <span>
 #include <string_view>
 
@@ -23,7 +24,9 @@
 #include "streamkit/Config/CameraConfig.h"
 #include "streamkit/Config/SessionConfig.h"
 #include "streamkit/ConnectionState.h"
+#include "streamkit/FileTransfer.h"
 #include "streamkit/NetworkMetrics.h"
+#include "streamkit/StreamError.h"
 
 namespace streamkit {
 
@@ -170,6 +173,18 @@ public:
     virtual void Send(std::span<const std::byte> data,
                       bool reliable = true,
                       std::string_view topic = "") = 0;
+
+    /// Send a complete in-memory payload using the backend's file transport.
+    virtual FileTransferInfo SendBytes(std::span<const std::byte>,
+                                       const FileSendOptions&) {
+        throw FileTransferUnsupportedError{};
+    }
+
+    /// Send a file using the backend's file transport.
+    virtual FileTransferInfo SendFile(const std::filesystem::path&,
+                                      const FileSendOptions&) {
+        throw FileTransferUnsupportedError{};
+    }
 };
 
 } // namespace streamkit

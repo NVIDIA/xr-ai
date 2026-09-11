@@ -5,10 +5,14 @@ package com.nvidia.xrai.streamkitsample.streamkit.backends
 
 import com.nvidia.xrai.streamkitsample.streamkit.CapturedImage
 import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
+import com.nvidia.xrai.streamkitsample.streamkit.FileSendOptions
+import com.nvidia.xrai.streamkitsample.streamkit.FileTransferInfo
 import com.nvidia.xrai.streamkitsample.streamkit.NetworkMetrics
+import com.nvidia.xrai.streamkitsample.streamkit.StreamError
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
+import java.io.File
 import java.nio.ByteBuffer
 
 /**
@@ -135,4 +139,14 @@ interface StreamingBackend {
      * @throws [com.nvidia.xrai.streamkitsample.streamkit.StreamError.NotConnected]
      */
     suspend fun send(data: ByteArray, reliable: Boolean = true)
+
+    /** Send a complete in-memory payload using the backend's file-transfer transport. */
+    suspend fun sendBytes(data: ByteArray, options: FileSendOptions): FileTransferInfo {
+        throw StreamError.FileTransferUnsupported
+    }
+
+    /** Send a file using the backend's file-transfer transport. */
+    suspend fun sendFile(file: File, options: FileSendOptions): FileTransferInfo {
+        throw StreamError.FileTransferUnsupported
+    }
 }

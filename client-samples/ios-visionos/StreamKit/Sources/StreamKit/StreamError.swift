@@ -32,6 +32,15 @@ public enum StreamError: Error, LocalizedError, Sendable {
     /// A requested still image could not be captured or encoded.
     case imageCaptureUnavailable(String)
 
+    /// The selected custom backend does not implement file transfer.
+    case fileTransferUnsupported
+
+    /// File-transfer metadata is invalid.
+    case invalidFileMetadata(String)
+
+    /// The local transport could not verify successful stream completion.
+    case fileTransferIncomplete
+
     // MARK: - LocalizedError
 
     public var errorDescription: String? {
@@ -48,6 +57,12 @@ public enum StreamError: Error, LocalizedError, Sendable {
             return "Call startCamera() before injecting frames."
         case .imageCaptureUnavailable(let detail):
             return detail
+        case .fileTransferUnsupported:
+            return "The selected streaming backend does not support file transfer."
+        case .invalidFileMetadata(let reason):
+            return "Invalid file metadata: \(reason)"
+        case .fileTransferIncomplete:
+            return "The file stream did not close successfully on the active connection."
         }
     }
 }

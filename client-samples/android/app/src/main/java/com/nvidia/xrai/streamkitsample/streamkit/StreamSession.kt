@@ -20,6 +20,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.io.File
 import java.nio.ByteBuffer
 
 /**
@@ -228,6 +229,14 @@ class StreamSession(private val backend: StreamingBackend) {
     suspend fun send(data: ByteArray, reliable: Boolean = true) {
         backend.send(data, reliable)
     }
+
+    /** Sends a complete in-memory payload as a client-to-agent file transfer. */
+    suspend fun sendBytes(data: ByteArray, options: FileSendOptions): FileTransferInfo =
+        backend.sendBytes(data, options)
+
+    /** Streams a local file as a client-to-agent file transfer. */
+    suspend fun sendFile(file: File, options: FileSendOptions): FileTransferInfo =
+        backend.sendFile(file, options)
 
     // ── Private ────────────────────────────────────────────────────────────────
 
