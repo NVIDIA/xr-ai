@@ -43,6 +43,7 @@ from pipecat.pipeline.worker import PipelineWorker
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.workers.runner import WorkerRunner
 
+from xr_ai_models import TTSChunk
 from xr_ai_voice import VadConfig
 from xr_ai_voice._types import VoiceQuery
 from xr_ai_voice._pipeline import _build_voice_pipeline
@@ -122,11 +123,14 @@ async def _run_chain(
     )
     runner = WorkerRunner()
     await runner.add_workers(worker)
+    started = asyncio.Event()
+
+    @worker.event_handler("on_pipeline_started")
+    async def on_pipeline_started(_worker, _frame) -> None:
+        started.set()
 
     async def drive() -> None:
-        # The runner's setup happens inside .run(); give it a tick to
-        # push StartFrame through every processor before we feed data.
-        await asyncio.sleep(0.05)
+        await started.wait()
         for i, f in enumerate(sends):
             await worker.queue_frame(f)
             if i < len(sends) - 1 and per_send_delay_s:
@@ -181,6 +185,51 @@ class _FakeTts:
 
     async def close(self) -> None:
         pass
+
+
+class _FakeStreamingTts(_FakeTts):
+    """Streaming TTS double with controllable pauses after first audio."""
+
+    def __init__(self, sample_rate: int = 22050) -> None:
+        super().__init__(sample_rate)
+        self.stream_calls: list[str] = []
+        self.chunks: dict[str, tuple[bytes, ...]] = {}
+        self.started: dict[str, asyncio.Event] = {}
+        self.releases: dict[str, asyncio.Event] = {}
+        self.closed: dict[str, asyncio.Event] = {}
+        self.completed: list[str] = []
+
+    def configure(
+        self,
+        text: str,
+        *chunks: bytes,
+        pause_after_first: bool = False,
+    ) -> None:
+        self.chunks[text] = chunks
+        self.started[text] = asyncio.Event()
+        self.closed[text] = asyncio.Event()
+        if pause_after_first:
+            self.releases[text] = asyncio.Event()
+
+    async def stream(
+        self,
+        text: str,
+        *,
+        timeout: float | None = None,
+    ) -> AsyncIterator[TTSChunk]:
+        del timeout
+        self.stream_calls.append(text)
+        try:
+            for index, data in enumerate(self.chunks[text]):
+                yield TTSChunk(data, self.sample_rate)
+                if index == 0:
+                    self.started[text].set()
+                    release = self.releases.get(text)
+                    if release is not None:
+                        await release.wait()
+            self.completed.append(text)
+        finally:
+            self.closed[text].set()
 
 
 class _NullSink:
@@ -2039,6 +2088,140 @@ async def test_assistant_participant_lifecycle_callbacks_fire():
 # ════════════════════════════════════════════════════════════════════════════
 # StreamingTtsProcessor
 # ════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_streaming_tts_emits_first_chunk_before_stream_finishes(monkeypatch):
+    tts = _FakeStreamingTts()
+    tts.configure(
+        "hello.",
+        b"\x01\x00",
+        b"\x02\x00",
+        pause_after_first=True,
+    )
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    proc = StreamingTtsProcessor(tts=tts, voice_gate=gate)
+    frames: list[OutputAudioRawFrame] = []
+
+    async def capture(frame: OutputAudioRawFrame) -> None:
+        frames.append(frame)
+
+    monkeypatch.setattr(proc, "push_frame", capture)
+    send_task = asyncio.create_task(
+        proc._send_stream("hello.", pid="alice"),  # noqa: SLF001
+    )
+    await asyncio.wait_for(tts.started["hello."].wait(), timeout=1)
+
+    assert [frame.audio for frame in frames] == [b"\x01\x00"]
+    assert not send_task.done()
+
+    send_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await send_task
+    assert tts.closed["hello."].is_set()
+    assert tts.completed == []
+
+
+@pytest.mark.asyncio
+async def test_streaming_tts_preserves_sentence_and_response_boundary_order():
+    tts = _FakeStreamingTts()
+    tts.configure("First.", b"\x01\x00", b"\x02\x00")
+    tts.configure("Second.", b"\x03\x00", b"\x04\x00")
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    proc = StreamingTtsProcessor(tts=tts, voice_gate=gate)
+
+    sink = await _run_chain(
+        proc,
+        sends=[
+            _text_for("First. Second.", "alice"),
+            AssistantResponseEndFrame(
+                pid="alice",
+                text="First. Second.",
+                pts_us=1,
+            ),
+        ],
+    )
+
+    assert tts.stream_calls == ["First.", "Second."]
+    assert tts.calls == []
+    audio = [
+        frame
+        for frame in sink.frames
+        if isinstance(frame, OutputAudioRawFrame)
+    ]
+    assert [frame.audio for frame in audio] == [
+        b"\x01\x00",
+        b"\x02\x00",
+        b"\x03\x00",
+        b"\x04\x00",
+    ]
+    stopped_index = next(
+        index
+        for index, frame in enumerate(sink.frames)
+        if isinstance(frame, TTSStoppedFrame)
+    )
+    last_audio_index = max(
+        index
+        for index, frame in enumerate(sink.frames)
+        if isinstance(frame, OutputAudioRawFrame)
+    )
+    assert stopped_index > last_audio_index
+    assert sink.frames[stopped_index].transport_destination == "alice"
+    assert all(closed.is_set() for closed in tts.closed.values())
+
+
+@pytest.mark.asyncio
+async def test_streaming_tts_interrupt_closes_only_target_stream():
+    tts = _FakeStreamingTts()
+    tts.configure(
+        "Alice speaking.",
+        b"\x01\x00",
+        b"\x02\x00",
+        pause_after_first=True,
+    )
+    tts.configure(
+        "Bob speaking.",
+        b"\x03\x00",
+        b"\x04\x00",
+        pause_after_first=True,
+    )
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    proc = StreamingTtsProcessor(tts=tts, voice_gate=gate)
+
+    async def release_bob_after_alice_closes() -> None:
+        await asyncio.wait_for(tts.started["Bob speaking."].wait(), timeout=1)
+        await asyncio.wait_for(tts.closed["Alice speaking."].wait(), timeout=1)
+        tts.releases["Bob speaking."].set()
+
+    release_task = asyncio.create_task(release_bob_after_alice_closes())
+    sink = await _run_chain(
+        proc,
+        sends=[
+            _text_for("Alice speaking. ", "alice"),
+            _text_for("Bob speaking. ", "bob"),
+            _interrupt_for("alice"),
+        ],
+        settle_s=0.1,
+        per_send_delay_s=0.03,
+    )
+    await release_task
+
+    audio_by_pid = {
+        pid: [
+            frame.audio
+            for frame in sink.frames
+            if isinstance(frame, OutputAudioRawFrame)
+            and frame.transport_destination == pid
+        ]
+        for pid in ("alice", "bob")
+    }
+    assert audio_by_pid == {
+        "alice": [b"\x01\x00"],
+        "bob": [b"\x03\x00", b"\x04\x00"],
+    }
+    assert tts.closed["Alice speaking."].is_set()
+    assert tts.closed["Bob speaking."].is_set()
+    assert tts.completed == ["Bob speaking."]
 
 
 @pytest.mark.asyncio
