@@ -22,6 +22,7 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
     assert set(commands) == {
         "lab_instrument_monitoring",
         "model_servers",
+        "model_servers_nim",
         "simple_vlm_example",
         "tea_making_sample",
         "xr_render_demo",

@@ -116,7 +116,7 @@ def run() -> None:
         help="Write a reusable client models JSON and exit without launching servers.",
     )
     parser.add_argument(
-        "--gpu-profile", choices=sorted(p.name for p in (_BASE / "yaml").iterdir() if p.is_dir()),
+        "--gpu-profile", choices=["96G_blackwell", "dual_48G_ada", "spark"],
         help="Select a hardware profile; otherwise detect Blackwell, dual Ada, or Spark.",
     )
     parser.add_argument(

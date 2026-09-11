@@ -179,6 +179,8 @@ image request, and query/passage embeddings. Repeat after a cold start and a
 warm restart on each target machine; monitor GPU memory under concurrent agent
 traffic as well as during startup.
 
-All implementation, configuration, and tests are inside this sample. The sole
-repository-wide change is the generated `DEPENDENCIES.md` inventory required
-when adding these Python projects.
+All implementation, configuration, and sample tests are inside this sample.
+Two repository-wide updates register the new projects: the generated
+`DEPENDENCIES.md` inventory required for Python projects, and the expected
+command list in `tests/test_cli_documentation.py`, which checks every sample
+automatically discovered by the documentation generator.
