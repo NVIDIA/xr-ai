@@ -43,9 +43,10 @@ room. The ready file is created only after connector startup and the remaining
 startup configuration succeed.
 
 The hub task and connector task run concurrently, and the process waits for
-`SIGINT` or `SIGTERM` to shut down. Startup failures clean up the started
-components. A periodic stats loop logs per-participant video, audio, and data
-rates.
+`SIGINT` or `SIGTERM` to shut down. Startup failures attempt cleanup of every
+owned component. Cleanup errors are logged without replacing the original
+startup failure. A periodic stats loop logs per-participant video, audio, and
+data rates.
 
 ### Isolation contract
 

@@ -454,9 +454,10 @@ shared-memory attachment and layout validation before connecting the LiveKit
 room. The ready file is created only after connector startup and the remaining
 startup configuration succeed.</p>
 <p>The hub task and connector task run concurrently, and the process waits for
-<code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> to shut down. Startup failures clean up the started
-components. A periodic stats loop logs per-participant video, audio, and data
-rates.</p>
+<code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> to shut down. Startup failures attempt cleanup of every
+owned component. Cleanup errors are logged without replacing the original
+startup failure. A periodic stats loop logs per-participant video, audio, and
+data rates.</p>
 <section id="isolation-contract">
 <h3>Isolation contract<a class="headerlink" href="#isolation-contract" title="Link to this heading">#</a></h3>
 <p>The hub is <strong>not</strong> a routing switch between participants. There is no supported
