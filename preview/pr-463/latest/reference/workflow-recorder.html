@@ -429,7 +429,7 @@
 worker that composes <code class="docutils literal notranslate"><span class="pre">RecorderAgent</span></code>, <code class="docutils literal notranslate"><span class="pre">SopEngineAgent</span></code>, and <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> in one
 runtime. It reuses Parakeet STT, Nemotron Omni, Cosmos VLM, and Piper TTS from
 the shared model-server stack. Refer to the
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/01f19e7d62246e28fc90f2fcc31985a862505453/agent-samples/workflow-recorder">sample README</a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/3a6c8fff07a1afa8d27a6185f0c36f5ac20a9e25/agent-samples/workflow-recorder">sample README</a>
 for launch commands.</p>
 <section id="configuration">
 <h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h2>
@@ -487,7 +487,10 @@ use the same command and narration handling. Control utterances are not
 included in the recorded instructions.</p>
 <p>Recording samples frames, saves accepted final speech transcripts, and
 produces periodic frame-linked visual captions with an Activity → Phase
-summary. Starting a recording stops any active SOP execution for that
+summary. Captions use the prior observation and up to eight recent narration
+records from the preceding 30 seconds, never speech timestamped after the
+selected frame. Narration directs visual attention but does not prove that
+an action happened. Starting a recording stops any active SOP execution for that
 participant. Repeating <code class="docutils literal notranslate"><span class="pre">start</span> <span class="pre">workflow</span></code> does not create another recording;
 repeating <code class="docutils literal notranslate"><span class="pre">finish</span> <span class="pre">workflow</span></code> during conversion does not create another guide.</p>
 <p>Session packets are written under <code class="docutils literal notranslate"><span class="pre">artifacts/sessions/</span></code>. Each packet includes
@@ -510,6 +513,41 @@ a draft <code class="docutils literal notranslate"><span class="pre">workflow_&l
 existing guide. Review the steps, visual completion conditions, evidence,
 and uncertainties against the recording, then set <code class="docutils literal notranslate"><span class="pre">task.status</span></code> to
 <code class="docutils literal notranslate"><span class="pre">approved</span></code> before use.</p>
+<p>The generator starts from narration: every recorded utterance must be assigned
+to a step as action evidence or interpreted context. Distinct actions become
+steps; sentence fragments, destinations, clarifications, and corrections refine
+the relevant step instead of becoming extra steps. Incidental or unclear speech
+remains explicitly non-operative context, separate from actionable clarifications.
+The model first classifies whether a procedure exists; a negative decision ends
+conversion without retrying it into an invented procedure.</p>
+<p>For each step, the model selects at most one caption that best matches the
+combined instruction and context, considering objects, locations, counts,
+state, and time rather than timestamp alone. The generated step’s <code class="docutils literal notranslate"><span class="pre">voice.prompt</span></code>
+retains the original caption, its frame ID, utterance context, and a
+narration-refined caption. Raw <code class="docutils literal notranslate"><span class="pre">captions.jsonl</span></code> records are not changed. The
+refinement distinguishes observed state from narrated intent and marks conflicts
+or missing visual confirmation as uncertainty. If no caption is relevant, the
+step remains grounded in speech with an explicit visual-evidence gap.</p>
+<p>Completion conditions describe the full narrated requirement, including counts,
+locations, and later corrections, not merely the partial state in a caption.
+They are used in both the generated state description and the image-check
+question. A partial result must not satisfy a complete-step check.</p>
+<p>The converter uses a separate schema-constrained client to the configured LLM
+endpoint; the endpoint must support JSON-schema response formatting. This does
+not constrain ordinary agent chat. The converter also decodes plain JSON,
+fenced JSON, and bounded text-block envelopes,
+including stringified envelopes, without executing model output. It validates
+the resulting draft and requires every speech ID to be accounted for. Invalid
+output or missing coverage gets one corrective retry within the same generation
+timeout. A second invalid response fails conversion without saving a partial
+guide. These checks enforce structure and evidence references, not semantic
+correctness; review the interpreted context, selected captions, and completion
+conditions before approving a guide.</p>
+<p>SOP generation enables model reasoning for grouping utterances and matching
+captions. For the sample’s Nemotron model, it supplies a <code class="docutils literal notranslate"><span class="pre">reasoning_budget</span></code> hint
+of 2,048 tokens unless the model profile already specifies one. The hard
+response limit is 8,000 tokens, and the configured total generation timeout
+still applies.</p>
 <p>The session’s <code class="docutils literal notranslate"><span class="pre">generation.json</span></code> reports <code class="docutils literal notranslate"><span class="pre">generating</span></code>, <code class="docutils literal notranslate"><span class="pre">draft</span></code> (with the guide
 ID and path), <code class="docutils literal notranslate"><span class="pre">failed</span></code> (with an error), or <code class="docutils literal notranslate"><span class="pre">interrupted</span></code> if the worker stops
 during conversion. Conversion continues if the participant disconnects after
@@ -617,7 +655,11 @@ root:</p>
 <p>The evaluation uses synthetic recordings in temporary directories; it does
 not read or modify saved user recordings. Cases check chronological actions,
 rejection of incidental conversation, embedded instruction handling, and
-acknowledgment of conflicting evidence. These checks complement human review
+acknowledgment of conflicting evidence. They also check distinct attachments
+under repeated captions, multiple actions in one utterance, and a final
+narrated action without a caption. Additional cases check fragmented speech,
+caption relevance, requested counts despite partial observations, and later
+corrections. These checks complement human review
 of generated SOPs; they do not establish correctness for every procedure.</p>
 </section>
 </section>

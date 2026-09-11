@@ -56,7 +56,10 @@ included in the recorded instructions.
 
 Recording samples frames, saves accepted final speech transcripts, and
 produces periodic frame-linked visual captions with an Activity → Phase
-summary. Starting a recording stops any active SOP execution for that
+summary. Captions use the prior observation and up to eight recent narration
+records from the preceding 30 seconds, never speech timestamped after the
+selected frame. Narration directs visual attention but does not prove that
+an action happened. Starting a recording stops any active SOP execution for that
 participant. Repeating `start workflow` does not create another recording;
 repeating `finish workflow` during conversion does not create another guide.
 
@@ -81,6 +84,46 @@ a draft `workflow_<id>.guide.yaml` into `guides/`, without overwriting an
 existing guide. Review the steps, visual completion conditions, evidence,
 and uncertainties against the recording, then set `task.status` to
 `approved` before use.
+
+The generator starts from narration: every recorded utterance must be assigned
+to a step as action evidence or interpreted context. Distinct actions become
+steps; sentence fragments, destinations, clarifications, and corrections refine
+the relevant step instead of becoming extra steps. Incidental or unclear speech
+remains explicitly non-operative context, separate from actionable clarifications.
+The model first classifies whether a procedure exists; a negative decision ends
+conversion without retrying it into an invented procedure.
+
+For each step, the model selects at most one caption that best matches the
+combined instruction and context, considering objects, locations, counts,
+state, and time rather than timestamp alone. The generated step's `voice.prompt`
+retains the original caption, its frame ID, utterance context, and a
+narration-refined caption. Raw `captions.jsonl` records are not changed. The
+refinement distinguishes observed state from narrated intent and marks conflicts
+or missing visual confirmation as uncertainty. If no caption is relevant, the
+step remains grounded in speech with an explicit visual-evidence gap.
+
+Completion conditions describe the full narrated requirement, including counts,
+locations, and later corrections, not merely the partial state in a caption.
+They are used in both the generated state description and the image-check
+question. A partial result must not satisfy a complete-step check.
+
+The converter uses a separate schema-constrained client to the configured LLM
+endpoint; the endpoint must support JSON-schema response formatting. This does
+not constrain ordinary agent chat. The converter also decodes plain JSON,
+fenced JSON, and bounded text-block envelopes,
+including stringified envelopes, without executing model output. It validates
+the resulting draft and requires every speech ID to be accounted for. Invalid
+output or missing coverage gets one corrective retry within the same generation
+timeout. A second invalid response fails conversion without saving a partial
+guide. These checks enforce structure and evidence references, not semantic
+correctness; review the interpreted context, selected captions, and completion
+conditions before approving a guide.
+
+SOP generation enables model reasoning for grouping utterances and matching
+captions. For the sample's Nemotron model, it supplies a `reasoning_budget` hint
+of 2,048 tokens unless the model profile already specifies one. The hard
+response limit is 8,000 tokens, and the configured total generation timeout
+still applies.
 
 The session's `generation.json` reports `generating`, `draft` (with the guide
 ID and path), `failed` (with an error), or `interrupted` if the worker stops
@@ -177,5 +220,9 @@ uv run --project worker python eval/eval.py
 The evaluation uses synthetic recordings in temporary directories; it does
 not read or modify saved user recordings. Cases check chronological actions,
 rejection of incidental conversation, embedded instruction handling, and
-acknowledgment of conflicting evidence. These checks complement human review
+acknowledgment of conflicting evidence. They also check distinct attachments
+under repeated captions, multiple actions in one utterance, and a final
+narrated action without a caption. Additional cases check fragmented speech,
+caption relevance, requested counts despite partial observations, and later
+corrections. These checks complement human review
 of generated SOPs; they do not establish correctness for every procedure.
