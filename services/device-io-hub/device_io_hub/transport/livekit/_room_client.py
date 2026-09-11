@@ -488,10 +488,10 @@ class RoomClient:
                         participant_id=identity,
                         track_id=track_id,
                     )
-                except RuntimeError:
+                except RuntimeError as exc:
                     logger.warning(
-                        "Ring buffer full — dropped frame from {!r}/{!r}",
-                        identity, track_id,
+                        "Frame from {!r}/{!r} dropped: {}",
+                        identity, track_id, exc,
                     )
                 except ValueError as exc:
                     logger.warning(

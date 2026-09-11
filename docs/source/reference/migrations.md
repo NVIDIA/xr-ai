@@ -15,6 +15,11 @@ and command to `device_io_hub`. Rename `xr_media_hub.yaml` to
 
 ## Operator-visible runtime changes
 
+- DeviceIOHub now waits for the hub to acknowledge shared-memory attachment
+  before connecting the LiveKit room or creating its ready file. Missing
+  segments trigger bounded recreation; incompatible layouts and acknowledgement
+  timeouts fail startup. Check the registration error in the hub logs rather
+  than treating a running process as ready.
 - DeviceIOHub no longer falls back to embedded LiveKit development credentials.
   Set `api_key` and `api_secret` in `device_io_hub.yaml`, or inject
   `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` through the environment.
