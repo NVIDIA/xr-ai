@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Reuses services/nim-server and the repository's Magpie Riva gRPC adapter.
+# The pinned manifest provides batch sizes 8, 32, and 64; reserve about 13 GiB.
+# Pin the digest: older documentation for this tag lists an absent bs=1 profile.
+# https://docs.nvidia.com/nim/speech/latest/reference/support-matrix/tts.html
+image: nvcr.io/nim/nvidia/magpie-tts-multilingual:1.10.0@sha256:72a18be0070be31fe84fda4d5ee97c50b71da99272e405bc6ced7557e1b9da54
+container_name: xr-ai-model-servers-nim-tts
+http_port: 9011
+grpc_port: 50052
+nim_cache: ../../../../models/nim
+cuda_visible_devices: "0"
+env:
+  NIM_TAGS_SELECTOR: "batch_size=8"
