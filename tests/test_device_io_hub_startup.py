@@ -210,6 +210,29 @@ async def test_failure_after_connector_start_cleans_up_before_ready(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("cleanup_error_type", [asyncio.CancelledError, KeyboardInterrupt, SystemExit])
+@pytest.mark.parametrize("owner", ["main", "connector"])
+async def test_cleanup_preserves_failure_without_swallowing_process_exit(
+    main_runtime, livekit_connector, monkeypatch, cleanup_error_type, owner,
+):
+    startup_error = ValueError("startup failed")
+    cleanup_error = cleanup_error_type("cleanup interrupted")
+    if owner == "main":
+        monkeypatch.setattr(hub_main, "make_client_token", Mock(side_effect=startup_error))
+        main_runtime.connector.stop.side_effect = cleanup_error
+        operation = hub_main.main(ready_file=main_runtime.ready_file)
+    else:
+        livekit_connector._room_client.connect.side_effect = startup_error
+        livekit_connector._room_client.disconnect.side_effect = cleanup_error
+        operation = livekit_connector.start()
+
+    expected = startup_error if cleanup_error_type is asyncio.CancelledError else cleanup_error
+    with pytest.raises(type(expected)) as caught:
+        await operation
+    assert caught.value is expected
+
+
+@pytest.mark.asyncio
 async def test_main_cancellation_after_ready_cleans_up(main_runtime):
     runtime = main_runtime
     main_task = asyncio.create_task(hub_main.main(ready_file=runtime.ready_file))

@@ -167,7 +167,7 @@ async def main(ready_file: Path | None = None) -> None:
                 for task in tasks:
                     task.cancel()
                 await asyncio.gather(*tasks, return_exceptions=True)
-        except BaseException:
+        except (Exception, asyncio.CancelledError):
             if failure is None:
                 raise
             logger.exception("DeviceIOHub cleanup failed while handling an earlier failure")

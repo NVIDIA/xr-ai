@@ -115,7 +115,7 @@ class LiveKitConnector:
         except BaseException as exc:
             try:
                 await self.stop()
-            except BaseException:
+            except (Exception, asyncio.CancelledError):
                 logger.exception("LiveKitConnector cleanup failed after startup failure")
             if isinstance(exc, _ConnectorRegistrationError):
                 banner = "━" * 56
