@@ -35,6 +35,14 @@ uv run model_servers_nim --gpu-profile 96G_blackwell --dry-run
 uv run model_servers_nim
 ```
 
+Alternatively, run the source file directly after synchronization:
+
+```bash
+uv run main.py
+```
+
+After the launcher exits, start the consuming sample from the same terminal.
+
 Docker with NVIDIA Container Toolkit and `NGC_API_KEY` are required. Spark also
 uses `HF_TOKEN` for its local STT fallback. Credentials can be exported in the
 environment or loaded from the repository's existing credential store.
@@ -99,11 +107,13 @@ A later `uv sync` can remove the manually installed extra. For a maintained
 consumer, declare `xr-ai-models[riva]` in its worker dependencies. The new sample
 does not edit existing workers, SDK presets, or agent configurations.
 
-## Configuration and memory
+## Configure
 
 `yaml/<gpu-profile>/models.json` selects the deployment and client adapters.
-The adjacent server YAML files own image versions and digests, model profiles, ports, GPU
-placement, and runtime limits. `--models PATH` selects a custom deployment JSON
+The adjacent server YAML files own image versions and digests, model profiles,
+ports, GPU placement, and runtime limits. See the generated
+[configuration reference](https://nvidia.github.io/xr-ai/latest/reference/configuration.html)
+and the [sample configuration guide](https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html). `--models PATH` selects a custom deployment JSON
 using the selected hardware directory. For example, reduce Omni concurrency in
 `nim_llm_server.yaml` by changing its `NIM_PASSTHROUGH_ARGS` entry:
 
