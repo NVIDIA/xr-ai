@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Generic NVFP4, TP=1 profile from this image's model_manifest.yaml.
+# Pin precision: an automatically selected BF16 profile cannot share this GPU.
+# https://docs.nvidia.com/nim/vision-language-models/2.0.4-variant/support-matrix.html
+image: nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant@sha256:8b7dc7fe5f18522bbaeb594d52afdd41b00a562d0887ba25a7ac850e51384f18
+container_name: xr-ai-model-servers-nim-omni
+http_port: 8108
+nim_cache: ../../../../models/nim
+cuda_visible_devices: "0"
+env:
+  NIM_MODEL_PROFILE: "d62eaa66527fa3c35dc50bce594f4622a16b183066fcece982ea532d5ae60196"
+  NIM_MAX_MODEL_LEN: "32768"
+  NIM_PASSTHROUGH_ARGS: >-
+    --gpu-memory-utilization 0.35
+    --max-num-seqs 4
+    --enforce-eager
+    --enable-auto-tool-choice
+    --tool-call-parser qwen3_coder
+    --reasoning-parser nemotron_v3

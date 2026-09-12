@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Same text embedding model as model-servers (not the distinct VL model).
+# Keep a single instance; NIM budgets are engine-specific, not vLLM fractions.
+# https://docs.nvidia.com/nim/nemo-retriever/text-embedding/1.13.0/environment-variables.html
+image: nvcr.io/nim/nvidia/llama-nemotron-embed-1b-v2:1.13.0@sha256:3c22c0bd8d36dcdee4c46ff371951bb83ec537361db5d6b5737b5c4ecbec92ae
+container_name: xr-ai-model-servers-nim-embedding
+http_port: 8119
+nim_cache: ../../../../models/nim
+cuda_visible_devices: "0"
+env:
+  NIM_NUM_MODEL_INSTANCES: "1"
+  NIM_NUM_TOKENIZERS: "1"
+  NIM_TRITON_PERFORMANCE_MODE: "latency"
+  # Explicit generic FP16 ONNX (4096 tokens) engine.
+  NIM_MODEL_PROFILE: "e28f17c9c13a99055d065f88d725bf93c23b3aab14acd68f16323de1353fc528"

@@ -532,6 +532,40 @@ drift:
 - Commands:
   - `model_servers` → `main:run`
 
+#### `model-servers-nim` — [`agent-samples/model-servers-nim/`](agent-samples/model-servers-nim/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+- Optional dependency groups:
+  - `test`:
+    - `pytest>=8.0`
+    - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+    - `nim-embedding-adapter` → [`nim-embedding-adapter`](agent-samples/model-servers-nim/embedding-adapter/) (local, editable)
+- Commands:
+  - `model_servers_nim` → `main:run`
+
+#### `nim-embedding-adapter` — [`agent-samples/model-servers-nim/embedding-adapter/`](agent-samples/model-servers-nim/embedding-adapter/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+  - `fastapi>=0.115`
+  - `uvicorn>=0.30`
+  - `pyyaml>=6.0`
+  - `httpx>=0.27`
+- Optional dependency groups: none
+- Commands:
+  - `nim_embedding_adapter` → `nim_embedding_adapter.__main__:run`
+
 #### `simple-vlm-example` — [`agent-samples/simple-vlm-example/`](agent-samples/simple-vlm-example/)
 
 - Python: `>=3.11,<3.13`
