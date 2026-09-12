@@ -1,0 +1,95 @@
+xr_ai_tools.current_frame
+=========================
+
+.. py:module:: xr_ai_tools.current_frame
+
+.. autoapi-nested-parse::
+
+   Select current camera frames without invoking a VLM.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_tools.current_frame.ImageFrame
+   xr_ai_tools.current_frame.CurrentFrameRequest
+   xr_ai_tools.current_frame.CurrentFrameTool
+
+
+Module Contents
+---------------
+
+.. py:class:: ImageFrame
+
+
+
+   One selected camera frame and its source metadata.
+
+
+   .. py:attribute:: width
+      :type:  int
+
+      Frame width in pixels.
+
+
+
+   .. py:attribute:: height
+      :type:  int
+
+      Frame height in pixels.
+
+
+
+   .. py:attribute:: sequence
+      :type:  int
+
+      Source track sequence number.
+
+
+
+   .. py:attribute:: participant_id
+      :type:  str
+
+      Participant that published the frame.
+
+
+
+   .. py:attribute:: track_id
+      :type:  str
+      :value: ''
+
+
+      Source video track identifier, when available.
+
+
+
+.. py:class:: CurrentFrameRequest
+
+
+
+   Select the latest camera frame for one participant.
+
+
+   .. py:attribute:: participant_id
+      :type:  str
+
+      Participant whose latest camera frame should be returned.
+
+
+
+.. py:class:: CurrentFrameTool(*, endpoint: xr_ai_hub.ProcessorEndpoint, images: xr_ai_tools.image.ImageRegistry, frame_max_age_s: float = 2.0, frame_timeout_s: float = 5.0)
+
+
+
+   Return a participant's current frame without running visual inference.
+
+
+   .. py:method:: release(participant_id: str) -> None
+
+      Forget cached frame state and image handles after disconnect.
+
+
+
