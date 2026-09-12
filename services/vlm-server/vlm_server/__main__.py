@@ -39,7 +39,7 @@ Config keys
                                     at startup.
     vllm_backend:            str    "pip" (default) or "docker".
     vllm_image:              str    NGC image when vllm_backend=docker
-                                    (default: nvcr.io/nvidia/vllm:26.07-py3).
+                                    (default: nvcr.io/nvidia/vllm:26.08-py3).
     spark_uma:               bool   Enable DGX Spark cold-start safeguards
                                     (docker backend only; default: false).
 """
@@ -68,7 +68,7 @@ _DEFAULT_EAGER       = False
 _DEFAULT_ASYNC       = False
 _DEFAULT_MAX_IMAGES  = 1
 _DEFAULT_MAX_VIDEOS  = 0
-_DEFAULT_VLLM_IMAGE  = "nvcr.io/nvidia/vllm:26.07-py3"
+_DEFAULT_VLLM_IMAGE  = "nvcr.io/nvidia/vllm:26.08-py3"
 
 _COSMOS3_NANO_MODEL = "nvidia/Cosmos3-Nano"
 _COSMOS3_REASONER_ARCHITECTURE = "Cosmos3ForConditionalGeneration"

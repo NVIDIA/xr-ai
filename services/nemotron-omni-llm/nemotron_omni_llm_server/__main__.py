@@ -34,7 +34,7 @@ Config keys (nemotron_omni_llm_server.yaml)
     moe_backend:              str    Optional vLLM MoE backend.
     vllm_backend:             str    "pip" (default) or "docker".
     vllm_image:               str    Docker image when vllm_backend=docker
-                                     (default: nvcr.io/nvidia/vllm:26.04-py3).
+                                     (default: nvcr.io/nvidia/vllm:26.08-py3).
     extra_pip:                list   Pip packages installed into the Docker
                                      container before `vllm serve` runs
                                      (docker backend only; default:

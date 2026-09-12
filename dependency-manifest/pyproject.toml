@@ -10,7 +10,10 @@ name = "xr-ai-dependency-manifest"
 version = "0.0.0"
 description = "Repository-wide resolved dependency manifest."
 requires-python = ">=3.11,<3.13"
-dependencies = [
+dependencies = []
+
+[project.optional-dependencies]
+repository = [
     "lab-instrument-monitoring",
     "lab-instrument-monitoring-worker",
     "model-servers",
@@ -30,18 +33,13 @@ dependencies = [
     "xr-ai-web-events",
     "cloudxr-runtime",
     "device-io-hub",
-    "embedding-server",
-    "llama-nemotron-llm-server",
     "magpie-tts-server",
-    "nemotron-omni-llm-server",
-    "nemotron3-nano-llm-server",
     "nim-server",
     "xr-openxr-service",
     "pocket-tts-server",
     "xr-rag-service",
     "stt-server",
     "xr-video-memory-service",
-    "vlm-server",
     "xr-ai-tests",
     "xr-ai-launcher",
     "xr-ai-logging",
@@ -49,9 +47,17 @@ dependencies = [
     "xr-ai-vllm",
     "xr-ai-voicegate",
 ]
+vllm = [
+    "embedding-server",
+    "llama-nemotron-llm-server",
+    "nemotron-omni-llm-server",
+    "nemotron3-nano-llm-server",
+    "vlm-server",
+]
 
 [tool.uv]
 package = false
+conflicts = [[{ extra = "repository" }, { extra = "vllm" }]]
 
 [tool.uv.sources]
 "lab-instrument-monitoring"        = { path = "../agent-samples/lab-instrument-monitoring", editable = true }

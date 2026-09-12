@@ -26,7 +26,7 @@ Config keys
     enforce_eager:           bool   Skip CUDA graph capture (default: false).
     vllm_backend:            str    "pip" (default) or "docker".
     vllm_image:              str    NGC image when vllm_backend=docker
-                                    (default: nvcr.io/nvidia/vllm:26.04-py3).
+                                    (default: nvcr.io/nvidia/vllm:26.08-py3).
     spark_uma:               bool   Enable DGX Spark cold-start safeguards
                                     (docker backend only; default: false).
 """

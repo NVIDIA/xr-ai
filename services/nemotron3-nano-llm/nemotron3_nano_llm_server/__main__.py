@@ -25,10 +25,11 @@ Config keys
     max_model_len:           int    vLLM --max-model-len (default: 32768).
     gpu_memory_utilization:  float  vLLM --gpu-memory-utilization (default: 0.85).
     enforce_eager:           bool   Skip CUDA graph capture (default: true).
+    moe_backend:             str    vLLM MoE backend for B200/B300 (SM100-series).
     parser_url:              str    URL to fetch nano_v3_reasoning_parser.py.
     vllm_backend:            str    "pip" (default) or "docker".
     vllm_image:              str    NGC image when vllm_backend=docker
-                                    (default: nvcr.io/nvidia/vllm:26.04-py3).
+                                    (default: nvcr.io/nvidia/vllm:26.08-py3).
 """
 import os
 import urllib.request
@@ -107,6 +108,7 @@ def run() -> None:
     parser_url    = cfg.get("parser_url",          _PARSER_URL_DEFAULT)
     backend       = cfg.get("vllm_backend",        "pip")
     image         = cfg.get("vllm_image",          DEFAULT_IMAGE)
+    moe_backend   = cfg.get("moe_backend")
 
     if backend == "pip":
         # FlashInfer JIT-compiles CUTLASS MoE kernels on first run via nvcc.
@@ -134,6 +136,10 @@ def run() -> None:
     ]
     if major >= 10:
         extra_serve_args += ["--kv-cache-dtype", "fp8"]
+    # NGC 26.08 requires this override for the NVFP4 model on B200/B300.
+    # Other supported GPUs use different kernels and must retain vLLM's default.
+    if major == 10 and moe_backend:
+        extra_serve_args += ["--moe-backend", str(moe_backend)]
     if enforce_eager:
         extra_serve_args.append("--enforce-eager")
 

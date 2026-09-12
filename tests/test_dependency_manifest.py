@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib.util
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -117,6 +118,31 @@ def test_manifest_lists_every_project_with_all_extras(tmp_path: Path) -> None:
     assert '"server"  = { path = "../services/server", editable = true }' in manifest
     assert 'requires-python = ">=3.11,<3.13"' in manifest
     assert "package = false" in manifest
+    assert 'conflicts = [[{ extra = "repository" }, { extra = "vllm" }]]' in manifest
+
+
+def test_manifest_isolates_vllm_projects_without_overriding_dependencies(
+    tmp_path: Path,
+) -> None:
+    _write_project(tmp_path, "services/server", name="server")
+    _write_project(tmp_path, "services/embedding", name="embedding-server")
+
+    manifest = _render(tmp_path)
+
+    repository = manifest.split("repository = [", 1)[1].split("]", 1)[0]
+    vllm = manifest.split("vllm = [", 1)[1].split("]", 1)[0]
+    assert '"server"' in repository
+    assert '"embedding-server"' not in repository
+    assert '"embedding-server"' in vllm
+    assert '"server"' not in vllm
+    assert "override-dependencies" not in manifest
+
+
+def test_manifest_lock_inventories_both_pynvvideocodec_environments() -> None:
+    lock = tomllib.loads((_ROOT / MANIFEST / "uv.lock").read_text())
+    versions = {package["version"] for package in lock["package"] if package["name"] == "pynvvideocodec"}
+
+    assert {"2.0.4", "2.2.2"} <= versions
 
 
 def test_manifest_orders_by_path_not_name(tmp_path: Path) -> None:
