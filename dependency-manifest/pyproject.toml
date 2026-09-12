@@ -9,7 +9,7 @@
 name = "xr-ai-dependency-manifest"
 version = "0.0.0"
 description = "Repository-wide resolved dependency manifest."
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11,<3.15"
 dependencies = [
     "lab-instrument-monitoring",
     "lab-instrument-monitoring-worker",

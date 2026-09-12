@@ -9,7 +9,7 @@ build-backend = "hatchling.build"
 name = "xr-openxr-service"
 version = "0.1.0"
 description = "Long-running OpenXR tracking service for XR AI."
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11,<3.15"
 dependencies = [
     "xr-ai-launcher",
     "xr-ai-logging",
