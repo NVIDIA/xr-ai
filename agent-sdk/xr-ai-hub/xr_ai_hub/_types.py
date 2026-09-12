@@ -84,6 +84,9 @@ class MsgType(IntEnum):
     AGENT_PRESENCE = 14
     """Readiness-participating agent attachment or detachment."""
 
+    FILE_MESSAGE = 15
+    """Completed inbound file or byte transfer from a connector."""
+
     # Add new types here; existing code is unaffected.
 
 
@@ -165,6 +168,38 @@ class DataMessage:
 
 
 @dataclass(slots=True)
+class FileMessage:
+    """A completed client-to-agent file or byte transfer."""
+
+    participant_id: str
+    """Identity of the participant that sent the transfer."""
+
+    topic: str
+    """Application-defined file route."""
+
+    pts_us: int
+    """Hub receipt timestamp in microseconds."""
+
+    transfer_id: str
+    """Opaque identifier assigned by the active client transport."""
+
+    name: str
+    """Display name or filename supplied by the client."""
+
+    mime_type: str
+    """Payload MIME type."""
+
+    attributes: dict[str, str]
+    """Application metadata with StreamKit's internal attributes removed."""
+
+    data: bytes
+    """Complete file contents."""
+
+    participant_session_id: str = ""
+    """Opaque participant-session identifier used to reject stale delivery."""
+
+
+@dataclass(slots=True)
 class ParticipantEvent:
     """A LiveKit participant has joined or left the room."""
     participant_id: str
@@ -178,6 +213,9 @@ class ParticipantEvent:
 
     connector_id:   str = ""  # which connector this participant arrived on
     """Identity of the connector that reported the participant."""
+
+    participant_session_id: str = ""
+    """Opaque identity for this particular participant connection."""
 
 
 @dataclass(slots=True)

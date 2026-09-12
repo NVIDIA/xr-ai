@@ -9,6 +9,12 @@ from dataclasses import dataclass, field
 from typing import Any
 
 _DEFAULT_RETURN_AUDIO_MAX_BUFFER_S = 3.0
+_DEFAULT_INCOMING_FILE_MAX_BYTES = 16 * 1024 * 1024
+_DEFAULT_INCOMING_FILE_MAX_CONCURRENT = 8
+_DEFAULT_INCOMING_FILE_MAX_CONCURRENT_PER_PARTICIPANT = 2
+_DEFAULT_INCOMING_FILE_IDLE_TIMEOUT_S = 10.0
+_DEFAULT_INCOMING_FILE_TOTAL_TIMEOUT_S = 60.0
+_DEFAULT_INCOMING_FILE_IPC_HWM = 2
 
 
 def _validate_return_audio_max_buffer_s(value: object) -> float:
@@ -30,6 +36,30 @@ def _validate_return_audio_max_buffer_s(value: object) -> float:
             f"got {value!r}"
         )
     return max_buffer_s
+
+
+def _positive_int(name: str, value: object) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"{name} must be a positive integer, got {value!r}")
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a positive integer, got {value!r}") from exc
+    if parsed <= 0 or parsed != value:
+        raise ValueError(f"{name} must be a positive integer, got {value!r}")
+    return parsed
+
+
+def _positive_float(name: str, value: object) -> float:
+    if isinstance(value, bool):
+        raise ValueError(f"{name} must be a finite number greater than 0, got {value!r}")
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a finite number greater than 0, got {value!r}") from exc
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise ValueError(f"{name} must be a finite number greater than 0, got {value!r}")
+    return parsed
 
 
 @dataclass
@@ -75,6 +105,18 @@ class LiveKitConnectorConfig:
     # ── IPC hub ZMQ addresses ─────────────────────────────────────────────────
     hub_push_addr: str = "ipc:///tmp/xr_hub_in"
     hub_sub_addr:  str = "ipc:///tmp/xr_hub_pub"
+    hub_file_push_addr: str = "ipc:///tmp/xr_hub_file_in"
+    hub_file_sub_addr:  str = "ipc:///tmp/xr_hub_file_pub"
+
+    # ── Completed client-to-agent files ─────────────────────────────────────
+    incoming_file_max_bytes: int = _DEFAULT_INCOMING_FILE_MAX_BYTES
+    incoming_file_max_concurrent: int = _DEFAULT_INCOMING_FILE_MAX_CONCURRENT
+    incoming_file_max_concurrent_per_participant: int = (
+        _DEFAULT_INCOMING_FILE_MAX_CONCURRENT_PER_PARTICIPANT
+    )
+    incoming_file_idle_timeout_s: float = _DEFAULT_INCOMING_FILE_IDLE_TIMEOUT_S
+    incoming_file_total_timeout_s: float = _DEFAULT_INCOMING_FILE_TOTAL_TIMEOUT_S
+    incoming_file_ipc_hwm: int = _DEFAULT_INCOMING_FILE_IPC_HWM
 
     # ── Web server (serves a static web client + /token endpoint) ────────────
     enable_web_server: bool = False
@@ -130,3 +172,35 @@ class LiveKitConnectorConfig:
         self.return_audio_max_buffer_s = _validate_return_audio_max_buffer_s(
             self.return_audio_max_buffer_s
         )
+        self.incoming_file_max_bytes = _positive_int(
+            "incoming_file_max_bytes", self.incoming_file_max_bytes
+        )
+        self.incoming_file_max_concurrent = _positive_int(
+            "incoming_file_max_concurrent", self.incoming_file_max_concurrent
+        )
+        self.incoming_file_max_concurrent_per_participant = _positive_int(
+            "incoming_file_max_concurrent_per_participant",
+            self.incoming_file_max_concurrent_per_participant,
+        )
+        self.incoming_file_idle_timeout_s = _positive_float(
+            "incoming_file_idle_timeout_s", self.incoming_file_idle_timeout_s
+        )
+        self.incoming_file_total_timeout_s = _positive_float(
+            "incoming_file_total_timeout_s", self.incoming_file_total_timeout_s
+        )
+        self.incoming_file_ipc_hwm = _positive_int(
+            "incoming_file_ipc_hwm", self.incoming_file_ipc_hwm
+        )
+        if self.incoming_file_idle_timeout_s > self.incoming_file_total_timeout_s:
+            raise ValueError(
+                "incoming_file_idle_timeout_s cannot exceed "
+                "incoming_file_total_timeout_s"
+            )
+        if (
+            self.incoming_file_max_concurrent_per_participant
+            > self.incoming_file_max_concurrent
+        ):
+            raise ValueError(
+                "incoming_file_max_concurrent_per_participant cannot exceed "
+                "incoming_file_max_concurrent"
+            )

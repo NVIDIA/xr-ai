@@ -12,6 +12,7 @@ import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
 import io.livekit.android.renderer.TextureViewRenderer
 import io.livekit.android.room.track.LocalVideoTrack
+import java.io.File
 import java.nio.ByteBuffer
 
 /**
@@ -197,6 +198,14 @@ class StreamSession(private val backend: StreamingBackend) {
     suspend fun send(data: ByteArray, reliable: Boolean = true) {
         backend.send(data, reliable)
     }
+
+    /** Sends a complete in-memory payload as a client-to-agent file transfer. */
+    suspend fun sendBytes(data: ByteArray, options: FileSendOptions): FileTransferInfo =
+        backend.sendBytes(data, options)
+
+    /** Streams a local file as a client-to-agent file transfer. */
+    suspend fun sendFile(file: File, options: FileSendOptions): FileTransferInfo =
+        backend.sendFile(file, options)
 
     // ── Private ────────────────────────────────────────────────────────────────
 

@@ -5,6 +5,8 @@ package com.nvidia.xrai.streamkitsample.streamkit.backends.livekit
 
 import android.content.Context
 import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
+import com.nvidia.xrai.streamkitsample.streamkit.FileSendOptions
+import com.nvidia.xrai.streamkitsample.streamkit.FileTransferInfo
 import com.nvidia.xrai.streamkitsample.streamkit.NetworkMetrics
 import com.nvidia.xrai.streamkitsample.streamkit.NetworkQuality
 import com.nvidia.xrai.streamkitsample.streamkit.StreamError
@@ -20,6 +22,9 @@ import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
 import io.livekit.android.renderer.TextureViewRenderer
 import io.livekit.android.room.Room
+import io.livekit.android.room.datastream.StreamBytesOptions
+import io.livekit.android.room.datastream.outgoing.ByteStreamSender
+import io.livekit.android.room.datastream.outgoing.writeFile
 import io.livekit.android.room.participant.ConnectionQuality
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.VideoTrackPublishOptions
@@ -32,6 +37,7 @@ import io.livekit.android.room.track.Track
 import io.livekit.android.room.track.VideoCaptureParameter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -41,7 +47,9 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
+import java.io.File
 import java.net.URL
 import java.net.URLEncoder
 import java.nio.ByteBuffer
@@ -99,6 +107,7 @@ internal class LiveKitBackend(
 
     @Volatile private var room: Room? = null
     @Volatile private var isConnected = false
+    @Volatile private var connectionGeneration = 0L
 
     /** Coroutine scope active for the lifetime of one connection. */
     private var connectionScope: CoroutineScope? = null
@@ -301,6 +310,138 @@ internal class LiveKitBackend(
         )
     }
 
+    override suspend fun sendBytes(
+        data: ByteArray,
+        options: FileSendOptions,
+    ): FileTransferInfo {
+        val effective = makeFileOptions(options, data.size.toLong(), null)
+        return sendFileStream(effective) { sender -> sender.write(data).getOrThrow() }
+    }
+
+    override suspend fun sendFile(file: File, options: FileSendOptions): FileTransferInfo {
+        if (!file.isFile) throw StreamError.InvalidFileMetadata("file is not readable")
+        val effective = makeFileOptions(options, file.length(), file.name)
+        return sendFileStream(effective) { sender -> sender.writeFile(file).getOrThrow() }
+    }
+
+    private data class EffectiveFileOptions(
+        val topic: String,
+        val name: String,
+        val mimeType: String,
+        val size: Long,
+        val liveKit: StreamBytesOptions,
+    )
+
+    private fun makeFileOptions(
+        options: FileSendOptions,
+        size: Long,
+        defaultName: String?,
+    ): EffectiveFileOptions {
+        val topic = validateFileField(options.topic, "topic", FILE_MAX_FIELD_BYTES)
+        if (topic.startsWith(FILE_RESERVED_PREFIX)) {
+            throw StreamError.InvalidFileMetadata("topic uses the reserved _streamkit. prefix")
+        }
+        val name = validateFileField(options.name ?: defaultName, "name", FILE_MAX_FIELD_BYTES)
+        val mimeType = validateFileField(
+            options.mimeType ?: "application/octet-stream",
+            "MIME type",
+            FILE_MAX_FIELD_BYTES,
+        )
+        val attributes = options.attributes.toMutableMap()
+        if (attributes.size > FILE_MAX_ATTRIBUTES) {
+            throw StreamError.InvalidFileMetadata("attributes exceed 32 application entries")
+        }
+        var attributeBytes = 0
+        attributes.forEach { (key, value) ->
+            validateFileField(key, "attribute key", FILE_MAX_ATTRIBUTE_KEY_BYTES)
+            validateFileField(
+                value,
+                "attribute value",
+                FILE_MAX_ATTRIBUTE_VALUE_BYTES,
+                allowsEmpty = true,
+            )
+            if (key.startsWith(FILE_RESERVED_PREFIX)) {
+                throw StreamError.InvalidFileMetadata("attribute $key is reserved")
+            }
+            attributeBytes += key.toByteArray(Charsets.UTF_8).size
+            attributeBytes += value.toByteArray(Charsets.UTF_8).size
+        }
+        if (attributeBytes > FILE_MAX_ATTRIBUTES_BYTES) {
+            throw StreamError.InvalidFileMetadata("attributes exceed 8192 UTF-8 bytes")
+        }
+        attributes[FILE_TOPIC_ATTRIBUTE] = topic
+        val destinations = config.hubIdentity
+            ?.let { listOf(Participant.Identity(it)) }
+            ?: emptyList()
+        return EffectiveFileOptions(
+            topic = topic,
+            name = name,
+            mimeType = mimeType,
+            size = size,
+            liveKit = StreamBytesOptions(
+                topic = FILE_STREAM_TOPIC,
+                attributes = attributes,
+                destinationIdentities = destinations,
+                mimeType = mimeType,
+                name = name,
+                totalSize = size,
+            ),
+        )
+    }
+
+    private suspend fun sendFileStream(
+        effective: EffectiveFileOptions,
+        write: suspend (ByteStreamSender) -> Unit,
+    ): FileTransferInfo {
+        val activeRoom = room
+        if (!isConnected || activeRoom == null) throw StreamError.NotConnected
+        val generation = connectionGeneration
+        val sender = activeRoom.localParticipant.streamBytes(effective.liveKit)
+        try {
+            write(sender)
+            sender.close()
+            if (sender.isOpen || !isConnected || room !== activeRoom || generation != connectionGeneration) {
+                throw StreamError.FileTransferIncomplete
+            }
+        } catch (error: Throwable) {
+            closeFileSenderAfterFailure(sender)
+            throw error
+        }
+        return FileTransferInfo(
+            id = sender.info.id,
+            topic = effective.topic,
+            name = effective.name,
+            mimeType = effective.mimeType,
+            size = effective.size,
+        )
+    }
+
+    private suspend fun closeFileSenderAfterFailure(sender: ByteStreamSender) {
+        withContext(NonCancellable) {
+            withTimeoutOrNull(2_000) {
+                runCatching { sender.close("StreamKit send failed") }
+            }
+        }
+    }
+
+    private fun validateFileField(
+        value: String?,
+        name: String,
+        maxBytes: Int,
+        allowsEmpty: Boolean = false,
+    ): String {
+        if (value == null || (!allowsEmpty && value.isEmpty())) {
+            throw StreamError.InvalidFileMetadata("$name must be nonempty")
+        }
+        if ('\u0000' in value) {
+            throw StreamError.InvalidFileMetadata("$name cannot contain NUL")
+        }
+        if (value.toByteArray(Charsets.UTF_8).size > maxBytes) {
+            throw StreamError.InvalidFileMetadata("$name exceeds $maxBytes UTF-8 bytes")
+        }
+        return value
+    }
+
     // ── Event dispatcher ───────────────────────────────────────────────────────
 
     private fun handleEvent(eventRoom: Room, event: RoomEvent) {
@@ -316,6 +457,7 @@ internal class LiveKitBackend(
             }
             is RoomEvent.Disconnected -> {
                 isConnected = false
+                connectionGeneration += 1
                 room = null
                 connectionScope?.cancel()
                 connectionScope = null
@@ -426,6 +568,7 @@ internal class LiveKitBackend(
     // ── Teardown ──────────────────────────────────────────────────────────────
 
     private suspend fun tearDown() {
+        connectionGeneration += 1
         isConnected = false
         connectionScope?.cancel()
         connectionScope = null
@@ -517,5 +660,13 @@ internal class LiveKitBackend(
     companion object {
         /** Reserved LiveKit topic for internal agent status messages. Matches web and Swift. */
         private const val AGENT_STATUS_TOPIC = "_agent.status"
+        private const val FILE_STREAM_TOPIC = "_streamkit.file"
+        private const val FILE_TOPIC_ATTRIBUTE = "_streamkit.topic"
+        private const val FILE_RESERVED_PREFIX = "_streamkit."
+        private const val FILE_MAX_FIELD_BYTES = 255
+        private const val FILE_MAX_ATTRIBUTE_KEY_BYTES = 128
+        private const val FILE_MAX_ATTRIBUTE_VALUE_BYTES = 1_024
+        private const val FILE_MAX_ATTRIBUTES = 32
+        private const val FILE_MAX_ATTRIBUTES_BYTES = 8 * 1_024
     }
 }

@@ -177,6 +177,16 @@ public final class StreamSession: ObservableObject {
         try await backend.send(data, reliable: reliable, topic: topic)
     }
 
+    /// Sends a complete in-memory payload as a client-to-agent file transfer.
+    public func sendBytes(_ data: Data, options: FileSendOptions) async throws -> FileTransferInfo {
+        try await backend.sendBytes(data, options: options)
+    }
+
+    /// Streams a local file as a client-to-agent file transfer.
+    public func sendFile(_ fileURL: URL, options: FileSendOptions) async throws -> FileTransferInfo {
+        try await backend.sendFile(fileURL, options: options)
+    }
+
     // MARK: - Private
 
     private func wireCallbacks() {

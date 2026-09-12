@@ -23,6 +23,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <future>
+#include <filesystem>
+#include <fstream>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -90,6 +92,40 @@ int main() {
     Expect(states[0] == ConnectionState::kConnecting);
     Expect(states[1] == ConnectionState::kConnected);
     Expect(!livekit_backend->GetRoom());
+
+    // File APIs retain their local-completion contract in stub mode.
+    const std::vector<std::byte> file_bytes{
+        static_cast<std::byte>('p'),
+        static_cast<std::byte>('n'),
+        static_cast<std::byte>('g'),
+    };
+    const streamkit::FileSendOptions byte_options{
+        .topic = "image.response",
+        .name = "capture.png",
+        .mime_type = "image/png",
+        .attributes = {},
+    };
+    const auto byte_info = session.SendBytes(file_bytes, byte_options);
+    ExpectEq(byte_info.size, file_bytes.size());
+    ExpectEq(byte_info.topic, std::string("image.response"));
+
+    const auto file_path = std::filesystem::temp_directory_path() /
+        "streamkit-livekit-backend-file-test.bin";
+    {
+        std::ofstream file(file_path, std::ios::binary);
+        file.write("png", 3);
+    }
+    const auto file_info = session.SendFile(
+        file_path,
+        streamkit::FileSendOptions{
+            .topic = "image.response",
+            .name = {},
+            .mime_type = "application/octet-stream",
+            .attributes = {},
+        });
+    std::filesystem::remove(file_path);
+    ExpectEq(file_info.size, std::size_t{3});
+    ExpectEq(file_info.name, file_path.filename().string());
 
     // ── Disconnect — exactly one kDisconnected. ──────────────────────────
     session.Disconnect();

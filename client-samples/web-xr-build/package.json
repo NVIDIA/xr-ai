@@ -10,7 +10,7 @@
     "@nvidia/cloudxr": "file:./sdk.tgz",
     "gl-matrix": "^3.4.3",
     "long": "^5.3.2",
-    "livekit-client": "^2.0.0"
+    "livekit-client": "^2.21.0"
   },
   "devDependencies": {
     "webpack": "^5.97.0",

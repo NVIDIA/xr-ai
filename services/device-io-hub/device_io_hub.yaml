@@ -36,6 +36,20 @@ lk_skip_external_ip_validation: false
 # queued frames are dropped.
 return_audio_max_buffer_s: 3.0
 
+# ── Client-to-agent files ────────────────────────────────────────────────────
+# Largest declared or observed payload, in bytes.
+incoming_file_max_bytes: 16777216
+# Global number of files that may be assembled concurrently.
+incoming_file_max_concurrent: 8
+# Per-participant share of the global concurrent-transfer limit.
+incoming_file_max_concurrent_per_participant: 2
+# Maximum seconds without receiving another chunk.
+incoming_file_idle_timeout_s: 10.0
+# Maximum total seconds from admission through completion.
+incoming_file_total_timeout_s: 60.0
+# Complete messages queued at each file IPC socket.
+incoming_file_ipc_hwm: 2
+
 # ── Web client server ─────────────────────────────────────────────────────────
 enable_web_server: true
 web_server_host:   "0.0.0.0"

@@ -37,6 +37,8 @@ return — do not hold the view beyond the callback boundary.
 """
 from __future__ import annotations
 
+import asyncio
+import base64
 from loguru import logger
 import json
 import time
@@ -46,7 +48,7 @@ import zmq
 import zmq.asyncio
 
 from xr_ai_hub import (AGENT_STATUS_TOPIC, AudioChunk, ConnectorRegistration,
-                       ControlMessage, DataMessage, FrameData, MsgType,
+                       ControlMessage, DataMessage, FileMessage, FrameData, MsgType,
                        ParticipantEvent, ReturnAudioFlush, ShmRingBuffer, SlotView,
                        decode, encode)
 
@@ -81,23 +83,48 @@ TOPIC_VIDEO              = b"video"       # FRAME_SIGNAL metadata (fires at full
 TOPIC_VIDEO_DATA         = b"video_data"  # FRAME_DATA pixel response (on-demand only)
 TOPIC_AUDIO              = b"audio"
 TOPIC_DATA               = b"data"
+TOPIC_FILE               = b"file"
 TOPIC_CONTROL            = b"control"
 TOPIC_RETURN_AUDIO       = b"return_audio"
 TOPIC_RETURN_AUDIO_FLUSH = b"return_audio_flush"
 TOPIC_RETURN_DATA        = b"return_data"
+_DEFAULT_FILE_MAX_BYTES = 16 * 1024 * 1024
+_FILE_IPC_METADATA_ALLOWANCE = 64 * 1024
+
+
+def _file_prefix(participant_id: str) -> bytes:
+    """Return an exact, delimiter-safe participant prefix for file IPC."""
+    encoded = base64.urlsafe_b64encode(participant_id.encode("utf-8")).rstrip(b"=")
+    return b"file." + encoded + b"."
 
 
 class HubEndpoint:
     """
     Hub-side IPC endpoint.
 
-    Parameters
-    ----------
-    pull_addr : ZMQ address the hub binds for connector PUSH traffic.
-    pub_addr  : ZMQ address the hub binds for consumer SUB traffic.
+    The optional file addresses must be configured together. ``file_hwm``
+    limits queued complete files per socket, and ``file_max_bytes`` bounds one
+    payload before it enters the file fan-out lane.
     """
 
-    def __init__(self, pull_addr: str, pub_addr: str) -> None:
+    def __init__(
+        self,
+        pull_addr: str,
+        pub_addr: str,
+        *,
+        file_pull_addr: str | None = None,
+        file_pub_addr: str | None = None,
+        file_hwm: int = 2,
+        file_max_bytes: int = _DEFAULT_FILE_MAX_BYTES,
+    ) -> None:
+        if isinstance(file_hwm, bool) or not isinstance(file_hwm, int) or file_hwm <= 0:
+            raise ValueError("file_hwm must be a positive integer")
+        if (
+            isinstance(file_max_bytes, bool)
+            or not isinstance(file_max_bytes, int)
+            or file_max_bytes <= 0
+        ):
+            raise ValueError("file_max_bytes must be a positive integer")
         ctx = zmq.asyncio.Context.instance()
 
         self._pull: zmq.asyncio.Socket = ctx.socket(zmq.PULL)
@@ -106,11 +133,29 @@ class HubEndpoint:
         self._pub: zmq.asyncio.Socket = ctx.socket(zmq.PUB)
         self._pub.bind(pub_addr)
 
+        self._file_pull: zmq.asyncio.Socket | None = None
+        self._file_pub: zmq.asyncio.Socket | None = None
+        self._file_max_bytes = file_max_bytes
+        if (file_pull_addr is None) != (file_pub_addr is None):
+            raise ValueError("file_pull_addr and file_pub_addr must be configured together")
+        if file_pull_addr is not None and file_pub_addr is not None:
+            self._file_pull = ctx.socket(zmq.PULL)
+            self._file_pull.setsockopt(zmq.RCVHWM, file_hwm)
+            self._file_pull.setsockopt(
+                zmq.MAXMSGSIZE,
+                file_max_bytes + _FILE_IPC_METADATA_ALLOWANCE,
+            )
+            self._file_pull.bind(file_pull_addr)
+            self._file_pub = ctx.socket(zmq.PUB)
+            self._file_pub.setsockopt(zmq.SNDHWM, file_hwm)
+            self._file_pub.bind(file_pub_addr)
+
         # connector_id → ShmRingBuffer (opened on CONNECTOR_REGISTER)
         self._ring_registry: dict[str, ShmRingBuffer] = {}
         self._ring_names: dict[str, str] = {}
         # participant_id → connector_id (updated on PARTICIPANT_EVENT)
         self._participant_connector: dict[str, str] = {}
+        self._participant_sessions: dict[str, str] = {}
         # (participant_id, track_id) → (ring, SlotView) of the latest frame.
         # The slot is held open (not released) until the next frame for the same
         # track arrives, the participant disconnects, or the hub shuts down — so
@@ -301,19 +346,65 @@ class HubEndpoint:
     async def run(self) -> None:
         """Receive and dispatch messages from all connectors until stop()."""
         self._running = True
+        file_tasks = []
+        if self._file_pull is not None:
+            file_tasks = [asyncio.create_task(self._run_files(), name="hub-file-ipc")]
+        try:
+            while self._running:
+                try:
+                    raw = await self._pull.recv()
+                except zmq.ZMQError as exc:
+                    if not self._running:
+                        break
+                    logger.error("ZMQ recv error: {}", exc)
+                    continue
+                try:
+                    type_id, msg = decode(raw)
+                    await self._dispatch(type_id, msg)
+                except Exception:
+                    logger.exception("Error dispatching message")
+        finally:
+            for task in file_tasks:
+                task.cancel()
+            await asyncio.gather(*file_tasks, return_exceptions=True)
+
+    async def _run_files(self) -> None:
+        """Route bounded complete-file messages independently of real-time traffic."""
+        assert self._file_pull is not None
+        assert self._file_pub is not None
         while self._running:
             try:
-                raw = await self._pull.recv()
+                raw = await self._file_pull.recv()
+                type_id, msg = await asyncio.to_thread(decode, raw)
+                if type_id != MsgType.FILE_MESSAGE:
+                    logger.warning("Unknown file IPC message type {} ignored", type_id)
+                    continue
+                if len(msg.data) > self._file_max_bytes:
+                    logger.warning(
+                        "File {} dropped: {} bytes exceeds the {} byte IPC limit",
+                        msg.transfer_id,
+                        len(msg.data),
+                        self._file_max_bytes,
+                    )
+                    continue
+                active_session = self._participant_sessions.get(msg.participant_id)
+                if active_session is None or msg.participant_session_id != active_session:
+                    logger.info(
+                        "File {} dropped: participant session is no longer active",
+                        msg.transfer_id,
+                    )
+                    continue
+                topic = _file_prefix(msg.participant_id) + msg.topic.encode("utf-8")
+                encoded = await asyncio.to_thread(encode, MsgType.FILE_MESSAGE, msg)
+                await self._file_pub.send_multipart([topic, encoded])
+            except asyncio.CancelledError:
+                raise
             except zmq.ZMQError as exc:
                 if not self._running:
-                    break
-                logger.error("ZMQ recv error: {}", exc)
-                continue
-            try:
-                type_id, msg = decode(raw)
-                await self._dispatch(type_id, msg)
+                    return
+                logger.error("File IPC ZMQ error: {}", exc)
             except Exception:
-                logger.exception("Error dispatching message")
+                logger.exception("Error routing file message")
 
     async def _dispatch(self, type_id: int, msg) -> None:
         if type_id == MsgType.CONNECTOR_REGISTER:
@@ -440,10 +531,31 @@ class HubEndpoint:
             await self._pub.send_multipart([topic, encode(MsgType.DATA_MESSAGE, msg)])
 
         elif type_id == MsgType.PARTICIPANT_EVENT:
+            # Some embedders construct a lightweight HubEndpoint instance for
+            # dispatch-only testing, so initialise newly added state lazily too.
+            participant_sessions = getattr(self, "_participant_sessions", None)
+            if participant_sessions is None:
+                participant_sessions = {}
+                self._participant_sessions = participant_sessions
             if msg.joined:
                 self._participant_connector[msg.participant_id] = msg.connector_id
+                participant_sessions[msg.participant_id] = (
+                    msg.participant_session_id
+                )
             else:
+                active_session = participant_sessions.get(msg.participant_id, "")
+                if (
+                    msg.participant_session_id
+                    and active_session
+                    and msg.participant_session_id != active_session
+                ):
+                    logger.debug(
+                        "Ignoring stale departure for participant {!r}",
+                        msg.participant_id,
+                    )
+                    return
                 self._participant_connector.pop(msg.participant_id, None)
+                participant_sessions.pop(msg.participant_id, None)
                 self._published_status.pop(msg.participant_id, None)
                 for per_participant in self._agent_status.values():
                     per_participant.pop(msg.participant_id, None)
@@ -497,10 +609,13 @@ class HubEndpoint:
             await self._replay_roster()
 
         elif type_id == MsgType.SUBSCRIPTION_PROBE:
-            await self._pub.send_multipart([
+            probe = [
                 f"_probe.{msg.token}".encode(),
                 encode(MsgType.SUBSCRIPTION_PROBE, msg),
-            ])
+            ]
+            await self._pub.send_multipart(probe)
+            if self._file_pub is not None:
+                await self._file_pub.send_multipart(probe)
 
         elif type_id == MsgType.AGENT_PRESENCE:
             if msg.attached:
@@ -530,6 +645,7 @@ class HubEndpoint:
             event = ParticipantEvent(
                 participant_id=pid, joined=True,
                 pts_us=pts_us, connector_id=connector_id,
+                participant_session_id=self._participant_sessions.get(pid, ""),
             )
             await self._pub.send_multipart([
                 b"participant", encode(MsgType.PARTICIPANT_EVENT, event),
@@ -618,6 +734,10 @@ class HubEndpoint:
     def close(self) -> None:
         self._pull.close(linger=0)
         self._pub.close(linger=0)
+        if self._file_pull is not None:
+            self._file_pull.close(linger=0)
+        if self._file_pub is not None:
+            self._file_pub.close(linger=0)
         for ring, view in self._latest_slots.values():
             self._release_held_slot(ring, view, context="hub shutdown")
         self._latest_slots.clear()

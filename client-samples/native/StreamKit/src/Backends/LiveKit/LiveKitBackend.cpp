@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <cstring>
 #include <format>
+#include <fstream>
 #include <future>
 #include <iterator>
 #include <mutex>
@@ -38,6 +39,7 @@
 #if STREAMKIT_HAVE_LIVEKIT
 #include "livekit/audio_frame.h"
 #include "livekit/audio_source.h"
+#include "livekit/data_stream.h"
 #include "livekit/livekit.h"
 #include "livekit/local_audio_track.h"
 #include "livekit/local_participant.h"
@@ -57,6 +59,89 @@
 namespace streamkit {
 
 namespace {
+
+constexpr std::string_view kFileStreamTopic = "_streamkit.file";
+constexpr std::string_view kFileReservedPrefix = "_streamkit.";
+constexpr std::string_view kFileTopicAttribute = "_streamkit.topic";
+constexpr std::size_t kFileMaxFieldBytes = 255;
+constexpr std::size_t kFileMaxAttributeKeyBytes = 128;
+constexpr std::size_t kFileMaxAttributeValueBytes = 1024;
+constexpr std::size_t kFileMaxAttributes = 32;
+constexpr std::size_t kFileMaxAttributesBytes = 8 * 1024;
+constexpr std::size_t kFileWriteChunkBytes = 64 * 1024;
+
+struct EffectiveFileOptions {
+    std::string topic;
+    std::string name;
+    std::string mime_type;
+    std::map<std::string, std::string> attributes;
+    std::size_t size;
+};
+
+void ValidateFileField(std::string_view value, std::string_view name,
+                       std::size_t max_bytes,
+                       bool allows_empty = false) {
+    if (!allows_empty && value.empty()) {
+        throw std::invalid_argument(std::string(name) + " must be nonempty");
+    }
+    if (value.find('\0') != std::string_view::npos) {
+        throw std::invalid_argument(std::string(name) + " cannot contain NUL");
+    }
+    if (value.size() > max_bytes) {
+        throw std::invalid_argument(
+            std::string(name) + " exceeds " + std::to_string(max_bytes) + " UTF-8 bytes");
+    }
+}
+
+EffectiveFileOptions MakeFileOptions(const FileSendOptions& options,
+                                     std::size_t size,
+                                     std::string default_name = {}) {
+    ValidateFileField(options.topic, "file topic", kFileMaxFieldBytes);
+    if (options.topic.starts_with(kFileReservedPrefix)) {
+        throw std::invalid_argument("file topic uses the reserved _streamkit. prefix");
+    }
+    auto name = options.name.empty() ? std::move(default_name) : options.name;
+    ValidateFileField(name, "file name", kFileMaxFieldBytes);
+    auto mime_type = options.mime_type.empty()
+        ? std::string("application/octet-stream")
+        : options.mime_type;
+    ValidateFileField(mime_type, "file MIME type", kFileMaxFieldBytes);
+    auto attributes = options.attributes;
+    if (attributes.size() > kFileMaxAttributes) {
+        throw std::invalid_argument("file attributes exceed 32 application entries");
+    }
+    std::size_t attribute_bytes = 0;
+    for (const auto& [key, value] : attributes) {
+        ValidateFileField(key, "file attribute key", kFileMaxAttributeKeyBytes);
+        ValidateFileField(
+            value, "file attribute value", kFileMaxAttributeValueBytes, true);
+        if (key.starts_with(kFileReservedPrefix)) {
+            throw std::invalid_argument("file attribute '" + key + "' is reserved");
+        }
+        attribute_bytes += key.size() + value.size();
+    }
+    if (attribute_bytes > kFileMaxAttributesBytes) {
+        throw std::invalid_argument("file attributes exceed 8192 UTF-8 bytes");
+    }
+    attributes[std::string(kFileTopicAttribute)] = options.topic;
+    return {
+        .topic = options.topic,
+        .name = std::move(name),
+        .mime_type = std::move(mime_type),
+        .attributes = std::move(attributes),
+        .size = size,
+    };
+}
+
+#if STREAMKIT_HAVE_LIVEKIT
+std::vector<std::uint8_t> ToBytes(std::span<const std::byte> data) {
+    std::vector<std::uint8_t> bytes(data.size());
+    if (!data.empty()) {
+        std::memcpy(bytes.data(), data.data(), data.size());
+    }
+    return bytes;
+}
+#endif
 
 LiveKitBackend*& MetricsCallbackBackend() {
     static thread_local LiveKitBackend* backend = nullptr;
@@ -514,6 +599,179 @@ void LiveKitBackend::Send(std::span<const std::byte> data,
 #else
     (void)data;
     (void)reliable;
+#endif
+}
+
+FileTransferInfo LiveKitBackend::SendBytes(
+    std::span<const std::byte> data,
+    const FileSendOptions& options) {
+    const auto effective = MakeFileOptions(options, data.size());
+
+#if STREAMKIT_HAVE_LIVEKIT
+    std::shared_ptr<livekit::Room> active_room;
+    std::uint64_t generation;
+    {
+        std::scoped_lock lock(teardown_mutex_);
+        if (!is_connected_.load() || !room_) {
+            throw NotConnectedError{};
+        }
+        active_room = room_;
+        generation = connect_generation_.load();
+    }
+    const auto destinations =
+        config_.hub_identity.has_value() && !config_.hub_identity->empty()
+            ? std::vector<std::string>{*config_.hub_identity}
+            : std::vector<std::string>{};
+    livekit::ByteStreamWriter writer(
+        *active_room->localParticipant(),
+        effective.name,
+        std::string(kFileStreamTopic),
+        effective.attributes,
+        "",
+        effective.size,
+        effective.mime_type,
+        destinations);
+    const auto require_active_connection = [&]() {
+        std::scoped_lock lock(teardown_mutex_);
+        if (!is_connected_.load() || room_ != active_room ||
+            connect_generation_.load() != generation) {
+            throw StreamError("The file stream is no longer on the active connection");
+        }
+    };
+    try {
+        for (std::size_t offset = 0; offset < data.size();
+             offset += kFileWriteChunkBytes) {
+            require_active_connection();
+            writer.write(ToBytes(data.subspan(
+                offset,
+                std::min(kFileWriteChunkBytes, data.size() - offset))));
+        }
+        require_active_connection();
+        writer.close();
+        if (!writer.isClosed()) {
+            throw StreamError("The file stream did not close on the active connection");
+        }
+        require_active_connection();
+    } catch (...) {
+        if (!writer.isClosed()) {
+            try {
+                writer.close("StreamKit send failed");
+            } catch (...) {
+            }
+        }
+        throw;
+    }
+    return {
+        .id = writer.info().stream_id,
+        .topic = effective.topic,
+        .name = effective.name,
+        .mime_type = effective.mime_type,
+        .size = effective.size,
+    };
+#else
+    if (!is_connected_.load()) {
+        throw NotConnectedError{};
+    }
+    return {
+        .id = std::format("stub-{}", std::chrono::steady_clock::now().time_since_epoch().count()),
+        .topic = effective.topic,
+        .name = effective.name,
+        .mime_type = effective.mime_type,
+        .size = effective.size,
+    };
+#endif
+}
+
+FileTransferInfo LiveKitBackend::SendFile(
+    const std::filesystem::path& path,
+    const FileSendOptions& options) {
+    const auto size = std::filesystem::file_size(path);
+    const auto effective = MakeFileOptions(options, size, path.filename().string());
+
+#if STREAMKIT_HAVE_LIVEKIT
+    std::shared_ptr<livekit::Room> active_room;
+    std::uint64_t generation;
+    {
+        std::scoped_lock lock(teardown_mutex_);
+        if (!is_connected_.load() || !room_) {
+            throw NotConnectedError{};
+        }
+        active_room = room_;
+        generation = connect_generation_.load();
+    }
+    const auto destinations =
+        config_.hub_identity.has_value() && !config_.hub_identity->empty()
+            ? std::vector<std::string>{*config_.hub_identity}
+            : std::vector<std::string>{};
+    livekit::ByteStreamWriter writer(
+        *active_room->localParticipant(),
+        effective.name,
+        std::string(kFileStreamTopic),
+        effective.attributes,
+        "",
+        effective.size,
+        effective.mime_type,
+        destinations);
+    const auto require_active_connection = [&]() {
+        std::scoped_lock lock(teardown_mutex_);
+        if (!is_connected_.load() || room_ != active_room ||
+            connect_generation_.load() != generation) {
+            throw StreamError("The file stream is no longer on the active connection");
+        }
+    };
+    try {
+        std::ifstream file(path, std::ios::binary);
+        if (!file) {
+            throw StreamError("Could not open file: " + path.string());
+        }
+        std::vector<std::uint8_t> chunk(64 * 1024);
+        while (file) {
+            file.read(reinterpret_cast<char*>(chunk.data()),
+                      static_cast<std::streamsize>(chunk.size()));
+            const auto count = file.gcount();
+            if (count > 0) {
+                require_active_connection();
+                const std::vector<std::uint8_t> payload(
+                    chunk.begin(), chunk.begin() + count);
+                writer.write(payload);
+            }
+        }
+        if (!file.eof()) {
+            throw StreamError("Could not read file: " + path.string());
+        }
+        require_active_connection();
+        writer.close();
+        if (!writer.isClosed()) {
+            throw StreamError("The file stream did not close on the active connection");
+        }
+        require_active_connection();
+    } catch (...) {
+        if (!writer.isClosed()) {
+            try {
+                writer.close("StreamKit send failed");
+            } catch (...) {
+            }
+        }
+        throw;
+    }
+    return {
+        .id = writer.info().stream_id,
+        .topic = effective.topic,
+        .name = effective.name,
+        .mime_type = effective.mime_type,
+        .size = effective.size,
+    };
+#else
+    if (!is_connected_.load()) {
+        throw NotConnectedError{};
+    }
+    return {
+        .id = std::format("stub-{}", std::chrono::steady_clock::now().time_since_epoch().count()),
+        .topic = effective.topic,
+        .name = effective.name,
+        .mime_type = effective.mime_type,
+        .size = effective.size,
+    };
 #endif
 }
 
