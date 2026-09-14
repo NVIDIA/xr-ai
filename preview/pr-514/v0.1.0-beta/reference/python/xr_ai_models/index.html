@@ -462,13 +462,10 @@ OpenAI-compatible endpoints.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.KIND_OPENAI_COMPAT" title="xr_ai_models.KIND_OPENAI_COMPAT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KIND_OPENAI_COMPAT</span></code></a></p></td>
 <td><p>The adapter kind for OpenAI-compatible HTTP endpoints.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.KIND_POCKET_TTS" title="xr_ai_models.KIND_POCKET_TTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KIND_POCKET_TTS</span></code></a></p></td>
-<td><p>The adapter kind for the repository's streaming Pocket TTS service.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.ModelKind" title="xr_ai_models.ModelKind"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelKind</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.ModelKind" title="xr_ai_models.ModelKind"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelKind</span></code></a></p></td>
 <td><p>A supported model-service adapter implementation.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.Spec" title="xr_ai_models.Spec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Spec</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.Spec" title="xr_ai_models.Spec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Spec</span></code></a></p></td>
 <td><p>Any typed model-role specification stored in <a class="reference internal" href="#xr_ai_models.ModelsConfig" title="xr_ai_models.ModelsConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelsConfig</span></code></a>.</p></td>
 </tr>
 </tbody>
@@ -497,26 +494,20 @@ OpenAI-compatible endpoints.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.LLMService" title="xr_ai_models.LLMService"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMService</span></code></a></p></td>
 <td><p>Structural interface for text chat-completion services.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.StreamingTTSService" title="xr_ai_models.StreamingTTSService"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StreamingTTSService</span></code></a></p></td>
-<td><p>Text-to-speech service that can yield audio before synthesis ends.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.STTService" title="xr_ai_models.STTService"><code class="xref py py-obj docutils literal notranslate"><span class="pre">STTService</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.STTService" title="xr_ai_models.STTService"><code class="xref py py-obj docutils literal notranslate"><span class="pre">STTService</span></code></a></p></td>
 <td><p>Structural interface for speech-to-text services.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.TextPart" title="xr_ai_models.TextPart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TextPart</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.TextPart" title="xr_ai_models.TextPart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TextPart</span></code></a></p></td>
 <td><p>Text content in a multimodal chat message.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.ToolCall" title="xr_ai_models.ToolCall"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolCall</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.ToolCall" title="xr_ai_models.ToolCall"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolCall</span></code></a></p></td>
 <td><p>A function-tool invocation requested by a model.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.ToolDef" title="xr_ai_models.ToolDef"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolDef</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.ToolDef" title="xr_ai_models.ToolDef"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToolDef</span></code></a></p></td>
 <td><p>A function tool definition exposed to a chat model.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.TTSService" title="xr_ai_models.TTSService"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TTSService</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.TTSService" title="xr_ai_models.TTSService"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TTSService</span></code></a></p></td>
 <td><p>Structural interface for text-to-speech services.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.TTSChunk" title="xr_ai_models.TTSChunk"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TTSChunk</span></code></a></p></td>
-<td><p>One signed 16-bit PCM chunk from streaming speech synthesis.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.VideoPart" title="xr_ai_models.VideoPart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VideoPart</span></code></a></p></td>
 <td><p>A video reference in a multimodal chat message.</p></td>
@@ -539,40 +530,37 @@ OpenAI-compatible endpoints.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.OpenAICompatVLM" title="xr_ai_models.OpenAICompatVLM"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpenAICompatVLM</span></code></a></p></td>
 <td><p>OpenAI-compatible client for image- and video-bearing chat requests.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.PocketTTS" title="xr_ai_models.PocketTTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PocketTTS</span></code></a></p></td>
-<td><p>Streaming client for the repository's Pocket TTS HTTP service.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.AdapterSpec" title="xr_ai_models.AdapterSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AdapterSpec</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.AdapterSpec" title="xr_ai_models.AdapterSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AdapterSpec</span></code></a></p></td>
 <td><p>API dialect and model-specific request/response behavior.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.DeploymentSpec" title="xr_ai_models.DeploymentSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DeploymentSpec</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.DeploymentSpec" title="xr_ai_models.DeploymentSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DeploymentSpec</span></code></a></p></td>
 <td><p>Process ownership for the endpoint that serves a model role.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.EmbeddingSpec" title="xr_ai_models.EmbeddingSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EmbeddingSpec</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.EmbeddingSpec" title="xr_ai_models.EmbeddingSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EmbeddingSpec</span></code></a></p></td>
 <td><p>Configuration for a text-embedding model role.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.EndpointSpec" title="xr_ai_models.EndpointSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EndpointSpec</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.EndpointSpec" title="xr_ai_models.EndpointSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EndpointSpec</span></code></a></p></td>
 <td><p>Connectivity, authentication, timeout, and readiness for an adapter.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.LLMSpec" title="xr_ai_models.LLMSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMSpec</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.LLMSpec" title="xr_ai_models.LLMSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMSpec</span></code></a></p></td>
 <td><p>Configuration for a text chat-completion model role.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.ModelsConfig" title="xr_ai_models.ModelsConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelsConfig</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.ModelsConfig" title="xr_ai_models.ModelsConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelsConfig</span></code></a></p></td>
 <td><p>Logical-name to typed model-role specifications.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.STTSpec" title="xr_ai_models.STTSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">STTSpec</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.STTSpec" title="xr_ai_models.STTSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">STTSpec</span></code></a></p></td>
 <td><p>Configuration for a speech-to-text model role.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.TTSSpec" title="xr_ai_models.TTSSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TTSSpec</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.TTSSpec" title="xr_ai_models.TTSSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TTSSpec</span></code></a></p></td>
 <td><p>Configuration for a text-to-speech model role.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.VLMSpec" title="xr_ai_models.VLMSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VLMSpec</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.VLMSpec" title="xr_ai_models.VLMSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VLMSpec</span></code></a></p></td>
 <td><p>Configuration for an image- or video-language model role.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.RivaSTT" title="xr_ai_models.RivaSTT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RivaSTT</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.RivaSTT" title="xr_ai_models.RivaSTT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RivaSTT</span></code></a></p></td>
 <td><p>Riva ASR client: offline (batch) recognition over gRPC.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.RivaTTS" title="xr_ai_models.RivaTTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RivaTTS</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.RivaTTS" title="xr_ai_models.RivaTTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RivaTTS</span></code></a></p></td>
 <td><p>Riva TTS client: streaming synthesis over gRPC, concatenated to one</p></td>
 </tr>
 </tbody>
@@ -839,26 +827,6 @@ OpenAI-compatible endpoints.</p>
 </dd></dl>
 
 <dl class="py class">
-<dt class="sig sig-object py" id="xr_ai_models.StreamingTTSService">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">StreamingTTSService</span></span><a class="headerlink" href="#xr_ai_models.StreamingTTSService" title="Link to this definition">#</a></dt>
-<dd><p>Text-to-speech service that can yield audio before synthesis ends.</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="xr_ai_models.StreamingTTSService.stream">
-<span class="sig-name descname"><span class="pre">stream</span></span><span class="sig-paren">(</span>
-
-<dl>
-<dd><em class="sig-param"><span class="n"><span class="pre">text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
-</dl>
-
-<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">AsyncIterator</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_models.TTSChunk" title="xr_ai_models.TTSChunk"><span class="pre">TTSChunk</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#xr_ai_models.StreamingTTSService.stream" title="Link to this definition">#</a></dt>
-<dd><p>Yield signed 16-bit PCM chunks for <em>text</em>.</p>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_models.STTService">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">STTService</span></span><a class="headerlink" href="#xr_ai_models.STTService" title="Link to this definition">#</a></dt>
 <dd><p>Structural interface for speech-to-text services.</p>
@@ -993,30 +961,6 @@ OpenAI-compatible endpoints.</p>
 <dt class="sig sig-object py" id="xr_ai_models.TTSService.close">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_models.TTSService.close" title="Link to this definition">#</a></dt>
 <dd><p>Release resources owned by the service.</p>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="xr_ai_models.TTSChunk">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">TTSChunk</span></span><a class="headerlink" href="#xr_ai_models.TTSChunk" title="Link to this definition">#</a></dt>
-<dd><p>One signed 16-bit PCM chunk from streaming speech synthesis.</p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_models.TTSChunk.data">
-<span class="sig-name descname"><span class="pre">data</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bytes</span></em><a class="headerlink" href="#xr_ai_models.TTSChunk.data" title="Link to this definition">#</a></dt>
-<dd><p>Interleaved signed 16-bit PCM samples.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_models.TTSChunk.sample_rate">
-<span class="sig-name descname"><span class="pre">sample_rate</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#xr_ai_models.TTSChunk.sample_rate" title="Link to this definition">#</a></dt>
-<dd><p>Sample rate in hertz.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_models.TTSChunk.channels">
-<span class="sig-name descname"><span class="pre">channels</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#xr_ai_models.TTSChunk.channels" title="Link to this definition">#</a></dt>
-<dd><p>Number of interleaved audio channels.</p>
 </dd></dl>
 
 </dd></dl>
@@ -1562,38 +1506,6 @@ configured capabilities.</p>
 </dd></dl>
 
 <dl class="py class">
-<dt class="sig sig-object py" id="xr_ai_models.PocketTTS">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">PocketTTS</span></span><span class="sig-paren">(</span>
-
-<dl>
-<dd><em class="sig-param"><span class="n"><span class="pre">base_url</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">api_key_env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">30.0</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">health_check</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">health_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'/health'</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">httpx.AsyncClient</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
-</dl>
-
-<span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_models.PocketTTS" title="Link to this definition">#</a></dt>
-<dd><p>Streaming client for the repository’s Pocket TTS HTTP service.</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="xr_ai_models.PocketTTS.stream">
-<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">stream</span></span><span class="sig-paren">(</span>
-
-<dl>
-<dd><em class="sig-param"><span class="n"><span class="pre">text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
-</dl>
-
-<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">AsyncIterator</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_models.TTSChunk" title="xr_ai_models.TTSChunk"><span class="pre">xr_ai_models.TTSChunk</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#xr_ai_models.PocketTTS.stream" title="Link to this definition">#</a></dt>
-<dd><p>Yield signed 16-bit PCM chunks as Pocket TTS generates them.</p>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_models.AdapterSpec">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">AdapterSpec</span></span><a class="headerlink" href="#xr_ai_models.AdapterSpec" title="Link to this definition">#</a></dt>
 <dd><p>API dialect and model-specific request/response behavior.</p>
@@ -1780,12 +1692,6 @@ even when the endpoint takes no API key.</p>
 <dt class="sig sig-object py" id="xr_ai_models.KIND_OPENAI_COMPAT">
 <span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">KIND_OPENAI_COMPAT</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ModelKind</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'openai_compat'</span></em><a class="headerlink" href="#xr_ai_models.KIND_OPENAI_COMPAT" title="Link to this definition">#</a></dt>
 <dd><p>The adapter kind for OpenAI-compatible HTTP endpoints.</p>
-</dd></dl>
-
-<dl class="py data">
-<dt class="sig sig-object py" id="xr_ai_models.KIND_POCKET_TTS">
-<span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">KIND_POCKET_TTS</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ModelKind</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'pocket_tts'</span></em><a class="headerlink" href="#xr_ai_models.KIND_POCKET_TTS" title="Link to this definition">#</a></dt>
-<dd><p>The adapter kind for the repository’s streaming Pocket TTS service.</p>
 </dd></dl>
 
 <dl class="py class">
@@ -2309,10 +2215,6 @@ WAV (or raw PCM) result.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.LLMService.close"><code class="docutils literal notranslate"><span class="pre">close()</span></code></a></li>
 </ul>
 </li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.StreamingTTSService"><code class="docutils literal notranslate"><span class="pre">StreamingTTSService</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.StreamingTTSService.stream"><code class="docutils literal notranslate"><span class="pre">stream()</span></code></a></li>
-</ul>
-</li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.STTService"><code class="docutils literal notranslate"><span class="pre">STTService</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.STTService.transcribe"><code class="docutils literal notranslate"><span class="pre">transcribe()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.STTService.health"><code class="docutils literal notranslate"><span class="pre">health()</span></code></a></li>
@@ -2341,12 +2243,6 @@ WAV (or raw PCM) result.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.TTSService.synthesize"><code class="docutils literal notranslate"><span class="pre">synthesize()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.TTSService.health"><code class="docutils literal notranslate"><span class="pre">health()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.TTSService.close"><code class="docutils literal notranslate"><span class="pre">close()</span></code></a></li>
-</ul>
-</li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.TTSChunk"><code class="docutils literal notranslate"><span class="pre">TTSChunk</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.TTSChunk.data"><code class="docutils literal notranslate"><span class="pre">data</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.TTSChunk.sample_rate"><code class="docutils literal notranslate"><span class="pre">sample_rate</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.TTSChunk.channels"><code class="docutils literal notranslate"><span class="pre">channels</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.VideoInput"><code class="docutils literal notranslate"><span class="pre">VideoInput</span></code></a></li>
@@ -2405,10 +2301,6 @@ WAV (or raw PCM) result.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatVLM.close"><code class="docutils literal notranslate"><span class="pre">close()</span></code></a></li>
 </ul>
 </li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.PocketTTS"><code class="docutils literal notranslate"><span class="pre">PocketTTS</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.PocketTTS.stream"><code class="docutils literal notranslate"><span class="pre">stream()</span></code></a></li>
-</ul>
-</li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec"><code class="docutils literal notranslate"><span class="pre">AdapterSpec</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.kind"><code class="docutils literal notranslate"><span class="pre">kind</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.model_name"><code class="docutils literal notranslate"><span class="pre">model_name</span></code></a></li>
@@ -2445,7 +2337,6 @@ WAV (or raw PCM) result.</p>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.KIND_OPENAI_COMPAT"><code class="docutils literal notranslate"><span class="pre">KIND_OPENAI_COMPAT</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.KIND_POCKET_TTS"><code class="docutils literal notranslate"><span class="pre">KIND_POCKET_TTS</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.LLMSpec"><code class="docutils literal notranslate"><span class="pre">LLMSpec</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.LLMSpec.adapter"><code class="docutils literal notranslate"><span class="pre">adapter</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.LLMSpec.endpoint"><code class="docutils literal notranslate"><span class="pre">endpoint</span></code></a></li>

@@ -32,7 +32,6 @@ Attributes
    xr_ai_models.VideoInput
    xr_ai_models.Category
    xr_ai_models.KIND_OPENAI_COMPAT
-   xr_ai_models.KIND_POCKET_TTS
    xr_ai_models.ModelKind
    xr_ai_models.Spec
 
@@ -48,13 +47,11 @@ Classes
    xr_ai_models.EmbeddingService
    xr_ai_models.ImagePart
    xr_ai_models.LLMService
-   xr_ai_models.StreamingTTSService
    xr_ai_models.STTService
    xr_ai_models.TextPart
    xr_ai_models.ToolCall
    xr_ai_models.ToolDef
    xr_ai_models.TTSService
-   xr_ai_models.TTSChunk
    xr_ai_models.VideoPart
    xr_ai_models.VLMService
    xr_ai_models.OpenAICompatLLM
@@ -62,7 +59,6 @@ Classes
    xr_ai_models.OpenAICompatSTT
    xr_ai_models.OpenAICompatTTS
    xr_ai_models.OpenAICompatVLM
-   xr_ai_models.PocketTTS
    xr_ai_models.AdapterSpec
    xr_ai_models.DeploymentSpec
    xr_ai_models.EmbeddingSpec
@@ -326,19 +322,6 @@ Package Contents
 
 
 
-.. py:class:: StreamingTTSService
-
-
-
-   Text-to-speech service that can yield audio before synthesis ends.
-
-
-   .. py:method:: stream(text: str, *, timeout: float | None = None) -> AsyncIterator[TTSChunk]
-
-      Yield signed 16-bit PCM chunks for *text*.
-
-
-
 .. py:class:: STTService
 
 
@@ -477,34 +460,6 @@ Package Contents
 
 
       Release resources owned by the service.
-
-
-
-.. py:class:: TTSChunk
-
-   One signed 16-bit PCM chunk from streaming speech synthesis.
-
-
-   .. py:attribute:: data
-      :type:  bytes
-
-      Interleaved signed 16-bit PCM samples.
-
-
-
-   .. py:attribute:: sample_rate
-      :type:  int
-
-      Sample rate in hertz.
-
-
-
-   .. py:attribute:: channels
-      :type:  int
-      :value: 1
-
-
-      Number of interleaved audio channels.
 
 
 
@@ -864,21 +819,6 @@ Package Contents
 
 
 
-.. py:class:: PocketTTS(base_url: str, *, api_key_env: str | None = None, timeout: float = 30.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
-
-
-
-   Streaming client for the repository's Pocket TTS HTTP service.
-
-
-   .. py:method:: stream(text: str, *, timeout: float | None = None) -> AsyncIterator[xr_ai_models.TTSChunk]
-      :async:
-
-
-      Yield signed 16-bit PCM chunks as Pocket TTS generates them.
-
-
-
 .. py:class:: AdapterSpec
 
    API dialect and model-specific request/response behavior.
@@ -1107,14 +1047,6 @@ Package Contents
 
 
    The adapter kind for OpenAI-compatible HTTP endpoints.
-
-
-.. py:data:: KIND_POCKET_TTS
-   :type:  ModelKind
-   :value: 'pocket_tts'
-
-
-   The adapter kind for the repository's streaming Pocket TTS service.
 
 
 .. py:class:: LLMSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', model_name: str = '', api_key_env: str | None = None, reasoning_field: str | None = None, capabilities: dict[str, Any] | None = None, default_extras: dict[str, Any] | None = None, timeout: float = 60.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None)

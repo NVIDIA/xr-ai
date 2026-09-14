@@ -961,7 +961,7 @@ workflow.</p></li>
 <span class="c1"># Inference device: "cuda", "cpu", or "auto" (CUDA if available, else CPU).</span>
 <span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto</span>
 
-<span class="c1"># GPU 1 only — GPU 0 is fully allocated to vlm.</span>
+<span class="c1"># GPU 1 only — VLM, embedding, and Pocket TTS share GPU 0.</span>
 <span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"1"</span>
 
 <span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8103</span>
