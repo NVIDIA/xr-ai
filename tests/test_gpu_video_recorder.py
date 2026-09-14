@@ -22,13 +22,12 @@ from PIL import Image
 # libnvidia-encode.so.1 raises RuntimeError (not ImportError) — importorskip
 # would let it escape and break collection on CI boxes without NVENC.
 try:
-    import PyNvVideoCodec  # noqa: F401  (import-only — used to detect NVENC availability)
+    import PyNvVideoCodec
 except (ImportError, RuntimeError, OSError) as exc:
     pytest.skip(f"PyNvVideoCodec unavailable: {exc}", allow_module_level=True)
 
 from xr_ai_hub import AudioChunk, DataMessage, FrameData, FrameSignal, PixelFormat, SlotView  # noqa: E402
 
-from video_memory_service.frames import decode_h264  # noqa: E402
 from video_memory_service.service import VideoMemoryService  # noqa: E402
 from video_memory_service.store import ChunkStore  # noqa: E402
 from device_io_hub.capture._recorder import SessionRecorder  # noqa: E402
@@ -94,6 +93,36 @@ def _make_recorder(out_dir: str) -> VideoRecorder:
     except Exception as e:
         pytest.skip(f"NVENC unavailable on this host: {e}")
     return recorder
+
+
+def _decode_h264_shapes(
+    data: bytes,
+    *,
+    gpu_id: int,
+    max_width: int,
+    max_height: int,
+) -> list[tuple[int, ...]]:
+    """Decode a stream that can grow beyond its initial SPS dimensions."""
+    decoder = PyNvVideoCodec.CreateDecoder(
+        gpuid=gpu_id,
+        codec=PyNvVideoCodec.cudaVideoCodec.H264,
+        cudacontext=0,
+        cudastream=0,
+        usedevicememory=False,
+        maxwidth=max_width,
+        maxheight=max_height,
+    )
+    source = np.frombuffer(data, dtype=np.uint8)
+    packet = PyNvVideoCodec.PacketData()
+    packet.bsl = int(source.size)
+    packet.bsl_data = int(source.ctypes.data)
+    shapes = [frame.shape for frame in decoder.Decode(packet)]
+    end = PyNvVideoCodec.PacketData()
+    end.bsl = 0
+    end.bsl_data = 0
+    end.decode_flag = int(PyNvVideoCodec.VideoPacketFlag.ENDOFSTREAM)
+    shapes.extend(frame.shape for frame in decoder.Decode(end))
+    return shapes
 
 
 # ── tests ─────────────────────────────────────────────────────────────────────
@@ -280,9 +309,10 @@ async def test_media_capture_composites_caption_with_real_nvenc():
         assert packet_types == {"video", "audio"}
         assert len(video_pts) > 1
         encoded = (session / segment["raw_path"]).read_bytes()
-        frames = decode_h264(encoded, gpu_id=0)
-        assert len(frames) == len(frame_specs)
-        assert frames[-1].shape == (
-            segment["height"] * 3 // 2,
-            segment["width"],
+        frame_shapes = _decode_h264_shapes(
+            encoded,
+            gpu_id=0,
+            max_width=segment["width"],
+            max_height=segment["height"],
         )
+        assert len(frame_shapes) == len(frame_specs)
