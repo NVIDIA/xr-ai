@@ -9,7 +9,7 @@ This sample records a connected participant's camera on request at a
 configurable sampling rate, saves final speech transcripts, and produces
 periodic frame-linked visual captions with an Activity → Phase summary. A
 session starts with `start recording` and is finalized with `finish recording`.
-Refer to the [recording controls](../../docs/source/reference/migrations.md#workflow-recorder-controls)
+Refer to the [recording controls](https://nvidia.github.io/xr-ai/latest/reference/migrations.html#workflow-recorder-controls)
 for connection, silence, and repeat-recording behavior.
 
 Output is written to `artifacts/sessions/`. Executable SOP guides placed in
@@ -17,20 +17,52 @@ Output is written to `artifacts/sessions/`. Executable SOP guides placed in
 `artifacts/guide-index.json`. Invalid and draft guides are visible in the index
 but cannot run.
 
+## Configure
+
+The launcher reads the checked-in configuration automatically. Edit these
+files before starting the sample:
+
+| File | Common changes |
+|---|---|
+| `yaml/workflow_recorder_worker.yaml` | Recording and caption intervals, artifact and guide directories, frame freshness, and VAD settings |
+| `yaml/voice_gate.yaml` | Wake phrases, listening chime, and follow-up window |
+| `yaml/models.json` | Reused model adapters and endpoint addresses |
+| `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
+
+For example, change `capture_fps` in `yaml/workflow_recorder_worker.yaml` to
+sample one camera frame per second:
+
+```yaml
+capture_fps: 1.0
+```
+
+Restart the sample after an edit. Refer to the
+[sample configuration guide](https://nvidia.github.io/xr-ai/latest/reference/configuration.html)
+for the edit workflow and the generated
+[workflow recorder configuration](https://nvidia.github.io/xr-ai/latest/reference/configuration.html#config-workflow-recorder)
+for the checked-in fields and values.
+
 ## Run
 
-From `agent-samples/workflow-recorder/`, start the shared
-models if needed:
+Run all commands from `agent-samples/workflow-recorder/`. Start the shared
+models first:
 
 ```bash
 uv run --project ../model-servers model_servers
 ```
 
-Then start the recorder:
+Wait for the launcher to report that all processes are ready and return. Then
+start the recorder from the same terminal:
 
 ```bash
 uv sync
 uv run workflow_recorder
+```
+
+Alternatively, run the source file directly after synchronization:
+
+```bash
+uv run main.py
 ```
 
 Open the authenticated URL printed by DeviceIOHub, allow camera and microphone
