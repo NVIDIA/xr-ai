@@ -120,7 +120,7 @@ Package Contents
 
 
 .. py:data:: DEFAULT_IMAGE
-   :value: 'nvcr.io/nvidia/vllm:26.04-py3'
+   :value: 'nvcr.io/nvidia/vllm:26.08-py3'
 
 
    Default NGC vLLM image used when a service does not override ``vllm_image``.

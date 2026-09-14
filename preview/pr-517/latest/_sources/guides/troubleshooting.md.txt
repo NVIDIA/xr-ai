@@ -352,6 +352,11 @@ owned by `xr_ai_voice.VoiceAgent`.
 will appear to connect (signaling through the port 8080 proxy succeeds) but
 media frames are silently dropped without 7882.
 
+**Audio-only cause:** the browser's autoplay policy blocked the remote audio
+track. Use the **Connect** button to open the session. If the session is already
+connected but silent, send a message or click **Start Microphone** to retry
+playback from a user gesture.
+
 ### HTTPS web client → `ws://` mixed-content warning
 
 **Symptom:** the LiveKit JS SDK logs a mixed-content error connecting to
