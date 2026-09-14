@@ -5,10 +5,12 @@
 
 # Workflow recorder prototype
 
-This sub-project automatically records a connected participant's camera at a
+This sample records a connected participant's camera on request at a
 configurable sampling rate, saves final speech transcripts, and produces
 periodic frame-linked visual captions with an Activity → Phase summary. A
-session starts when a participant connects and is finalized when they leave.
+session starts with `start recording` and is finalized with `finish recording`.
+Refer to the [recording controls](../../docs/source/reference/migrations.md#workflow-recorder-controls)
+for connection, silence, and repeat-recording behavior.
 
 Output is written to `artifacts/sessions/`. Executable SOP guides placed in
 `guides/` are validated automatically and listed in
@@ -17,11 +19,11 @@ but cannot run.
 
 ## Run
 
-From `agent-samples/simple-vlm-example/workflow-recorder/`, start the shared
+From `agent-samples/workflow-recorder/`, start the shared
 models if needed:
 
 ```bash
-uv run --project ../../model-servers model_servers
+uv run --project ../model-servers model_servers
 ```
 
 Then start the recorder:
@@ -32,7 +34,8 @@ uv run workflow_recorder
 ```
 
 Open the authenticated URL printed by DeviceIOHub, allow camera and microphone
-access, and connect. Recording is automatic. The default sampling rate is 2
+access, and connect. Say `start recording` to record and `finish recording` to
+finish. The default sampling rate is 2
 FPS and the default caption interval is five seconds; both are configured in
 `yaml/workflow_recorder_worker.yaml`. This prototype has no retention policy,
 so remove old session folders when their frame data is no longer needed.

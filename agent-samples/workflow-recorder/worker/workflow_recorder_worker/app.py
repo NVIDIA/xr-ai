@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Compose automatic capture, transcription, captioning, and guide discovery."""
+"""Compose controlled capture, transcription, captioning, and guide discovery."""
 
 from __future__ import annotations
 
@@ -68,6 +68,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         current_frame=current_frame,
         image_query=sop_image_query,
         vision_timeout_s=config.frame_timeout_s,
+        recorder=recorder,
     )
     voice = VoiceAgent(
         query_topic=USER_QUERY_TOPIC,
@@ -86,6 +87,8 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         transport=transport,
         participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
         participant_left_topic=PARTICIPANT_LEFT_TOPIC,
+        interrupt_on_supersede=True,
+        stop_ack_enabled=lambda pid: not recorder.is_recording(pid),
     )
 
     runtime = AgentRuntime()

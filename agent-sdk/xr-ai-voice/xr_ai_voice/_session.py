@@ -53,11 +53,13 @@ class _VoiceSession:
         text_topic: str = "agent.response",
         idle_timeout_secs: float | None = None,
         transport: HubVoiceTransport | None = None,
+        stop_ack_enabled: Callable[[str], bool] | None = None,
     ) -> None:
         self.stt = stt
         self.tts = tts
         self.vad = vad
         self.voice_gate = voice_gate
+        self.stop_ack_enabled = stop_ack_enabled
         self.probes = dict(probes or {})
         self.ready_file = ready_file
         self.closeables = tuple(closeables)
@@ -127,6 +129,7 @@ class _VoiceSession:
             io_processor=io_processor,
             vad_cfg=self.vad,
             voice_gate_cfg=self.voice_gate,
+            stop_ack_enabled=self.stop_ack_enabled,
             on_final_transcript=on_transcript,
             text_topic=self.text_topic,
             idle_timeout_secs=self.idle_timeout_secs,
