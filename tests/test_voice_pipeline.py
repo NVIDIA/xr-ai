@@ -3571,6 +3571,31 @@ async def test_streaming_tts_publishes_spoken_capture_caption():
 
 
 @pytest.mark.asyncio
+async def test_streaming_tts_publishes_capture_caption_before_first_pcm():
+    from xr_ai_voice._capture_frames import _CaptureTtsCaptionFrame
+
+    tts = _FakeStreamingTts()
+    tts.configure("Spoken sentence.", b"\x01\x00", b"\x02\x00")
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    proc = StreamingTtsProcessor(tts=tts, voice_gate=gate, transport=_RecordingTransport())
+
+    sink = await _run_chain(proc, sends=[_text_for("Spoken sentence.", "alice")])
+
+    capture_frames = [
+        frame
+        for frame in sink.frames
+        if isinstance(frame, (_CaptureTtsCaptionFrame, OutputAudioRawFrame))
+    ]
+    assert [type(frame) for frame in capture_frames] == [
+        _CaptureTtsCaptionFrame,
+        OutputAudioRawFrame,
+        OutputAudioRawFrame,
+    ]
+    assert capture_frames[0].text == "Spoken sentence."
+    assert capture_frames[0].transport_destination == "alice"
+
+
+@pytest.mark.asyncio
 async def test_streaming_tts_echoes_data_when_topic_set():
     tts  = _FakeTts()
     gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
