@@ -587,9 +587,9 @@ workflow.</p></li>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
 <span class="c1"># Nemotron-3-Nano-Omni — single Blackwell 96 GB.</span>
-<span class="c1"># NVFP4 is selected automatically. RTX PRO 6000 Blackwell (SM120) retains</span>
-<span class="c1"># vLLM's automatic MoE backend selection. This standalone Omni stack leaves</span>
-<span class="c1"># the remainder of the GPU for STT, rendering, and runtime overhead.</span>
+<span class="c1"># NVFP4 is selected automatically. Leave moe_backend unset so vLLM can select</span>
+<span class="c1"># a compatible kernel for the checkpoint and hardware. This standalone Omni</span>
+<span class="c1"># stack leaves the remainder of the GPU for STT, rendering, and runtime overhead.</span>
 
 <span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
 <span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8108</span>
