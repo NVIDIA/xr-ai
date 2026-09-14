@@ -35,14 +35,11 @@ Config keys (nemotron_omni_llm_server.yaml)
     vllm_backend:             str    "pip" (default) or "docker".
     vllm_image:               str    Docker image when vllm_backend=docker
                                      (default: nvcr.io/nvidia/vllm:26.08-py3).
-    extra_pip:                list   Pip packages installed into the Docker
-                                     container before `vllm serve` runs
-                                     (docker backend only; default:
-                                     ["mamba-ssm", "causal-conv1d"] since
-                                     Nemotron-Omni's hybrid SSM backbone
-                                     requires both at model-load time).
+    extra_pip:                list   Additional pip packages installed into the
+                                     Docker container before `vllm serve` runs
+                                     (docker backend only; default: []).
     spark_uma:                bool   Enable DGX Spark cold-start safeguards
-                                     (docker backend only; default: false).
+                                     (docker backend only; default: auto-detect).
 """
 import json
 import os
@@ -58,7 +55,7 @@ from xr_ai_vllm import (
     serve,
     setup_hf_env,
 )
-from xr_ai_vllm._config import parse_config_bool
+from xr_ai_vllm._config import _gpu_is_dgx_spark, parse_config_bool
 
 _MODEL_BLACKWELL = "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-NVFP4"
 _MODEL_ADA       = "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-FP8"
@@ -89,13 +86,14 @@ def run() -> None:
     # nvidia-smi queries the right device.
     cuda_devices = setup_hf_env(cfg, model_cache)
 
+    major = gpu_compute_major()
     use_bf16 = parse_config_bool(cfg.get("use_bf16", False), "use_bf16")
+    use_nvfp4 = not use_bf16 and major >= 10
     if use_bf16:
         model = cfg.get("model_bf16", _MODEL_BF16)
         use_kv_fp8 = False
         logger.info("use_bf16=true → {}", model)
     else:
-        major = gpu_compute_major()
         if major >= 10:
             model = cfg.get("model_blackwell", _MODEL_BLACKWELL)
             use_kv_fp8 = True
@@ -109,7 +107,11 @@ def run() -> None:
     host          = cfg.get("host",                 _DEFAULT_HOST)
     port          = int(cfg.get("port",             _DEFAULT_PORT))
     served_name   = cfg.get("served_model_name",    _DEFAULT_SERVED)
-    max_seqs      = int(cfg.get("max_num_seqs",     _DEFAULT_SEQS))
+    spark_uma_value = cfg["spark_uma"] if "spark_uma" in cfg else _gpu_is_dgx_spark()
+    spark_uma     = parse_config_bool(spark_uma_value, "spark_uma")
+    max_seqs      = int(cfg.get(
+        "max_num_seqs", 4 if use_nvfp4 and spark_uma else _DEFAULT_SEQS
+    ))
     tp_size       = int(cfg.get("tensor_parallel_size", _DEFAULT_TP))
     max_ctx       = int(cfg.get("max_model_len",    _DEFAULT_CTX))
     gpu_mem       = float(cfg.get("gpu_memory_utilization", _DEFAULT_GPU_MEM))
@@ -132,16 +134,12 @@ def run() -> None:
     prune_rate    = float(cfg.get("video_pruning_rate", _DEFAULT_PRUNE))
     video_fps     = int(cfg.get("video_fps",        _DEFAULT_FPS))
     video_frames  = int(cfg.get("video_num_frames", _DEFAULT_FRAMES))
-    moe_backend   = cfg.get("moe_backend")
+    moe_backend   = cfg.get("moe_backend", "flashinfer_cutlass")
     backend       = cfg.get("vllm_backend",         "pip")
     image         = cfg.get("vllm_image",           DEFAULT_IMAGE)
-    spark_uma     = parse_config_bool(cfg.get("spark_uma", False), "spark_uma")
-    # Nemotron-Omni's hybrid SSM/Transformer backbone imports `mamba_ssm`
-    # at model-load time, and `causal_conv1d` is its required CUDA-kernel
-    # peer dep. Neither ships in the NGC vLLM image, so we install both
-    # into the container before `vllm serve` runs. Configurable via YAML
-    # for users who want to pin specific versions or add more wheels.
-    extra_pip     = cfg.get("extra_pip", ["mamba-ssm", "causal-conv1d"])
+    # NGC 26.08 supports Nemotron Omni through vLLM's native Mamba and causal
+    # convolution implementations, so no out-of-tree CUDA packages are needed.
+    extra_pip     = cfg.get("extra_pip", [])
 
     media_io_kwargs = json.dumps({"video": {"fps": video_fps, "num_frames": video_frames}})
 
@@ -165,7 +163,9 @@ def run() -> None:
         )
     if use_kv_fp8:
         extra_serve_args += ["--kv-cache-dtype", "fp8"]
-    if moe_backend:
+    # NGC 26.08 requires this override for the NVFP4 model on B200/B300.
+    # SM120 devices, including RTX PRO 6000 Blackwell, use vLLM's default.
+    if use_nvfp4 and major == 10 and moe_backend:
         extra_serve_args += ["--moe-backend", str(moe_backend)]
     if enforce_eager:
         extra_serve_args.append("--enforce-eager")

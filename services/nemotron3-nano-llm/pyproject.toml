@@ -12,8 +12,8 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     # vLLM provides the OpenAI-compatible HTTP server, the Qwen3-coder
     # tool-call parser, the nano_v3 reasoning parser plugin, and the
-    # FlashInfer NVFP4 MoE kernels.  0.12.0 is the minimum the model
-    # card (nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4) calls for.
+    # FlashInfer NVFP4 MoE kernels. 0.27.0 is the security floor that fixes
+    # CVE-2026-73558 while retaining the model-card-required features.
     "vllm>=0.27.0",
     "pyyaml>=6.0",
     # Xet speeds up weight download on first run.

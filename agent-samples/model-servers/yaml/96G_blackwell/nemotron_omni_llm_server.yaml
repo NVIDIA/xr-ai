@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Nemotron-3-Nano-Omni — single Blackwell 96 GB.
-# NVFP4 is selected automatically. NGC 26.08 requires FlashInfer CUTLASS for
-# NVFP4 MoE models on x86 Blackwell. This standalone Omni stack leaves the
-# remainder of the GPU for STT, rendering, and runtime overhead.
+# NVFP4 is selected automatically. RTX PRO 6000 Blackwell (SM120) retains
+# vLLM's automatic MoE backend selection. This standalone Omni stack leaves
+# the remainder of the GPU for STT, rendering, and runtime overhead.
 
 host: "0.0.0.0"
 port: 8108
@@ -16,7 +16,6 @@ tensor_parallel_size: 1
 max_model_len: 32768
 gpu_memory_utilization: 0.35
 enforce_eager: false
-moe_backend: flashinfer_cutlass
 
 video_pruning_rate: 0.5
 video_fps: 2
@@ -24,4 +23,3 @@ video_num_frames: 64
 
 vllm_backend: docker
 vllm_image: nvcr.io/nvidia/vllm:26.08-py3
-extra_pip: []

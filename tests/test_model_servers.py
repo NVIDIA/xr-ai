@@ -261,7 +261,7 @@ def test_omni_profiles_select_supported_vllm_configuration(profile_path: Path) -
 
     assert config["vllm_backend"] == "docker"
     assert config["vllm_image"] == "nvcr.io/nvidia/vllm:26.08-py3"
-    assert config["extra_pip"] == []
+    assert "extra_pip" not in config
     if profile_path.parent.name == "spark":
         assert config["max_num_seqs"] == 4
         assert "moe_backend" not in config
@@ -269,13 +269,24 @@ def test_omni_profiles_select_supported_vllm_configuration(profile_path: Path) -
         assert config["kv_cache_memory_bytes"] == 2147483648
         assert config["spark_uma"] is True
     elif profile_path.parent.name == "96G_blackwell":
-        assert config["moe_backend"] == "flashinfer_cutlass"
+        assert "moe_backend" not in config
         assert "kv_cache_memory_bytes" not in config
         assert "spark_uma" not in config
     else:
         assert "moe_backend" not in config
         assert "kv_cache_memory_bytes" not in config
         assert "spark_uma" not in config
+
+
+def test_all_shipped_vllm_images_track_dispatcher_default() -> None:
+    configured_images: dict[Path, str] = {}
+    for path in _REPO_ROOT.rglob("*.yaml"):
+        config = yaml.safe_load(path.read_text())
+        if isinstance(config, dict) and "vllm_image" in config:
+            configured_images[path] = config["vllm_image"]
+
+    assert configured_images
+    assert set(configured_images.values()) == {_nano.DEFAULT_IMAGE}
 
 
 def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -537,11 +548,7 @@ def test_omni_only_forwards_configured_moe_backend(
     monkeypatch.setattr(
         _omni,
         "load_config",
-        lambda: (
-            {"moe_backend": moe_backend} if moe_backend is not None else {},
-            Path("."),
-            None,
-        ),
+        lambda: ({"moe_backend": moe_backend}, Path("."), None),
     )
     monkeypatch.setattr(_omni, "resolve_model_cache", lambda *_a, **_k: Path("models"))
     monkeypatch.setattr(_omni, "setup_hf_env", lambda *_a, **_k: None)
@@ -558,12 +565,58 @@ def test_omni_only_forwards_configured_moe_backend(
 
 
 @pytest.mark.parametrize(
-    ("compute_major", "expected_moe_backend"),
-    [(8, None), (10, "flashinfer_cutlass"), (12, None)],
+    ("compute_major", "spark_uma", "expected_seqs", "expected_moe_backend"),
+    [
+        (8, False, "384", None),
+        (10, False, "384", "flashinfer_cutlass"),
+        (12, False, "384", None),
+        (12, True, "4", None),
+    ],
+)
+def test_omni_applies_nvfp4_hardware_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+    compute_major: int,
+    spark_uma: bool,
+    expected_seqs: str,
+    expected_moe_backend: str | None,
+) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(_omni, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        _omni,
+        "load_config",
+        lambda: ({}, Path("."), None),
+    )
+    monkeypatch.setattr(_omni, "resolve_model_cache", lambda *_a, **_k: Path("models"))
+    monkeypatch.setattr(_omni, "setup_hf_env", lambda *_a, **_k: None)
+    monkeypatch.setattr(_omni, "gpu_compute_major", lambda: compute_major)
+    monkeypatch.setattr(_omni, "_gpu_is_dgx_spark", lambda: spark_uma)
+    monkeypatch.setattr(_omni, "serve", lambda **kwargs: captured.update(kwargs))
+
+    _omni.run()
+
+    args = captured["extra_serve_args"]
+    assert args[args.index("--max-num-seqs") + 1] == expected_seqs
+    assert captured["extra_pip"] == []
+    if expected_moe_backend is None:
+        assert "--moe-backend" not in args
+    else:
+        assert args[args.index("--moe-backend") + 1] == expected_moe_backend
+
+
+@pytest.mark.parametrize(
+    ("compute_major", "spark_uma", "expected_seqs", "expected_moe_backend"),
+    [
+        (8, False, "8", None),
+        (10, False, "8", "flashinfer_cutlass"),
+        (12, True, "4", None),
+    ],
 )
 def test_nano_standalone_forwards_ngc_compatibility_settings(
     monkeypatch: pytest.MonkeyPatch,
     compute_major: int,
+    spark_uma: bool,
+    expected_seqs: str,
     expected_moe_backend: str | None,
 ) -> None:
     captured: dict[str, object] = {}
@@ -579,6 +632,7 @@ def test_nano_standalone_forwards_ngc_compatibility_settings(
     monkeypatch.setattr(_nano, "resolve_model_cache", lambda *_a, **_k: Path("models"))
     monkeypatch.setattr(_nano, "setup_hf_env", lambda *_a, **_k: None)
     monkeypatch.setattr(_nano, "gpu_compute_major", lambda: compute_major)
+    monkeypatch.setattr(_nano, "_gpu_is_dgx_spark", lambda: spark_uma)
     monkeypatch.setattr(
         _nano,
         "_ensure_reasoning_parser",
@@ -589,7 +643,7 @@ def test_nano_standalone_forwards_ngc_compatibility_settings(
     _nano.run()
 
     args = captured["extra_serve_args"]
-    assert args[args.index("--max-num-seqs") + 1] == "4"
+    assert args[args.index("--max-num-seqs") + 1] == expected_seqs
     if expected_moe_backend is None:
         assert "--moe-backend" not in args
     else:

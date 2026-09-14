@@ -41,7 +41,8 @@ model_cache: ../../models
 # On Ada Lovelace (RTX 6000 Ada 48 GB): FP8 weights ~30 GB; run the LLM
 # on a dedicated GPU and keep the vlm-server + stt-server on the second GPU.
 # With LLM alone on a 48 GB card, 0.85 (~41 GB) gives ~11 GB for KV cache.
-max_num_seqs:         4
+# The launcher defaults to 8 sequences, or 4 when spark_uma is enabled for
+# DGX Spark. Set max_num_seqs to override that hardware-aware default.
 tensor_parallel_size: 1
 max_model_len:        32768
 
@@ -57,10 +58,8 @@ gpu_memory_utilization: 0.85
 # maximum throughput and can wait for graph capture to finish.
 enforce_eager: true
 
-# Required by NGC 26.08 for NVFP4 MoE models on B200/B300. The launcher
-# forwards this setting only on SM100-series GPUs; Ada and DGX Spark retain
-# vLLM's automatic backend selection.
-moe_backend: flashinfer_cutlass
+# The launcher selects flashinfer_cutlass automatically for the NVFP4 model on
+# B200/B300 (SM100-series). Other GPUs retain vLLM's automatic backend.
 
 # vLLM runtime. If this key is omitted, the wrapper falls back to pip;
 # the checked-in configuration below selects the NGC Docker container.
@@ -74,3 +73,6 @@ vllm_backend: docker
 # Container image used when vllm_backend: docker.  Override to pin a different
 # tag, an internal mirror, or a custom build.
 vllm_image: nvcr.io/nvidia/vllm:26.08-py3
+
+# DGX Spark is detected automatically to cap max_num_seqs at 4 and enable the
+# unified-memory cold-start safeguards. Set spark_uma explicitly to override.

@@ -50,6 +50,7 @@ import sys
 from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_vllm import (
+    DEFAULT_IMAGE,
     load_config,
     resolve_model_cache,
     serve,
@@ -68,8 +69,6 @@ _DEFAULT_EAGER       = False
 _DEFAULT_ASYNC       = False
 _DEFAULT_MAX_IMAGES  = 1
 _DEFAULT_MAX_VIDEOS  = 0
-_DEFAULT_VLLM_IMAGE  = "nvcr.io/nvidia/vllm:26.08-py3"
-
 _COSMOS3_NANO_MODEL = "nvidia/Cosmos3-Nano"
 _COSMOS3_REASONER_ARCHITECTURE = "Cosmos3ForConditionalGeneration"
 
@@ -117,7 +116,7 @@ def run() -> None:
     max_images    = int(cfg.get("max_images_per_prompt", _DEFAULT_MAX_IMAGES))
     max_videos    = int(cfg.get("max_videos_per_prompt", _DEFAULT_MAX_VIDEOS))
     backend       = cfg.get("vllm_backend",         "pip")
-    image         = cfg.get("vllm_image",           _DEFAULT_VLLM_IMAGE)
+    image         = cfg.get("vllm_image",           DEFAULT_IMAGE)
     spark_uma     = parse_config_bool(cfg.get("spark_uma", False), "spark_uma")
 
     model_cache = resolve_model_cache(cfg, yaml_dir, default="../../models")

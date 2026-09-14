@@ -145,6 +145,25 @@ def test_manifest_lock_inventories_both_pynvvideocodec_environments() -> None:
     assert {"2.0.4", "2.2.2"} <= versions
 
 
+def test_manifest_lock_preserves_generated_environment_split() -> None:
+    lock = tomllib.loads((_ROOT / MANIFEST / "uv.lock").read_text())
+    manifest_package = next(
+        package
+        for package in lock["package"]
+        if package["name"] == dependency_manifest.MANIFEST_NAME
+    )
+    extras = manifest_package["optional-dependencies"]
+    vllm_names = {item["name"] for item in extras["vllm"]}
+    repository_names = {item["name"] for item in extras["repository"]}
+
+    assert vllm_names == dependency_manifest.VLLM_PROJECTS
+    assert vllm_names.isdisjoint(repository_names)
+    assert lock["conflicts"] == [[
+        {"package": dependency_manifest.MANIFEST_NAME, "extra": "repository"},
+        {"package": dependency_manifest.MANIFEST_NAME, "extra": "vllm"},
+    ]]
+
+
 def test_manifest_orders_by_path_not_name(tmp_path: Path) -> None:
     _write_project(tmp_path, "zeta/first", name="aaa")
     _write_project(tmp_path, "alpha/second", name="zzz")
