@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 import nemo_relay
 import pytest
+from loguru import logger
 from pydantic import ValidationError
 from xr_ai_hub import DataMessage
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
@@ -891,6 +892,47 @@ async def test_cancelled_response_stream_releases_blocked_publishers() -> None:
 
         assert agent._closed_streams  # noqa: SLF001
     assert agent._streams == {}  # noqa: SLF001
+
+
+async def test_reused_finalized_response_id_is_ignored_and_warned_once() -> None:
+    session = _Session()
+    runtime = AgentRuntime()
+    voice = _voice_agent(session, text_input=False)
+    runtime.register("voice", voice)
+    messages: list[str] = []
+    handler_id = logger.add(messages.append, format="{message}", level="WARNING")
+
+    try:
+        async with _running_voice(runtime, voice, session):
+            await runtime.publish(
+                VOICE_OUTPUT_TOPIC,
+                VoiceOutput(text="first ", response_id="turn", final=False),
+                participant_id="alice",
+                source="observer",
+            )
+            await runtime.publish(
+                VOICE_OUTPUT_TOPIC,
+                VoiceOutput(text="response", response_id="turn"),
+                participant_id="alice",
+                source="observer",
+            )
+            await session.wait_for(1)
+            for text in ("second", "third"):
+                await runtime.publish(
+                    VOICE_OUTPUT_TOPIC,
+                    VoiceOutput(text=text, response_id="turn"),
+                    participant_id="alice",
+                    source="observer",
+                )
+    finally:
+        logger.remove(handler_id)
+
+    assert [text for _pid, text, _interrupt, _pts in session.responses] == [
+        "first response"
+    ]
+    assert sum(
+        "ignored voice output for closed response" in message for message in messages
+    ) == 1
 
 
 async def test_voice_output_preserves_originating_query_timestamp() -> None:
