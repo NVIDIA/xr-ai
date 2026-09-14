@@ -19,7 +19,7 @@ uv --config-file uv.toml sync --project tests
 uv --config-file uv.toml run --project tests pytest -v
 ```
 
-CI runs the same selection on Python 3.11 and 3.12 from `tests/`, with the
+CI runs the same selection on Python 3.11 through 3.14 from `tests/`, with the
 project environment at the repository root for nltk compatibility. The
 equivalent repository-root command is:
 

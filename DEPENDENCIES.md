@@ -21,12 +21,13 @@ derived from project metadata.
 
 ## Python version
 
-Repository Python projects conventionally require Python 3.11 or 3.12. A project
-may declare a different range when its dependencies require it. The generated
-inventory records each declaration, while `.github/workflows/lock-check.yml`
-runs `uv lock` on every project to prove its complete declared range resolves.
+Repository Python projects conventionally require Python 3.11 through 3.14. A
+project may declare a different range when its dependencies require it. The
+generated inventory records each declaration, while
+`.github/workflows/lock-check.yml` runs `uv lock` on every project to prove its
+complete declared range resolves.
 
-The pytest matrix in `.github/workflows/tests.yml` covers Python 3.11 and 3.12.
+The pytest matrix in `.github/workflows/tests.yml` covers Python 3.11 through 3.14.
 Loosening the repository-wide upper bound requires a coordinated qualification
 change, even when an individual dependency publishes newer Python wheels.
 
@@ -96,7 +97,7 @@ drift:
 
 #### `xr-ai-hub-client` — [`agent-sdk/xr-ai-hub/`](agent-sdk/xr-ai-hub/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -107,7 +108,7 @@ drift:
 
 #### `xr-ai-models` — [`agent-sdk/xr-ai-models/`](agent-sdk/xr-ai-models/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -121,7 +122,7 @@ drift:
 
 #### `xr-ai-agent-runtime` — [`agent-sdk/xr-ai-runtime/`](agent-sdk/xr-ai-runtime/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -133,7 +134,7 @@ drift:
 
 #### `xr-ai-tools` — [`agent-sdk/xr-ai-tools/`](agent-sdk/xr-ai-tools/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -163,7 +164,7 @@ drift:
 
 #### `xr-ai-voice` — [`agent-sdk/xr-ai-voice/`](agent-sdk/xr-ai-voice/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -184,7 +185,7 @@ drift:
 
 #### `xr-ai-web-events` — [`agent-sdk/xr-ai-web-events/`](agent-sdk/xr-ai-web-events/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -197,7 +198,7 @@ drift:
 
 #### `xr-ai-launcher` — [`utils/xr-ai-launcher/`](utils/xr-ai-launcher/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies: none
@@ -206,7 +207,7 @@ drift:
 
 #### `xr-ai-logging` — [`utils/xr-ai-logging/`](utils/xr-ai-logging/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -216,10 +217,11 @@ drift:
 
 #### `xr-ai-vad` — [`utils/xr-ai-vad/`](utils/xr-ai-vad/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `importlib-resources>=6.5`
   - `numpy>=1.24`
   - `silero-vad>=5.1`
   - `onnxruntime>=1.17`
@@ -229,7 +231,7 @@ drift:
 
 #### `xr-ai-vllm` — [`utils/xr-ai-vllm/`](utils/xr-ai-vllm/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies: none
@@ -238,7 +240,7 @@ drift:
 
 #### `xr-ai-voicegate` — [`utils/xr-ai-voicegate/`](utils/xr-ai-voicegate/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -251,7 +253,7 @@ drift:
 
 #### `cloudxr-runtime` — [`services/cloudxr-runtime/`](services/cloudxr-runtime/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -265,7 +267,7 @@ drift:
 
 #### `device-io-hub` — [`services/device-io-hub/`](services/device-io-hub/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -288,7 +290,7 @@ drift:
 
 #### `embedding-server` — [`services/embedding-server/`](services/embedding-server/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -304,7 +306,7 @@ drift:
 
 #### `llama-nemotron-llm-server` — [`services/llama-nemotron-llm/`](services/llama-nemotron-llm/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -320,7 +322,7 @@ drift:
 
 #### `magpie-tts-server` — [`services/magpie-tts/`](services/magpie-tts/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -340,7 +342,7 @@ drift:
 
 #### `nemotron-omni-llm-server` — [`services/nemotron-omni-llm/`](services/nemotron-omni-llm/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -356,7 +358,7 @@ drift:
 
 #### `nemotron3-nano-llm-server` — [`services/nemotron3-nano-llm/`](services/nemotron3-nano-llm/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -372,7 +374,7 @@ drift:
 
 #### `nim-server` — [`services/nim-server/`](services/nim-server/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -385,7 +387,7 @@ drift:
 
 #### `xr-openxr-service` — [`services/openxr-service/`](services/openxr-service/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -400,7 +402,7 @@ drift:
 
 #### `pocket-tts-server` — [`services/pocket-tts/`](services/pocket-tts/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -419,7 +421,7 @@ drift:
 
 #### `xr-rag-service` — [`services/rag-service/`](services/rag-service/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -434,7 +436,7 @@ drift:
 
 #### `stt-server` — [`services/stt-server/`](services/stt-server/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -453,7 +455,7 @@ drift:
 
 #### `xr-video-memory-service` — [`services/video-memory-service/`](services/video-memory-service/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -469,7 +471,7 @@ drift:
 
 #### `vlm-server` — [`services/vlm-server/`](services/vlm-server/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -487,7 +489,7 @@ drift:
 
 #### `lab-instrument-monitoring` — [`agent-samples/lab-instrument-monitoring/`](agent-samples/lab-instrument-monitoring/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -499,7 +501,7 @@ drift:
 
 #### `lab-instrument-monitoring-worker` — [`agent-samples/lab-instrument-monitoring/worker/`](agent-samples/lab-instrument-monitoring/worker/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -522,7 +524,7 @@ drift:
 
 #### `model-servers` — [`agent-samples/model-servers/`](agent-samples/model-servers/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -535,7 +537,7 @@ drift:
 
 #### `simple-vlm-example` — [`agent-samples/simple-vlm-example/`](agent-samples/simple-vlm-example/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -547,7 +549,7 @@ drift:
 
 #### `simple-vlm-example-worker` — [`agent-samples/simple-vlm-example/worker/`](agent-samples/simple-vlm-example/worker/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -567,7 +569,7 @@ drift:
 
 #### `tea-making-sample` — [`agent-samples/tea-making-sample/`](agent-samples/tea-making-sample/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -579,7 +581,7 @@ drift:
 
 #### `tea-making-worker` — [`agent-samples/tea-making-sample/worker/`](agent-samples/tea-making-sample/worker/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -601,7 +603,7 @@ drift:
 
 #### `xr-render-demo` — [`agent-samples/xr-render-demo/`](agent-samples/xr-render-demo/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -614,7 +616,7 @@ drift:
 
 #### `xr-render-demo-eval` — [`agent-samples/xr-render-demo/eval/`](agent-samples/xr-render-demo/eval/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -637,7 +639,7 @@ drift:
 
 #### `xr-render-scene` — [`agent-samples/xr-render-demo/scene/`](agent-samples/xr-render-demo/scene/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -653,7 +655,7 @@ drift:
 
 #### `xr-render-demo-worker` — [`agent-samples/xr-render-demo/worker/`](agent-samples/xr-render-demo/worker/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -675,7 +677,7 @@ drift:
 
 #### `xr-ai-tests` — [`tests/`](tests/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -709,7 +711,7 @@ drift:
 
 #### `xr-ai-dependency-manifest` — [`dependency-manifest/`](dependency-manifest/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies: none
 - Runtime dependencies:
   - `lab-instrument-monitoring` → [`lab-instrument-monitoring`](agent-samples/lab-instrument-monitoring/) (local, editable)
