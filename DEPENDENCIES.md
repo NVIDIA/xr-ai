@@ -375,6 +375,22 @@ drift:
 - Commands:
   - `nemotron3_nano_llm_server` → `nemotron3_nano_llm_server.__main__:run`
 
+#### `nemotron35-lightning-llm-server` — [`services/nemotron35-lightning-llm/`](services/nemotron35-lightning-llm/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `vllm>=0.27.1`
+  - `pyyaml>=6.0`
+  - `huggingface-hub>=0.32.0`
+  - `hf-xet>=1.1.2,<2.0.0`
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `nemotron35_lightning_llm_server` → `nemotron35_lightning_llm_server.__main__:run`
+
 #### `nim-server` — [`services/nim-server/`](services/nim-server/)
 
 - Python: `>=3.11,<3.13`
@@ -756,6 +772,7 @@ drift:
     - `llama-nemotron-llm-server` → [`llama-nemotron-llm-server`](services/llama-nemotron-llm/) (local, editable)
     - `nemotron-omni-llm-server` → [`nemotron-omni-llm-server`](services/nemotron-omni-llm/) (local, editable)
     - `nemotron3-nano-llm-server` → [`nemotron3-nano-llm-server`](services/nemotron3-nano-llm/) (local, editable)
+    - `nemotron35-lightning-llm-server` → [`nemotron35-lightning-llm-server`](services/nemotron35-lightning-llm/) (local, editable)
     - `vlm-server` → [`vlm-server`](services/vlm-server/) (local, editable)
 - Commands: none
 
@@ -774,6 +791,7 @@ Python dependency metadata, so they remain curated here.
 | `services/pocket-tts/` | `pocket-tts-server` | `pocket_tts_server` | 8105 | kyutai/pocket-tts | Pocket TTS in-process |
 | `services/llama-nemotron-llm/` | `llama-nemotron-llm-server` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `services/nemotron3-nano-llm/` | `nemotron3-nano-llm-server` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B (GPU-selected quantization) | vLLM (pip or docker) |
+| `services/nemotron35-lightning-llm/` | `nemotron35-lightning-llm-server` | `nemotron35_lightning_llm_server` | 8108 | NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4 | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron-omni-llm-server` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning | vLLM (pip or docker), multimodal |
 | `services/embedding-server/` | `embedding-server` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
 | `services/video-memory-service/` | `xr-video-memory-service` | `video_memory_service` | 8310 | — | Typed RPC using msgpack over ZMQ |

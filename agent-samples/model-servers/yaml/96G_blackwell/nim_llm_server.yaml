@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Self-hosted Nemotron-3-Nano-Omni NIM (serves both the `llm` and
+# Self-hosted Nemotron 3.5 Lightning NIM (serves both the `llm` and
 # `agent_llm` roles). This matches the model family used by the default local
 # deployment. Swap in any compatible NIM from https://catalog.ngc.nvidia.com.
 # To adapt a sample, copy the `llm` entry from
@@ -9,9 +9,8 @@
 # `deployment.ownership` from `managed` to `reused`, and keep service
 # `llm-nim` on port 8110. Duplicate it as `agent_llm` when the sample uses
 # that role.
-# Verify startup and memory use on the target 96 GB Blackwell GPU before
-# deployment.
-image:     nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant
+# The NIM selects its compatible packaged NVFP4 profile.
+image:     nvcr.io/nim/nvidia/nemotron-3.5-lightning-30b-a3b:2.0.9-variant
 http_port: 8110
 
 nim_cache: ../../../../models/nim
@@ -19,5 +18,7 @@ nim_cache: ../../../../models/nim
 cuda_visible_devices: "0"
 env:
   NIM_MAX_MODEL_LEN: "32768"
-  # Match the local Omni deployment's reasoning and tool-call parsers.
+  NIM_MODEL_NAME: "nvidia/nemotron-3.5-lightning-30b-a3b"
+  NIM_SERVED_MODEL_NAME: "nvidia/nemotron-3.5-lightning-30b-a3b"
+  # Match the local Lightning deployment's reasoning and tool-call parsers.
   NIM_PASSTHROUGH_ARGS: "--gpu-memory-utilization 0.4 --enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser nemotron_v3"

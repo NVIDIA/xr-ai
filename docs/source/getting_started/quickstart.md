@@ -54,7 +54,7 @@ uv run model_servers --stop
 
 Persisted vLLM processes or containers may otherwise keep serving the previous
 models and images even though the checked-in configuration now selects
-Nemotron-3 Nano Omni and Cosmos3 Nano Reasoner.
+Nemotron 3.5 Lightning and Cosmos3 Nano Reasoner.
 :::
 
 ```bash
@@ -73,10 +73,10 @@ On first run each model downloads from Hugging Face (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.
 
 Which servers start is a deployment profile selected with
-`--models <name|path>`. The default starts Nemotron-3 Nano Omni (8108,
+`--models <name|path>`. The default starts Nemotron 3.5 Lightning (8108,
 serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), Pocket TTS
 (8105), and embeddings (8109). `vlm_llm_nim` serves the LLM and VLM as
-self-hosted NIM containers (Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner;
+self-hosted NIM containers (Nemotron 3.5 Lightning and Cosmos3-Nano Reasoner;
 requires Docker and `NGC_API_KEY`). Starting a profile stops persisted servers
 outside it first and aborts if they cannot be stopped, avoiding GPU overcommit.
 
@@ -248,10 +248,11 @@ Inspect the JSONL artifacts while trying additional interactions.
 ## Tea-making guidance (voice + visual workflow)
 
 This sample combines an interactive tea guide with optional background change,
-transcript, and video observation. Nemotron-3 Nano Omni supplies both language
-and visual inference. Records are written as JSON Lines under the sample's
-`artifacts/` directory. A separate live event viewer presents selected runtime
-events without replacing those durable records.
+transcript, and video observation. Nemotron 3.5 Lightning supplies language
+inference, while Cosmos3 Nano Reasoner supplies visual inference. Records are
+written as JSON Lines under the sample's `artifacts/` directory. A separate
+live event viewer presents selected runtime events without replacing those
+durable records.
 
 Start the shared model services, including Pocket TTS:
 
@@ -312,7 +313,7 @@ dev.
 Under the hood, the orchestrator launches the hub, CloudXR runtime, typed
 capability processes, and the worker alongside the reused model endpoints. The
 worker calls those processes through Relay-managed native tools. The voice
-runtime runs quick-acks and a Nemotron-3-Nano-Omni-30B-A3B-Reasoning agentic
+runtime runs quick-acks and a Nemotron-3.5-Lightning-30B-A3B agentic
 tool-calling loop over scene, tracking, spatial math, vision, and video-memory
 tools. Refer to the
 {doc}`xr-render-demo reference </reference/xr-render-demo>` for the full process

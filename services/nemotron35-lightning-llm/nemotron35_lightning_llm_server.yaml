@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Nemotron 3.5 Lightning text-generation server. The NVFP4 checkpoint uses
+# native FP4 kernels on Blackwell and W4A16 kernels on earlier supported GPUs.
+model: nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4
+
+host: "0.0.0.0"
+port: 8108
+served_model_name: llm
+hf_token: ""
+model_cache: ../../models
+
+max_num_seqs: 8
+tensor_parallel_size: 1
+max_model_len: 32768
+gpu_memory_utilization: 0.85
+enable_prefix_caching: true
+async_scheduling: false
+enforce_eager: false
+
+# Nemotron 3.5 Lightning uses the hybrid Mamba and attention cache path.
+kv_cache_dtype: fp8
+mamba_backend: flashinfer
+mamba_cache_mode: align
+
+# Shared qualified runtime; currently includes vLLM 0.27.1.
+vllm_backend: docker
+vllm_image: nvcr.io/nvidia/vllm:26.08-py3

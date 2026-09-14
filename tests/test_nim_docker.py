@@ -204,11 +204,11 @@ def test_model_servers_nim_profile_parses() -> None:
     llm = cfg.llm("llm")
     assert llm.kind == "openai_compat"
     assert llm.model_name == (
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+        "nvidia/nemotron-3.5-lightning-30b-a3b"
     )
     assert llm.reasoning_field == "reasoning"
-    assert llm.capabilities.get("vision") is True
-    assert llm.capabilities.get("video") is True
+    assert llm.capabilities.get("vision") is not True
+    assert llm.capabilities.get("video") is not True
     # The NIM chat template defaults thinking on; without the pin,
     # non-thinking agent calls can truncate mid-reasoning.
     assert llm.default_extras["chat_template_kwargs"] == {"enable_thinking": False}

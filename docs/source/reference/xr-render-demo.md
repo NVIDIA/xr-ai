@@ -23,7 +23,7 @@ any owned process exit terminates the application stack.
 | cloudxr | sample | `services/cloudxr-runtime/` | `cloudxr_runtime` | 48322 (WSS proxy for WebRTC profiles; unused by `auto-native`) |
 | stt | reused | `services/stt-server/` | `stt_server` | 8103 |
 | tts | reused | `services/pocket-tts/` | `pocket_tts_server` | 8105 |
-| omni | reused | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 (LLM) |
+| lightning | reused | `services/nemotron35-lightning-llm/` | `nemotron35_lightning_llm_server` | 8108 (LLM) |
 | vlm | reused | `services/vlm-server/` | `vlm_server` | 8100 (Cosmos VLM) |
 | video-memory | sample | `services/video-memory-service/` | `video_memory_service` | 8310 (recorded-video typed RPC) |
 | scene | sample | `agent-samples/xr-render-demo/scene/` | `xr_render_scene` | 8320 (typed RPC) |
@@ -136,7 +136,7 @@ fields, checked-in values, and adjacent YAML comments.
 
 ## The LLM server
 
-### Nemotron-3-Nano-Omni-30B-A3B-Reasoning — port 8108
+### Nemotron 3.5 Lightning 30B-A3B — port 8108
 
 A small Python wrapper reads YAML configuration, sets the model environment,
 and starts vLLM through the selected `pip` or Docker backend. The vLLM process
@@ -146,8 +146,8 @@ The shared model-server stack reuses a healthy instance and replaces one whose
 launch configuration changed.
 
 `vllm serve` uses `--tool-call-parser qwen3_coder` and
-`--reasoning-parser nemotron_v3`. The launcher selects NVFP4 on Blackwell and
-FP8 on Ada, Hopper, or Ampere, with BF16 available as an explicit fallback.
+`--reasoning-parser nemotron_v3`. The NVFP4 checkpoint uses native FP4 kernels
+on Blackwell and W4A16 kernels on earlier supported GPUs.
 
 One server backs both LLM roles in `yaml/models.json`: `agent_llm` runs the
 supervisor and subagent tool-calling loops, and `llm` remains available for
@@ -243,7 +243,7 @@ services. On each accepted `xr-render.user-query` event:
    The block is session-scoped: only the last eight turns since the
    participant last departed, and within ten minutes of the request, are
    injected; older history is memory_agent's to recall.
-2. **Supervisor loop** (`run_tool_loop`, up to 12 iterations) — Nemotron-Omni
+2. **Supervisor loop** (`run_tool_loop`, up to 12 iterations) — Nemotron 3.5 Lightning
    :8108 routes the request to one or more subagent tools. Each subagent
    runs its own inner `run_tool_loop` (up to 4 iterations) against the
    scene, XR-tracking, and vision services.

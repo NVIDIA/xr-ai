@@ -20,6 +20,7 @@ _REQUIRED_SERVICES = {
     "llama-nemotron-llm",
     "magpie-tts",
     "nemotron-omni-llm",
+    "nemotron35-lightning-llm",
     "nemotron3-nano-llm",
     "openxr-service",
     "pocket-tts",
@@ -40,6 +41,11 @@ _MODEL_SERVICES = {
     "nemotron-omni-llm": (
         "nemotron-omni-llm-server",
         "nemotron_omni_llm_server",
+        8108,
+    ),
+    "nemotron35-lightning-llm": (
+        "nemotron35-lightning-llm-server",
+        "nemotron35_lightning_llm_server",
         8108,
     ),
     "nemotron3-nano-llm": (
@@ -443,8 +449,13 @@ def test_render_demo_reuses_every_model_process() -> None:
     assert {
         process.name: process.launch_mode
         for process in sample._build_processes()
-        if process.name in {"stt", "omni", "vlm", "tts"}
-    } == {"stt": "reuse", "omni": "reuse", "vlm": "reuse", "tts": "reuse"}
+        if process.name in {"stt", "lightning", "vlm", "tts"}
+    } == {
+        "stt": "reuse",
+        "lightning": "reuse",
+        "vlm": "reuse",
+        "tts": "reuse",
+    }
 
 
 def test_sample_hub_projects_resolve() -> None:

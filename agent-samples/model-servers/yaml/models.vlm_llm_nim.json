@@ -28,8 +28,8 @@
     },
     "llm": {
       "adapter": {
-        "preset": "nemotron_omni",
-        "model_name": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+        "preset": "nemotron35_lightning",
+        "model_name": "nvidia/nemotron-3.5-lightning-30b-a3b",
         "reasoning_field": "reasoning"
       },
       "endpoint": {

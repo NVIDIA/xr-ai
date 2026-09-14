@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Nemotron 3.5 Lightning — dual 48 GB Ada configuration. Cosmos remains on
+# GPU 0; Lightning uses the checkpoint's W4A16 path on GPU 1 beside STT.
+model: nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4
+
+host: "0.0.0.0"
+port: 8108
+served_model_name: llm
+hf_token: ""
+model_cache: ../../../../models
+
+cuda_visible_devices: "1"
+max_num_seqs: 8
+tensor_parallel_size: 1
+max_model_len: 32768
+gpu_memory_utilization: 0.78
+enable_prefix_caching: true
+async_scheduling: true
+enforce_eager: false
+
+kv_cache_dtype: fp8
+quantization: modelopt_fp4
+mamba_backend: flashinfer
+mamba_cache_mode: align
+mamba_ssu_algorithm: simple
+moe_backend: humming
+linear_backend: humming
+
+vllm_backend: docker
+vllm_image: nvcr.io/nvidia/vllm:26.08-py3

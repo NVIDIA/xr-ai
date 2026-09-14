@@ -97,8 +97,8 @@ utilization or KV cache.
 
 ### DGX Spark — vLLM reports insufficient KV cache only on a cold start
 
-**Symptom:** Nemotron Omni or the Cosmos VLM reports a negative or smaller
-KV-cache capacity on its first start than on a later start with the same
+**Symptom:** Nemotron 3.5 Lightning or the Cosmos VLM reports a negative or
+smaller KV-cache capacity on its first start than on a later start with the same
 configuration. The first start can reject the configured context even while
 Linux reports substantial available memory.
 
@@ -112,12 +112,12 @@ The model-server launcher starts these services sequentially, so concurrent
 startup is not required to trigger the page-cache accounting error.
 
 **Fix:** the bundled `spark` profile sets `kv_cache_memory_bytes` explicitly
-for both Nemotron Omni and Cosmos instead of using the fractional profiler to
-size their caches. Keep the fixed allocations when copying or modifying the
-profile. The values are 2 GiB for Omni's 32,768-token hybrid Mamba/attention
-cache and 1.5 GiB for Cosmos's 8,192-token cache. The Cosmos budget supports
-one maximum-length request while `max_num_seqs: 4` retains concurrency for
-shorter requests. Concurrent requests near the context limit can queue,
+for both Nemotron 3.5 Lightning and Cosmos instead of using the fractional
+profiler to size their caches. Keep the fixed allocations when copying or
+modifying the profile. The values are 2 GiB for Lightning's 32,768-token hybrid
+Mamba and attention cache and 1.5 GiB for Cosmos's 8,192-token cache. The
+Cosmos budget supports one maximum-length request while `max_num_seqs: 4`
+retains concurrency for shorter requests. Concurrent requests near the context limit can queue,
 preempt, or recompute when their aggregate token demand exceeds the fixed
 cache. Increase the fixed cache when a custom Spark deployment needs parallel
 full-context requests.
@@ -271,7 +271,7 @@ contains only wrapper messages — nothing from inside the container.
 **Health probe** — confirm vLLM never reached the `/health` endpoint:
 
 ```bash
-curl -fsS http://127.0.0.1:8108/health   # nemotron_omni (default LLM)
+curl -fsS http://127.0.0.1:8108/health   # nemotron35_lightning (default LLM)
 curl -fsS http://127.0.0.1:8100/health   # vlm_server (default Cosmos VLM)
 curl -fsS http://127.0.0.1:8107/health   # superseded nemotron3_nano
 ```
@@ -477,7 +477,7 @@ but the server then sits silent for several minutes before becoming healthy.
 **Cause:** CUDA graph capture and, for FP4 MoE models, FlashInfer autotuning
 happen on first run after weight load. They are silent.
 
-**Fix:** the default Omni profiles set `enforce_eager: false` to enable CUDA
+**Fix:** the default Lightning profiles set `enforce_eager: false` to enable CUDA
 graph capture and maximize steady-state throughput, so this startup delay is
 expected. For development, set `enforce_eager: true` in the active model YAML
 to skip CUDA graph capture. Eager mode starts faster but can reduce per-token
@@ -497,8 +497,8 @@ GPU-visible memory. The complete original error remains in the reported log file
 
 ### `xr_render_demo` exits but VRAM is still pinned
 
-**By design.** The vLLM-backed servers (`nemotron_omni_llm_server`,
-`vlm_server`, and `nemotron3_nano_llm_server`) survive stack
+**By design.** The vLLM-backed servers (`nemotron35_lightning_llm_server`,
+`nemotron_omni_llm_server`, `vlm_server`, and `nemotron3_nano_llm_server`) survive stack
 restarts so model weights stay loaded across worker crashes and debug
 restarts. Refer to {doc}`/components/ai-services` → *vLLM model
 persistence*.

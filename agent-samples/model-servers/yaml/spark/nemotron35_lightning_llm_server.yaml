@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Nemotron 3.5 Lightning — DGX Spark (GB10). The NVFP4 checkpoint runs through
+# W4A16 Marlin kernels. Reserve a fixed 2 GiB KV cache so checkpoint loading
+# does not make vLLM's free-memory-based cache sizing unstable on unified memory.
+model: nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4
+
+host: "0.0.0.0"
+port: 8108
+served_model_name: llm
+hf_token: ""
+model_cache: ../../../../models
+
+max_num_seqs: 8
+tensor_parallel_size: 1
+max_model_len: 32768
+gpu_memory_utilization: 0.27
+kv_cache_memory_bytes: 2147483648
+enable_prefix_caching: true
+enforce_eager: false
+
+kv_cache_dtype: fp8
+mamba_backend: flashinfer
+mamba_cache_mode: align
+moe_backend: marlin
+
+vllm_backend: docker
+vllm_image: nvcr.io/nvidia/vllm:26.08-py3
+spark_uma: true

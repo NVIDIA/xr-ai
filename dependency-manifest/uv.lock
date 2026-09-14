@@ -2816,6 +2816,29 @@ requires-dist = [
 ]
 
 [[package]]
+name = "nemotron35-lightning-llm-server"
+version = "0.1.0"
+source = { editable = "../services/nemotron35-lightning-llm" }
+dependencies = [
+    { name = "hf-xet" },
+    { name = "huggingface-hub" },
+    { name = "pyyaml" },
+    { name = "vllm" },
+    { name = "xr-ai-logging" },
+    { name = "xr-ai-vllm" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
+    { name = "huggingface-hub", specifier = ">=0.32.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "vllm", specifier = ">=0.27.1" },
+    { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
+    { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
+]
+
+[[package]]
 name = "networkx"
 version = "3.6.1"
 source = { registry = "https://pypi.org/simple" }
@@ -6301,6 +6324,7 @@ vllm = [
     { name = "llama-nemotron-llm-server" },
     { name = "nemotron-omni-llm-server" },
     { name = "nemotron3-nano-llm-server" },
+    { name = "nemotron35-lightning-llm-server" },
     { name = "vlm-server" },
 ]
 
@@ -6316,6 +6340,7 @@ requires-dist = [
     { name = "model-servers", marker = "extra == 'repository'", editable = "../agent-samples/model-servers" },
     { name = "nemotron-omni-llm-server", marker = "extra == 'vllm'", editable = "../services/nemotron-omni-llm" },
     { name = "nemotron3-nano-llm-server", marker = "extra == 'vllm'", editable = "../services/nemotron3-nano-llm" },
+    { name = "nemotron35-lightning-llm-server", marker = "extra == 'vllm'", editable = "../services/nemotron35-lightning-llm" },
     { name = "nim-server", marker = "extra == 'repository'", editable = "../services/nim-server" },
     { name = "pocket-tts-server", marker = "extra == 'repository'", editable = "../services/pocket-tts" },
     { name = "simple-vlm-example", marker = "extra == 'repository'", editable = "../agent-samples/simple-vlm-example" },

@@ -14,8 +14,8 @@ The workflow keeps state transitions deterministic: the VLM describes the
 current view, the observation LLM judges whether that description satisfies the
 current step, and guarded commits count any required confirmations. Only an
 explicit user command advances the procedure. The sample launches its
-application services and reuses STT, Pocket TTS, Nemotron-3 Nano Omni, and
-embedding endpoints from the shared model stack.
+application services and reuses STT, Pocket TTS, Nemotron 3.5 Lightning,
+Cosmos3 Nano Reasoner, and embedding endpoints from the shared model stack.
 
 ## Configure
 

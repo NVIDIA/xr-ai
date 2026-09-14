@@ -10,7 +10,7 @@ controlled background observation. A separate QR and ArUco monitor associates
 camera readings with instruments, reports meaningful changes, and records
 durable participant-scoped output.
 
-Nemotron-3 Nano Omni handles foreground tool routing, while Cosmos3 Nano
+Nemotron 3.5 Lightning handles foreground tool routing, while Cosmos3 Nano
 Reasoner handles image inference. The sample launches its hub, worker, and
 application-specific processes, but reuses STT, TTS, LLM, and VLM endpoints
 from the shared model stack.
