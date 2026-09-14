@@ -38,6 +38,10 @@ VLLM_PROJECTS = frozenset(
 # Lock output varies across uv releases, so the lock is always produced by this
 # exact version, whatever `uv` is on PATH.
 UV_VERSION = "0.10.7"
+# Resolution differs by interpreter for index-routed packages even though the
+# resulting lock covers the full declared Python range. Pin the lowest supported
+# interpreter so local and CI regeneration are byte-for-byte identical.
+LOCK_PYTHON = "3.11"
 _PYTHON_MINORS = range(8, 20)
 REGENERATE = "  uv run --script .github/scripts/generate_dependency_manifest.py"
 
@@ -130,7 +134,18 @@ def lock_manifest(root: Path) -> None:
     """Resolve the manifest lock from scratch with the pinned uv under the root uv.toml cutoff."""
 
     subprocess.run(
-        ["uvx", f"uv@{UV_VERSION}", "--config-file", "uv.toml", "lock", "--upgrade", "--project", MANIFEST_DIRECTORY],
+        [
+            "uvx",
+            f"uv@{UV_VERSION}",
+            "--config-file",
+            "uv.toml",
+            "lock",
+            "--upgrade",
+            "--python",
+            LOCK_PYTHON,
+            "--project",
+            MANIFEST_DIRECTORY,
+        ],
         cwd=root,
         check=True,
     )

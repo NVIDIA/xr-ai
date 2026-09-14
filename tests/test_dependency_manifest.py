@@ -215,6 +215,34 @@ def test_manifest_requires_projects() -> None:
         dependency_manifest.manifest_toml(())
 
 
+def test_manifest_lock_pins_uv_and_python(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[list[str], Path]] = []
+    monkeypatch.setattr(
+        dependency_manifest.subprocess,
+        "run",
+        lambda args, *, cwd, check: calls.append((args, cwd)),
+    )
+
+    dependency_manifest.lock_manifest(tmp_path)
+
+    assert calls == [
+        ([
+            "uvx",
+            f"uv@{dependency_manifest.UV_VERSION}",
+            "--config-file",
+            "uv.toml",
+            "lock",
+            "--upgrade",
+            "--python",
+            dependency_manifest.LOCK_PYTHON,
+            "--project",
+            dependency_manifest.MANIFEST_DIRECTORY,
+        ], tmp_path),
+    ]
+
+
 def test_discovery_tolerates_stale_manifest_sources(tmp_path: Path) -> None:
     _write_project(tmp_path, "services/moved", name="library")
     _write_project(
