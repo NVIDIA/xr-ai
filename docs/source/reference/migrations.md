@@ -5,6 +5,23 @@
 
 # Release migration
 
+## Workflow recorder controls
+
+The workflow-recorder sample no longer starts recording on connection. Say
+`start recording` to start a packet and `finish recording` to finalize it. The
+agent says "Recording started." and then stays silent during recording. Say
+`start recording` again to record another packet without disconnecting.
+
+Command help is spoken once on connection. After each finished recording, the
+agent says "Recording ended." followed by the same command help.
+Outside recording, an active guide answers questions using its step-specific
+instructions and tools. Without an active guide, unsupported queries receive
+the original guide-command hint; there is no general chat or idle visual Q&A.
+Guide responses and monitoring pause during
+recording and resume afterward. Disconnecting still finalizes an open packet.
+Frame capture, transcripts, captions, packet format, manual guide generation,
+and guide-step execution are otherwise unchanged.
+
 ## DeviceIOHub rename
 
 Update `services/xr-media-hub/` to `services/device-io-hub/`, the
