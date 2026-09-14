@@ -50,4 +50,11 @@ public:
         : StreamError("Connect() before starting the camera.") {}
 };
 
+/// Thrown when a custom backend does not implement file transfer.
+class FileTransferUnsupportedError : public StreamError {
+public:
+    FileTransferUnsupportedError()
+        : StreamError("The selected streaming backend does not support file transfer.") {}
+};
+
 } // namespace streamkit

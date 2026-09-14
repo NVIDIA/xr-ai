@@ -41,6 +41,7 @@ mutates the XR scene (move, recolor, add, remove, etc.).
 
 The CloudXR EULA is accepted via cloudxr_runtime.yaml (see ``accept_eula``).
 """
+import json
 import os
 import platform
 import re
@@ -200,8 +201,8 @@ def _ensure_web_vendor() -> None:
 
     Runs client-samples/web-xr-build/build.sh, which downloads the CloudXR SDK
     from NGC and produces vendor/cloudxr-sdk.esm.mjs and livekit-client.esm.mjs.
-    Requires npm on PATH. Skipped when both outputs carry the version selected
-    by web-xr-build/.sdk-version.
+    Requires npm on PATH. Skipped when both outputs carry the CloudXR and
+    LiveKit dependency versions selected by web-xr-build.
     """
     vendor_dir   = (_BASE / "../../client-samples/web-xr/vendor").resolve()
     cloudxr_out  = vendor_dir / "cloudxr-sdk.esm.mjs"
@@ -215,22 +216,36 @@ def _ensure_web_vendor() -> None:
         return
 
     sdk_version_path = build_sh.parent / ".sdk-version"
+    package_json_path = build_sh.parent / "package.json"
     version_marker = vendor_dir / ".cloudxr-sdk-version"
+    livekit_version_marker = vendor_dir / ".livekit-client-version"
     try:
         sdk_version = sdk_version_path.read_text(encoding="utf-8").strip()
     except OSError as exc:
         sys.exit(f"\n  [setup] failed to read {sdk_version_path}: {exc}\n")
     if not sdk_version:
         sys.exit(f"\n  [setup] {sdk_version_path} is empty.\n")
+    try:
+        package = json.loads(package_json_path.read_text(encoding="utf-8"))
+        livekit_version = package["dependencies"]["livekit-client"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        sys.exit(f"\n  [setup] failed to read {package_json_path}: {exc}\n")
 
     try:
         built_version = version_marker.read_text(encoding="utf-8").strip()
     except OSError:
         built_version = ""
+    try:
+        built_livekit_version = livekit_version_marker.read_text(
+            encoding="utf-8"
+        ).strip()
+    except OSError:
+        built_livekit_version = ""
     if (
         cloudxr_out.exists()
         and livekit_out.exists()
         and built_version == sdk_version
+        and built_livekit_version == livekit_version
     ):
         return
 
@@ -243,10 +258,13 @@ def _ensure_web_vendor() -> None:
         )
 
     logger.info(
-        "Web vendor bundle missing or stale (have={!r}, want={!r}) — "
+        "Web vendor bundle missing or stale "
+        "(CloudXR have={!r}, want={!r}; LiveKit have={!r}, want={!r}) — "
         "running build.sh: {}",
         built_version or None,
         sdk_version,
+        built_livekit_version or None,
+        livekit_version,
         build_sh,
     )
     result = subprocess.run([str(build_sh)], cwd=str(build_sh.parent))
@@ -266,10 +284,16 @@ def _ensure_web_vendor() -> None:
         built_version = version_marker.read_text(encoding="utf-8").strip()
     except OSError:
         built_version = ""
-    if built_version != sdk_version:
+    try:
+        built_livekit_version = livekit_version_marker.read_text(
+            encoding="utf-8"
+        ).strip()
+    except OSError:
+        built_livekit_version = ""
+    if built_version != sdk_version or built_livekit_version != livekit_version:
         sys.exit(
-            "\n  [setup] build.sh completed without recording CloudXR SDK "
-            f"version {sdk_version!r} in {version_marker}.\n"
+            "\n  [setup] build.sh completed without recording the requested "
+            "vendor versions.\n"
         )
     logger.info("Web vendor bundle ready")
 

@@ -14,6 +14,23 @@ import CoreMedia
 import Foundation
 import LiveKit
 
+private actor FileCloseRace {
+    private var completed = false
+    private var waiter: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        if completed { return }
+        await withCheckedContinuation { waiter = $0 }
+    }
+
+    func finish() {
+        guard !completed else { return }
+        completed = true
+        waiter?.resume()
+        waiter = nil
+    }
+}
+
 // MARK: - LiveKitBackend
 
 /// ``StreamingBackend`` implementation that uses LiveKit WebRTC for transport.
@@ -34,6 +51,14 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     /// Reserved LiveKit topic for internal agent status messages.
     /// Matches the web client's `LiveKitBackend.#STATUS_TOPIC`.
     private static let agentStatusTopic = "_agent.status"
+    private static let fileStreamTopic = "_streamkit.file"
+    private static let fileTopicAttribute = "_streamkit.topic"
+    private static let fileReservedPrefix = "_streamkit."
+    private static let fileMaxFieldBytes = 255
+    private static let fileMaxAttributeKeyBytes = 128
+    private static let fileMaxAttributeValueBytes = 1_024
+    private static let fileMaxAttributes = 32
+    private static let fileMaxAttributesBytes = 8 * 1_024
 
     // MARK: Private state
 
@@ -42,6 +67,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     private var sessionConfig: SessionConfig = .default
     private var networkMetricsTask: Task<Void, Never>?
     private var statisticsTracks: [ObjectIdentifier: Track] = [:]
+    private var connectionGeneration: UInt64 = 0
 
     /// Publication for the device camera track (iOS) or ARKit track (visionOS).
     /// Nil on simulator — all video goes through the buffer track path.
@@ -358,6 +384,24 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         try await room.localParticipant.publish(data: data, options: options)
     }
 
+    public func sendBytes(_ data: Data, options: FileSendOptions) async throws -> FileTransferInfo {
+        let effective = try makeFileOptions(options, size: data.count, defaultName: nil)
+        return try await sendFileStream(data: data, fileURL: nil, effective: effective)
+    }
+
+    public func sendFile(_ fileURL: URL, options: FileSendOptions) async throws -> FileTransferInfo {
+        let values = try fileURL.resourceValues(forKeys: [.fileSizeKey, .nameKey])
+        guard let size = values.fileSize else {
+            throw StreamError.invalidFileMetadata("file size is unavailable")
+        }
+        let effective = try makeFileOptions(
+            options,
+            size: size,
+            defaultName: values.name ?? fileURL.lastPathComponent
+        )
+        return try await sendFileStream(data: nil, fileURL: fileURL, effective: effective)
+    }
+
     // MARK: - Private helpers
 
     /// Roll the recording engine back to its idle state: drop prepared mode and
@@ -370,7 +414,159 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         )
     }
 
+    private struct EffectiveFileOptions {
+        let topic: String
+        let name: String
+        let mimeType: String
+        let size: Int
+        let liveKit: StreamByteOptions
+    }
+
+    private func makeFileOptions(
+        _ options: FileSendOptions,
+        size: Int,
+        defaultName: String?
+    ) throws -> EffectiveFileOptions {
+        let topic = try Self.validateFileField(
+            options.topic,
+            name: "topic",
+            maxBytes: Self.fileMaxFieldBytes
+        )
+        guard !topic.hasPrefix(Self.fileReservedPrefix) else {
+            throw StreamError.invalidFileMetadata("topic uses the reserved _streamkit. prefix")
+        }
+        let name = try Self.validateFileField(
+            options.name ?? defaultName,
+            name: "name",
+            maxBytes: Self.fileMaxFieldBytes
+        )
+        let mimeType = try Self.validateFileField(
+            options.mimeType ?? "application/octet-stream",
+            name: "MIME type",
+            maxBytes: Self.fileMaxFieldBytes
+        )
+        var attributes = options.attributes
+        guard attributes.count <= Self.fileMaxAttributes else {
+            throw StreamError.invalidFileMetadata("attributes exceed 32 application entries")
+        }
+        var attributeBytes = 0
+        for (key, value) in attributes {
+            _ = try Self.validateFileField(
+                key,
+                name: "attribute key",
+                maxBytes: Self.fileMaxAttributeKeyBytes
+            )
+            _ = try Self.validateFileField(
+                value,
+                name: "attribute value",
+                maxBytes: Self.fileMaxAttributeValueBytes,
+                allowsEmpty: true
+            )
+            guard !key.hasPrefix(Self.fileReservedPrefix) else {
+                throw StreamError.invalidFileMetadata("attribute \(key) is reserved")
+            }
+            attributeBytes += key.utf8.count + value.utf8.count
+        }
+        guard attributeBytes <= Self.fileMaxAttributesBytes else {
+            throw StreamError.invalidFileMetadata("attributes exceed 8192 UTF-8 bytes")
+        }
+        attributes[Self.fileTopicAttribute] = topic
+        let destinations = config.hubIdentity.map { [Participant.Identity(from: $0)] } ?? []
+        return EffectiveFileOptions(
+            topic: topic,
+            name: name,
+            mimeType: mimeType,
+            size: size,
+            liveKit: StreamByteOptions(
+                topic: Self.fileStreamTopic,
+                attributes: attributes,
+                destinationIdentities: destinations,
+                mimeType: mimeType,
+                name: name,
+                totalSize: size
+            )
+        )
+    }
+
+    private func sendFileStream(
+        data: Data?,
+        fileURL: URL?,
+        effective: EffectiveFileOptions
+    ) async throws -> FileTransferInfo {
+        guard let room, room.connectionState == .connected else {
+            throw StreamError.notConnected
+        }
+        let generation = connectionGeneration
+        let writer = try await room.localParticipant.streamBytes(options: effective.liveKit)
+        do {
+            if let data {
+                try await writer.write(data)
+            } else if let fileURL {
+                let handle = try FileHandle(forReadingFrom: fileURL)
+                defer { try? handle.close() }
+                while let chunk = try handle.read(upToCount: 64 * 1024), !chunk.isEmpty {
+                    try Task.checkCancellation()
+                    try await writer.write(chunk)
+                }
+            }
+            try Task.checkCancellation()
+            try await writer.close()
+            guard await writer.isOpen == false,
+                  generation == connectionGeneration,
+                  self.room === room,
+                  room.connectionState == .connected else {
+                throw StreamError.fileTransferIncomplete
+            }
+        } catch {
+            await closeFileWriterAfterFailure(writer)
+            throw error
+        }
+        return FileTransferInfo(
+            id: writer.info.id,
+            topic: effective.topic,
+            name: effective.name,
+            mimeType: effective.mimeType,
+            size: effective.size
+        )
+    }
+
+    private func closeFileWriterAfterFailure(_ writer: ByteStreamWriter) async {
+        let race = FileCloseRace()
+        let closeTask = Task {
+            _ = try? await writer.close(reason: "StreamKit send failed")
+            await race.finish()
+        }
+        let timeoutTask = Task {
+            _ = try? await Task.sleep(nanoseconds: 2_000_000_000)
+            await race.finish()
+        }
+        await race.wait()
+        closeTask.cancel()
+        timeoutTask.cancel()
+    }
+
+    private static func validateFileField(
+        _ value: String?,
+        name: String,
+        maxBytes: Int,
+        allowsEmpty: Bool = false
+    ) throws -> String {
+        guard let value, allowsEmpty || !value.isEmpty else {
+            throw StreamError.invalidFileMetadata("\(name) must be nonempty")
+        }
+        guard !value.contains("\0") else {
+            throw StreamError.invalidFileMetadata("\(name) cannot contain NUL")
+        }
+        guard value.utf8.count <= maxBytes else {
+            throw StreamError.invalidFileMetadata(
+                "\(name) exceeds \(maxBytes) UTF-8 bytes"
+            )
+        }
+        return value
+    }
+
     private func tearDown() async {
+        connectionGeneration &+= 1
         let metricsTask = networkMetricsTask
         metricsTask?.cancel()
         networkMetricsTask = nil

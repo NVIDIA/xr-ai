@@ -61,6 +61,81 @@ function mapQuality(lkQuality) {
   }
 }
 
+const FILE_STREAM_TOPIC = '_streamkit.file';
+const FILE_TOPIC_ATTRIBUTE = '_streamkit.topic';
+const FILE_RESERVED_PREFIX = '_streamkit.';
+const FILE_MAX_FIELD_BYTES = 255;
+const FILE_MAX_ATTRIBUTE_KEY_BYTES = 128;
+const FILE_MAX_ATTRIBUTE_VALUE_BYTES = 1024;
+const FILE_MAX_ATTRIBUTES = 32;
+const FILE_MAX_ATTRIBUTES_BYTES = 8 * 1024;
+const UTF8_ENCODER = new TextEncoder();
+
+function validateFileField(value, name, maxBytes, { required = true } = {}) {
+  if (typeof value !== 'string' || (required && value.length === 0)) {
+    throw new TypeError(`${name} must be a ${required ? 'nonempty ' : ''}string`);
+  }
+  if (value.includes('\0')) throw new TypeError(`${name} cannot contain NUL`);
+  if (UTF8_ENCODER.encode(value).byteLength > maxBytes) {
+    throw new TypeError(`${name} exceeds ${maxBytes} UTF-8 bytes`);
+  }
+  return value;
+}
+
+function fileStreamOptions(options, size, defaultName, defaultMimeType, hubIdentity) {
+  if (!options || typeof options !== 'object') {
+    throw new TypeError('file options are required');
+  }
+  const topic = validateFileField(options.topic, 'file topic', FILE_MAX_FIELD_BYTES);
+  if (topic.startsWith(FILE_RESERVED_PREFIX)) {
+    throw new TypeError(`file topic cannot begin with '${FILE_RESERVED_PREFIX}'`);
+  }
+  const name = validateFileField(
+    options.name ?? defaultName,
+    'file name',
+    FILE_MAX_FIELD_BYTES,
+  );
+  const mimeType = validateFileField(
+    options.mimeType || defaultMimeType || 'application/octet-stream',
+    'file MIME type',
+    FILE_MAX_FIELD_BYTES,
+  );
+  const attributes = {};
+  const applicationAttributes = Object.entries(options.attributes ?? {});
+  if (applicationAttributes.length > FILE_MAX_ATTRIBUTES) {
+    throw new TypeError('file attributes exceed 32 application entries');
+  }
+  let attributeBytes = 0;
+  for (const [key, value] of applicationAttributes) {
+    validateFileField(key, 'file attribute key', FILE_MAX_ATTRIBUTE_KEY_BYTES);
+    validateFileField(
+      value,
+      `file attribute '${key}'`,
+      FILE_MAX_ATTRIBUTE_VALUE_BYTES,
+      { required: false },
+    );
+    if (key.startsWith(FILE_RESERVED_PREFIX)) {
+      throw new TypeError(`file attribute '${key}' is reserved`);
+    }
+    attributeBytes += UTF8_ENCODER.encode(key).byteLength;
+    attributeBytes += UTF8_ENCODER.encode(value).byteLength;
+    attributes[key] = value;
+  }
+  if (attributeBytes > FILE_MAX_ATTRIBUTES_BYTES) {
+    throw new TypeError('file attributes exceed 8192 UTF-8 bytes');
+  }
+  attributes[FILE_TOPIC_ATTRIBUTE] = topic;
+  const liveKitOptions = {
+    topic: FILE_STREAM_TOPIC,
+    name,
+    mimeType,
+    attributes,
+    totalSize: size,
+  };
+  if (hubIdentity) liveKitOptions.destinationIdentities = [hubIdentity];
+  return { topic, name, mimeType, liveKitOptions };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -454,6 +529,64 @@ export class LiveKitBackend {
       opts.destinationIdentities = [this.#config.hubIdentity];
     }
     await room.localParticipant.publishData(bytes, opts);
+  }
+
+  async sendBytes(data, options) {
+    const room = this.#room;
+    if (!room || room.state !== 'connected') throw StreamError.notConnected();
+    const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+    const transfer = fileStreamOptions(
+      options,
+      bytes.byteLength,
+      undefined,
+      'application/octet-stream',
+      this.#config.hubIdentity,
+    );
+    const info = await room.localParticipant.sendBytes(bytes, transfer.liveKitOptions);
+    return {
+      id: info.id,
+      topic: transfer.topic,
+      name: transfer.name,
+      mimeType: transfer.mimeType,
+      size: bytes.byteLength,
+    };
+  }
+
+  async sendFile(file, options) {
+    const room = this.#room;
+    if (!room || room.state !== 'connected') throw StreamError.notConnected();
+    if (!(file instanceof File)) throw new TypeError('file must be a File');
+    const transfer = fileStreamOptions(
+      options,
+      file.size,
+      file.name,
+      file.type,
+      this.#config.hubIdentity,
+    );
+    const writer = await room.localParticipant.streamBytes(transfer.liveKitOptions);
+    const reader = file.stream().getReader();
+    let closed = false;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await writer.write(value);
+      }
+      await writer.close();
+      closed = true;
+    } finally {
+      reader.releaseLock();
+      if (!closed) {
+        try { await writer.close(); } catch { /* Preserve the original read or write error. */ }
+      }
+    }
+    return {
+      id: writer.info.id,
+      topic: transfer.topic,
+      name: transfer.name,
+      mimeType: transfer.mimeType,
+      size: file.size,
+    };
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────

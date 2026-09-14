@@ -220,7 +220,11 @@ def test_xr_render_repairs_an_incomplete_web_xr_vendor_bundle(
     build_script.parent.mkdir(parents=True)
     build_script.write_text("#!/bin/sh\n")
     (build_script.parent / ".sdk-version").write_text("6.2.0\n")
+    (build_script.parent / "package.json").write_text(
+        '{"dependencies":{"livekit-client":"^2.21.0"}}\n'
+    )
     version_marker = vendor_dir / ".cloudxr-sdk-version"
+    livekit_version_marker = vendor_dir / ".livekit-client-version"
     calls: list[list[str]] = []
     produce_livekit = True
 
@@ -229,6 +233,7 @@ def test_xr_render_repairs_an_incomplete_web_xr_vendor_bundle(
         if produce_livekit:
             (vendor_dir / "livekit-client.esm.mjs").write_text("livekit")
             version_marker.write_text("6.2.0\n")
+            livekit_version_marker.write_text("^2.21.0\n")
         return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(sample, "_BASE", sample_root)
@@ -271,11 +276,17 @@ def test_xr_render_rebuilds_stale_web_xr_vendor_bundle(
     build_script.parent.mkdir(parents=True)
     build_script.write_text("#!/bin/sh\n")
     (build_script.parent / ".sdk-version").write_text("6.2.0\n")
+    (build_script.parent / "package.json").write_text(
+        '{"dependencies":{"livekit-client":"^2.21.0"}}\n'
+    )
+    livekit_version_marker = vendor_dir / ".livekit-client-version"
+    livekit_version_marker.write_text("^2.20.0\n")
     calls: list[list[str]] = []
 
     def fake_run(command: list[str], *, cwd: str) -> subprocess.CompletedProcess:
         calls.append(command)
         version_marker.write_text("6.2.0\n")
+        livekit_version_marker.write_text("^2.21.0\n")
         return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(sample, "_BASE", sample_root)
@@ -305,6 +316,9 @@ def test_web_xr_build_replaces_stale_sdk_tarball(tmp_path: Path) -> None:
     )
     build_script.chmod(0o755)
     (build_dir / ".sdk-version").write_text("6.2.0\n")
+    (build_dir / "package.json").write_text(
+        '{"dependencies":{"livekit-client":"^2.21.0"}}\n'
+    )
     (build_dir / "nvidia-cloudxr-6.2.0.tgz").write_bytes(b"cloudxr-6.2")
     (build_dir / "sdk.tgz").write_bytes(b"cloudxr-6.1")
     stale_package = build_dir / "node_modules" / "@nvidia" / "cloudxr"
@@ -335,6 +349,7 @@ def test_web_xr_build_replaces_stale_sdk_tarball(tmp_path: Path) -> None:
     assert (build_dir / "sdk.tgz").read_bytes() == b"cloudxr-6.2"
     assert not (build_dir / "package-lock.json").exists()
     assert (vendor_dir / ".cloudxr-sdk-version").read_text().strip() == "6.2.0"
+    assert (vendor_dir / ".livekit-client-version").read_text().strip() == "^2.21.0"
     assert (vendor_dir / "cloudxr-sdk.esm.mjs").read_text() == "cloudxr-6.2"
 
 

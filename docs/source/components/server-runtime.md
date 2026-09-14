@@ -121,11 +121,17 @@ three endpoints:
 | `HubEndpoint` | server: dispatch + fan-out | DeviceIOHub process |
 | `ProcessorEndpoint` | subscriber + publisher | agents, analytics, downstream processors |
 
-The hub binds two sockets (defaults shown):
+The hub binds two real-time sockets (defaults shown):
 
 - `PULL` on `ipc:///tmp/xr_hub_in` — connectors `PUSH` inbound media here.
 - `PUB` on `ipc:///tmp/xr_hub_pub` — consumers `SUB` here for the fanned-out
   stream.
+
+Completed files use a separate bounded pair in each direction: connector `PUSH` to hub `PULL` on `ipc:///tmp/xr_hub_file_in`, then hub `PUB` to processor `SUB` on `ipc:///tmp/xr_hub_file_pub`. Each processor has its own bounded subscriber queue, so a slow processor drops its own excess files without blocking healthy processors. The processor receives subscription probes independently while a bounded serial worker runs file callbacks. Bulk file serialization runs outside the real-time event loop.
+
+The file path is controlled by `incoming_file_max_bytes` (16 MiB), `incoming_file_max_concurrent` (8 globally), `incoming_file_max_concurrent_per_participant` (2), `incoming_file_idle_timeout_s` (10 seconds), `incoming_file_total_timeout_s` (60 seconds), and `incoming_file_ipc_hwm` (2 complete messages per file socket). Transfers that exceed admission, size, time, or queue limits are dropped without producing an agent `FileMessage`.
+
+Participant lifecycle events and completed files carry the same opaque connection identifier. The hub and processor discard a file if that connection has departed or the identity has since reconnected, preventing queued data from an old session from entering new participant state.
 
 ```
 connector_A ──PUSH──┐
