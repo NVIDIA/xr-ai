@@ -4,11 +4,19 @@
 """Read already-routed return traffic from the media-hub publish socket."""
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 
 import zmq
 import zmq.asyncio
-from xr_ai_hub import AudioChunk, DataMessage, MsgType, ReturnAudioFlush, decode
+from xr_ai_hub import (
+    AudioChunk,
+    DataMessage,
+    MsgType,
+    ParticipantEvent,
+    ReturnAudioFlush,
+    decode,
+)
 from xr_ai_hub._capture import CAPTURE_PUBLISH_PREFIX
 
 AudioCallback = Callable[[AudioChunk], Awaitable[None]]
@@ -27,11 +35,13 @@ class ReturnTrafficSubscriber:
             b"return_data.",
             b"return_audio_flush.",
             CAPTURE_PUBLISH_PREFIX,
+            b"participant",
         ):
             self._socket.setsockopt(zmq.SUBSCRIBE, prefix)
         self._audio_callbacks: list[AudioCallback] = []
         self._data_callbacks: list[DataCallback] = []
         self._flush_callbacks: list[FlushCallback] = []
+        self._departures: dict[tuple[str, int, str], asyncio.Event] = {}
 
     def on_audio(self, callback: AudioCallback) -> None:
         self._audio_callbacks.append(callback)
@@ -55,6 +65,19 @@ class ReturnTrafficSubscriber:
             elif type_id == MsgType.RETURN_AUDIO_FLUSH:
                 for callback in self._flush_callbacks:
                     await callback(message)
+            elif type_id == MsgType.PARTICIPANT_EVENT and not message.joined:
+                self._departure_event(message).set()
+
+    async def wait_for_departure(self, event: ParticipantEvent) -> None:
+        """Wait until return traffic published before *event* has been handled."""
+        key = (event.participant_id, event.pts_us, event.connector_id)
+        departure = self._departure_event(event)
+        await departure.wait()
+        self._departures.pop(key, None)
+
+    def _departure_event(self, event: ParticipantEvent) -> asyncio.Event:
+        key = (event.participant_id, event.pts_us, event.connector_id)
+        return self._departures.setdefault(key, asyncio.Event())
 
     def close(self) -> None:
         self._socket.close(linger=0)

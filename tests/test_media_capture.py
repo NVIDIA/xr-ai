@@ -8,6 +8,7 @@ import json
 import os
 import stat
 import sys
+import threading
 import types
 import wave
 from concurrent.futures import ThreadPoolExecutor
@@ -17,6 +18,8 @@ import numpy as np
 import pytest
 from device_io_hub.capture._compositor import compose_caption
 from device_io_hub.capture._recorder import (
+    _CAPTURE_MARKER_CONTENT,
+    _CAPTURE_MARKER_NAME,
     SessionRecorder,
     _safe_name,
     _StereoWaveWriter,
@@ -27,7 +30,15 @@ from device_io_hub.capture._service import (
     _invalid_audio_reason,
 )
 from device_io_hub.capture.config import CaptureConfig, load_capture_config
-from xr_ai_hub import AudioChunk, DataMessage, FrameData, FrameSignal, PixelFormat
+from xr_ai_hub import (
+    AudioChunk,
+    DataMessage,
+    FrameData,
+    FrameSignal,
+    MsgType,
+    ParticipantEvent,
+    PixelFormat,
+)
 from xr_ai_hub._capture import CAPTURE_STT_TOPIC, CAPTURE_TTS_TOPIC
 
 
@@ -320,9 +331,11 @@ def test_retention_counts_incomplete_capture_directories(
     monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
     incomplete = tmp_path / "1_incomplete"
     incomplete.mkdir()
+    (incomplete / _CAPTURE_MARKER_NAME).write_text(_CAPTURE_MARKER_CONTENT)
     (incomplete / "events.jsonl").write_bytes(b"x" * 100)
     complete = tmp_path / "2_complete"
     complete.mkdir()
+    (complete / _CAPTURE_MARKER_NAME).write_text(_CAPTURE_MARKER_CONTENT)
     (complete / "manifest.json").write_text("{}")
     (complete / "payload").write_bytes(b"y" * 100)
     os.utime(incomplete, ns=(1, 1))
@@ -330,11 +343,114 @@ def test_retention_counts_incomplete_capture_directories(
 
     SessionRecorder(CaptureConfig(
         out_dir=str(tmp_path),
-        max_total_bytes=102,
+        max_total_bytes=len(_CAPTURE_MARKER_CONTENT.encode()) + 102,
     ))
 
     assert not incomplete.exists()
     assert complete.exists()
+
+
+def test_retention_ignores_unowned_directories(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    unrelated = tmp_path / "unrelated-project"
+    unrelated.mkdir()
+    (unrelated / "events.jsonl").write_bytes(b"x" * 100)
+    owned = tmp_path / "capture-session"
+    owned.mkdir()
+    (owned / _CAPTURE_MARKER_NAME).write_text(_CAPTURE_MARKER_CONTENT)
+    (owned / "events.jsonl").write_bytes(b"y" * 100)
+    os.utime(owned, ns=(1, 1))
+    os.utime(unrelated, ns=(2, 2))
+
+    SessionRecorder(CaptureConfig(
+        out_dir=str(tmp_path),
+        max_total_bytes=1,
+    ))
+
+    assert unrelated.exists()
+    assert not owned.exists()
+
+
+@pytest.mark.asyncio
+async def test_departure_waits_for_published_return_traffic(
+    hub,
+    hub_addrs,
+    make_connector,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    pull, publish = hub_addrs
+    service = CaptureService(CaptureConfig(
+        hub_push_addr=pull,
+        hub_sub_addr=publish,
+        out_dir=str(tmp_path),
+        max_total_bytes=0,
+    ))
+    await service.start()
+    connector = make_connector(connector_id="capture-order")
+    connector_task: asyncio.Task | None = None
+    write_started = threading.Event()
+    release_write = threading.Event()
+    original_record_audio = service._recorder.record_audio
+
+    def delayed_record_audio(direction: str, chunk: AudioChunk) -> None:
+        if direction == "agent" and not write_started.is_set():
+            write_started.set()
+            if not release_write.wait(timeout=1):
+                raise TimeoutError("test did not release the capture writer")
+        original_record_audio(direction, chunk)
+
+    service._recorder.record_audio = delayed_record_audio  # type: ignore[method-assign]
+    try:
+        await connector.register()
+        connector_task = asyncio.create_task(connector.run())
+        await asyncio.sleep(0.05)
+        await connector.notify_participant_joined("alice", pts_us=1_000_000)
+        for _ in range(40):
+            if "alice" in service._recorder._sessions:
+                break
+            await asyncio.sleep(0.025)
+        assert "alice" in service._recorder._sessions
+
+        first = _audio("agent", pts_us=1_010_000)
+        second = _audio("agent", pts_us=1_020_000)
+        await hub.send_return_audio(first)
+        for _ in range(40):
+            if write_started.is_set():
+                break
+            await asyncio.sleep(0.025)
+        assert write_started.is_set()
+        await hub.send_return_audio(second)
+        await hub.broadcast(
+            b"participant",
+            MsgType.PARTICIPANT_EVENT,
+            ParticipantEvent("alice", False, 1_030_000, "capture-order"),
+        )
+
+        await asyncio.sleep(0.05)
+        assert not list(tmp_path.glob("*/manifest.json"))
+        release_write.set()
+        manifests: list[Path] = []
+        for _ in range(80):
+            manifests = list(tmp_path.glob("*/manifest.json"))
+            if manifests:
+                break
+            await asyncio.sleep(0.025)
+        assert manifests
+        assert (manifests[0].parent / "audio" / "agent.f32le").read_bytes() == (
+            first.data + second.data
+        )
+    finally:
+        release_write.set()
+        connector.stop()
+        if connector_task is not None:
+            connector_task.cancel()
+            await asyncio.gather(connector_task, return_exceptions=True)
+        await service.stop()
 
 
 def test_session_bundle_merges_resolution_and_track_segments_into_one_video(

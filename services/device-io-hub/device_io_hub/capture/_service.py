@@ -185,6 +185,7 @@ class CaptureService:
                 event.pts_us,
             )
             return
+        await self._returns.wait_for_departure(event)
         self._departed_participants.add(event.participant_id)
         workers = [
             (key, worker)
