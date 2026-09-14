@@ -612,7 +612,7 @@ class SopEngineAgent(Agent):
             return await self._llm.chat(
                 messages,
                 tools=definitions,
-                max_tokens=384,
+                max_tokens=512,
                 temperature=0.0,
                 enable_thinking=False,
             )
