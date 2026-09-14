@@ -354,7 +354,7 @@ class TTSService(Protocol):
 
 
 @dataclass(frozen=True)
-class TTSChunk:
+class _TTSChunk:
     """One signed 16-bit PCM chunk from streaming speech synthesis."""
 
     data: bytes
@@ -368,7 +368,7 @@ class TTSChunk:
 
 
 @runtime_checkable
-class StreamingTTSService(TTSService, Protocol):
+class _StreamingTTSService(TTSService, Protocol):
     """Text-to-speech service that can yield audio before synthesis ends."""
 
     def stream(
@@ -376,7 +376,7 @@ class StreamingTTSService(TTSService, Protocol):
         text: str,
         *,
         timeout: float | None = None,
-    ) -> AsyncIterator[TTSChunk]:
+    ) -> AsyncIterator[_TTSChunk]:
         """Yield signed 16-bit PCM chunks for *text*."""
 
         pass

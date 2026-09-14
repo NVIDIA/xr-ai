@@ -404,6 +404,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `anyio>=4.0`
   - `pocket-tts==3.0.2`
   - `torch>=2.5.0`
   - `huggingface-hub>=0.32.0`

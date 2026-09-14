@@ -49,7 +49,8 @@ from pipecat.frames.frames import (
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from xr_ai_hub import DataMessage
-from xr_ai_models import StreamingTTSService, TTSChunk, TTSService
+from xr_ai_models import TTSService
+from xr_ai_models._protocols import _StreamingTTSService, _TTSChunk
 from xr_ai_voicegate import VoiceGate
 
 from .._audio import wav_to_output_frames
@@ -288,7 +289,7 @@ class StreamingTtsProcessor(FrameProcessor):
             st.active_responses += 1
         st.response_sentences += 1
         st.synth_seq += 1
-        if isinstance(self._tts, StreamingTTSService):
+        if isinstance(self._tts, _StreamingTTSService):
             await queue.put(_TtsStreamRequest(sentence, pid))
         else:
             task = asyncio.create_task(
@@ -352,7 +353,7 @@ class StreamingTtsProcessor(FrameProcessor):
             return
 
     async def _send_stream(self, text: str, *, pid: str) -> None:
-        assert isinstance(self._tts, StreamingTTSService)
+        assert isinstance(self._tts, _StreamingTTSService)
         first = True
         with nemo_relay.scope.scope(
             "voice.tts",
@@ -362,7 +363,10 @@ class StreamingTtsProcessor(FrameProcessor):
         ):
             async for chunk in self._tts.stream(text):
                 if first:
-                    self._observe_pcm(chunk)
+                    try:
+                        self._observe_pcm(chunk)
+                    except Exception:
+                        logger.exception("observe streaming TTS PCM raised pid={!r}", pid)
                     first = False
                 out = OutputAudioRawFrame(
                     audio=chunk.data,
@@ -372,7 +376,7 @@ class StreamingTtsProcessor(FrameProcessor):
                 out.transport_destination = pid
                 await self.push_frame(out)
 
-    def _observe_pcm(self, chunk: TTSChunk) -> None:
+    def _observe_pcm(self, chunk: _TTSChunk) -> None:
         buffer = io.BytesIO()
         with wave.open(buffer, "wb") as wav:
             wav.setnchannels(chunk.channels)

@@ -26,9 +26,9 @@ from xr_ai_models import (
     OpenAICompatSTT,
     OpenAICompatTTS,
     OpenAICompatVLM,
-    PocketTTS,
     ToolDef,
 )
+from xr_ai_models._openai_compat import _PocketTTS
 
 
 async def test_pocket_tts_streams_pcm_chunks() -> None:
@@ -43,7 +43,7 @@ async def test_pocket_tts_streams_pcm_chunks() -> None:
         )
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handle))
-    async with PocketTTS("http://stub", client=client) as tts:
+    async with _PocketTTS("http://stub", client=client) as tts:
         chunks = [chunk async for chunk in tts.stream("Hello.")]
     await client.aclose()
 
@@ -55,6 +55,48 @@ async def test_pocket_tts_streams_pcm_chunks() -> None:
     assert [(chunk.data, chunk.sample_rate, chunk.channels) for chunk in chunks] == [
         (b"\x01\x00\x02\x00", 24000, 1),
     ]
+
+
+async def test_pocket_tts_falls_back_when_server_does_not_stream() -> None:
+    request_bodies = []
+    wav_buffer = io.BytesIO()
+    with wave.open(wav_buffer, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(24000)
+        wav_file.writeframes(b"\x01\x00\x02\x00")
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.read())
+        request_bodies.append(body)
+        if body["response_format"] == "pcm":
+            return httpx.Response(200, content=b"legacy pcm without headers")
+        return httpx.Response(200, content=wav_buffer.getvalue())
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handle))
+    async with _PocketTTS("http://stub", client=client) as tts:
+        chunks = [chunk async for chunk in tts.stream("Hello.")]
+    await client.aclose()
+
+    assert [body["response_format"] for body in request_bodies] == ["pcm", "wav"]
+    assert [(chunk.data, chunk.sample_rate, chunk.channels) for chunk in chunks] == [
+        (b"\x01\x00\x02\x00", 24000, 1),
+    ]
+
+
+async def test_pocket_tts_rejects_partial_pcm_sample() -> None:
+    def handle(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=b"\x01\x00\x02",
+            headers={"x-audio-sample-rate": "24000"},
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handle))
+    async with _PocketTTS("http://stub", client=client) as tts:
+        with pytest.raises(ValueError, match="incomplete PCM sample"):
+            _ = [chunk async for chunk in tts.stream("Hello.")]
+    await client.aclose()
 
 
 async def test_embedding_batches_inputs_and_preserves_response_order() -> None:

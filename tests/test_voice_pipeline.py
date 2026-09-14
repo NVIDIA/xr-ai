@@ -22,6 +22,7 @@ import io
 import wave
 import warnings
 from typing import Any, AsyncIterator, Sequence
+from unittest.mock import Mock
 
 import nemo_relay
 import numpy as np
@@ -43,7 +44,7 @@ from pipecat.pipeline.worker import PipelineWorker
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.workers.runner import WorkerRunner
 
-from xr_ai_models import TTSChunk
+from xr_ai_models._protocols import _TTSChunk
 from xr_ai_voice import VadConfig
 from xr_ai_voice._types import VoiceQuery
 from xr_ai_voice._pipeline import _build_voice_pipeline
@@ -216,12 +217,12 @@ class _FakeStreamingTts(_FakeTts):
         text: str,
         *,
         timeout: float | None = None,
-    ) -> AsyncIterator[TTSChunk]:
+    ) -> AsyncIterator[_TTSChunk]:
         del timeout
         self.stream_calls.append(text)
         try:
             for index, data in enumerate(self.chunks[text]):
-                yield TTSChunk(data, self.sample_rate)
+                yield _TTSChunk(data, self.sample_rate)
                 if index == 0:
                     self.started[text].set()
                     release = self.releases.get(text)
@@ -2116,10 +2117,34 @@ async def test_streaming_tts_emits_first_chunk_before_stream_finishes(monkeypatc
     assert not send_task.done()
 
     send_task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await send_task
+    result = await asyncio.gather(send_task, return_exceptions=True)
+    assert isinstance(result[0], asyncio.CancelledError)
     assert tts.closed["hello."].is_set()
     assert tts.completed == []
+
+
+@pytest.mark.asyncio
+async def test_streaming_tts_gate_observation_failure_does_not_drop_audio(
+    monkeypatch,
+):
+    tts = _FakeStreamingTts()
+    tts.configure("hello.", b"\x01\x00")
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    monkeypatch.setattr(
+        gate,
+        "observe_tts_wav",
+        Mock(side_effect=RuntimeError("gate failed")),
+    )
+    proc = StreamingTtsProcessor(tts=tts, voice_gate=gate)
+
+    sink = await _run_chain(proc, sends=[_text_for("hello.", "alice")])
+
+    audio = [
+        frame
+        for frame in sink.frames
+        if isinstance(frame, OutputAudioRawFrame)
+    ]
+    assert [frame.audio for frame in audio] == [b"\x01\x00"]
 
 
 @pytest.mark.asyncio
@@ -2204,7 +2229,8 @@ async def test_streaming_tts_interrupt_closes_only_target_stream():
         settle_s=0.1,
         per_send_delay_s=0.03,
     )
-    await release_task
+    assert release_task.done()
+    assert release_task.exception() is None
 
     audio_by_pid = {
         pid: [

@@ -10,9 +10,10 @@ name = "pocket-tts-server"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
+    "anyio>=4.0",
     "pocket-tts==3.0.2",
-    # The default PyPI build enables optional CUDA placement while retaining
-    # CPU execution on hosts without a compatible GPU.
+    # The PyPI build includes CUDA libraries on Linux so one environment can
+    # run the configured GPU path or fall back to CPU execution.
     "torch>=2.5.0",
     "huggingface-hub>=0.32.0",
     "hf-xet>=1.1.2,<2.0.0",

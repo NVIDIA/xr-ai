@@ -547,6 +547,12 @@ cleanup.
   loop. The default `bill_boerst` voice derives from a CC0 Voice-Zero recording
   and is the only voice accepted by this release. The service logs whether it
   loaded the gated voice-cloning weights or the ungated fallback.
+
+  To stream, send `POST /v1/audio/speech` with `response_format` set to `pcm`
+  and `stream` set to `true`. The response uses `audio/pcm`; the
+  `x-audio-sample-rate` and `x-audio-channels` headers describe the signed
+  16-bit interleaved samples. Streaming with another response format returns
+  HTTP 400.
 - **embedding-server** serves `nvidia/llama-nemotron-embed-1b-v2` through
   `/v1/embeddings`. It emits 2048-dimensional Matryoshka embeddings and can
   truncate them to 384, 512, 768, 1024, or 2048 dimensions. The checked-in

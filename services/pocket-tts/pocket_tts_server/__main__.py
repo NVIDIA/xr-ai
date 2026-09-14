@@ -21,7 +21,8 @@ Config keys
 -----------
     voice:        str   Must be "bill_boerst" (required)
     language:     str   Pocket TTS language/model variant (default: "english")
-    device:       str   "cpu", "cuda", or "auto" (default: "cpu")
+    device:       str   "cpu", "cuda", or "auto" (default: "auto")
+    cuda_visible_devices: str  CUDA device indices exposed to Pocket TTS.
     port:         int   HTTP port (default: 8105)
     host:         str   Bind address (default: "0.0.0.0")
     startup_timeout_s: float  Seconds allowed for a cold start (default: 600)
@@ -41,6 +42,7 @@ import urllib.request
 import wave
 from pathlib import Path
 
+import anyio
 import yaml
 from loguru import logger
 from xr_ai_logging import setup_logging
@@ -61,11 +63,12 @@ class _SynthesisCancelled(RuntimeError):
 
 async def _await_cleanup(task: asyncio.Task):
     """Wait for a cleanup task even when the caller is repeatedly cancelled."""
-    while not task.done():
-        try:
-            await asyncio.shield(task)
-        except asyncio.CancelledError:
-            continue
+    with anyio.CancelScope(shield=True):
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                continue
     return task.result()
 
 
@@ -96,7 +99,7 @@ def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
 class _PocketTTSBackend:
     """Thread-safe Pocket TTS voice loader and synthesizer."""
 
-    def __init__(self, voice: str, language: str, device: str = "cpu") -> None:
+    def __init__(self, voice: str, language: str, device: str = "auto") -> None:
         self._voice_name = voice
         self._language = language
         self._requested_device = device
@@ -246,7 +249,7 @@ def _build_app(cfg: dict, _model_cache: Path):
 
     voice_name = cfg["voice"]
     language = str(cfg.get("language", "english"))
-    device = str(cfg.get("device", "cpu"))
+    device = str(cfg.get("device", "auto"))
     backend = _PocketTTSBackend(voice_name, language, device)
     generation_lock = asyncio.Lock()
 
@@ -277,36 +280,85 @@ def _build_app(cfg: dict, _model_cache: Path):
     async def synthesize(req: SpeechRequest, request: Request):
         loop = asyncio.get_running_loop()
         cancelled = threading.Event()
-        if getattr(req, "stream", False):
+        if req.stream:
             if req.response_format != "pcm":
                 raise HTTPException(
                     status_code=400,
                     detail="streaming Pocket TTS requires response_format 'pcm'",
                 )
 
-            async def stream_audio():
-                stream = backend.stream(req.input, cancelled)
-                next_task: asyncio.Task | None = None
+            queue: asyncio.Queue = asyncio.Queue()
+            stream_end = object()
+
+            def publish(item: object) -> None:
+                try:
+                    loop.call_soon_threadsafe(queue.put_nowait, item)
+                except RuntimeError:
+                    pass
+
+            def generate_audio() -> None:
+                error: Exception | None = None
+                stream = None
+                try:
+                    stream = backend.stream(req.input, cancelled)
+                    for chunk in stream:
+                        publish(chunk)
+                except Exception as exc:
+                    error = exc
+                finally:
+                    if stream is not None:
+                        try:
+                            stream.close()
+                        except Exception as exc:
+                            if error is None:
+                                error = exc
+                    if error is not None:
+                        publish(error)
+                    publish(stream_end)
+
+            async def produce_audio() -> None:
                 try:
                     async with generation_lock:
-                        if await request.is_disconnected():
-                            return
-                        while True:
-                            next_task = asyncio.create_task(asyncio.to_thread(next, stream, None))
-                            chunk = await asyncio.shield(next_task)
-                            next_task = None
-                            if chunk is None:
-                                return
-                            if await request.is_disconnected():
-                                cancelled.set()
-                                return
-                            yield chunk
+                        if cancelled.is_set() or await request.is_disconnected():
+                            raise _SynthesisCancelled
+                        worker = asyncio.create_task(asyncio.to_thread(generate_audio))
+                        try:
+                            await asyncio.shield(worker)
+                        except asyncio.CancelledError:
+                            cancelled.set()
+                            await _await_cleanup(worker)
+                            raise
+                except (Exception, asyncio.CancelledError) as exc:
+                    queue.put_nowait(exc)
+                    queue.put_nowait(stream_end)
+
+            producer = asyncio.create_task(produce_audio())
+            try:
+                first = await queue.get()
+            except asyncio.CancelledError:
+                cancelled.set()
+                await _await_cleanup(producer)
+                raise
+
+            if isinstance(first, BaseException):
+                await _await_cleanup(producer)
+                if isinstance(first, _SynthesisCancelled):
+                    raise HTTPException(status_code=499, detail="request cancelled")
+                if isinstance(first, ValueError):
+                    raise HTTPException(status_code=400, detail=str(first)) from first
+                raise first
+
+            async def stream_audio():
+                item = first
+                try:
+                    while item is not stream_end:
+                        if isinstance(item, BaseException):
+                            raise item
+                        yield item
+                        item = await queue.get()
                 finally:
                     cancelled.set()
-                    if next_task is not None:
-                        await _await_cleanup(next_task)
-                    close_task = asyncio.create_task(asyncio.to_thread(stream.close))
-                    await _await_cleanup(close_task)
+                    await _await_cleanup(producer)
 
             return StreamingResponse(
                 stream_audio(),
@@ -424,7 +476,7 @@ def _monitor_reused_server(health_url: str, poll_s: float = 5.0) -> None:
 async def _load_backend(
     backend: _PocketTTSBackend,
 ) -> None:
-    """Load Pocket TTS without letting a stuck native initializer block shutdown."""
+    """Initialize Pocket TTS without letting stuck native work block shutdown."""
     loop = asyncio.get_running_loop()
     loaded = loop.create_future()
 
@@ -440,6 +492,7 @@ async def _load_backend(
         error: BaseException | None = None
         try:
             backend._ensure_loaded()
+            backend.warmup()
         except BaseException as exc:
             error = exc
         try:
@@ -483,7 +536,6 @@ async def _run(
     try:
         async with asyncio.timeout(startup_timeout_s):
             await _load_backend(backend)
-            await asyncio.to_thread(backend.warmup)
 
             config = uvicorn.Config(app, host=host, port=port, log_level="warning")
             server = uvicorn.Server(config)

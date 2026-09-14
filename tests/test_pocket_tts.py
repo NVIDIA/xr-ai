@@ -120,6 +120,10 @@ class _FakeModel:
 
     def __init__(self) -> None:
         self.generated: list[tuple[object, str]] = []
+        self.placements: list[str] = []
+
+    def to(self, device: str) -> None:
+        self.placements.append(device)
 
     def get_state_for_audio_prompt(self, voice: str) -> object:
         return {"voice": voice}
@@ -142,7 +146,7 @@ def _loaded_backend(module, monkeypatch: pytest.MonkeyPatch):
         "pocket_tts",
         SimpleNamespace(TTSModel=SimpleNamespace(load_model=load_model)),
     )
-    backend = module._PocketTTSBackend("bill_boerst", "english")
+    backend = module._PocketTTSBackend("bill_boerst", "english", "cpu")
     backend._ensure_loaded()
     return backend, model, load_model
 
@@ -162,6 +166,62 @@ async def test_backend_loads_selected_model_and_voice(monkeypatch) -> None:
     assert backend.ready
     assert backend.sample_rate == 24000
     load_model.assert_called_once_with(language="english")
+
+
+async def test_backend_auto_selects_cuda_and_warms_up(monkeypatch) -> None:
+    module = _load_main_module()
+    model = _FakeModel()
+    monkeypatch.setitem(
+        sys.modules,
+        "torch",
+        SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: True)),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "pocket_tts",
+        SimpleNamespace(
+            TTSModel=SimpleNamespace(load_model=Mock(return_value=model)),
+        ),
+    )
+    backend = module._PocketTTSBackend("bill_boerst", "english", "auto")
+
+    backend.warmup()
+
+    assert backend._device == "cuda"
+    assert model.placements == ["cuda"]
+    assert model.generated == [({"voice": "bill_boerst"}, "Ready.")]
+
+
+@pytest.mark.parametrize(
+    ("device", "cuda_available", "message"),
+    (
+        ("cuda", False, "CUDA is unavailable"),
+        ("tpu", True, "must be 'cpu', 'cuda', or 'auto'"),
+    ),
+)
+async def test_backend_rejects_unavailable_or_invalid_device(
+    device: str,
+    cuda_available: bool,
+    message: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_main_module()
+    monkeypatch.setitem(
+        sys.modules,
+        "torch",
+        SimpleNamespace(
+            cuda=SimpleNamespace(is_available=lambda: cuda_available),
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "pocket_tts",
+        SimpleNamespace(TTSModel=SimpleNamespace(load_model=Mock())),
+    )
+    backend = module._PocketTTSBackend("bill_boerst", "english", device)
+
+    with pytest.raises((RuntimeError, ValueError), match=message):
+        backend._ensure_loaded()
 
 
 async def test_backend_returns_wav_and_pcm(monkeypatch) -> None:
@@ -312,7 +372,11 @@ async def test_http_contract_and_error_mapping(monkeypatch, tmp_path) -> None:
     backend._model = SimpleNamespace(sample_rate=24000)
     backend.synthesize = Mock(return_value=b"RIFFtest")
     request = SimpleNamespace(is_disconnected=AsyncMock(return_value=False))
-    speech_request = SimpleNamespace(input="Hello", response_format="wav")
+    speech_request = SimpleNamespace(
+        input="Hello",
+        response_format="wav",
+        stream=False,
+    )
     response = await routes["/v1/audio/speech"].endpoint(speech_request, request)
     assert response.status_code == 200
     assert response.body == b"RIFFtest"
@@ -351,7 +415,51 @@ async def test_http_streams_pcm_chunks(tmp_path) -> None:
     backend.stream.assert_called_once()
 
 
-async def test_http_disconnect_waits_for_blocked_generation(tmp_path) -> None:
+async def test_http_rejects_non_pcm_stream(tmp_path) -> None:
+    from fastapi import HTTPException
+
+    module = _load_main_module()
+    app, backend = module._build_app({"voice": "bill_boerst"}, tmp_path)
+    route = next(route for route in app.routes if route.path == "/v1/audio/speech")
+    request = SimpleNamespace(is_disconnected=AsyncMock(return_value=False))
+    speech_request = SimpleNamespace(
+        input="Hello",
+        response_format="wav",
+        stream=True,
+    )
+
+    with pytest.raises(HTTPException) as error:
+        await route.endpoint(speech_request, request)
+
+    assert error.value.status_code == 400
+    assert "response_format 'pcm'" in error.value.detail
+    assert not backend.ready
+
+
+async def test_http_maps_stream_failure_before_response_headers(tmp_path) -> None:
+    from fastapi import HTTPException
+
+    module = _load_main_module()
+    app, backend = module._build_app({"voice": "bill_boerst"}, tmp_path)
+    route = next(route for route in app.routes if route.path == "/v1/audio/speech")
+    backend._model = SimpleNamespace(sample_rate=24000)
+
+    backend.stream = Mock(side_effect=ValueError("bad streaming input"))
+    request = SimpleNamespace(is_disconnected=AsyncMock(return_value=False))
+    speech_request = SimpleNamespace(
+        input="Hello",
+        response_format="pcm",
+        stream=True,
+    )
+
+    with pytest.raises(HTTPException) as error:
+        await route.endpoint(speech_request, request)
+
+    assert error.value.status_code == 400
+    assert error.value.detail == "bad streaming input"
+
+
+async def test_http_cancellation_under_load_does_not_deadlock(tmp_path) -> None:
     module = _load_main_module()
     app, backend = module._build_app({"voice": "bill_boerst"}, tmp_path)
     route = next(route for route in app.routes if route.path == "/v1/audio/speech")
@@ -359,12 +467,16 @@ async def test_http_disconnect_waits_for_blocked_generation(tmp_path) -> None:
     started = threading.Event()
     release = threading.Event()
     closed = threading.Event()
+    stream_calls = 0
 
     def blocking_stream(_text: str, _cancelled: threading.Event):
-        started.set()
-        release.wait(timeout=5)
+        nonlocal stream_calls
+        stream_calls += 1
         try:
             yield b"\x01\x00"
+            started.set()
+            release.wait(timeout=5)
+            yield b"\x02\x00"
         finally:
             closed.set()
 
@@ -376,20 +488,115 @@ async def test_http_disconnect_waits_for_blocked_generation(tmp_path) -> None:
         stream=True,
     )
     response = await route.endpoint(speech_request, request)
-    read_task = asyncio.create_task(response.body_iterator.__anext__())
+    assert await response.body_iterator.__anext__() == b"\x01\x00"
     assert await asyncio.to_thread(started.wait, 1)
+    read_task = asyncio.create_task(response.body_iterator.__anext__())
+    await asyncio.sleep(0)
 
     read_task.cancel()
     await asyncio.sleep(0)
     read_task.cancel()
+    queued = [
+        asyncio.create_task(route.endpoint(speech_request, request))
+        for _ in range(15)
+    ]
     await asyncio.sleep(0.01)
-    completed_before_release = read_task.done()
+    for task in queued:
+        task.cancel()
+
+    assert not read_task.done()
     release.set()
 
-    with pytest.raises(asyncio.CancelledError):
-        await asyncio.wait_for(read_task, timeout=1)
-    assert not completed_before_release
+    results = await asyncio.wait_for(
+        asyncio.gather(read_task, *queued, return_exceptions=True),
+        timeout=2,
+    )
+    assert all(isinstance(result, asyncio.CancelledError) for result in results)
     assert closed.is_set()
+    assert stream_calls == 1
+
+
+async def test_asgi_disconnect_shields_blocked_stream_cleanup(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    module = _load_main_module()
+    app, backend = module._build_app({"voice": "bill_boerst"}, tmp_path)
+    backend._model = SimpleNamespace(sample_rate=24000)
+    started = threading.Event()
+    release = threading.Event()
+    closed = threading.Event()
+
+    def blocking_stream(_text: str, _cancelled: threading.Event):
+        try:
+            yield b"\x01\x00"
+            started.set()
+            release.wait(timeout=5)
+            yield b"\x02\x00"
+        finally:
+            closed.set()
+
+    backend.stream = blocking_stream
+    real_shield = asyncio.shield
+    shield_calls = 0
+
+    def counting_shield(awaitable):
+        nonlocal shield_calls
+        shield_calls += 1
+        return real_shield(awaitable)
+
+    monkeypatch.setattr(module.asyncio, "shield", counting_shield)
+    body = json.dumps({
+        "input": "Hello",
+        "response_format": "pcm",
+        "stream": True,
+    }).encode()
+    receive_count = 0
+
+    async def receive() -> dict:
+        nonlocal receive_count
+        receive_count += 1
+        if receive_count == 1:
+            return {"type": "http.request", "body": body, "more_body": False}
+        if receive_count == 2:
+            return {"type": "http.request", "body": b"", "more_body": False}
+        assert await asyncio.to_thread(started.wait, 1)
+        return {"type": "http.disconnect"}
+
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "http_version": "1.1",
+        "scheme": "http",
+        "method": "POST",
+        "root_path": "",
+        "path": "/v1/audio/speech",
+        "raw_path": b"/v1/audio/speech",
+        "query_string": b"",
+        "headers": [
+            (b"host", b"testserver"),
+            (b"content-type", b"application/json"),
+            (b"content-length", str(len(body)).encode()),
+        ],
+        "client": ("127.0.0.1", 1234),
+        "server": ("testserver", 80),
+    }
+    app_task = asyncio.create_task(app(scope, receive, send))
+    assert await asyncio.to_thread(started.wait, 1)
+    await asyncio.sleep(0.02)
+
+    assert not app_task.done()
+    assert shield_calls < 10
+
+    release.set()
+    await asyncio.wait_for(app_task, timeout=1)
+    assert closed.is_set()
+    assert any(message["type"] == "http.response.start" for message in sent)
 
 
 async def test_scopes_hugging_face_cache_to_model_cache(tmp_path, monkeypatch) -> None:
@@ -457,11 +664,14 @@ async def test_rejects_unhealthy_listener(tmp_path, monkeypatch) -> None:
     assert not ready_file.exists()
 
 
-async def test_model_load_timeout_does_not_wait_for_loader(tmp_path, monkeypatch) -> None:
+async def test_startup_timeout_does_not_wait_for_cuda_warmup(
+    tmp_path,
+    monkeypatch,
+) -> None:
     module = _load_main_module()
     release = threading.Event()
     backend = Mock()
-    backend._ensure_loaded.side_effect = lambda: release.wait(timeout=1)
+    backend.warmup.side_effect = lambda: release.wait(timeout=1)
     monkeypatch.setitem(module.sys.modules, "uvicorn", Mock())
     monkeypatch.setattr(
         module,
@@ -477,6 +687,27 @@ async def test_model_load_timeout_does_not_wait_for_loader(tmp_path, monkeypatch
             )
     finally:
         release.set()
+
+
+async def test_load_and_warmup_share_daemon_thread() -> None:
+    module = _load_main_module()
+    calls: list[tuple[str, bool, str]] = []
+
+    class Backend:
+        def _ensure_loaded(self) -> None:
+            thread = threading.current_thread()
+            calls.append(("load", thread.daemon, thread.name))
+
+        def warmup(self) -> None:
+            thread = threading.current_thread()
+            calls.append(("warmup", thread.daemon, thread.name))
+
+    await module._load_backend(Backend())
+
+    assert calls == [
+        ("load", True, "pocket-model-loader"),
+        ("warmup", True, "pocket-model-loader"),
+    ]
 
 
 async def test_execs_managed_server_in_place(tmp_path, monkeypatch) -> None:
@@ -842,6 +1073,7 @@ async def test_managed_reuse_and_process_group_cleanup(
         yaml.safe_dump(
             {
                 "voice": "bill_boerst",
+                "device": "cpu",
                 "port": port,
                 "host": "127.0.0.1",
                 "startup_timeout_s": 30,
