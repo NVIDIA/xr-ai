@@ -24,13 +24,13 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-xr-ai-agent-runtime = { path = "../../../../agent-sdk/xr-ai-runtime", editable = true }
-xr-ai-hub-client = { path = "../../../../agent-sdk/xr-ai-hub", editable = true }
-xr-ai-logging   = { path = "../../../../utils/xr-ai-logging", editable = true }
-xr-ai-models    = { path = "../../../../agent-sdk/xr-ai-models", editable = true }
-xr-ai-tools     = { path = "../../../../agent-sdk/xr-ai-tools", editable = true }
-xr-ai-voice     = { path = "../../../../agent-sdk/xr-ai-voice", editable = true }
-xr-ai-voicegate = { path = "../../../../utils/xr-ai-voicegate", editable = true }
+xr-ai-agent-runtime = { path = "../../../agent-sdk/xr-ai-runtime", editable = true }
+xr-ai-hub-client = { path = "../../../agent-sdk/xr-ai-hub", editable = true }
+xr-ai-logging   = { path = "../../../utils/xr-ai-logging", editable = true }
+xr-ai-models    = { path = "../../../agent-sdk/xr-ai-models", editable = true }
+xr-ai-tools     = { path = "../../../agent-sdk/xr-ai-tools", editable = true }
+xr-ai-voice     = { path = "../../../agent-sdk/xr-ai-voice", editable = true }
+xr-ai-voicegate = { path = "../../../utils/xr-ai-voicegate", editable = true }
 
 [project.scripts]
 workflow_recorder_worker = "workflow_recorder_worker.__main__:run"

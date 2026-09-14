@@ -1287,6 +1287,24 @@ async def test_voice_gate_processor_stop_emits_interruption_and_ack_text():
 
 
 @pytest.mark.asyncio
+async def test_voice_gate_stop_ack_can_be_silenced_per_participant():
+    recording = {"pid-1"}
+    proc = VoiceGateProcessor(
+        cfg=VoiceGateConfig(), tts=_FakeTts(),
+        stop_ack_enabled=lambda pid: pid not in recording,
+    )
+    sink = await _run_chain(proc, sends=[
+        TranscriptionFrame(text="stop", user_id="pid-1", timestamp="t"),
+        TranscriptionFrame(text="stop", user_id="pid-2", timestamp="t"),
+    ])
+    interruptions = [f for f in sink.frames if isinstance(f, InterruptionFrame)]
+    assert [f.transport_source for f in interruptions] == ["pid-1", "pid-2"]
+    acknowledgements = [f for f in sink.frames if isinstance(f, TextFrame)]
+    assert len(acknowledgements) == 1
+    assert acknowledgements[0].transport_destination == "pid-2"
+
+
+@pytest.mark.asyncio
 async def test_voice_gate_processor_greeting_emitted_when_phrases_configured():
     cfg = VoiceGateConfig(magic_phrases=("agent",))
     proc = VoiceGateProcessor(cfg=cfg, tts=_FakeTts())

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Launch the automatic workflow-recording prototype."""
+"""Launch the voice-controlled workflow-recording prototype."""
 
 from pathlib import Path
 
@@ -13,31 +13,31 @@ _BASE = Path(__file__).resolve().parent
 PROCESSES = [
     Process(
         "hub",
-        "../../../services/device-io-hub",
+        "../../services/device-io-hub",
         "device_io_hub",
         config="yaml/device_io_hub.yaml",
     ),
     Process(
         "stt",
-        "../../../services/stt-server",
+        "../../services/stt-server",
         "stt_server",
         launch_mode="reuse",
     ),
     Process(
         "omni",
-        "../../../services/nemotron-omni-llm",
+        "../../services/nemotron-omni-llm",
         "nemotron_omni_llm_server",
         launch_mode="reuse",
     ),
     Process(
         "vlm",
-        "../../../services/vlm-server",
+        "../../services/vlm-server",
         "vlm_server",
         launch_mode="reuse",
     ),
     Process(
         "tts",
-        "../../../services/piper-tts",
+        "../../services/piper-tts",
         "piper_tts_server",
         launch_mode="reuse",
     ),

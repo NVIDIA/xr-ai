@@ -23,13 +23,11 @@ from xr_ai_tools.image import ImageReference, ImageRegistry
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 from xr_ai_voice import (
     VOICE_TRANSCRIPT_TOPIC,
-    VoiceParticipantJoined,
-    VoiceParticipantLeft,
     VoiceTranscript,
 )
 
 from .catalog import GuideCatalog
-from .events import PARTICIPANT_JOINED_TOPIC, PARTICIPANT_LEFT_TOPIC
+from .events import RECORDING_COMMAND
 
 _SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
 
@@ -149,7 +147,7 @@ def _clock(timestamp_us: int, started_at_us: int) -> str:
 
 
 class RecorderAgent(Agent):
-    """Start a durable multimodal packet automatically for each participant."""
+    """Capture a durable multimodal packet on explicit participant request."""
 
     def __init__(
         self,
@@ -176,13 +174,11 @@ class RecorderAgent(Agent):
         self._sessions_lock = asyncio.Lock()
         self._stopped = False
 
-    @subscribe(PARTICIPANT_JOINED_TOPIC)
-    async def participant_joined(
-        self,
-        _event: VoiceParticipantJoined,
-        ctx: RuntimeContext,
-    ) -> None:
-        participant_id = self._participant(ctx)
+    def is_recording(self, participant_id: str) -> bool:
+        return participant_id in self._sessions
+
+    async def start_recording(self, participant_id: str) -> None:
+        """Start a fresh packet unless this participant is already recording."""
         async with self._sessions_lock:
             if participant_id in self._sessions or self._stopped:
                 return
@@ -226,7 +222,7 @@ class RecorderAgent(Agent):
         async with self._sessions_lock:
             state = self._sessions.get(participant_id)
         text = event.text.strip()
-        if state is None or not text:
+        if state is None or not text or RECORDING_COMMAND.fullmatch(text):
             return
         async with state.lock:
             if not state.active:
@@ -244,13 +240,9 @@ class RecorderAgent(Agent):
             )
             await self._write_packet(state)
 
-    @subscribe(PARTICIPANT_LEFT_TOPIC)
-    async def participant_left(
-        self,
-        _event: VoiceParticipantLeft,
-        ctx: RuntimeContext,
-    ) -> None:
-        await self._close(self._participant(ctx), status="complete")
+    async def finish_recording(self, participant_id: str) -> None:
+        """Finalize the packet using the same path as worker shutdown."""
+        await self._close(participant_id, status="complete")
 
     async def stop(self) -> None:
         """Finalize every open packet before worker shutdown."""

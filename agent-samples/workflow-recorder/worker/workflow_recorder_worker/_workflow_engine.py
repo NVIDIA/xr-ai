@@ -36,10 +36,15 @@ from xr_ai_voice import (
 
 from ._workflow_spec import Step, Workflow
 from .catalog import CatalogGuide, GuideCatalog
-from .events import PARTICIPANT_JOINED_TOPIC, PARTICIPANT_LEFT_TOPIC, USER_QUERY_TOPIC
+from .events import PARTICIPANT_JOINED_TOPIC, PARTICIPANT_LEFT_TOPIC, RECORDING_COMMAND, USER_QUERY_TOPIC
+from .recorder import RecorderAgent
 
 _POLL_INTERVAL_S = 0.25
 _MAX_TOOL_ROUNDS = 3
+_COMMAND_HELP = (
+    "To begin recording a workflow, say start recording, and say finish recording when you are done. "
+    "Say list guides, or say start guide followed by a guide ID."
+)
 _CONTROL = re.compile(
     r"(?i)^\s*(?:(list|show)\s+(?:available\s+)?guides?|"
     r"(?:start|run)\s+(?:guide|workflow)\s+(.+?)|"
@@ -119,6 +124,7 @@ class SopEngineAgent(Agent):
         current_frame: CurrentFrameTool,
         image_query: ImageQueryTool,
         vision_timeout_s: float,
+        recorder: RecorderAgent,
     ) -> None:
         super().__init__()
         self._catalog = catalog
@@ -126,6 +132,8 @@ class SopEngineAgent(Agent):
         self._current_frame = current_frame
         self._image_query = image_query
         self._vision_timeout_s = vision_timeout_s
+        self._recorder = recorder
+        self._controls: dict[str, asyncio.Lock] = {}
         self._runtime: AgentRuntime | None = None
         self._connected: set[str] = set()
         self._sessions: dict[str, _Session] = {}
@@ -144,9 +152,13 @@ class SopEngineAgent(Agent):
         ctx: RuntimeContext,
     ) -> None:
         participant_id = self._participant(ctx)
-        self._connected.add(participant_id)
-        self._sessions.pop(participant_id, None)
-        self._start_monitor(participant_id)
+        async with self._controls.setdefault(participant_id, asyncio.Lock()):
+            if participant_id in self._connected:
+                return
+            self._connected.add(participant_id)
+            self._sessions.pop(participant_id, None)
+            self._start_monitor(participant_id)
+            await self._say(participant_id, _COMMAND_HELP)
 
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
@@ -155,14 +167,50 @@ class SopEngineAgent(Agent):
         ctx: RuntimeContext,
     ) -> None:
         participant_id = self._participant(ctx)
-        self._connected.discard(participant_id)
-        await self._cancel(self._turns, participant_id)
-        await self._cancel(self._monitors, participant_id)
-        self._sessions.pop(participant_id, None)
+        async with self._controls.setdefault(participant_id, asyncio.Lock()):
+            self._connected.discard(participant_id)
+            await self._cancel(self._turns, participant_id)
+            await self._cancel(self._monitors, participant_id)
+            self._sessions.pop(participant_id, None)
+            await self._recorder.finish_recording(participant_id)
 
     @subscribe(USER_QUERY_TOPIC)
     async def user_query(self, query: UserQuery, ctx: RuntimeContext) -> None:
         participant_id = self._participant(ctx)
+        # Controls must finish before the next utterance can start another turn.
+        async with self._controls.setdefault(participant_id, asyncio.Lock()):
+            if participant_id not in self._connected:
+                return
+            command = RECORDING_COMMAND.fullmatch(query.text)
+            if command is not None:
+                if command.group(1).casefold() == "start":
+                    if self._recorder.is_recording(participant_id):
+                        return
+                    await self._cancel(self._turns, participant_id)
+                    await self._cancel(self._monitors, participant_id)
+                    await self._recorder.start_recording(participant_id)
+                    if self._recorder.is_recording(participant_id):
+                        await self._say(participant_id, "Recording started.")
+                elif self._recorder.is_recording(participant_id):
+                    await self._recorder.finish_recording(participant_id)
+                    await self._say(participant_id, "Recording ended. " + _COMMAND_HELP)
+                    self._start_monitor(participant_id)
+                return
+            if self._recorder.is_recording(participant_id):
+                return
+            await self._start_answer(query, participant_id)
+
+    async def _say(self, participant_id: str, text: str) -> None:
+        runtime = self._runtime
+        if runtime is not None and runtime.running:
+            await runtime.publish(
+                VOICE_OUTPUT_TOPIC,
+                VoiceOutput(text=text, interrupt=True),
+                participant_id=participant_id,
+                source="sop-engine",
+            )
+
+    async def _start_answer(self, query: UserQuery, participant_id: str) -> None:
         await self._cancel(self._turns, participant_id)
         task = asyncio.create_task(
             self._answer(query, participant_id),
@@ -178,6 +226,7 @@ class SopEngineAgent(Agent):
         self._monitors.clear()
         self._connected.clear()
         self._sessions.clear()
+        self._controls.clear()
         for task in tasks:
             task.cancel()
         if tasks:
@@ -192,7 +241,7 @@ class SopEngineAgent(Agent):
             logger.opt(exception=True).error("SOP query failed pid={!r}", participant_id)
             response = "I couldn't complete that guide request. Please try again."
         runtime = self._runtime
-        if runtime is None or not runtime.running:
+        if not response or runtime is None or not runtime.running:
             return
         try:
             await runtime.publish(
