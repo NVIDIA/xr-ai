@@ -21,5 +21,4 @@ video_fps: 2
 video_num_frames: 64
 
 vllm_backend: docker
-vllm_image: vllm/vllm-openai:v0.20.0
-extra_pip: []
+vllm_image: nvcr.io/nvidia/vllm:26.08-py3

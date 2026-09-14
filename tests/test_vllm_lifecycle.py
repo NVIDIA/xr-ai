@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from xr_ai_vllm._config import parse_config_bool, setup_hf_env
+from xr_ai_vllm._config import _gpu_is_dgx_spark, parse_config_bool, setup_hf_env
 from xr_ai_vllm._lifecycle import health_ok, health_url, wait_until_healthy
 
 
@@ -36,6 +36,30 @@ class TestParseConfigBool:
     def test_rejects_other_values(self, value):
         with pytest.raises(ValueError, match="enforce_eager"):
             parse_config_bool(value, "enforce_eager")
+
+
+@pytest.mark.parametrize(
+    ("gpu_rows", "selected", "expected"),
+    [
+        ("0, GPU-ada, NVIDIA RTX 6000 Ada\n", "", False),
+        ("0, GPU-rtx, NVIDIA RTX PRO 6000 Blackwell\n", "", False),
+        ("0, GPU-ada, NVIDIA RTX 6000 Ada\n1, GPU-gb10, NVIDIA GB10\n", "1", True),
+        ("0, GPU-gb10, NVIDIA DGX Spark\n", "GPU-gb10", True),
+    ],
+)
+def test_dgx_spark_detection_uses_selected_gpu(
+    monkeypatch: pytest.MonkeyPatch,
+    gpu_rows: str,
+    selected: str,
+    expected: bool,
+) -> None:
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", selected)
+    monkeypatch.setattr(
+        "xr_ai_vllm._config.subprocess.check_output",
+        lambda *_args, **_kwargs: gpu_rows,
+    )
+
+    assert _gpu_is_dgx_spark() is expected
 
 
 class TestSetupHfEnv:

@@ -129,3 +129,27 @@ def gpu_compute_major() -> int:
             "defaulting to pre-Blackwell model variant", exc,
         )
     return 0
+
+
+def _gpu_is_dgx_spark() -> bool:
+    """Return whether the selected GPU is the GB10 in a DGX Spark."""
+    try:
+        rows = subprocess.check_output(
+            [
+                "nvidia-smi",
+                "--query-gpu=index,uuid,name",
+                "--format=csv,noheader,nounits",
+            ],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip().splitlines()
+    except Exception:
+        return False
+
+    selected = os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",", 1)[0].strip()
+    for row in rows:
+        index, uuid, name = (part.strip() for part in row.split(",", 2))
+        if selected and selected not in {index, uuid}:
+            continue
+        return "GB10" in name.upper() or "DGX SPARK" in name.upper()
+    return False
