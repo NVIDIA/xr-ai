@@ -20,7 +20,8 @@ Config keys (nemotron_omni_llm_server.yaml)
     served_model_name:        str    Name in /v1/models (default: "llm").
     hf_token:                 str    HF token for gated models.
     model_cache:              str    Weight cache, relative to this YAML.
-    max_num_seqs:             int    vLLM --max-num-seqs (default: 384).
+    max_num_seqs:             int    vLLM --max-num-seqs (default: 384; 4 for
+                                      NVFP4 on Spark).
     tensor_parallel_size:     int    vLLM --tensor-parallel-size (default: 1).
     max_model_len:            int    vLLM --max-model-len (default: 131072).
     gpu_memory_utilization:   float  vLLM --gpu-memory-utilization (default: 0.85).

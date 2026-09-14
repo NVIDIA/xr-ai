@@ -20,7 +20,7 @@ Config keys
     served_model_name:       str    Name exposed in /v1/models (default: "llm").
     hf_token:                str    HuggingFace token for gated models.
     model_cache:             str    HF weight + plugin cache, relative to this YAML.
-    max_num_seqs:            int    vLLM --max-num-seqs (default: 8).
+    max_num_seqs:            int    vLLM --max-num-seqs (default: 8; 4 on Spark).
     tensor_parallel_size:    int    vLLM --tensor-parallel-size (default: 1).
     max_model_len:           int    vLLM --max-model-len (default: 32768).
     gpu_memory_utilization:  float  vLLM --gpu-memory-utilization (default: 0.85).
