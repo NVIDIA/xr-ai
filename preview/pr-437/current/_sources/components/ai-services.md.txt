@@ -391,13 +391,30 @@ flags. Docker-only lifecycle settings such as `vllm_image`, `extra_pip`, and
 ```yaml
 # vlm-server (Cosmos3)
 vllm_backend: docker
-vllm_image:   nvcr.io/nvidia/vllm:26.07-py3
+vllm_image:   nvcr.io/nvidia/vllm:26.08-py3
 ```
 
-`vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.07-py3` for vlm-server,
-whose Cosmos3 support requires vLLM 0.23 or newer. The other wrappers retain
-their `26.04-py3` default. Override either to pin another tag, an internal
-mirror, or a custom build.
+`vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.08-py3` for all wrappers.
+This image includes vLLM 0.27.1 and supports the checked-in Cosmos3 and
+Nemotron model configurations. Nemotron Omni uses the image's native Mamba and
+causal-convolution implementations, so the shipped configuration does not
+compile or install `mamba-ssm` or `causal-conv1d`. Override the image to pin
+another tag, an internal mirror, or a custom build.
+
+::::{important}
+When upgrading an existing checkout, stop the persistent model stack before
+starting it with the new image:
+
+```bash
+uv run --project agent-samples/model-servers model_servers --stop
+docker pull nvcr.io/nvidia/vllm:26.08-py3
+```
+
+The next launch recreates stale managed containers when their image or command
+fingerprint differs. After the new stack starts successfully, reclaim disk from
+an old image with `docker image rm <old-vllm-image>`. Keep the shared model cache;
+the 26.08 stack reuses compatible weights and downloads any missing artifacts.
+::::
 
 ### docker mode — prerequisites
 
@@ -441,13 +458,11 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
   forwarded, and included in the container fingerprint, so changing one
   recreates a persistent container.
 
-The shipped image pins were qualified with these in-container versions:
+The shipped image pin was qualified with this in-container vLLM version:
 
-| Image | `huggingface-hub` | `hf-xet` |
-|---|---:|---:|
-| `nvcr.io/nvidia/vllm:26.04-py3` | 0.36.2 | 1.4.3 |
-| `nvcr.io/nvidia/vllm:26.07-py3` | 1.24.0 | 1.5.2 |
-| `vllm/vllm-openai:v0.20.0` | 1.12.0 | 1.4.3 |
+| Image | vLLM |
+|---|---:|
+| `nvcr.io/nvidia/vllm:26.08-py3` | 0.27.1 |
 
 - Container name is deterministic per service: `xr-ai-vllm-vlm-server`,
   `xr-ai-vllm-llama-nemotron-llm-server`,
