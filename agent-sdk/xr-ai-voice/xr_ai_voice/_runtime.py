@@ -17,6 +17,7 @@ import nemo_relay
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from xr_ai_hub import DataMessage
+from xr_ai_hub._capture import CAPTURE_STT_TOPIC
 from xr_ai_models import STTService, TTSService
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_voicegate import VoiceGateConfig
@@ -467,6 +468,21 @@ class VoiceAgent(Agent):
         while True:
             participant_id, transcript = await queue.get()
             try:
+                sender = getattr(self._session.transport, "send_return_data", None)
+                if sender is not None:
+                    try:
+                        await sender(DataMessage(
+                            participant_id=participant_id,
+                            topic=CAPTURE_STT_TOPIC,
+                            pts_us=transcript.timestamp_us,
+                            data=transcript.text.encode(),
+                        ))
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception:
+                        logger.opt(exception=True).debug(
+                            "capture STT caption failed pid={!r}", participant_id,
+                        )
                 await runtime.publish(
                     VOICE_TRANSCRIPT_TOPIC,
                     transcript,
