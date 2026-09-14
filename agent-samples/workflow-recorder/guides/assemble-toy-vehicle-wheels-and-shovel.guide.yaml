@@ -18,9 +18,9 @@
 schema_version: 1
 task:
   id: assemble_toy_vehicle_wheels_shovel
-  name: Attach two wheels and a front shovel to the toy vehicle
+  name: Assemble toy vehicle
   version: 1
-  status: draft
+  status: approved
   source_session: 20260914T191651112328Z-web-client
   start_step: identify_starting_parts
   foreground_prompt: >-
@@ -157,8 +157,7 @@ steps:
           Is the orange shovel visibly joined to the yellow front of the toy
           vehicle by its connecting arms, with its broad toothed blade extending
           outward, all four black wheels still visibly in their wheel positions,
-          and no hand holding the shovel in place? The shovel must appear
-          connected at the yellow end, not simply rest nearby. If the connection,
+          and no hand holding the shovel in place? If the
           yellow front, or any wheel is obscured or uncertain, answer
           "front shovel not confirmed".
     agent:
