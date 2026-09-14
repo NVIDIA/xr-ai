@@ -423,6 +423,22 @@
 -->
 <section id="release-migration">
 <h1>Release migration<a class="headerlink" href="#release-migration" title="Link to this heading">#</a></h1>
+<section id="workflow-recorder-controls">
+<h2>Workflow recorder controls<a class="headerlink" href="#workflow-recorder-controls" title="Link to this heading">#</a></h2>
+<p>The workflow-recorder sample no longer starts recording on connection. Say
+<code class="docutils literal notranslate"><span class="pre">start</span> <span class="pre">recording</span></code> to start a packet and <code class="docutils literal notranslate"><span class="pre">finish</span> <span class="pre">recording</span></code> to finalize it. The
+agent says “Recording started.” and then stays silent during recording. Say
+<code class="docutils literal notranslate"><span class="pre">start</span> <span class="pre">recording</span></code> again to record another packet without disconnecting.</p>
+<p>Command help is spoken once on connection. After each finished recording, the
+agent says “Recording ended.” followed by the same command help.
+Outside recording, an active guide answers questions using its step-specific
+instructions and tools. Without an active guide, unsupported queries receive
+the original guide-command hint; there is no general chat or idle visual Q&amp;A.
+Guide responses and monitoring pause during
+recording and resume afterward. Disconnecting still finalizes an open packet.
+Frame capture, transcripts, captions, packet format, manual guide generation,
+and guide-step execution are otherwise unchanged.</p>
+</section>
 <section id="deviceiohub-rename">
 <h2>DeviceIOHub rename<a class="headerlink" href="#deviceiohub-rename" title="Link to this heading">#</a></h2>
 <p>Update <code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/</span></code> to <code class="docutils literal notranslate"><span class="pre">services/device-io-hub/</span></code>, the
@@ -609,6 +625,7 @@ reuse the ignored caches rather than downloading them again.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#workflow-recorder-controls">Workflow recorder controls</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deviceiohub-rename">DeviceIOHub rename</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#operator-visible-runtime-changes">Operator-visible runtime changes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#local-speech-service">Local speech service</a></li>
