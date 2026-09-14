@@ -969,7 +969,7 @@ cleanup.</p>
 </section>
 <section id="per-server-notes">
 <h2>Per-server notes<a class="headerlink" href="#per-server-notes" title="Link to this heading">#</a></h2>
-<ul class="simple">
+<ul>
 <li><p><strong>vlm-server</strong> defaults to the Cosmos3 Nano Reasoner. Hugging Face publishes
 Reasoner and Generator weights in the unified <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos3-Nano</span></code>
 checkpoint. The required <code class="docutils literal notranslate"><span class="pre">Cosmos3ForConditionalGeneration</span></code> architecture
@@ -1036,12 +1036,20 @@ English-only; the <code class="docutils literal notranslate"><span class="pre">l
 ignored. Set <code class="docutils literal notranslate"><span class="pre">startup_timeout_s</span></code> to a positive finite number to override the
 600-second cold-start budget.</p></li>
 <li><p><strong>magpie-tts</strong> loads magpie_tts_multilingual_357m via NeMo TTS in-process.</p></li>
-<li><p><strong>pocket-tts</strong> loads the compact <code class="docutils literal notranslate"><span class="pre">kyutai/pocket-tts</span></code> model on CPU and serves
-the configured voice through the repository’s OpenAI-compatible TTS API.
-Model loading and synthesis run outside the asyncio event loop. The default
-<code class="docutils literal notranslate"><span class="pre">bill_boerst</span></code> voice derives from a CC0 Voice-Zero recording and is the only
-voice accepted by this release. The service logs whether it loaded the gated
-voice-cloning weights or the ungated fallback.</p></li>
+<li><p><strong>pocket-tts</strong> loads the compact <code class="docutils literal notranslate"><span class="pre">kyutai/pocket-tts</span></code> model on the configured
+<code class="docutils literal notranslate"><span class="pre">cpu</span></code>, <code class="docutils literal notranslate"><span class="pre">cuda</span></code>, or automatically selected device. The checked-in deployment
+profiles use CUDA and warm up the model before reporting ready. Its native
+PCM streaming path emits audio during generation; non-streaming WAV requests
+remain supported. Model loading and synthesis run outside the asyncio event
+loop. The default <code class="docutils literal notranslate"><span class="pre">bill_boerst</span></code> voice derives from a CC0 Voice-Zero recording
+and is the only voice accepted by this release. The service logs whether it
+loaded the gated voice-cloning weights or the ungated fallback.</p>
+<p>To stream, send <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/v1/audio/speech</span></code> with <code class="docutils literal notranslate"><span class="pre">response_format</span></code> set to <code class="docutils literal notranslate"><span class="pre">pcm</span></code>
+and <code class="docutils literal notranslate"><span class="pre">stream</span></code> set to <code class="docutils literal notranslate"><span class="pre">true</span></code>. The response uses <code class="docutils literal notranslate"><span class="pre">audio/pcm</span></code>; the
+<code class="docutils literal notranslate"><span class="pre">x-audio-sample-rate</span></code> and <code class="docutils literal notranslate"><span class="pre">x-audio-channels</span></code> headers describe the signed
+16-bit interleaved samples. Streaming with another response format returns
+HTTP 400.</p>
+</li>
 <li><p><strong>embedding-server</strong> serves <code class="docutils literal notranslate"><span class="pre">nvidia/llama-nemotron-embed-1b-v2</span></code> through
 <code class="docutils literal notranslate"><span class="pre">/v1/embeddings</span></code>. It emits 2048-dimensional Matryoshka embeddings and can
 truncate them to 384, 512, 768, 1024, or 2048 dimensions. The checked-in

@@ -47,6 +47,14 @@ alias. Replace the `piper_tts` model preset, `piper_tts_server` command, and
 `services/pocket-tts/`. Pocket TTS voice names differ from Piper voice names;
 the checked-in profiles use the CC0 `bill_boerst` voice.
 
+Pocket TTS now selects a GPU automatically by default, and the checked-in
+model-server profiles require CUDA on GPU 0. Set `device: cpu` for CPU-only
+execution or `cuda_visible_devices` to change GPU placement. CUDA warmup runs
+within `startup_timeout_s`, so increase that timeout when cold initialization
+exceeds 600 seconds. The service now resolves the PyPI Torch build instead of
+the CPU-only index; Linux environments therefore include the CUDA library
+footprint even when execution falls back to CPU.
+
 ## Removed SDK compatibility surfaces
 
 This release removes deprecated SDK aliases and the standalone Pipecat
