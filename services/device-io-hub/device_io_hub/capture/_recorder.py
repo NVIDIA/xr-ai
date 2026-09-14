@@ -25,6 +25,8 @@ from .config import CaptureConfig
 
 _MAX_SAFE_NAME = 96
 _MAX_DATA_FEED_TEXT = 1_024
+_CAPTURE_MARKER_NAME = ".xr-ai-media-capture"
+_CAPTURE_MARKER_CONTENT = "xr-ai media capture session v1\n"
 
 
 def _safe_name(value: str) -> str:
@@ -344,6 +346,10 @@ class SessionRecorder:
                 root = Path(f"{base}_{suffix}")
                 suffix += 1
             root.mkdir(mode=0o700)
+            (root / _CAPTURE_MARKER_NAME).write_text(
+                _CAPTURE_MARKER_CONTENT,
+                encoding="utf-8",
+            )
             (root / "video").mkdir(mode=0o700)
             (root / "audio").mkdir(mode=0o700)
             events = (root / "events.jsonl").open("a", encoding="utf-8")
@@ -652,11 +658,9 @@ class SessionRecorder:
         artifacts = [
             path for path in self._root.iterdir()
             if path.is_dir()
+            and not path.is_symlink()
             and path not in active
-            and (
-                (path / "manifest.json").is_file()
-                or (path / "events.jsonl").is_file()
-            )
+            and self._is_capture_artifact(path)
         ]
         sizes = {
             path: sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
@@ -669,3 +673,13 @@ class SessionRecorder:
             total -= sizes[path]
             shutil.rmtree(path)
             logger.info("media capture evicted session artifact {}", path)
+
+    @staticmethod
+    def _is_capture_artifact(path: Path) -> bool:
+        marker = path / _CAPTURE_MARKER_NAME
+        if not marker.is_file() or marker.is_symlink():
+            return False
+        try:
+            return marker.read_text(encoding="utf-8") == _CAPTURE_MARKER_CONTENT
+        except OSError:
+            return False
