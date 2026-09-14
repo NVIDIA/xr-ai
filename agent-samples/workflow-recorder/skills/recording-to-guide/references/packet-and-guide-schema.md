@@ -56,6 +56,11 @@ Supported triggers are `current_view` and `clock__timer`. Supported policy tools
 are `current_view`, `clock__now`, and `clock__timer`. Participant identity is
 bound by the engine and never appears in model-authored arguments.
 
+For `current_view`, `arguments.question` must contain 1–500 characters,
+including spaces and punctuation. The limit applies to the parsed YAML string,
+including folded text (`>-`), not to individual source lines. Shorten wording
+without removing required visual checks or changing the accepted answer labels.
+
 Optional `evidence` contains a full-match regex, a positive `consecutive` count,
 and optional `commit` values. When `commit` is present, the engine applies it
 directly after the evidence threshold, avoiding a second model judgment. Its
