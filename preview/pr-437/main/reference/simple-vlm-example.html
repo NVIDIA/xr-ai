@@ -281,15 +281,16 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.1.0-beta</option>
-    <option value="1" selected>main (development)</option>
+    <option value="0" >v0.2.0-beta.2</option>
+    <option value="1" >v0.1.0-beta</option>
+    <option value="2" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.1.0-beta/index.html", "simple-vlm-example.html"];
+    var urls = ["../../v0.2.0-beta.2/reference/simple-vlm-example.html", "../../v0.1.0-beta/index.html", "simple-vlm-example.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -448,13 +449,13 @@
 <h1>Simple VLM example<a class="headerlink" href="#simple-vlm-example" title="Link to this heading">#</a></h1>
 <p>The simple VLM example is the smallest complete voice-and-vision application in
 the repository. It answers spoken or typed questions about each participant’s
-latest camera frame and streams the answer to both Piper TTS and the
+latest camera frame and streams the answer to both Pocket TTS and the
 <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> data topic. Refer to the <a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a> to run the sample. This reference owns the
 sample’s design and operational details.</p>
 <section id="composition">
 <h2>Composition<a class="headerlink" href="#composition" title="Link to this heading">#</a></h2>
 <p>The orchestrator starts only DeviceIOHub and the worker. The fixed
-<code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> profile marks Parakeet STT, Cosmos3 Nano, and Piper TTS as
+<code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> profile marks Parakeet STT, Cosmos3 Nano, and Pocket TTS as
 reused services. Start those endpoints together with the shared model-server
 stack.</p>
 <p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns service readiness, hub transport, voice gating, TTS, signals,

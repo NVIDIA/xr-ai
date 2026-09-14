@@ -38,7 +38,7 @@ the header by hand in such files.
 ## Files to skip
 
 Skip files that can't carry comments or aren't ours to license: `LICENSE`,
-`*.json`, `*.resolved`, binary assets (e.g. `*.gif`), `.gitkeep` markers,
+`*.json`, `*.resolved`, Gradle `*.lockfile`, binary assets (e.g. `*.gif`), `.gitkeep` markers,
 Xcode-managed files (`*.pbxproj`, `*.xcworkspacedata`), and third-party Gradle
 wrapper files (`gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.properties`).
 

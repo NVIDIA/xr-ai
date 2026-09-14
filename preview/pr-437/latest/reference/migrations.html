@@ -434,6 +434,11 @@ and command to <code class="docutils literal notranslate"><span class="pre">devi
 <section id="operator-visible-runtime-changes">
 <h2>Operator-visible runtime changes<a class="headerlink" href="#operator-visible-runtime-changes" title="Link to this heading">#</a></h2>
 <ul class="simple">
+<li><p>DeviceIOHub now waits for the hub to acknowledge shared-memory attachment
+before connecting the LiveKit room or creating its ready file. Missing
+segments trigger bounded recreation; incompatible layouts and acknowledgement
+timeouts fail startup. Check the registration error in the hub logs rather
+than treating a running process as ready.</p></li>
 <li><p>DeviceIOHub no longer falls back to embedded LiveKit development credentials.
 Set <code class="docutils literal notranslate"><span class="pre">api_key</span></code> and <code class="docutils literal notranslate"><span class="pre">api_secret</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>, or inject
 <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_SECRET</span></code> through the environment.</p></li>
@@ -441,7 +446,7 @@ Set <code class="docutils literal notranslate"><span class="pre">api_key</span><
 <code class="docutils literal notranslate"><span class="pre">false</span></code>, <code class="docutils literal notranslate"><span class="pre">yes</span></code>, <code class="docutils literal notranslate"><span class="pre">no</span></code>, <code class="docutils literal notranslate"><span class="pre">on</span></code>, <code class="docutils literal notranslate"><span class="pre">off</span></code>, <code class="docutils literal notranslate"><span class="pre">1</span></code>, or <code class="docutils literal notranslate"><span class="pre">0</span></code> (case-insensitive). Numeric
 <code class="docutils literal notranslate"><span class="pre">1</span></code>/<code class="docutils literal notranslate"><span class="pre">0</span></code>, null values, and arbitrary strings now fail at startup instead of
 being interpreted by Python truthiness. This applies to vLLM eager, tool, and
-scheduling flags, Nemotron-Omni BF16 selection, Piper CUDA, voice-gate
+scheduling flags, Nemotron-Omni BF16 selection, voice-gate
 <code class="docutils literal notranslate"><span class="pre">listening_chime</span></code>, lab-monitoring <code class="docutils literal notranslate"><span class="pre">capture_marker_scans</span></code>, and tea-workflow
 <code class="docutils literal notranslate"><span class="pre">complete_on_skip</span></code>.</p></li>
 <li><p>Return audio is paced before IPC by the built-in voice transport and bounded
@@ -453,6 +458,21 @@ reserve. Increase the value for intentionally bursty custom producers, or
 decrease it for a tighter memory and latency bound when using a compatible
 custom producer.</p></li>
 </ul>
+</section>
+<section id="local-speech-service">
+<h2>Local speech service<a class="headerlink" href="#local-speech-service" title="Link to this heading">#</a></h2>
+<p>The local speech service changed from Piper to Pocket TTS with no compatibility
+alias. Replace the <code class="docutils literal notranslate"><span class="pre">piper_tts</span></code> model preset, <code class="docutils literal notranslate"><span class="pre">piper_tts_server</span></code> command, and
+<code class="docutils literal notranslate"><span class="pre">services/piper-tts/</span></code> path with <code class="docutils literal notranslate"><span class="pre">pocket_tts</span></code>, <code class="docutils literal notranslate"><span class="pre">pocket_tts_server</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">services/pocket-tts/</span></code>. Pocket TTS voice names differ from Piper voice names;
+the checked-in profiles use the CC0 <code class="docutils literal notranslate"><span class="pre">bill_boerst</span></code> voice.</p>
+<p>Pocket TTS now selects a GPU automatically by default, and the checked-in
+model-server profiles require CUDA on GPU 0. Set <code class="docutils literal notranslate"><span class="pre">device:</span> <span class="pre">cpu</span></code> for CPU-only
+execution or <code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> to change GPU placement. CUDA warmup runs
+within <code class="docutils literal notranslate"><span class="pre">startup_timeout_s</span></code>, so increase that timeout when cold initialization
+exceeds 600 seconds. The service now resolves the PyPI Torch build instead of
+the CPU-only index; Linux environments therefore include the CUDA library
+footprint even when execution falls back to CPU.</p>
 </section>
 <section id="removed-sdk-compatibility-surfaces">
 <h2>Removed SDK compatibility surfaces<a class="headerlink" href="#removed-sdk-compatibility-surfaces" title="Link to this heading">#</a></h2>
@@ -598,6 +618,7 @@ reuse the ignored caches rather than downloading them again.</p>
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deviceiohub-rename">DeviceIOHub rename</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#operator-visible-runtime-changes">Operator-visible runtime changes</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#local-speech-service">Local speech service</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#removed-sdk-compatibility-surfaces">Removed SDK compatibility surfaces</a></li>
 </ul>
   </nav></div>

@@ -552,7 +552,10 @@ after the IPC socket connects, after the HTTP server starts listening, etc.</p>
 <p>Pass <code class="docutils literal notranslate"><span class="pre">exit_after_ready=True</span></code> to <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> to return immediately once
 everything is ready instead of monitoring — useful for launchers whose
 processes are all <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;persist&quot;</span></code> and are designed to outlive the
-orchestrator (e.g. <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>).</p>
+orchestrator (e.g. <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>). For a persistent process, this also tells
+a bootstrap that reused an already-running service that it may exit after
+signaling readiness. Without <code class="docutils literal notranslate"><span class="pre">exit_after_ready=True</span></code>, the bootstrap remains
+alive so the launcher can continue monitoring it.</p>
 <section id="the-ready-file-protocol">
 <h3>The <code class="docutils literal notranslate"><span class="pre">--ready-file</span></code> protocol<a class="headerlink" href="#the-ready-file-protocol" title="Link to this heading">#</a></h3>
 <p>The launcher injects <code class="docutils literal notranslate"><span class="pre">--ready-file</span> <span class="pre">&lt;path&gt;</span></code> into every spawned command. The

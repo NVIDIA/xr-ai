@@ -444,6 +444,12 @@ client — web browser, Android app, iOS/visionOS app, or AR glasses — can joi
 the session using the token printed on startup. Each procedure below starts
 with a <code class="docutils literal notranslate"><span class="pre">cd</span></code> from the repository root; keep running that procedure’s commands
 from the selected sample directory.</p>
+<p>Each interactive procedure includes one concrete spoken request that exercises
+the sample’s main path. After it succeeds, you can ask “What can you do?” to
+explore further. In samples with wake-word gating, prefix that spoken question
+with “Hey Agent”; one follow-up utterance within five seconds can omit the wake
+phrase. Typed requests bypass the voice gate. Treat the reply as a
+conversational introduction rather than an exhaustive capability reference.</p>
 </section>
 <section id="model-servers-shared-ai-services">
 <h2>Model servers (shared AI services)<a class="headerlink" href="#model-servers-shared-ai-services" title="Link to this heading">#</a></h2>
@@ -481,7 +487,7 @@ On first run each model downloads from Hugging Face (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.</p>
 <p>Which servers start is a deployment profile selected with
 <code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">&lt;name|path&gt;</span></code>. The default starts Nemotron-3 Nano Omni (8108,
-serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), Piper TTS
+serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), Pocket TTS
 (8105), and embeddings (8109). <code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code> serves the LLM and VLM as
 self-hosted NIM containers (Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner;
 requires Docker and <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code>). Starting a profile stops persisted servers
@@ -503,12 +509,12 @@ pass <code class="docutils literal notranslate"><span class="pre">--allow-anonym
 <h2>Simple VLM example (vision Q&amp;A over voice + text)<a class="headerlink" href="#simple-vlm-example-vision-q-a-over-voice-text" title="Link to this heading">#</a></h2>
 <p>End-to-end voice + vision sample. Speak into the mic or type into the data
 channel; both routes use the same VLM pipeline against the latest video frame.
-Replies arrive as streaming Piper TTS audio plus a <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> text message.</p>
+Replies arrive as streaming Pocket TTS audio plus a <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> text message.</p>
 <p>Uses the text-output Reasoner from <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos3-Nano</span></code> by default. Refer to
 <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI services</span></a> for runtime-selection details.</p>
 <p>The sample always reuses model services and never starts or stops them. Its
 fixed <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> expects Parakeet STT on port 8103, Cosmos3-Nano on
-port 8100, and Piper TTS on port 8105. From the sample directory, start the
+port 8100, and Pocket TTS on port 8105. From the sample directory, start the
 repository defaults first:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/simple-vlm-example
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers
@@ -550,8 +556,17 @@ private” warning the first time — click <strong>Advanced → Proceed</strong
 <strong>Accept the Risk and Continue</strong> (Firefox). Refer to the networking guide for
 trusting the certificate permanently or running over plain HTTP instead.</p>
 <p>Leave <strong>Token URL</strong> blank — the web client fetches a token from the server
-automatically. Click <strong>Connect</strong>.</p>
-<p>You are now live in the XR session. To test the agent:</p>
+automatically. Click <strong>Connect</strong>, then click <strong>Start Camera</strong> and allow camera
+access. For a spoken interaction, click <strong>Start Microphone</strong> and allow
+microphone access.</p>
+</section>
+<section id="step-3-meet-the-agent">
+<h3>Step 3 — Meet the agent<a class="headerlink" href="#step-3-meet-the-agent" title="Link to this heading">#</a></h3>
+<p>Try this first spoken interaction:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Hey Agent, what am I looking at?
+Agent: [Answers from the current camera frame.]
+</pre></div>
+</div>
 <ul class="simple">
 <li><p>Type any question → sent verbatim to the VLM.</p></li>
 <li><p>Speak into your mic → speech is transcribed and sent as a query.</p></li>
@@ -582,7 +597,7 @@ speaks only discovered, changed, or long-missing device updates, and persists
 final pre-gate transcript, foreground-turn, and Relay JSONL files under <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code>
 and intentionally serves no sample-specific monitoring web UI. Its fixed model
 configuration uses Cosmos for visual inference.</p>
-<p>Start the shared <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> stack, which includes Piper TTS:</p>
+<p>Start the shared <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> stack, which includes Pocket TTS:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/lab-instrument-monitoring
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers
 </pre></div>
@@ -603,6 +618,16 @@ available on port 8080 together with the shared connection web client. Refer to
 the <a class="reference internal" href="../reference/lab-instrument-monitoring.html"><span class="doc">lab instrument architecture guide</span></a>
 for reusable agent patterns, marker setup, output contracts, and adaptation
 recipes.</p>
+<section id="try-the-lab-agent">
+<h3>Try the lab agent<a class="headerlink" href="#try-the-lab-agent" title="Link to this heading">#</a></h3>
+<p>Point the camera at instruments carrying the configured markers, then try this
+spoken interaction:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Hey Agent, read the instruments.
+Agent: [Reports the visible marker-associated readings or their availability.]
+</pre></div>
+</div>
+<p>Inspect the JSONL artifacts while trying additional interactions.</p>
+</section>
 </section>
 <section id="tea-making-guidance-voice-visual-workflow">
 <h2>Tea-making guidance (voice + visual workflow)<a class="headerlink" href="#tea-making-guidance-voice-visual-workflow" title="Link to this heading">#</a></h2>
@@ -611,7 +636,7 @@ transcript, and video observation. Nemotron-3 Nano Omni supplies both language
 and visual inference. Records are written as JSON Lines under the sample’s
 <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code> directory. A separate live event viewer presents selected runtime
 events without replacing those durable records.</p>
-<p>Start the shared model services, including Piper TTS:</p>
+<p>Start the shared model services, including Pocket TTS:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/tea-making-sample
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers
 </pre></div>
@@ -641,6 +666,14 @@ advance the workflow silently. Refer to the
 <a class="reference internal" href="../reference/tea-making-sample.html"><span class="doc">tea-making architecture guide</span></a> for
 reusable workflow patterns, background-agent contracts, backend integration,
 and adaptation recipes.</p>
+<section id="try-the-tea-agent">
+<h3>Try the tea agent<a class="headerlink" href="#try-the-tea-agent" title="Link to this heading">#</a></h3>
+<p>Try this first spoken interaction:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Hey Agent, help me make tea.
+Agent: [Starts the tea guide and presents the first step.]
+</pre></div>
+</div>
+</section>
 </section>
 <section id="xr-render-demo-voice-driven-sphere-in-cloudxr">
 <h2>XR render demo (voice-driven sphere in CloudXR)<a class="headerlink" href="#xr-render-demo-voice-driven-sphere-in-cloudxr" title="Link to this heading">#</a></h2>
@@ -708,6 +741,25 @@ uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo
 the pin to its own process and writes the selectors into <code class="docutils literal notranslate"><span class="pre">cloudxr.env</span></code>;
 the scene process and LOVR inherit from that file. Refer to the
 <a class="reference internal" href="../reference/xr-render-demo.html"><span class="doc">xr-render-demo reference</span></a> for full details.</p>
+</section>
+<section id="step-3-connect-and-meet-the-agent">
+<h3>Step 3 — Connect and meet the agent<a class="headerlink" href="#step-3-connect-and-meet-the-agent" title="Link to this heading">#</a></h3>
+<p>Open the authenticated web-client URL printed by DeviceIOHub. Accept the
+port-8080 development certificate on first use, leave <strong>Token URL</strong> blank, and
+click <strong>Connect</strong>. Wait for the agent status to report ready, then click <strong>Start
+Microphone</strong>. In the <strong>XR Stream</strong> section, follow the <strong>accept the CloudXR
+cert</strong> link to accept the second development certificate, return to the client,
+and click <strong>Launch XR</strong>.</p>
+<p>With the default always-on setting, ordinary finalized speech is dispatched
+without a wake phrase; stop commands are intercepted by the voice gate. Try
+this first spoken interaction:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Make the sphere red.
+Agent: [Changes the sphere's color or explains why it could not.]
+</pre></div>
+</div>
+<p>Speak naturally: the agent accepts questions, commands, and follow-up requests.
+The scene draws two shapes, boxes and spheres; ask for either by name. Refer to
+<a class="reference internal" href="clients.html"><span class="doc">Connecting clients</span></a> for headset and native-client setup.</p>
 <p>To stop the model servers when done:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
@@ -783,13 +835,21 @@ documented beside its value.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simple-vlm-example-vision-q-a-over-voice-text">Simple VLM example (vision Q&amp;A over voice + text)</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-start-the-server">Step 1 — Start the server</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-connect-a-client">Step 2 — Connect a client</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-3-meet-the-agent">Step 3 — Meet the agent</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lab-instrument-monitoring-marker-associated-readings-foreground-voice">Lab instrument monitoring (marker-associated readings + foreground voice)</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tea-making-guidance-voice-visual-workflow">Tea-making guidance (voice + visual workflow)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lab-instrument-monitoring-marker-associated-readings-foreground-voice">Lab instrument monitoring (marker-associated readings + foreground voice)</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#try-the-lab-agent">Try the lab agent</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tea-making-guidance-voice-visual-workflow">Tea-making guidance (voice + visual workflow)</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#try-the-tea-agent">Try the tea agent</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-render-demo-voice-driven-sphere-in-cloudxr">XR render demo (voice-driven sphere in CloudXR)</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-start-model-servers-once">Step 1 — Start model servers (once)</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-start-the-demo">Step 2 — Start the demo</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-3-connect-and-meet-the-agent">Step 3 — Connect and meet the agent</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hub-only-standalone">Hub only (standalone)</a></li>

@@ -281,15 +281,16 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.1.0-beta</option>
-    <option value="1" selected>main (development)</option>
+    <option value="0" >v0.2.0-beta.2</option>
+    <option value="1" >v0.1.0-beta</option>
+    <option value="2" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.1.0-beta/index.html", "spdx-headers.html"];
+    var urls = ["../../v0.2.0-beta.2/guides/spdx-headers.html", "../../v0.1.0-beta/index.html", "spdx-headers.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -489,7 +490,7 @@ the header by hand in such files.</p>
 <section id="files-to-skip">
 <h2>Files to skip<a class="headerlink" href="#files-to-skip" title="Link to this heading">#</a></h2>
 <p>Skip files that can’t carry comments or aren’t ours to license: <code class="docutils literal notranslate"><span class="pre">LICENSE</span></code>,
-<code class="docutils literal notranslate"><span class="pre">*.json</span></code>, <code class="docutils literal notranslate"><span class="pre">*.resolved</span></code>, binary assets (e.g. <code class="docutils literal notranslate"><span class="pre">*.gif</span></code>), <code class="docutils literal notranslate"><span class="pre">.gitkeep</span></code> markers,
+<code class="docutils literal notranslate"><span class="pre">*.json</span></code>, <code class="docutils literal notranslate"><span class="pre">*.resolved</span></code>, Gradle <code class="docutils literal notranslate"><span class="pre">*.lockfile</span></code>, binary assets (e.g. <code class="docutils literal notranslate"><span class="pre">*.gif</span></code>), <code class="docutils literal notranslate"><span class="pre">.gitkeep</span></code> markers,
 Xcode-managed files (<code class="docutils literal notranslate"><span class="pre">*.pbxproj</span></code>, <code class="docutils literal notranslate"><span class="pre">*.xcworkspacedata</span></code>), and third-party Gradle
 wrapper files (<code class="docutils literal notranslate"><span class="pre">gradlew</span></code>, <code class="docutils literal notranslate"><span class="pre">gradlew.bat</span></code>, <code class="docutils literal notranslate"><span class="pre">gradle/wrapper/gradle-wrapper.properties</span></code>).</p>
 </section>

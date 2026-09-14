@@ -528,15 +528,34 @@ release or shutdown.</p>
 </section>
 <section id="voice-gating-and-early-probes">
 <h2>Voice gating and early probes<a class="headerlink" href="#voice-gating-and-early-probes" title="Link to this heading">#</a></h2>
-<p>When wake phrases and a listening chime are enabled, VAD and STT probe the opening
-audio while the user is still speaking. Probe audio includes a silent tail so
-offline STT can finalize a phrase. Only the final transcript is dispatched as a
-query; a slow probe receives a short grace period and is then cancelled.</p>
+<p>VAD and STT probe the opening audio while the user is still speaking. Probe
+audio includes a silent tail so offline STT can finalize a phrase. A partial
+global-STOP match interrupts active output immediately, but it does not commit
+the user’s intent: final STT remains authoritative for global-stop versus query
+routing. A slow probe receives a short grace period and is then cancelled.
+With wake phrases configured, one utterance can make up to three bounded partial
+STT requests plus the authoritative final request. Set <code class="docutils literal notranslate"><span class="pre">stop_probe_after_s</span></code> to
+zero to disable the additional requests and early interruption path.</p>
 <p>A wake phrase is accepted at the beginning of a transcript or after
 sentence-final <code class="docutils literal notranslate"><span class="pre">.</span></code>, <code class="docutils literal notranslate"><span class="pre">?</span></code>, or <code class="docutils literal notranslate"><span class="pre">!</span></code> punctuation followed by whitespace or a closing
 quote. Text before the boundary and the phrase are removed. A phrase after a
-comma, semicolon, or inside ordinary prose does not activate the gate. STOP
-commands use the same early-probe path for prompt interruption.</p>
+comma, semicolon, or inside ordinary prose does not activate the gate. Partial
+STOP classification checks both raw text and the tail after a configured wake
+phrase, so <code class="docutils literal notranslate"><span class="pre">stop</span></code> and <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span> <span class="pre">stop</span></code> interrupt equally early.</p>
+<p>Global STOP uses a closed imperative grammar for direct requests such as
+<code class="docutils literal notranslate"><span class="pre">stop</span></code>, <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">it</span></code>, <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">talking</span></code>, <code class="docutils literal notranslate"><span class="pre">be</span> <span class="pre">quiet</span></code>, and <code class="docutils literal notranslate"><span class="pre">shut</span> <span class="pre">up</span></code>, with a bounded set
+of conversational prefixes and punctuation. Up to two prefixes may be drawn
+from <code class="docutils literal notranslate"><span class="pre">please</span></code>, <code class="docutils literal notranslate"><span class="pre">hey</span></code>, <code class="docutils literal notranslate"><span class="pre">okay</span></code>, <code class="docutils literal notranslate"><span class="pre">ok</span></code>, <code class="docutils literal notranslate"><span class="pre">uh</span></code>, <code class="docutils literal notranslate"><span class="pre">um</span></code>, <code class="docutils literal notranslate"><span class="pre">wait</span></code>, <code class="docutils literal notranslate"><span class="pre">no</span></code>, <code class="docutils literal notranslate"><span class="pre">just</span></code>,
+<code class="docutils literal notranslate"><span class="pre">alright</span></code>, <code class="docutils literal notranslate"><span class="pre">sorry</span></code>, <code class="docutils literal notranslate"><span class="pre">whoa</span></code>, <code class="docutils literal notranslate"><span class="pre">hang</span> <span class="pre">on</span></code>, <code class="docutils literal notranslate"><span class="pre">I</span> <span class="pre">said</span></code>, or <code class="docutils literal notranslate"><span class="pre">can</span></code>, <code class="docutils literal notranslate"><span class="pre">could</span></code>, <code class="docutils literal notranslate"><span class="pre">would</span></code>,
+or <code class="docutils literal notranslate"><span class="pre">will</span></code> followed by <code class="docutils literal notranslate"><span class="pre">you</span></code>. Negations (<code class="docutils literal notranslate"><span class="pre">don't</span> <span class="pre">stop</span></code>), questions (<code class="docutils literal notranslate"><span class="pre">should</span> <span class="pre">I</span> <span class="pre">stop?</span></code>), reported speech (<code class="docutils literal notranslate"><span class="pre">you</span> <span class="pre">said</span> <span class="pre">stop</span></code>), unconfigured arbitrary prefixes,
+and scoped or multi-action commands (<code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">monitoring</span> <span class="pre">xyz</span></code>) are not global
+stops. They follow the ordinary gate rules.</p>
+<p>A partial STOP match emits only an interruption, not a chime or stop
+acknowledgement. Wake recognition may independently emit the optional chime,
+but chime configuration, initialization, or playback does not control probing.
+If the final transcript remains a global stop, normal stop handling emits the
+acknowledgement. If STT revises partial <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span> <span class="pre">stop</span></code> to final <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span> <span class="pre">stop</span> <span class="pre">monitoring</span> <span class="pre">xyz</span></code>, the final transcript instead dispatches <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">monitoring</span> <span class="pre">xyz</span></code>
+to the agent; the latency-saving interruption is not undone.</p>
 </section>
 <section id="relay-telemetry">
 <h2>Relay telemetry<a class="headerlink" href="#relay-telemetry" title="Link to this heading">#</a></h2>

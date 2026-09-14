@@ -517,8 +517,9 @@ Package Contents
 
    Shared-memory ring buffer for raw video frames.
 
-   Hub creates the buffer (create=True). Connector opens it (create=False) and
-   reads num_slots / max_frame_bytes from the global header automatically.
+   The connector creates the buffer (create=True). The hub opens it
+   (create=False) and reads num_slots / max_frame_bytes from the global header
+   automatically.
 
    The caller that uses read_slot() MUST call release_slot() before the next
    write_frame() for that slot can succeed. Both operations are O(1).
@@ -534,6 +535,13 @@ Package Contents
    create :
        Create and initialize the segment instead of attaching to an existing
        one. The creator is responsible for eventually calling :meth:`unlink`.
+
+   Raises
+   ------
+   FileNotFoundError
+       If the named segment does not exist when attaching.
+   ValueError
+       If an existing segment has an invalid or incompatible ring layout.
 
 
    .. py:method:: write_frame(data: bytes | memoryview, width: int, height: int, fmt: xr_ai_hub.PixelFormat, pts_us: int, seq: int) -> int
