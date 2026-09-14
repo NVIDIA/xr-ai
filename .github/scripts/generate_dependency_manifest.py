@@ -41,7 +41,7 @@ UV_VERSION = "0.10.7"
 # Resolution differs by interpreter for index-routed packages even though the
 # resulting lock covers the full declared Python range. Pin the lowest supported
 # interpreter so local and CI regeneration are byte-for-byte identical.
-LOCK_PYTHON = "3.11"
+LOCK_PYTHON = "3.11.14"
 _PYTHON_MINORS = range(8, 20)
 REGENERATE = "  uv run --script .github/scripts/generate_dependency_manifest.py"
 
