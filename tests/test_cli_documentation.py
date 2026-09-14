@@ -24,6 +24,7 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         "model_servers",
         "simple_vlm_example",
         "tea_making_sample",
+        "workflow_recorder",
         "xr_render_demo",
     }
     assert [argument.flags for argument in commands["lab_instrument_monitoring"].arguments] == [
@@ -36,6 +37,7 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         ("--gpu-profile",),
     ]
     assert commands["simple_vlm_example"].arguments == ()
+    assert commands["workflow_recorder"].arguments == ()
     assert [argument.flags for argument in commands["tea_making_sample"].arguments] == [
         ("--expose-web-events",),
     ]
