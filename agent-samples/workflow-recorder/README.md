@@ -17,6 +17,9 @@ Output is written to `artifacts/sessions/`. Executable SOP guides placed in
 `artifacts/guide-index.json`. Invalid and draft guides are visible in the index
 but cannot run.
 
+Runtime guides and recording sessions are local, gitignored data. Do not commit
+them to the repository.
+
 ## Configure
 
 The launcher reads the checked-in configuration automatically. Edit these
