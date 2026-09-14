@@ -26,6 +26,7 @@ Prefer to do it by hand? Follow {doc}`/getting_started/quickstart`.
 | Skill | What it does |
 |---|---|
 | [`getting-started`](https://github.com/NVIDIA/xr-ai/blob/main/skills/getting-started/SKILL.md) | Sets an agent up to build on xr-ai: repo, working contract, docs, reference sample |
+| [`build-your-app`](https://github.com/NVIDIA/xr-ai/blob/main/skills/build-your-app/SKILL.md) | Guides your coding agent to build an application on the XR AI stack |
 | [`gh-review-xr-ai`](https://github.com/NVIDIA/xr-ai/blob/main/skills/gh-review-xr-ai/SKILL.md) | Reviews xr-ai PRs with strict scope discipline and comment-only feedback |
 | [`gh-manage-xr-ai-reviews`](https://github.com/NVIDIA/xr-ai/blob/main/skills/gh-manage-xr-ai-reviews/SKILL.md) | Tracks an XR-AI review inbox with overall status, next actions, and safe batching |
 

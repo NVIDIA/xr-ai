@@ -24,11 +24,21 @@ a release takes precedence once it contains the current entry points. Start
 with:
 
 - [Set up with a coding agent](https://nvidia.github.io/xr-ai/latest/getting_started/skills.html)
+- [Build your own application](https://nvidia.github.io/xr-ai/latest/guides/building-your-app.html)
 - [Manual quickstart](https://nvidia.github.io/xr-ai/latest/getting_started/quickstart.html)
 - [System requirements](https://nvidia.github.io/xr-ai/latest/getting_started/requirements.html)
 - [Architecture](https://nvidia.github.io/xr-ai/latest/overview/architecture.html)
 
 The site also publishes the current `main` branch and release-tagged versions.
+
+## Build your own app
+
+Build an application in the XR AI source tree so its unpublished SDK
+dependencies resolve from their repository paths. Start from
+`agent-samples/simple-vlm-example/`, keep only the SDK layers and services the
+application needs, and follow the
+[build-your-application guide](https://nvidia.github.io/xr-ai/latest/guides/building-your-app.html)
+through scaffolding, startup, and hardware-free verification.
 
 ## Samples
 

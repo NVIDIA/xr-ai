@@ -50,8 +50,11 @@ Ask the user, then tailor the pointers below to the answers.
   <https://nvidia.github.io/xr-ai/>.
 - **Reference sample:** `agent-samples/simple-vlm-example/`, the one to study
   and copy.
-- **Scaffolding a new sample:** `docs/source/guides/adding-a-sample.md`, full
-  boilerplate templates.
+- **Building your application:** `docs/source/guides/building-your-app.md`, the
+  consumer path for choosing SDK layers, copying the reference, and verifying
+  without hardware.
+- **Preparing an upstream sample:** `docs/source/guides/adding-a-sample.md`,
+  full repository boilerplate templates.
 - **Quickstart order:** follow
   `https://nvidia.github.io/xr-ai/<ref>/getting_started/quickstart.html`, with
   `<ref>` replaced as above. Start `model-server-samples/model-servers` and wait for

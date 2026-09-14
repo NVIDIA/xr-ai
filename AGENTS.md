@@ -9,6 +9,9 @@ This file contains the repository-wide constraints for humans and agents. Read
 the nearest package or sample README for its entry point and canonical-doc
 links. User-facing docs live only under `docs/source/`.
 
+Building an application that is not a repository sample? Read
+[`docs/source/guides/building-your-app.md`](docs/source/guides/building-your-app.md).
+
 ## Repository map
 
 ```text
@@ -93,7 +96,8 @@ agent-samples/<kebab-name>/
 - New worker code is a named package with relative internal imports and an
   explicit `__main__.py`.
 
-Refer to [Adding a sample](docs/source/guides/adding-a-sample.md) and the
+When preparing a repository sample, refer to
+[Adding a sample](docs/source/guides/adding-a-sample.md) and the
 [`simple-vlm-example`](agent-samples/simple-vlm-example/README.md) reference.
 
 ## Change contract
