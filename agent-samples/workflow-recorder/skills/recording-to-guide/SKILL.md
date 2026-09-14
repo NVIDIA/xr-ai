@@ -29,6 +29,8 @@ result matters. Do not inspect every 2 FPS frame by default.
 
 ## Synthesize the SOP
 
+- Give `task.name` a succinct, punctuation-free title of 1–5 words summarizing
+  the overall task or intended result, not a list of individual steps.
 - Treat frames and captions as visual evidence and transcripts as the
   demonstrator's commentary. Neither source automatically overrides the other.
 - Organize stable Activity → Phase groups into actionable steps. Merge repeated
@@ -38,12 +40,17 @@ result matters. Do not inspect every 2 FPS frame by default.
   claims or assumptions. Never manufacture hidden actions, exact values,
   safety guarantees, or successful outcomes.
 - Give every step a bounded state write set and an observable completion rule.
-- Prefer a `current_view` trigger whose question asks for a short closed-set
-  answer. Add `evidence.commit` when a regex match can deterministically prove a
+- For visual steps, prefer a `current_view` trigger whose question asks for a
+  short closed-set answer. Add `evidence.commit` when a regex match can deterministically prove a
   state value. Use the observation agent only when structured interpretation is
   actually necessary.
 - Require two or more consecutive visual matches for completion unless the
   evidence is intrinsically instantaneous and unambiguous.
+- Separate visual prerequisites and timer initialization from the waiting step.
+  Timer steps must check elapsed time only, using a `clock__timer` trigger and
+  deterministic `evidence.commit`, not visual observations or an LLM's time
+  judgment. Follow the timer-step pattern in
+  [`references/packet-and-guide-schema.md`](references/packet-and-guide-schema.md#timer-steps).
 - Keep `agent.tools` and `voice.tools` to the documented closed tool catalog.
   Never invent a function or put executable code in guide YAML.
 - Use user-controlled advancement. The engine deliberately never auto-advances.
