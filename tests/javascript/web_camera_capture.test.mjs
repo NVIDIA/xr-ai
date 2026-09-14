@@ -41,6 +41,7 @@ function makeRoom(publishTrack, { localTracks = [], remoteTracks = [], quality =
       { trackPublications: new Map(remoteTracks.map((track, i) => [String(i), { track }])) },
     ]] : []),
     unpublishedTracks: [],
+    startAudioCalls: 0,
     localParticipant: {
       connectionQuality: quality,
       trackPublications: new Map(localTracks.map((track, i) => [String(i), { track }])),
@@ -59,6 +60,9 @@ function makeRoom(publishTrack, { localTracks = [], remoteTracks = [], quality =
     },
     removeAllListeners() {
       handlers.clear();
+    },
+    async startAudio() {
+      this.startAudioCalls += 1;
     },
     async connect() {
       this.state = 'connected';
@@ -144,6 +148,14 @@ function installAppBrowser(model) {
   };
   return { previewCard, video };
 }
+
+test('primes remote audio on connect and retries before sending', async (t) => {
+  const { backend, room } = await connectedBackend(t, async () => {});
+
+  assert.equal(room.startAudioCalls, 1);
+  await backend.send('hello');
+  assert.equal(room.startAudioCalls, 2);
+});
 
 test('publishes and previews the captured full-frame camera track', async (t) => {
   const capturedTracks = [makeMediaTrack(), makeMediaTrack()];
