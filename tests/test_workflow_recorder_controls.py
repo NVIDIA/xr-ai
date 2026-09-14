@@ -16,6 +16,7 @@ from unittest.mock import AsyncMock, Mock
 import nemo_relay
 import pytest
 import pytest_asyncio
+from xr_ai_models import load_models_config
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_voice import (
     VOICE_OUTPUT_TOPIC,
@@ -39,6 +40,10 @@ from workflow_recorder_worker.events import (  # noqa: E402
     USER_QUERY_TOPIC,
 )
 from workflow_recorder_worker.recorder import RecorderAgent  # noqa: E402
+
+
+def test_sample_model_config_resolves_presets():
+    load_models_config(_SAMPLE / "yaml/models.json")
 
 
 class _Speech(Agent):
