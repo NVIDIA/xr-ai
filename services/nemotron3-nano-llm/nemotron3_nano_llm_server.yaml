@@ -58,9 +58,6 @@ gpu_memory_utilization: 0.85
 # maximum throughput and can wait for graph capture to finish.
 enforce_eager: true
 
-# The launcher selects flashinfer_cutlass automatically for the NVFP4 model on
-# B200/B300 (SM100-series). Other GPUs retain vLLM's automatic backend.
-
 # vLLM runtime. If this key is omitted, the wrapper falls back to pip;
 # the checked-in configuration below selects the NGC Docker container.
 #   pip     — vllm CLI from this wrapper's venv (today's behavior)

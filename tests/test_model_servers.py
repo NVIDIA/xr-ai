@@ -548,7 +548,11 @@ def test_omni_only_forwards_configured_moe_backend(
     monkeypatch.setattr(
         _omni,
         "load_config",
-        lambda: ({"moe_backend": moe_backend}, Path("."), None),
+        lambda: (
+            {"moe_backend": moe_backend} if moe_backend is not None else {},
+            Path("."),
+            None,
+        ),
     )
     monkeypatch.setattr(_omni, "resolve_model_cache", lambda *_a, **_k: Path("models"))
     monkeypatch.setattr(_omni, "setup_hf_env", lambda *_a, **_k: None)
@@ -565,20 +569,18 @@ def test_omni_only_forwards_configured_moe_backend(
 
 
 @pytest.mark.parametrize(
-    ("compute_major", "spark_uma", "expected_seqs", "expected_moe_backend"),
+    ("compute_major", "spark_uma", "expected_seqs"),
     [
-        (8, False, "384", None),
-        (10, False, "384", "flashinfer_cutlass"),
-        (12, False, "384", None),
-        (12, True, "4", None),
+        (8, False, "384"),
+        (12, False, "384"),
+        (12, True, "4"),
     ],
 )
-def test_omni_applies_nvfp4_hardware_defaults(
+def test_omni_applies_spark_sequence_default(
     monkeypatch: pytest.MonkeyPatch,
     compute_major: int,
     spark_uma: bool,
     expected_seqs: str,
-    expected_moe_backend: str | None,
 ) -> None:
     captured: dict[str, object] = {}
     monkeypatch.setattr(_omni, "setup_logging", lambda *_a, **_k: None)
@@ -598,26 +600,20 @@ def test_omni_applies_nvfp4_hardware_defaults(
     args = captured["extra_serve_args"]
     assert args[args.index("--max-num-seqs") + 1] == expected_seqs
     assert captured["extra_pip"] == []
-    if expected_moe_backend is None:
-        assert "--moe-backend" not in args
-    else:
-        assert args[args.index("--moe-backend") + 1] == expected_moe_backend
 
 
 @pytest.mark.parametrize(
-    ("compute_major", "spark_uma", "expected_seqs", "expected_moe_backend"),
+    ("compute_major", "spark_uma", "expected_seqs"),
     [
-        (8, False, "8", None),
-        (10, False, "8", "flashinfer_cutlass"),
-        (12, True, "4", None),
+        (8, False, "8"),
+        (12, True, "4"),
     ],
 )
-def test_nano_standalone_forwards_ngc_compatibility_settings(
+def test_nano_standalone_applies_spark_sequence_default(
     monkeypatch: pytest.MonkeyPatch,
     compute_major: int,
     spark_uma: bool,
     expected_seqs: str,
-    expected_moe_backend: str | None,
 ) -> None:
     captured: dict[str, object] = {}
     config_path = (
@@ -644,10 +640,6 @@ def test_nano_standalone_forwards_ngc_compatibility_settings(
 
     args = captured["extra_serve_args"]
     assert args[args.index("--max-num-seqs") + 1] == expected_seqs
-    if expected_moe_backend is None:
-        assert "--moe-backend" not in args
-    else:
-        assert args[args.index("--moe-backend") + 1] == expected_moe_backend
 
 
 def test_spark_omni_uses_explicit_kv_cache(

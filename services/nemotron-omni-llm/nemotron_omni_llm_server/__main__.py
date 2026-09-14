@@ -134,7 +134,7 @@ def run() -> None:
     prune_rate    = float(cfg.get("video_pruning_rate", _DEFAULT_PRUNE))
     video_fps     = int(cfg.get("video_fps",        _DEFAULT_FPS))
     video_frames  = int(cfg.get("video_num_frames", _DEFAULT_FRAMES))
-    moe_backend   = cfg.get("moe_backend", "flashinfer_cutlass")
+    moe_backend   = cfg.get("moe_backend")
     backend       = cfg.get("vllm_backend",         "pip")
     image         = cfg.get("vllm_image",           DEFAULT_IMAGE)
     # NGC 26.08 supports Nemotron Omni through vLLM's native Mamba and causal
@@ -163,9 +163,7 @@ def run() -> None:
         )
     if use_kv_fp8:
         extra_serve_args += ["--kv-cache-dtype", "fp8"]
-    # NGC 26.08 requires this override for the NVFP4 model on B200/B300.
-    # SM120 devices, including RTX PRO 6000 Blackwell, use vLLM's default.
-    if use_nvfp4 and major == 10 and moe_backend:
+    if moe_backend:
         extra_serve_args += ["--moe-backend", str(moe_backend)]
     if enforce_eager:
         extra_serve_args.append("--enforce-eager")
