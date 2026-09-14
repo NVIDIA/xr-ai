@@ -33,6 +33,7 @@ from ._protocols import (
     TextPart,
     ToolCall,
     ToolDef,
+    _TTSChunk,
     VideoInput,
     VideoPart,
 )
@@ -811,6 +812,66 @@ class OpenAICompatTTS:
 
     async def __aexit__(self, *exc: Any) -> None:
         await self.close()
+
+
+class _PocketTTS(OpenAICompatTTS):
+    """Streaming client for the repository's Pocket TTS HTTP service."""
+
+    async def stream(
+        self,
+        text: str,
+        *,
+        timeout: float | None = None,
+    ) -> AsyncIterator[_TTSChunk]:
+        """Yield signed 16-bit PCM chunks as Pocket TTS generates them."""
+
+        kwargs: dict[str, Any] = {
+            "json": {
+                "input": text,
+                "response_format": "pcm",
+                "stream": True,
+            },
+            "headers": _auth_headers(self._api_key),
+        }
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        fallback_to_wav = False
+        async with self._client.stream("POST", self._url, **kwargs) as resp:
+            if resp.is_error:
+                body = await resp.aread()
+                logger.error("tts {}: {}", resp.status_code, body[:300])
+                resp.raise_for_status()
+            sample_rate_header = resp.headers.get("x-audio-sample-rate")
+            if sample_rate_header is None:
+                fallback_to_wav = True
+            else:
+                sample_rate = int(sample_rate_header)
+                channels = int(resp.headers.get("x-audio-channels", "1"))
+                if channels < 1:
+                    raise ValueError("Pocket TTS returned an invalid channel count")
+                pending = b""
+                async for block in resp.aiter_bytes():
+                    block = pending + block
+                    complete = len(block) - len(block) % (2 * channels)
+                    if complete:
+                        yield _TTSChunk(block[:complete], sample_rate, channels)
+                    pending = block[complete:]
+                if pending:
+                    raise ValueError("Pocket TTS returned an incomplete PCM sample")
+
+        if fallback_to_wav:
+            logger.warning(
+                "Pocket TTS server does not support streaming; falling back to WAV"
+            )
+            wav_bytes = await self.synthesize(text, timeout=timeout)
+            with wave.open(io.BytesIO(wav_bytes), "rb") as wav_file:
+                if wav_file.getsampwidth() != 2:
+                    raise ValueError("Pocket TTS returned non-16-bit WAV audio")
+                yield _TTSChunk(
+                    wav_file.readframes(wav_file.getnframes()),
+                    wav_file.getframerate(),
+                    wav_file.getnchannels(),
+                )
 
 
 # ── Embeddings ────────────────────────────────────────────────────────────

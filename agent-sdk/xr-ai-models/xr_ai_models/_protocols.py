@@ -353,6 +353,35 @@ class TTSService(Protocol):
         pass
 
 
+@dataclass(frozen=True)
+class _TTSChunk:
+    """One signed 16-bit PCM chunk from streaming speech synthesis."""
+
+    data: bytes
+    """Interleaved signed 16-bit PCM samples."""
+
+    sample_rate: int
+    """Sample rate in hertz."""
+
+    channels: int = 1
+    """Number of interleaved audio channels."""
+
+
+@runtime_checkable
+class _StreamingTTSService(TTSService, Protocol):
+    """Text-to-speech service that can yield audio before synthesis ends."""
+
+    def stream(
+        self,
+        text: str,
+        *,
+        timeout: float | None = None,
+    ) -> AsyncIterator[_TTSChunk]:
+        """Yield signed 16-bit PCM chunks for *text*."""
+
+        pass
+
+
 @runtime_checkable
 class EmbeddingService(Protocol):
     """Structural interface for text-embedding services."""
