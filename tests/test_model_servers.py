@@ -262,24 +262,20 @@ def test_omni_profiles_select_supported_vllm_configuration(profile_path: Path) -
     assert config["vllm_backend"] == "docker"
     assert config["vllm_image"] == "nvcr.io/nvidia/vllm:26.08-py3"
     assert "extra_pip" not in config
+    assert "gpu_memory_utilization" not in config
+    assert config["kv_cache_memory_bytes"] == 2147483648
     if profile_path.parent.name == "spark":
         assert config["max_num_seqs"] == 4
         assert "moe_backend" not in config
-        assert "gpu_memory_utilization" not in config
-        assert config["kv_cache_memory_bytes"] == 2147483648
         assert config["spark_uma"] is True
     elif profile_path.parent.name == "dual_48G_ada":
         assert "moe_backend" not in config
-        assert "gpu_memory_utilization" not in config
-        assert config["kv_cache_memory_bytes"] == 2147483648
         assert "spark_uma" not in config
     elif profile_path.parent.name == "96G_blackwell":
         assert "moe_backend" not in config
-        assert "kv_cache_memory_bytes" not in config
         assert "spark_uma" not in config
     else:
         assert "moe_backend" not in config
-        assert "kv_cache_memory_bytes" not in config
         assert "spark_uma" not in config
 
 
