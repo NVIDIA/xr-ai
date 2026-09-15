@@ -14,17 +14,56 @@ in each application's `pyproject.toml`.
 
 ## Choose the layers your application needs
 
-| Distribution | Import | Repository source | Use it for | API reference |
-|---|---|---|---|---|
-| `xr-ai-launcher` | `xr_ai_launcher` | `utils/xr-ai-launcher` | Stdlib-only process management for starting DeviceIOHub, workers, and application services in dependency order. | {doc}`xr-ai-launcher </reference/python/xr_ai_launcher/index>` |
-| `xr-ai-hub-client` | `xr_ai_hub` | `agent-sdk/xr-ai-hub` | IPC with DeviceIOHub, participant events, data and audio messages, and live frame access. | {doc}`xr-ai-hub-client </reference/python/xr_ai_hub/index>` |
-| `xr-ai-logging` | `xr_ai_logging` | `utils/xr-ai-logging` | Shared logging setup used by the copied orchestrator and worker. | {doc}`xr-ai-logging </reference/python/xr_ai_logging/index>` |
-| `xr-ai-models` | `xr_ai_models` | `agent-sdk/xr-ai-models` | Typed LLM, VLM, STT, TTS, and embedding clients selected from deployment profiles. | {doc}`xr-ai-models </reference/python/xr_ai_models/index>` |
-| `xr-ai-agent-runtime` | `xr_ai_runtime` | `agent-sdk/xr-ai-runtime` | Typed agent lifecycle, registration, publication, and participant-scoped subscriptions. | {doc}`xr-ai-agent-runtime </reference/python/xr_ai_runtime/index>` |
-| `xr-ai-tools` | `xr_ai_tools` | `agent-sdk/xr-ai-tools` | Typed `Tool` and `ToolSet` objects. Add `relay` for `run_tool_loop()`, `frames` for live-frame selection, and `vision` for VLM query tools. | {doc}`xr-ai-tools </reference/python/xr_ai_tools/index>` |
-| `xr-ai-voice` | `xr_ai_voice` | `agent-sdk/xr-ai-voice` | The `VoiceAgent` runtime for hub transport, STT, voice gating, TTS, interruption, readiness, and cleanup. | {doc}`xr-ai-voice </reference/python/xr_ai_voice/index>` |
-| `xr-ai-voicegate` | `xr_ai_voicegate` | `utils/xr-ai-voicegate` | Wake-phrase and follow-up-turn gating used by the copied voice application. | {doc}`xr-ai-voicegate </reference/python/xr_ai_voicegate/index>` |
-| `xr-ai-web-events` | `xr_ai_web_events` | `agent-sdk/xr-ai-web-events` | A bounded browser view for compact application events explicitly selected by the application. | {doc}`xr-ai-web-events </reference/python/xr_ai_web_events/index>` |
+```{list-table}
+:header-rows: 1
+:widths: 35 65
+
+* - Package
+  - Use it for
+* - {doc}`xr-ai-launcher </reference/python/xr_ai_launcher/index>`\
+    Import: `xr_ai_launcher`\
+    Source: `utils/xr-ai-launcher`
+  - Stdlib-only process management for starting DeviceIOHub, workers, and
+    application services in dependency order.
+* - {doc}`xr-ai-hub-client </reference/python/xr_ai_hub/index>`\
+    Import: `xr_ai_hub`\
+    Source: `agent-sdk/xr-ai-hub`
+  - IPC with DeviceIOHub, participant events, data and audio messages, and live
+    frame access.
+* - {doc}`xr-ai-logging </reference/python/xr_ai_logging/index>`\
+    Import: `xr_ai_logging`\
+    Source: `utils/xr-ai-logging`
+  - Shared logging setup used by the copied orchestrator and worker.
+* - {doc}`xr-ai-models </reference/python/xr_ai_models/index>`\
+    Import: `xr_ai_models`\
+    Source: `agent-sdk/xr-ai-models`
+  - Typed LLM, VLM, STT, TTS, and embedding clients selected from deployment
+    profiles.
+* - {doc}`xr-ai-agent-runtime </reference/python/xr_ai_runtime/index>`\
+    Import: `xr_ai_runtime`\
+    Source: `agent-sdk/xr-ai-runtime`
+  - Typed agent lifecycle, registration, publication, and participant-scoped
+    subscriptions.
+* - {doc}`xr-ai-tools </reference/python/xr_ai_tools/index>`\
+    Import: `xr_ai_tools`\
+    Source: `agent-sdk/xr-ai-tools`
+  - Typed `Tool` and `ToolSet` objects. Add `relay` for `run_tool_loop()`,
+    `frames` for live-frame selection, and `vision` for VLM query tools.
+* - {doc}`xr-ai-voice </reference/python/xr_ai_voice/index>`\
+    Import: `xr_ai_voice`\
+    Source: `agent-sdk/xr-ai-voice`
+  - The `VoiceAgent` runtime for hub transport, STT, voice gating, TTS,
+    interruption, readiness, and cleanup.
+* - {doc}`xr-ai-voicegate </reference/python/xr_ai_voicegate/index>`\
+    Import: `xr_ai_voicegate`\
+    Source: `utils/xr-ai-voicegate`
+  - Wake-phrase and follow-up-turn gating used by the copied voice application.
+* - {doc}`xr-ai-web-events </reference/python/xr_ai_web_events/index>`\
+    Import: `xr_ai_web_events`\
+    Source: `agent-sdk/xr-ai-web-events`
+  - A bounded browser view for compact application events explicitly selected
+    by the application.
+```
 
 The distribution names, import names, and source directories are not always
 identical. In particular, `xr-ai-hub-client` comes from
@@ -173,17 +212,3 @@ pre-commit hooks uninstalled and use the focused application test command
 above. To use those hooks or the full repository checks, first edit the SPDX
 hook exclusions, dependency-generator ignore rules, and sample catalogs for the
 chosen application path.
-
-## Contribute a sample upstream
-
-Before proposing an application as an upstream sample:
-
-- Add the repository SPDX header to every new source file.
-- Regenerate `DEPENDENCIES.md` after a `pyproject.toml` change with
-  `uv run --script .github/scripts/generate_dependency_map.py` from the
-  repository root. Do not edit its generated package map by hand.
-- Add the sample to the root README sample tour and provide its concise README
-  plus canonical `docs/source/` documentation.
-
-Refer to {doc}`adding-a-sample` for the upstream templates and checklist, and
-{doc}`contributing-and-conventions` for the contribution workflow.

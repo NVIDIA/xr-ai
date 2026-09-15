@@ -433,68 +433,67 @@ in each application’s <code class="docutils literal notranslate"><span class="
 <section id="choose-the-layers-your-application-needs">
 <h2>Choose the layers your application needs<a class="headerlink" href="#choose-the-layers-your-application-needs" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
+<colgroup>
+<col style="width: 35.0%" />
+<col style="width: 65.0%" />
+</colgroup>
 <thead>
-<tr class="row-odd"><th class="head"><p>Distribution</p></th>
-<th class="head"><p>Import</p></th>
-<th class="head"><p>Repository source</p></th>
+<tr class="row-odd"><th class="head"><p>Package</p></th>
 <th class="head"><p>Use it for</p></th>
-<th class="head"><p>API reference</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_launcher</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">utils/xr-ai-launcher</span></code></p></td>
-<td><p>Stdlib-only process management for starting DeviceIOHub, workers, and application services in dependency order.</p></td>
-<td><p><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html"><span class="doc">xr-ai-launcher</span></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html"><span class="doc">xr-ai-launcher</span></a><br />
+Import: <code class="docutils literal notranslate"><span class="pre">xr_ai_launcher</span></code><br />
+Source: <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-launcher</span></code></p></td>
+<td><p>Stdlib-only process management for starting DeviceIOHub, workers, and
+application services in dependency order.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-hub-client</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_hub</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-hub</span></code></p></td>
-<td><p>IPC with DeviceIOHub, participant events, data and audio messages, and live frame access.</p></td>
-<td><p><a class="reference internal" href="../reference/python/xr_ai_hub/index.html"><span class="doc">xr-ai-hub-client</span></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../reference/python/xr_ai_hub/index.html"><span class="doc">xr-ai-hub-client</span></a><br />
+Import: <code class="docutils literal notranslate"><span class="pre">xr_ai_hub</span></code><br />
+Source: <code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-hub</span></code></p></td>
+<td><p>IPC with DeviceIOHub, participant events, data and audio messages, and live
+frame access.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-logging</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_logging</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">utils/xr-ai-logging</span></code></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../reference/python/xr_ai_logging/index.html"><span class="doc">xr-ai-logging</span></a><br />
+Import: <code class="docutils literal notranslate"><span class="pre">xr_ai_logging</span></code><br />
+Source: <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-logging</span></code></p></td>
 <td><p>Shared logging setup used by the copied orchestrator and worker.</p></td>
-<td><p><a class="reference internal" href="../reference/python/xr_ai_logging/index.html"><span class="doc">xr-ai-logging</span></a></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models</span></code></p></td>
-<td><p>Typed LLM, VLM, STT, TTS, and embedding clients selected from deployment profiles.</p></td>
-<td><p><a class="reference internal" href="../reference/python/xr_ai_models/index.html"><span class="doc">xr-ai-models</span></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../reference/python/xr_ai_models/index.html"><span class="doc">xr-ai-models</span></a><br />
+Import: <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code><br />
+Source: <code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models</span></code></p></td>
+<td><p>Typed LLM, VLM, STT, TTS, and embedding clients selected from deployment
+profiles.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_runtime</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-runtime</span></code></p></td>
-<td><p>Typed agent lifecycle, registration, publication, and participant-scoped subscriptions.</p></td>
-<td><p><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html"><span class="doc">xr-ai-agent-runtime</span></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html"><span class="doc">xr-ai-agent-runtime</span></a><br />
+Import: <code class="docutils literal notranslate"><span class="pre">xr_ai_runtime</span></code><br />
+Source: <code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-runtime</span></code></p></td>
+<td><p>Typed agent lifecycle, registration, publication, and participant-scoped
+subscriptions.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_tools</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-tools</span></code></p></td>
-<td><p>Typed <code class="docutils literal notranslate"><span class="pre">Tool</span></code> and <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code> objects. Add <code class="docutils literal notranslate"><span class="pre">relay</span></code> for <code class="docutils literal notranslate"><span class="pre">run_tool_loop()</span></code>, <code class="docutils literal notranslate"><span class="pre">frames</span></code> for live-frame selection, and <code class="docutils literal notranslate"><span class="pre">vision</span></code> for VLM query tools.</p></td>
-<td><p><a class="reference internal" href="../reference/python/xr_ai_tools/index.html"><span class="doc">xr-ai-tools</span></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../reference/python/xr_ai_tools/index.html"><span class="doc">xr-ai-tools</span></a><br />
+Import: <code class="docutils literal notranslate"><span class="pre">xr_ai_tools</span></code><br />
+Source: <code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-tools</span></code></p></td>
+<td><p>Typed <code class="docutils literal notranslate"><span class="pre">Tool</span></code> and <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code> objects. Add <code class="docutils literal notranslate"><span class="pre">relay</span></code> for <code class="docutils literal notranslate"><span class="pre">run_tool_loop()</span></code>,
+<code class="docutils literal notranslate"><span class="pre">frames</span></code> for live-frame selection, and <code class="docutils literal notranslate"><span class="pre">vision</span></code> for VLM query tools.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_voice</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-voice</span></code></p></td>
-<td><p>The <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> runtime for hub transport, STT, voice gating, TTS, interruption, readiness, and cleanup.</p></td>
-<td><p><a class="reference internal" href="../reference/python/xr_ai_voice/index.html"><span class="doc">xr-ai-voice</span></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../reference/python/xr_ai_voice/index.html"><span class="doc">xr-ai-voice</span></a><br />
+Import: <code class="docutils literal notranslate"><span class="pre">xr_ai_voice</span></code><br />
+Source: <code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-voice</span></code></p></td>
+<td><p>The <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> runtime for hub transport, STT, voice gating, TTS,
+interruption, readiness, and cleanup.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-voicegate</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_voicegate</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">utils/xr-ai-voicegate</span></code></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html"><span class="doc">xr-ai-voicegate</span></a><br />
+Import: <code class="docutils literal notranslate"><span class="pre">xr_ai_voicegate</span></code><br />
+Source: <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-voicegate</span></code></p></td>
 <td><p>Wake-phrase and follow-up-turn gating used by the copied voice application.</p></td>
-<td><p><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html"><span class="doc">xr-ai-voicegate</span></a></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-web-events</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_web_events</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-web-events</span></code></p></td>
-<td><p>A bounded browser view for compact application events explicitly selected by the application.</p></td>
-<td><p><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html"><span class="doc">xr-ai-web-events</span></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html"><span class="doc">xr-ai-web-events</span></a><br />
+Import: <code class="docutils literal notranslate"><span class="pre">xr_ai_web_events</span></code><br />
+Source: <code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-web-events</span></code></p></td>
+<td><p>A bounded browser view for compact application events explicitly selected
+by the application.</p></td>
 </tr>
 </tbody>
 </table>
@@ -681,20 +680,6 @@ above. To use those hooks or the full repository checks, first edit the SPDX
 hook exclusions, dependency-generator ignore rules, and sample catalogs for the
 chosen application path.</p>
 </section>
-<section id="contribute-a-sample-upstream">
-<h2>Contribute a sample upstream<a class="headerlink" href="#contribute-a-sample-upstream" title="Link to this heading">#</a></h2>
-<p>Before proposing an application as an upstream sample:</p>
-<ul class="simple">
-<li><p>Add the repository SPDX header to every new source file.</p></li>
-<li><p>Regenerate <code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code> after a <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> change with
-<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--script</span> <span class="pre">.github/scripts/generate_dependency_map.py</span></code> from the
-repository root. Do not edit its generated package map by hand.</p></li>
-<li><p>Add the sample to the root README sample tour and provide its concise README
-plus canonical <code class="docutils literal notranslate"><span class="pre">docs/source/</span></code> documentation.</p></li>
-</ul>
-<p>Refer to <a class="reference internal" href="adding-a-sample.html"><span class="doc">Adding a new sample</span></a> for the upstream templates and checklist, and
-<a class="reference internal" href="contributing-and-conventions.html"><span class="doc">Contributing and conventions</span></a> for the contribution workflow.</p>
-</section>
 </section>
 
 
@@ -751,7 +736,6 @@ plus canonical <code class="docutils literal notranslate"><span class="pre">docs
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resolve-and-run-the-application">Resolve and run the application</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#verify-without-hardware">Verify without hardware</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#avoid-upstream-repository-checks">Avoid upstream repository checks</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#contribute-a-sample-upstream">Contribute a sample upstream</a></li>
 </ul>
   </nav></div>
 
