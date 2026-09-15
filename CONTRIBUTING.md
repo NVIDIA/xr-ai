@@ -55,14 +55,25 @@ Language-specific toolchains are pinned in each client project:
 
 - Keep code, tests, dependency metadata, and user-facing docs in the same
   change.
+- Keep each pull request to one independently useful outcome. Split unrelated
+  cleanup or redesign into a separate pull request.
 - After changing a `pyproject.toml`, run
   `uv run --script .github/scripts/generate_dependency_map.py` and regenerate the
   affected project's gitignored `uv.lock` locally. Do not hand-edit the
   generated dependency inventory; pre-commit updates it and CI rejects drift.
 - Add the repository SPDX header to new source files. See
   [SPDX headers](docs/source/guides/spdx-headers.md).
-- Describe the motivation and validation in the pull request and link related
-  issues.
+- Complete the pull request template with the problem, solution and important
+  design decisions, related issues, scope and follow-ups, and validation.
+  Explain deliberate exclusions and tradeoffs.
+- Link the issue related to the current change. Link planned follow-up issues
+  separately when they exist.
+- Use `Large PR: yes` only when maintainers agree the coherent change cannot be
+  split into independently useful pull requests; explain that decision and map
+  the major change groups to the goal.
+- Review the complete diff before requesting review and remove unrelated churn.
+- Rebase onto the latest target branch and ensure required CI is green before
+  requesting review, unless maintainers explicitly agree to an exception.
 - Keep commits focused and sign them with `git commit -s`.
 
 ## Developer Certificate of Origin
