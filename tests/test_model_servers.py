@@ -268,6 +268,11 @@ def test_omni_profiles_select_supported_vllm_configuration(profile_path: Path) -
         assert config["gpu_memory_utilization"] == 0.25
         assert config["kv_cache_memory_bytes"] == 2147483648
         assert config["spark_uma"] is True
+    elif profile_path.parent.name == "dual_48G_ada":
+        assert "moe_backend" not in config
+        assert config["gpu_memory_utilization"] == 0.78
+        assert config["kv_cache_memory_bytes"] == 2147483648
+        assert "spark_uma" not in config
     elif profile_path.parent.name == "96G_blackwell":
         assert "moe_backend" not in config
         assert "kv_cache_memory_bytes" not in config
@@ -694,6 +699,38 @@ def test_spark_omni_uses_explicit_kv_cache(
     assert args[cache_index + 1] == "2147483648"
     assert args[memory_index + 1] == "0.25"
     assert captured["spark_uma"] is True
+
+
+def test_dual_ada_omni_uses_explicit_kv_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    config_path = (
+        _REPO_ROOT
+        / "agent-samples/model-servers/yaml/dual_48G_ada/"
+        "nemotron_omni_llm_server.yaml"
+    )
+    config = yaml.safe_load(config_path.read_text())
+    monkeypatch.setattr(_omni, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        _omni,
+        "load_config",
+        lambda: (config, config_path.parent, None),
+    )
+    monkeypatch.setattr(_omni, "resolve_model_cache", lambda *_a, **_k: Path("models"))
+    monkeypatch.setattr(_omni, "setup_hf_env", lambda *_a, **_k: None)
+    monkeypatch.setattr(_omni, "gpu_compute_major", lambda: 8)
+    monkeypatch.setattr(_omni, "_gpu_is_dgx_spark", lambda: False)
+    monkeypatch.setattr(_omni, "serve", lambda **kwargs: captured.update(kwargs))
+
+    _omni.run()
+
+    args = captured["extra_serve_args"]
+    cache_index = args.index("--kv-cache-memory-bytes")
+    memory_index = args.index("--gpu-memory-utilization")
+    assert args[cache_index + 1] == "2147483648"
+    assert args[memory_index + 1] == "0.78"
+    assert captured["spark_uma"] is False
 
 
 @pytest.mark.parametrize("value", [True, 0, -1, "invalid"])
