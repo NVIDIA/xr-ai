@@ -42,12 +42,13 @@ def test_package_root_exports_complete_config_surface() -> None:
     assert LLMSpec in get_args(Spec)
 
 
-def test_nine_presets_registered() -> None:
+def test_ten_presets_registered() -> None:
     assert set(available_presets()) == {
         "cosmos3_nano_reasoner",
         "cosmos_vlm",
         "llama_nemotron",
         "magpie_tts",
+        "nemotron35_lightning",
         "nemotron3_nano",
         "nemotron_omni",
         "parakeet_stt",
@@ -69,6 +70,17 @@ def test_nemotron_omni_disables_thinking_by_default() -> None:
     assert preset["default_extras"] == {
         "chat_template_kwargs": {"enable_thinking": False},
     }
+
+
+def test_nemotron35_lightning_is_text_only_and_disables_thinking() -> None:
+    preset = get_preset("nemotron35_lightning")
+
+    assert preset["default_extras"] == {
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
+    assert preset["reasoning_field"] == "reasoning"
+    assert "vision" not in preset["capabilities"]
+    assert "video" not in preset["capabilities"]
 
 
 def test_unknown_preset_raises() -> None:

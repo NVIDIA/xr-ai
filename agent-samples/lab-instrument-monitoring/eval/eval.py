@@ -39,9 +39,10 @@ async def main() -> None:
             response = await llm.chat(
                 messages,
                 tools=FOREGROUND_TOOL_DEFS,
-                max_tokens=256,
+                max_tokens=1024,
                 temperature=0.0,
-                enable_thinking=False,
+                enable_thinking=True,
+                thinking_budget=512,
             )
             calls = response.tool_calls or []
             expected_tool = case["expected_tool"]

@@ -230,11 +230,9 @@ the visual answer.
 Each turn contains the system prompt, current query, and current workflow
 context—no accumulated conversation history.
 
-Every visual tool in this sample sends exactly one image. The checked-in Omni
-wrapper does not expose multi-image request configuration, so this deployment
-does not support adapting these tools to send multiple images. The explicit
-``reasoning_field`` in ``models.local.json`` keeps the inline VLM adapter aligned
-with the Nemotron Omni preset.
+Every visual tool in this sample sends exactly one image through the shared
+Cosmos3 Nano Reasoner service. The language and tool-calling loop uses the
+separate, text-only Nemotron 3.5 Lightning service.
 
 This makes routing easy to reason about: application state decides which
 capabilities exist, and the model decides how to use only those capabilities.
@@ -450,7 +448,7 @@ root-versus-active prompt and tool preparation. It validates the first model
 action, bound workflow arguments, semantic active-guide refusals, and positive
 active-guide routes. The suite must maintain an 80 percent pass rate so
 occasional language-model variation remains visible without making the
-evaluation unusable. Start `model-servers` so the configured Omni LLM endpoint
+evaluation unusable. Start `model-servers` so the configured Lightning LLM endpoint
 on port 8108 is healthy, then run from `agent-samples/tea-making-sample/`:
 
 ```bash

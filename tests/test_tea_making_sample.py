@@ -96,20 +96,19 @@ def _load_main():
     return module
 
 
-def test_omni_supplies_both_language_and_vision() -> None:
+def test_lightning_supplies_language_and_cosmos_supplies_vision() -> None:
     models = json.loads((_SAMPLE / "yaml/models.local.json").read_text())["models"]
 
-    assert models["llm"]["deployment"]["service"] == "omni"
-    assert models["vlm"]["deployment"]["service"] == "omni"
+    assert models["llm"]["deployment"]["service"] == "lightning"
+    assert models["vlm"]["deployment"]["service"] == "vlm"
     assert models["llm"]["endpoint"]["base_url"] == "http://localhost:8108"
-    assert models["vlm"]["endpoint"]["base_url"] == "http://localhost:8108"
-    assert models["vlm"]["adapter"]["capabilities"]["vision"] is True
-    assert models["vlm"]["adapter"]["reasoning_field"] == "reasoning_content"
+    assert models["vlm"]["endpoint"]["base_url"] == "http://localhost:8100"
+    assert models["vlm"]["adapter"]["preset"] == "cosmos3_nano_reasoner"
     assert all(
         model["deployment"]["ownership"] == "reused"
         for model in models.values()
     )
-    assert "cosmos" not in json.dumps(models).lower()
+    assert "nemotron_omni" not in json.dumps(models)
 
 
 def test_materialized_config_stays_inside_runtime_dir(tmp_path: Path) -> None:
@@ -126,7 +125,7 @@ def test_materialized_config_stays_inside_runtime_dir(tmp_path: Path) -> None:
         sample_main._materialize_worker_config(escaped)
 
 
-def test_launcher_declares_one_omni_and_no_monitoring_ui(tmp_path: Path) -> None:
+def test_launcher_declares_language_and_vision_services(tmp_path: Path) -> None:
     sample_main = _load_main()
     worker_config = sample_main._materialize_worker_config(
         tmp_path,
@@ -136,14 +135,14 @@ def test_launcher_declares_one_omni_and_no_monitoring_ui(tmp_path: Path) -> None
 
     assert names[0] == "hub"
     assert names[-1] == "worker"
-    assert names.count("omni") == 1
-    assert "vlm" not in names
+    assert names.count("lightning") == 1
+    assert names.count("vlm") == 1
     assert "activity-viewer" not in names
     assert "rag" in names
     assert all(
         process.launch_mode == "reuse"
         for process in processes
-        if process.name in {"stt", "omni", "embedding", "tts"}
+        if process.name in {"stt", "lightning", "vlm", "embedding", "tts"}
     )
 
 
@@ -2084,7 +2083,18 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     assert all(isinstance(case.get("expected_skip"), bool) for case in advance_cases)
     observation_cases = [case for case in cases if case.get("kind") == "observation"]
     assert len(observation_cases) >= 4
-    assert all(case["expected_updates"] == {} for case in observation_cases)
+    negative_observation_cases = [
+        case
+        for case in observation_cases
+        if case.get("expected_updates") == {}
+    ]
+    assert len(negative_observation_cases) >= 4
+    assert all(
+        case["expected_tool"] != "workflow__commit"
+        or "expected_updates" in case
+        or "expected_updates_containing" in case
+        for case in observation_cases
+    )
 
     positive_active_names = {
         case["name"]

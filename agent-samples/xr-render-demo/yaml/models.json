@@ -1,14 +1,14 @@
 {
   "models": {
     "llm": {
-      "adapter": {"preset": "nemotron_omni"},
+      "adapter": {"preset": "nemotron35_lightning"},
       "endpoint": {"base_url": "http://localhost:8108", "readiness": "health"},
-      "deployment": {"ownership": "reused", "service": "omni"}
+      "deployment": {"ownership": "reused", "service": "lightning"}
     },
     "agent_llm": {
-      "adapter": {"preset": "nemotron_omni"},
+      "adapter": {"preset": "nemotron35_lightning"},
       "endpoint": {"base_url": "http://localhost:8108", "readiness": "health"},
-      "deployment": {"ownership": "reused", "service": "omni"}
+      "deployment": {"ownership": "reused", "service": "lightning"}
     },
     "stt": {
       "adapter": {"preset": "parakeet_stt"},

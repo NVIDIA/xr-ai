@@ -26,9 +26,9 @@ _MODEL_PROCESSES = [
         launch_mode="reuse",
     ),
     Process(
-        "omni",
-        "../../services/nemotron-omni-llm",
-        "nemotron_omni_llm_server",
+        "lightning",
+        "../../services/nemotron35-lightning-llm",
+        "nemotron35_lightning_llm_server",
         launch_mode="reuse",
     ),
     Process(

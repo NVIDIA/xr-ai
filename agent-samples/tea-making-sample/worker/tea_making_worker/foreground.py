@@ -284,12 +284,14 @@ class ForegroundAgent(Agent):
         ) -> ChatResponse:
             nonlocal round_index
             round_index += 1
+            think = round_index == 1
             response = await self._llm.chat(
                 messages,
                 tools=definitions,
-                max_tokens=512,
+                max_tokens=1024,
                 temperature=0.0,
-                enable_thinking=False,
+                enable_thinking=think,
+                thinking_budget=512 if think else None,
             )
             logger.info(
                 "tea foreground route pid={!r} route={} agent={} round={} tools={}",

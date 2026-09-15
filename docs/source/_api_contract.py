@@ -46,6 +46,7 @@ PUBLIC_API_EXCLUSIONS = (
     "xr_ai_models.presets.cosmos_vlm",
     "xr_ai_models.presets.llama_nemotron",
     "xr_ai_models.presets.magpie_tts",
+    "xr_ai_models.presets.nemotron35_lightning",
     "xr_ai_models.presets.nemotron3_nano",
     "xr_ai_models.presets.nemotron_embedding",
     "xr_ai_models.presets.nemotron_omni",

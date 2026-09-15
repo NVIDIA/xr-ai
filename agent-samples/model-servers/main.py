@@ -15,13 +15,13 @@ containers. Shipped profiles (yaml/models.<name>.json):
   default
     stt        — nvidia/parakeet-tdt-0.6b-v3        port 8103  (NeMo ASR)
     tts        — Pocket TTS, bill_boerst voice       port 8105  (GPU)
-    omni       — Nemotron-3-Nano-Omni-30B-A3B       port 8108  (vLLM; llm + agent_llm)
+    lightning  — Nemotron-3.5-Lightning-30B-A3B      port 8108  (vLLM; llm + agent_llm)
     vlm        — nvidia/Cosmos3-Nano Reasoner       port 8100  (vLLM)
     embedding  — nvidia/llama-nemotron-embed-1b-v2  port 8109  (vLLM)
 
   vlm_llm_nim
     stt + tts + embedding local; the LLM and VLM as self-hosted NIM containers
-    (Nemotron-3-Nano-Omni port 8110, Cosmos3-Nano Reasoner port 8100).
+    (Nemotron-3.5 Lightning port 8110, Cosmos3-Nano Reasoner port 8100).
     Requires docker + NGC_API_KEY. Samples may reuse these endpoints.
 
 Per-service placement (GPUs, ports, KV budgets) lives in the per-GPU-profile
@@ -75,7 +75,7 @@ def _gpu_profile_name(value: str) -> str:
 # service → (project, command, config basename). Order is launch
 # order: NIM containers precede local servers (speech NIMs allocate fixed
 # VRAM while LLM/VLM NIMs grab most of their GPU's free VRAM for KV cache);
-# agent-llm precedes the VLM so its FlashInfer MoE JIT compilation runs with
+# language models precede the VLM so FlashInfer MoE JIT compilation runs with
 # the full GPU free on single-GPU profiles.
 _MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
     "stt-nim":   ("../../services/nim-server", "nim_server", "nim_stt_server"),
@@ -88,6 +88,11 @@ _MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
         "../../services/nemotron3-nano-llm",
         "nemotron3_nano_llm_server",
         "nemotron3_nano_llm_server",
+    ),
+    "lightning": (
+        "../../services/nemotron35-lightning-llm",
+        "nemotron35_lightning_llm_server",
+        "nemotron35_lightning_llm_server",
     ),
     "omni": (
         "../../services/nemotron-omni-llm",

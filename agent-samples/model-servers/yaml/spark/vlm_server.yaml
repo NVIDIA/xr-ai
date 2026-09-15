@@ -3,8 +3,8 @@
 
 # VLM server — DGX Spark (GB10, ~120 GiB GPU-visible unified memory).
 #
-# vlm is THIRD in load order: STT → Omni → vlm.
-# free_at_startup ≈ 120 − 30 (Omni) − 2 (STT) ≈ 88 GiB.
+# vlm is THIRD in load order: STT → Lightning → vlm.
+# free_at_startup ≈ 120 − 32 (Lightning) − 2 (STT) ≈ 86 GiB.
 # Cosmos3 requires about 1.12 GiB of KV cache for one 8,192-token request.
 # Pin 1.5 GiB because vLLM's fractional memory profiler can misattribute
 # filesystem page-cache changes as model overhead on unified-memory systems.

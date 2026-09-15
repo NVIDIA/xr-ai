@@ -151,12 +151,12 @@ def test_models_config_loads() -> None:
     assert tts_spec.base_url       == "http://localhost:8105"
     assert vlm_spec.base_url       == "http://localhost:8100"
 
-    # nemotron_omni preset must set reasoning_field so ChatResponse.reasoning
-    # is populated from vLLM's "reasoning_content" field.
-    assert agent_llm_spec.reasoning_field == "reasoning_content"
+    # The Lightning preset must set reasoning_field so ChatResponse.reasoning
+    # is populated from vLLM's "reasoning" field.
+    assert agent_llm_spec.reasoning_field == "reasoning"
 
-    # Both logical LLMs share the Omni server. The preset must pin thinking off
-    # at the wire level: Nemotron-3-Nano-Omni's template defaults thinking-on,
+    # Both logical LLMs share the Lightning server. The preset pins thinking off
+    # at the wire level because the model's template defaults thinking-on,
     # which burns short reply budgets on hidden reasoning and returns empty
     # content with finish_reason="length".
     for spec in (llm_spec, agent_llm_spec):
@@ -300,7 +300,7 @@ async def test_agentic_loop_wire_golden_thinking_on() -> None:
 
     body = stub.last_json()
 
-    # Model name from the nemotron_omni preset.
+    # Model name from the nemotron35_lightning preset.
     assert body["model"]       == "llm"
     assert body["max_tokens"]  == 2048
     assert body["temperature"] == 0.0
@@ -312,10 +312,8 @@ async def test_agentic_loop_wire_golden_thinking_on() -> None:
     assert tool_names == {"add_primitive", "get_scene_state"}
 
     # Thinking kwargs must be present.
-    assert body.get("chat_template_kwargs") == {
-        "enable_thinking":  True,
-        "thinking_budget":  1024,
-    }
+    assert body.get("chat_template_kwargs") == {"enable_thinking": True}
+    assert body["thinking_token_budget"] == 1024
 
     # Messages wired correctly.
     assert body["messages"][0]["role"] == "system"

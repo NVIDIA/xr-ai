@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nemotron35-lightning-llm-server"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "vllm>=0.27.1",
+    "pyyaml>=6.0",
+    "huggingface-hub>=0.32.0",
+    "hf-xet>=1.1.2,<2.0.0",
+    "xr-ai-logging",
+    "xr-ai-vllm",
+]
+
+[project.scripts]
+nemotron35_lightning_llm_server = "nemotron35_lightning_llm_server.__main__:run"
+
+[tool.uv.sources]
+xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
+xr-ai-vllm    = { path = "../../utils/xr-ai-vllm",    editable = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["nemotron35_lightning_llm_server"]

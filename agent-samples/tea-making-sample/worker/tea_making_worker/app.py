@@ -253,7 +253,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     runtime.register("voice", voice)
 
     logger.info("file outputs → {}", config.artifacts_dir)
-    logger.info("tea-making starting with Omni for language and vision")
+    logger.info("tea-making starting with Lightning language and Cosmos3 vision")
     async with _relay_event_log(config.artifacts_dir):
         async with web_events:
             logger.info("live events → {}", web_events.url)

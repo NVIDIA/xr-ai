@@ -256,11 +256,11 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     models = json.loads(config.models_config.read_text())
 
     assert config.models_config == _SAMPLE / "yaml" / "models.json"
-    assert models["models"]["llm"]["adapter"]["preset"] == "nemotron_omni"
+    assert models["models"]["llm"]["adapter"]["preset"] == "nemotron35_lightning"
     assert models["models"]["llm"]["endpoint"]["base_url"].endswith(":8108")
     assert models["models"]["vlm"]["adapter"]["preset"] == ("cosmos3_nano_reasoner")
     assert models["models"]["vlm"]["endpoint"]["base_url"].endswith(":8100")
-    assert models["models"]["llm"]["deployment"]["service"] == "omni"
+    assert models["models"]["llm"]["deployment"]["service"] == "lightning"
     assert models["models"]["vlm"]["deployment"]["service"] == "vlm"
     assert config.voice_gate_yaml == _SAMPLE / "yaml" / "voice_gate.yaml"
     assert yaml.safe_load(config.voice_gate_yaml.read_text()) == {
@@ -358,7 +358,7 @@ def test_launcher_reuses_cosmos_and_other_model_services(tmp_path: Path) -> None
     assert config.voice_gate_yaml == _SAMPLE / "yaml" / "voice_gate.yaml"
     assert config.artifacts_dir == _SAMPLE / "artifacts"
     assert config.web_events_host == "0.0.0.0"
-    assert models["models"]["llm"]["deployment"]["service"] == "omni"
+    assert models["models"]["llm"]["deployment"]["service"] == "lightning"
     assert models["models"]["vlm"]["adapter"]["preset"] == (
         "cosmos3_nano_reasoner"
     )
@@ -371,7 +371,7 @@ def test_launcher_reuses_cosmos_and_other_model_services(tmp_path: Path) -> None
     assert [process.name for process in processes] == [
         "hub",
         "stt",
-        "omni",
+        "lightning",
         "vlm",
         "tts",
         "worker",
@@ -379,7 +379,7 @@ def test_launcher_reuses_cosmos_and_other_model_services(tmp_path: Path) -> None
     assert all(
         process.launch_mode == "reuse"
         for process in processes
-        if process.name in {"stt", "omni", "vlm", "tts"}
+        if process.name in {"stt", "lightning", "vlm", "tts"}
     )
     assert processes[-1].config == worker_config
 

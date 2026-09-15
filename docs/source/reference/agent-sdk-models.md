@@ -38,13 +38,13 @@ A profile names logical roles and separates three concerns:
   "models": {
     "agent_llm": {
       "category": "llm",
-      "adapter": {"preset": "nemotron_omni"},
+      "adapter": {"preset": "nemotron35_lightning"},
       "endpoint": {
         "base_url": "http://localhost:8108",
         "timeout": 60.0,
         "readiness": "health"
       },
-      "deployment": {"ownership": "reused", "service": "omni"}
+      "deployment": {"ownership": "reused", "service": "lightning"}
     }
   }
 }
@@ -73,6 +73,7 @@ by a managed service itself use `deployment.credentials`.
 | `cosmos3_nano_reasoner` | Cosmos3 Nano VLM | Image; video requires `max_videos_per_prompt >= 1`; no reasoning-field mapping |
 | `cosmos_vlm` | Cosmos-Reason1 compatibility | Image; video requires `max_videos_per_prompt >= 1`; thinking disabled by default |
 | `llama_nemotron` | Llama Nemotron LLM | Server-side `llama3_json` tool calls |
+| `nemotron35_lightning` | Nemotron 3.5 Lightning LLM | Tool calls and `reasoning` normalization; thinking disabled unless requested |
 | `nemotron3_nano` | Nemotron 3 Nano LLM | Normalizes the `reasoning` field; thinking disabled unless requested |
 | `nemotron_omni` | Nemotron Omni | Tool calls, image and video, `reasoning_content` normalization; thinking disabled unless requested |
 | `nemotron_embedding` | Embedding server | OpenAI-compatible dense vectors |
