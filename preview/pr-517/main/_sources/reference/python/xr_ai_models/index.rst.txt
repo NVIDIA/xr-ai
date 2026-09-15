@@ -585,7 +585,8 @@ Package Contents
 
       Per-call generation values override endpoint defaults. ``headers`` may
       supply request context but cannot override the configured authorization
-      header.
+      header. ``thinking_budget`` limits reasoning tokens within the total
+      ``max_tokens`` output limit.
 
 
 
@@ -597,6 +598,8 @@ Package Contents
 
       Malformed server-sent event lines and deltas without content are
       skipped. Tool-call and reasoning deltas are not yielded.
+      ``thinking_budget`` limits reasoning tokens within the total
+      ``max_tokens`` output limit.
 
 
 

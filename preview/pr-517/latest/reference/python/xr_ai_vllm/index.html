@@ -629,10 +629,8 @@ helper can find it.</p>
 <p>Docker mode verifies a Xet-capable Hub inside the container and repairs a
 missing or incompatible <code class="docutils literal notranslate"><span class="pre">hf-xet</span></code> wheel. <em>extra_pip</em> is an additional
 docker-only list of pip-installable package specs for model architectures
-whose wheels the image doesn’t bundle — e.g.
-<code class="docutils literal notranslate"><span class="pre">[&quot;mamba-ssm&quot;,</span> <span class="pre">&quot;causal-conv1d&quot;]</span></code> for Nemotron-Omni’s hybrid SSM
-backbone. Silently ignored in pip mode (deps belong in the wrapper’s
-pyproject.toml there).</p>
+whose wheels the image doesn’t bundle. Silently ignored in pip mode (deps
+belong in the wrapper’s pyproject.toml there).</p>
 <p><em>spark_uma</em> enables the DGX Spark cold-start safeguards in docker mode:
 prefetching and syncing the Hugging Face snapshot before CUDA starts, and
 one bounded restart of a container attempt launched by this wrapper after
