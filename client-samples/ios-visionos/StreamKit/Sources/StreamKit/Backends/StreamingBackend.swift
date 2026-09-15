@@ -108,6 +108,9 @@ public protocol StreamingBackend: AnyObject, Sendable {
     /// Stop camera capture.
     func stopCamera() async throws
 
+    /// Capture one still locally without publishing a video track.
+    func captureImage(config: CameraConfig) async throws -> CapturedImage
+
     // MARK: - Data channel
 
     /// Send binary data to remote participants.
@@ -131,10 +134,31 @@ public protocol StreamingBackend: AnyObject, Sendable {
     ///   - reliable: `true` for ordered, guaranteed delivery (default).
     ///   - topic: Optional topic name; nil means the transport-default topic.
     func send(_ data: Data, reliable: Bool, topic: String?) async throws
+
+    /// Send an encoded image through the backend's chunked stream transport.
+    func sendImage(
+        _ data: Data,
+        requestID: String,
+        mimeType: String,
+        name: String
+    ) async throws
 }
 
 public extension StreamingBackend {
+    func captureImage(config _: CameraConfig) async throws -> CapturedImage {
+        throw StreamError.imageCaptureUnavailable("This backend does not support still capture.")
+    }
+
     func send(_ data: Data, reliable: Bool, topic: String?) async throws {
         try await send(data, reliable: reliable)
+    }
+
+    func sendImage(
+        _: Data,
+        requestID _: String,
+        mimeType _: String,
+        name _: String
+    ) async throws {
+        throw StreamError.notConnected
     }
 }

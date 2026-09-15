@@ -77,13 +77,17 @@ model dependencies out of the minimal agent-to-hub IPC package.
 ### Client media and participant events
 
 1. A client joins through the configured transport and publishes audio, video,
-   and data.
+   and data. It may instead keep video off and expose an opt-in still-image
+   capture handler.
 2. The transport connector converts that input into participant-tagged hub
    events. Audio, data, and participant events travel inline; video pixels stay
    in shared memory and frame notifications remain lightweight.
 3. DeviceIOHub fans subscribed events out to `ProcessorEndpoint` consumers.
    Multiple agents or passive processors can subscribe to the same input.
-4. A worker requests video pixels only when its application needs a frame.
+4. A worker requests video pixels only when its application needs a frame. If
+   no fresh video exists, a participant-bound tool can request one encoded
+   still from the originating client; the client returns it in a targeted,
+   correlated byte stream.
 5. Return audio and data name the originating participant. The hub validates
    the target and the connector delivers the response only to that participant.
 

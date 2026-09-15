@@ -6,9 +6,10 @@
 # Simple VLM example
 
 This sample is the smallest complete voice-and-vision application in the
-repository. A participant can ask a spoken or typed question about the latest
-camera frame. The response streams to Pocket TTS and to the `vlm.response` data
-topic.
+repository. A participant can ask a spoken or typed question about the current
+camera view. The worker uses an existing live video frame when the client is
+streaming; otherwise it asks the client to take one picture for that turn. The
+response streams to Pocket TTS and to the `vlm.response` data topic.
 
 The sample launches DeviceIOHub and its worker. It reuses Parakeet STT,
 Cosmos3 Nano Reasoner, and Pocket TTS from the shared model stack. Before the

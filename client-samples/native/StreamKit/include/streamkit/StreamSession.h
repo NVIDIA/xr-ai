@@ -46,6 +46,7 @@
 #include "streamkit/Config/CameraConfig.h"
 #include "streamkit/Config/SessionConfig.h"
 #include "streamkit/ConnectionState.h"
+#include "streamkit/ImageCapture.h"
 
 namespace streamkit {
 
@@ -85,6 +86,9 @@ public:
     /// May run on a backend worker thread; marshal to the UI thread as needed.
     /// Exceptions are contained by the built-in LiveKit backend.
     std::function<void(const NetworkMetrics& metrics)> on_network_metrics;
+
+    /// Opt-in handler invoked when the remote agent asks for one still image.
+    std::function<CapturedImage(const ImageCaptureRequest&)> on_image_capture_requested;
 
     // ── State ──────────────────────────────────────────────────────────────
 
@@ -129,6 +133,8 @@ public:
     void Send(std::span<const std::byte> data,
               bool reliable = true,
               std::string_view topic = "");
+
+    void SendImage(const CapturedImage& image, std::string_view request_id);
 
     // ── Advanced ──────────────────────────────────────────────────────────
 

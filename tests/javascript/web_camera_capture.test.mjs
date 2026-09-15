@@ -10,6 +10,12 @@ register('./web_camera_test_loader.mjs', import.meta.url);
 const { LiveKitBackend } = await import(
   '../../client-samples/web/StreamKit/Backends/LiveKit/LiveKitBackend.js'
 );
+const { StreamSession } = await import(
+  '../../client-samples/web/StreamKit/StreamSession.js'
+);
+const { ConnectionState } = await import(
+  '../../client-samples/web/StreamKit/ConnectionState.js'
+);
 
 function makeMediaTrack(settings = {}) {
   return {
@@ -128,6 +134,11 @@ function installAppBrowser(model) {
   });
   globalThis.__elements = new Map([
     ['camera-preview', video],
+    ['captured-preview', {
+      classList: new FakeClassList(),
+      removeAttribute() {},
+      src: '',
+    }],
     ['preview-placeholder', element()],
     ['preview-live-badge', element()],
     ['agent-response-text', element()],
@@ -318,4 +329,34 @@ test('stops network polling after a terminal room disconnect', async (t) => {
   await new Promise(resolve => setTimeout(resolve, 1_100));
 
   assert.equal(statsCalls, 1);
+});
+
+test('cancels an in-flight image capture on terminal disconnect', async () => {
+  let resolveStarted;
+  const started = new Promise(resolve => { resolveStarted = resolve; });
+  let aborted = false;
+  let imagesSent = 0;
+  const backend = {
+    async disconnect() {},
+    async sendImage() { imagesSent += 1; },
+  };
+  const session = new StreamSession(backend);
+  session.onImageCaptureRequested = ({ signal }) => new Promise((resolve, reject) => {
+    resolveStarted();
+    signal.addEventListener('abort', () => {
+      aborted = true;
+      reject(new DOMException('Capture cancelled', 'AbortError'));
+    }, { once: true });
+  });
+
+  backend.onDataReceived(
+    'camera.capture.request',
+    new TextEncoder().encode('{"version":1,"request_id":"capture-1","timeout_ms":5000}'),
+  );
+  await started;
+  backend.onConnectionStateChanged(ConnectionState.DISCONNECTED);
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  assert.equal(aborted, true);
+  assert.equal(imagesSent, 0);
 });

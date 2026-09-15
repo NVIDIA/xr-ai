@@ -5,9 +5,11 @@ package com.nvidia.xrai.streamkitsample.streamkit.backends.livekit
 
 import android.content.Context
 import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
+import com.nvidia.xrai.streamkitsample.streamkit.CapturedImage
 import com.nvidia.xrai.streamkitsample.streamkit.NetworkMetrics
 import com.nvidia.xrai.streamkitsample.streamkit.NetworkQuality
 import com.nvidia.xrai.streamkitsample.streamkit.StreamError
+import com.nvidia.xrai.streamkitsample.streamkit.captureJpeg
 import com.nvidia.xrai.streamkitsample.streamkit.backends.StreamingBackend
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.BackendConfiguration
@@ -23,6 +25,7 @@ import io.livekit.android.room.Room
 import io.livekit.android.room.participant.ConnectionQuality
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.VideoTrackPublishOptions
+import io.livekit.android.room.datastream.StreamBytesOptions
 import io.livekit.android.room.track.CameraPosition
 import io.livekit.android.room.track.DataPublishReliability
 import io.livekit.android.room.track.LocalVideoTrack
@@ -240,6 +243,30 @@ internal class LiveKitBackend(
         room?.localParticipant?.setCameraEnabled(false)
     }
 
+    override suspend fun captureImage(config: CameraConfig): CapturedImage {
+        if (!isConnected) throw StreamError.NotConnected
+        localCameraTrack?.let { return CapturedImage(it.captureJpeg()) }
+        val participant = room?.localParticipant ?: throw StreamError.NotConnected
+        val position = when (config.facing) {
+            CameraConfig.CameraFacing.FRONT -> CameraPosition.FRONT
+            CameraConfig.CameraFacing.BACK -> CameraPosition.BACK
+        }
+        val track = participant.createVideoTrack(
+            name = "still-capture",
+            options = participant.videoTrackCaptureDefaults.copy(
+                deviceId = config.deviceId,
+                position = position,
+            ),
+        )
+        return try {
+            track.startCapture()
+            CapturedImage(track.captureJpeg())
+        } finally {
+            track.stop()
+            track.dispose()
+        }
+    }
+
     // ── StreamingBackend: injected video frames ───────────────────────────────
 
     override suspend fun injectVideoFrame(
@@ -299,6 +326,34 @@ internal class LiveKitBackend(
             if (reliable) DataPublishReliability.RELIABLE else DataPublishReliability.LOSSY,
             identities = identities,
         )
+    }
+
+    override suspend fun sendImage(
+        data: ByteArray,
+        requestId: String,
+        mimeType: String,
+        name: String,
+    ) {
+        if (!isConnected) throw StreamError.NotConnected
+        val participant = room?.localParticipant ?: throw StreamError.NotConnected
+        val destinations = config.hubIdentity?.let { listOf(Participant.Identity(it)) }.orEmpty()
+        val sender = participant.streamBytes(
+            StreamBytesOptions(
+                topic = "camera.capture.response",
+                attributes = mapOf("request_id" to requestId),
+                destinationIdentities = destinations,
+                mimeType = mimeType,
+                name = name,
+                totalSize = data.size.toLong(),
+            )
+        )
+        try {
+            sender.write(data).getOrThrow()
+            sender.close()
+        } catch (error: Throwable) {
+            if (sender.isOpen) sender.close(error.message)
+            throw error
+        }
     }
 
     // ── Event dispatcher ───────────────────────────────────────────────────────

@@ -151,6 +151,7 @@ class _WebEventCollector(Agent):
 def _fake_endpoint() -> SimpleNamespace:
     return SimpleNamespace(
         on_frame=lambda _callback: None,
+        on_image_capture=lambda _callback: lambda: None,
         on_participant=lambda _callback: None,
     )
 
