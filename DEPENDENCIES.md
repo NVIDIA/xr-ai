@@ -772,7 +772,6 @@ drift:
     - `llama-nemotron-llm-server` → [`llama-nemotron-llm-server`](services/llama-nemotron-llm/) (local, editable)
     - `nemotron-omni-llm-server` → [`nemotron-omni-llm-server`](services/nemotron-omni-llm/) (local, editable)
     - `nemotron3-nano-llm-server` → [`nemotron3-nano-llm-server`](services/nemotron3-nano-llm/) (local, editable)
-    - `nemotron35-lightning-llm-server` → [`nemotron35-lightning-llm-server`](services/nemotron35-lightning-llm/) (local, editable)
     - `vlm-server` → [`vlm-server`](services/vlm-server/) (local, editable)
 - Commands: none
 
