@@ -391,13 +391,30 @@ flags. Docker-only lifecycle settings such as `vllm_image`, `extra_pip`, and
 ```yaml
 # vlm-server (Cosmos3)
 vllm_backend: docker
-vllm_image:   nvcr.io/nvidia/vllm:26.07-py3
+vllm_image:   nvcr.io/nvidia/vllm:26.08-py3
 ```
 
-`vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.07-py3` for vlm-server,
-whose Cosmos3 support requires vLLM 0.23 or newer. The other wrappers retain
-their `26.04-py3` default. Override either to pin another tag, an internal
-mirror, or a custom build.
+`vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.08-py3` for all wrappers.
+This image includes vLLM 0.27.1 and supports the checked-in Cosmos3 and
+Nemotron model configurations. Nemotron Omni uses the image's native Mamba and
+causal-convolution implementations, so the shipped configuration does not
+compile or install `mamba-ssm` or `causal-conv1d`. Override the image to pin
+another tag, an internal mirror, or a custom build.
+
+::::{important}
+When upgrading an existing checkout, stop the persistent model stack before
+starting it with the new image:
+
+```bash
+uv run --project agent-samples/model-servers model_servers --stop
+docker pull nvcr.io/nvidia/vllm:26.08-py3
+```
+
+The next launch recreates stale managed containers when their image or command
+fingerprint differs. After the new stack starts successfully, reclaim disk from
+an old image with `docker image rm <old-vllm-image>`. Keep the shared model cache;
+the 26.08 stack reuses compatible weights and downloads any missing artifacts.
+::::
 
 ### docker mode — prerequisites
 
@@ -441,13 +458,11 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
   forwarded, and included in the container fingerprint, so changing one
   recreates a persistent container.
 
-The shipped image pins were qualified with these in-container versions:
+The shipped image pin was qualified with this in-container vLLM version:
 
-| Image | `huggingface-hub` | `hf-xet` |
-|---|---:|---:|
-| `nvcr.io/nvidia/vllm:26.04-py3` | 0.36.2 | 1.4.3 |
-| `nvcr.io/nvidia/vllm:26.07-py3` | 1.24.0 | 1.5.2 |
-| `vllm/vllm-openai:v0.20.0` | 1.12.0 | 1.4.3 |
+| Image | vLLM |
+|---|---:|
+| `nvcr.io/nvidia/vllm:26.08-py3` | 0.27.1 |
 
 - Container name is deterministic per service: `xr-ai-vllm-vlm-server`,
   `xr-ai-vllm-llama-nemotron-llm-server`,
@@ -539,12 +554,20 @@ cleanup.
   ignored. Set `startup_timeout_s` to a positive finite number to override the
   600-second cold-start budget.
 - **magpie-tts** loads magpie_tts_multilingual_357m via NeMo TTS in-process.
-- **pocket-tts** loads the compact `kyutai/pocket-tts` model on CPU and serves
-  the configured voice through the repository's OpenAI-compatible TTS API.
-  Model loading and synthesis run outside the asyncio event loop. The default
-  `bill_boerst` voice derives from a CC0 Voice-Zero recording and is the only
-  voice accepted by this release. The service logs whether it loaded the gated
-  voice-cloning weights or the ungated fallback.
+- **pocket-tts** loads the compact `kyutai/pocket-tts` model on the configured
+  `cpu`, `cuda`, or automatically selected device. The checked-in deployment
+  profiles use CUDA and warm up the model before reporting ready. Its native
+  PCM streaming path emits audio during generation; non-streaming WAV requests
+  remain supported. Model loading and synthesis run outside the asyncio event
+  loop. The default `bill_boerst` voice derives from a CC0 Voice-Zero recording
+  and is the only voice accepted by this release. The service logs whether it
+  loaded the gated voice-cloning weights or the ungated fallback.
+
+  To stream, send `POST /v1/audio/speech` with `response_format` set to `pcm`
+  and `stream` set to `true`. The response uses `audio/pcm`; the
+  `x-audio-sample-rate` and `x-audio-channels` headers describe the signed
+  16-bit interleaved samples. Streaming with another response format returns
+  HTTP 400.
 - **embedding-server** serves `nvidia/llama-nemotron-embed-1b-v2` through
   `/v1/embeddings`. It emits 2048-dimensional Matryoshka embeddings and can
   truncate them to 384, 512, 768, 1024, or 2048 dimensions. The checked-in

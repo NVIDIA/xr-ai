@@ -434,6 +434,11 @@ and command to <code class="docutils literal notranslate"><span class="pre">devi
 <section id="operator-visible-runtime-changes">
 <h2>Operator-visible runtime changes<a class="headerlink" href="#operator-visible-runtime-changes" title="Link to this heading">#</a></h2>
 <ul class="simple">
+<li><p>DeviceIOHub now waits for the hub to acknowledge shared-memory attachment
+before connecting the LiveKit room or creating its ready file. Missing
+segments trigger bounded recreation; incompatible layouts and acknowledgement
+timeouts fail startup. Check the registration error in the hub logs rather
+than treating a running process as ready.</p></li>
 <li><p>DeviceIOHub no longer falls back to embedded LiveKit development credentials.
 Set <code class="docutils literal notranslate"><span class="pre">api_key</span></code> and <code class="docutils literal notranslate"><span class="pre">api_secret</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>, or inject
 <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_SECRET</span></code> through the environment.</p></li>
@@ -461,6 +466,13 @@ alias. Replace the <code class="docutils literal notranslate"><span class="pre">
 <code class="docutils literal notranslate"><span class="pre">services/piper-tts/</span></code> path with <code class="docutils literal notranslate"><span class="pre">pocket_tts</span></code>, <code class="docutils literal notranslate"><span class="pre">pocket_tts_server</span></code>, and
 <code class="docutils literal notranslate"><span class="pre">services/pocket-tts/</span></code>. Pocket TTS voice names differ from Piper voice names;
 the checked-in profiles use the CC0 <code class="docutils literal notranslate"><span class="pre">bill_boerst</span></code> voice.</p>
+<p>Pocket TTS now selects a GPU automatically by default, and the checked-in
+model-server profiles require CUDA on GPU 0. Set <code class="docutils literal notranslate"><span class="pre">device:</span> <span class="pre">cpu</span></code> for CPU-only
+execution or <code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> to change GPU placement. CUDA warmup runs
+within <code class="docutils literal notranslate"><span class="pre">startup_timeout_s</span></code>, so increase that timeout when cold initialization
+exceeds 600 seconds. The service now resolves the PyPI Torch build instead of
+the CPU-only index; Linux environments therefore include the CUDA library
+footprint even when execution falls back to CPU.</p>
 </section>
 <section id="removed-sdk-compatibility-surfaces">
 <h2>Removed SDK compatibility surfaces<a class="headerlink" href="#removed-sdk-compatibility-surfaces" title="Link to this heading">#</a></h2>
