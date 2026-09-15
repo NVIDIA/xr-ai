@@ -22,7 +22,13 @@ from tea_making_worker.transcript import TranscriptAgent
 from tea_making_worker.video_log import VideoLogAgent
 from tea_making_worker.workflow import GuidanceAgent, _state_contract
 from tea_making_worker.workflow_tools import workflow_commit_tool
-from xr_ai_models import ChatMessage, LLMService, load_models_config, make_llm
+from xr_ai_models import (
+    ChatMessage,
+    LLMService,
+    ToolCall,
+    load_models_config,
+    make_llm,
+)
 from xr_ai_tools import ToolSet
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.tool_calling import tool_definitions
@@ -127,7 +133,12 @@ def _observation_turn(
 ) -> tuple[tuple[ChatMessage, ...], ToolSet]:
     session = guidance.store.get(participant_id)
     guidance.store.start(session)
-    step = guidance.workflow.step(str(case["step"]))
+    target_step = str(case["step"])
+    while session.step_id != target_step:
+        if not session.active or session.step_id is None:
+            raise ValueError(f"cannot reach observation step {target_step!r}")
+        guidance.store.advance(session, skip=True)
+    step = guidance.workflow.step(target_step)
     quick = guidance._named_tools(session, step.agent.tools)
     commit = workflow_commit_tool(
         guidance.store,
@@ -152,10 +163,41 @@ def _observation_turn(
             step.agent.prompt,
         )
     )
-    return (
+    messages = [
         ChatMessage(role="system", content=system),
         ChatMessage(role="user", content=request),
-    ), tools
+    ]
+    prior_tool = case.get("prior_tool")
+    if prior_tool is not None:
+        name = str(prior_tool["name"])
+        call_id = f"prior-{name}"
+        messages.extend(
+            (
+                ChatMessage(
+                    role="assistant",
+                    content="",
+                    tool_calls=[
+                        ToolCall(
+                            id=call_id,
+                            name=name,
+                            arguments=json.dumps(
+                                prior_tool.get("arguments", {}),
+                                separators=(",", ":"),
+                            ),
+                        )
+                    ],
+                ),
+                ChatMessage(
+                    role="tool",
+                    content=json.dumps(
+                        prior_tool["result"],
+                        separators=(",", ":"),
+                    ),
+                    tool_call_id=call_id,
+                ),
+            )
+        )
+    return tuple(messages), tools
 
 
 async def main() -> None:
@@ -235,10 +277,29 @@ async def main() -> None:
                 except json.JSONDecodeError:
                     pass
                 else:
-                    if arguments.get("updates") != case.get("expected_updates"):
+                    expected_updates = case.get("expected_updates")
+                    if (
+                        "expected_updates" in case
+                        and arguments.get("updates") != expected_updates
+                    ):
                         errors.append(
                             f"observation updates were {arguments.get('updates')!r}, "
-                            f"expected {case.get('expected_updates')!r}"
+                            f"expected {expected_updates!r}"
+                        )
+                    expected_updates_containing = case.get(
+                        "expected_updates_containing"
+                    )
+                    actual_updates = arguments.get("updates")
+                    if expected_updates_containing is not None and (
+                        not isinstance(actual_updates, dict)
+                        or any(
+                            actual_updates.get(name) != value
+                            for name, value in expected_updates_containing.items()
+                        )
+                    ):
+                        errors.append(
+                            f"observation updates were {actual_updates!r}, expected "
+                            f"at least {expected_updates_containing!r}"
                         )
             normalized_content = _normalize_response(content)
             expected_response = case.get("expected_response")

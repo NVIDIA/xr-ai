@@ -16,7 +16,9 @@ state:
     description: Brewing temperature in Celsius.
   steep_duration_s:
     type: integer
-    description: Steep duration in seconds.
+    description: >-
+      Steep duration in seconds, converted from the explicit source unit;
+      for example, five minutes is 300 seconds, never 5.
   guidance_source:
     type: string
     description: Package or retrieved source.
@@ -68,9 +70,12 @@ steps:
         write placeholder values. Prefer
         visible values. If temperature/time is missing,
         call rag_lookup once with "<exact name> water temperature steep time",
-        top_k 2; accept only a section naming it. If every writable field is
-        supported, commit all with tea_ready true. Otherwise commit nothing;
-        never write tea_ready false.
+        top_k 2; accept only a section naming the exact blend or an unambiguous
+        tea type contained in its name. Never supply temperature or duration
+        from memory. Convert an explicit minute duration to seconds before
+        committing; use the lower bound of an explicit range. If every writable
+        field is supported, commit all with tea_ready true. Otherwise commit
+        nothing; never write tea_ready false.
       tools: [rag_lookup]
     voice:
       prompt: >-
@@ -203,8 +208,8 @@ steps:
         clock__now. Nearby, above, or outside the liquid does not count. Then
         commit exactly its epoch_us as steeping_started_at_us with
         steeping_started true. For any other caption, do not infer contact from
-        context or prior state; commit empty updates and message. Never invent or
-        replace a start time.
+        context or prior state; commit empty updates and message. Never commit a
+        timestamp before receiving clock__now, and never invent or replace one.
       tools: [clock__now]
     voice:
       prompt: >-

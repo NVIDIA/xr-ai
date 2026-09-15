@@ -2083,7 +2083,18 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     assert all(isinstance(case.get("expected_skip"), bool) for case in advance_cases)
     observation_cases = [case for case in cases if case.get("kind") == "observation"]
     assert len(observation_cases) >= 4
-    assert all(case["expected_updates"] == {} for case in observation_cases)
+    negative_observation_cases = [
+        case
+        for case in observation_cases
+        if case.get("expected_updates") == {}
+    ]
+    assert len(negative_observation_cases) >= 4
+    assert all(
+        case["expected_tool"] != "workflow__commit"
+        or "expected_updates" in case
+        or "expected_updates_containing" in case
+        for case in observation_cases
+    )
 
     positive_active_names = {
         case["name"]
