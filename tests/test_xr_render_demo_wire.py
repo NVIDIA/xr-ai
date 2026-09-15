@@ -152,8 +152,8 @@ def test_models_config_loads() -> None:
     assert vlm_spec.base_url       == "http://localhost:8100"
 
     # The Lightning preset must set reasoning_field so ChatResponse.reasoning
-    # is populated from vLLM's "reasoning_content" field.
-    assert agent_llm_spec.reasoning_field == "reasoning_content"
+    # is populated from vLLM's "reasoning" field.
+    assert agent_llm_spec.reasoning_field == "reasoning"
 
     # Both logical LLMs share the Lightning server. The preset pins thinking off
     # at the wire level because the model's template defaults thinking-on,

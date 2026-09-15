@@ -53,7 +53,6 @@ vllm = [
     "llama-nemotron-llm-server",
     "nemotron-omni-llm-server",
     "nemotron3-nano-llm-server",
-    "nemotron35-lightning-llm-server",
     "vlm-server",
 ]
 
@@ -86,7 +85,6 @@ conflicts = [[{ extra = "repository" }, { extra = "vllm" }]]
 "magpie-tts-server"                = { path = "../services/magpie-tts", editable = true }
 "nemotron-omni-llm-server"         = { path = "../services/nemotron-omni-llm", editable = true }
 "nemotron3-nano-llm-server"        = { path = "../services/nemotron3-nano-llm", editable = true }
-"nemotron35-lightning-llm-server"  = { path = "../services/nemotron35-lightning-llm", editable = true }
 "nim-server"                       = { path = "../services/nim-server", editable = true }
 "xr-openxr-service"                = { path = "../services/openxr-service", editable = true }
 "pocket-tts-server"                = { path = "../services/pocket-tts", editable = true }

@@ -32,7 +32,6 @@ VLLM_PROJECTS = frozenset(
         "llama-nemotron-llm-server",
         "nemotron-omni-llm-server",
         "nemotron3-nano-llm-server",
-        "nemotron35-lightning-llm-server",
         "vlm-server",
     }
 )

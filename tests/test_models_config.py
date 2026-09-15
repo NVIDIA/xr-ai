@@ -78,7 +78,7 @@ def test_nemotron35_lightning_is_text_only_and_disables_thinking() -> None:
     assert preset["default_extras"] == {
         "chat_template_kwargs": {"enable_thinking": False},
     }
-    assert preset["reasoning_field"] == "reasoning_content"
+    assert preset["reasoning_field"] == "reasoning"
     assert "vision" not in preset["capabilities"]
     assert "video" not in preset["capabilities"]
 
