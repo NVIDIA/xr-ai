@@ -158,8 +158,8 @@ export class LiveKitBackend {
    * Establishes a LiveKit room connection.
    *
    * Tears down any existing session first, validates the host, builds the
-   * WebSocket URL, acquires a JWT (from `config.token` or the token endpoint),
-   * creates and wires up a `Room`, then connects. Audio is published
+   * WebSocket URL, creates a `Room`, acquires a JWT (from `config.token` or
+   * the token endpoint), wires up the room, then connects. Audio is published
    * automatically unless the session config disables the microphone.
    *
    * @param {import('../../Config/SessionConfig.js').SessionConfig} sessionConfig
@@ -192,6 +192,13 @@ export class LiveKitBackend {
     const scheme = secure ? 'wss' : 'ws';
     const wsURL = `${scheme}://${cleanHost}:${port}`;
 
+    // Prime playback while handling the user's Connect click, before token and
+    // network awaits can outlive the browser's activation window. Tracks that
+    // subscribe later still make their own play attempt below.
+    const room = new Room();
+    this.#room = room;
+    this.#resumeRemoteAudio(room);
+
     // ── Resolve JWT ───────────────────────────────────────────────────────────
     let token;
     if (this.#config.token) {
@@ -202,10 +209,7 @@ export class LiveKitBackend {
       throw StreamError.missingToken();
     }
 
-    // ── Create Room and wire events ───────────────────────────────────────────
-    const room = new Room();
-    this.#room = room;
-
+    // ── Wire Room events ──────────────────────────────────────────────────────
     room.on(RoomEvent.ConnectionStateChanged, (lkState) => {
       if (lkState === 'disconnected' && this.#room === room) {
         this.#stopNetworkMetricsReporting();
@@ -252,7 +256,7 @@ export class LiveKitBackend {
         document.body.appendChild(el);
         this.#audioElements.set(track.sid, el);
         el.play().catch(() => {
-          // Autoplay blocked — will resume on next user gesture.
+          // Later microphone and send gestures retry through Room.startAudio().
         });
       }
     });
@@ -294,6 +298,9 @@ export class LiveKitBackend {
     if (!this.#room || this.#room.state !== 'connected') {
       throw StreamError.notConnected();
     }
+
+    this.#resumeRemoteAudio(this.#room);
+
     await this.stopAudio();
     await this.#publishAudio(audioConfig ?? this.#sessionConfig?.audio);
   }
@@ -428,6 +435,8 @@ export class LiveKitBackend {
       throw StreamError.notConnected();
     }
 
+    this.#resumeRemoteAudio(room);
+
     let bytes;
     if (typeof data === 'string') {
       bytes = new TextEncoder().encode(data);
@@ -476,6 +485,17 @@ export class LiveKitBackend {
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────
+
+  /**
+   * Best-effort retry for browser-blocked remote audio playback.
+   *
+   * @param {Room} room
+   */
+  #resumeRemoteAudio(room) {
+    room.startAudio().catch((error) => {
+      console.warn('Remote audio playback remains blocked.', error);
+    });
+  }
 
   /**
    * Disconnects the room, stops all tracks, and nulls out all state.

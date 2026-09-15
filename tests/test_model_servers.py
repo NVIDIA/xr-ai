@@ -30,6 +30,15 @@ assert _OMNI_SPEC and _OMNI_SPEC.loader
 _omni = importlib.util.module_from_spec(_OMNI_SPEC)
 _OMNI_SPEC.loader.exec_module(_omni)
 
+_NANO_PATH = (
+    _REPO_ROOT
+    / "services/nemotron3-nano-llm/nemotron3_nano_llm_server/__main__.py"
+)
+_NANO_SPEC = importlib.util.spec_from_file_location("nemotron3_nano_main", _NANO_PATH)
+assert _NANO_SPEC and _NANO_SPEC.loader
+_nano = importlib.util.module_from_spec(_NANO_SPEC)
+_NANO_SPEC.loader.exec_module(_nano)
+
 _EMBEDDING_PATH = (
     _REPO_ROOT / "services/embedding-server/embedding_server/__main__.py"
 )
@@ -251,16 +260,33 @@ def test_omni_profiles_select_supported_vllm_configuration(profile_path: Path) -
     config = yaml.safe_load(profile_path.read_text())
 
     assert config["vllm_backend"] == "docker"
-    assert config["vllm_image"] == "vllm/vllm-openai:v0.20.0"
-    assert config["extra_pip"] == []
-    assert "moe_backend" not in config
+    assert config["vllm_image"] == "nvcr.io/nvidia/vllm:26.08-py3"
+    assert "extra_pip" not in config
     if profile_path.parent.name == "spark":
+        assert config["max_num_seqs"] == 4
+        assert "moe_backend" not in config
         assert config["gpu_memory_utilization"] == 0.25
         assert config["kv_cache_memory_bytes"] == 2147483648
         assert config["spark_uma"] is True
-    else:
+    elif profile_path.parent.name == "96G_blackwell":
+        assert "moe_backend" not in config
         assert "kv_cache_memory_bytes" not in config
         assert "spark_uma" not in config
+    else:
+        assert "moe_backend" not in config
+        assert "kv_cache_memory_bytes" not in config
+        assert "spark_uma" not in config
+
+
+def test_all_shipped_vllm_images_track_dispatcher_default() -> None:
+    configured_images: dict[Path, str] = {}
+    for path in _REPO_ROOT.rglob("*.yaml"):
+        config = yaml.safe_load(path.read_text())
+        if isinstance(config, dict) and "vllm_image" in config:
+            configured_images[path] = config["vllm_image"]
+
+    assert configured_images
+    assert set(configured_images.values()) == {_nano.DEFAULT_IMAGE}
 
 
 def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -540,6 +566,80 @@ def test_omni_only_forwards_configured_moe_backend(
         assert "--moe-backend" not in args
     else:
         assert args[args.index("--moe-backend") + 1] == moe_backend
+
+
+@pytest.mark.parametrize(
+    ("compute_major", "spark_uma", "expected_seqs"),
+    [
+        (8, False, "384"),
+        (12, False, "384"),
+        (12, True, "4"),
+    ],
+)
+def test_omni_applies_spark_sequence_default(
+    monkeypatch: pytest.MonkeyPatch,
+    compute_major: int,
+    spark_uma: bool,
+    expected_seqs: str,
+) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(_omni, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        _omni,
+        "load_config",
+        lambda: ({}, Path("."), None),
+    )
+    monkeypatch.setattr(_omni, "resolve_model_cache", lambda *_a, **_k: Path("models"))
+    monkeypatch.setattr(_omni, "setup_hf_env", lambda *_a, **_k: None)
+    monkeypatch.setattr(_omni, "gpu_compute_major", lambda: compute_major)
+    monkeypatch.setattr(_omni, "_gpu_is_dgx_spark", lambda: spark_uma)
+    monkeypatch.setattr(_omni, "serve", lambda **kwargs: captured.update(kwargs))
+
+    _omni.run()
+
+    args = captured["extra_serve_args"]
+    assert args[args.index("--max-num-seqs") + 1] == expected_seqs
+    assert captured["extra_pip"] == []
+
+
+@pytest.mark.parametrize(
+    ("compute_major", "spark_uma", "expected_seqs"),
+    [
+        (8, False, "8"),
+        (12, True, "4"),
+    ],
+)
+def test_nano_standalone_applies_spark_sequence_default(
+    monkeypatch: pytest.MonkeyPatch,
+    compute_major: int,
+    spark_uma: bool,
+    expected_seqs: str,
+) -> None:
+    captured: dict[str, object] = {}
+    config_path = (
+        _REPO_ROOT
+        / "services/nemotron3-nano-llm/nemotron3_nano_llm_server.yaml"
+    )
+    config = yaml.safe_load(config_path.read_text())
+    monkeypatch.setattr(_nano, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        _nano, "load_config", lambda: (config, config_path.parent, None)
+    )
+    monkeypatch.setattr(_nano, "resolve_model_cache", lambda *_a, **_k: Path("models"))
+    monkeypatch.setattr(_nano, "setup_hf_env", lambda *_a, **_k: None)
+    monkeypatch.setattr(_nano, "gpu_compute_major", lambda: compute_major)
+    monkeypatch.setattr(_nano, "_gpu_is_dgx_spark", lambda: spark_uma)
+    monkeypatch.setattr(
+        _nano,
+        "_ensure_reasoning_parser",
+        lambda *_a, **_k: Path("parser.py"),
+    )
+    monkeypatch.setattr(_nano, "serve", lambda **kwargs: captured.update(kwargs))
+
+    _nano.run()
+
+    args = captured["extra_serve_args"]
+    assert args[args.index("--max-num-seqs") + 1] == expected_seqs
 
 
 def test_spark_omni_uses_explicit_kv_cache(

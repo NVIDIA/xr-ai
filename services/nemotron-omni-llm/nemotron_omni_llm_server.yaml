@@ -30,7 +30,8 @@ model_cache: ../../models
 # cuda_visible_devices: "0"
 
 # vLLM knobs.
-max_num_seqs:           384
+# The launcher defaults to 384 sequences, or 4 for the NVFP4 model when
+# spark_uma is enabled. Set max_num_seqs to override that hardware-aware default.
 tensor_parallel_size:   1
 max_model_len:          131072
 gpu_memory_utilization: 0.85
@@ -55,4 +56,7 @@ vllm_backend: docker
 
 # Container image used when vllm_backend: docker.  Override to pin a different
 # tag, an internal mirror, or a custom build.
-vllm_image: nvcr.io/nvidia/vllm:26.04-py3
+vllm_image: nvcr.io/nvidia/vllm:26.08-py3
+
+# DGX Spark is detected automatically to select the documented four-sequence
+# limit and unified-memory cold-start safeguards. Set spark_uma to override.

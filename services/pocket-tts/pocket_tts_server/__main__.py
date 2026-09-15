@@ -4,7 +4,7 @@
 """
 pocket_tts_server — Pocket TTS HTTP server.
 
-Pocket TTS is a compact, streaming-capable CPU model. This wrapper exposes the
+Pocket TTS is a compact, streaming-capable model. This wrapper exposes the
 repository's existing OpenAI-compatible API:
 
     POST /v1/audio/speech
@@ -21,6 +21,8 @@ Config keys
 -----------
     voice:        str   Must be "bill_boerst" (required)
     language:     str   Pocket TTS language/model variant (default: "english")
+    device:       str   "cpu", "cuda", or "auto" (default: "auto")
+    cuda_visible_devices: str  CUDA device indices exposed to Pocket TTS.
     port:         int   HTTP port (default: 8105)
     host:         str   Bind address (default: "0.0.0.0")
     startup_timeout_s: float  Seconds allowed for a cold start (default: 600)
@@ -40,6 +42,7 @@ import urllib.request
 import wave
 from pathlib import Path
 
+import anyio
 import yaml
 from loguru import logger
 from xr_ai_logging import setup_logging
@@ -56,6 +59,17 @@ _SUPPORTED_VOICES = frozenset({"bill_boerst"})
 
 class _SynthesisCancelled(RuntimeError):
     """A queued request was abandoned before generation started."""
+
+
+async def _await_cleanup(task: asyncio.Task):
+    """Wait for a cleanup task even when the caller is repeatedly cancelled."""
+    with anyio.CancelScope(shield=True):
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                continue
+    return task.result()
 
 
 def _parse_startup_timeout(value: object) -> float:
@@ -85,9 +99,11 @@ def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
 class _PocketTTSBackend:
     """Thread-safe Pocket TTS voice loader and synthesizer."""
 
-    def __init__(self, voice: str, language: str) -> None:
+    def __init__(self, voice: str, language: str, device: str = "auto") -> None:
         self._voice_name = voice
         self._language = language
+        self._requested_device = device
+        self._device = "cpu"
         self._model = None
         self._voice_state = None
         self._load_lock = threading.Lock()
@@ -106,22 +122,35 @@ class _PocketTTSBackend:
                     f"this release supports: {choices}"
                 )
 
+            import torch
             from pocket_tts import TTSModel
 
-            logger.info("Loading Pocket TTS language {!r}…", self._language)
+            device = self._requested_device
+            if device == "auto":
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+            if device not in {"cpu", "cuda"}:
+                raise ValueError("Pocket TTS device must be 'cpu', 'cuda', or 'auto'")
+            if device == "cuda" and not torch.cuda.is_available():
+                raise RuntimeError("Pocket TTS requested CUDA, but CUDA is unavailable")
+
+            logger.info("Loading Pocket TTS language {!r} on {}…", self._language, device)
             model = TTSModel.load_model(language=self._language)
+            if device != "cpu":
+                model.to(device)
             logger.info("Loading voice {!r}…", self._voice_name)
             voice_state = model.get_state_for_audio_prompt(self._voice_name)
             self._model = model
             self._voice_state = voice_state
+            self._device = device
             weights = (
                 "gated voice-cloning"
                 if model.has_voice_cloning
                 else "ungated no-voice-cloning fallback"
             )
             logger.info(
-                "Pocket TTS ready  sample_rate={} weights={}",
+                "Pocket TTS ready  sample_rate={} device={} weights={}",
                 model.sample_rate,
+                device,
                 weights,
             )
 
@@ -133,6 +162,52 @@ class _PocketTTSBackend:
     def sample_rate(self) -> int:
         self._ensure_loaded()
         return self._model.sample_rate
+
+    @staticmethod
+    def _pcm(audio) -> bytes:
+        return (
+            (audio.reshape(-1).clamp(-1, 1) * 32767)
+            .short()
+            .detach()
+            .cpu()
+            .numpy()
+            .tobytes()
+        )
+
+    def stream(
+        self,
+        text: str,
+        cancelled: threading.Event | None = None,
+    ):
+        """Yield signed 16-bit mono PCM as Pocket TTS generates it."""
+
+        self._ensure_loaded()
+        if not text.strip():
+            return
+        with self._generation_lock:
+            if cancelled is not None and cancelled.is_set():
+                return
+            upstream = iter(self._model.generate_audio_stream(self._voice_state, text))
+            try:
+                for audio in upstream:
+                    if cancelled is not None and cancelled.is_set():
+                        break
+                    yield self._pcm(audio)
+            finally:
+                # Pocket TTS owns background generator/decoder threads until
+                # its iterator is exhausted. Drain abandoned output while
+                # retaining the model lock so another request cannot overlap.
+                for _ in upstream:
+                    pass
+
+    def warmup(self) -> None:
+        """Pay CUDA's one-time kernel startup cost before reporting ready."""
+
+        self._ensure_loaded()
+        if self._device == "cuda":
+            logger.info("Warming Pocket TTS CUDA kernels…")
+            for _chunk in self.stream("Ready."):
+                pass
 
     def synthesize(
         self,
@@ -154,14 +229,7 @@ class _PocketTTSBackend:
                 if cancelled is not None and cancelled.is_set():
                     raise _SynthesisCancelled
                 audio = self._model.generate_audio(self._voice_state, text)
-            pcm = (
-                (audio.reshape(-1).clamp(-1, 1) * 32767)
-                .short()
-                .detach()
-                .cpu()
-                .numpy()
-                .tobytes()
-            )
+            pcm = self._pcm(audio)
         if response_format == "pcm":
             return pcm
 
@@ -176,12 +244,13 @@ class _PocketTTSBackend:
 
 def _build_app(cfg: dict, _model_cache: Path):
     from fastapi import FastAPI, HTTPException, Request
-    from fastapi.responses import Response
+    from fastapi.responses import Response, StreamingResponse
     from pydantic import BaseModel
 
     voice_name = cfg["voice"]
     language = str(cfg.get("language", "english"))
-    backend = _PocketTTSBackend(voice_name, language)
+    device = str(cfg.get("device", "auto"))
+    backend = _PocketTTSBackend(voice_name, language, device)
     generation_lock = asyncio.Lock()
 
     app = FastAPI(title="Pocket TTS Server", version="0.1.0")
@@ -192,6 +261,7 @@ def _build_app(cfg: dict, _model_cache: Path):
         voice:           str   = "default"
         speed:           float = 1.0
         response_format: str   = "wav"
+        stream:          bool  = False
 
     @app.get("/health")
     def health():
@@ -210,6 +280,94 @@ def _build_app(cfg: dict, _model_cache: Path):
     async def synthesize(req: SpeechRequest, request: Request):
         loop = asyncio.get_running_loop()
         cancelled = threading.Event()
+        if req.stream:
+            if req.response_format != "pcm":
+                raise HTTPException(
+                    status_code=400,
+                    detail="streaming Pocket TTS requires response_format 'pcm'",
+                )
+
+            queue: asyncio.Queue = asyncio.Queue()
+            stream_end = object()
+
+            def publish(item: object) -> None:
+                try:
+                    loop.call_soon_threadsafe(queue.put_nowait, item)
+                except RuntimeError:
+                    pass
+
+            def generate_audio() -> None:
+                error: Exception | None = None
+                stream = None
+                try:
+                    stream = backend.stream(req.input, cancelled)
+                    for chunk in stream:
+                        publish(chunk)
+                except Exception as exc:
+                    error = exc
+                finally:
+                    if stream is not None:
+                        try:
+                            stream.close()
+                        except Exception as exc:
+                            if error is None:
+                                error = exc
+                    if error is not None:
+                        publish(error)
+                    publish(stream_end)
+
+            async def produce_audio() -> None:
+                try:
+                    async with generation_lock:
+                        if cancelled.is_set() or await request.is_disconnected():
+                            raise _SynthesisCancelled
+                        worker = asyncio.create_task(asyncio.to_thread(generate_audio))
+                        try:
+                            await asyncio.shield(worker)
+                        except asyncio.CancelledError:
+                            cancelled.set()
+                            await _await_cleanup(worker)
+                            raise
+                except (Exception, asyncio.CancelledError) as exc:
+                    queue.put_nowait(exc)
+                    queue.put_nowait(stream_end)
+
+            producer = asyncio.create_task(produce_audio())
+            try:
+                first = await queue.get()
+            except asyncio.CancelledError:
+                cancelled.set()
+                await _await_cleanup(producer)
+                raise
+
+            if isinstance(first, BaseException):
+                await _await_cleanup(producer)
+                if isinstance(first, _SynthesisCancelled):
+                    raise HTTPException(status_code=499, detail="request cancelled")
+                if isinstance(first, ValueError):
+                    raise HTTPException(status_code=400, detail=str(first)) from first
+                raise first
+
+            async def stream_audio():
+                item = first
+                try:
+                    while item is not stream_end:
+                        if isinstance(item, BaseException):
+                            raise item
+                        yield item
+                        item = await queue.get()
+                finally:
+                    cancelled.set()
+                    await _await_cleanup(producer)
+
+            return StreamingResponse(
+                stream_audio(),
+                media_type="audio/pcm",
+                headers={
+                    "x-audio-sample-rate": str(backend.sample_rate),
+                    "x-audio-channels": "1",
+                },
+            )
         try:
             # Waiting for this lock is cancellable, unlike a worker blocked on
             # the model's thread lock. Re-check the connection after acquiring
@@ -318,7 +476,7 @@ def _monitor_reused_server(health_url: str, poll_s: float = 5.0) -> None:
 async def _load_backend(
     backend: _PocketTTSBackend,
 ) -> None:
-    """Load Pocket TTS without letting a stuck native initializer block shutdown."""
+    """Initialize Pocket TTS without letting stuck native work block shutdown."""
     loop = asyncio.get_running_loop()
     loaded = loop.create_future()
 
@@ -334,6 +492,7 @@ async def _load_backend(
         error: BaseException | None = None
         try:
             backend._ensure_loaded()
+            backend.warmup()
         except BaseException as exc:
             error = exc
         try:
@@ -359,6 +518,9 @@ async def _run(
         sys.exit(1)
 
     model_cache = _resolve_model_cache(cfg, yaml_dir)
+    cuda_vis = cfg.get("cuda_visible_devices")
+    if cuda_vis is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_vis)
     os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
     os.environ.setdefault("HF_XET_CACHE", str(model_cache / "pocket" / "xet"))
     os.environ.setdefault("HF_HOME", str(model_cache / "pocket" / "huggingface"))

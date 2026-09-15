@@ -33,11 +33,18 @@ Usage
 from __future__ import annotations
 
 import asyncio
+from contextlib import AsyncExitStack
 from typing import Awaitable, Callable
 
 from loguru import logger
 
-from device_io_hub.ipc import AudioChunk, ConnectorEndpoint, DataMessage
+from device_io_hub._errors import StartupError
+from device_io_hub.ipc import (
+    AudioChunk,
+    ConnectorEndpoint,
+    DataMessage,
+)
+from device_io_hub.ipc._connector import _ConnectorRegistrationError
 
 from ._docker import LiveKitDocker
 from ._hwcodec import require_nvidia_video_codecs
@@ -63,6 +70,7 @@ class LiveKitConnector:
             max_frame_bytes=self._cfg.shm_max_frame_bytes,
         )
         self._room_client = RoomClient(self._cfg, self._ep)
+        self._room_connect_started = False
 
     # ── callback registration ─────────────────────────────────────────────────
 
@@ -77,19 +85,50 @@ class LiveKitConnector:
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
     async def start(self) -> None:
-        """Start Docker, optional servers, register IPC endpoint, connect room client."""
-        require_nvidia_video_codecs()
-        await self._docker.start()
-        if self._token:
-            await self._token.start()
-        if self._web:
-            await self._web.start()
-        await self._ep.register()
-        await self._room_client.connect()
-        self._ep.on_return_data(self._room_client.send_return_data)
-        self._ep.on_return_audio(self._room_client.send_return_audio)
-        self._ep.on_return_audio_flush(self._room_client.flush_return_audio)
-        logger.info("LiveKitConnector started — room={!r}", self._cfg.room_name)
+        """Start Docker, optional servers, register IPC endpoint, connect room client.
+
+        Any startup failure triggers cleanup of owned resources. Cleanup errors
+        are logged without replacing the startup failure.
+
+        Raises
+        ------
+        RuntimeError
+            If shared-memory registration fails or a startup prerequisite is
+            not met. Operator-facing failures include a diagnostic banner.
+        """
+        try:
+            require_nvidia_video_codecs()
+            await self._docker.start()
+            if self._token:
+                await self._token.start()
+            if self._web:
+                await self._web.start()
+            # Ring creation happens inside register(), after the expensive
+            # services above and immediately before the IPC handshake.
+            await self._ep.register()
+            self._room_connect_started = True
+            await self._room_client.connect()
+            self._ep.on_return_data(self._room_client.send_return_data)
+            self._ep.on_return_audio(self._room_client.send_return_audio)
+            self._ep.on_return_audio_flush(self._room_client.flush_return_audio)
+            logger.info("LiveKitConnector started — room={!r}", self._cfg.room_name)
+        except BaseException as exc:
+            try:
+                await self.stop()
+            except (Exception, asyncio.CancelledError):
+                logger.exception("LiveKitConnector cleanup failed after startup failure")
+            if isinstance(exc, _ConnectorRegistrationError):
+                banner = "━" * 56
+                raise StartupError("\n".join([
+                    "",
+                    banner,
+                    "  DeviceIOHub video IPC registration failed — refusing to start",
+                    banner,
+                    "  LiveKit media was not accepted.",
+                    f"  {exc}",
+                    banner,
+                ])) from exc
+            raise
 
     async def run(self) -> None:
         """
@@ -120,18 +159,24 @@ class LiveKitConnector:
                 logger.error("Connector task {!r} raised: {}", t.get_name(), exc)
 
     async def stop(self) -> None:
-        """Gracefully shut down all components in reverse-start order."""
+        """Shut down all components, attempting every cleanup even if one fails.
+
+        Cleanup errors propagate after every cleanup step has been attempted.
+        """
         logger.info("LiveKitConnector stopping…")
         # Start Docker shutdown immediately so it runs in parallel with the
         # other cleanup steps — docker compose down can take several seconds.
         docker_task = asyncio.create_task(self._docker.stop(), name="docker-stop")
-        self._ep.stop()
-        self._room_client.stop()
-        await self._room_client.disconnect()
-        self._ep.close()
-        if self._web:
-            await self._web.stop()
-        if self._token:
-            await self._token.stop()
-        await docker_task
+        async with AsyncExitStack() as cleanup:
+            cleanup.push_async_callback(asyncio.gather, docker_task)
+            if self._token:
+                cleanup.push_async_callback(self._token.stop)
+            if self._web:
+                cleanup.push_async_callback(self._web.stop)
+            cleanup.callback(self._ep.close)
+            if self._room_connect_started:
+                self._room_connect_started = False
+                cleanup.push_async_callback(self._room_client.disconnect)
+            cleanup.callback(self._room_client.stop)
+            cleanup.callback(self._ep.stop)
         logger.info("LiveKitConnector stopped")

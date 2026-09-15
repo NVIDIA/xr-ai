@@ -11,6 +11,7 @@ from ._openai_compat import (
     OpenAICompatSTT,
     OpenAICompatTTS,
     OpenAICompatVLM,
+    _PocketTTS,
 )
 from ._protocols import Capabilities, EmbeddingService, LLMService, STTService, TTSService, VLMService
 
@@ -133,7 +134,12 @@ def make_tts(config: ModelsConfig, name: str) -> TTSService:
     adapter = spec.adapter
     endpoint = spec.endpoint
     if adapter.kind == KIND_OPENAI_COMPAT:
-        return OpenAICompatTTS(
+        client_type = (
+            _PocketTTS
+            if adapter.capabilities.get("streaming") is True
+            else OpenAICompatTTS
+        )
+        return client_type(
             base_url=endpoint.base_url,
             api_key_env=endpoint.api_key_env,
             timeout=endpoint.timeout,

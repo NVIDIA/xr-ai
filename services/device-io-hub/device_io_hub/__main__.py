@@ -15,6 +15,7 @@ import collections
 import signal
 import sys
 import time
+from contextlib import AsyncExitStack
 from pathlib import Path
 
 from loguru import logger
@@ -96,63 +97,80 @@ async def main(ready_file: Path | None = None) -> None:
     hub.on_participant(on_participant)
 
     connector = LiveKitConnector(cfg)
-    await connector.start()
-
-    vr_cfg = cfg.video_recording or {}
-    if vr_cfg.get("enabled"):
-        from device_io_hub.video import VideoRecorder, VideoRecorderConfig
-        rc_defaults = VideoRecorderConfig()
-        rc = VideoRecorderConfig(
-            out_dir         = vr_cfg.get("out_dir",         rc_defaults.out_dir),
-            chunk_frames    = int(vr_cfg.get("chunk_frames",    rc_defaults.chunk_frames)),
-            max_total_bytes = int(vr_cfg.get("max_total_bytes", rc_defaults.max_total_bytes)),
-            sample_fps      = float(vr_cfg.get("sample_fps",    rc_defaults.sample_fps)),
-            bitrate         = int(vr_cfg.get("bitrate",         rc_defaults.bitrate)),
-            gpu_id          = int(vr_cfg.get("gpu_id",          rc_defaults.gpu_id)),
-        )
-        _recorder = VideoRecorder(rc)
-        logger.info("Video recording enabled  out_dir={}", rc.out_dir)
-
-    token = make_client_token(cfg, identity="ios-client")
-    web_scheme = "https" if cfg.web_server_tls else "http"
-    # External clients reach LiveKit via the web server's /rtc proxy;
-    # without that, LiveKit's native plain ws:// is the only path.
-    if cfg.enable_web_server:
-        lk_scheme   = "wss" if cfg.web_server_tls else "ws"
-        lk_url_port = cfg.web_server_port
-    else:
-        lk_scheme   = "ws"
-        lk_url_port = cfg.lk_port_ws
-    logger.info("LiveKit URL : {}://localhost:{}", lk_scheme, lk_url_port)
-    logger.info("Room        : {}", cfg.room_name)
-    logger.info("Token       : {}", token)
-    if cfg.enable_web_server:
-        logger.info("Web client  : {}://localhost:{}", web_scheme, cfg.web_server_port)
-    if _recorder is not None:
-        logger.info("Recording   : {}", rc.out_dir)
-
-    if ready_file:
-        ready_file.touch()
-
-    stop = asyncio.Event()
+    hub_task = asyncio.create_task(hub.run(), name="hub")
+    tasks = [hub_task]
+    connector_started = False
+    installed_signals = []
     loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, stop.set)
+    try:
+        await asyncio.sleep(0)
+        await connector.start()
+        connector_started = True
 
-    logger.info("DeviceIOHub running — press Ctrl-C to exit")
-    hub_task   = asyncio.create_task(hub.run(),       name="hub")
-    conn_task  = asyncio.create_task(connector.run(), name="connector")
-    stats_task = asyncio.create_task(_stats_loop(),   name="stats")
+        vr_cfg = cfg.video_recording or {}
+        if vr_cfg.get("enabled"):
+            from device_io_hub.video import VideoRecorder, VideoRecorderConfig
+            rc_defaults = VideoRecorderConfig()
+            rc = VideoRecorderConfig(
+                out_dir         = vr_cfg.get("out_dir",         rc_defaults.out_dir),
+                chunk_frames    = int(vr_cfg.get("chunk_frames",    rc_defaults.chunk_frames)),
+                max_total_bytes = int(vr_cfg.get("max_total_bytes", rc_defaults.max_total_bytes)),
+                sample_fps      = float(vr_cfg.get("sample_fps",    rc_defaults.sample_fps)),
+                bitrate         = int(vr_cfg.get("bitrate",         rc_defaults.bitrate)),
+                gpu_id          = int(vr_cfg.get("gpu_id",          rc_defaults.gpu_id)),
+            )
+            _recorder = VideoRecorder(rc)
+            logger.info("Video recording enabled  out_dir={}", rc.out_dir)
 
-    await stop.wait()
-    logger.info("Shutting down…")
+        token = make_client_token(cfg, identity="ios-client")
+        web_scheme = "https" if cfg.web_server_tls else "http"
+        # External clients reach LiveKit via the web server's /rtc proxy;
+        # without that, LiveKit's native plain ws:// is the only path.
+        if cfg.enable_web_server:
+            lk_scheme   = "wss" if cfg.web_server_tls else "ws"
+            lk_url_port = cfg.web_server_port
+        else:
+            lk_scheme   = "ws"
+            lk_url_port = cfg.lk_port_ws
+        logger.info("LiveKit URL : {}://localhost:{}", lk_scheme, lk_url_port)
+        logger.info("Room        : {}", cfg.room_name)
+        logger.info("Token       : {}", token)
+        if cfg.enable_web_server:
+            logger.info("Web client  : {}://localhost:{}", web_scheme, cfg.web_server_port)
+        if _recorder is not None:
+            logger.info("Recording   : {}", rc.out_dir)
 
-    stats_task.cancel()
-    hub.stop()
-    hub.close()
-    await connector.stop()
+        if ready_file:
+            ready_file.touch()
 
-    await asyncio.gather(hub_task, conn_task, stats_task, return_exceptions=True)
+        stop = asyncio.Event()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, stop.set)
+            installed_signals.append(sig)
+
+        logger.info("DeviceIOHub running — press Ctrl-C to exit")
+        conn_task  = asyncio.create_task(connector.run(), name="connector")
+        stats_task = asyncio.create_task(_stats_loop(),   name="stats")
+        tasks.extend([conn_task, stats_task])
+        await stop.wait()
+    finally:
+        logger.info("Shutting down…")
+        failure = sys.exception()
+        try:
+            async with AsyncExitStack() as cleanup:
+                if connector_started:
+                    cleanup.push_async_callback(connector.stop)
+                cleanup.callback(hub.close)
+                for sig in installed_signals:
+                    loop.remove_signal_handler(sig)
+                hub.stop()
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+        except (Exception, asyncio.CancelledError):
+            if failure is None:
+                raise
+            logger.exception("DeviceIOHub cleanup failed while handling an earlier failure")
 
 
 def run() -> None:

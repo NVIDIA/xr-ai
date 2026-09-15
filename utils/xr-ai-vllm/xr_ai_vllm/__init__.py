@@ -56,7 +56,7 @@ from ._nim import serve_nim
 
 log = logging.getLogger(__name__)
 
-DEFAULT_IMAGE = "nvcr.io/nvidia/vllm:26.04-py3"
+DEFAULT_IMAGE = "nvcr.io/nvidia/vllm:26.08-py3"
 """Default NGC vLLM image used when a service does not override ``vllm_image``.
 
 Individual services may pin a newer image when required by their model.
@@ -109,10 +109,8 @@ def serve(
     Docker mode verifies a Xet-capable Hub inside the container and repairs a
     missing or incompatible ``hf-xet`` wheel. *extra_pip* is an additional
     docker-only list of pip-installable package specs for model architectures
-    whose wheels the image doesn't bundle — e.g.
-    ``["mamba-ssm", "causal-conv1d"]`` for Nemotron-Omni's hybrid SSM
-    backbone. Silently ignored in pip mode (deps belong in the wrapper's
-    pyproject.toml there).
+    whose wheels the image doesn't bundle. Silently ignored in pip mode (deps
+    belong in the wrapper's pyproject.toml there).
 
     *spark_uma* enables the DGX Spark cold-start safeguards in docker mode:
     prefetching and syncing the Hugging Face snapshot before CUDA starts, and

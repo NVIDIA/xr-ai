@@ -6,5 +6,6 @@
 POCKET_TTS = {
     "category": "tts",
     "kind":     "openai_compat",
+    "capabilities": {"streaming": True},
     "timeout":  30.0,
 }

@@ -20,7 +20,7 @@ Config keys
     served_model_name:       str    Name exposed in /v1/models (default: "llm").
     hf_token:                str    HuggingFace token for gated models.
     model_cache:             str    HF weight + plugin cache, relative to this YAML.
-    max_num_seqs:            int    vLLM --max-num-seqs (default: 8).
+    max_num_seqs:            int    vLLM --max-num-seqs (default: 8; 4 on Spark).
     tensor_parallel_size:    int    vLLM --tensor-parallel-size (default: 1).
     max_model_len:           int    vLLM --max-model-len (default: 32768).
     gpu_memory_utilization:  float  vLLM --gpu-memory-utilization (default: 0.85).
@@ -28,7 +28,9 @@ Config keys
     parser_url:              str    URL to fetch nano_v3_reasoning_parser.py.
     vllm_backend:            str    "pip" (default) or "docker".
     vllm_image:              str    NGC image when vllm_backend=docker
-                                    (default: nvcr.io/nvidia/vllm:26.04-py3).
+                                    (default: nvcr.io/nvidia/vllm:26.08-py3).
+    spark_uma:               bool   Enable DGX Spark compatibility settings
+                                    (docker backend only; default: auto-detect).
 """
 import os
 import urllib.request
@@ -44,7 +46,7 @@ from xr_ai_vllm import (
     serve,
     setup_hf_env,
 )
-from xr_ai_vllm._config import parse_config_bool
+from xr_ai_vllm._config import _gpu_is_dgx_spark, parse_config_bool
 
 _MODEL_BLACKWELL  = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4"
 _MODEL_ADA        = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
@@ -97,7 +99,11 @@ def run() -> None:
     host          = cfg.get("host",                _DEFAULT_HOST)
     port          = int(cfg.get("port",            _DEFAULT_PORT))
     served_name   = cfg.get("served_model_name",   _DEFAULT_SERVED)
-    max_seqs      = int(cfg.get("max_num_seqs",    _DEFAULT_SEQS))
+    spark_uma_value = cfg["spark_uma"] if "spark_uma" in cfg else _gpu_is_dgx_spark()
+    spark_uma     = parse_config_bool(spark_uma_value, "spark_uma")
+    max_seqs      = int(cfg.get(
+        "max_num_seqs", 4 if spark_uma else _DEFAULT_SEQS
+    ))
     tp_size       = int(cfg.get("tensor_parallel_size", _DEFAULT_TP))
     max_ctx       = int(cfg.get("max_model_len",   _DEFAULT_CTX))
     gpu_mem       = float(cfg.get("gpu_memory_utilization", _DEFAULT_GPU_MEM))
@@ -151,6 +157,7 @@ def run() -> None:
         hf_token=os.environ.get("HF_TOKEN") or None,
         cuda_visible_devices=cuda_devices,
         ready_file=ready_file,
+        spark_uma=spark_uma,
     )
 
 

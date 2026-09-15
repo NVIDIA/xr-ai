@@ -401,6 +401,8 @@ tts:
     assert isinstance(cfg.tts("tts"), TTSSpec)
     assert cfg.stt("stt").base_url == "http://localhost:8103"
     assert cfg.tts("tts").base_url == "http://localhost:8105"
+    assert cfg.tts("tts").kind == "openai_compat"
+    assert cfg.tts("tts").capabilities == {"streaming": True}
 
 
 def test_wrong_category_accessor_raises(tmp_path) -> None:
@@ -466,6 +468,7 @@ tts:
         assert vlm.capabilities.vision is True
         assert stt.health_url == "http://localhost:8103/health"
         assert tts.health_url == "http://localhost:8105/health"
+        assert callable(getattr(tts, "stream", None))
     finally:
         await vlm.close()
         await stt.close()
