@@ -1840,7 +1840,9 @@ workflow.</p></li>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Brewing temperature in Celsius.</span>
 <span class="w">  </span><span class="nt">steep_duration_s</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">integer</span>
-<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Steep duration in seconds.</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<span class="w">      </span><span class="no">Steep duration in seconds, converted from the explicit source unit;</span>
+<span class="w">      </span><span class="no">for example, five minutes is 300 seconds, never 5.</span>
 <span class="w">  </span><span class="nt">guidance_source</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">string</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Package or retrieved source.</span>
@@ -1892,9 +1894,12 @@ workflow.</p></li>
 <span class="w">        </span><span class="no">write placeholder values. Prefer</span>
 <span class="w">        </span><span class="no">visible values. If temperature/time is missing,</span>
 <span class="w">        </span><span class="no">call rag_lookup once with "&lt;exact name&gt; water temperature steep time",</span>
-<span class="w">        </span><span class="no">top_k 2; accept only a section naming it. If every writable field is</span>
-<span class="w">        </span><span class="no">supported, commit all with tea_ready true. Otherwise commit nothing;</span>
-<span class="w">        </span><span class="no">never write tea_ready false.</span>
+<span class="w">        </span><span class="no">top_k 2; accept only a section naming the exact blend or an unambiguous</span>
+<span class="w">        </span><span class="no">tea type contained in its name. Never supply temperature or duration</span>
+<span class="w">        </span><span class="no">from memory. Convert an explicit minute duration to seconds before</span>
+<span class="w">        </span><span class="no">committing; use the lower bound of an explicit range. If every writable</span>
+<span class="w">        </span><span class="no">field is supported, commit all with tea_ready true. Otherwise commit</span>
+<span class="w">        </span><span class="no">nothing; never write tea_ready false.</span>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">rag_lookup</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
@@ -2027,8 +2032,8 @@ workflow.</p></li>
 <span class="w">        </span><span class="no">clock__now. Nearby, above, or outside the liquid does not count. Then</span>
 <span class="w">        </span><span class="no">commit exactly its epoch_us as steeping_started_at_us with</span>
 <span class="w">        </span><span class="no">steeping_started true. For any other caption, do not infer contact from</span>
-<span class="w">        </span><span class="no">context or prior state; commit empty updates and message. Never invent or</span>
-<span class="w">        </span><span class="no">replace a start time.</span>
+<span class="w">        </span><span class="no">context or prior state; commit empty updates and message. Never commit a</span>
+<span class="w">        </span><span class="no">timestamp before receiving clock__now, and never invent or replace one.</span>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">clock__now</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
