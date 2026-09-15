@@ -120,8 +120,20 @@ def make_vision_agent(
                 f"Focused instruction: {request.instruction}"
             )),
         ]
+        round_index = 0
+
         async def _call_model(transcript, definitions):
-            return await llm.chat(transcript, tools=list(definitions) or None, max_tokens=2048, temperature=0.0)
+            nonlocal round_index
+            round_index += 1
+            think = round_index == 1
+            return await llm.chat(
+                transcript,
+                tools=list(definitions) or None,
+                max_tokens=2048,
+                temperature=0.0,
+                enable_thinking=think,
+                thinking_budget=512 if think else None,
+            )
         try:
             loop_result = await run_tool_loop(messages, toolset, _call_model)
         except ToolLoopError:

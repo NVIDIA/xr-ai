@@ -312,10 +312,8 @@ async def test_agentic_loop_wire_golden_thinking_on() -> None:
     assert tool_names == {"add_primitive", "get_scene_state"}
 
     # Thinking kwargs must be present.
-    assert body.get("chat_template_kwargs") == {
-        "enable_thinking":  True,
-        "thinking_budget":  1024,
-    }
+    assert body.get("chat_template_kwargs") == {"enable_thinking": True}
+    assert body["thinking_token_budget"] == 1024
 
     # Messages wired correctly.
     assert body["messages"][0]["role"] == "system"

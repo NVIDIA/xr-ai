@@ -149,7 +149,7 @@ async def test_llm_chat_passes_through_max_tokens_temperature() -> None:
     assert body["temperature"] == 0.7
 
 
-async def test_llm_chat_folds_thinking_kwargs_into_chat_template_kwargs() -> None:
+async def test_llm_chat_sends_thinking_mode_and_budget() -> None:
     stub = StubOpenAI()
     async with OpenAICompatLLM(
         "http://stub", "llm", client=stub.client(),
@@ -159,10 +159,8 @@ async def test_llm_chat_folds_thinking_kwargs_into_chat_template_kwargs() -> Non
             enable_thinking=True, thinking_budget=1024,
         )
     body = stub.last_json()
-    assert body["chat_template_kwargs"] == {
-        "enable_thinking": True,
-        "thinking_budget": 1024,
-    }
+    assert body["chat_template_kwargs"] == {"enable_thinking": True}
+    assert body["thinking_token_budget"] == 1024
 
 
 async def test_llm_chat_default_extras_merged_with_per_call() -> None:
@@ -177,10 +175,8 @@ async def test_llm_chat_default_extras_merged_with_per_call() -> None:
             thinking_budget=256,
         )
     body = stub.last_json()
-    assert body["chat_template_kwargs"] == {
-        "enable_thinking": False,
-        "thinking_budget": 256,
-    }
+    assert body["chat_template_kwargs"] == {"enable_thinking": False}
+    assert body["thinking_token_budget"] == 256
 
 
 async def test_llm_chat_reasoning_field_aliasing() -> None:

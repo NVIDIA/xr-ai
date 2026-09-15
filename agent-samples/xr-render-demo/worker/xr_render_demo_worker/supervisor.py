@@ -235,9 +235,19 @@ class SceneSupervisor:
             ChatMessage(role="user", content=user_message),
         ]
 
+        round_index = 0
+
         async def _call_model(model_transcript, definitions):
+            nonlocal round_index
+            round_index += 1
+            think = round_index == 1
             return await self._llm.chat(
-                model_transcript, tools=list(definitions) or None, max_tokens=2048, temperature=0.0
+                model_transcript,
+                tools=list(definitions) or None,
+                max_tokens=2048,
+                temperature=0.0,
+                enable_thinking=think,
+                thinking_budget=256 if think else None,
             )
 
         try:

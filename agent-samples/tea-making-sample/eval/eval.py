@@ -197,9 +197,10 @@ async def main() -> None:
             response = await llm.chat(
                 messages,
                 tools=tool_definitions(tools),
-                max_tokens=512,
+                max_tokens=1024,
                 temperature=0.0,
-                enable_thinking=False,
+                enable_thinking=True,
+                thinking_budget=512,
             )
             calls = response.tool_calls or []
             content = response.content or ""
