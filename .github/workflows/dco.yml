@@ -22,7 +22,7 @@ on:
   push:
     branches: ["**"]
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 # Read-only token is sufficient — we only inspect commit metadata.
 permissions:
@@ -35,7 +35,7 @@ concurrency:
 jobs:
   dco:
     name: DCO sign-off
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && contains(github.event.pull_request.labels.*.name, 'ci:self-hosted') && '["self-hosted","Linux","X64"]' || '["ubuntu-latest"]') }}
     timeout-minutes: 5
 
     steps:
