@@ -5,8 +5,8 @@
 #
 # vlm is THIRD in load order: STT → Omni → vlm.
 # free_at_startup ≈ 96 − 34 (Omni) − 2 (STT) ≈ 60 GiB.
-# 0.23 × 96 = 22.1 GiB cap: 16.8 GiB measured Reasoner weights plus
-# multimodal encoder profiling, runtime overhead, and KV cache.
+# Cosmos3 requires about 1.12 GiB of KV cache for one 8,192-token request.
+# Pin 1.5 GiB while retaining capacity for concurrent shorter requests.
 # hf_overrides selects the Reasoner runtime; details are documented in
 # docs/source/components/ai-services.md#per-server-notes.
 
@@ -18,7 +18,7 @@ hf_token: ""
 port: 8100
 host: "0.0.0.0"
 model_cache: ../../../../models
-gpu_memory_utilization: 0.23
+kv_cache_memory_bytes: 1610612736
 max_num_seqs: 4
 enforce_eager: true
 async_scheduling: true

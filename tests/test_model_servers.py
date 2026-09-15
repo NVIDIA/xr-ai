@@ -809,6 +809,19 @@ def test_non_spark_embedding_profiles_do_not_enable_uma_safeguards() -> None:
         assert "spark_uma" not in config
 
 
+def test_embedding_profiles_retain_fractional_memory_budget() -> None:
+    for profile in ("spark", "96G_blackwell", "dual_48G_ada"):
+        config_path = (
+            _REPO_ROOT
+            / "agent-samples/model-servers/yaml"
+            / profile
+            / "embedding_server.yaml"
+        )
+        config = yaml.safe_load(config_path.read_text())
+        assert config["gpu_memory_utilization"] == 0.08
+        assert "kv_cache_memory_bytes" not in config
+
+
 def test_stop_needs_no_stack_selection(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
