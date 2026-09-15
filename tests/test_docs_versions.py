@@ -174,6 +174,7 @@ def test_latest_docs_alias_contains_complete_rendered_version() -> None:
         "getting_started/skills.html",
         "getting_started/quickstart.html",
         "getting_started/requirements.html",
+        "guides/building-your-app.html",
         "overview/architecture.html",
     ):
         assert f"https://nvidia.github.io/xr-ai/latest/{page}" in readme
