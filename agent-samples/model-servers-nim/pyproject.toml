@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "model-servers-nim"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "xr-ai-launcher",
+    "xr-ai-logging",
+    # Used by --stop to clean up persisted vLLM servers.
+    "xr-ai-vllm",
+]
+
+[tool.uv.sources]
+xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
+xr-ai-logging  = { path = "../../utils/xr-ai-logging", editable = true }
+xr-ai-vllm     = { path = "../../utils/xr-ai-vllm",    editable = true }
+
+xr-ai-models = { path = "../../agent-sdk/xr-ai-models", editable = true }
+nim-embedding-adapter = { path = "embedding-adapter", editable = true }
+
+[project.scripts]
+model_servers_nim = "main:run"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["main.py"]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0", "xr-ai-models[riva]", "nim-embedding-adapter"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

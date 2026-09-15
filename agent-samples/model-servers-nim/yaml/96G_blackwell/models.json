@@ -1,0 +1,126 @@
+{
+  "models": {
+    "stt": {
+      "adapter": {
+        "kind": "riva_grpc",
+        "language": "en-GB"
+      },
+      "endpoint": {
+        "base_url": "localhost:50051",
+        "readiness": "health"
+      },
+      "deployment": {
+        "ownership": "managed",
+        "service": "stt-nim",
+        "credentials": [
+          "NGC_API_KEY"
+        ]
+      },
+      "category": "stt"
+    },
+    "tts": {
+      "adapter": {
+        "kind": "riva_grpc",
+        "language": "en-US",
+        "voice": "Magpie-Multilingual.EN-US.Aria",
+        "sample_rate": 44100
+      },
+      "endpoint": {
+        "base_url": "localhost:50052",
+        "readiness": "health"
+      },
+      "deployment": {
+        "ownership": "managed",
+        "service": "tts-nim",
+        "credentials": [
+          "NGC_API_KEY"
+        ]
+      },
+      "category": "tts"
+    },
+    "llm": {
+      "adapter": {
+        "preset": "nemotron_omni",
+        "model_name": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+        "reasoning_field": "reasoning"
+      },
+      "endpoint": {
+        "base_url": "http://localhost:8108",
+        "readiness": "health",
+        "health_path": "/v1/health/ready"
+      },
+      "deployment": {
+        "ownership": "managed",
+        "service": "llm-nim",
+        "credentials": [
+          "NGC_API_KEY"
+        ]
+      }
+    },
+    "agent_llm": {
+      "adapter": {
+        "preset": "nemotron_omni",
+        "model_name": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+        "reasoning_field": "reasoning"
+      },
+      "endpoint": {
+        "base_url": "http://localhost:8108",
+        "readiness": "health",
+        "health_path": "/v1/health/ready"
+      },
+      "deployment": {
+        "ownership": "managed",
+        "service": "llm-nim",
+        "credentials": [
+          "NGC_API_KEY"
+        ]
+      }
+    },
+    "vlm": {
+      "adapter": {
+        "kind": "openai_compat",
+        "model_name": "nvidia/cosmos3-nano-reasoner",
+        "capabilities": {
+          "streaming": true,
+          "vision": true,
+          "video": false
+        },
+        "default_extras": {
+          "chat_template_kwargs": {
+            "enable_thinking": false
+          }
+        }
+      },
+      "endpoint": {
+        "base_url": "http://localhost:8100",
+        "readiness": "health",
+        "health_path": "/v1/health/ready"
+      },
+      "deployment": {
+        "ownership": "managed",
+        "service": "vlm-nim",
+        "credentials": [
+          "NGC_API_KEY"
+        ]
+      },
+      "category": "vlm"
+    },
+    "embedding": {
+      "adapter": {
+        "preset": "nemotron_embedding"
+      },
+      "endpoint": {
+        "base_url": "http://localhost:8109",
+        "readiness": "health",
+        "health_path": "/health"
+      },
+      "deployment": {
+        "ownership": "managed",
+        "service": "embedding",
+        "credentials": [
+          "NGC_API_KEY"
+        ]
+      }
+    }
+  }
+}

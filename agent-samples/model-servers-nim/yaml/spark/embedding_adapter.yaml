@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Bridges XR AI's query:/passage: prefixes to NIM's asymmetric embedding API.
+# Port 8119 is the native NIM; port 8109 is the SDK-compatible endpoint.
+model: nvidia/llama-nemotron-embed-1b-v2
+base_url: http://localhost:8119
+host: "0.0.0.0"
+port: 8109

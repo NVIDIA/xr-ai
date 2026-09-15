@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Cosmos3 Nano Reasoner, preserving the original sample's model size.
+# Both controls are set because the image's inference.py supplies engine extra
+# args in addition to nimlib's NIM_KVCACHE_PERCENT defaults. These are fractions
+# of total GPU memory for weights + runtime + cache, not fractions of free VRAM.
+image: nvcr.io/nim/nvidia/cosmos3-reasoner:1.7.0@sha256:19add3edaaa77c4030c75eb27d30939c29ca93807bb7af10a1876f05d520026c
+container_name: xr-ai-model-servers-nim-cosmos
+http_port: 8100
+nim_cache: ../../../../models/nim
+cuda_visible_devices: "0"
+env:
+  NIM_MODEL_SIZE: "nano"
+  NIM_MAX_MODEL_LEN: "8192"
+  NIM_MAX_NUM_SEQS: "4"
+  NIM_MAX_IMAGES_PER_PROMPT: "4"
+  NIM_MAX_VIDEOS_PER_PROMPT: "0"
+  NIM_GPU_MEMORY_UTILIZATION: "0.24"
+  NIM_KVCACHE_PERCENT: "0.24"
+  NIM_DISABLE_CUDA_GRAPH: "1"
+  NIM_COMPILATION_CONFIG: '{"cudagraph_mode": "NONE", "compile_mm_encoder": false}'

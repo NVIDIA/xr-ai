@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# type=multi selects parakeet-tdt-0.6b-v3, preserving the original STT model.
+# The English-only default would select v2. Budget about 14 GB for this NIM.
+# https://docs.nvidia.com/nim/speech/26.02.0/about/release-notes.html
+image: nvcr.io/nim/nvidia/parakeet-0.6b-tdt:1.3.0@sha256:0a5b5246146d0cc9e6421812dd535e64081e7a62a92c0436563ad7bfe227df06
+container_name: xr-ai-model-servers-nim-stt
+http_port: 9010
+grpc_port: 50051
+nim_cache: ../../../../models/nim
+cuda_visible_devices: "0"
+env:
+  NIM_TAGS_SELECTOR: "type=multi"
+  NIM_USE_MULTIPROCESSING_FOR_INFERENCE: "false"
