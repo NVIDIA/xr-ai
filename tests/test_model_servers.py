@@ -265,12 +265,12 @@ def test_omni_profiles_select_supported_vllm_configuration(profile_path: Path) -
     if profile_path.parent.name == "spark":
         assert config["max_num_seqs"] == 4
         assert "moe_backend" not in config
-        assert config["gpu_memory_utilization"] == 0.25
+        assert "gpu_memory_utilization" not in config
         assert config["kv_cache_memory_bytes"] == 2147483648
         assert config["spark_uma"] is True
     elif profile_path.parent.name == "dual_48G_ada":
         assert "moe_backend" not in config
-        assert config["gpu_memory_utilization"] == 0.78
+        assert "gpu_memory_utilization" not in config
         assert config["kv_cache_memory_bytes"] == 2147483648
         assert "spark_uma" not in config
     elif profile_path.parent.name == "96G_blackwell":
@@ -628,6 +628,8 @@ def test_omni_applies_spark_sequence_default(
 
     args = captured["extra_serve_args"]
     assert args[args.index("--max-num-seqs") + 1] == expected_seqs
+    assert args[args.index("--gpu-memory-utilization") + 1] == "0.85"
+    assert "--kv-cache-memory-bytes" not in args
     assert captured["extra_pip"] == []
 
 
@@ -695,9 +697,8 @@ def test_spark_omni_uses_explicit_kv_cache(
 
     args = captured["extra_serve_args"]
     cache_index = args.index("--kv-cache-memory-bytes")
-    memory_index = args.index("--gpu-memory-utilization")
     assert args[cache_index + 1] == "2147483648"
-    assert args[memory_index + 1] == "0.25"
+    assert "--gpu-memory-utilization" not in args
     assert captured["spark_uma"] is True
 
 
@@ -727,9 +728,8 @@ def test_dual_ada_omni_uses_explicit_kv_cache(
 
     args = captured["extra_serve_args"]
     cache_index = args.index("--kv-cache-memory-bytes")
-    memory_index = args.index("--gpu-memory-utilization")
     assert args[cache_index + 1] == "2147483648"
-    assert args[memory_index + 1] == "0.78"
+    assert "--gpu-memory-utilization" not in args
     assert captured["spark_uma"] is False
 
 
