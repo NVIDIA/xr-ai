@@ -54,8 +54,10 @@ import java.nio.ByteBuffer
  */
 class StreamSession(private val backend: StreamingBackend) {
 
+    private class CaptureOperation(var job: Job? = null)
+
     private val captureScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val captureJobs = mutableMapOf<String, Job>()
+    private val captureJobs = mutableMapOf<String, CaptureOperation>()
 
     /**
      * Creates a session backed by a [BackendConfiguration].
@@ -115,8 +117,7 @@ class StreamSession(private val backend: StreamingBackend) {
      * Safe to call at any time, including before [connect].
      */
     suspend fun disconnect() {
-        captureJobs.values.forEach { it.cancel() }
-        captureJobs.clear()
+        cancelImageCaptures()
         backend.disconnect()
     }
 
@@ -227,7 +228,10 @@ class StreamSession(private val backend: StreamingBackend) {
     // ── Private ────────────────────────────────────────────────────────────────
 
     private fun wireCallbacks() {
-        backend.onConnectionStateChanged = { state -> onConnectionStateChanged?.invoke(state) }
+        backend.onConnectionStateChanged = { state ->
+            if (state == ConnectionState.DISCONNECTED) cancelImageCaptures()
+            onConnectionStateChanged?.invoke(state)
+        }
         backend.onDataReceived = { topic, data ->
             when (topic) {
                 "camera.capture.request" -> handleCaptureRequest(data)
@@ -245,8 +249,10 @@ class StreamSession(private val backend: StreamingBackend) {
         val requestId = request.optString("request_id")
         if (requestId.isBlank()) return
         val handler = onImageCaptureRequested ?: return
-        captureJobs.remove(requestId)?.cancel()
-        captureJobs[requestId] = captureScope.launch {
+        captureJobs.remove(requestId)?.job?.cancel()
+        val operation = CaptureOperation()
+        captureJobs[requestId] = operation
+        operation.job = captureScope.launch {
             try {
                 val image = handler(
                     ImageCaptureRequest(requestId, request.optLong("timeout_ms"))
@@ -261,7 +267,7 @@ class StreamSession(private val backend: StreamingBackend) {
             } catch (error: Exception) {
                 Log.w("StreamSession", "Image capture request failed", error)
             } finally {
-                captureJobs.remove(requestId)
+                if (captureJobs[requestId] === operation) captureJobs.remove(requestId)
             }
         }
     }
@@ -270,6 +276,11 @@ class StreamSession(private val backend: StreamingBackend) {
         val requestId = runCatching {
             JSONObject(String(data, Charsets.UTF_8)).optString("request_id")
         }.getOrNull() ?: return
-        captureJobs.remove(requestId)?.cancel()
+        captureJobs.remove(requestId)?.job?.cancel()
+    }
+
+    private fun cancelImageCaptures() {
+        captureJobs.values.forEach { it.job?.cancel() }
+        captureJobs.clear()
     }
 }

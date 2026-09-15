@@ -179,8 +179,7 @@ export class StreamSession {
    * @returns {Promise<void>}
    */
   async disconnect() {
-    for (const controller of this.#captureRequests.values()) controller.abort();
-    this.#captureRequests.clear();
+    this.#cancelImageCaptures();
     await this.#backend.disconnect();
   }
 
@@ -250,6 +249,7 @@ export class StreamSession {
   #wireCallbacks() {
     this.#backend.onConnectionStateChanged = (state) => {
       this.#connectionState = state;
+      if (state === ConnectionState.DISCONNECTED) this.#cancelImageCaptures();
       this.onConnectionStateChanged?.(state);
     };
 
@@ -319,5 +319,10 @@ export class StreamSession {
       this.#captureRequests.get(request?.request_id)?.abort();
       this.#captureRequests.delete(request?.request_id);
     } catch { /* malformed cancellation */ }
+  }
+
+  #cancelImageCaptures() {
+    for (const controller of this.#captureRequests.values()) controller.abort();
+    this.#captureRequests.clear();
   }
 }
