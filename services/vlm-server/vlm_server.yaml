@@ -31,9 +31,11 @@ model_cache: ../../models
 max_num_seqs:           4
 tensor_parallel_size:   1
 max_model_len:          8192
+# Choose one KV-cache sizing mode. The fraction enables automatic sizing;
+# comment it out and set explicit bytes for deterministic shared deployments.
 gpu_memory_utilization: 0.85
-# Optional fixed KV-cache size in bytes per GPU. When this is set, vLLM still
-# uses gpu_memory_utilization for its initial free-memory admission check.
+# Optional fixed KV-cache size in bytes per GPU. When this is set, the launcher
+# does not pass gpu_memory_utilization to vLLM.
 # kv_cache_memory_bytes: 1610612736
 enforce_eager:          false
 # Recommended by NVIDIA for the Cosmos3 Reasoner vLLM path.
