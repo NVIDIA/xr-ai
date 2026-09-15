@@ -582,6 +582,7 @@ async function waitForExposure(video, signal) {
 
 async function captureCameraTrack(track, signal, { settleExposure = false } = {}) {
   if (!track) throw new Error('Camera did not provide a video track');
+  if (signal.aborted) throw new DOMException('Capture cancelled', 'AbortError');
   const video = document.createElement('video');
   video.muted = true;
   video.playsInline = true;
@@ -590,9 +591,21 @@ async function captureCameraTrack(track, signal, { settleExposure = false } = {}
     await video.play();
     if (!video.videoWidth || !video.videoHeight) {
       await new Promise((resolve, reject) => {
-        const abort = () => reject(new DOMException('Capture cancelled', 'AbortError'));
+        const cleanup = () => {
+          signal.removeEventListener('abort', abort);
+          video.removeEventListener('loadedmetadata', loaded);
+        };
+        const loaded = () => {
+          cleanup();
+          resolve();
+        };
+        const abort = () => {
+          cleanup();
+          reject(new DOMException('Capture cancelled', 'AbortError'));
+        };
         signal.addEventListener('abort', abort, { once: true });
-        video.addEventListener('loadedmetadata', resolve, { once: true });
+        video.addEventListener('loadedmetadata', loaded, { once: true });
+        if (signal.aborted) abort();
       });
     }
     if (settleExposure) await waitForExposure(video, signal);

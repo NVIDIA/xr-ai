@@ -118,6 +118,33 @@ async def test_current_frame_does_not_request_capture_while_video_is_fresh() -> 
     assert endpoint.requests == []
 
 
+async def test_current_frame_falls_back_when_fresh_pixels_are_unavailable() -> None:
+    endpoint = _Endpoint()
+    images = ImageRegistry()
+    tool = CurrentFrameTool(endpoint=endpoint, images=images)  # type: ignore[arg-type]
+    await endpoint.frame_callback(FrameSignal(
+        slot=0,
+        seq=7,
+        pts_us=time.time_ns() // 1_000,
+        width=2,
+        height=2,
+        fmt=PixelFormat.RGB24,
+        data_sz=12,
+        participant_id="alice",
+        track_id="camera",
+    ))
+
+    async def unavailable_frame(_signal) -> None:
+        return None
+
+    endpoint.request_frame = unavailable_frame
+    result = await tool._get_current_frame(CurrentFrameRequest(participant_id="alice"))
+
+    assert result.sequence == 0
+    assert result.track_id == ""
+    assert len(endpoint.requests) == 1
+
+
 async def test_timed_out_capture_is_cancelled_on_the_client() -> None:
     endpoint = _Endpoint(respond=False)
     source = ClientImageCaptureSource(endpoint, timeout_s=0.01)  # type: ignore[arg-type]

@@ -98,34 +98,41 @@ class CurrentFrameTool(Tool[CurrentFrameRequest, ImageFrame]):
         self.images.release_owner(participant_id)
 
     async def _get_current_frame(self, request: CurrentFrameRequest) -> ImageFrame:
-        if request.participant_id not in self.frames.participants():
+        if request.participant_id in self.frames.participants():
             try:
-                captured = await self._captures.capture(request.participant_id)
-                width, height = await asyncio.to_thread(
-                    _encoded_image_size,
-                    captured.data,
+                frame = await self.frames.get(request.participant_id)
+            except FrameUnavailable:
+                pass
+            else:
+                image_bytes = await asyncio.to_thread(
+                    lambda: encode_image_bytes(frame_to_pil(frame))
                 )
-            except (ImageCaptureUnavailable, OSError, ValueError) as exc:
-                raise FrameUnavailable(str(exc)) from exc
-            return ImageFrame(
-                image=self.images.put(captured.data, owner=request.participant_id),
-                width=width,
-                height=height,
-                timestamp_us=captured.pts_us,
-                sequence=0,
-                participant_id=captured.participant_id,
-                track_id="",
+                return ImageFrame(
+                    image=self.images.put(image_bytes, owner=request.participant_id),
+                    width=frame.width,
+                    height=frame.height,
+                    timestamp_us=frame.pts_us,
+                    sequence=frame.seq,
+                    participant_id=frame.participant_id or request.participant_id,
+                    track_id=frame.track_id,
+                )
+
+        try:
+            captured = await self._captures.capture(request.participant_id)
+            width, height = await asyncio.to_thread(
+                _encoded_image_size,
+                captured.data,
             )
-        frame = await self.frames.get(request.participant_id)
-        image_bytes = await asyncio.to_thread(lambda: encode_image_bytes(frame_to_pil(frame)))
+        except (ImageCaptureUnavailable, OSError, ValueError) as exc:
+            raise FrameUnavailable(str(exc)) from exc
         return ImageFrame(
-            image=self.images.put(image_bytes, owner=request.participant_id),
-            width=frame.width,
-            height=frame.height,
-            timestamp_us=frame.pts_us,
-            sequence=frame.seq,
-            participant_id=frame.participant_id or request.participant_id,
-            track_id=frame.track_id,
+            image=self.images.put(captured.data, owner=request.participant_id),
+            width=width,
+            height=height,
+            timestamp_us=captured.pts_us,
+            sequence=0,
+            participant_id=captured.participant_id,
+            track_id="",
         )
 
 
