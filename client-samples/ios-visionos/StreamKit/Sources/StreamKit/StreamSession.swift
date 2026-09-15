@@ -76,8 +76,12 @@ public final class StreamSession: ObservableObject {
 
     // MARK: - Private
 
+    private final class CaptureOperation {
+        var task: Task<Void, Never>?
+    }
+
     private var backend: any StreamingBackend
-    private var captureTasks: [String: Task<Void, Never>] = [:]
+    private var captureTasks: [String: CaptureOperation] = [:]
 
     // MARK: - Init
 
@@ -104,8 +108,7 @@ public final class StreamSession: ObservableObject {
 
     /// Disconnects and releases all resources.
     public func disconnect() async {
-        captureTasks.values.forEach { $0.cancel() }
-        captureTasks.removeAll()
+        cancelImageCaptures()
         await backend.disconnect()
         agentStatus = nil
         networkMetrics = nil
@@ -206,6 +209,7 @@ public final class StreamSession: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 connectionState = state
+                if state == .disconnected { cancelImageCaptures() }
                 if state != .connected {
                     networkMetrics = nil
                 }
@@ -245,9 +249,15 @@ public final class StreamSession: ObservableObject {
               let requestID = object["request_id"] as? String,
               !requestID.isEmpty,
               let handler = onImageCaptureRequested else { return }
-        captureTasks[requestID]?.cancel()
-        captureTasks[requestID] = Task { @MainActor [weak self] in
-            defer { self?.captureTasks.removeValue(forKey: requestID) }
+        captureTasks.removeValue(forKey: requestID)?.task?.cancel()
+        let operation = CaptureOperation()
+        captureTasks[requestID] = operation
+        operation.task = Task { @MainActor [weak self, weak operation] in
+            defer {
+                if let operation, self?.captureTasks[requestID] === operation {
+                    self?.captureTasks.removeValue(forKey: requestID)
+                }
+            }
             do {
                 let image = try await handler(ImageCaptureRequest(
                     requestID: requestID,
@@ -275,7 +285,12 @@ public final class StreamSession: ObservableObject {
     private func handleCaptureCancel(_ data: Data) {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let requestID = object["request_id"] as? String else { return }
-        captureTasks.removeValue(forKey: requestID)?.cancel()
+        captureTasks.removeValue(forKey: requestID)?.task?.cancel()
+    }
+
+    private func cancelImageCaptures() {
+        captureTasks.values.forEach { $0.task?.cancel() }
+        captureTasks.removeAll()
     }
 }
 
