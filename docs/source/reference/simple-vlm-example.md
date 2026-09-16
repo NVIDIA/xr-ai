@@ -97,9 +97,11 @@ creates a bundle under
 `~/.local/share/xr-ai/captures/simple-vlm-example/` containing one captioned
 NVENC H.264 video in a fast-start `.mp4` with timestamp-aligned 48 kHz stereo
 AAC-LC device/agent audio, retained source H.264 and WAV tracks, exact raw audio
-chunks, inbound and outbound data, and a manifest. Text returned on `vlm.response`
-appears in the scrolling data panel; final STT and text sent to TTS use the
-larger primary caption.
+chunks, frame/audio timestamp indexes, a dedicated transcript, optional
+frame-linked observations, inbound and outbound data, and a manifest. Text
+returned on `vlm.response` appears in the scrolling data panel; final STT and
+text sent to TTS use the larger primary caption. This sample selects the shared
+recorder's `demo` profile and participant-lifetime session policy.
 
 Encoding and file writes run in the separate capture process behind bounded
 queues. If recording falls behind, it drops pending capture frames rather than

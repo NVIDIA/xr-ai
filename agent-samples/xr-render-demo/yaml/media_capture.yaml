@@ -7,6 +7,8 @@
 hub_sub_addr: ipc:///tmp/xr_hub_pub
 hub_push_addr: ipc:///tmp/xr_hub_in
 out_dir: ~/.local/share/xr-ai/captures/xr-render-demo
+profile: demo
+session_mode: participant
 
 sample_fps: 30.0
 bitrate: 6000000

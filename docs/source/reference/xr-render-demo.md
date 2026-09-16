@@ -158,10 +158,15 @@ Each participant connection creates a timestamped directory under
 - `audio/conversation.wav`, with device input on the left and agent output on
   the right, aligned by hub timestamps. Exact float32 chunks remain in
   `device.f32le` and `agent.f32le`, indexed by `chunks.jsonl`.
+- `video/frames.jsonl`, indexing every accepted frame by absolute and relative
+  timestamp, source sequence, track, pixel format, and dimensions.
+- `transcript.jsonl`, containing final user STT and spoken agent TTS text on
+  the same clock, plus `observations.jsonl` for derived frame-linked metadata.
 - `events.jsonl`, retaining inbound and outbound data with direction, topic,
-  timestamp, and either UTF-8 text or base64 for binary payloads.
-- `manifest.json`, recording timing, source track metadata, audio layout, and capture
-  frame drops.
+  absolute and relative timestamps, and either UTF-8 text or base64 for binary
+  payloads.
+- `manifest.json`, recording the capture profile, session policy, shared clock,
+  file roles, counts, source track metadata, audio layout, and capture drops.
 
 NVENC work runs behind a bounded queue in the capture process. When capture is
 slower than the live stream, it replaces old pending frame requests and records
@@ -171,6 +176,12 @@ Finalization additionally requires `ffmpeg` on `PATH`; it copies the H.264
 stream, encodes the aligned PCM mix as AAC-LC, normalizes timestamps, and moves
 MP4 metadata ahead of media data for fast-start playback. Omit `--capture` when
 recording is prohibited, and treat the output as sensitive device data.
+
+The media-capture service itself also supports a `raw` projection and explicit
+agent-controlled session boundaries. Those modes reuse the same audio,
+transcript, observation, timing, manifest, retention, and encoder
+infrastructure; the XR render demo intentionally selects `demo` plus
+participant-lifetime recording.
 
 ## The LLM server
 

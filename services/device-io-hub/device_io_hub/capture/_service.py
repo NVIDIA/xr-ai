@@ -5,8 +5,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
 from loguru import logger
 from xr_ai_hub import (
@@ -17,7 +19,13 @@ from xr_ai_hub import (
     ProcessorEndpoint,
     Subscribe,
 )
-from xr_ai_hub._capture import CAPTURE_STT_TOPIC, CAPTURE_TTS_TOPIC
+from xr_ai_hub._capture import (
+    CAPTURE_OBSERVATION_TOPIC,
+    CAPTURE_START_TOPIC,
+    CAPTURE_STOP_TOPIC,
+    CAPTURE_STT_TOPIC,
+    CAPTURE_TTS_TOPIC,
+)
 
 from ._recorder import SessionRecorder
 from ._return_subscriber import ReturnTrafficSubscriber
@@ -33,6 +41,18 @@ def _invalid_audio_reason(chunk: AudioChunk) -> str | None:
     if len(chunk.data) != expected_bytes:
         return f"expected {expected_bytes} PCM bytes, got {len(chunk.data)}"
     return None
+
+
+def _json_object(data: bytes, *, label: str, allow_empty: bool = False) -> dict[str, Any]:
+    if allow_empty and not data:
+        return {}
+    try:
+        value = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"{label} must be a UTF-8 JSON object") from exc
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must be a JSON object")
+    return value
 
 
 class _FrameWorker:
@@ -128,6 +148,7 @@ class CaptureService:
         )
         self._frame_workers: dict[tuple[str, str], _FrameWorker] = {}
         self._departed_participants: set[str] = set()
+        self._closing_participants: set[str] = set()
         self._endpoint_task: asyncio.Task | None = None
         self._return_task: asyncio.Task | None = None
         self._failure: asyncio.Future[None] | None = None
@@ -179,30 +200,62 @@ class CaptureService:
     async def _on_participant(self, event: ParticipantEvent) -> None:
         if event.joined:
             self._departed_participants.discard(event.participant_id)
-            await self._write(
-                self._recorder.begin_session,
-                event.participant_id,
-                event.pts_us,
-            )
+            if self._config.session_mode == "participant":
+                await self._write(
+                    self._recorder.begin_session,
+                    event.participant_id,
+                    event.pts_us,
+                )
             return
         await self._returns.wait_for_departure(event)
         self._departed_participants.add(event.participant_id)
-        workers = [
-            (key, worker)
-            for key, worker in self._frame_workers.items()
-            if key[0] == event.participant_id
-        ]
-        for key, worker in workers:
-            self._frame_workers.pop(key, None)
-            await worker.close()
+        await self._finish_session(event.participant_id, event.pts_us)
+
+    async def _finish_session(self, participant_id: str, pts_us: int) -> None:
+        self._closing_participants.add(participant_id)
+        try:
+            workers = [
+                (key, worker)
+                for key, worker in self._frame_workers.items()
+                if key[0] == participant_id
+            ]
+            for key, worker in workers:
+                self._frame_workers.pop(key, None)
+                await worker.close()
+            await self._write(self._recorder.end_session, participant_id, pts_us)
+        finally:
+            self._closing_participants.discard(participant_id)
+
+    async def _start_recording(
+        self,
+        participant_id: str,
+        pts_us: int,
+        metadata: dict[str, Any],
+    ) -> None:
+        if self._config.session_mode != "explicit":
+            logger.warning("media capture ignored explicit start in participant session mode")
+            return
+        self._closing_participants.discard(participant_id)
         await self._write(
-            self._recorder.end_session,
-            event.participant_id,
-            event.pts_us,
+            self._recorder.begin_session,
+            participant_id,
+            pts_us,
+            "agent",
+            metadata,
         )
 
+    async def _stop_recording(self, participant_id: str, pts_us: int) -> None:
+        if self._config.session_mode != "explicit":
+            logger.warning("media capture ignored explicit stop in participant session mode")
+            return
+        await self._finish_session(participant_id, pts_us)
+
     async def _on_frame(self, signal: FrameSignal) -> None:
-        if signal.participant_id in self._departed_participants:
+        if (
+            signal.participant_id in self._departed_participants
+            or signal.participant_id in self._closing_participants
+            or not self._recorder.has_session(signal.participant_id)
+        ):
             return
         key = (signal.participant_id, signal.track_id)
         worker = self._frame_workers.get(key)
@@ -227,7 +280,11 @@ class CaptureService:
         await self._record_audio("agent", chunk)
 
     async def _record_audio(self, direction: str, chunk: AudioChunk) -> None:
-        if chunk.participant_id in self._departed_participants:
+        if (
+            chunk.participant_id in self._departed_participants
+            or chunk.participant_id in self._closing_participants
+            or not self._recorder.has_session(chunk.participant_id)
+        ):
             return
         reason = _invalid_audio_reason(chunk)
         if reason is not None:
@@ -241,12 +298,44 @@ class CaptureService:
         await self._write(self._recorder.record_audio, direction, chunk)
 
     async def _on_device_data(self, message: DataMessage) -> None:
-        if message.participant_id in self._departed_participants:
+        if (
+            message.participant_id in self._departed_participants
+            or message.participant_id in self._closing_participants
+            or not self._recorder.has_session(message.participant_id)
+        ):
             return
         await self._write(self._recorder.record_data, "device", message)
 
     async def _on_agent_data(self, message: DataMessage) -> None:
-        if message.participant_id in self._departed_participants:
+        if (
+            message.participant_id in self._departed_participants
+            or message.participant_id in self._closing_participants
+        ):
+            return
+        if message.topic == CAPTURE_START_TOPIC:
+            try:
+                metadata = _json_object(
+                    message.data,
+                    label="capture start metadata",
+                    allow_empty=True,
+                )
+            except ValueError as exc:
+                logger.warning("media capture ignored invalid start command: {}", exc)
+                return
+            await self._start_recording(message.participant_id, message.pts_us, metadata)
+            return
+        if message.topic == CAPTURE_STOP_TOPIC:
+            await self._stop_recording(message.participant_id, message.pts_us)
+            return
+        if not self._recorder.has_session(message.participant_id):
+            return
+        if message.topic == CAPTURE_OBSERVATION_TOPIC:
+            try:
+                observation = _json_object(message.data, label="capture observation")
+            except ValueError as exc:
+                logger.warning("media capture ignored invalid observation: {}", exc)
+                return
+            await self._write(self._recorder.record_observation, message, observation)
             return
         if message.topic == CAPTURE_STT_TOPIC:
             await self._write(self._recorder.record_voice_caption, "user", message)
@@ -257,7 +346,11 @@ class CaptureService:
         await self._write(self._recorder.record_data, "agent", message)
 
     async def _on_agent_flush(self, flush) -> None:
-        if flush.participant_id in self._departed_participants:
+        if (
+            flush.participant_id in self._departed_participants
+            or flush.participant_id in self._closing_participants
+            or not self._recorder.has_session(flush.participant_id)
+        ):
             return
         await self._write(
             self._recorder.record_flush,

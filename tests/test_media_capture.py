@@ -17,8 +17,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from device_io_hub.capture import _frontends as frontends_module
 from device_io_hub.capture import _mp4 as mp4_module
-from device_io_hub.capture import _recorder as recorder_module
 from device_io_hub.capture._compositor import compose_caption
 from device_io_hub.capture._recorder import (
     _CAPTURE_MARKER_CONTENT,
@@ -42,7 +42,13 @@ from xr_ai_hub import (
     ParticipantEvent,
     PixelFormat,
 )
-from xr_ai_hub._capture import CAPTURE_STT_TOPIC, CAPTURE_TTS_TOPIC
+from xr_ai_hub._capture import (
+    CAPTURE_OBSERVATION_TOPIC,
+    CAPTURE_START_TOPIC,
+    CAPTURE_STOP_TOPIC,
+    CAPTURE_STT_TOPIC,
+    CAPTURE_TTS_TOPIC,
+)
 
 
 def _minimal_fast_start_mp4() -> bytes:
@@ -54,12 +60,12 @@ def _minimal_fast_start_mp4() -> bytes:
 
 @pytest.fixture(autouse=True)
 def _stub_capture_mp4_finalizer(monkeypatch) -> None:
-    monkeypatch.setattr(recorder_module, "find_ffmpeg", lambda: "/test/ffmpeg")
+    monkeypatch.setattr(frontends_module, "find_ffmpeg", lambda: "/test/ffmpeg")
 
     def finalize(**kwargs) -> None:
         kwargs["output_path"].write_bytes(_minimal_fast_start_mp4())
 
-    monkeypatch.setattr(recorder_module, "mux_h264_aac", finalize)
+    monkeypatch.setattr(frontends_module, "mux_h264_aac", finalize)
 
 
 def _frame(
@@ -242,6 +248,18 @@ def test_capture_config_resolves_output_and_caption_duration(tmp_path: Path) -> 
     assert config.overlay_seconds == 8
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("profile", "archive", "profile must be"),
+        ("session_mode", "automatic", "session_mode must be"),
+    ],
+)
+def test_capture_config_rejects_unknown_modular_modes(field, value, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        CaptureConfig(**{field: value})
+
+
 def test_mp4_finalizer_encodes_aac_stereo_and_normalizes_timestamps(
     tmp_path: Path,
     monkeypatch,
@@ -314,6 +332,7 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
     monkeypatch,
 ) -> None:
     encoded_inputs: list[np.ndarray] = []
+    finalized_video_inputs: list[str] = []
 
     class FakeEncoder:
         def Encode(self, frame, _params):
@@ -336,6 +355,12 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
         NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
     )
     monkeypatch.setitem(sys.modules, "PyNvVideoCodec", fake_module)
+
+    def finalize(**kwargs) -> None:
+        finalized_video_inputs.append(kwargs["h264_path"].name)
+        kwargs["output_path"].write_bytes(_minimal_fast_start_mp4())
+
+    monkeypatch.setattr(frontends_module, "mux_h264_aac", finalize)
     config = CaptureConfig(
         out_dir=str(tmp_path),
         sample_fps=30,
@@ -382,6 +407,9 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
     assert stat.S_IMODE(session.stat().st_mode) & 0o077 == 0
     assert not list(session.rglob("*.pending"))
     manifest = json.loads((session / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["version"] == 2
+    assert manifest["profile"] == "demo"
+    assert manifest["session_mode"] == "participant"
     assert manifest["participant_id"] == "alice"
     assert manifest["audio"]["channels"] == {"left": "device", "right": "agent"}
     assert manifest["video_tracks"]["camera"][0]["num_frames"] == 2
@@ -394,7 +422,18 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
     assert (session / segment["raw_path"]).read_bytes().startswith(b"\x00\x00\x00\x01")
     assert (session / "audio" / "device.f32le").read_bytes() == _audio("device").data
     assert (session / "audio" / "agent.f32le").read_bytes() == _audio("agent").data
+    frame_rows = [
+        json.loads(line)
+        for line in (session / manifest["video_frame_index"]).read_text().splitlines()
+    ]
+    assert [row["relative_us"] for row in frame_rows] == [0, 50_000]
+    transcript_rows = [
+        json.loads(line)
+        for line in (session / manifest["transcript"]).read_text().splitlines()
+    ]
+    assert [row["source"] for row in transcript_rows] == ["user", "agent"]
     events = [json.loads(line) for line in (session / "events.jsonl").read_text().splitlines()]
+    assert [event["event_id"] for event in events] == list(range(1, len(events) + 1))
     assert any(event.get("text") == "Hello from the agent" for event in events)
     assert any(
         event.get("kind") == "voice_caption"
@@ -403,7 +442,13 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
         for event in events
     )
     assert encoded_inputs
-    assert np.any(encoded_inputs[0][_frame().height:] == 235)
+    assert encoded_inputs[0].shape == (48, 64)
+    assert any(
+        frame.shape[0] > 48 and np.any(frame[_frame().height:] == 235)
+        for frame in encoded_inputs
+    )
+    assert finalized_video_inputs == ["projection.264"]
+    assert not (session / "video" / "projection.264").exists()
 
 
 def test_session_manifest_falls_back_to_raw_video_when_mp4_finalization_fails(
@@ -429,12 +474,13 @@ def test_session_manifest_falls_back_to_raw_video_when_mp4_finalization_fails(
     def fail(**_kwargs) -> None:
         raise RuntimeError("finalization failed")
 
-    monkeypatch.setattr(recorder_module, "mux_h264_aac", fail)
+    monkeypatch.setattr(frontends_module, "mux_h264_aac", fail)
     recorder = SessionRecorder(CaptureConfig(
         out_dir=str(tmp_path),
         sample_fps=30,
         max_total_bytes=0,
     ))
+    recorder.begin_session("alice", 1_000_000)
     recorder.record_video(_frame())
     recorder.end_session("alice", 1_100_000)
 
@@ -445,6 +491,155 @@ def test_session_manifest_falls_back_to_raw_video_when_mp4_finalization_fails(
     assert segment["audio_embedded"] is False
     assert (session / segment["path"]).is_file()
     assert not list((session / "video").glob("*.mp4"))
+
+
+def test_raw_profile_preserves_camera_pixels_and_timestamp_indexes(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    encoded_inputs: list[np.ndarray] = []
+
+    class FakeEncoder:
+        def Encode(self, frame, _params):
+            encoded_inputs.append(frame.copy())
+            return [{"data": b"\x00\x00\x00\x01\x65frame", "picture_type": 3}]
+
+        def EndEncode(self):
+            return []
+
+    monkeypatch.setitem(
+        sys.modules,
+        "PyNvVideoCodec",
+        types.SimpleNamespace(
+            CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
+            NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
+        ),
+    )
+    monkeypatch.setattr(
+        frontends_module,
+        "find_ffmpeg",
+        lambda: pytest.fail("raw capture must not require FFmpeg"),
+    )
+    recorder = SessionRecorder(CaptureConfig(
+        out_dir=str(tmp_path),
+        profile="raw",
+        session_mode="explicit",
+        sample_fps=30,
+        max_total_bytes=0,
+    ))
+    recorder.begin_session(
+        "alice",
+        1_000_000,
+        "agent",
+        {"purpose": "SOP evidence", "tags": ["assembly"]},
+    )
+    recorder.record_voice_caption(
+        "user",
+        DataMessage("alice", CAPTURE_STT_TOPIC, 1_010_000, b"Attach the wheel"),
+    )
+    recorder.record_observation(
+        DataMessage("alice", CAPTURE_OBSERVATION_TOPIC, 1_020_000, b""),
+        {
+            "kind": "frame_caption",
+            "frame_pts_us": 1_000_000,
+            "text": "Wheel aligned with axle",
+        },
+    )
+    recorder.record_video(_frame())
+    recorder.record_audio("device", _audio("device"))
+    recorder.end_session("alice", 1_100_000)
+
+    assert encoded_inputs[0].shape == (48, 64)
+    assert np.all(encoded_inputs[0][:32] == 96)
+    session = next(path for path in tmp_path.iterdir() if path.is_dir())
+    manifest = json.loads((session / "manifest.json").read_text())
+    segment = manifest["video_tracks"]["camera"][0]
+    assert manifest["version"] == 2
+    assert manifest["profile"] == "raw"
+    assert manifest["session_mode"] == "explicit"
+    assert manifest["trigger"] == "agent"
+    assert manifest["metadata"] == {"purpose": "SOP evidence", "tags": ["assembly"]}
+    assert manifest["clock"]["session_start_us"] == 1_000_000
+    assert segment["path"] == "video/session.264"
+    assert segment["audio_embedded"] is False
+    frame = json.loads((session / manifest["video_frame_index"]).read_text())
+    assert frame["pts_us"] == 1_000_000
+    assert frame["relative_us"] == 0
+    assert frame["source_width"] == frame["raw_width"] == 64
+    assert frame["projection_width"] == 64
+    transcript = json.loads((session / manifest["transcript"]).read_text())
+    assert transcript["relative_us"] == 10_000
+    assert transcript["text"] == "Attach the wheel"
+    observation = json.loads((session / manifest["observations"]).read_text())
+    assert observation["frame_relative_us"] == 0
+    audio = json.loads((session / manifest["audio"]["raw_index"]).read_text())
+    assert audio["duration_us"] == 10_000
+    assert audio["sample_format"] == "float32_le"
+
+
+@pytest.mark.asyncio
+async def test_explicit_session_control_records_only_between_reserved_commands(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    service = CaptureService(CaptureConfig(
+        out_dir=str(tmp_path),
+        profile="raw",
+        session_mode="explicit",
+        max_total_bytes=0,
+    ))
+    try:
+        await service._on_participant(ParticipantEvent("alice", True, 1_000_000))
+        await service._on_agent_data(
+            DataMessage("alice", "agent.response", 1_010_000, b"before"),
+        )
+        assert not list(tmp_path.iterdir())
+
+        await service._on_agent_data(DataMessage(
+            "alice",
+            CAPTURE_START_TOPIC,
+            1_020_000,
+            json.dumps({"purpose": "agent controlled"}).encode(),
+        ))
+        await service._on_agent_data(DataMessage(
+            "alice",
+            CAPTURE_START_TOPIC,
+            1_025_000,
+            json.dumps({"purpose": "must not replace active metadata"}).encode(),
+        ))
+        await service._on_agent_data(
+            DataMessage("alice", CAPTURE_STT_TOPIC, 1_030_000, b"during"),
+        )
+        await service._on_agent_data(DataMessage(
+            "alice",
+            CAPTURE_OBSERVATION_TOPIC,
+            1_040_000,
+            json.dumps({
+                "kind": "frame_caption",
+                "frame_pts_us": 1_035_000,
+                "text": "A timed observation",
+            }).encode(),
+        ))
+        await service._on_agent_data(
+            DataMessage("alice", CAPTURE_STOP_TOPIC, 1_050_000, b""),
+        )
+        await service._on_agent_data(
+            DataMessage("alice", CAPTURE_STT_TOPIC, 1_060_000, b"after"),
+        )
+
+        session = next(path for path in tmp_path.iterdir() if path.is_dir())
+        manifest = json.loads((session / "manifest.json").read_text())
+        assert manifest["start_us"] == 1_020_000
+        assert manifest["end_us"] == 1_050_000
+        assert manifest["metadata"] == {"purpose": "agent controlled"}
+        assert manifest["counts"]["transcripts"] == 1
+        assert manifest["counts"]["observations"] == 1
+        assert "during" in (session / "transcript.jsonl").read_text()
+        assert "before" not in (session / "events.jsonl").read_text()
+        assert "after" not in (session / "transcript.jsonl").read_text()
+    finally:
+        await service.stop()
 
 
 def test_safe_names_do_not_alias_distinct_track_ids() -> None:
@@ -633,6 +828,10 @@ def test_session_bundle_merges_resolution_and_track_segments_into_one_video(
         {"width": 224, "height": 112},
         {"width": 288, "height": 144},
     ]
+    assert videos[0]["source_dimensions"] == [
+        {"width": 64, "height": 32},
+        {"width": 128, "height": 64},
+    ]
     assert [path.name for path in (session / "video").glob("*.mp4")] == [
         "session.mp4"
     ]
@@ -728,6 +927,16 @@ async def test_capture_service_observes_both_sides_of_media_hub(
         await processor.send_return_data(
             DataMessage("alice", CAPTURE_TTS_TOPIC, 1_010_000, b"Spoken response"),
         )
+        await processor.send_return_data(DataMessage(
+            "alice",
+            CAPTURE_OBSERVATION_TOPIC,
+            1_020_000,
+            json.dumps({
+                "kind": "frame_caption",
+                "frame_pts_us": 1_000_000,
+                "text": "Door is open",
+            }).encode(),
+        ))
 
         for _ in range(80):
             sessions = [path for path in tmp_path.iterdir() if path.is_dir()]
@@ -757,8 +966,12 @@ async def test_capture_service_observes_both_sides_of_media_hub(
         assert '"direction":"device"' in events
         assert '"direction":"agent"' in events
         assert '"kind":"voice_caption"' in events
+        assert '"kind":"observation"' in events
+        assert "Door is open" in (session / "observations.jsonl").read_text()
+        assert "User transcript" in (session / "transcript.jsonl").read_text()
         returned_topics = [message.topic for message in returned_data]
         assert "agent.response" in returned_topics
+        assert CAPTURE_OBSERVATION_TOPIC not in returned_topics
         assert CAPTURE_STT_TOPIC not in returned_topics
         assert CAPTURE_TTS_TOPIC not in returned_topics
     finally:

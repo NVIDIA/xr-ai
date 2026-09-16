@@ -19,6 +19,8 @@ class CaptureConfig:
     hub_sub_addr: str = "ipc:///tmp/xr_hub_pub"
     hub_push_addr: str = "ipc:///tmp/xr_hub_in"
     out_dir: str = _DEFAULT_OUT_DIR
+    profile: str = "demo"
+    session_mode: str = "participant"
     sample_fps: float = 30.0
     bitrate: int = 6_000_000
     gpu_id: int = 0
@@ -30,6 +32,10 @@ class CaptureConfig:
     max_total_bytes: int = 10 * 1024 * 1024 * 1024
 
     def __post_init__(self) -> None:
+        if self.profile not in {"demo", "raw"}:
+            raise ValueError("profile must be 'demo' or 'raw'")
+        if self.session_mode not in {"participant", "explicit"}:
+            raise ValueError("session_mode must be 'participant' or 'explicit'")
         if not math.isfinite(self.sample_fps) or not 1 <= self.sample_fps <= 120:
             raise ValueError("sample_fps must be finite and between 1 and 120")
         if self.bitrate <= 0:

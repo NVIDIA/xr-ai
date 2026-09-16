@@ -14,13 +14,13 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from loguru import logger
 from xr_ai_hub import AudioChunk, DataMessage, FrameData
 
-from ._compositor import compose_caption
-from ._mp4 import find_ffmpeg, mux_h264_aac
+from ._frontends import _CaptureFrontend, _make_frontend, _RawCaptureFrontend
 from .config import CaptureConfig
 
 _MAX_SAFE_NAME = 96
@@ -32,6 +32,8 @@ class _VideoPacket:
     size: int
     pts_us: int
     key_frame: bool
+
+
 _MAX_DATA_FEED_TEXT = 1_024
 _CAPTURE_MARKER_NAME = ".xr-ai-media-capture"
 _CAPTURE_MARKER_CONTENT = "xr-ai media capture session v1\n"
@@ -180,12 +182,16 @@ class _H264TrackWriter:
         nvc: object,
         root: Path,
         track_id: str,
+        stream_name: str,
         config: CaptureConfig,
+        frontend: _CaptureFrontend,
     ) -> None:
         self._nvc = nvc
         self._root = root
         self._track_id = track_id
+        self._stream_name = stream_name
         self._config = config
+        self._frontend = frontend
         self._encoder = None
         self._stream = None
         self._width = 0
@@ -202,32 +208,34 @@ class _H264TrackWriter:
         frame: FrameData,
         caption: str,
         data_feed: tuple[str, ...],
-    ) -> None:
+    ) -> tuple[int, int, str] | None:
         min_interval_us = round(1_000_000 / self._config.sample_fps)
         if self._last_pts_us and frame.pts_us - self._last_pts_us < min_interval_us:
-            return
-        nv12, width, height = compose_caption(
+            return None
+        rendered = self._frontend.render_frame(
             frame,
-            caption,
+            caption=caption,
             data_feed=data_feed,
-            max_lines=self._config.overlay_lines,
         )
+        width = rendered.width
+        height = rendered.height
         if self._encoder is None or (width, height) != (self._width, self._height):
             self._start_segment(width, height, frame.pts_us)
         picture_params = self._nvc.NV_ENC_PIC_PARAMS()
         picture_params.inputTimeStamp = frame.pts_us
         self._submitted_pts.append(frame.pts_us)
-        for packet in _encoded_packets(self._encoder.Encode(nv12, picture_params)):
+        for packet in _encoded_packets(self._encoder.Encode(rendered.pixels, picture_params)):
             self._write_packet(packet)
         self._last_pts_us = frame.pts_us
         self._active["end_us"] = frame.pts_us
         self._active["num_frames"] += 1
+        return width, height, str(self._active["path"])
 
     def _start_segment(self, width: int, height: int, pts_us: int) -> None:
         self._finish_segment()
         self._width = width
         self._height = height
-        name = f"{_safe_name(self._track_id)}_{self._segment_index:03d}.264"
+        name = f"{self._stream_name}_{_safe_name(self._track_id)}_{self._segment_index:03d}.264"
         self._segment_index += 1
         self._stream = (self._root / name).open("wb")
         try:
@@ -314,15 +322,26 @@ class _ParticipantSession:
     participant_id: str
     start_us: int
     root: Path
+    trigger: str
+    metadata: dict[str, Any]
     events: object
+    transcripts: object
+    observations: object
+    video_index: object
     audio_index: object
     raw_audio: dict[str, object]
     conversation: _StereoWaveWriter
     video: dict[str, _H264TrackWriter] = field(default_factory=dict)
+    projected_video: dict[str, _H264TrackWriter] = field(default_factory=dict)
     caption: str = ""
     caption_expires_us: int = 0
     data_feed: deque[str] = field(default_factory=lambda: deque(maxlen=64))
     dropped_video_frames: int = 0
+    event_count: int = 0
+    transcript_count: int = 0
+    observation_count: int = 0
+    frame_count: int = 0
+    audio_chunk_count: int = 0
     lock: threading.RLock = field(default_factory=threading.RLock)
 
 
@@ -335,15 +354,29 @@ class SessionRecorder:
         except (ImportError, RuntimeError, OSError) as exc:
             raise RuntimeError(f"PyNvVideoCodec is required for media capture: {exc}") from exc
         self._nvc = nvc
-        self._ffmpeg_path = find_ffmpeg()
         self._config = config
+        self._frontend = _make_frontend(
+            profile=config.profile,
+            overlay_lines=config.overlay_lines,
+        )
+        self._raw_frontend = _RawCaptureFrontend()
         self._root = Path(config.out_dir)
         self._root.mkdir(parents=True, exist_ok=True)
         self._sessions: dict[str, _ParticipantSession] = {}
         self._lock = threading.RLock()
         self._prune_artifacts()
 
-    def begin_session(self, participant_id: str, pts_us: int) -> None:
+    def has_session(self, participant_id: str) -> bool:
+        with self._lock:
+            return participant_id in self._sessions
+
+    def begin_session(
+        self,
+        participant_id: str,
+        pts_us: int,
+        trigger: str = "participant",
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
         with self._lock:
             if participant_id in self._sessions:
                 return
@@ -362,6 +395,9 @@ class SessionRecorder:
             (root / "video").mkdir(mode=0o700)
             (root / "audio").mkdir(mode=0o700)
             events = (root / "events.jsonl").open("a", encoding="utf-8")
+            transcripts = (root / "transcript.jsonl").open("a", encoding="utf-8")
+            observations = (root / "observations.jsonl").open("a", encoding="utf-8")
+            video_index = (root / "video" / "frames.jsonl").open("a", encoding="utf-8")
             audio_index = (root / "audio" / "chunks.jsonl").open("a", encoding="utf-8")
             raw_audio = {
                 direction: (root / "audio" / f"{direction}.f32le").open("ab")
@@ -371,7 +407,12 @@ class SessionRecorder:
                 participant_id=participant_id,
                 start_us=start_us,
                 root=root,
+                trigger=trigger,
+                metadata=dict(metadata or {}),
                 events=events,
+                transcripts=transcripts,
+                observations=observations,
+                video_index=video_index,
                 audio_index=audio_index,
                 raw_audio=raw_audio,
                 conversation=_StereoWaveWriter(
@@ -381,16 +422,15 @@ class SessionRecorder:
                 ),
             )
             self._sessions[participant_id] = session
-        self._event(session, "participant", start_us, state="joined")
+        self._event(session, "recording", start_us, state="started", trigger=trigger)
         logger.info("media capture started participant={!r} path={}", participant_id, root)
 
     def _session(self, participant_id: str, pts_us: int) -> _ParticipantSession:
+        del pts_us
         with self._lock:
             session = self._sessions.get(participant_id)
         if session is None:
-            self.begin_session(participant_id, pts_us)
-            with self._lock:
-                session = self._sessions[participant_id]
+            raise RuntimeError(f"no active capture session for {participant_id!r}")
         return session
 
     def record_audio(self, direction: str, chunk: AudioChunk) -> None:
@@ -400,12 +440,19 @@ class SessionRecorder:
             offset = stream.tell()
             stream.write(chunk.data)
             stream.flush()
+            session.audio_chunk_count += 1
+            duration_us = round(chunk.samples * 1_000_000 / chunk.sample_rate)
             _write_json_line(session.audio_index, {
+                "chunk_id": session.audio_chunk_count,
                 "direction": direction,
                 "pts_us": chunk.pts_us,
+                "relative_us": chunk.pts_us - session.start_us,
+                "end_pts_us": chunk.pts_us + duration_us,
+                "duration_us": duration_us,
                 "sample_rate": chunk.sample_rate,
                 "channels": chunk.channels,
                 "samples": chunk.samples,
+                "sample_format": "float32_le",
                 "offset": offset,
                 "size_bytes": len(chunk.data),
                 "track_id": chunk.track_id,
@@ -438,18 +485,61 @@ class SessionRecorder:
     def record_voice_caption(self, source: str, message: DataMessage) -> None:
         session = self._session(message.participant_id, message.pts_us)
         text = message.data.decode("utf-8", errors="replace").strip()
-        self._event(
-            session,
-            "voice_caption",
-            message.pts_us,
-            source=source,
-            text=text,
-        )
         with session.lock:
+            session.transcript_count += 1
+            transcript = {
+                "transcript_id": session.transcript_count,
+                "pts_us": message.pts_us,
+                "relative_us": message.pts_us - session.start_us,
+                "source": source,
+                "kind": "speech_recognition" if source == "user" else "speech_synthesis",
+                "text": text,
+            }
+            _write_json_line(session.transcripts, transcript)
+            self._event(
+                session,
+                "voice_caption",
+                message.pts_us,
+                source=source,
+                transcript_id=session.transcript_count,
+                text=text,
+            )
             session.caption = f"{source.upper()}: {text}" if text else ""
             session.caption_expires_us = (
                 max(message.pts_us, time.time_ns() // 1_000)
                 + round(self._config.overlay_seconds * 1_000_000)
+            )
+
+    def record_observation(
+        self,
+        message: DataMessage,
+        observation: dict[str, Any],
+    ) -> None:
+        session = self._session(message.participant_id, message.pts_us)
+        frame_pts_us = observation.get("frame_pts_us")
+        if not isinstance(frame_pts_us, int):
+            frame_pts_us = None
+        with session.lock:
+            session.observation_count += 1
+            record = {
+                "observation_id": session.observation_count,
+                "generated_at_us": message.pts_us,
+                "generated_relative_us": message.pts_us - session.start_us,
+                "frame_pts_us": frame_pts_us,
+                "frame_relative_us": (
+                    frame_pts_us - session.start_us
+                    if frame_pts_us is not None
+                    else None
+                ),
+                "observation": observation,
+            }
+            _write_json_line(session.observations, record)
+            self._event(
+                session,
+                "observation",
+                message.pts_us,
+                observation_id=session.observation_count,
+                frame_pts_us=frame_pts_us,
             )
 
     def record_flush(self, participant_id: str, pts_us: int) -> None:
@@ -472,12 +562,54 @@ class SessionRecorder:
                     nvc=self._nvc,
                     root=session.root / "video",
                     track_id=frame.track_id,
+                    stream_name="raw",
                     config=self._config,
+                    frontend=self._raw_frontend,
                 )
                 session.video[frame.track_id] = writer
             caption = "" if frame.pts_us > session.caption_expires_us else session.caption
             data_feed = tuple(session.data_feed)
-        writer.write(frame, caption, data_feed)
+            projected_writer = session.projected_video.get(frame.track_id)
+            if self._frontend.name == "demo" and projected_writer is None:
+                projected_writer = _H264TrackWriter(
+                    nvc=self._nvc,
+                    root=session.root / "video",
+                    track_id=frame.track_id,
+                    stream_name="demo",
+                    config=self._config,
+                    frontend=self._frontend,
+                )
+                session.projected_video[frame.track_id] = projected_writer
+        raw_frame = writer.write(frame, "", ())
+        if raw_frame is None:
+            return
+        raw_width, raw_height, raw_segment_path = raw_frame
+        projected_frame = (
+            projected_writer.write(frame, caption, data_feed)
+            if projected_writer is not None
+            else raw_frame
+        )
+        if projected_frame is None:
+            raise RuntimeError("capture projections accepted different frame timestamps")
+        projected_width, projected_height, projected_segment_path = projected_frame
+        with session.lock:
+            session.frame_count += 1
+            _write_json_line(session.video_index, {
+                "frame_id": session.frame_count,
+                "pts_us": frame.pts_us,
+                "relative_us": frame.pts_us - session.start_us,
+                "sequence": frame.seq,
+                "track_id": frame.track_id,
+                "pixel_format": frame.fmt.name.lower(),
+                "source_width": frame.width,
+                "source_height": frame.height,
+                "raw_width": raw_width,
+                "raw_height": raw_height,
+                "raw_encoder_segment_id": Path(raw_segment_path).stem,
+                "projection_width": projected_width,
+                "projection_height": projected_height,
+                "projection_encoder_segment_id": Path(projected_segment_path).stem,
+            })
 
     def note_video_drop(self, participant_id: str, pts_us: int) -> None:
         session = self._session(participant_id, pts_us)
@@ -491,8 +623,11 @@ class SessionRecorder:
             return
         with session.lock:
             writer = session.video.get(track_id)
+            projected_writer = session.projected_video.get(track_id)
         if writer is not None:
             writer.close()
+        if projected_writer is not None:
+            projected_writer.close()
 
     def end_session(self, participant_id: str, pts_us: int) -> None:
         with self._lock:
@@ -501,30 +636,56 @@ class SessionRecorder:
             return
         pts_us = max(session.start_us, pts_us)
         with session.lock:
-            self._event(session, "participant", pts_us, state="left")
+            self._event(session, "recording", pts_us, state="stopped")
             for writer in session.video.values():
+                writer.close()
+            for writer in session.projected_video.values():
                 writer.close()
             session.conversation.close()
             video_tracks = self._mux_video(session, pts_us)
             for stream in session.raw_audio.values():
                 stream.close()
+            session.video_index.close()
             session.audio_index.close()
+            session.transcripts.close()
+            session.observations.close()
             session.events.close()
             manifest = {
-                "version": 1,
+                "version": 2,
                 "participant_id": participant_id,
+                "profile": self._frontend.name,
+                "session_mode": self._config.session_mode,
+                "trigger": session.trigger,
+                "metadata": session.metadata,
                 "start_us": session.start_us,
                 "end_us": pts_us,
+                "duration_us": pts_us - session.start_us,
+                "clock": {
+                    "timebase": "microseconds",
+                    "origin": "unix_epoch",
+                    "session_start_us": session.start_us,
+                },
                 "video_tracks": video_tracks,
+                "video_frame_index": "video/frames.jsonl",
                 "audio": {
                     "conversation": "audio/conversation.wav",
                     "channels": {"left": "device", "right": "agent"},
                     "sample_rate": self._config.audio_sample_rate,
+                    "sample_format": "pcm_s16le",
                     "raw_index": "audio/chunks.jsonl",
                     "device_raw": "audio/device.f32le",
                     "agent_raw": "audio/agent.f32le",
                 },
                 "events": "events.jsonl",
+                "transcript": "transcript.jsonl",
+                "observations": "observations.jsonl",
+                "counts": {
+                    "video_frames": session.frame_count,
+                    "audio_chunks": session.audio_chunk_count,
+                    "transcripts": session.transcript_count,
+                    "observations": session.observation_count,
+                    "events": session.event_count,
+                },
                 "dropped_video_frames": session.dropped_video_frames,
             }
             manifest_path = session.root / "manifest.json"
@@ -546,56 +707,48 @@ class SessionRecorder:
         session: _ParticipantSession,
         end_us: int,
     ) -> dict[str, list[dict]]:
-        sources = sorted(
-            (
-                (track_id, segment)
-                for track_id, writer in session.video.items()
-                for segment in writer.segments
-            ),
-            key=lambda item: (item[1]["start_us"], item[0]),
-        )
-        if not sources:
+        raw_sources = self._video_sources(session.video)
+        if not raw_sources:
             return {}
-
         raw_path = session.root / "video" / "session.264"
-        pending_path = raw_path.with_suffix(".264.pending")
-        try:
-            with pending_path.open("wb") as output:
-                for _, segment in sources:
-                    source_path = session.root / segment["path"]
-                    with source_path.open("rb") as source:
-                        shutil.copyfileobj(source, output)
-            pending_path.replace(raw_path)
-        except Exception:
-            pending_path.unlink(missing_ok=True)
-            raise
+        self._join_sources(session.root, raw_sources, raw_path)
+        projected_sources = self._video_sources(session.projected_video)
+        display_sources = projected_sources or raw_sources
+        projection_path: Path | None = None
+        if projected_sources:
+            projection_path = session.root / "video" / "projection.264"
+            self._join_sources(session.root, projected_sources, projection_path)
 
-        for _, segment in sources:
-            (session.root / segment["path"]).unlink(missing_ok=True)
-
-        dimensions = sorted({
+        source_dimensions = sorted({
             (segment["width"], segment["height"])
-            for _, segment in sources
+            for _, segment in raw_sources
+        })
+        encoded_dimensions = sorted({
+            (segment["width"], segment["height"])
+            for _, segment in display_sources
         })
         display_segment = max(
-            (segment for _, segment in sources),
+            (segment for _, segment in display_sources),
             key=lambda segment: segment["width"] * segment["height"],
         )
-        track_ids = list(dict.fromkeys(track_id for track_id, _ in sources))
+        track_ids = list(dict.fromkeys(track_id for track_id, _ in display_sources))
         combined = {
-            "path": "video/session.mp4",
-            "start_us": min(segment["start_us"] for _, segment in sources),
-            "end_us": max(segment["end_us"] for _, segment in sources),
-            "num_frames": sum(segment["num_frames"] for _, segment in sources),
+            "start_us": min(segment["start_us"] for _, segment in display_sources),
+            "end_us": max(segment["end_us"] for _, segment in display_sources),
+            "num_frames": sum(segment["num_frames"] for _, segment in display_sources),
             "width": display_segment["width"],
             "height": display_segment["height"],
             "fps": self._config.sample_fps,
             "raw_path": "video/session.264",
             "raw_size_bytes": raw_path.stat().st_size,
             "source_track_ids": track_ids,
+            "source_dimensions": [
+                {"width": width, "height": height}
+                for width, height in source_dimensions
+            ],
             "encoded_dimensions": [
                 {"width": width, "height": height}
-                for width, height in dimensions
+                for width, height in encoded_dimensions
             ],
         }
 
@@ -611,35 +764,74 @@ class SessionRecorder:
             * sample_rate
             / 1_000_000
         )
-        muxed_path = session.root / combined["path"]
-        pending_muxed_path = muxed_path.with_suffix(".mp4.pending")
         try:
-            mux_h264_aac(
-                ffmpeg_path=self._ffmpeg_path,
-                output_path=pending_muxed_path,
-                h264_path=raw_path,
+            artifact = self._frontend.finalize_video(
+                session_root=session.root,
+                raw_path=projection_path or raw_path,
                 wave_path=wave_path,
                 audio_start_frame=start_frame,
                 audio_end_frame=end_frame,
                 fps=combined["fps"],
             )
-            pending_muxed_path.replace(muxed_path)
         except Exception as exc:
-            pending_muxed_path.unlink(missing_ok=True)
-            logger.warning("media capture A/V mux failed path={}: {}", raw_path, exc)
+            logger.warning("media capture video finalization failed path={}: {}", raw_path, exc)
             combined["path"] = combined["raw_path"]
             combined["size_bytes"] = combined["raw_size_bytes"]
             combined["audio_embedded"] = False
         else:
-            combined["size_bytes"] = muxed_path.stat().st_size
-            combined["audio_embedded"] = True
+            combined["path"] = artifact.path
+            combined["size_bytes"] = artifact.size_bytes
+            combined["audio_embedded"] = artifact.audio_embedded
+        finally:
+            if projection_path is not None:
+                projection_path.unlink(missing_ok=True)
 
         manifest_track = track_ids[0] if len(track_ids) == 1 else "session"
         return {manifest_track: [combined]}
 
+    @staticmethod
+    def _video_sources(
+        writers: dict[str, _H264TrackWriter],
+    ) -> list[tuple[str, dict]]:
+        return sorted(
+            (
+                (track_id, segment)
+                for track_id, writer in writers.items()
+                for segment in writer.segments
+            ),
+            key=lambda item: (item[1]["start_us"], item[0]),
+        )
+
+    @staticmethod
+    def _join_sources(
+        session_root: Path,
+        sources: list[tuple[str, dict]],
+        output_path: Path,
+    ) -> None:
+        pending_path = output_path.with_suffix(".264.pending")
+        try:
+            with pending_path.open("wb") as output:
+                for _, segment in sources:
+                    source_path = session_root / segment["path"]
+                    with source_path.open("rb") as source:
+                        shutil.copyfileobj(source, output)
+            pending_path.replace(output_path)
+        except Exception:
+            pending_path.unlink(missing_ok=True)
+            raise
+        for _, segment in sources:
+            (session_root / segment["path"]).unlink(missing_ok=True)
+
     def _event(self, session: _ParticipantSession, kind: str, pts_us: int, **fields) -> None:
         with session.lock:
-            _write_json_line(session.events, {"kind": kind, "pts_us": pts_us, **fields})
+            session.event_count += 1
+            _write_json_line(session.events, {
+                "event_id": session.event_count,
+                "kind": kind,
+                "pts_us": pts_us,
+                "relative_us": pts_us - session.start_us,
+                **fields,
+            })
 
     def close(self) -> None:
         end_us = time.time_ns() // 1_000

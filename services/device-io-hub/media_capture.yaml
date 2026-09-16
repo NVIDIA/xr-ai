@@ -10,6 +10,15 @@ hub_push_addr: ipc:///tmp/xr_hub_in
 # Each participant connection creates one timestamped capture bundle here.
 out_dir: ~/.local/share/xr-ai/captures
 
+# The shared recorder has two private projections. `demo` burns transcript/data
+# panels into H.264 and finalizes an H.264/AAC MP4. `raw` preserves camera pixels
+# in H.264 and leaves audio separate for downstream workflow/SOP processing.
+profile: demo
+
+# `participant` records one session from join to leave. `explicit` records only
+# between reserved agent start/stop control messages.
+session_mode: participant
+
 # Video pixels are requested after the media hub has normalized the transport.
 # NVENC runs in bounded worker threads; if capture falls behind, old capture
 # requests are dropped without delaying the hub, client, or agent.
