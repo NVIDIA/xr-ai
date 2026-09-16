@@ -17,7 +17,6 @@ dependencies = []
 repository = [
     "lab-instrument-monitoring",
     "lab-instrument-monitoring-worker",
-    "model-servers",
     "simple-vlm-example",
     "simple-vlm-example-worker",
     "tea-making-sample",
@@ -32,6 +31,7 @@ repository = [
     "xr-ai-tools[frames,image-editing,marker-tracking,relay,services,vision]",
     "xr-ai-voice",
     "xr-ai-web-events",
+    "model-servers",
     "cloudxr-runtime",
     "device-io-hub",
     "magpie-tts-server",
@@ -63,7 +63,6 @@ conflicts = [[{ extra = "repository" }, { extra = "vllm" }]]
 [tool.uv.sources]
 "lab-instrument-monitoring"        = { path = "../agent-samples/lab-instrument-monitoring", editable = true }
 "lab-instrument-monitoring-worker" = { path = "../agent-samples/lab-instrument-monitoring/worker", editable = true }
-"model-servers"                    = { path = "../agent-samples/model-servers", editable = true }
 "simple-vlm-example"               = { path = "../agent-samples/simple-vlm-example", editable = true }
 "simple-vlm-example-worker"        = { path = "../agent-samples/simple-vlm-example/worker", editable = true }
 "tea-making-sample"                = { path = "../agent-samples/tea-making-sample", editable = true }
@@ -78,6 +77,7 @@ conflicts = [[{ extra = "repository" }, { extra = "vllm" }]]
 "xr-ai-tools"                      = { path = "../agent-sdk/xr-ai-tools", editable = true }
 "xr-ai-voice"                      = { path = "../agent-sdk/xr-ai-voice", editable = true }
 "xr-ai-web-events"                 = { path = "../agent-sdk/xr-ai-web-events", editable = true }
+"model-servers"                    = { path = "../model-server-samples/model-servers", editable = true }
 "cloudxr-runtime"                  = { path = "../services/cloudxr-runtime", editable = true }
 "device-io-hub"                    = { path = "../services/device-io-hub", editable = true }
 "embedding-server"                 = { path = "../services/embedding-server", editable = true }

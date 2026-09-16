@@ -48,7 +48,7 @@ Run all commands from `agent-samples/lab-instrument-monitoring/`. Start the
 shared models first:
 
 ```bash
-uv run --project ../model-servers model_servers
+uv run --project ../../model-server-samples/model-servers model_servers
 ```
 
 Wait for the launcher to report that all processes are ready and return. Then
@@ -77,7 +77,7 @@ JSONL output is written below `artifacts/`, and the bounded live event viewer
 is available at `http://127.0.0.1:8092` by default.
 
 The shared models remain running after the sample stops. From this directory,
-stop them with `uv run --project ../model-servers model_servers --stop`.
+stop them with `uv run --project ../../model-server-samples/model-servers model_servers --stop`.
 
 <!-- Compatibility anchors for headings consolidated into the documentation. -->
 <a id="file-outputs"></a><a id="foreground-routing-eval"></a>

@@ -172,3 +172,13 @@ def test_duplicate_project_names_are_rejected(tmp_path: Path) -> None:
 def test_generated_section_requires_one_ordered_marker_pair(document: str) -> None:
     with pytest.raises(ValueError):
         dependency_map.replace_generated_section(document, "generated")
+
+
+def test_model_server_samples_have_their_own_inventory_group(tmp_path: Path) -> None:
+    _write_project(tmp_path, "model-server-samples/model-servers", name="model-servers")
+    document = _write_document(tmp_path)
+
+    generated = dependency_map.generate_document(tmp_path, document)
+
+    assert "### Model server samples" in generated
+    assert "[`model-server-samples/model-servers/`](model-server-samples/model-servers/)" in generated

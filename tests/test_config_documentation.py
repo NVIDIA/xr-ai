@@ -17,14 +17,20 @@ load_config_catalog = _CONFIG_REFERENCE["load_config_catalog"]
 
 def test_config_catalog_covers_every_top_level_sample() -> None:
     configs = load_config_catalog(_ROOT)
-    projects = {path.parent.name for path in (_ROOT / "agent-samples").glob("*/pyproject.toml")}
+    project_paths = [
+        path
+        for category in ("agent-samples", "model-server-samples")
+        for path in (_ROOT / category).glob("*/pyproject.toml")
+    ]
+    projects = {path.parent.name for path in project_paths}
 
     assert {config.sample for config in configs} == projects
+    assert "model-servers" in projects
     assert len({config.path for config in configs}) == len(configs)
     assert [config.path for config in configs] == sorted(config.path for config in configs)
 
     expected: set[Path] = set()
-    for project_path in (_ROOT / "agent-samples").glob("*/pyproject.toml"):
+    for project_path in project_paths:
         sample_dir = project_path.parent
         expected.update(
             path.relative_to(_ROOT)
@@ -67,8 +73,9 @@ def test_config_catalog_preserves_source_and_language() -> None:
         assert config.content == (_ROOT / config.path).read_text(encoding="utf-8")
 
 
-def test_config_catalog_rejects_symbolic_links(tmp_path: Path) -> None:
-    sample = tmp_path / "agent-samples" / "demo"
+@pytest.mark.parametrize("category", ["agent-samples", "model-server-samples"])
+def test_config_catalog_rejects_symbolic_links(tmp_path: Path, category: str) -> None:
+    sample = tmp_path / category / "demo"
     yaml_dir = sample / "yaml"
     yaml_dir.mkdir(parents=True)
     sample.joinpath("pyproject.toml").write_text("[project]\nname = 'demo'\n")

@@ -61,7 +61,7 @@ Run all commands from `agent-samples/xr-render-demo/`. Start the shared models
 first:
 
 ```bash
-uv run --project ../model-servers model_servers
+uv run --project ../../model-server-samples/model-servers model_servers
 ```
 
 Wait for the launcher to report that all processes are ready and return. Then
@@ -82,7 +82,7 @@ Open the authenticated client URL printed by DeviceIOHub and connect. Press
 Ctrl+C to stop the demo stack; do not stop its individual child processes.
 
 The shared models remain running after the sample stops. From this directory,
-stop them with `uv run --project ../model-servers model_servers --stop`.
+stop them with `uv run --project ../../model-server-samples/model-servers model_servers --stop`.
 
 <!-- Compatibility anchors for headings consolidated into the documentation. -->
 <a id="file-map"></a><a id="composition-chain"></a><a id="how-to-extend"></a>

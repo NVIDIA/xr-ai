@@ -54,6 +54,6 @@ Ask the user, then tailor the pointers below to the answers.
   boilerplate templates.
 - **Quickstart order:** follow
   `https://nvidia.github.io/xr-ai/<ref>/getting_started/quickstart.html`, with
-  `<ref>` replaced as above. Start `agent-samples/model-servers` and wait for
+  `<ref>` replaced as above. Start `model-server-samples/model-servers` and wait for
   it to report readiness before starting `agent-samples/simple-vlm-example`
   or another agent sample.

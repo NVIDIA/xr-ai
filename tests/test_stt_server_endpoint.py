@@ -23,9 +23,9 @@ _WAV = ("file", ("audio.wav", b"RIFF....WAVE", "audio/wav"))
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _STT_CONFIGS = (
     "services/stt-server/stt_server.yaml",
-    "agent-samples/model-servers/yaml/spark/stt_server.yaml",
-    "agent-samples/model-servers/yaml/96G_blackwell/stt_server.yaml",
-    "agent-samples/model-servers/yaml/dual_48G_ada/stt_server.yaml",
+    "model-server-samples/model-servers/yaml/spark/stt_server.yaml",
+    "model-server-samples/model-servers/yaml/96G_blackwell/stt_server.yaml",
+    "model-server-samples/model-servers/yaml/dual_48G_ada/stt_server.yaml",
 )
 
 

@@ -525,19 +525,6 @@ drift:
 - Commands:
   - `lab_instrument_monitoring_worker` → `lab_instrument_monitoring_worker.__main__:run`
 
-#### `model-servers` — [`agent-samples/model-servers/`](agent-samples/model-servers/)
-
-- Python: `>=3.11,<3.13`
-- Build dependencies:
-  - `hatchling`
-- Runtime dependencies:
-  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
-  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
-- Optional dependency groups: none
-- Commands:
-  - `model_servers` → `main:run`
-
 #### `simple-vlm-example` — [`agent-samples/simple-vlm-example/`](agent-samples/simple-vlm-example/)
 
 - Python: `>=3.11,<3.13`
@@ -676,6 +663,21 @@ drift:
 - Commands:
   - `xr_render_demo_worker` → `xr_render_demo_worker.__main__:run`
 
+### Model server samples
+
+#### `model-servers` — [`model-server-samples/model-servers/`](model-server-samples/model-servers/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `model_servers` → `main:run`
+
 ### Tests
 
 #### `xr-ai-tests` — [`tests/`](tests/)
@@ -721,7 +723,6 @@ drift:
   - `repository`:
     - `lab-instrument-monitoring` → [`lab-instrument-monitoring`](agent-samples/lab-instrument-monitoring/) (local, editable)
     - `lab-instrument-monitoring-worker` → [`lab-instrument-monitoring-worker`](agent-samples/lab-instrument-monitoring/worker/) (local, editable)
-    - `model-servers` → [`model-servers`](agent-samples/model-servers/) (local, editable)
     - `simple-vlm-example` → [`simple-vlm-example`](agent-samples/simple-vlm-example/) (local, editable)
     - `simple-vlm-example-worker` → [`simple-vlm-example-worker`](agent-samples/simple-vlm-example/worker/) (local, editable)
     - `tea-making-sample` → [`tea-making-sample`](agent-samples/tea-making-sample/) (local, editable)
@@ -736,6 +737,7 @@ drift:
     - `xr-ai-tools[frames,image-editing,marker-tracking,relay,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
     - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
     - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
+    - `model-servers` → [`model-servers`](model-server-samples/model-servers/) (local, editable)
     - `cloudxr-runtime` → [`cloudxr-runtime`](services/cloudxr-runtime/) (local, editable)
     - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
     - `magpie-tts-server` → [`magpie-tts-server`](services/magpie-tts/) (local, editable)

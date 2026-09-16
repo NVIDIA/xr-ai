@@ -2465,7 +2465,7 @@ wheels = [
 [[package]]
 name = "model-servers"
 version = "0.1.0"
-source = { editable = "../agent-samples/model-servers" }
+source = { editable = "../model-server-samples/model-servers" }
 dependencies = [
     { name = "xr-ai-launcher" },
     { name = "xr-ai-logging" },
@@ -6313,7 +6313,7 @@ requires-dist = [
     { name = "lab-instrument-monitoring-worker", marker = "extra == 'repository'", editable = "../agent-samples/lab-instrument-monitoring/worker" },
     { name = "llama-nemotron-llm-server", marker = "extra == 'vllm'", editable = "../services/llama-nemotron-llm" },
     { name = "magpie-tts-server", marker = "extra == 'repository'", editable = "../services/magpie-tts" },
-    { name = "model-servers", marker = "extra == 'repository'", editable = "../agent-samples/model-servers" },
+    { name = "model-servers", marker = "extra == 'repository'", editable = "../model-server-samples/model-servers" },
     { name = "nemotron-omni-llm-server", marker = "extra == 'vllm'", editable = "../services/nemotron-omni-llm" },
     { name = "nemotron3-nano-llm-server", marker = "extra == 'vllm'", editable = "../services/nemotron3-nano-llm" },
     { name = "nim-server", marker = "extra == 'repository'", editable = "../services/nim-server" },

@@ -34,7 +34,7 @@ The site also publishes the current `main` branch and release-tagged versions.
 
 | Sample | Purpose |
 |---|---|
-| [`model-servers`](agent-samples/model-servers/README.md) | Start and persist the shared model stack |
+| [`model-servers`](model-server-samples/model-servers/README.md) | Start and persist the shared model stack |
 | [`simple-vlm-example`](agent-samples/simple-vlm-example/README.md) | Voice and text questions about the current camera frame |
 | [`lab-instrument-monitoring`](agent-samples/lab-instrument-monitoring/README.md) | Marker-associated visual monitoring with a foreground voice agent |
 | [`tea-making-sample`](agent-samples/tea-making-sample/README.md) | Guided workflow with visual evidence and background observations |
@@ -51,6 +51,7 @@ evaluation, and adaptation guidance.
 | `client-samples/` | Platform clients and shared StreamKit implementations |
 | `agent-sdk/` | Hub IPC, model clients, runtime, tools, voice, and web events |
 | `agent-samples/` | Runnable agent stacks |
+| `model-server-samples/` | Shared model-server launch samples |
 | `services/` | Hub, model servers, and typed capability services |
 | `utils/` | Launcher, logging, VAD, vLLM, and voice-gate utilities |
 | `tests/` | Cross-package and integration tests |

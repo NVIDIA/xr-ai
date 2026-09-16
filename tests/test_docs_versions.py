@@ -35,7 +35,12 @@ def _section(source: str, heading: str) -> str:
 
 def _sample_projects() -> list[tuple[Path, str]]:
     projects: list[tuple[Path, str]] = []
-    for project_path in sorted((_ROOT / "agent-samples").glob("*/pyproject.toml")):
+    project_paths = sorted(
+        path
+        for category in ("agent-samples", "model-server-samples")
+        for path in (_ROOT / category).glob("*/pyproject.toml")
+    )
+    for project_path in project_paths:
         sample_dir = project_path.parent
         if not (sample_dir / "main.py").is_file():
             continue
@@ -268,7 +273,7 @@ def test_getting_started_skill_routes_to_versioned_setup_docs() -> None:
         in skill
     )
     assert (
-        "Start `agent-samples/model-servers` and wait for it to report readiness "
+        "Start `model-server-samples/model-servers` and wait for it to report readiness "
         "before starting `agent-samples/simple-vlm-example`"
     ) in normalized
 
@@ -276,16 +281,17 @@ def test_getting_started_skill_routes_to_versioned_setup_docs() -> None:
 def test_sample_readmes_use_sample_directory_commands() -> None:
     for sample_dir, command in _sample_projects():
         directory = sample_dir.name
+        relative_dir = sample_dir.relative_to(_ROOT).as_posix()
         readme = _visible_markdown((sample_dir / "README.md").read_text())
         run_section = _section(readme, "Run")
         configure_section = _section(readme, "Configure")
         bash = "\n".join(_BASH_FENCE.findall(run_section))
 
-        assert f"Run all commands from `agent-samples/{directory}/`" in run_section
+        assert f"Run all commands from `{relative_dir}/`" in run_section
         assert "another terminal" not in readme
         assert not re.search(r"^\s*cd\s", bash, flags=re.MULTILINE)
         assert "uv run --directory" not in bash
-        assert f"--project agent-samples/{directory}" not in bash
+        assert f"--project {relative_dir}" not in bash
         assert re.search(rf"^uv run {re.escape(command)}(?:\s|$)", bash, re.MULTILINE)
         assert re.search(r"^uv run main\.py\s*$", bash, re.MULTILINE)
         assert "yaml/" in configure_section
@@ -294,7 +300,7 @@ def test_sample_readmes_use_sample_directory_commands() -> None:
             in configure_section
         )
         if directory != "model-servers":
-            assert "uv run --project ../model-servers model_servers" in bash
+            assert "uv run --project ../../model-server-samples/model-servers model_servers" in bash
             assert "same terminal" in run_section
             assert "sample configuration guide" in configure_section
 

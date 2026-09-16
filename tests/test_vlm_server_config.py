@@ -15,7 +15,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SERVER_MAIN = _REPO_ROOT / "services" / "vlm-server" / "vlm_server" / "__main__.py"
 _SERVER_YAML = _REPO_ROOT / "services" / "vlm-server" / "vlm_server.yaml"
 _SAMPLES = _REPO_ROOT / "agent-samples"
-_MODEL_PROFILES = _SAMPLES / "model-servers" / "yaml"
+_MODEL_PROFILES = _REPO_ROOT / "model-server-samples" / "model-servers" / "yaml"
 _LOCAL_VLM_CONFIGS = (
     _SERVER_YAML,
     _MODEL_PROFILES / "96G_blackwell" / "vlm_server.yaml",

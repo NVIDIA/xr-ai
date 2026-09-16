@@ -21,7 +21,7 @@ Prerequisites
 All model services must already be running before this demo starts. The sample
 never starts or stops them. The shared model stack includes Pocket TTS:
 
-    uv run --project agent-samples/model-servers model_servers
+    uv run --project model-server-samples/model-servers model_servers
 
 How to run (from the repo root or any directory):
     uv run --project agent-samples/xr-render-demo xr_render_demo

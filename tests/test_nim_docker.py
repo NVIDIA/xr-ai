@@ -196,7 +196,7 @@ def test_serve_nim_exits_without_ngc_key(tmp_path, monkeypatch):
 # ── shipped profiles parse through the real loader ─────────────────────────
 
 
-_MS_YAML = _REPO_ROOT / "agent-samples" / "model-servers" / "yaml"
+_MS_YAML = _REPO_ROOT / "model-server-samples" / "model-servers" / "yaml"
 
 
 def test_model_servers_nim_profile_parses() -> None:
