@@ -142,7 +142,7 @@ For the shipped `vlm_llm_nim` stack:
 1. Copy its `llm` entry when the sample needs language or tool calling.
 2. Copy its `vlm` entry when the sample needs vision.
 3. Remove the `deployment` object and endpoint `readiness` and `health_path`
-   settings from every copied consumer entry. Keep the LLM endpoint on port
+   settings from the copied LLM and VLM entries. Keep the LLM endpoint on port
    8110 and the VLM endpoint on port 8100. The server profile keeps its settings.
 4. If the sample uses `agent_llm`, duplicate the `llm` entry under that role.
 5. Preserve the sample's STT, TTS, embedding, and other roles unless the shared
@@ -189,7 +189,8 @@ client-profile instructions beside each GPU-specific container configuration.
 If an operator already runs a compatible service elsewhere, no model-server
 change is required. Update the sample entry's `endpoint.base_url`. Both
 operator-managed XR AI services and hosted APIs use client entries without
-`deployment` or health polling settings. A hosted endpoint may also need a
+`deployment`. Worker model clients do not need health polling settings; the
+RAG embedding exception is described below. A hosted endpoint may also need a
 credential:
 
 ```json
@@ -203,6 +204,34 @@ credential:
 
 Do not put the credential value in JSON. Export it or use the credential store.
 Refer to {doc}`/getting_started/credentials` for credential options.
+
+(rag-embedding-health)=
+## RAG embedding health
+
+Tea making's RAG service reads the `embedding` role from the same
+`yaml/models.local.json` profile as the worker. Unlike worker model clients,
+it explicitly calls embedding `health()` before building its index and when
+reporting RAG readiness. Preserve health settings for this role when changing
+its endpoint.
+
+For a hosted embedding provider without a health route, set `readiness: none`
+in the embedding entry's `endpoint` object:
+
+```json
+{
+  "endpoint": {
+    "base_url": "https://integrate.api.nvidia.com",
+    "api_key_env": "NGC_API_KEY",
+    "readiness": "none"
+  }
+}
+```
+
+This skips the health request; actual embedding requests still use the configured
+adapter and credentials. If the provider exposes a supported health route,
+use `readiness: health` and set `health_path` to that route instead, for example
+`/v1/health/ready`. Omitting these settings defaults to probing `/health`, which
+can prevent RAG startup even when embedding inference works.
 
 ## Riva speech boundary
 

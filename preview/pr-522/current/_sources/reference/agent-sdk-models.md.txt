@@ -137,10 +137,14 @@ A hosted OpenAI-compatible endpoint changes only the profile:
 }
 ```
 
-Consumer startup does not require a health route. For custom code that calls
+Worker model clients do not probe health routes at startup. For code that calls
 `health()` explicitly, `readiness: none` makes that call succeed without a
 request; `health_path` selects a provider-specific HTTP route when probing is
-enabled. These compatibility settings remain supported.
+enabled. These compatibility settings remain supported. Tea making's RAG service
+still explicitly checks embedding health at startup and when reporting readiness.
+Its embedding entry needs `readiness: none` for a provider without a health route,
+or the provider's supported `health_path` with health probing enabled. Refer to
+{ref}`RAG embedding health <rag-embedding-health>`.
 
 (riva-grpc-speech-nim-stt-tts)=
 ## Riva speech over gRPC

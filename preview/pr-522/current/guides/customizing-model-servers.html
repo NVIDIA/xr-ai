@@ -564,7 +564,7 @@ stack’s deployment profile.</p>
 <li><p>Copy its <code class="docutils literal notranslate"><span class="pre">llm</span></code> entry when the sample needs language or tool calling.</p></li>
 <li><p>Copy its <code class="docutils literal notranslate"><span class="pre">vlm</span></code> entry when the sample needs vision.</p></li>
 <li><p>Remove the <code class="docutils literal notranslate"><span class="pre">deployment</span></code> object and endpoint <code class="docutils literal notranslate"><span class="pre">readiness</span></code> and <code class="docutils literal notranslate"><span class="pre">health_path</span></code>
-settings from every copied consumer entry. Keep the LLM endpoint on port
+settings from the copied LLM and VLM entries. Keep the LLM endpoint on port
 8110 and the VLM endpoint on port 8100. The server profile keeps its settings.</p></li>
 <li><p>If the sample uses <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code>, duplicate the <code class="docutils literal notranslate"><span class="pre">llm</span></code> entry under that role.</p></li>
 <li><p>Preserve the sample’s STT, TTS, embedding, and other roles unless the shared
@@ -627,7 +627,8 @@ client-profile instructions beside each GPU-specific container configuration.</p
 <p>If an operator already runs a compatible service elsewhere, no model-server
 change is required. Update the sample entry’s <code class="docutils literal notranslate"><span class="pre">endpoint.base_url</span></code>. Both
 operator-managed XR AI services and hosted APIs use client entries without
-<code class="docutils literal notranslate"><span class="pre">deployment</span></code> or health polling settings. A hosted endpoint may also need a
+<code class="docutils literal notranslate"><span class="pre">deployment</span></code>. Worker model clients do not need health polling settings; the
+RAG embedding exception is described below. A hosted endpoint may also need a
 credential:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
@@ -639,6 +640,30 @@ credential:</p>
 </div>
 <p>Do not put the credential value in JSON. Export it or use the credential store.
 Refer to <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a> for credential options.</p>
+</section>
+<section id="rag-embedding-health">
+<span id="id1"></span><h2>RAG embedding health<a class="headerlink" href="#rag-embedding-health" title="Link to this heading">#</a></h2>
+<p>Tea making’s RAG service reads the <code class="docutils literal notranslate"><span class="pre">embedding</span></code> role from the same
+<code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code> profile as the worker. Unlike worker model clients,
+it explicitly calls embedding <code class="docutils literal notranslate"><span class="pre">health()</span></code> before building its index and when
+reporting RAG readiness. Preserve health settings for this role when changing
+its endpoint.</p>
+<p>For a hosted embedding provider without a health route, set <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code>
+in the embedding entry’s <code class="docutils literal notranslate"><span class="pre">endpoint</span></code> object:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://integrate.api.nvidia.com"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"none"</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>This skips the health request; actual embedding requests still use the configured
+adapter and credentials. If the provider exposes a supported health route,
+use <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">health</span></code> and set <code class="docutils literal notranslate"><span class="pre">health_path</span></code> to that route instead, for example
+<code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>. Omitting these settings defaults to probing <code class="docutils literal notranslate"><span class="pre">/health</span></code>, which
+can prevent RAG startup even when embedding inference works.</p>
 </section>
 <section id="riva-speech-boundary">
 <h2>Riva speech boundary<a class="headerlink" href="#riva-speech-boundary" title="Link to this heading">#</a></h2>
@@ -729,6 +754,7 @@ and NIM credentials, refer to <a class="reference internal" href="../components/
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#customize-a-hardware-specific-server">Customize a hardware-specific server</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adapt-a-sample-to-the-shared-stack">Adapt a sample to the shared stack</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#use-an-endpoint-at-another-address">Use an endpoint at another address</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rag-embedding-health">RAG embedding health</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#riva-speech-boundary">Riva speech boundary</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validate-and-switch-profiles">Validate and switch profiles</a></li>
 </ul>

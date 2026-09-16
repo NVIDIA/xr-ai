@@ -575,10 +575,14 @@ multi-image methods. All images are placed in one user message in caller order.<
 <span class="p">}</span>
 </pre></div>
 </div>
-<p>Consumer startup does not require a health route. For custom code that calls
+<p>Worker model clients do not probe health routes at startup. For code that calls
 <code class="docutils literal notranslate"><span class="pre">health()</span></code> explicitly, <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code> makes that call succeed without a
 request; <code class="docutils literal notranslate"><span class="pre">health_path</span></code> selects a provider-specific HTTP route when probing is
-enabled. These compatibility settings remain supported.</p>
+enabled. These compatibility settings remain supported. Tea making’s RAG service
+still explicitly checks embedding health at startup and when reporting readiness.
+Its embedding entry needs <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code> for a provider without a health route,
+or the provider’s supported <code class="docutils literal notranslate"><span class="pre">health_path</span></code> with health probing enabled. Refer to
+<a class="reference internal" href="../guides/customizing-model-servers.html#rag-embedding-health"><span class="std std-ref">RAG embedding health</span></a>.</p>
 </section>
 <section id="riva-speech-over-grpc">
 <span id="riva-grpc-speech-nim-stt-tts"></span><h2>Riva speech over gRPC<a class="headerlink" href="#riva-speech-over-grpc" title="Link to this heading">#</a></h2>
