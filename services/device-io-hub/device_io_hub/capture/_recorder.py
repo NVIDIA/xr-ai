@@ -663,14 +663,27 @@ class SessionRecorder:
         if projected_writer is not None:
             projected_writer.close()
 
-    def end_session(self, participant_id: str, pts_us: int) -> None:
+    def end_session(
+        self,
+        participant_id: str,
+        pts_us: int,
+        incomplete_reason: str | None = None,
+    ) -> None:
         with self._lock:
             session = self._sessions.pop(participant_id, None)
         if session is None:
             return
         pts_us = max(session.start_us, pts_us)
         with session.lock:
-            self._event(session, "recording", pts_us, state="stopped")
+            complete = incomplete_reason is None
+            self._event(
+                session,
+                "recording",
+                pts_us,
+                state="stopped",
+                complete=complete,
+                incomplete_reason=incomplete_reason,
+            )
             for writer in session.video.values():
                 writer.close()
             for writer in session.projected_video.values():
@@ -692,6 +705,8 @@ class SessionRecorder:
                 "trigger": session.trigger,
                 "target": session.target,
                 "metadata": session.metadata,
+                "complete": complete,
+                "incomplete_reason": incomplete_reason,
                 "start_us": session.start_us,
                 "end_us": pts_us,
                 "duration_us": pts_us - session.start_us,

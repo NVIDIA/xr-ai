@@ -19,6 +19,7 @@ import numpy as np
 import pytest
 from device_io_hub.capture import _frontends as frontends_module
 from device_io_hub.capture import _mp4 as mp4_module
+from device_io_hub.capture import _service as service_module
 from device_io_hub.capture._compositor import compose_caption
 from device_io_hub.capture._recorder import (
     _CAPTURE_MARKER_CONTENT,
@@ -561,6 +562,8 @@ def test_raw_profile_preserves_camera_pixels_and_timestamp_indexes(
     assert manifest["trigger"] == "agent"
     assert manifest["target"] == "assembly-line/run-a"
     assert manifest["metadata"] == {"purpose": "SOP evidence", "tags": ["assembly"]}
+    assert manifest["complete"] is True
+    assert manifest["incomplete_reason"] is None
     assert manifest["clock"]["session_start_us"] == 1_000_000
     assert segment["path"] == "video/session.264"
     assert segment["audio_embedded"] is False
@@ -822,6 +825,42 @@ async def test_departure_waits_for_published_return_traffic(
         if connector_task is not None:
             connector_task.cancel()
             await asyncio.gather(connector_task, return_exceptions=True)
+        await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_missing_return_departure_finalizes_incomplete_bundle(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    monkeypatch.setattr(service_module, "_RETURN_TRAFFIC_DRAIN_TIMEOUT_S", 0.01)
+    service = CaptureService(CaptureConfig(
+        out_dir=str(tmp_path),
+        max_total_bytes=0,
+    ))
+
+    async def write_inline(function, *args) -> None:
+        function(*args)
+
+    service._write = write_inline  # type: ignore[method-assign]
+    try:
+        await service._on_participant(ParticipantEvent("alice", True, 1_000_000))
+
+        await asyncio.wait_for(
+            service._on_participant(
+                ParticipantEvent("alice", False, 1_100_000, "lost-return-marker"),
+            ),
+            timeout=1,
+        )
+
+        session = next(path.parent for path in tmp_path.glob("*/manifest.json"))
+        manifest = json.loads((session / "manifest.json").read_text())
+        assert manifest["complete"] is False
+        assert manifest["incomplete_reason"] == "return_traffic_drain_timeout"
+        assert not service._recorder.has_session("alice")
+        assert not service._returns._departures
+    finally:
         await service.stop()
 
 

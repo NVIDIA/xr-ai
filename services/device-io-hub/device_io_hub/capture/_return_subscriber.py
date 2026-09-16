@@ -72,8 +72,11 @@ class ReturnTrafficSubscriber:
         """Wait until return traffic published before *event* has been handled."""
         key = (event.participant_id, event.pts_us, event.connector_id)
         departure = self._departure_event(event)
-        await departure.wait()
-        self._departures.pop(key, None)
+        try:
+            await departure.wait()
+        finally:
+            if self._departures.get(key) is departure:
+                self._departures.pop(key, None)
 
     def _departure_event(self, event: ParticipantEvent) -> asyncio.Event:
         key = (event.participant_id, event.pts_us, event.connector_id)

@@ -32,6 +32,9 @@ from ._recorder import SessionRecorder
 from ._return_subscriber import ReturnTrafficSubscriber
 from .config import CaptureConfig
 
+_RETURN_TRAFFIC_DRAIN_TIMEOUT_S = 30.0
+_RETURN_TRAFFIC_DRAIN_TIMEOUT_REASON = "return_traffic_drain_timeout"
+
 
 def _invalid_audio_reason(chunk: AudioChunk) -> str | None:
     if chunk.sample_rate <= 0:
@@ -228,11 +231,33 @@ class CaptureService:
                     event.pts_us,
                 )
             return
-        await self._returns.wait_for_departure(event)
+        incomplete_reason = None
+        try:
+            await asyncio.wait_for(
+                self._returns.wait_for_departure(event),
+                timeout=_RETURN_TRAFFIC_DRAIN_TIMEOUT_S,
+            )
+        except TimeoutError:
+            incomplete_reason = _RETURN_TRAFFIC_DRAIN_TIMEOUT_REASON
+            logger.warning(
+                "media capture timed out draining return traffic pid={!r}; "
+                "finalizing an incomplete bundle",
+                event.participant_id,
+            )
         self._departed_participants.add(event.participant_id)
-        await self._finish_session(event.participant_id, event.pts_us)
+        await self._finish_session(
+            event.participant_id,
+            event.pts_us,
+            incomplete_reason=incomplete_reason,
+        )
 
-    async def _finish_session(self, participant_id: str, pts_us: int) -> None:
+    async def _finish_session(
+        self,
+        participant_id: str,
+        pts_us: int,
+        *,
+        incomplete_reason: str | None = None,
+    ) -> None:
         self._closing_participants.add(participant_id)
         try:
             workers = [
@@ -243,7 +268,12 @@ class CaptureService:
             for key, worker in workers:
                 self._frame_workers.pop(key, None)
                 await worker.close()
-            await self._write(self._recorder.end_session, participant_id, pts_us)
+            await self._write(
+                self._recorder.end_session,
+                participant_id,
+                pts_us,
+                incomplete_reason,
+            )
         finally:
             self._closing_participants.discard(participant_id)
 
