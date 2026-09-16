@@ -15,6 +15,11 @@ and command to `device_io_hub`. Rename `xr_media_hub.yaml` to
 
 ## Operator-visible runtime changes
 
+- DeviceIOHub now waits for the hub to acknowledge shared-memory attachment
+  before connecting the LiveKit room or creating its ready file. Missing
+  segments trigger bounded recreation; incompatible layouts and acknowledgement
+  timeouts fail startup. Check the registration error in the hub logs rather
+  than treating a running process as ready.
 - DeviceIOHub no longer falls back to embedded LiveKit development credentials.
   Set `api_key` and `api_secret` in `device_io_hub.yaml`, or inject
   `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` through the environment.
@@ -41,6 +46,14 @@ alias. Replace the `piper_tts` model preset, `piper_tts_server` command, and
 `services/piper-tts/` path with `pocket_tts`, `pocket_tts_server`, and
 `services/pocket-tts/`. Pocket TTS voice names differ from Piper voice names;
 the checked-in profiles use the CC0 `bill_boerst` voice.
+
+Pocket TTS now selects a GPU automatically by default, and the checked-in
+model-server profiles require CUDA on GPU 0. Set `device: cpu` for CPU-only
+execution or `cuda_visible_devices` to change GPU placement. CUDA warmup runs
+within `startup_timeout_s`, so increase that timeout when cold initialization
+exceeds 600 seconds. The service now resolves the PyPI Torch build instead of
+the CPU-only index; Linux environments therefore include the CUDA library
+footprint even when execution falls back to CPU.
 
 ## Removed SDK compatibility surfaces
 

@@ -577,7 +577,7 @@ mounted <em>nim_cache</em> makes subsequent starts fast.</p>
 
 <dl class="py data">
 <dt class="sig sig-object py" id="xr_ai_vllm.DEFAULT_IMAGE">
-<span class="sig-prename descclassname"><span class="pre">xr_ai_vllm.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_IMAGE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'nvcr.io/nvidia/vllm:26.04-py3'</span></em><a class="headerlink" href="#xr_ai_vllm.DEFAULT_IMAGE" title="Link to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">xr_ai_vllm.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_IMAGE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'nvcr.io/nvidia/vllm:26.08-py3'</span></em><a class="headerlink" href="#xr_ai_vllm.DEFAULT_IMAGE" title="Link to this definition">#</a></dt>
 <dd><p>Default NGC vLLM image used when a service does not override <code class="docutils literal notranslate"><span class="pre">vllm_image</span></code>.</p>
 <p>Individual services may pin a newer image when required by their model.</p>
 </dd></dl>
@@ -630,10 +630,8 @@ helper can find it.</p>
 <p>Docker mode verifies a Xet-capable Hub inside the container and repairs a
 missing or incompatible <code class="docutils literal notranslate"><span class="pre">hf-xet</span></code> wheel. <em>extra_pip</em> is an additional
 docker-only list of pip-installable package specs for model architectures
-whose wheels the image doesn’t bundle — e.g.
-<code class="docutils literal notranslate"><span class="pre">[&quot;mamba-ssm&quot;,</span> <span class="pre">&quot;causal-conv1d&quot;]</span></code> for Nemotron-Omni’s hybrid SSM
-backbone. Silently ignored in pip mode (deps belong in the wrapper’s
-pyproject.toml there).</p>
+whose wheels the image doesn’t bundle. Silently ignored in pip mode (deps
+belong in the wrapper’s pyproject.toml there).</p>
 <p><em>spark_uma</em> enables the DGX Spark cold-start safeguards in docker mode:
 prefetching and syncing the Hugging Face snapshot before CUDA starts, and
 one bounded restart of a container attempt launched by this wrapper after

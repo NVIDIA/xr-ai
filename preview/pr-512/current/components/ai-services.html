@@ -869,13 +869,28 @@ flags. Docker-only lifecycle settings such as <code class="docutils literal notr
 <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-vllm/</span></code>. Switching is one YAML edit:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># vlm-server (Cosmos3)</span>
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.07-py3</span>
+<span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.08-py3</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">vllm_image:</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.07-py3</span></code> for vlm-server,
-whose Cosmos3 support requires vLLM 0.23 or newer. The other wrappers retain
-their <code class="docutils literal notranslate"><span class="pre">26.04-py3</span></code> default. Override either to pin another tag, an internal
-mirror, or a custom build.</p>
+<p><code class="docutils literal notranslate"><span class="pre">vllm_image:</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.08-py3</span></code> for all wrappers.
+This image includes vLLM 0.27.1 and supports the checked-in Cosmos3 and
+Nemotron model configurations. Nemotron Omni uses the image’s native Mamba and
+causal-convolution implementations, so the shipped configuration does not
+compile or install <code class="docutils literal notranslate"><span class="pre">mamba-ssm</span></code> or <code class="docutils literal notranslate"><span class="pre">causal-conv1d</span></code>. Override the image to pin
+another tag, an internal mirror, or a custom build.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>When upgrading an existing checkout, stop the persistent model stack before
+starting it with the new image:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+docker<span class="w"> </span>pull<span class="w"> </span>nvcr.io/nvidia/vllm:26.08-py3
+</pre></div>
+</div>
+<p>The next launch recreates stale managed containers when their image or command
+fingerprint differs. After the new stack starts successfully, reclaim disk from
+an old image with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">image</span> <span class="pre">rm</span> <span class="pre">&lt;old-vllm-image&gt;</span></code>. Keep the shared model cache;
+the 26.08 stack reuses compatible weights and downloads any missing artifacts.</p>
+</div>
 <section id="docker-mode-prerequisites">
 <h3>docker mode — prerequisites<a class="headerlink" href="#docker-mode-prerequisites" title="Link to this heading">#</a></h3>
 <ul>
@@ -920,26 +935,16 @@ continue to use Xet when it remains enabled. These values are preserved,
 forwarded, and included in the container fingerprint, so changing one
 recreates a persistent container.</p></li>
 </ul>
-<p>The shipped image pins were qualified with these in-container versions:</p>
+<p>The shipped image pin was qualified with this in-container vLLM version:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Image</p></th>
-<th class="head text-right"><p><code class="docutils literal notranslate"><span class="pre">huggingface-hub</span></code></p></th>
-<th class="head text-right"><p><code class="docutils literal notranslate"><span class="pre">hf-xet</span></code></p></th>
+<th class="head text-right"><p>vLLM</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.04-py3</span></code></p></td>
-<td class="text-right"><p>0.36.2</p></td>
-<td class="text-right"><p>1.4.3</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.07-py3</span></code></p></td>
-<td class="text-right"><p>1.24.0</p></td>
-<td class="text-right"><p>1.5.2</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vllm/vllm-openai:v0.20.0</span></code></p></td>
-<td class="text-right"><p>1.12.0</p></td>
-<td class="text-right"><p>1.4.3</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.08-py3</span></code></p></td>
+<td class="text-right"><p>0.27.1</p></td>
 </tr>
 </tbody>
 </table>
@@ -970,7 +975,7 @@ cleanup.</p>
 </section>
 <section id="per-server-notes">
 <h2>Per-server notes<a class="headerlink" href="#per-server-notes" title="Link to this heading">#</a></h2>
-<ul class="simple">
+<ul>
 <li><p><strong>vlm-server</strong> defaults to the Cosmos3 Nano Reasoner. Hugging Face publishes
 Reasoner and Generator weights in the unified <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos3-Nano</span></code>
 checkpoint. The required <code class="docutils literal notranslate"><span class="pre">Cosmos3ForConditionalGeneration</span></code> architecture
@@ -1037,12 +1042,20 @@ English-only; the <code class="docutils literal notranslate"><span class="pre">l
 ignored. Set <code class="docutils literal notranslate"><span class="pre">startup_timeout_s</span></code> to a positive finite number to override the
 600-second cold-start budget.</p></li>
 <li><p><strong>magpie-tts</strong> loads magpie_tts_multilingual_357m via NeMo TTS in-process.</p></li>
-<li><p><strong>pocket-tts</strong> loads the compact <code class="docutils literal notranslate"><span class="pre">kyutai/pocket-tts</span></code> model on CPU and serves
-the configured voice through the repository’s OpenAI-compatible TTS API.
-Model loading and synthesis run outside the asyncio event loop. The default
-<code class="docutils literal notranslate"><span class="pre">bill_boerst</span></code> voice derives from a CC0 Voice-Zero recording and is the only
-voice accepted by this release. The service logs whether it loaded the gated
-voice-cloning weights or the ungated fallback.</p></li>
+<li><p><strong>pocket-tts</strong> loads the compact <code class="docutils literal notranslate"><span class="pre">kyutai/pocket-tts</span></code> model on the configured
+<code class="docutils literal notranslate"><span class="pre">cpu</span></code>, <code class="docutils literal notranslate"><span class="pre">cuda</span></code>, or automatically selected device. The checked-in deployment
+profiles use CUDA and warm up the model before reporting ready. Its native
+PCM streaming path emits audio during generation; non-streaming WAV requests
+remain supported. Model loading and synthesis run outside the asyncio event
+loop. The default <code class="docutils literal notranslate"><span class="pre">bill_boerst</span></code> voice derives from a CC0 Voice-Zero recording
+and is the only voice accepted by this release. The service logs whether it
+loaded the gated voice-cloning weights or the ungated fallback.</p>
+<p>To stream, send <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/v1/audio/speech</span></code> with <code class="docutils literal notranslate"><span class="pre">response_format</span></code> set to <code class="docutils literal notranslate"><span class="pre">pcm</span></code>
+and <code class="docutils literal notranslate"><span class="pre">stream</span></code> set to <code class="docutils literal notranslate"><span class="pre">true</span></code>. The response uses <code class="docutils literal notranslate"><span class="pre">audio/pcm</span></code>; the
+<code class="docutils literal notranslate"><span class="pre">x-audio-sample-rate</span></code> and <code class="docutils literal notranslate"><span class="pre">x-audio-channels</span></code> headers describe the signed
+16-bit interleaved samples. Streaming with another response format returns
+HTTP 400.</p>
+</li>
 <li><p><strong>embedding-server</strong> serves <code class="docutils literal notranslate"><span class="pre">nvidia/llama-nemotron-embed-1b-v2</span></code> through
 <code class="docutils literal notranslate"><span class="pre">/v1/embeddings</span></code>. It emits 2048-dimensional Matryoshka embeddings and can
 truncate them to 384, 512, 768, 1024, or 2048 dimensions. The checked-in
