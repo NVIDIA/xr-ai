@@ -610,10 +610,10 @@ for agent audio and data. It does not expose return traffic to agent APIs.</p>
   <span class="o">--</span><span class="n">config</span> <span class="n">services</span><span class="o">/</span><span class="n">device</span><span class="o">-</span><span class="n">io</span><span class="o">-</span><span class="n">hub</span><span class="o">/</span><span class="n">media_capture</span><span class="o">.</span><span class="n">yaml</span>
 </pre></div>
 </div>
-<p>One connection produces one participant-scoped capture bundle: playable
-Matroska video with timestamp-aligned stereo PCM embedded (device left, agent
-right), the source H.264 and WAV tracks, exact raw float32 audio chunks, the
-complete directional data timeline, and a manifest.
+<p>One connection produces one participant-scoped capture bundle: a fast-start
+MP4 with H.264 video and timestamp-aligned AAC-LC audio at 48 kHz stereo
+(device left, agent right), the source H.264 and WAV tracks, exact raw float32
+audio chunks, the complete directional data timeline, and a manifest.
 Final STT and the text actually sent to TTS appear as the large primary caption
 below the sensor image. Each TTS sentence travels through the paced media queue,
 so its caption is timestamped from the first corresponding audio chunk rather
@@ -629,10 +629,14 @@ dedicated threads in the capture process. Recorder overload therefore drops
 capture frames without delaying the hub’s publish path. PyNvVideoCodec receives
 contiguous NV12 CPU input and emits H.264 Annex B chunks with repeated parameter
 sets and no B-frames. At session finalization, the chunks are joined in
-timestamp order and a private lightweight muxer packages them with the session
-PCM into one <code class="docutils literal notranslate"><span class="pre">.mkv</span></code>. Resolution or LiveKit track changes therefore do not create
-additional playable outputs. This does not affect the live path. No FFmpeg
-process or additional media library is involved.</p>
+timestamp order. FFmpeg preserves that H.264 stream, converts the aligned PCM
+mix to AAC-LC with an explicit 48 kHz stereo layout, regenerates monotonic
+constant-rate video and audio timestamps, and writes one <code class="docutils literal notranslate"><span class="pre">.mp4</span></code> with fast-start
+metadata. Resolution or LiveKit track changes therefore do not create
+additional playable outputs. This does not affect the live path.</p>
+<p>Capture requires an <code class="docutils literal notranslate"><span class="pre">ffmpeg</span></code> executable on <code class="docutils literal notranslate"><span class="pre">PATH</span></code> with the native AAC encoder.
+The process validates that requirement at startup so a session cannot silently
+fall back to an MP4-incompatible PCM or MP3 track.</p>
 </section>
 <section id="per-participant-return-path">
 <h2>Per-participant return path<a class="headerlink" href="#per-participant-return-path" title="Link to this heading">#</a></h2>

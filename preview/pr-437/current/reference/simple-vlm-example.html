@@ -540,15 +540,15 @@ start <code class="docutils literal notranslate"><span class="pre">device_io_cap
 hub media without joining the LiveKit room. Each participant connection then
 creates a bundle under
 <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/captures/simple-vlm-example/</span></code> containing one captioned
-NVENC H.264 video in a playable <code class="docutils literal notranslate"><span class="pre">.mkv</span></code> with timestamp-aligned device/agent
-audio embedded, retained source H.264 and WAV tracks, exact raw audio chunks,
-inbound and outbound data, and a manifest. Text returned on <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code>
+NVENC H.264 video in a fast-start <code class="docutils literal notranslate"><span class="pre">.mp4</span></code> with timestamp-aligned 48 kHz stereo
+AAC-LC device/agent audio, retained source H.264 and WAV tracks, exact raw audio
+chunks, inbound and outbound data, and a manifest. Text returned on <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code>
 appears in the scrolling data panel; final STT and text sent to TTS use the
 larger primary caption.</p>
 <p>Encoding and file writes run in the separate capture process behind bounded
 queues. If recording falls behind, it drops pending capture frames rather than
-backpressuring the hub or worker. Omit <code class="docutils literal notranslate"><span class="pre">--capture</span></code> when a deployment must not
-retain device media.</p>
+backpressuring the hub or worker. MP4 finalization requires <code class="docutils literal notranslate"><span class="pre">ffmpeg</span></code> on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>.
+Omit <code class="docutils literal notranslate"><span class="pre">--capture</span></code> when a deployment must not retain device media.</p>
 <p>Wake phrases match at the start of a final transcript or after sentence-final
 <code class="docutils literal notranslate"><span class="pre">.</span></code>, <code class="docutils literal notranslate"><span class="pre">?</span></code>, or <code class="docutils literal notranslate"><span class="pre">!</span></code> punctuation followed by whitespace or a closing quote. Text
 before that boundary and the phrase itself are discarded before dispatch.</p>

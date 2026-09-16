@@ -643,11 +643,11 @@ the hub publisher. It never joins the LiveKit room.</p>
 <p>Each participant connection creates a timestamped directory under
 <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/captures/xr-render-demo/</span></code> containing:</p>
 <ul class="simple">
-<li><p>One playable <code class="docutils literal notranslate"><span class="pre">.mkv</span></code> under <code class="docutils literal notranslate"><span class="pre">video/</span></code>, with NVENC H.264 video and stereo
-audio embedded. Final STT and spoken TTS text use the large lower caption;
+<li><p>One fast-start <code class="docutils literal notranslate"><span class="pre">.mp4</span></code> under <code class="docutils literal notranslate"><span class="pre">video/</span></code>, with NVENC H.264 video and AAC-LC
+audio at 48 kHz stereo. Final STT and spoken TTS text use the large lower caption;
 all UTF-8 data-channel messages scroll in a smaller right-side panel. Both
 panels are outside the sensor image. The joined source <code class="docutils literal notranslate"><span class="pre">.264</span></code> stream is
-retained beside the <code class="docutils literal notranslate"><span class="pre">.mkv</span></code>.</p></li>
+retained beside the <code class="docutils literal notranslate"><span class="pre">.mp4</span></code>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">audio/conversation.wav</span></code>, with device input on the left and agent output on
 the right, aligned by hub timestamps. Exact float32 chunks remain in
 <code class="docutils literal notranslate"><span class="pre">device.f32le</span></code> and <code class="docutils literal notranslate"><span class="pre">agent.f32le</span></code>, indexed by <code class="docutils literal notranslate"><span class="pre">chunks.jsonl</span></code>.</p></li>
@@ -659,10 +659,11 @@ frame drops.</p></li>
 <p>NVENC work runs behind a bounded queue in the capture process. When capture is
 slower than the live stream, it replaces old pending frame requests and records
 the drop count rather than adding latency to DeviceIOHub or the agent. The
-process uses DeviceIOHub’s existing NumPy, ZMQ, and PyNvVideoCodec dependencies;
-it finalizes the <code class="docutils literal notranslate"><span class="pre">.mkv</span></code> locally and does not require FFmpeg or a media-container
-library. Omit <code class="docutils literal notranslate"><span class="pre">--capture</span></code> when recording is prohibited, and treat the output as
-sensitive device data.</p>
+process uses DeviceIOHub’s existing NumPy, ZMQ, and PyNvVideoCodec dependencies.
+Finalization additionally requires <code class="docutils literal notranslate"><span class="pre">ffmpeg</span></code> on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>; it copies the H.264
+stream, encodes the aligned PCM mix as AAC-LC, normalizes timestamps, and moves
+MP4 metadata ahead of media data for fast-start playback. Omit <code class="docutils literal notranslate"><span class="pre">--capture</span></code> when
+recording is prohibited, and treat the output as sensitive device data.</p>
 </section>
 <section id="the-llm-server">
 <h2>The LLM server<a class="headerlink" href="#the-llm-server" title="Link to this heading">#</a></h2>

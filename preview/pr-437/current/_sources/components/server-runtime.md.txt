@@ -194,10 +194,10 @@ uv run --project services/device-io-hub device_io_capture \
   --config services/device-io-hub/media_capture.yaml
 ```
 
-One connection produces one participant-scoped capture bundle: playable
-Matroska video with timestamp-aligned stereo PCM embedded (device left, agent
-right), the source H.264 and WAV tracks, exact raw float32 audio chunks, the
-complete directional data timeline, and a manifest.
+One connection produces one participant-scoped capture bundle: a fast-start
+MP4 with H.264 video and timestamp-aligned AAC-LC audio at 48 kHz stereo
+(device left, agent right), the source H.264 and WAV tracks, exact raw float32
+audio chunks, the complete directional data timeline, and a manifest.
 Final STT and the text actually sent to TTS appear as the large primary caption
 below the sensor image. Each TTS sentence travels through the paced media queue,
 so its caption is timestamped from the first corresponding audio chunk rather
@@ -214,10 +214,15 @@ dedicated threads in the capture process. Recorder overload therefore drops
 capture frames without delaying the hub's publish path. PyNvVideoCodec receives
 contiguous NV12 CPU input and emits H.264 Annex B chunks with repeated parameter
 sets and no B-frames. At session finalization, the chunks are joined in
-timestamp order and a private lightweight muxer packages them with the session
-PCM into one `.mkv`. Resolution or LiveKit track changes therefore do not create
-additional playable outputs. This does not affect the live path. No FFmpeg
-process or additional media library is involved.
+timestamp order. FFmpeg preserves that H.264 stream, converts the aligned PCM
+mix to AAC-LC with an explicit 48 kHz stereo layout, regenerates monotonic
+constant-rate video and audio timestamps, and writes one `.mp4` with fast-start
+metadata. Resolution or LiveKit track changes therefore do not create
+additional playable outputs. This does not affect the live path.
+
+Capture requires an `ffmpeg` executable on `PATH` with the native AAC encoder.
+The process validates that requirement at startup so a session cannot silently
+fall back to an MP4-incompatible PCM or MP3 track.
 
 ## Per-participant return path
 
