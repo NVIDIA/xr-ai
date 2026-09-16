@@ -434,6 +434,21 @@ and command to <code class="docutils literal notranslate"><span class="pre">devi
 <section id="operator-visible-runtime-changes">
 <h2>Operator-visible runtime changes<a class="headerlink" href="#operator-visible-runtime-changes" title="Link to this heading">#</a></h2>
 <ul class="simple">
+<li><p>Consumer workers no longer poll model health at startup. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> waits
+only for explicitly supplied <code class="docutils literal notranslate"><span class="pre">probes</span></code>; it no longer adds STT and TTS probes.
+Start the shared model-server stack and wait for its launcher to return first.
+Simple VLM retains its streaming image warmup, and XR Render retains its LLM
+inference warmup, including for hosted LLMs. Tea making retains its RAG
+capability probe. Endpoint <code class="docutils literal notranslate"><span class="pre">readiness</span></code> and <code class="docutils literal notranslate"><span class="pre">health_path</span></code> settings still control
+explicit <code class="docutils literal notranslate"><span class="pre">health()</span></code> calls, but do not enable automatic worker polling.
+Out-of-tree applications that require the former behavior can explicitly pass
+<code class="docutils literal notranslate"><span class="pre">probes={&quot;stt&quot;:</span> <span class="pre">stt.health,</span> <span class="pre">&quot;tts&quot;:</span> <span class="pre">tts.health}</span></code> to <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>.</p></li>
+<li><p>HTTP model requests now retry connection failures and HTTP 502/503/504 up to
+three total attempts, with 0.25 and 0.5 second backoffs and per-attempt
+timeouts. Errors after response headers are accepted, including interrupted
+streams, are not replayed. Other HTTP errors and read/write failures propagate
+immediately. Explicit health probes and Riva gRPC calls retain their previous
+behavior.</p></li>
 <li><p>DeviceIOHub now waits for the hub to acknowledge shared-memory attachment
 before connecting the LiveKit room or creating its ready file. Missing
 segments trigger bounded recreation; incompatible layouts and acknowledgement

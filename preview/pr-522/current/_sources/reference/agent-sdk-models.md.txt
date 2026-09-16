@@ -41,8 +41,7 @@ A client profile names logical roles and declares adapters and endpoints:
       "adapter": {"preset": "nemotron_omni"},
       "endpoint": {
         "base_url": "http://localhost:8108",
-        "timeout": 60.0,
-        "readiness": "health"
+        "timeout": 60.0
       }
     }
   }
@@ -51,8 +50,9 @@ A client profile names logical roles and declares adapters and endpoints:
 
 - `adapter` owns the model name, wire quirks, capabilities, default request
   extras, and reasoning-field normalization.
-- `endpoint` owns connectivity, readiness, timeouts, and environment-variable
-  credentials.
+- `endpoint` owns connectivity, timeouts, and environment-variable credentials.
+  Optional health settings control explicit SDK `health()` calls; they do not
+  cause consumer workers to poll endpoints at startup.
 - Optional `deployment` metadata selects the processes a shared model-server
   orchestrator manages. Consumer profiles omit it: their endpoints are operated
   outside the sample, whether locally or remotely. Existing explicit `reused`
@@ -67,6 +67,20 @@ stdlib-only launcher must use the wrapped nested JSON form with `adapter` and
 `endpoint` objects; `deployment` is optional in both loaders. Launcher credentials
 are explicit: endpoint credentials use `api_key_env`, while credentials needed
 by a managed service itself use `deployment.credentials`.
+
+## Request failures
+
+Model-server wrappers retain startup and reuse checks. Consumers send actual
+requests without a preliminary model-health request. OpenAI-compatible HTTP
+clients retry connection failures and temporary gateway or unavailable responses
+within a bounded attempt count; authentication, invalid requests, read/write
+failures, and failures after accepting a response propagate. Streamed text or
+audio is never replayed. The exact retry policy is documented on the generated
+{py:class}`~xr_ai_models.OpenAICompatLLM` reference.
+
+Applications retain their request-error handling after retries are exhausted.
+A ready worker is not a guarantee that every model remains available. Simple
+VLM and XR Render still use explicit inference warmups during startup.
 
 ## Built-in adapters
 
@@ -116,17 +130,17 @@ A hosted OpenAI-compatible endpoint changes only the profile:
       },
       "endpoint": {
         "base_url": "https://integrate.api.nvidia.com",
-        "api_key_env": "NGC_API_KEY",
-        "readiness": "none"
+        "api_key_env": "NGC_API_KEY"
       }
     }
   }
 }
 ```
 
-Use `readiness: none` only when the remote provider has no compatible health
-route. It makes `health()` succeed without a request, preventing an impossible
-local readiness gate.
+Consumer startup does not require a health route. For custom code that calls
+`health()` explicitly, `readiness: none` makes that call succeed without a
+request; `health_path` selects a provider-specific HTTP route when probing is
+enabled. These compatibility settings remain supported.
 
 (riva-grpc-speech-nim-stt-tts)=
 ## Riva speech over gRPC
@@ -145,8 +159,9 @@ stt:
 
 STT accepts 16-bit PCM WAV or raw int16 PCM with an explicit sample rate. TTS
 also accepts `voice` and `sample_rate`. A hosted NVCF endpoint uses TLS,
-`api_key_env`, its `function_id`, and `health_check: false` because it has no
-Riva channel-ready health surface.
+`api_key_env`, and its `function_id`. If custom code explicitly calls `health()`,
+set `health_check: false` for a hosted endpoint without a channel-ready health
+surface. Existing gRPC request deadlines and error propagation are unchanged.
 
 ## Tests
 

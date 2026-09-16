@@ -451,10 +451,16 @@ and defaults.</p>
     <span class="k">await</span> <span class="n">voice</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runtime</span><span class="p">)</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns model readiness, hub transport, VAD and STT, voice gating, typed
-text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
+<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns application readiness, hub transport, VAD and STT, voice gating,
+typed text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
 session remains private. Applications that need a shared public
 <code class="docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code> construct and inject one explicitly.</p>
+<p>Startup waits only for explicitly supplied <code class="docutils literal notranslate"><span class="pre">probes</span></code>, such as an inference
+warmup or an application capability dependency. STT and TTS are not probed
+automatically. Ready status means the application’s transport is initialized
+after any explicit probes; model availability is handled by actual requests.
+Start the shared model-server stack before consumers. Simple VLM retains its
+streaming image warmup, and XR Render retains its tool-shaped LLM warmup.</p>
 <p>Each non-empty final STT result is queued for publication on
 <code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code> before wake-phrase filtering. Accepted speech and
 untopiced typed text become <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>; named application and control messages

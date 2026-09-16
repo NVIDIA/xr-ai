@@ -452,8 +452,7 @@ protocols instead of hand-written HTTP or vendor SDK calls. Refer to
 <span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8108"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"timeout"</span><span class="p">:</span><span class="w"> </span><span class="mf">60.0</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
+<span class="w">        </span><span class="nt">"timeout"</span><span class="p">:</span><span class="w"> </span><span class="mf">60.0</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
@@ -463,8 +462,9 @@ protocols instead of hand-written HTTP or vendor SDK calls. Refer to
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">adapter</span></code> owns the model name, wire quirks, capabilities, default request
 extras, and reasoning-field normalization.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">endpoint</span></code> owns connectivity, readiness, timeouts, and environment-variable
-credentials.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">endpoint</span></code> owns connectivity, timeouts, and environment-variable credentials.
+Optional health settings control explicit SDK <code class="docutils literal notranslate"><span class="pre">health()</span></code> calls; they do not
+cause consumer workers to poll endpoints at startup.</p></li>
 <li><p>Optional <code class="docutils literal notranslate"><span class="pre">deployment</span></code> metadata selects the processes a shared model-server
 orchestrator manages. Consumer profiles omit it: their endpoints are operated
 outside the sample, whether locally or remotely. Existing explicit <code class="docutils literal notranslate"><span class="pre">reused</span></code>
@@ -478,6 +478,19 @@ stdlib-only launcher must use the wrapped nested JSON form with <code class="doc
 <code class="docutils literal notranslate"><span class="pre">endpoint</span></code> objects; <code class="docutils literal notranslate"><span class="pre">deployment</span></code> is optional in both loaders. Launcher credentials
 are explicit: endpoint credentials use <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>, while credentials needed
 by a managed service itself use <code class="docutils literal notranslate"><span class="pre">deployment.credentials</span></code>.</p>
+</section>
+<section id="request-failures">
+<h2>Request failures<a class="headerlink" href="#request-failures" title="Link to this heading">#</a></h2>
+<p>Model-server wrappers retain startup and reuse checks. Consumers send actual
+requests without a preliminary model-health request. OpenAI-compatible HTTP
+clients retry connection failures and temporary gateway or unavailable responses
+within a bounded attempt count; authentication, invalid requests, read/write
+failures, and failures after accepting a response propagate. Streamed text or
+audio is never replayed. The exact retry policy is documented on the generated
+<a class="reference internal" href="python/xr_ai_models/index.html#xr_ai_models.OpenAICompatLLM" title="xr_ai_models.OpenAICompatLLM"><code class="xref py py-class docutils literal notranslate"><span class="pre">OpenAICompatLLM</span></code></a> reference.</p>
+<p>Applications retain their request-error handling after retries are exhausted.
+A ready worker is not a guarantee that every model remains available. Simple
+VLM and XR Render still use explicit inference warmups during startup.</p>
 </section>
 <section id="built-in-adapters">
 <h2>Built-in adapters<a class="headerlink" href="#built-in-adapters" title="Link to this heading">#</a></h2>
@@ -555,17 +568,17 @@ multi-image methods. All images are placed in one user message in caller order.<
 <span class="w">      </span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://integrate.api.nvidia.com"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"none"</span>
+<span class="w">        </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
 </pre></div>
 </div>
-<p>Use <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code> only when the remote provider has no compatible health
-route. It makes <code class="docutils literal notranslate"><span class="pre">health()</span></code> succeed without a request, preventing an impossible
-local readiness gate.</p>
+<p>Consumer startup does not require a health route. For custom code that calls
+<code class="docutils literal notranslate"><span class="pre">health()</span></code> explicitly, <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code> makes that call succeed without a
+request; <code class="docutils literal notranslate"><span class="pre">health_path</span></code> selects a provider-specific HTTP route when probing is
+enabled. These compatibility settings remain supported.</p>
 </section>
 <section id="riva-speech-over-grpc">
 <span id="riva-grpc-speech-nim-stt-tts"></span><h2>Riva speech over gRPC<a class="headerlink" href="#riva-speech-over-grpc" title="Link to this heading">#</a></h2>
@@ -581,8 +594,9 @@ local readiness gate.</p>
 </div>
 <p>STT accepts 16-bit PCM WAV or raw int16 PCM with an explicit sample rate. TTS
 also accepts <code class="docutils literal notranslate"><span class="pre">voice</span></code> and <code class="docutils literal notranslate"><span class="pre">sample_rate</span></code>. A hosted NVCF endpoint uses TLS,
-<code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>, its <code class="docutils literal notranslate"><span class="pre">function_id</span></code>, and <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">false</span></code> because it has no
-Riva channel-ready health surface.</p>
+<code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>, and its <code class="docutils literal notranslate"><span class="pre">function_id</span></code>. If custom code explicitly calls <code class="docutils literal notranslate"><span class="pre">health()</span></code>,
+set <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">false</span></code> for a hosted endpoint without a channel-ready health
+surface. Existing gRPC request deadlines and error propagation are unchanged.</p>
 </section>
 <section id="tests">
 <h2>Tests<a class="headerlink" href="#tests" title="Link to this heading">#</a></h2>
@@ -645,6 +659,7 @@ repository root:</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#construct-a-model-client">Construct a model client</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#request-failures">Request failures</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#built-in-adapters">Built-in adapters</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hosted-endpoints">Hosted endpoints</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#riva-speech-over-grpc">Riva speech over gRPC</a></li>

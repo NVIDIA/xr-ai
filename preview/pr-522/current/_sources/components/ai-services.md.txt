@@ -111,12 +111,13 @@ the sample's models JSON. Omit the `deployment` object from copied entries;
 it belongs to the shared model-server profile.
 
 Declare only application processes in the sample orchestrator. Start
-`model_servers` separately before the application sample. At startup, the
-sample worker probes endpoints whose models JSON entry uses `readiness: health`
-and keeps waiting until those services are available. Model endpoints do not
-need placeholder `Process` entries. Application capability services such as
-RAG remain sample-owned and keep their configuration with the sample that
-launches them.
+`model_servers` separately and wait for its launcher to return before starting
+the application sample. Server wrappers check model readiness and verify
+existing services before reuse. Consumer workers do not poll model health
+endpoints or need placeholder `Process` entries. Simple VLM's streaming image
+warmup and XR Render's tool-shaped LLM warmup remain explicit startup gates.
+Application capability services such as RAG remain sample-owned and can retain
+their own readiness probes.
 
 ## Calling these from a worker
 
@@ -149,7 +150,7 @@ A consumer model profile specifies adapter behavior and endpoint connectivity:
     "agent_llm": {
       "category": "llm",
       "adapter": {"preset": "nemotron_omni"},
-      "endpoint": {"base_url": "http://localhost:8108", "readiness": "health"}
+      "endpoint": {"base_url": "http://localhost:8108"}
     }
   }
 }
@@ -170,8 +171,8 @@ API, so this is a model-profile change with no worker code edits. STT and TTS
 stay local: hosted NIM speech (Riva) is not OpenAI `/v1/audio`-compatible.
 Self-hosted speech NIMs are covered below.
 
-A hosted entry uses an environment-variable reference for its credential,
-disables endpoint health probing, and omits deployment metadata:
+A hosted consumer entry uses an environment-variable reference for its
+credential and omits deployment and health polling metadata:
 
 ```json
 {
@@ -185,8 +186,7 @@ disables endpoint health probing, and omits deployment metadata:
       },
       "endpoint": {
         "base_url": "https://integrate.api.nvidia.com",
-        "api_key_env": "NGC_API_KEY",
-        "readiness": "none"
+        "api_key_env": "NGC_API_KEY"
       }
     }
   }
@@ -197,8 +197,6 @@ disables endpoint health probing, and omits deployment metadata:
   token. The key is a
   managed credential — `run_stack` injects a saved `NGC_API_KEY` into every
   subprocess (refer to {doc}`/getting_started/credentials`); or export it.
-- **`readiness: none`** is required when the hosted endpoint has no local
-  `/health` route.
 - **Omitted `deployment`** defaults to an externally operated endpoint; no
   model process is started or stopped by the profile.
 - **`model_name`** is the hosted model id from [build.nvidia.com](https://build.nvidia.com).
@@ -258,8 +256,9 @@ stt:
 ```
 
 TTS additionally takes `voice:` (a Riva voice name) and `sample_rate:`
-(default 44100). `health_check: true` (the default) runs a gRPC channel-ready
-probe. No shipped model-server profile or sample selects Riva speech.
+(default 44100). An explicit `health()` call with `health_check: true` (the
+default) runs a gRPC channel-ready probe; consumer startup does not call it.
+No shipped model-server profile or sample selects Riva speech.
 
 Requirements: docker + NVIDIA Container Toolkit, `NGC_API_KEY` (used for the
 `nvcr.io` image pull *and* by the container itself to download the
@@ -272,8 +271,9 @@ target host. Readiness gates on each container's `/v1/health/ready`.
 
 A NIM container serving something the samples don't ship is the same
 mechanism by hand: point an `openai_compat` entry's `base_url` at its port
-(its health route is `/v1/health/ready`, so keep `health_check: false` and
-let the container gate readiness), or a `riva_grpc` entry at its gRPC port.
+or a `riva_grpc` entry at its gRPC port. Consumer workers do not require a
+health route. Operators can still check the container's `/v1/health/ready`
+endpoint directly.
 With `ownership: external` (you run the container yourself) that is the
 whole change. For an orchestrator to launch or expect it, the entry's
 `deployment.service` must name a process row in that orchestrator's service

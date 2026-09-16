@@ -53,7 +53,9 @@ agent-samples/<name>/
 `vlm`, `stt`, `tts`, or any sample-specific name). Each role composes an
 adapter and endpoint spec, with optional deployment metadata. Consumer samples
 omit `deployment` and connect to shared endpoints; the shared model-server
-profiles use it to select managed services. Worker-only profiles may remain in
+profiles use it to select managed services. Consumer workers do not poll model
+health endpoints; omit health settings unless custom code calls `health()`.
+Explicit inference warmups can still gate startup. Worker-only profiles may remain in
 the legacy flat JSON or YAML shape; a profile shared with the stdlib-only
 orchestrator uses the wrapped nested JSON shape. The worker passes either form to
 `load_models_config(...)` and constructs services with `make_llm`, `make_vlm`,

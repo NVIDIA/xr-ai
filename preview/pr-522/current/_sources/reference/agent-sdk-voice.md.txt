@@ -37,10 +37,17 @@ async with runtime:
     await voice.run(runtime)
 ```
 
-`VoiceAgent` owns model readiness, hub transport, VAD and STT, voice gating, typed
-text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
+`VoiceAgent` owns application readiness, hub transport, VAD and STT, voice gating,
+typed text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
 session remains private. Applications that need a shared public
 `HubVoiceTransport` construct and inject one explicitly.
+
+Startup waits only for explicitly supplied `probes`, such as an inference
+warmup or an application capability dependency. STT and TTS are not probed
+automatically. Ready status means the application's transport is initialized
+after any explicit probes; model availability is handled by actual requests.
+Start the shared model-server stack before consumers. Simple VLM retains its
+streaming image warmup, and XR Render retains its tool-shaped LLM warmup.
 
 Each non-empty final STT result is queued for publication on
 `VOICE_TRANSCRIPT_TOPIC` before wake-phrase filtering. Accepted speech and

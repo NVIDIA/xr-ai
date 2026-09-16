@@ -583,7 +583,10 @@ process startup; they do not determine whether a client may connect.</p>
 loaded across sample restarts. Its deployment profiles mark services as
 <code class="docutils literal notranslate"><span class="pre">managed</span></code> to select processes to launch. Application samples declare only their
 own hub, workers, and capability services; their model profiles contain adapters
-and endpoints without deployment metadata. Workers check endpoint readiness.</p>
+and endpoints without deployment metadata or health polling settings. Server
+wrappers check model readiness. Workers initialize application transport and
+handle model availability during requests; explicitly configured inference
+warmups still gate application readiness.</p>
 <p>Explicit <code class="docutils literal notranslate"><span class="pre">reused</span></code> and <code class="docutils literal notranslate"><span class="pre">external</span></code> model deployment entries remain supported for
 older custom profiles. Neither gives a consuming worker control over a server.
 The model-server profile co-locates process ownership and endpoint choices. The

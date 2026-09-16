@@ -563,6 +563,9 @@ Package Contents
    Nemotron-Omni) and indirectly via :class:`OpenAICompatVLM` for VLMs.
    The API key is read once from ``api_key_env`` during construction. An
    injected HTTP client remains owned by the caller and is not closed here.
+   Inference makes at most three attempts on connection failures or HTTP
+   502/503/504, with 0.25 and 0.5 second backoffs and per-attempt timeouts.
+   Accepted responses, including partial streams, are never replayed.
 
 
    .. py:attribute:: health_url
@@ -625,6 +628,9 @@ Package Contents
 
    The API key is read once from ``api_key_env`` during construction. An
    injected HTTP client remains owned by the caller and is not closed here.
+   Inference makes at most three attempts on connection failures or HTTP
+   502/503/504, with 0.25 and 0.5 second backoffs and per-attempt timeouts.
+   Accepted responses, including partial streams, are never replayed.
 
 
    .. py:method:: embed(texts: Sequence[str], *, timeout: float | None = None) -> list[list[float]]
@@ -663,6 +669,9 @@ Package Contents
 
    The API key is read once from ``api_key_env`` during construction. An
    injected HTTP client remains owned by the caller and is not closed here.
+   Inference makes at most three attempts on connection failures or HTTP
+   502/503/504, with 0.25 and 0.5 second backoffs and per-attempt timeouts.
+   Accepted responses, including partial streams, are never replayed.
 
 
    .. py:method:: transcribe(audio: bytes, *, sample_rate: int | None = None, channels: int = 1, timeout: float | None = None) -> str
@@ -702,6 +711,9 @@ Package Contents
 
    The API key is read once from ``api_key_env`` during construction. An
    injected HTTP client remains owned by the caller and is not closed here.
+   Inference makes at most three attempts on connection failures or HTTP
+   502/503/504, with 0.25 and 0.5 second backoffs and per-attempt timeouts.
+   Accepted responses, including partial streams, are never replayed.
 
 
    .. py:method:: synthesize(text: str, *, response_format: str = 'wav', timeout: float | None = None) -> bytes
@@ -1025,7 +1037,7 @@ Package Contents
       :value: 'health'
 
 
-      How the client determines whether the endpoint is ready.
+      Policy for explicit ``health()`` calls; does not schedule startup probes.
 
 
 
@@ -1034,7 +1046,7 @@ Package Contents
       :value: '/health'
 
 
-      Endpoint path probed for readiness (NIM containers use /v1/health/ready).
+      Path used by explicit HTTP ``health()`` calls (NIM: /v1/health/ready).
 
 
 

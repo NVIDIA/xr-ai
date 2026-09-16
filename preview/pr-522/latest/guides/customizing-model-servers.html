@@ -563,8 +563,9 @@ stack’s deployment profile.</p>
 <ol class="arabic simple">
 <li><p>Copy its <code class="docutils literal notranslate"><span class="pre">llm</span></code> entry when the sample needs language or tool calling.</p></li>
 <li><p>Copy its <code class="docutils literal notranslate"><span class="pre">vlm</span></code> entry when the sample needs vision.</p></li>
-<li><p>Remove the <code class="docutils literal notranslate"><span class="pre">deployment</span></code> object from every copied entry. Keep the LLM
-endpoint on port 8110 and the VLM endpoint on port 8100.</p></li>
+<li><p>Remove the <code class="docutils literal notranslate"><span class="pre">deployment</span></code> object and endpoint <code class="docutils literal notranslate"><span class="pre">readiness</span></code> and <code class="docutils literal notranslate"><span class="pre">health_path</span></code>
+settings from every copied consumer entry. Keep the LLM endpoint on port
+8110 and the VLM endpoint on port 8100. The server profile keeps its settings.</p></li>
 <li><p>If the sample uses <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code>, duplicate the <code class="docutils literal notranslate"><span class="pre">llm</span></code> entry under that role.</p></li>
 <li><p>Preserve the sample’s STT, TTS, embedding, and other roles unless the shared
 stack provides intentional replacements.</p></li>
@@ -609,18 +610,15 @@ stack provides intentional replacements.</p></li>
 <span class="w">      </span><span class="nt">"video"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8100"</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">"health_path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/v1/health/ready"</span>
-<span class="w">  </span><span class="p">}</span>
+<span class="w">  </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8100"</span><span class="p">}</span>
 <span class="p">}</span>
 </pre></div>
 </div>
 <p>Sample launchers declare only their application processes; model endpoints
 are specified in the client profile. The worker constructs the client from its
-models JSON and checks endpoint readiness. Starting or stopping the sample
-therefore never changes the shared NIM container.</p>
+models JSON without polling model health endpoints. Explicit inference warmups
+can still gate startup. Starting or stopping the sample never changes the
+shared NIM container; wait for the model-server launcher to return first.</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">nim_llm_server.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">nim_vlm_server.yaml</span></code> files repeat the copy and
 client-profile instructions beside each GPU-specific container configuration.</p>
 </section>
@@ -629,13 +627,12 @@ client-profile instructions beside each GPU-specific container configuration.</p
 <p>If an operator already runs a compatible service elsewhere, no model-server
 change is required. Update the sample entry’s <code class="docutils literal notranslate"><span class="pre">endpoint.base_url</span></code>. Both
 operator-managed XR AI services and hosted APIs use client entries without
-<code class="docutils literal notranslate"><span class="pre">deployment</span></code>. A hosted endpoint may also need a credential and a different
-readiness policy:</p>
+<code class="docutils literal notranslate"><span class="pre">deployment</span></code> or health polling settings. A hosted endpoint may also need a
+credential:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://integrate.api.nvidia.com"</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"none"</span>
+<span class="w">    </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
 </pre></div>

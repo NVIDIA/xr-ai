@@ -146,7 +146,10 @@ The shared `model-servers` stack owns model services and can keep large weights
 loaded across sample restarts. Its deployment profiles mark services as
 `managed` to select processes to launch. Application samples declare only their
 own hub, workers, and capability services; their model profiles contain adapters
-and endpoints without deployment metadata. Workers check endpoint readiness.
+and endpoints without deployment metadata or health polling settings. Server
+wrappers check model readiness. Workers initialize application transport and
+handle model availability during requests; explicitly configured inference
+warmups still gate application readiness.
 
 Explicit `reused` and `external` model deployment entries remain supported for
 older custom profiles. Neither gives a consuming worker control over a server.

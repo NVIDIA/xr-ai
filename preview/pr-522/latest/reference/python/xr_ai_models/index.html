@@ -1119,7 +1119,10 @@ OpenAI-compatible endpoints.</p>
 <p>Used directly for plain LLMs (Llama-Nemotron, Nemotron3-Nano,
 Nemotron-Omni) and indirectly via <a class="reference internal" href="#xr_ai_models.OpenAICompatVLM" title="xr_ai_models.OpenAICompatVLM"><code class="xref py py-class docutils literal notranslate"><span class="pre">OpenAICompatVLM</span></code></a> for VLMs.
 The API key is read once from <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code> during construction. An
-injected HTTP client remains owned by the caller and is not closed here.</p>
+injected HTTP client remains owned by the caller and is not closed here.
+Inference makes at most three attempts on connection failures or HTTP
+502/503/504, with 0.25 and 0.5 second backoffs and per-attempt timeouts.
+Accepted responses, including partial streams, are never replayed.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_models.OpenAICompatLLM.health_url">
 <span class="sig-name descname"><span class="pre">health_url</span></span><a class="headerlink" href="#xr_ai_models.OpenAICompatLLM.health_url" title="Link to this definition">#</a></dt>
@@ -1211,7 +1214,10 @@ disabled at construction time.</p>
 <span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_models.OpenAICompatEmbedding" title="Link to this definition">#</a></dt>
 <dd><p>OpenAI-compatible <code class="docutils literal notranslate"><span class="pre">/v1/embeddings</span></code> client.</p>
 <p>The API key is read once from <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code> during construction. An
-injected HTTP client remains owned by the caller and is not closed here.</p>
+injected HTTP client remains owned by the caller and is not closed here.
+Inference makes at most three attempts on connection failures or HTTP
+502/503/504, with 0.25 and 0.5 second backoffs and per-attempt timeouts.
+Accepted responses, including partial streams, are never replayed.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_models.OpenAICompatEmbedding.embed">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">embed</span></span><span class="sig-paren">(</span>
@@ -1261,7 +1267,10 @@ disabled at construction time.</p>
 <span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_models.OpenAICompatSTT" title="Link to this definition">#</a></dt>
 <dd><p>OpenAI-compatible <code class="docutils literal notranslate"><span class="pre">/v1/audio/transcriptions</span></code> client.</p>
 <p>The API key is read once from <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code> during construction. An
-injected HTTP client remains owned by the caller and is not closed here.</p>
+injected HTTP client remains owned by the caller and is not closed here.
+Inference makes at most three attempts on connection failures or HTTP
+502/503/504, with 0.25 and 0.5 second backoffs and per-attempt timeouts.
+Accepted responses, including partial streams, are never replayed.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_models.OpenAICompatSTT.transcribe">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">transcribe</span></span><span class="sig-paren">(</span>
@@ -1314,7 +1323,10 @@ disabled at construction time.</p>
 <span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_models.OpenAICompatTTS" title="Link to this definition">#</a></dt>
 <dd><p>OpenAI-compatible <code class="docutils literal notranslate"><span class="pre">/v1/audio/speech</span></code> client.</p>
 <p>The API key is read once from <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code> during construction. An
-injected HTTP client remains owned by the caller and is not closed here.</p>
+injected HTTP client remains owned by the caller and is not closed here.
+Inference makes at most three attempts on connection failures or HTTP
+502/503/504, with 0.25 and 0.5 second backoffs and per-attempt timeouts.
+Accepted responses, including partial streams, are never replayed.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_models.OpenAICompatTTS.synthesize">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">synthesize</span></span><span class="sig-paren">(</span>
@@ -1663,13 +1675,13 @@ even when the endpoint takes no API key.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_models.EndpointSpec.readiness">
 <span class="sig-name descname"><span class="pre">readiness</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Readiness</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'health'</span></em><a class="headerlink" href="#xr_ai_models.EndpointSpec.readiness" title="Link to this definition">#</a></dt>
-<dd><p>How the client determines whether the endpoint is ready.</p>
+<dd><p>Policy for explicit <code class="docutils literal notranslate"><span class="pre">health()</span></code> calls; does not schedule startup probes.</p>
 </dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_models.EndpointSpec.health_path">
 <span class="sig-name descname"><span class="pre">health_path</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'/health'</span></em><a class="headerlink" href="#xr_ai_models.EndpointSpec.health_path" title="Link to this definition">#</a></dt>
-<dd><p>Endpoint path probed for readiness (NIM containers use /v1/health/ready).</p>
+<dd><p>Path used by explicit HTTP <code class="docutils literal notranslate"><span class="pre">health()</span></code> calls (NIM: /v1/health/ready).</p>
 </dd></dl>
 
 <dl class="py property">

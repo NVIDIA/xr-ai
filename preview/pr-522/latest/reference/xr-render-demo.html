@@ -593,7 +593,7 @@ restart <code class="docutils literal notranslate"><span class="pre">xr_render_d
 <td><p>Always-on speech or wake phrases, listening chime, and follow-up window</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
-<td><p>Reused model adapters, endpoints, and readiness checks</p></td>
+<td><p>Model adapters and shared endpoints</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code></p></td>
 <td><p>LiveKit, web and token servers, networking, and video recording</p></td>
@@ -656,10 +656,11 @@ model sees only participant-safe perception facades. Recorded selection is
 grouped into latest tools, whose windows end at the newest recording, and
 historical tools, whose frame or video window begins at one absolute <code class="docutils literal notranslate"><span class="pre">start_us</span></code>.
 Recorded-frame timestamps are estimates interpolated from chunk metadata.</p>
-<p>There is a deliberate startup ordering constraint: <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> readiness
-blocks on the VLM’s <code class="docutils literal notranslate"><span class="pre">/health</span></code> endpoint, which
-returns 200 only after weights are fully loaded. This ensures model memory has
-settled before LOVR starts its Vulkan device, preventing a transient OOM race.</p>
+<p>Start the shared model-server stack and wait for its launcher to return before
+starting the sample. Server wrappers check model loading and service reuse.
+The worker does not poll model health endpoints. It retains a tool-shaped LLM
+inference warmup before announcing readiness so that LLM memory settles before
+LOVR creates its Vulkan device. This explicit warmup also runs for hosted LLMs.</p>
 </section>
 <section id="stt-parakeet-tdt-0-6b-v3">
 <h2>STT — parakeet-tdt-0.6b-v3<a class="headerlink" href="#stt-parakeet-tdt-0-6b-v3" title="Link to this heading">#</a></h2>

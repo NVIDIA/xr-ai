@@ -594,12 +594,13 @@ its hardware-specific server YAML, and copy compatible endpoint entries into
 the sample’s models JSON. Omit the <code class="docutils literal notranslate"><span class="pre">deployment</span></code> object from copied entries;
 it belongs to the shared model-server profile.</p>
 <p>Declare only application processes in the sample orchestrator. Start
-<code class="docutils literal notranslate"><span class="pre">model_servers</span></code> separately before the application sample. At startup, the
-sample worker probes endpoints whose models JSON entry uses <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">health</span></code>
-and keeps waiting until those services are available. Model endpoints do not
-need placeholder <code class="docutils literal notranslate"><span class="pre">Process</span></code> entries. Application capability services such as
-RAG remain sample-owned and keep their configuration with the sample that
-launches them.</p>
+<code class="docutils literal notranslate"><span class="pre">model_servers</span></code> separately and wait for its launcher to return before starting
+the application sample. Server wrappers check model readiness and verify
+existing services before reuse. Consumer workers do not poll model health
+endpoints or need placeholder <code class="docutils literal notranslate"><span class="pre">Process</span></code> entries. Simple VLM’s streaming image
+warmup and XR Render’s tool-shaped LLM warmup remain explicit startup gates.
+Application capability services such as RAG remain sample-owned and can retain
+their own readiness probes.</p>
 </section>
 <section id="calling-these-from-a-worker">
 <h2>Calling these from a worker<a class="headerlink" href="#calling-these-from-a-worker" title="Link to this heading">#</a></h2>
@@ -628,7 +629,7 @@ never branch on backend.</p>
 <span class="w">    </span><span class="nt">"agent_llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm"</span><span class="p">,</span>
 <span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8108"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">}</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8108"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
@@ -648,8 +649,8 @@ local vLLM — NIM exposes the same OpenAI-compatible <code class="docutils lite
 API, so this is a model-profile change with no worker code edits. STT and TTS
 stay local: hosted NIM speech (Riva) is not OpenAI <code class="docutils literal notranslate"><span class="pre">/v1/audio</span></code>-compatible.
 Self-hosted speech NIMs are covered below.</p>
-<p>A hosted entry uses an environment-variable reference for its credential,
-disables endpoint health probing, and omits deployment metadata:</p>
+<p>A hosted consumer entry uses an environment-variable reference for its
+credential and omits deployment and health polling metadata:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
@@ -661,8 +662,7 @@ disables endpoint health probing, and omits deployment metadata:</p>
 <span class="w">      </span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://integrate.api.nvidia.com"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"none"</span>
+<span class="w">        </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
@@ -674,8 +674,6 @@ disables endpoint health probing, and omits deployment metadata:</p>
 token. The key is a
 managed credential — <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> injects a saved <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> into every
 subprocess (refer to <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>); or export it.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code></strong> is required when the hosted endpoint has no local
-<code class="docutils literal notranslate"><span class="pre">/health</span></code> route.</p></li>
 <li><p><strong>Omitted <code class="docutils literal notranslate"><span class="pre">deployment</span></code></strong> defaults to an externally operated endpoint; no
 model process is started or stopped by the profile.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">model_name</span></code></strong> is the hosted model id from <a class="reference external" href="https://build.nvidia.com">build.nvidia.com</a>.</p></li>
@@ -728,8 +726,9 @@ Workers reach them through the optional <code class="docutils literal notranslat
 </pre></div>
 </div>
 <p>TTS additionally takes <code class="docutils literal notranslate"><span class="pre">voice:</span></code> (a Riva voice name) and <code class="docutils literal notranslate"><span class="pre">sample_rate:</span></code>
-(default 44100). <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">true</span></code> (the default) runs a gRPC channel-ready
-probe. No shipped model-server profile or sample selects Riva speech.</p>
+(default 44100). An explicit <code class="docutils literal notranslate"><span class="pre">health()</span></code> call with <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">true</span></code> (the
+default) runs a gRPC channel-ready probe; consumer startup does not call it.
+No shipped model-server profile or sample selects Riva speech.</p>
 <p>Requirements: docker + NVIDIA Container Toolkit, <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> (used for the
 <code class="docutils literal notranslate"><span class="pre">nvcr.io</span></code> image pull <em>and</em> by the container itself to download the
 GPU-matched optimized engine from NGC on first start; multi-GB, cached
@@ -740,8 +739,9 @@ validation status and hardware cautions; verify startup and capacity on the
 target host. Readiness gates on each container’s <code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>.</p>
 <p>A NIM container serving something the samples don’t ship is the same
 mechanism by hand: point an <code class="docutils literal notranslate"><span class="pre">openai_compat</span></code> entry’s <code class="docutils literal notranslate"><span class="pre">base_url</span></code> at its port
-(its health route is <code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>, so keep <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">false</span></code> and
-let the container gate readiness), or a <code class="docutils literal notranslate"><span class="pre">riva_grpc</span></code> entry at its gRPC port.
+or a <code class="docutils literal notranslate"><span class="pre">riva_grpc</span></code> entry at its gRPC port. Consumer workers do not require a
+health route. Operators can still check the container’s <code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>
+endpoint directly.
 With <code class="docutils literal notranslate"><span class="pre">ownership:</span> <span class="pre">external</span></code> (you run the container yourself) that is the
 whole change. For an orchestrator to launch or expect it, the entry’s
 <code class="docutils literal notranslate"><span class="pre">deployment.service</span></code> must name a process row in that orchestrator’s service
