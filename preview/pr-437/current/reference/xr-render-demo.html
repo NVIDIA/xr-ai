@@ -335,6 +335,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -672,8 +673,10 @@ recording is prohibited, and treat the output as sensitive device data.</p>
 <p>The media-capture service itself also supports a <code class="docutils literal notranslate"><span class="pre">raw</span></code> projection and explicit
 agent-controlled session boundaries. Those modes reuse the same audio,
 transcript, observation, timing, manifest, retention, and encoder
-infrastructure; the XR render demo intentionally selects <code class="docutils literal notranslate"><span class="pre">demo</span></code> plus
-participant-lifetime recording.</p>
+infrastructure. In explicit mode, a background wrapper fixes the relative
+capture namespace and metadata before exposing parameterless start and stop
+actions; every start creates a timestamped child bundle. The XR render demo
+intentionally selects <code class="docutils literal notranslate"><span class="pre">demo</span></code> plus participant-lifetime recording.</p>
 </section>
 <section id="the-llm-server">
 <h2>The LLM server<a class="headerlink" href="#the-llm-server" title="Link to this heading">#</a></h2>

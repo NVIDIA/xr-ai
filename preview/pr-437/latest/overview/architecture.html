@@ -335,6 +335,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -624,7 +625,9 @@ SDKs and server packages do not enter agent APIs.</p></li>
 consumes normalized hub IPC and routed return traffic in a separate process.
 Participant-lifetime or agent-controlled boundaries select what the shared
 writer retains; demo rendering and raw workflow packets are projections over
-that writer. Bounded capture queues may drop recording frames but must not
+that writer. Agent wrappers own the capture namespace and fixed metadata;
+model-facing start and stop actions do not accept filesystem paths. Bounded
+capture queues may drop recording frames but must not
 apply backpressure to the hub, clients, or agents.</p></li>
 <li><p><strong>Raw media stays on the media path.</strong> Video pixels remain in shared memory
 until explicitly requested, and raw media is not embedded in runtime events

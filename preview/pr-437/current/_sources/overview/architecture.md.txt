@@ -186,7 +186,9 @@ The following constraints define the supported system boundary:
   consumes normalized hub IPC and routed return traffic in a separate process.
   Participant-lifetime or agent-controlled boundaries select what the shared
   writer retains; demo rendering and raw workflow packets are projections over
-  that writer. Bounded capture queues may drop recording frames but must not
+  that writer. Agent wrappers own the capture namespace and fixed metadata;
+  model-facing start and stop actions do not accept filesystem paths. Bounded
+  capture queues may drop recording frames but must not
   apply backpressure to the hub, clients, or agents.
 - **Raw media stays on the media path.** Video pixels remain in shared memory
   until explicitly requested, and raw media is not embedded in runtime events

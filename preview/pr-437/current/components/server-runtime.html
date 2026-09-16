@@ -335,6 +335,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -629,10 +630,18 @@ finalization. The retained raw stream is therefore suitable for later machine
 processing even when the same bundle also contains a presentation-ready demo.</p>
 <p><code class="docutils literal notranslate"><span class="pre">session_mode:</span> <span class="pre">participant</span></code> records from participant join to leave.
 <code class="docutils literal notranslate"><span class="pre">session_mode:</span> <span class="pre">explicit</span></code> creates bundles only between reserved agent start and
-stop messages. Those private messages are intentionally an internal adapter
-seam rather than a public agent tool API; a background capture agent can later
-wrap them and publish frame-linked observations without changing the storage
-engine.</p>
+stop messages. A background agent wrapper initializes the private controller
+with a destination namespace relative to <code class="docutils literal notranslate"><span class="pre">out_dir</span></code> and fixed capture metadata;
+the semantic actions exposed to the model can therefore remain parameterless
+<code class="docutils literal notranslate"><span class="pre">start</span> <span class="pre">recording</span></code> and <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">recording</span></code>. Each accepted start creates a new
+timestamped child directory in that namespace. The model never selects a
+filesystem path. These messages remain an internal adapter seam rather than a
+public agent tool API, and the wrapper can publish frame-linked observations
+without changing the storage engine.</p>
+<p>The SDK implementation is <code class="docutils literal notranslate"><span class="pre">xr_ai_tools.capture.CaptureTools</span></code>. Applications
+construct it with the fixed target and metadata, then call
+<code class="docutils literal notranslate"><span class="pre">participant_tools(participant_id)</span></code> to obtain the two participant-bound native
+tools.</p>
 <p>Every bundle uses one Unix-microsecond clock and records both absolute and
 session-relative timing. <code class="docutils literal notranslate"><span class="pre">video/frames.jsonl</span></code> indexes source sequence,
 timestamp, track, pixel format, and source/encoded dimensions.
