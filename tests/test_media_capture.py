@@ -531,6 +531,7 @@ def test_raw_profile_preserves_camera_pixels_and_timestamp_indexes(
         "alice",
         1_000_000,
         "agent",
+        "assembly-line/run-a",
         {"purpose": "SOP evidence", "tags": ["assembly"]},
     )
     recorder.record_voice_caption(
@@ -551,13 +552,14 @@ def test_raw_profile_preserves_camera_pixels_and_timestamp_indexes(
 
     assert encoded_inputs[0].shape == (48, 64)
     assert np.all(encoded_inputs[0][:32] == 96)
-    session = next(path for path in tmp_path.iterdir() if path.is_dir())
+    session = next(path.parent for path in tmp_path.rglob("manifest.json"))
     manifest = json.loads((session / "manifest.json").read_text())
     segment = manifest["video_tracks"]["camera"][0]
     assert manifest["version"] == 2
     assert manifest["profile"] == "raw"
     assert manifest["session_mode"] == "explicit"
     assert manifest["trigger"] == "agent"
+    assert manifest["target"] == "assembly-line/run-a"
     assert manifest["metadata"] == {"purpose": "SOP evidence", "tags": ["assembly"]}
     assert manifest["clock"]["session_start_us"] == 1_000_000
     assert segment["path"] == "video/session.264"
@@ -596,17 +598,24 @@ async def test_explicit_session_control_records_only_between_reserved_commands(
         )
         assert not list(tmp_path.iterdir())
 
+        start_command = json.dumps({
+            "target": "sop-capture/assembly-line",
+            "metadata": {"purpose": "agent controlled"},
+        }).encode()
         await service._on_agent_data(DataMessage(
             "alice",
             CAPTURE_START_TOPIC,
             1_020_000,
-            json.dumps({"purpose": "agent controlled"}).encode(),
+            start_command,
         ))
         await service._on_agent_data(DataMessage(
             "alice",
             CAPTURE_START_TOPIC,
             1_025_000,
-            json.dumps({"purpose": "must not replace active metadata"}).encode(),
+            json.dumps({
+                "target": "other-target",
+                "metadata": {"purpose": "must not replace active metadata"},
+            }).encode(),
         ))
         await service._on_agent_data(
             DataMessage("alice", CAPTURE_STT_TOPIC, 1_030_000, b"during"),
@@ -628,16 +637,55 @@ async def test_explicit_session_control_records_only_between_reserved_commands(
             DataMessage("alice", CAPTURE_STT_TOPIC, 1_060_000, b"after"),
         )
 
-        session = next(path for path in tmp_path.iterdir() if path.is_dir())
+        await service._on_agent_data(DataMessage(
+            "alice", CAPTURE_START_TOPIC, 2_000_000, start_command,
+        ))
+        await service._on_agent_data(
+            DataMessage("alice", CAPTURE_STOP_TOPIC, 2_010_000, b""),
+        )
+
+        target = tmp_path / "sop-capture" / "assembly-line"
+        sessions = sorted(path.parent for path in target.glob("*/manifest.json"))
+        assert len(sessions) == 2
+        session = sessions[0]
         manifest = json.loads((session / "manifest.json").read_text())
         assert manifest["start_us"] == 1_020_000
         assert manifest["end_us"] == 1_050_000
+        assert manifest["target"] == "sop-capture/assembly-line"
         assert manifest["metadata"] == {"purpose": "agent controlled"}
         assert manifest["counts"]["transcripts"] == 1
         assert manifest["counts"]["observations"] == 1
         assert "during" in (session / "transcript.jsonl").read_text()
         assert "before" not in (session / "events.jsonl").read_text()
         assert "after" not in (session / "transcript.jsonl").read_text()
+        assert not (tmp_path / "other-target").exists()
+    finally:
+        await service.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("target", ["../escape", "/absolute", "bad target"])
+async def test_explicit_session_control_rejects_unsafe_wrapper_targets(
+    tmp_path: Path,
+    monkeypatch,
+    target: str,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    service = CaptureService(CaptureConfig(
+        out_dir=str(tmp_path),
+        profile="raw",
+        session_mode="explicit",
+        max_total_bytes=0,
+    ))
+    try:
+        await service._on_agent_data(DataMessage(
+            "alice",
+            CAPTURE_START_TOPIC,
+            1_000_000,
+            json.dumps({"target": target, "metadata": {}}).encode(),
+        ))
+        assert not service._recorder.has_session("alice")
+        assert not list(tmp_path.iterdir())
     finally:
         await service.stop()
 
@@ -651,7 +699,9 @@ def test_retention_counts_incomplete_capture_directories(
     monkeypatch,
 ) -> None:
     monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
-    incomplete = tmp_path / "1_incomplete"
+    target = tmp_path / "workflow"
+    target.mkdir()
+    incomplete = target / "1_incomplete"
     incomplete.mkdir()
     (incomplete / _CAPTURE_MARKER_NAME).write_text(_CAPTURE_MARKER_CONTENT)
     (incomplete / "events.jsonl").write_bytes(b"x" * 100)

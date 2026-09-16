@@ -8,6 +8,7 @@ import asyncio
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from typing import Any
 
 from loguru import logger
@@ -53,6 +54,26 @@ def _json_object(data: bytes, *, label: str, allow_empty: bool = False) -> dict[
     if not isinstance(value, dict):
         raise ValueError(f"{label} must be a JSON object")
     return value
+
+
+@dataclass(frozen=True, slots=True)
+class _StartRequest:
+    target: str | None
+    metadata: dict[str, Any]
+
+
+def _start_request(data: bytes) -> _StartRequest:
+    value = _json_object(data, label="capture start command", allow_empty=True)
+    unknown = set(value) - {"target", "metadata"}
+    if unknown:
+        raise ValueError(f"capture start command has unknown fields: {sorted(unknown)}")
+    target = value.get("target")
+    if target is not None and (not isinstance(target, str) or not target):
+        raise ValueError("capture start target must be a non-empty string")
+    metadata = value.get("metadata", {})
+    if not isinstance(metadata, dict):
+        raise ValueError("capture start metadata must be a JSON object")
+    return _StartRequest(target=target, metadata=metadata)
 
 
 class _FrameWorker:
@@ -230,6 +251,7 @@ class CaptureService:
         self,
         participant_id: str,
         pts_us: int,
+        target: str | None,
         metadata: dict[str, Any],
     ) -> None:
         if self._config.session_mode != "explicit":
@@ -241,6 +263,7 @@ class CaptureService:
             participant_id,
             pts_us,
             "agent",
+            target,
             metadata,
         )
 
@@ -314,15 +337,15 @@ class CaptureService:
             return
         if message.topic == CAPTURE_START_TOPIC:
             try:
-                metadata = _json_object(
-                    message.data,
-                    label="capture start metadata",
-                    allow_empty=True,
+                request = _start_request(message.data)
+                await self._start_recording(
+                    message.participant_id,
+                    message.pts_us,
+                    request.target,
+                    request.metadata,
                 )
             except ValueError as exc:
                 logger.warning("media capture ignored invalid start command: {}", exc)
-                return
-            await self._start_recording(message.participant_id, message.pts_us, metadata)
             return
         if message.topic == CAPTURE_STOP_TOPIC:
             await self._stop_recording(message.participant_id, message.pts_us)

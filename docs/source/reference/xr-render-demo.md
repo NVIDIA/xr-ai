@@ -180,8 +180,10 @@ recording is prohibited, and treat the output as sensitive device data.
 The media-capture service itself also supports a `raw` projection and explicit
 agent-controlled session boundaries. Those modes reuse the same audio,
 transcript, observation, timing, manifest, retention, and encoder
-infrastructure; the XR render demo intentionally selects `demo` plus
-participant-lifetime recording.
+infrastructure. In explicit mode, a background wrapper fixes the relative
+capture namespace and metadata before exposing parameterless start and stop
+actions; every start creates a timestamped child bundle. The XR render demo
+intentionally selects `demo` plus participant-lifetime recording.
 
 ## The LLM server
 

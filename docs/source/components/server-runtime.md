@@ -214,10 +214,19 @@ processing even when the same bundle also contains a presentation-ready demo.
 
 `session_mode: participant` records from participant join to leave.
 `session_mode: explicit` creates bundles only between reserved agent start and
-stop messages. Those private messages are intentionally an internal adapter
-seam rather than a public agent tool API; a background capture agent can later
-wrap them and publish frame-linked observations without changing the storage
-engine.
+stop messages. A background agent wrapper initializes the private controller
+with a destination namespace relative to `out_dir` and fixed capture metadata;
+the semantic actions exposed to the model can therefore remain parameterless
+``start recording`` and ``stop recording``. Each accepted start creates a new
+timestamped child directory in that namespace. The model never selects a
+filesystem path. These messages remain an internal adapter seam rather than a
+public agent tool API, and the wrapper can publish frame-linked observations
+without changing the storage engine.
+
+The SDK implementation is `xr_ai_tools.capture.CaptureTools`. Applications
+construct it with the fixed target and metadata, then call
+`participant_tools(participant_id)` to obtain the two participant-bound native
+tools.
 
 Every bundle uses one Unix-microsecond clock and records both absolute and
 session-relative timing. `video/frames.jsonl` indexes source sequence,

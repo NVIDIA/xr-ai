@@ -26,6 +26,7 @@ API_PACKAGE_DIRS = (
 PUBLIC_API_MODULES = (
     "xr_ai_models.presets",
     "xr_ai_tools.async_tools",
+    "xr_ai_tools.capture",
     "xr_ai_tools.current_frame",
     "xr_ai_tools.image",
     "xr_ai_tools.image_polygon",

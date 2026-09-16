@@ -7,6 +7,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 import shutil
 import struct
 import threading
@@ -46,6 +47,20 @@ def _safe_name(value: str) -> str:
     digest = hashlib.sha256(value.encode()).hexdigest()[:8]
     prefix = (cleaned or "unnamed")[:_MAX_SAFE_NAME - len(digest) - 1]
     return f"{prefix}_{digest}"
+
+
+def _target_parts(target: str | None) -> tuple[str, ...]:
+    """Validate a wrapper-owned namespace beneath the configured capture root."""
+    if target is None:
+        return ()
+    if not target or target.startswith("/"):
+        raise ValueError("capture target must be a non-empty relative path")
+    parts = tuple(target.split("/"))
+    if any(part in {".", ".."} or _safe_name(part) != part for part in parts):
+        raise ValueError(
+            "capture target components may contain only letters, numbers, '.', '-', and '_'"
+        )
+    return parts
 
 
 def _write_json_line(stream, value: dict) -> None:
@@ -323,6 +338,7 @@ class _ParticipantSession:
     start_us: int
     root: Path
     trigger: str
+    target: str | None
     metadata: dict[str, Any]
     events: object
     transcripts: object
@@ -375,13 +391,17 @@ class SessionRecorder:
         participant_id: str,
         pts_us: int,
         trigger: str = "participant",
+        target: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
+        target_parts = _target_parts(target)
+        normalized_target = "/".join(target_parts) or None
         with self._lock:
             if participant_id in self._sessions:
                 return
             start_us = max(1, pts_us)
-            base = self._root / f"{start_us}_{_safe_name(participant_id)}"
+            target_root = self._ensure_target_root(target_parts)
+            base = target_root / f"{start_us}_{_safe_name(participant_id)}"
             root = base
             suffix = 2
             while root.exists():
@@ -408,6 +428,7 @@ class SessionRecorder:
                 start_us=start_us,
                 root=root,
                 trigger=trigger,
+                target=normalized_target,
                 metadata=dict(metadata or {}),
                 events=events,
                 transcripts=transcripts,
@@ -424,6 +445,19 @@ class SessionRecorder:
             self._sessions[participant_id] = session
         self._event(session, "recording", start_us, state="started", trigger=trigger)
         logger.info("media capture started participant={!r} path={}", participant_id, root)
+
+    def _ensure_target_root(self, parts: tuple[str, ...]) -> Path:
+        target_root = self._root
+        for part in parts:
+            target_root = target_root / part
+            try:
+                target_root.mkdir(mode=0o700)
+            except FileExistsError:
+                if target_root.is_symlink() or not target_root.is_dir():
+                    raise ValueError(
+                        f"capture target component is not a directory: {part!r}"
+                    ) from None
+        return target_root
 
     def _session(self, participant_id: str, pts_us: int) -> _ParticipantSession:
         del pts_us
@@ -656,6 +690,7 @@ class SessionRecorder:
                 "profile": self._frontend.name,
                 "session_mode": self._config.session_mode,
                 "trigger": session.trigger,
+                "target": session.target,
                 "metadata": session.metadata,
                 "start_us": session.start_us,
                 "end_us": pts_us,
@@ -843,13 +878,17 @@ class SessionRecorder:
         if cap <= 0:
             return
         active = {session.root for session in self._sessions.values()}
-        artifacts = [
-            path for path in self._root.iterdir()
-            if path.is_dir()
-            and not path.is_symlink()
-            and path not in active
-            and self._is_capture_artifact(path)
-        ]
+        artifacts = []
+        for directory, dirnames, filenames in os.walk(self._root, followlinks=False):
+            parent = Path(directory)
+            dirnames[:] = [
+                name for name in dirnames if not (parent / name).is_symlink()
+            ]
+            if _CAPTURE_MARKER_NAME not in filenames:
+                continue
+            path = parent
+            if path not in active and self._is_capture_artifact(path):
+                artifacts.append(path)
         sizes = {
             path: sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
             for path in artifacts
