@@ -608,8 +608,8 @@ live-frame selection from <code class="docutils literal notranslate"><span class
 <section id="resolve-and-run-the-application">
 <h2>Resolve and run the application<a class="headerlink" href="#resolve-and-run-the-application" title="Link to this heading">#</a></h2>
 <p>From <code class="docutils literal notranslate"><span class="pre">agent-samples/my-app/</span></code>, resolve both projects before starting the stack:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync
-uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>worker
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<span class="w"> </span>sync
+uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>worker
 </pre></div>
 </div>
 <p>The shared model launcher requires <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> by default. Configure it through
@@ -620,11 +620,11 @@ command below.</p>
 <p>The copied application reuses STT, VLM, and TTS services. Start those shared
 services first and wait for the launcher to report that all processes are
 ready:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers
 </pre></div>
 </div>
 <p>Then start the application from the same directory:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>my_app
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<span class="w"> </span>run<span class="w"> </span>my_app
 </pre></div>
 </div>
 <p>Open the authenticated web-client URL printed by DeviceIOHub, grant the media
@@ -644,7 +644,7 @@ entry.</p>
 <p>From the repository root, load the worker configuration before starting
 services. This check imports the renamed package, reads the application YAML,
 and resolves packaged files such as the system prompt:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/my-app/worker<span class="w"> </span>python<span class="w"> </span>-c<span class="w"> </span><span class="s1">'from pathlib import Path; from my_app_worker.config import load_config; load_config(Path("agent-samples/my-app/yaml/my_app_worker.yaml"))'</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/my-app/worker<span class="w"> </span>python<span class="w"> </span>-c<span class="w"> </span><span class="s1">'from pathlib import Path; from my_app_worker.config import load_config; load_config(Path("agent-samples/my-app/yaml/my_app_worker.yaml"))'</span>
 </pre></div>
 </div>
 <p>Exercise model wire behavior with <code class="docutils literal notranslate"><span class="pre">tests/_stub_openai.py</span></code>, which provides an

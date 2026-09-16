@@ -479,10 +479,11 @@ stream share <code class="docutils literal notranslate"><span class="pre">respon
 participant; <code class="docutils literal notranslate"><span class="pre">interrupt=True</span></code> flushes queued hub audio and replaces active
 speech. Without aggregation, producer identity is part of the stream key so
 independent agents cannot merge accidentally.</p>
-<p>Output sent to a stream closed by finalization, cancellation, or eviction is
-ignored, and the runtime logs one warning for that participant, producer, and
-<code class="docutils literal notranslate"><span class="pre">response_id</span></code>. Use a new identifier for a later response, or omit <code class="docutils literal notranslate"><span class="pre">response_id</span></code>
-when publishing a finite response in one <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code>.</p>
+<p>Output sent to a recently closed stream is ignored, and the runtime logs one
+warning for that participant, producer, and <code class="docutils literal notranslate"><span class="pre">response_id</span></code>. Streams close by
+finalization, cancellation, or eviction. Use a new identifier for a later
+response, or omit <code class="docutils literal notranslate"><span class="pre">response_id</span></code> when publishing a finite response in one
+<code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code>.</p>
 <p><code class="docutils literal notranslate"><span class="pre">text_topic</span></code> controls the completed-response data echo and defaults to
 <code class="docutils literal notranslate"><span class="pre">agent.response</span></code>. Set it to an empty string when the application owns its own
 caption channel. The echo describes intended completed text, not client playback
