@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Opt-in server-side capture for the XR render demo. Each participant gets
-# a timestamped bundle with composited H.264/PCM .mkv video, retained raw
+# a timestamped bundle with composited H.264/AAC-LC .mp4 video, retained raw
 # media, and the exact inbound/outbound data timeline.
 hub_sub_addr: ipc:///tmp/xr_hub_pub
 hub_push_addr: ipc:///tmp/xr_hub_in

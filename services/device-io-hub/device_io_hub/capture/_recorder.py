@@ -20,10 +20,18 @@ from loguru import logger
 from xr_ai_hub import AudioChunk, DataMessage, FrameData
 
 from ._compositor import compose_caption
-from ._matroska import VideoPacket, mux_h264_pcm
+from ._mp4 import find_ffmpeg, mux_h264_aac
 from .config import CaptureConfig
 
 _MAX_SAFE_NAME = 96
+
+
+@dataclass(frozen=True, slots=True)
+class _VideoPacket:
+    offset: int
+    size: int
+    pts_us: int
+    key_frame: bool
 _MAX_DATA_FEED_TEXT = 1_024
 _CAPTURE_MARKER_NAME = ".xr-ai-media-capture"
 _CAPTURE_MARKER_CONTENT = "xr-ai media capture session v1\n"
@@ -185,7 +193,7 @@ class _H264TrackWriter:
         self._last_pts_us = 0
         self._segment_index = 0
         self._active: dict | None = None
-        self._packets: list[VideoPacket] = []
+        self._packets: list[_VideoPacket] = []
         self._submitted_pts: deque[int] = deque()
         self.segments: list[dict] = []
 
@@ -264,7 +272,7 @@ class _H264TrackWriter:
         if not self._submitted_pts:
             raise ValueError("NVENC emitted more packets than submitted frames")
         self._packets.append(
-            VideoPacket(
+            _VideoPacket(
                 offset=offset,
                 size=len(payload),
                 pts_us=self._submitted_pts.popleft(),
@@ -327,6 +335,7 @@ class SessionRecorder:
         except (ImportError, RuntimeError, OSError) as exc:
             raise RuntimeError(f"PyNvVideoCodec is required for media capture: {exc}") from exc
         self._nvc = nvc
+        self._ffmpeg_path = find_ffmpeg()
         self._config = config
         self._root = Path(config.out_dir)
         self._root.mkdir(parents=True, exist_ok=True)
@@ -550,23 +559,12 @@ class SessionRecorder:
 
         raw_path = session.root / "video" / "session.264"
         pending_path = raw_path.with_suffix(".264.pending")
-        packets: list[VideoPacket] = []
         try:
             with pending_path.open("wb") as output:
                 for _, segment in sources:
                     source_path = session.root / segment["path"]
-                    offset = output.tell()
                     with source_path.open("rb") as source:
                         shutil.copyfileobj(source, output)
-                    packets.extend(
-                        VideoPacket(
-                            offset=offset + packet.offset,
-                            size=packet.size,
-                            pts_us=packet.pts_us,
-                            key_frame=packet.key_frame,
-                        )
-                        for packet in segment["_packets"]
-                    )
             pending_path.replace(raw_path)
         except Exception:
             pending_path.unlink(missing_ok=True)
@@ -575,7 +573,6 @@ class SessionRecorder:
         for _, segment in sources:
             (session.root / segment["path"]).unlink(missing_ok=True)
 
-        packets.sort(key=lambda packet: packet.pts_us)
         dimensions = sorted({
             (segment["width"], segment["height"])
             for _, segment in sources
@@ -586,7 +583,7 @@ class SessionRecorder:
         )
         track_ids = list(dict.fromkeys(track_id for track_id, _ in sources))
         combined = {
-            "path": "video/session.mkv",
+            "path": "video/session.mp4",
             "start_us": min(segment["start_us"] for _, segment in sources),
             "end_us": max(segment["end_us"] for _, segment in sources),
             "num_frames": sum(segment["num_frames"] for _, segment in sources),
@@ -615,23 +612,22 @@ class SessionRecorder:
             / 1_000_000
         )
         muxed_path = session.root / combined["path"]
-        pending_muxed_path = muxed_path.with_suffix(".mkv.pending")
+        pending_muxed_path = muxed_path.with_suffix(".mp4.pending")
         try:
-            mux_h264_pcm(
+            mux_h264_aac(
+                ffmpeg_path=self._ffmpeg_path,
                 output_path=pending_muxed_path,
                 h264_path=raw_path,
-                packets=packets,
                 wave_path=wave_path,
                 audio_start_frame=start_frame,
                 audio_end_frame=end_frame,
-                width=combined["width"],
-                height=combined["height"],
                 fps=combined["fps"],
             )
             pending_muxed_path.replace(muxed_path)
         except Exception as exc:
             pending_muxed_path.unlink(missing_ok=True)
             logger.warning("media capture A/V mux failed path={}: {}", raw_path, exc)
+            combined["path"] = combined["raw_path"]
             combined["size_bytes"] = combined["raw_size_bytes"]
             combined["audio_embedded"] = False
         else:

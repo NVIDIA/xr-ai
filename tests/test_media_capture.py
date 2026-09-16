@@ -7,6 +7,7 @@ import asyncio
 import json
 import os
 import stat
+import subprocess
 import sys
 import threading
 import types
@@ -16,6 +17,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from device_io_hub.capture import _mp4 as mp4_module
+from device_io_hub.capture import _recorder as recorder_module
 from device_io_hub.capture._compositor import compose_caption
 from device_io_hub.capture._recorder import (
     _CAPTURE_MARKER_CONTENT,
@@ -40,6 +43,23 @@ from xr_ai_hub import (
     PixelFormat,
 )
 from xr_ai_hub._capture import CAPTURE_STT_TOPIC, CAPTURE_TTS_TOPIC
+
+
+def _minimal_fast_start_mp4() -> bytes:
+    def box(kind: bytes) -> bytes:
+        return (8).to_bytes(4, "big") + kind
+
+    return box(b"ftyp") + box(b"moov") + box(b"mdat")
+
+
+@pytest.fixture(autouse=True)
+def _stub_capture_mp4_finalizer(monkeypatch) -> None:
+    monkeypatch.setattr(recorder_module, "find_ffmpeg", lambda: "/test/ffmpeg")
+
+    def finalize(**kwargs) -> None:
+        kwargs["output_path"].write_bytes(_minimal_fast_start_mp4())
+
+    monkeypatch.setattr(recorder_module, "mux_h264_aac", finalize)
 
 
 def _frame(
@@ -222,6 +242,73 @@ def test_capture_config_resolves_output_and_caption_duration(tmp_path: Path) -> 
     assert config.overlay_seconds == 8
 
 
+def test_mp4_finalizer_encodes_aac_stereo_and_normalizes_timestamps(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    h264_path = tmp_path / "session.264"
+    wave_path = tmp_path / "conversation.wav"
+    output_path = tmp_path / "session.mp4.pending"
+    h264_path.write_bytes(b"annex-b")
+    with wave.open(str(wave_path), "wb") as stream:
+        stream.setnchannels(2)
+        stream.setsampwidth(2)
+        stream.setframerate(48_000)
+        stream.writeframes(b"\0" * 4_800)
+
+    commands: list[list[str]] = []
+
+    def run(command, **_kwargs):
+        commands.append(command)
+        Path(command[-1]).write_bytes(_minimal_fast_start_mp4())
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(mp4_module.subprocess, "run", run)
+
+    mp4_module.mux_h264_aac(
+        ffmpeg_path="/usr/bin/ffmpeg",
+        output_path=output_path,
+        h264_path=h264_path,
+        wave_path=wave_path,
+        audio_start_frame=480,
+        audio_end_frame=2_400,
+        fps=30,
+    )
+
+    command = commands[0]
+    assert command[command.index("-r") + 1] == "30"
+    assert command[command.index("-c:v") + 1] == "copy"
+    assert command[command.index("-c:a") + 1] == "aac"
+    assert command[command.index("-profile:a") + 1] == "aac_low"
+    assert command[command.index("-ar:a") + 1] == "48000"
+    assert command[command.index("-ac:a") + 1] == "2"
+    assert command[command.index("-movflags") + 1] == "+faststart"
+    audio_filter = command[command.index("-filter_complex") + 1]
+    assert "atrim=start_sample=480:end_sample=2400" in audio_filter
+    assert "channel_layouts=stereo" in audio_filter
+    assert "asetpts=N/SR/TB" in audio_filter
+    assert output_path.read_bytes().index(b"moov") < output_path.read_bytes().index(b"mdat")
+
+
+def test_capture_requires_ffmpeg_on_path(monkeypatch) -> None:
+    monkeypatch.setattr(mp4_module.shutil, "which", lambda _name: None)
+
+    with pytest.raises(RuntimeError, match="FFmpeg is required"):
+        mp4_module.find_ffmpeg()
+
+
+def test_capture_requires_native_ffmpeg_aac_encoder(monkeypatch) -> None:
+    monkeypatch.setattr(mp4_module.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(
+        mp4_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess([], 0, " V..... h264", ""),
+    )
+
+    with pytest.raises(RuntimeError, match="native AAC encoder"):
+        mp4_module.find_ffmpeg()
+
+
 def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
     tmp_path: Path,
     monkeypatch,
@@ -299,12 +386,11 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
     assert manifest["audio"]["channels"] == {"left": "device", "right": "agent"}
     assert manifest["video_tracks"]["camera"][0]["num_frames"] == 2
     segment = manifest["video_tracks"]["camera"][0]
-    assert segment["path"].endswith(".mkv")
+    assert segment["path"].endswith(".mp4")
     assert segment["audio_embedded"] is True
     muxed = (session / segment["path"]).read_bytes()
-    assert muxed.startswith(b"\x1a\x45\xdf\xa3")
-    assert b"V_MPEG4/ISO/AVC" in muxed
-    assert b"A_PCM/INT/LIT" in muxed
+    assert muxed[4:8] == b"ftyp"
+    assert muxed.index(b"moov") < muxed.index(b"mdat")
     assert (session / segment["raw_path"]).read_bytes().startswith(b"\x00\x00\x00\x01")
     assert (session / "audio" / "device.f32le").read_bytes() == _audio("device").data
     assert (session / "audio" / "agent.f32le").read_bytes() == _audio("agent").data
@@ -318,6 +404,47 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
     )
     assert encoded_inputs
     assert np.any(encoded_inputs[0][_frame().height:] == 235)
+
+
+def test_session_manifest_falls_back_to_raw_video_when_mp4_finalization_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    class FakeEncoder:
+        def Encode(self, _frame, _params):
+            return [{"data": b"\x00\x00\x00\x01\x65frame", "picture_type": 3}]
+
+        def EndEncode(self):
+            return []
+
+    monkeypatch.setitem(
+        sys.modules,
+        "PyNvVideoCodec",
+        types.SimpleNamespace(
+            CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
+            NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
+        ),
+    )
+
+    def fail(**_kwargs) -> None:
+        raise RuntimeError("finalization failed")
+
+    monkeypatch.setattr(recorder_module, "mux_h264_aac", fail)
+    recorder = SessionRecorder(CaptureConfig(
+        out_dir=str(tmp_path),
+        sample_fps=30,
+        max_total_bytes=0,
+    ))
+    recorder.record_video(_frame())
+    recorder.end_session("alice", 1_100_000)
+
+    session = next(path for path in tmp_path.iterdir() if path.is_dir())
+    manifest = json.loads((session / "manifest.json").read_text())
+    segment = manifest["video_tracks"]["camera"][0]
+    assert segment["path"] == segment["raw_path"] == "video/session.264"
+    assert segment["audio_embedded"] is False
+    assert (session / segment["path"]).is_file()
+    assert not list((session / "video").glob("*.mp4"))
 
 
 def test_safe_names_do_not_alias_distinct_track_ids() -> None:
@@ -506,8 +633,8 @@ def test_session_bundle_merges_resolution_and_track_segments_into_one_video(
         {"width": 224, "height": 112},
         {"width": 288, "height": 144},
     ]
-    assert [path.name for path in (session / "video").glob("*.mkv")] == [
-        "session.mkv"
+    assert [path.name for path in (session / "video").glob("*.mp4")] == [
+        "session.mp4"
     ]
     assert [path.name for path in (session / "video").glob("*.264")] == [
         "session.264"

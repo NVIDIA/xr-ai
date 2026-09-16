@@ -11,6 +11,7 @@ hosts without PyNvVideoCodec or an NVENC-capable GPU.
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -237,6 +238,8 @@ async def test_resolution_change_surfaces_error():
 
 async def test_media_capture_composites_caption_with_real_nvenc():
     """Capture must join NVENC resolution chunks into one playable session."""
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("FFmpeg is required for capture MP4 finalization")
     width, height = 640, 480
     with tempfile.TemporaryDirectory() as out_dir:
         _make_recorder(out_dir)  # pre-flight NVENC and skip only for unavailable hardware
@@ -289,7 +292,7 @@ async def test_media_capture_composites_caption_with_real_nvenc():
         manifest = json.loads((session / "manifest.json").read_text())
         segment = manifest["video_tracks"]["camera"][0]
         assert len(manifest["video_tracks"]["camera"]) == 1
-        assert len(list((session / "video").glob("*.mkv"))) == 1
+        assert len(list((session / "video").glob("*.mp4"))) == 1
         assert segment["width"] > width
         assert segment["height"] > height
         assert len(segment["encoded_dimensions"]) == 2
