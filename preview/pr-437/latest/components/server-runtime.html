@@ -649,7 +649,9 @@ timestamp, track, pixel format, and source/encoded dimensions.
 and timestamps. <code class="docutils literal notranslate"><span class="pre">transcript.jsonl</span></code> contains final STT and spoken TTS text, and
 <code class="docutils literal notranslate"><span class="pre">observations.jsonl</span></code> accepts derived records linked to an exact frame
 timestamp. <code class="docutils literal notranslate"><span class="pre">events.jsonl</span></code> remains the complete directional data timeline, and
-<code class="docutils literal notranslate"><span class="pre">manifest.json</span></code> is the machine-readable entry point.</p>
+<code class="docutils literal notranslate"><span class="pre">manifest.json</span></code> is the machine-readable entry point. Its <code class="docutils literal notranslate"><span class="pre">complete</span></code> and
+<code class="docutils literal notranslate"><span class="pre">incomplete_reason</span></code> fields distinguish a normally drained session from a
+bounded recovery when the return-traffic departure marker is lost.</p>
 <p>In the demo profile, final STT and the text actually sent to TTS appear as the
 large primary caption below the sensor image. Each TTS sentence travels through
 the paced media queue, so its caption is timestamped from the first

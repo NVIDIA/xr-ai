@@ -235,7 +235,9 @@ timestamp, track, pixel format, and source/encoded dimensions.
 and timestamps. `transcript.jsonl` contains final STT and spoken TTS text, and
 `observations.jsonl` accepts derived records linked to an exact frame
 timestamp. `events.jsonl` remains the complete directional data timeline, and
-`manifest.json` is the machine-readable entry point.
+`manifest.json` is the machine-readable entry point. Its `complete` and
+`incomplete_reason` fields distinguish a normally drained session from a
+bounded recovery when the return-traffic departure marker is lost.
 
 In the demo profile, final STT and the text actually sent to TTS appear as the
 large primary caption below the sensor image. Each TTS sentence travels through
