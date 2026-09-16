@@ -12,18 +12,42 @@ The launcher waits for readiness, then exits with the model servers running.
 
 | Role | Model | Endpoint |
 |---|---|---|
-| STT | Parakeet TDT 0.6B v3 | Riva gRPC `localhost:50051`; Spark HTTP `localhost:8103` |
-| TTS | Magpie TTS Multilingual | Riva gRPC `localhost:50052` |
+| STT | Parakeet TDT 0.6B v3 | HTTP `localhost:8103` |
+| TTS | Magpie TTS Multilingual | HTTP `localhost:8105` |
 | LLM and agent LLM | Nemotron 3 Nano Omni 30B A3B Reasoning | HTTP `localhost:8108` |
 | VLM | Cosmos3 Nano Reasoner | HTTP `localhost:8100` |
 | Embedding | Llama Nemotron Embed 1B v2 | HTTP `localhost:8109` |
 
-The embedding endpoint includes a sample-local adapter. It translates XR AI's
-`query: ` and `passage: ` prefixes to NIM's input types, preserving input order
-and avoiding duplicated prefixes. Unprefixed strings default to passages;
-callers can also set `input_type`. Native embedding NIM access is on port 8119.
-Speech NIM HTTP ports 9010 and 9011 are used for readiness; speech clients use
-the gRPC ports. This sample does not provide a Pocket-compatible TTS endpoint.
+All client endpoints preserve the original `model-servers` HTTP contracts,
+including `/health`, the `llm`, `vlm`, and `embed` aliases, multipart WAV
+transcription, and Pocket-compatible speech responses. The adapters live in
+this sample and use the existing typed `xr_ai_models` clients for NIM inference.
+Consuming workers do not need the Riva extra.
+
+The embedding adapter translates XR AI's `query: ` and `passage: ` prefixes
+to NIM's input types, preserving input order and avoiding duplicated prefixes.
+Unprefixed strings default to passages; callers can also set `input_type`.
+The chat adapters translate model aliases and normalize Nemotron reasoning.
+Streaming chat returns visible text, matching the shared SDK; use non-streaming
+chat for function calls and reasoning.
+
+Magpie returns mono 16-bit audio at 44,100 Hz. Its HTTP endpoint supports WAV
+synthesis and the existing Pocket client's PCM streaming protocol, including
+sample-rate headers. The shared Riva client collects each synthesis request
+before returning audio, so time to first audio can be longer than Pocket TTS.
+The voice pipeline can still submit sentences separately.
+
+Native NIM endpoints are separate from the client ports:
+
+| Backend | Native ports |
+|---|---|
+| Parakeet, except Spark | HTTP readiness `9010`; Riva gRPC `50051` |
+| Magpie | HTTP readiness `9011`; Riva gRPC `50052` |
+| Nemotron Omni | HTTP `8118` |
+| Cosmos | HTTP `8110` |
+| Embeddings | HTTP `8119` |
+
+Spark retains the original HTTP STT service directly on port `8103`.
 
 ## Run
 
@@ -73,13 +97,13 @@ To stop this stack before editing its configuration or switching back:
 uv run model_servers_nim --stop
 ```
 
-Cleanup uses the ports declared in this sample's YAML, including the embedding
-adapter and the Spark fallback. Run it before changing ports. It does not
+Cleanup uses the ports declared in this sample's YAML, including all compatibility
+adapters and the Spark fallback. Run it before changing ports. It does not
 remove downloaded images or model caches. Do not use it while another stack
 owns those same ports.
 
-Repeated launches reuse a healthy embedding adapter only after verifying its
-managed process markers and matching backend URL and model. An unrelated,
+Repeated launches reuse a healthy adapter only after verifying its managed
+process markers and matching configuration, including backend URL and model. An unrelated,
 unhealthy, or differently configured listener causes startup to fail without
 stopping that listener. Stop this stack before changing the adapter configuration.
 The stop command terminates the marked adapter listener; wrappers from repeated
@@ -87,32 +111,33 @@ launches then exit when that listener closes.
 
 ## Use with an agent sample
 
-Export the adapters, model IDs, and endpoints for the selected hardware:
+Start an existing agent sample with its checked-in `yaml/models.json` unchanged.
+For example, after this stack reports ready:
+
+```bash
+uv run --project ../simple-vlm-example simple_vlm_example
+```
+
+The default ports, model aliases, and protocols match `model-servers`. There is
+no client configuration export or additional worker dependency to install.
+The `pocket_tts` preset now reaches Magpie through the compatible HTTP endpoint.
+This compatibility applies to the original default local profiles; custom
+remote hosts, alternate models, or custom ports still need matching settings.
+
+An optional export remains available for custom deployments:
 
 ```bash
 uv run model_servers_nim --export-models yaml/models.reused.json
 ```
 
 The export requires no credentials or running models. Add `--gpu-profile NAME`
-to export for a different machine. Copy the needed entries from the export into
-the consuming sample's `yaml/models.json`, preserving its other model roles.
-The exported entries use `ownership: reused` and do not give the consumer
-responsibility for starting these servers or holding NGC credentials. For
-example, `simple-vlm-example` needs `stt`, `tts`, and `vlm`.
+to select a different hardware profile. Exported entries use `ownership: reused`
+and omit server credentials. Only consumers with custom endpoint requirements
+need entries copied from this export.
 
-Riva clients require the existing `xr-ai-models[riva]` extra **in the consuming
-worker's environment**. For a local simple-VLM trial, synchronize the worker
-and add its optional Riva client before starting that sample:
-
-```bash
-uv sync --project ../simple-vlm-example/worker
-uv pip install --python ../simple-vlm-example/worker/.venv/bin/python nvidia-riva-client
-uv run --project ../simple-vlm-example simple_vlm_example
-```
-
-A later `uv sync` can remove the manually installed extra. For a maintained
-consumer, declare `xr-ai-models[riva]` in its worker dependencies. The new sample
-does not edit existing workers, SDK presets, or agent configurations.
+When upgrading an already running version, stop it before updating the checkout,
+then start the updated stack. Native chat ports and adapter processes change;
+restarting a consuming worker alone does not replace the running servers.
 
 ## Configure
 
@@ -179,6 +204,9 @@ Container and profile references:
 
 The CPU checks load every profile with the real SDK, construct Docker commands,
 check startup, export, and stop behavior, and exercise prefix-aware embedding calls.
+Compatibility tests load the unchanged simple-VLM and original model-server JSON
+files and exercise readiness, speech, image requests, visible-text streaming,
+function calls, reasoning, and embeddings through real SDK HTTP serialization.
 Linux lifecycle tests launch actual adapters on temporary ports with a local
 health stub, without Docker or GPUs. They verify ownership, repeated launch,
 shutdown, restart, and rejection of unhealthy or conflicting listeners:
@@ -190,11 +218,13 @@ uv run --extra test python -m pytest tests -q
 After startup, check every endpoint through the same SDK that agents use:
 
 ```bash
-uv run model_servers_nim --export-models yaml/models.reused.json
-uv run --extra test python smoke_test.py --models yaml/models.reused.json
+uv run --extra test python smoke_test.py
+uv run --extra test python smoke_test.py --models ../simple-vlm-example/yaml/models.json
 ```
 
-This exercises a Magpie-to-Parakeet speech round trip, both LLM roles, a real
-image request, and query/passage embeddings. Repeat after a cold start and a
+The default smoke test loads the original `model-servers` configuration unchanged.
+It exercises a Magpie-to-Parakeet speech round trip, PCM speech responses, both
+LLM roles, image inference and streaming, and query and passage embeddings.
+A smaller consumer profile tests only its configured roles. Repeat after a cold start and a
 warm restart on each target machine; monitor GPU memory under concurrent agent
 traffic as well as during startup.
