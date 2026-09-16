@@ -610,13 +610,41 @@ for agent audio and data. It does not expose return traffic to agent APIs.</p>
   <span class="o">--</span><span class="n">config</span> <span class="n">services</span><span class="o">/</span><span class="n">device</span><span class="o">-</span><span class="n">io</span><span class="o">-</span><span class="n">hub</span><span class="o">/</span><span class="n">media_capture</span><span class="o">.</span><span class="n">yaml</span>
 </pre></div>
 </div>
-<p>One connection produces one participant-scoped capture bundle: a fast-start
-MP4 with H.264 video and timestamp-aligned AAC-LC audio at 48 kHz stereo
-(device left, agent right), the source H.264 and WAV tracks, exact raw float32
-audio chunks, the complete directional data timeline, and a manifest.
-Final STT and the text actually sent to TTS appear as the large primary caption
-below the sensor image. Each TTS sentence travels through the paced media queue,
-so its caption is timestamped from the first corresponding audio chunk rather
+<p>Capture is split into a shared timestamped session writer and a video
+projection. The writer owns participant/session boundaries, NVENC encoding,
+raw float32 audio, the aligned stereo WAV, transcripts, observations, event
+records, retention, and the manifest. The configured <code class="docutils literal notranslate"><span class="pre">profile</span></code> selects one of
+two private projections without duplicating that infrastructure:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">demo</span></code> adds the caption and data panels and produces a fast-start MP4 with
+H.264 video and 48 kHz stereo AAC-LC audio.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">raw</span></code> preserves the camera pixels in H.264 and leaves video and audio as
+separate indexed artifacts for later workflow or SOP processing. It does
+not require FFmpeg.</p></li>
+</ul>
+<p>The canonical <code class="docutils literal notranslate"><span class="pre">video/session.264</span></code> is always encoded from unmodified camera
+pixels. The demo projection performs a second bounded NVENC encode for its
+burned-in panels, uses that temporary stream for the MP4, and removes it after
+finalization. The retained raw stream is therefore suitable for later machine
+processing even when the same bundle also contains a presentation-ready demo.</p>
+<p><code class="docutils literal notranslate"><span class="pre">session_mode:</span> <span class="pre">participant</span></code> records from participant join to leave.
+<code class="docutils literal notranslate"><span class="pre">session_mode:</span> <span class="pre">explicit</span></code> creates bundles only between reserved agent start and
+stop messages. Those private messages are intentionally an internal adapter
+seam rather than a public agent tool API; a background capture agent can later
+wrap them and publish frame-linked observations without changing the storage
+engine.</p>
+<p>Every bundle uses one Unix-microsecond clock and records both absolute and
+session-relative timing. <code class="docutils literal notranslate"><span class="pre">video/frames.jsonl</span></code> indexes source sequence,
+timestamp, track, pixel format, and source/encoded dimensions.
+<code class="docutils literal notranslate"><span class="pre">audio/chunks.jsonl</span></code> indexes direction, sample format, byte range, duration,
+and timestamps. <code class="docutils literal notranslate"><span class="pre">transcript.jsonl</span></code> contains final STT and spoken TTS text, and
+<code class="docutils literal notranslate"><span class="pre">observations.jsonl</span></code> accepts derived records linked to an exact frame
+timestamp. <code class="docutils literal notranslate"><span class="pre">events.jsonl</span></code> remains the complete directional data timeline, and
+<code class="docutils literal notranslate"><span class="pre">manifest.json</span></code> is the machine-readable entry point.</p>
+<p>In the demo profile, final STT and the text actually sent to TTS appear as the
+large primary caption below the sensor image. Each TTS sentence travels through
+the paced media queue, so its caption is timestamped from the first
+corresponding audio chunk rather
 than from synthesis completion. Every UTF-8 data-channel message, inbound or
 outbound, scrolls through a smaller right-side panel with its direction and
 topic. Binary data is not rendered, but every data payload remains in
@@ -628,15 +656,17 @@ forwarded to the client data channel.</p>
 dedicated threads in the capture process. Recorder overload therefore drops
 capture frames without delaying the hub’s publish path. PyNvVideoCodec receives
 contiguous NV12 CPU input and emits H.264 Annex B chunks with repeated parameter
-sets and no B-frames. At session finalization, the chunks are joined in
-timestamp order. FFmpeg preserves that H.264 stream, converts the aligned PCM
-mix to AAC-LC with an explicit 48 kHz stereo layout, regenerates monotonic
-constant-rate video and audio timestamps, and writes one <code class="docutils literal notranslate"><span class="pre">.mp4</span></code> with fast-start
-metadata. Resolution or LiveKit track changes therefore do not create
-additional playable outputs. This does not affect the live path.</p>
-<p>Capture requires an <code class="docutils literal notranslate"><span class="pre">ffmpeg</span></code> executable on <code class="docutils literal notranslate"><span class="pre">PATH</span></code> with the native AAC encoder.
-The process validates that requirement at startup so a session cannot silently
-fall back to an MP4-incompatible PCM or MP3 track.</p>
+sets and no B-frames. At session finalization, each stream’s chunks are joined
+in timestamp order. For the demo projection, FFmpeg preserves the temporary
+composed H.264 stream, converts the aligned PCM mix to AAC-LC with an explicit
+48 kHz stereo layout, regenerates monotonic constant-rate video and audio
+timestamps, and writes one <code class="docutils literal notranslate"><span class="pre">.mp4</span></code> with fast-start metadata. Resolution or
+LiveKit track changes therefore do not create additional playable outputs.
+This does not affect the live path.</p>
+<p>The demo profile requires an <code class="docutils literal notranslate"><span class="pre">ffmpeg</span></code> executable on <code class="docutils literal notranslate"><span class="pre">PATH</span></code> with the native AAC
+encoder. It validates that requirement at startup so a session cannot silently
+fall back to an MP4-incompatible PCM or MP3 track. The raw profile has no MP4
+projection and therefore no FFmpeg requirement.</p>
 </section>
 <section id="per-participant-return-path">
 <h2>Per-participant return path<a class="headerlink" href="#per-participant-return-path" title="Link to this heading">#</a></h2>

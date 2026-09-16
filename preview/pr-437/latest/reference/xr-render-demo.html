@@ -651,10 +651,15 @@ retained beside the <code class="docutils literal notranslate"><span class="pre"
 <li><p><code class="docutils literal notranslate"><span class="pre">audio/conversation.wav</span></code>, with device input on the left and agent output on
 the right, aligned by hub timestamps. Exact float32 chunks remain in
 <code class="docutils literal notranslate"><span class="pre">device.f32le</span></code> and <code class="docutils literal notranslate"><span class="pre">agent.f32le</span></code>, indexed by <code class="docutils literal notranslate"><span class="pre">chunks.jsonl</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">video/frames.jsonl</span></code>, indexing every accepted frame by absolute and relative
+timestamp, source sequence, track, pixel format, and dimensions.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">transcript.jsonl</span></code>, containing final user STT and spoken agent TTS text on
+the same clock, plus <code class="docutils literal notranslate"><span class="pre">observations.jsonl</span></code> for derived frame-linked metadata.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">events.jsonl</span></code>, retaining inbound and outbound data with direction, topic,
-timestamp, and either UTF-8 text or base64 for binary payloads.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">manifest.json</span></code>, recording timing, source track metadata, audio layout, and capture
-frame drops.</p></li>
+absolute and relative timestamps, and either UTF-8 text or base64 for binary
+payloads.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">manifest.json</span></code>, recording the capture profile, session policy, shared clock,
+file roles, counts, source track metadata, audio layout, and capture drops.</p></li>
 </ul>
 <p>NVENC work runs behind a bounded queue in the capture process. When capture is
 slower than the live stream, it replaces old pending frame requests and records
@@ -664,6 +669,11 @@ Finalization additionally requires <code class="docutils literal notranslate"><s
 stream, encodes the aligned PCM mix as AAC-LC, normalizes timestamps, and moves
 MP4 metadata ahead of media data for fast-start playback. Omit <code class="docutils literal notranslate"><span class="pre">--capture</span></code> when
 recording is prohibited, and treat the output as sensitive device data.</p>
+<p>The media-capture service itself also supports a <code class="docutils literal notranslate"><span class="pre">raw</span></code> projection and explicit
+agent-controlled session boundaries. Those modes reuse the same audio,
+transcript, observation, timing, manifest, retention, and encoder
+infrastructure; the XR render demo intentionally selects <code class="docutils literal notranslate"><span class="pre">demo</span></code> plus
+participant-lifetime recording.</p>
 </section>
 <section id="the-llm-server">
 <h2>The LLM server<a class="headerlink" href="#the-llm-server" title="Link to this heading">#</a></h2>

@@ -497,8 +497,8 @@ services or externally hosted APIs.</p>
 <td><p>Agent state, model calls, or tools</p></td>
 </tr>
 <tr class="row-odd"><td><p>Session capture</p></td>
-<td><p>Passive recording of normalized hub media and routed return traffic</p></td>
-<td><p>Transport sessions, agent behavior, or live-path flow control</p></td>
+<td><p>Timestamped raw media/events and pluggable demo or workflow projections</p></td>
+<td><p>Transport sessions, agent policy, model inference, or live-path flow control</p></td>
 </tr>
 <tr class="row-even"><td><p>Agent SDK</p></td>
 <td><p>Lightweight hub IPC, typed runtime events, model protocols, voice composition, and tool primitives</p></td>
@@ -545,8 +545,10 @@ the target and the connector delivers the response only to that participant.</p>
 </ol>
 <p>An optional capture process can observe both sides after hub normalization. It
 uses the same on-demand video path as other passive processors and never joins
-the transport session, so recording policy and encoder load remain outside the
-hub’s latency-sensitive path.</p>
+the transport session, so encoder load remains outside the hub’s
+latency-sensitive path. Its shared session writer can follow participant
+lifetime or accept private start/stop commands from an agent adapter; demo and
+raw workflow projections reuse the same timestamped media and metadata core.</p>
 <p>The resulting portable contract is:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>participant -&gt; hub -&gt; subscribed worker -&gt; hub -&gt; same participant
 </pre></div>
@@ -618,10 +620,12 @@ input out to several consumers, but it never uses the return path to route
 one participant’s data to another.</p></li>
 <li><p><strong>Transport details stop at the hub.</strong> Workers use <code class="docutils literal notranslate"><span class="pre">xr_ai_hub</span></code>; transport
 SDKs and server packages do not enter agent APIs.</p></li>
-<li><p><strong>Capture is passive and transport-independent.</strong> Session capture consumes
-normalized hub IPC and routed return traffic in a separate process. Bounded
-capture queues may drop recording frames but must not apply backpressure to
-the hub, clients, or agents.</p></li>
+<li><p><strong>Capture is transport-independent and policy-separated.</strong> Session capture
+consumes normalized hub IPC and routed return traffic in a separate process.
+Participant-lifetime or agent-controlled boundaries select what the shared
+writer retains; demo rendering and raw workflow packets are projections over
+that writer. Bounded capture queues may drop recording frames but must not
+apply backpressure to the hub, clients, or agents.</p></li>
 <li><p><strong>Raw media stays on the media path.</strong> Video pixels remain in shared memory
 until explicitly requested, and raw media is not embedded in runtime events
 or tool results.</p></li>
