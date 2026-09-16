@@ -15,6 +15,12 @@ and command to `device_io_hub`. Rename `xr_media_hub.yaml` to
 
 ## Operator-visible runtime changes
 
+- The xr-render-demo worker now supports `video_history_enabled`. An omitted
+  key preserves recorded-video perception; explicit `false` disables it.
+  The checked-in worker YAML sets it to `false` because the sample hub disables
+  recording. To enable history, set hub `video_recording.enabled: true`, point
+  video-memory `recordings_dir` at the hub recordings directory, and set worker
+  `video_history_enabled: true`.
 - DeviceIOHub now waits for the hub to acknowledge shared-memory attachment
   before connecting the LiveKit room or creating its ready file. Missing
   segments trigger bounded recreation; incompatible layouts and acknowledgement

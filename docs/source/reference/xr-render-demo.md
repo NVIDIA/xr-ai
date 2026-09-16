@@ -168,6 +168,13 @@ grouped into latest tools, whose windows end at the newest recording, and
 historical tools, whose frame or video window begins at one absolute `start_us`.
 Recorded-frame timestamps are estimates interpolated from chunk metadata.
 
+Recorded selection requires `video_recording.enabled: true` in the hub YAML,
+`recordings_dir` pointing at the hub recordings directory in the video-memory
+YAML, and `video_history_enabled: true` in the worker YAML. An omitted worker
+key defaults to enabled for existing deployments; the checked-in sample
+explicitly disables it. With history disabled, perception uses current frames
+only.
+
 There is a deliberate startup ordering constraint: `VoiceAgent` readiness
 blocks on the VLM's `/health` endpoint, which
 returns 200 only after weights are fully loaded. This ensures model memory has
@@ -269,7 +276,8 @@ scene diff decides whether the verification pass runs.
 
 At worker startup, `app.py` composes the five subagent tools from the scene,
 XR-tracking, spatial-math, vision, video-memory, and text-memory `Tool`
-instances provided by `xr_ai_tools`. Lifecycle tools (`start_xr`,
+instances provided by `xr_ai_tools`. Video-memory tools are wired only when
+worker `video_history_enabled` is enabled. Lifecycle tools (`start_xr`,
 `get_health`) remain worker-managed and are not exposed to the supervisor.
 
 Final messages are also persisted through native
