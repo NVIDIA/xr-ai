@@ -129,8 +129,8 @@ live-frame selection from `xr_ai_tools.current_frame` and image inference from
 From `agent-samples/my-app/`, resolve both projects before starting the stack:
 
 ```bash
-uv sync
-uv sync --project worker
+uv --config-file ../../uv.toml sync
+uv --config-file ../../uv.toml sync --project worker
 ```
 
 The shared model launcher requires `HF_TOKEN` by default. Configure it through
@@ -144,13 +144,13 @@ services first and wait for the launcher to report that all processes are
 ready:
 
 ```bash
-uv run --project ../model-servers model_servers
+uv --config-file ../../uv.toml run --project ../model-servers model_servers
 ```
 
 Then start the application from the same directory:
 
 ```bash
-uv run my_app
+uv --config-file ../../uv.toml run my_app
 ```
 
 Open the authenticated web-client URL printed by DeviceIOHub, grant the media
@@ -173,7 +173,7 @@ services. This check imports the renamed package, reads the application YAML,
 and resolves packaged files such as the system prompt:
 
 ```bash
-uv run --project agent-samples/my-app/worker python -c 'from pathlib import Path; from my_app_worker.config import load_config; load_config(Path("agent-samples/my-app/yaml/my_app_worker.yaml"))'
+uv --config-file uv.toml run --project agent-samples/my-app/worker python -c 'from pathlib import Path; from my_app_worker.config import load_config; load_config(Path("agent-samples/my-app/yaml/my_app_worker.yaml"))'
 ```
 
 Exercise model wire behavior with `tests/_stub_openai.py`, which provides an
