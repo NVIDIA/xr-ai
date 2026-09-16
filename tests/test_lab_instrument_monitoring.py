@@ -260,8 +260,6 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     assert models["models"]["llm"]["endpoint"]["base_url"].endswith(":8108")
     assert models["models"]["vlm"]["adapter"]["preset"] == ("cosmos3_nano_reasoner")
     assert models["models"]["vlm"]["endpoint"]["base_url"].endswith(":8100")
-    assert models["models"]["llm"]["deployment"]["service"] == "omni"
-    assert models["models"]["vlm"]["deployment"]["service"] == "vlm"
     assert config.voice_gate_yaml == _SAMPLE / "yaml" / "voice_gate.yaml"
     assert yaml.safe_load(config.voice_gate_yaml.read_text()) == {
         "magic_phrases": ["agent", "hey agent"],
@@ -341,7 +339,7 @@ def test_config_rejects_unknown_capture_marker_scans_string(
         load_config(config_path)
 
 
-def test_launcher_reuses_cosmos_and_other_model_services(tmp_path: Path) -> None:
+def test_launcher_connects_to_models_without_model_process_entries(tmp_path: Path) -> None:
     runtime_dir = tmp_path / "runtime"
     runtime_dir.mkdir()
     assert _parser().parse_args([]).expose_web_events is False
@@ -358,29 +356,12 @@ def test_launcher_reuses_cosmos_and_other_model_services(tmp_path: Path) -> None
     assert config.voice_gate_yaml == _SAMPLE / "yaml" / "voice_gate.yaml"
     assert config.artifacts_dir == _SAMPLE / "artifacts"
     assert config.web_events_host == "0.0.0.0"
-    assert models["models"]["llm"]["deployment"]["service"] == "omni"
     assert models["models"]["vlm"]["adapter"]["preset"] == (
         "cosmos3_nano_reasoner"
     )
     assert models["models"]["vlm"]["endpoint"]["base_url"].endswith(":8100")
-    assert models["models"]["vlm"]["deployment"]["service"] == "vlm"
-    assert all(
-        model["deployment"]["ownership"] == "reused"
-        for model in models["models"].values()
-    )
-    assert [process.name for process in processes] == [
-        "hub",
-        "stt",
-        "omni",
-        "vlm",
-        "tts",
-        "worker",
-    ]
-    assert all(
-        process.launch_mode == "reuse"
-        for process in processes
-        if process.name in {"stt", "omni", "vlm", "tts"}
-    )
+    assert all("deployment" not in model for model in models["models"].values())
+    assert [process.name for process in processes] == ["hub", "worker"]
     assert processes[-1].config == worker_config
 
 

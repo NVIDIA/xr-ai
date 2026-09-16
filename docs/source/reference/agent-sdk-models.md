@@ -31,7 +31,7 @@ async with make_llm(config, "agent_llm") as llm:
 ```
 
 (profile-contract)=
-A profile names logical roles and separates three concerns:
+A client profile names logical roles and declares adapters and endpoints:
 
 ```json
 {
@@ -43,8 +43,7 @@ A profile names logical roles and separates three concerns:
         "base_url": "http://localhost:8108",
         "timeout": 60.0,
         "readiness": "health"
-      },
-      "deployment": {"ownership": "reused", "service": "omni"}
+      }
     }
   }
 }
@@ -54,15 +53,18 @@ A profile names logical roles and separates three concerns:
   extras, and reasoning-field normalization.
 - `endpoint` owns connectivity, readiness, timeouts, and environment-variable
   credentials.
-- `deployment` tells an orchestrator whether the process is managed, reused, or
-  external.
+- Optional `deployment` metadata selects the processes a shared model-server
+  orchestrator manages. Consumer profiles omit it: their endpoints are operated
+  outside the sample, whether locally or remotely. Existing explicit `reused`
+  and `external` entries remain supported for compatibility.
 
 (deployment-profiles)=
 Workers may load JSON or YAML. For compatibility, the loader accepts a direct
 role mapping, legacy flat entries, `health_check: true` or `health_check: false`,
 and `kind: preset:<name>`. The public role-spec classes also retain their legacy
 flat constructors and read-only flat properties. Profiles shared with the
-stdlib-only launcher must use the wrapped nested JSON form. Launcher credentials
+stdlib-only launcher must use the wrapped nested JSON form with `adapter` and
+`endpoint` objects; `deployment` is optional in both loaders. Launcher credentials
 are explicit: endpoint credentials use `api_key_env`, while credentials needed
 by a managed service itself use `deployment.credentials`.
 
@@ -116,8 +118,7 @@ A hosted OpenAI-compatible endpoint changes only the profile:
         "base_url": "https://integrate.api.nvidia.com",
         "api_key_env": "NGC_API_KEY",
         "readiness": "none"
-      },
-      "deployment": {"ownership": "external"}
+      }
     }
   }
 }

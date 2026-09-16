@@ -70,30 +70,8 @@ _NO_WEB_CLIENT_ENV = "DEVICE_IO_HUB_NO_WEB_CLIENT"
 
 # ── Process stack ─────────────────────────────────────────────────────────────
 #
-_MODEL_PROCESSES = [
-    Process(
-        "stt", "../../services/stt-server", "stt_server",
-        launch_mode="reuse",
-    ),
-    Process(
-        "omni", "../../services/nemotron-omni-llm",
-        "nemotron_omni_llm_server",
-        launch_mode="reuse",
-    ),
-    Process(
-        "vlm", "../../services/vlm-server", "vlm_server",
-        launch_mode="reuse",
-    ),
-    Process(
-        "tts", "../../services/pocket-tts", "pocket_tts_server",
-        launch_mode="reuse",
-    ),
-]
-
-
 def _build_processes() -> list[Process]:
     return [
-        *_MODEL_PROCESSES,
         Process("hub",        "../../services/device-io-hub",                "device_io_hub",
                 config="yaml/device_io_hub.yaml"),
         Process("cloudxr",    "../../services/cloudxr-runtime",               "cloudxr_runtime",

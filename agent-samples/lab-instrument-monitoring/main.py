@@ -18,34 +18,6 @@ from xr_ai_logging import setup_logging
 _BASE = Path(__file__).resolve().parent
 _WORKER_CONFIG = _BASE / "yaml" / "lab_instrument_monitoring_worker.yaml"
 
-_MODEL_PROCESSES = [
-    Process(
-        "stt",
-        "../../services/stt-server",
-        "stt_server",
-        launch_mode="reuse",
-    ),
-    Process(
-        "omni",
-        "../../services/nemotron-omni-llm",
-        "nemotron_omni_llm_server",
-        launch_mode="reuse",
-    ),
-    Process(
-        "vlm",
-        "../../services/vlm-server",
-        "vlm_server",
-        launch_mode="reuse",
-    ),
-    Process(
-        "tts",
-        "../../services/pocket-tts",
-        "pocket_tts_server",
-        launch_mode="reuse",
-    ),
-]
-
-
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run marker-associated lab instrument monitoring.",
@@ -116,7 +88,6 @@ def _build_processes(worker_config: Path = _WORKER_CONFIG) -> list[Process]:
             "device_io_hub",
             config="yaml/device_io_hub.yaml",
         ),
-        *_MODEL_PROCESSES,
         Process(
             "worker",
             "worker",

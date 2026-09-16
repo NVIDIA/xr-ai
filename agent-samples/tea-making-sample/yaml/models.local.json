@@ -2,8 +2,7 @@
   "models": {
     "llm": {
       "adapter": {"preset": "nemotron_omni"},
-      "endpoint": {"base_url": "http://localhost:8108", "readiness": "health"},
-      "deployment": {"ownership": "reused", "service": "omni"}
+      "endpoint": {"base_url": "http://localhost:8108", "readiness": "health"}
     },
     "vlm": {
       "category": "vlm",
@@ -18,23 +17,19 @@
           "chat_template_kwargs": {"enable_thinking": false}
         }
       },
-      "endpoint": {"base_url": "http://localhost:8108", "readiness": "health"},
-      "deployment": {"ownership": "reused", "service": "omni"}
+      "endpoint": {"base_url": "http://localhost:8108", "readiness": "health"}
     },
     "stt": {
       "adapter": {"preset": "parakeet_stt"},
-      "endpoint": {"base_url": "http://localhost:8103", "readiness": "health"},
-      "deployment": {"ownership": "reused", "service": "stt"}
+      "endpoint": {"base_url": "http://localhost:8103", "readiness": "health"}
     },
     "embedding": {
       "adapter": {"preset": "nemotron_embedding"},
-      "endpoint": {"base_url": "http://localhost:8109", "readiness": "health"},
-      "deployment": {"ownership": "reused", "service": "embedding"}
+      "endpoint": {"base_url": "http://localhost:8109", "readiness": "health"}
     },
     "tts": {
       "adapter": {"preset": "pocket_tts"},
-      "endpoint": {"base_url": "http://localhost:8105", "readiness": "health"},
-      "deployment": {"ownership": "reused", "service": "tts"}
+      "endpoint": {"base_url": "http://localhost:8105", "readiness": "health"}
     }
   }
 }

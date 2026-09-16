@@ -8,7 +8,7 @@
 Read this when calling or operating an inference server. For the
 orchestrator pattern that wires servers into a sample, refer to
 {doc}`/guides/adding-a-sample`. For an end-to-end procedure covering custom
-deployment profiles, hardware YAML, and reuse-only sample configuration, refer to
+deployment profiles, hardware YAML, and consumer model configuration, refer to
 {doc}`/guides/customizing-model-servers`.
 
 Multiple reusable inference and typed capability services are available as
@@ -107,27 +107,16 @@ Application samples reuse those endpoints; they do not own model processes or
 copy server YAML into their own configuration directories. Follow
 {doc}`/guides/customizing-model-servers` to select a deployment profile, tune
 its hardware-specific server YAML, and copy compatible endpoint entries into
-the sample's models JSON with `deployment.ownership` set to `reused`.
+the sample's models JSON. Omit the `deployment` object from copied entries;
+it belongs to the shared model-server profile.
 
-Declare each model dependency in the sample orchestrator as reuse-only so the
-process list records the external dependency without transferring lifecycle
-ownership to the sample:
-
-```python
-Process(
-    "vlm",
-    "../../services/vlm-server",
-    "vlm_server",
-    launch_mode="reuse",
-)
-```
-
-The launcher skips reuse-only entries completely: it does not start, order, or
-readiness-check them. Start `model_servers` separately before the application
-sample. At startup, the sample worker probes endpoints whose models JSON entry
-uses `readiness: health` and keeps waiting until those reused services are
-available. Application capability services such as RAG remain sample-owned and
-keep their configuration with the sample that launches them.
+Declare only application processes in the sample orchestrator. Start
+`model_servers` separately before the application sample. At startup, the
+sample worker probes endpoints whose models JSON entry uses `readiness: health`
+and keeps waiting until those services are available. Model endpoints do not
+need placeholder `Process` entries. Application capability services such as
+RAG remain sample-owned and keep their configuration with the sample that
+launches them.
 
 ## Calling these from a worker
 
@@ -152,8 +141,7 @@ async with make_llm(config, "agent_llm") as llm:
     print(resp.content, resp.reasoning)
 ```
 
-A model profile separates adapter behavior, endpoint connectivity, and
-deployment ownership:
+A consumer model profile specifies adapter behavior and endpoint connectivity:
 
 ```json
 {
@@ -161,8 +149,7 @@ deployment ownership:
     "agent_llm": {
       "category": "llm",
       "adapter": {"preset": "nemotron_omni"},
-      "endpoint": {"base_url": "http://localhost:8108", "readiness": "health"},
-      "deployment": {"ownership": "reused", "service": "omni"}
+      "endpoint": {"base_url": "http://localhost:8108", "readiness": "health"}
     }
   }
 }
@@ -184,7 +171,7 @@ stay local: hosted NIM speech (Riva) is not OpenAI `/v1/audio`-compatible.
 Self-hosted speech NIMs are covered below.
 
 A hosted entry uses an environment-variable reference for its credential,
-disables endpoint health probing, and declares external ownership:
+disables endpoint health probing, and omits deployment metadata:
 
 ```json
 {
@@ -200,8 +187,7 @@ disables endpoint health probing, and declares external ownership:
         "base_url": "https://integrate.api.nvidia.com",
         "api_key_env": "NGC_API_KEY",
         "readiness": "none"
-      },
-      "deployment": {"ownership": "external"}
+      }
     }
   }
 }
@@ -213,15 +199,15 @@ disables endpoint health probing, and declares external ownership:
   subprocess (refer to {doc}`/getting_started/credentials`); or export it.
 - **`readiness: none`** is required when the hosted endpoint has no local
   `/health` route.
-- **`ownership: external`** keeps the launcher from starting or stopping the
-  hosted service.
+- **Omitted `deployment`** defaults to an externally operated endpoint; no
+  model process is started or stopped by the profile.
 - **`model_name`** is the hosted model id from [build.nvidia.com](https://build.nvidia.com).
 
 To adapt a sample, copy its active model profile, replace the local model entry
 with the hosted entry, and point `models_config` in the worker YAML at the new
-file. The same wrapped JSON profile is consumed by the worker and orchestrator,
-so the orchestrator omits externally owned services and requests the referenced
-credential automatically.
+file. The worker reads the endpoint credential named in `api_key_env`; export
+it or configure the credential store. Consumer sample launchers do not inspect
+model profiles to choose model processes.
 
 ### Self-hosted NIM containers (`models.vlm_llm_nim.json`)
 
@@ -243,8 +229,8 @@ uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim
   these endpoints; they never launch or stop the containers.
 
 To adapt a sample, copy the relevant `llm` and `vlm` entries from
-`models.vlm_llm_nim.json` into the sample's active models JSON and change only
-their deployment ownership from `managed` to `reused`. Samples with an
+`models.vlm_llm_nim.json` into the sample's active models JSON and remove their
+`deployment` objects. Samples with an
 `agent_llm` role duplicate the `llm` entry under that name. The adjacent
 `nim_llm_server.yaml` and `nim_vlm_server.yaml` comments repeat this mapping
 beside the container configuration.

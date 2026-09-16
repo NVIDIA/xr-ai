@@ -51,7 +51,8 @@ def test_config_catalog_preserves_source_and_language() -> None:
 
     models = configs["agent-samples/simple-vlm-example/yaml/models.json"]
     assert models.language == "json"
-    assert models.content.count('"ownership": "reused"') == 3
+    assert models.content == (_ROOT / models.path).read_text()
+    assert '"deployment"' not in models.content
 
     scene = configs["agent-samples/xr-render-demo/scene/scene_service.yaml"]
     assert "lovr_bin" in scene.content

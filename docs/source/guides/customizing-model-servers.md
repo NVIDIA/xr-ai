@@ -11,7 +11,7 @@ sample connects to them. Model-server customization has two separate parts:
 1. A `model-servers` deployment profile declares which shared services the
    operator starts and owns.
 2. Each sample's active models JSON declares compatible client adapters and
-   endpoints, with deployment ownership set to `reused`.
+   endpoints. Consumer entries do not need a `deployment` object.
 
 Samples do not start or stop model services. Keep that ownership boundary when
 adapting a sample: customize the shared stack first, start it, and then point
@@ -133,14 +133,16 @@ comments say so.
 Do not copy a complete model-server profile into a sample. It can omit roles
 the sample needs, and its `managed` ownership belongs only in the shared stack.
 Copy or update the relevant role entries in the sample's active models JSON,
-then change their ownership to `reused`.
+omitting their `deployment` objects. Keep adapter settings and endpoint
+credentials needed by the client; server-only credentials stay in the shared
+stack's deployment profile.
 
 For the shipped `vlm_llm_nim` stack:
 
 1. Copy its `llm` entry when the sample needs language or tool calling.
 2. Copy its `vlm` entry when the sample needs vision.
-3. Change `deployment.ownership` from `managed` to `reused` in every copied
-   entry. Keep `llm-nim` on port 8110 and `vlm-nim` on port 8100.
+3. Remove the `deployment` object from every copied entry. Keep the LLM
+   endpoint on port 8110 and the VLM endpoint on port 8100.
 4. If the sample uses `agent_llm`, duplicate the `llm` entry under that role.
 5. Preserve the sample's STT, TTS, embedding, and other roles unless the shared
    stack provides intentional replacements.
@@ -172,29 +174,25 @@ For example, a sample reusing the Cosmos3-Nano Reasoner NIM uses:
     "base_url": "http://localhost:8100",
     "readiness": "health",
     "health_path": "/v1/health/ready"
-  },
-  "deployment": {
-    "ownership": "reused",
-    "service": "vlm-nim"
   }
 }
 ```
 
-Current sample launchers declare their model dependencies as reuse-only, so
-they do not spawn model processes. The worker constructs the client from its
+Sample launchers declare only their application processes; model endpoints
+are specified in the client profile. The worker constructs the client from its
 models JSON and checks endpoint readiness. Starting or stopping the sample
 therefore never changes the shared NIM container.
 
 The `nim_llm_server.yaml` and `nim_vlm_server.yaml` files repeat the copy and
-ownership instructions beside each GPU-specific container configuration.
+client-profile instructions beside each GPU-specific container configuration.
 
 ## Use an endpoint at another address
 
 If an operator already runs a compatible service elsewhere, no model-server
-change is required. Update the sample entry's `endpoint.base_url` and keep
-ownership `reused` when the endpoint belongs to an operator-managed XR AI
-stack. Use `external` for a hosted API or another endpoint with no corresponding
-launcher process:
+change is required. Update the sample entry's `endpoint.base_url`. Both
+operator-managed XR AI services and hosted APIs use client entries without
+`deployment`. A hosted endpoint may also need a credential and a different
+readiness policy:
 
 ```json
 {
@@ -202,8 +200,7 @@ launcher process:
     "base_url": "https://integrate.api.nvidia.com",
     "api_key_env": "NGC_API_KEY",
     "readiness": "none"
-  },
-  "deployment": {"ownership": "external"}
+  }
 }
 ```
 

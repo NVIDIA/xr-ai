@@ -5,10 +5,9 @@
 # `agent_llm` roles). This matches the model family used by the default local
 # deployment. Swap in any compatible NIM from https://catalog.ngc.nvidia.com.
 # To adapt a sample, copy the `llm` entry from
-# ../models.vlm_llm_nim.json into its active models JSON, change only
-# `deployment.ownership` from `managed` to `reused`, and keep service
-# `llm-nim` on port 8110. Duplicate it as `agent_llm` when the sample uses
-# that role.
+# ../models.vlm_llm_nim.json into its active models JSON, omit the
+# `deployment` object, and keep the endpoint on port 8110. Duplicate it as
+# `agent_llm` when the sample uses that role.
 # RTX Ada is not listed for this Omni NIM; verify startup and memory use on
 # target hardware before deployment.
 image:     nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant

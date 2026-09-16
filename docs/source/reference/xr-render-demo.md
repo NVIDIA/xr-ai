@@ -12,10 +12,12 @@ mechanics shared with other samples, refer to
 
 ## Process stack
 
-The orchestrator (`xr_render_demo`, via `xr-ai-launcher`) reuses all
-model processes and starts its application processes serially; each owned
-process touches its ready file before the next starts. `run_stack` is fail-fast:
-any owned process exit terminates the application stack.
+The orchestrator (`xr_render_demo`, via `xr-ai-launcher`) declares and starts
+only its application processes, serially; each process touches its ready file
+before the next starts. The worker connects to shared model endpoints configured
+in `yaml/models.json`. `run_stack` is fail-fast: any owned process exit terminates
+the application stack. The table includes both application processes and their
+shared model services.
 
 | Role | Ownership | Directory | Command | Port |
 |---|---|---|---|---|

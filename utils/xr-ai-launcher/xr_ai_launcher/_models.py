@@ -47,7 +47,13 @@ def load_model_deployment(worker_config: Path) -> ModelDeployment:
 
 
 def load_deployment_profile(profile_path: Path) -> ModelDeployment:
-    """Load a JSON deployment profile directly (no worker YAML indirection)."""
+    """Load a JSON deployment profile directly (no worker YAML indirection).
+
+    Entries require ``adapter`` and ``endpoint`` objects. Omitting
+    ``deployment`` declares an existing endpoint without managing a process;
+    endpoint API-key requirements are still collected. Explicit deployment
+    metadata, including legacy ``ownership: reused``, remains supported.
+    """
 
     if profile_path.suffix.lower() != ".json":
         raise ValueError(
@@ -73,15 +79,17 @@ def load_deployment_profile(profile_path: Path) -> ModelDeployment:
 
         adapter = model.get("adapter")
         endpoint = model.get("endpoint")
-        deployment = model.get("deployment")
+        deployment = model.get("deployment", {})
         if not all(
             isinstance(section, dict)
-            for section in (adapter, endpoint, deployment)
+            for section in (adapter, endpoint)
         ):
             raise ValueError(
-                f"{profile_path}: {role!r} must define adapter, endpoint, "
-                "and deployment objects"
+                f"{profile_path}: {role!r} must define adapter and endpoint objects"
             )
+
+        if not isinstance(deployment, dict):
+            raise ValueError(f"{profile_path}: deployment for {role!r} must be an object")
 
         readiness = endpoint.get("readiness", "health")
         if readiness not in {"health", "none"}:

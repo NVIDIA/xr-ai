@@ -29,9 +29,13 @@ processes that use their own internal defaults.
 
 Samples that support interchangeable local and hosted models may set
 `models_config` in the worker YAML. `load_model_deployment()` reads the selected
-structured JSON profile using only the standard library and exposes its
-managed, reused, or external service ownership to the orchestrator. The same
-file is loaded by the worker through `xr-ai-models`.
+structured JSON profile using only the standard library and exposes explicit
+deployment metadata and credential requirements. Its `deployment` object is
+optional, matching `xr-ai-models`: omission leaves the endpoint outside launcher
+process management. The shared `model-servers` sample uses managed entries to
+select servers. Consumer samples declare only application processes and let
+workers connect to the configured endpoints. Legacy explicit reused and external
+deployment entries remain accepted.
 
 The orchestrator declares the process sequence in code:
 

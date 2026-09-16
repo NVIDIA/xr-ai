@@ -100,6 +100,11 @@ class EndpointSpec:
 class DeploymentSpec:
     """Process ownership for the endpoint that serves a model role.
 
+    Client profiles can omit ``deployment``: the default ``external`` ownership
+    leaves the endpoint's process lifecycle to its operator. Shared model-server
+    profiles use ``managed`` to select processes to launch. Explicit ``reused``
+    metadata remains supported for older profiles.
+
     ``credentials`` names keys the launched service itself needs (e.g.
     NGC_API_KEY for a NIM container's nvcr.io pull and engine download)
     even when the endpoint takes no API key.
