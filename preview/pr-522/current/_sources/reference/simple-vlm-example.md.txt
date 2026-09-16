@@ -14,10 +14,10 @@ sample's design and operational details.
 
 ## Composition
 
-The orchestrator starts only DeviceIOHub and the worker. The fixed
-`yaml/models.json` profile marks Parakeet STT, Cosmos3 Nano, and Pocket TTS as
-reused services. Start those endpoints together with the shared model-server
-stack.
+The orchestrator starts only DeviceIOHub and the worker. The
+`yaml/models.json` profile configures client adapters and shared endpoints for
+Parakeet STT, Cosmos3 Nano, and Pocket TTS. Start those endpoints together with
+the shared model-server stack.
 
 `VoiceAgent` owns service readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
@@ -64,7 +64,7 @@ layout works without command-line configuration arguments.
 |---|---|
 | `yaml/simple_vlm_example_worker.yaml` | Frame freshness and wait limits, VAD, idle timeout, and optional prompt overrides |
 | `yaml/voice_gate.yaml` | Wake phrases, listening chime, and follow-up window |
-| `yaml/models.json` | Model adapters, endpoints, readiness, and reuse declarations |
+| `yaml/models.json` | Model adapters, shared endpoints, and readiness settings |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
 | `worker/simple_vlm_example_worker/prompts/system.txt` | Default VLM instruction |
 

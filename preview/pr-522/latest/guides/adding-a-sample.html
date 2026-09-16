@@ -489,7 +489,7 @@ entry point.</p>
 ├── yaml/                           ← all YAML configs for this sample
 │   ├── device_io_hub.yaml
 │   ├── &lt;command&gt;.yaml              ← one per launchable process
-│   ├── models.json                 ← adapter, endpoint, and deployment specs
+│   ├── models.json                 ← adapter and endpoint specs; optional deployment metadata
 │   └── …
 └── worker/
     ├── pyproject.toml              ← worker project
@@ -501,9 +501,11 @@ entry point.</p>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> names the logical models the worker needs (<code class="docutils literal notranslate"><span class="pre">llm</span></code>,
 <code class="docutils literal notranslate"><span class="pre">vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>, or any sample-specific name). Each role composes an
-adapter, endpoint, and deployment spec. Worker-only profiles may remain in the
-legacy flat JSON or YAML shape; a profile shared with the stdlib-only orchestrator
-uses the wrapped nested JSON shape. The worker passes either form to
+adapter and endpoint spec, with optional deployment metadata. Consumer samples
+omit <code class="docutils literal notranslate"><span class="pre">deployment</span></code> and connect to shared endpoints; the shared model-server
+profiles use it to select managed services. Worker-only profiles may remain in
+the legacy flat JSON or YAML shape; a profile shared with the stdlib-only
+orchestrator uses the wrapped nested JSON shape. The worker passes either form to
 <code class="docutils literal notranslate"><span class="pre">load_models_config(...)</span></code> and constructs services with <code class="docutils literal notranslate"><span class="pre">make_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code>,
 <code class="docutils literal notranslate"><span class="pre">make_stt</span></code>, or <code class="docutils literal notranslate"><span class="pre">make_tts</span></code> from <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code>. Schema, preset
 table, compatibility formats, and the profile contract are in
@@ -667,7 +669,7 @@ packages = ["&lt;snake_name&gt;_worker"]
 <p>Use this template when the worker talks directly to <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code>. Native
 voice workers keep argument parsing in <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code> and delegate composition
 to sibling <code class="docutils literal notranslate"><span class="pre">app.py</span></code> and <code class="docutils literal notranslate"><span class="pre">config.py</span></code> modules. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/3a5c4ffb551c62499caf9142213e9c394f875dc3/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/22340f281ece5e627205f544321d766294593b14/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
 for that shape. Fill in the sections marked <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">←</span> <span class="pre">FILL</span> <span class="pre">IN</span></code>.</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
