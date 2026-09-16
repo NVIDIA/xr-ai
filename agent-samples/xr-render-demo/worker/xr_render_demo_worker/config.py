@@ -32,7 +32,7 @@ class WorkerConfig:
 def load_config(path: pathlib.Path | None) -> WorkerConfig:
     data = _read_yaml(path)
     idle_timeout = data.get("idle_timeout_secs")
-    video_history = data.get("video_history_enabled", False)
+    video_history = data.get("video_history_enabled", True)
     if not isinstance(video_history, bool):
         raise ValueError(f"video_history_enabled must be a YAML boolean, got {video_history!r}")
 
