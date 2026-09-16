@@ -520,7 +520,9 @@ uses <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span
 environment or loaded from the repository’s existing credential store.
 Refer to the <a class="reference external" href="https://nvidia.github.io/xr-ai/latest/getting_started/credentials.html">credentials reference</a>.
 First startup downloads container images and model engines and can take tens
-of minutes. The caches persist under the repository’s <code class="docutils literal notranslate"><span class="pre">models/</span></code> directory.</p>
+of minutes. The caches persist under the repository’s <code class="docutils literal notranslate"><span class="pre">models/</span></code> directory.
+A fresh speech container can rebuild TensorRT engines even with cached model
+weights, so a later startup can also take tens of minutes.</p>
 <p>The default GPU detection is shared with <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>. Explicit selections:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers_nim<span class="w"> </span>--gpu-profile<span class="w"> </span>96G_blackwell
 uv<span class="w"> </span>run<span class="w"> </span>model_servers_nim<span class="w"> </span>--gpu-profile<span class="w"> </span>dual_48G_ada
@@ -632,9 +634,13 @@ availability is distinct from validation on GB10: the complete Spark stack
 still needs hardware qualification, including cold-cache startup. Cosmos NIM
 uses fractional cache sizing and does not inherit the original sample’s Spark
 prefetch and fixed-cache safeguards.</p>
-<p>Whole-stack startup, simultaneous load, and restart still need validation on
-all three hardware profiles. The defaults are allocation estimates, not a
-claim of measured full-stack support. Refer to the
+<p>A 96 GB RTX PRO 6000 Blackwell run passed cached-model startup, sequential
+inference through the unchanged original and simple-VLM client configurations,
+repeated-launch reuse, and full shutdown. This includes real speech, image
+streaming, function calls, and embeddings. Cold-cache startup, sustained
+concurrent load, and full restart qualification remain outstanding; dual Ada
+and Spark still need complete stack validation on their target machines.
+The defaults are allocation estimates, not a claim of full hardware qualification. Refer to the
 <a class="reference external" href="https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html">model-server customization guide</a>
 for the shared lifecycle and profiling workflow.</p>
 <p>Container and profile references:</p>
