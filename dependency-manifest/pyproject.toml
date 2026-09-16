@@ -28,7 +28,7 @@ repository = [
     "xr-ai-hub-client",
     "xr-ai-models[riva]",
     "xr-ai-agent-runtime",
-    "xr-ai-tools[frames,image-editing,marker-tracking,relay,services,vision]",
+    "xr-ai-tools[capture,frames,image-editing,marker-tracking,relay,services,vision]",
     "xr-ai-voice",
     "xr-ai-web-events",
     "model-servers",
