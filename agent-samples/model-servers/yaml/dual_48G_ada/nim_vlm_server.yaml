@@ -8,7 +8,7 @@
 # per-image cost, so every image request 500s.
 # To adapt a sample, copy the `vlm` entry from
 # ../models.vlm_llm_nim.json into its active models JSON, omit the
-# `deployment` object, and keep the endpoint on port 8100.
+# `deployment` object and endpoint health settings, and keep port 8100.
 # GPU 0 with the embedding server and a demo's CloudXR + LOVR; the
 # Nemotron NIM and local STT share GPU 1.
 image:     nvcr.io/nim/nvidia/cosmos3-reasoner:1.7.0

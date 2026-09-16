@@ -8,7 +8,7 @@
 # per-image cost, so every image request 500s.
 # To adapt a sample, copy the `vlm` entry from
 # ../models.vlm_llm_nim.json into its active models JSON, omit the
-# `deployment` object, and keep the endpoint on port 8100.
+# `deployment` object and endpoint health settings, and keep port 8100.
 # UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.
 image:     nvcr.io/nim/nvidia/cosmos3-reasoner:1.7.0
 http_port: 8100

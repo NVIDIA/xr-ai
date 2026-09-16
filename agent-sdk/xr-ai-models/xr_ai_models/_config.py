@@ -84,10 +84,10 @@ class EndpointSpec:
     """Default request timeout in seconds."""
 
     readiness: Readiness = "health"
-    """How the client determines whether the endpoint is ready."""
+    """Policy for explicit ``health()`` calls; does not schedule startup probes."""
 
     health_path: str = "/health"
-    """Endpoint path probed for readiness (NIM containers use /v1/health/ready)."""
+    """Path used by explicit HTTP ``health()`` calls (NIM: /v1/health/ready)."""
 
     @property
     def health_check(self) -> bool:

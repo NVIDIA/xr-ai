@@ -140,7 +140,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             silero_threshold=config.silero_threshold,
         ),
         voice_gate=load_voice_gate_config(config.voice_gate_yaml),
-        probes={"llm": llm.health, "vlm": vlm.health, "rag": rag.health},
+        probes={"rag": rag.health},
         ready_file=ready_file,
         closeables=(llm, vlm, rag),
         text_topic=_CLIENT_TEXT_TOPIC,

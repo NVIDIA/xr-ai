@@ -141,8 +141,9 @@ For the shipped `vlm_llm_nim` stack:
 
 1. Copy its `llm` entry when the sample needs language or tool calling.
 2. Copy its `vlm` entry when the sample needs vision.
-3. Remove the `deployment` object from every copied entry. Keep the LLM
-   endpoint on port 8110 and the VLM endpoint on port 8100.
+3. Remove the `deployment` object and endpoint `readiness` and `health_path`
+   settings from every copied consumer entry. Keep the LLM endpoint on port
+   8110 and the VLM endpoint on port 8100. The server profile keeps its settings.
 4. If the sample uses `agent_llm`, duplicate the `llm` entry under that role.
 5. Preserve the sample's STT, TTS, embedding, and other roles unless the shared
    stack provides intentional replacements.
@@ -170,18 +171,15 @@ For example, a sample reusing the Cosmos3-Nano Reasoner NIM uses:
       "video": true
     }
   },
-  "endpoint": {
-    "base_url": "http://localhost:8100",
-    "readiness": "health",
-    "health_path": "/v1/health/ready"
-  }
+  "endpoint": {"base_url": "http://localhost:8100"}
 }
 ```
 
 Sample launchers declare only their application processes; model endpoints
 are specified in the client profile. The worker constructs the client from its
-models JSON and checks endpoint readiness. Starting or stopping the sample
-therefore never changes the shared NIM container.
+models JSON without polling model health endpoints. Explicit inference warmups
+can still gate startup. Starting or stopping the sample never changes the
+shared NIM container; wait for the model-server launcher to return first.
 
 The `nim_llm_server.yaml` and `nim_vlm_server.yaml` files repeat the copy and
 client-profile instructions beside each GPU-specific container configuration.
@@ -191,15 +189,14 @@ client-profile instructions beside each GPU-specific container configuration.
 If an operator already runs a compatible service elsewhere, no model-server
 change is required. Update the sample entry's `endpoint.base_url`. Both
 operator-managed XR AI services and hosted APIs use client entries without
-`deployment`. A hosted endpoint may also need a credential and a different
-readiness policy:
+`deployment` or health polling settings. A hosted endpoint may also need a
+credential:
 
 ```json
 {
   "endpoint": {
     "base_url": "https://integrate.api.nvidia.com",
-    "api_key_env": "NGC_API_KEY",
-    "readiness": "none"
+    "api_key_env": "NGC_API_KEY"
   }
 }
 ```

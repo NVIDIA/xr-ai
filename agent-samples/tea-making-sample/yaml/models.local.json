@@ -2,7 +2,7 @@
   "models": {
     "llm": {
       "adapter": {"preset": "nemotron_omni"},
-      "endpoint": {"base_url": "http://localhost:8108", "readiness": "health"}
+      "endpoint": {"base_url": "http://localhost:8108"}
     },
     "vlm": {
       "category": "vlm",
@@ -17,19 +17,19 @@
           "chat_template_kwargs": {"enable_thinking": false}
         }
       },
-      "endpoint": {"base_url": "http://localhost:8108", "readiness": "health"}
+      "endpoint": {"base_url": "http://localhost:8108"}
     },
     "stt": {
       "adapter": {"preset": "parakeet_stt"},
-      "endpoint": {"base_url": "http://localhost:8103", "readiness": "health"}
+      "endpoint": {"base_url": "http://localhost:8103"}
     },
     "embedding": {
       "adapter": {"preset": "nemotron_embedding"},
-      "endpoint": {"base_url": "http://localhost:8109", "readiness": "health"}
+      "endpoint": {"base_url": "http://localhost:8109"}
     },
     "tts": {
       "adapter": {"preset": "pocket_tts"},
-      "endpoint": {"base_url": "http://localhost:8105", "readiness": "health"}
+      "endpoint": {"base_url": "http://localhost:8105"}
     }
   }
 }

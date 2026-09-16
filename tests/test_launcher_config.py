@@ -124,6 +124,10 @@ def test_consumer_profiles_connect_without_model_lifecycle_metadata(relative) ->
     profile = _ROOT / "agent-samples" / relative
     raw = json.loads(profile.read_text())["models"]
     assert all("deployment" not in model for model in raw.values())
+    assert all(
+        not {"readiness", "health_path", "health_check"}.intersection(model["endpoint"])
+        for model in raw.values()
+    )
     models = load_models_config(profile)
     deployment = load_deployment_profile(profile)
 

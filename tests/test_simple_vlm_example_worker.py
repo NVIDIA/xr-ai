@@ -531,7 +531,7 @@ async def test_vlm_warmup_failure_is_retried_by_readiness() -> None:
         timeout=1,
     )
 
-    assert vlm.health_calls == 2
+    assert vlm.health_calls == 0
     assert len(vlm.stream_calls) == 2
 
 
@@ -627,7 +627,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     }
     assert "publish:voice.output" not in {event["name"] for event in relay_events}
     assert "agent:voice" not in {event["name"] for event in relay_events}
-    assert stt.health_calls == tts.health_calls == vlm.health_calls == 1
+    assert stt.health_calls == tts.health_calls == vlm.health_calls == 0
     assert len(vlm.stream_calls) == 1
     warmup_images, question, system_prompt, max_tokens, timeout = vlm.stream_calls[0]
     assert len(warmup_images) == 1

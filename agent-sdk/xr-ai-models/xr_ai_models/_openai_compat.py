@@ -7,14 +7,22 @@ Per-model quirks (reasoning field name, mandatory ``chat_template_kwargs``)
 are absorbed by ``reasoning_field`` and ``default_extras`` on the
 constructor; per-call quirks (``enable_thinking``, ``thinking_budget``)
 fold into ``chat_template_kwargs`` on the wire.
+
+Inference requests make at most three attempts on connection errors, connection
+establishment timeouts, or HTTP 502/503/504, with 0.25 and 0.5 second backoffs.
+Timeout settings apply to each attempt. Other HTTP errors, read/write failures,
+and failures after accepting response headers propagate without replay. Explicit
+``health()`` calls are not retried.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import json
 import os
 import wave
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncIterator, Mapping, Sequence
 from urllib.parse import urlparse
@@ -89,6 +97,41 @@ def _request_headers(
         result[name] = value
     result.update(_auth_headers(api_key))
     return result
+
+
+@asynccontextmanager
+async def _inference_response(
+    client: httpx.AsyncClient, url: str, **kwargs: Any,
+) -> AsyncIterator[httpx.Response]:
+    """Retry connection failures and temporary HTTP errors before handing off.
+
+    Never catch failures from the response consumer: a request whose headers
+    have been accepted may already have produced text, audio, or tool calls.
+    All callers supply replayable JSON or in-memory multipart data.
+    """
+    for attempt in range(3):
+        async with AsyncExitStack() as stack:
+            try:
+                response = await stack.enter_async_context(
+                    client.stream("POST", url, **kwargs),
+                )
+            except (httpx.ConnectError, httpx.ConnectTimeout):
+                if attempt == 2:
+                    raise
+            else:
+                if response.status_code not in {502, 503, 504} or attempt == 2:
+                    yield response
+                    return
+        # Close failed responses before backing off; cancellation propagates.
+        await asyncio.sleep(0.25 * (2 ** attempt))
+
+
+async def _post_inference(
+    client: httpx.AsyncClient, url: str, **kwargs: Any,
+) -> httpx.Response:
+    async with _inference_response(client, url, **kwargs) as response:
+        await response.aread()
+        return response
 
 
 async def _http_health(client: httpx.AsyncClient, url: str, enabled: bool) -> bool:
@@ -267,6 +310,9 @@ class OpenAICompatLLM:
     Nemotron-Omni) and indirectly via :class:`OpenAICompatVLM` for VLMs.
     The API key is read once from ``api_key_env`` during construction. An
     injected HTTP client remains owned by the caller and is not closed here.
+    Inference makes at most three attempts on connection failures or HTTP
+    502/503/504, with 0.25 and 0.5 second backoffs and per-attempt timeouts.
+    Accepted responses, including partial streams, are never replayed.
     """
 
     def __init__(
@@ -364,7 +410,7 @@ class OpenAICompatLLM:
         kwargs: dict[str, Any] = {"json": payload, "headers": _request_headers(self._api_key, headers)}
         if timeout is not None:
             kwargs["timeout"] = timeout
-        resp = await self._client.post(self._chat_url, **kwargs)
+        resp = await _post_inference(self._client, self._chat_url, **kwargs)
         if resp.is_error:
             logger.error("llm {} {}: {}", self._model, resp.status_code, resp.text[:300])
         resp.raise_for_status()
@@ -397,7 +443,7 @@ class OpenAICompatLLM:
         kwargs: dict[str, Any] = {"json": payload, "headers": _request_headers(self._api_key, headers)}
         if timeout is not None:
             kwargs["timeout"] = timeout
-        async with self._client.stream("POST", self._chat_url, **kwargs) as resp:
+        async with _inference_response(self._client, self._chat_url, **kwargs) as resp:
             if resp.is_error:
                 body = await resp.aread()
                 logger.error("llm {} {}: {}", self._model, resp.status_code, body[:300])
@@ -670,6 +716,9 @@ class OpenAICompatSTT:
 
     The API key is read once from ``api_key_env`` during construction. An
     injected HTTP client remains owned by the caller and is not closed here.
+    Inference makes at most three attempts on connection failures or HTTP
+    502/503/504, with 0.25 and 0.5 second backoffs and per-attempt timeouts.
+    Accepted responses, including partial streams, are never replayed.
     """
 
     def __init__(
@@ -714,7 +763,7 @@ class OpenAICompatSTT:
         }
         if timeout is not None:
             kwargs["timeout"] = timeout
-        resp = await self._client.post(self._url, **kwargs)
+        resp = await _post_inference(self._client, self._url, **kwargs)
         if resp.is_error:
             logger.error("stt {}: {}", resp.status_code, resp.text[:300])
         resp.raise_for_status()
@@ -750,6 +799,9 @@ class OpenAICompatTTS:
 
     The API key is read once from ``api_key_env`` during construction. An
     injected HTTP client remains owned by the caller and is not closed here.
+    Inference makes at most three attempts on connection failures or HTTP
+    502/503/504, with 0.25 and 0.5 second backoffs and per-attempt timeouts.
+    Accepted responses, including partial streams, are never replayed.
     """
 
     def __init__(
@@ -786,7 +838,7 @@ class OpenAICompatTTS:
         }
         if timeout is not None:
             kwargs["timeout"] = timeout
-        resp = await self._client.post(self._url, **kwargs)
+        resp = await _post_inference(self._client, self._url, **kwargs)
         if resp.is_error:
             logger.error("tts {}: {}", resp.status_code, resp.text[:300])
         resp.raise_for_status()
@@ -836,7 +888,7 @@ class _PocketTTS(OpenAICompatTTS):
         if timeout is not None:
             kwargs["timeout"] = timeout
         fallback_to_wav = False
-        async with self._client.stream("POST", self._url, **kwargs) as resp:
+        async with _inference_response(self._client, self._url, **kwargs) as resp:
             if resp.is_error:
                 body = await resp.aread()
                 logger.error("tts {}: {}", resp.status_code, body[:300])
@@ -882,6 +934,9 @@ class OpenAICompatEmbedding:
 
     The API key is read once from ``api_key_env`` during construction. An
     injected HTTP client remains owned by the caller and is not closed here.
+    Inference makes at most three attempts on connection failures or HTTP
+    502/503/504, with 0.25 and 0.5 second backoffs and per-attempt timeouts.
+    Accepted responses, including partial streams, are never replayed.
     """
 
     def __init__(
@@ -925,7 +980,7 @@ class OpenAICompatEmbedding:
         }
         if timeout is not None:
             kwargs["timeout"] = timeout
-        response = await self._client.post(self._url, **kwargs)
+        response = await _post_inference(self._client, self._url, **kwargs)
         if response.is_error:
             logger.error("embedding {} {}: {}", self._model, response.status_code, response.text[:300])
         response.raise_for_status()
