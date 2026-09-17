@@ -30,6 +30,7 @@ from device_io_hub.capture._recorder import (
     _safe_name,
     _StereoWaveWriter,
 )
+from device_io_hub.capture._return_subscriber import ReturnTrafficSubscriber
 from device_io_hub.capture._service import (
     CaptureService,
     _FrameWorker,
@@ -996,6 +997,22 @@ async def test_shutdown_drains_participant_finalization_before_executors(
         if stop_task is not None:
             await asyncio.gather(stop_task, return_exceptions=True)
         await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_stopped_return_subscriber_releases_late_departure_waiter() -> None:
+    subscriber = ReturnTrafficSubscriber("inproc://capture-stopped-subscriber")
+    subscriber.stop()
+    try:
+        await asyncio.wait_for(
+            subscriber.wait_for_departure(
+                ParticipantEvent("alice", False, 1_000_000, "connector"),
+            ),
+            timeout=0.1,
+        )
+        assert not subscriber._departures
+    finally:
+        subscriber.close()
 
 
 @pytest.mark.asyncio

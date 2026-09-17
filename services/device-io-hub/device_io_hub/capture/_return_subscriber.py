@@ -79,6 +79,8 @@ class ReturnTrafficSubscriber:
         """Wait until return traffic published before *event* has been handled."""
         key = (event.participant_id, event.pts_us, event.connector_id)
         departure = self._departure_event(event)
+        if not self._running:
+            departure.set()
         try:
             await departure.wait()
         finally:
