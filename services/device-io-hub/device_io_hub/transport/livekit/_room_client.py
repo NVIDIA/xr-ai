@@ -304,49 +304,52 @@ class RoomClient:
         reader: rtc.ByteStreamReader,
         participant_id: str,
     ) -> None:
-        info = reader.info
-        request_id = (info.attributes or {}).get("request_id", "").strip()
-        if not participant_id or not request_id:
-            logger.warning("Client image stream without sender or request ID — dropped")
-            return
-        if info.mime_type not in _IMAGE_CAPTURE_MIME_TYPES:
-            logger.warning(
-                "Client image stream {} has unsupported media type {!r} — dropped",
-                request_id,
-                info.mime_type,
-            )
-            return
-        if info.size is not None and info.size > _IMAGE_CAPTURE_MAX_BYTES:
-            logger.warning(
-                "Client image stream {} declares {} bytes (limit {}) — dropped",
-                request_id,
-                info.size,
-                _IMAGE_CAPTURE_MAX_BYTES,
-            )
-            return
-
-        image = bytearray()
-        async for chunk in reader:
-            image.extend(chunk)
-            if len(image) > _IMAGE_CAPTURE_MAX_BYTES:
+        try:
+            info = reader.info
+            request_id = (info.attributes or {}).get("request_id", "").strip()
+            if not participant_id or not request_id:
+                logger.warning("Client image stream without sender or request ID — dropped")
+                return
+            if info.mime_type not in _IMAGE_CAPTURE_MIME_TYPES:
                 logger.warning(
-                    "Client image stream {} exceeded {} bytes — dropped",
+                    "Client image stream {} has unsupported media type {!r} — dropped",
                     request_id,
+                    info.mime_type,
+                )
+                return
+            if info.size is not None and info.size > _IMAGE_CAPTURE_MAX_BYTES:
+                logger.warning(
+                    "Client image stream {} declares {} bytes (limit {}) — dropped",
+                    request_id,
+                    info.size,
                     _IMAGE_CAPTURE_MAX_BYTES,
                 )
                 return
-        if not image:
-            logger.warning("Client image stream {} was empty — dropped", request_id)
-            return
-        await self._ep.push_image_capture(
-            ImageCaptureData(
-                participant_id=participant_id,
-                request_id=request_id,
-                pts_us=_now_us(),
-                mime_type=info.mime_type,
-                data=bytes(image),
+
+            image = bytearray()
+            async for chunk in reader:
+                image.extend(chunk)
+                if len(image) > _IMAGE_CAPTURE_MAX_BYTES:
+                    logger.warning(
+                        "Client image stream {} exceeded {} bytes — dropped",
+                        request_id,
+                        _IMAGE_CAPTURE_MAX_BYTES,
+                    )
+                    return
+            if not image:
+                logger.warning("Client image stream {} was empty — dropped", request_id)
+                return
+            await self._ep.push_image_capture(
+                ImageCaptureData(
+                    participant_id=participant_id,
+                    request_id=request_id,
+                    pts_us=_now_us(),
+                    mime_type=info.mime_type,
+                    data=bytes(image),
+                )
             )
-        )
+        finally:
+            reader.close()
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 

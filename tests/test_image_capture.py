@@ -9,8 +9,13 @@ import asyncio
 import io
 import json
 import time
+from types import SimpleNamespace
 
 import pytest
+from device_io_hub.transport.livekit._room_client import (
+    _IMAGE_CAPTURE_MAX_BYTES,
+    RoomClient,
+)
 from PIL import Image
 from xr_ai_hub import (
     ClientImageCaptureSource,
@@ -80,6 +85,50 @@ class _Endpoint:
             participant_id=signal.participant_id,
             track_id=signal.track_id,
         )
+
+
+class _ImageReader:
+    def __init__(self, *, size: int | None, chunks: tuple[bytes, ...] = ()) -> None:
+        self.info = SimpleNamespace(
+            attributes={"request_id": "capture-1"},
+            mime_type="image/jpeg",
+            size=size,
+        )
+        self._chunks = iter(chunks)
+        self.iterated = False
+        self.closed = False
+
+    def __aiter__(self):
+        self.iterated = True
+        return self
+
+    async def __anext__(self) -> bytes:
+        try:
+            return next(self._chunks)
+        except StopIteration:
+            raise StopAsyncIteration from None
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _BlockingImageReader(_ImageReader):
+    def __init__(self) -> None:
+        super().__init__(size=None)
+        self.started = asyncio.Event()
+
+    async def __anext__(self) -> bytes:
+        self.started.set()
+        await asyncio.Future()
+        raise AssertionError("unreachable")
+
+
+class _ImageEndpoint:
+    def __init__(self) -> None:
+        self.images = []
+
+    async def push_image_capture(self, image) -> None:
+        self.images.append(image)
 
 
 async def test_current_frame_falls_back_to_client_capture() -> None:
@@ -177,6 +226,37 @@ async def test_capture_rejects_a_disconnected_participant() -> None:
 
     with pytest.raises(ImageCaptureUnavailable, match="not connected"):
         await source.capture("alice")
+
+
+async def test_rejected_image_stream_closes_reader_without_consuming_it() -> None:
+    endpoint = _ImageEndpoint()
+    client = RoomClient.__new__(RoomClient)
+    client._ep = endpoint
+    reader = _ImageReader(size=_IMAGE_CAPTURE_MAX_BYTES + 1)
+
+    await client._receive_image_capture(reader, "alice")  # type: ignore[arg-type]
+
+    assert reader.closed
+    assert not reader.iterated
+    assert endpoint.images == []
+
+
+async def test_cancelled_image_stream_closes_reader() -> None:
+    endpoint = _ImageEndpoint()
+    client = RoomClient.__new__(RoomClient)
+    client._ep = endpoint
+    reader = _BlockingImageReader()
+    pending = asyncio.create_task(
+        client._receive_image_capture(reader, "alice")  # type: ignore[arg-type]
+    )
+    await reader.started.wait()
+
+    pending.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await pending
+
+    assert reader.closed
+    assert endpoint.images == []
 
 
 async def test_capture_request_and_image_route_through_real_hub(

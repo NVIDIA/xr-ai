@@ -111,6 +111,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Guards the physical-camera start path so two rapid taps can't interleave
      *  stopCamera/startCamera (mirrors iOS `isCameraStarting`). */
     private var isCameraStarting = false
+    internal var requestCameraPermission: (suspend () -> Boolean)? = null
     var isConnecting by mutableStateOf(false)
         private set
     val receivedMessages = mutableStateListOf<ReceivedMessage>()
@@ -198,6 +199,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             encodeI420Jpeg(source.renderFrame(0), source.width, source.height)
                         )
                     } else {
+                        val granted = requestCameraPermission?.invoke() == true
+                        if (!granted) {
+                            throw SecurityException("Camera permission is required for image capture.")
+                        }
                         val info = availableCameras.firstOrNull { it.id == selectedCameraId }
                         val facing = info?.facing ?: CameraConfig.CameraFacing.BACK
                         newSession.captureImage(

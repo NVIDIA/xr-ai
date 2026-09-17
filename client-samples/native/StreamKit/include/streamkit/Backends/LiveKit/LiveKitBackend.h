@@ -168,9 +168,10 @@ private:
     void FireStateChanged(ConnectionState state);
 
     /// Routes incoming data packets: intercepts "_agent.status",
-    /// fires on_data_received for everything else.
+    /// then surfaces packets from the configured hub participant.
     void HandleDataReceived(std::string_view topic,
-                            std::span<const std::byte> payload) const;
+                            std::span<const std::byte> payload,
+                            std::string_view sender_identity) const;
 
     void ApplyConnectionState(ConnectionState state);
     void BlockNetworkMetricsDelivery();
