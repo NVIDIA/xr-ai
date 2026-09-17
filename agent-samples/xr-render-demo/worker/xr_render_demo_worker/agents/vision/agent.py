@@ -20,8 +20,6 @@ from ...models import SubagentResult, SubagentTask
 from ...scene import SceneContext
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
-# The SCENE OBJECTS sentence intentionally duplicates supervisor_prompt.txt; see
-# docs/source/reference/xr-render-demo.md ("stated in both places on purpose").
 # _SHARED_RULES ends mid-sentence: each description completes it differently.
 _SHARED_RULES = (
     "Any request to describe or survey what is visible also means the physical view, never a "
@@ -36,10 +34,13 @@ _SHARED_RULES = (
 )
 
 DESCRIPTION = (
-    "Answer a question about the user's physical surroundings from the live camera, or from "
-    "recorded video when the question is about a past moment: \"what am I looking at?\" and "
-    "\"what was I holding a moment ago?\" are always this agent, never answered without "
-    "delegating here. " + _SHARED_RULES + "; never redelegate with historical video "
+    "Owns standalone questions about the user's physical surroundings from the live camera, or "
+    "from recorded video when the question is about a past moment: "
+    "\"what am I looking at?\" and \"what was "
+    "I holding a moment ago?\" route here. Never use as a prerequisite for an XR mutation; the "
+    "owning mutating agent handles any physical source it needs. Never use for a fact whose "
+    "subject is an object listed in SCENE OBJECTS. " + _SHARED_RULES + "; never "
+    "redelegate with historical video "
     "substituted for the present."
 )
 
@@ -121,7 +122,12 @@ def make_vision_agent(
             )),
         ]
         async def _call_model(transcript, definitions):
-            return await llm.chat(transcript, tools=list(definitions) or None, max_tokens=2048, temperature=0.0)
+            return await llm.chat(
+                transcript,
+                tools=list(definitions) or None,
+                max_tokens=2048,
+                temperature=0.0,
+            )
         try:
             loop_result = await run_tool_loop(messages, toolset, _call_model)
         except ToolLoopError:

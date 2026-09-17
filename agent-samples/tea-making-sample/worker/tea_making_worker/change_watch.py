@@ -143,7 +143,9 @@ class ChangeWatchAgent(Agent):
             (
                 Tool(
                     "change_watch__start",
-                    "Start visual change monitoring in the background.",
+                    "USE WHEN: a direct present request to start watching for a specified visual "
+                    "change in the background. DO NOT USE WHEN: negated, hypothetical, quoted, "
+                    "reported, or capability wording.",
                     ChangeWatchStartRequest,
                     ChangeWatchState,
                     start,
@@ -152,7 +154,8 @@ class ChangeWatchAgent(Agent):
                 ),
                 Tool(
                     "change_watch__stop",
-                    "Stop visual change monitoring.",
+                    "USE WHEN: a direct present request to stop the background visual change "
+                    "watch. DO NOT USE WHEN: a negated request to start watching.",
                     ChangeWatchControlRequest,
                     ChangeWatchState,
                     stop,
@@ -161,7 +164,8 @@ class ChangeWatchAgent(Agent):
                 ),
                 Tool(
                     "change_watch__status",
-                    "Report whether visual change monitoring is running.",
+                    "USE WHEN: a question asks for the actual current running state of the "
+                    "background visual change watch.",
                     ChangeWatchControlRequest,
                     ChangeWatchState,
                     status,

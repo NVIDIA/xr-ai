@@ -5,8 +5,10 @@
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
+import os
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,21 +16,50 @@ from typing import Any
 
 import yaml
 from tea_making_worker.background_context import BackgroundContextAgent
-from tea_making_worker.change_watch import ChangeWatchAgent
+from tea_making_worker.change_watch import ChangeDecision, ChangeWatchAgent
 from tea_making_worker.config import load_config
 from tea_making_worker.foreground import ForegroundAgent
 from tea_making_worker.spec import load_workflow
-from tea_making_worker.transcript import TranscriptAgent
-from tea_making_worker.video_log import VideoLogAgent
+from tea_making_worker.transcript import TranscriptAgent, TranscriptSummary
+from tea_making_worker.video_log import VideoDelta, VideoLogAgent
 from tea_making_worker.workflow import GuidanceAgent, _state_contract
 from tea_making_worker.workflow_tools import workflow_commit_tool
-from xr_ai_models import ChatMessage, LLMService, load_models_config, make_llm
-from xr_ai_tools import ToolSet
+from xr_ai_models import (
+    ChatMessage,
+    LLMService,
+    ToolCall,
+    load_models_config,
+    make_llm,
+)
+from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.tool_calling import tool_definitions
 
 _SAMPLE = Path(__file__).resolve().parents[1]
+_PROMPTS = _SAMPLE / "worker" / "tea_making_worker" / "prompts"
 _MIN_PASS_RATE = 0.80
+_CLASSIFIER_CASES = {
+    "change_watch": (
+        "change_watch_event_prompt.txt",
+        "change_watch__commit",
+        ChangeDecision,
+    ),
+    "transcript_summary": (
+        "transcript_summary_prompt.txt",
+        "transcript__commit_summary",
+        TranscriptSummary,
+    ),
+    "video_delta": (
+        "video_delta_prompt.txt",
+        "video_log__commit",
+        VideoDelta,
+    ),
+}
+
+
+def _models_config() -> Path:
+    override = os.environ.get("XR_AI_EVAL_MODELS_CONFIG")
+    return Path(override) if override else _SAMPLE / "yaml" / "models.local.json"
 
 
 def _build_agents(llm: LLMService) -> tuple[ForegroundAgent, GuidanceAgent]:
@@ -127,7 +158,24 @@ def _observation_turn(
 ) -> tuple[tuple[ChatMessage, ...], ToolSet]:
     session = guidance.store.get(participant_id)
     guidance.store.start(session)
-    step = guidance.workflow.step(str(case["step"]))
+    target_step = str(case["step"])
+    while session.step_id != target_step:
+        if not session.active or session.step_id is None:
+            raise ValueError(f"cannot reach observation step {target_step!r}")
+        if session.step_id == "start_steeping" and target_step == "steep_timer":
+            guidance.store.observe(session, "accepted")
+            guidance.store.observe(session, "accepted")
+            result = guidance.store.commit(
+                session,
+                {"steeping_started_at_us": 1, "steeping_started": True},
+                "",
+            )
+            if not result.accepted or not result.complete:
+                raise ValueError("could not complete start_steeping for timer eval")
+            guidance.store.advance(session, skip=False)
+        else:
+            guidance.store.advance(session, skip=True)
+    step = guidance.workflow.step(target_step)
     quick = guidance._named_tools(session, step.agent.tools)
     commit = workflow_commit_tool(
         guidance.store,
@@ -152,23 +200,92 @@ def _observation_turn(
             step.agent.prompt,
         )
     )
-    return (
+    messages = [
         ChatMessage(role="system", content=system),
         ChatMessage(role="user", content=request),
-    ), tools
+    ]
+    prior_tool = case.get("prior_tool")
+    if prior_tool is not None:
+        name = str(prior_tool["name"])
+        call_id = f"prior-{name}"
+        messages.extend(
+            (
+                ChatMessage(
+                    role="assistant",
+                    content="",
+                    tool_calls=[
+                        ToolCall(
+                            id=call_id,
+                            name=name,
+                            arguments=json.dumps(
+                                prior_tool.get("arguments", {}),
+                                separators=(",", ":"),
+                            ),
+                        )
+                    ],
+                ),
+                ChatMessage(
+                    role="tool",
+                    content=json.dumps(
+                        prior_tool["result"],
+                        separators=(",", ":"),
+                    ),
+                    tool_call_id=call_id,
+                ),
+            )
+        )
+    return tuple(messages), tools
+
+
+def _classifier_turn(case: dict[str, Any]) -> tuple[tuple[ChatMessage, ...], ToolSet]:
+    prompt_name, tool_name, request_model = _CLASSIFIER_CASES[str(case["kind"])]
+
+    async def commit(request: Any) -> Any:
+        return request
+
+    tool = Tool(
+        tool_name,
+        "Commit the prompt-controlled result exactly once.",
+        request_model,
+        request_model,
+        commit,
+        return_direct=True,
+    )
+    messages = (
+        ChatMessage(
+            role="system",
+            content=(_PROMPTS / prompt_name).read_text(encoding="utf-8").strip(),
+        ),
+        ChatMessage(
+            role="user",
+            content=json.dumps(case["input"], ensure_ascii=False, separators=(",", ":")),
+        ),
+    )
+    return messages, ToolSet((tool,))
 
 
 async def main() -> None:
     cases = yaml.safe_load((_SAMPLE / "eval" / "cases.yaml").read_text(encoding="utf-8"))
-    llm = make_llm(load_models_config(_SAMPLE / "yaml" / "models.local.json"), "llm")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("cases", nargs="*", help="Case names; omit to run all")
+    args = parser.parse_args()
+    wanted = set(args.cases)
+    cases = [case for case in cases if not wanted or case["name"] in wanted]
+    if not cases:
+        raise SystemExit(f"unknown cases: {args.cases}")
+    llm = make_llm(load_models_config(_models_config()), "llm")
     foreground, guidance = _build_agents(llm)
     passed_count = 0
     try:
         for index, case in enumerate(cases):
             participant_id = f"tea-eval-{index}"
-            observation_case = case.get("kind") == "observation"
+            kind = case.get("kind")
+            observation_case = kind == "observation"
+            classifier_case = kind in _CLASSIFIER_CASES
             if observation_case:
                 messages, tools = _observation_turn(guidance, case, participant_id)
+            elif classifier_case:
+                messages, tools = _classifier_turn(case)
             else:
                 if case.get("route", "root") == "active":
                     _active_route(
@@ -234,11 +351,61 @@ async def main() -> None:
                 except json.JSONDecodeError:
                     pass
                 else:
-                    if arguments.get("updates") != case.get("expected_updates"):
+                    expected_updates = case.get("expected_updates")
+                    if (
+                        "expected_updates" in case
+                        and arguments.get("updates") != expected_updates
+                    ):
                         errors.append(
                             f"observation updates were {arguments.get('updates')!r}, "
-                            f"expected {case.get('expected_updates')!r}"
+                            f"expected {expected_updates!r}"
                         )
+                    expected_updates_containing = case.get(
+                        "expected_updates_containing"
+                    )
+                    actual_updates = arguments.get("updates")
+                    if expected_updates_containing is not None and (
+                        not isinstance(actual_updates, dict)
+                        or any(
+                            actual_updates.get(name) != value
+                            for name, value in expected_updates_containing.items()
+                        )
+                    ):
+                        errors.append(
+                            f"observation updates were {actual_updates!r}, expected "
+                            f"at least {expected_updates_containing!r}"
+                        )
+            expected_arguments = case.get("expected_arguments")
+            if expected_arguments is not None and calls:
+                try:
+                    arguments = json.loads(calls[0].arguments)
+                except json.JSONDecodeError:
+                    pass
+                else:
+                    if arguments != expected_arguments:
+                        errors.append(
+                            f"arguments were {arguments!r}, expected {expected_arguments!r}"
+                        )
+            expected_argument_patterns = case.get("expected_argument_patterns", {})
+            forbidden_argument_patterns = case.get("forbidden_argument_patterns", {})
+            if (expected_argument_patterns or forbidden_argument_patterns) and calls:
+                try:
+                    arguments = json.loads(calls[0].arguments)
+                except json.JSONDecodeError:
+                    pass
+                else:
+                    for field, pattern in expected_argument_patterns.items():
+                        value = str(arguments.get(field, ""))
+                        if re.search(str(pattern), value) is None:
+                            errors.append(
+                                f"argument {field!r}={value!r} did not match {pattern!r}"
+                            )
+                    for field, pattern in forbidden_argument_patterns.items():
+                        value = str(arguments.get(field, ""))
+                        if re.search(str(pattern), value) is not None:
+                            errors.append(
+                                f"argument {field!r}={value!r} matched forbidden {pattern!r}"
+                            )
             normalized_content = _normalize_response(content)
             expected_response = case.get("expected_response")
             if expected_response is not None and normalized_content != _normalize_response(
@@ -268,6 +435,8 @@ async def main() -> None:
             passed = actual_tools == expected_tools and not errors
             label = "PASS" if passed else "MISS"
             print(f"{label} {case['name']}: tools={actual_tools!r} content={content!r}")
+            for error in errors:
+                print(f"  {error}")
             if passed:
                 passed_count += 1
     finally:

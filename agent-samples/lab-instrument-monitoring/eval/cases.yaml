@@ -88,3 +88,116 @@
 - name: conversational
   query: Say hello in one short sentence.
   expected_tool: null
+
+- name: ambiguous-deictic-object
+  query: What is this thing in front of me?
+  expected_tool: current_view
+
+- name: gauge-deictic-still-routes-to-instruments
+  query: What does this gauge say?
+  expected_tool: lab_instruments__read
+
+- name: start-ordinary-bench-watch
+  query: Watch the lab bench for anyone leaving equipment behind.
+  expected_tool: visual_monitor__start
+
+- name: start-meter-reading-watch
+  query: Keep monitoring the meter readings for me.
+  expected_tool: lab_instruments__start
+
+- name: stop-ordinary-door-watch
+  query: Stop watching the doorway.
+  expected_tool: visual_monitor__stop
+
+- name: stop-meter-reading-watch
+  query: Stop watching the meter readings.
+  expected_tool: lab_instruments__stop
+
+- name: ordinary-watch-status-with-focus
+  query: Are you still watching the doorway?
+  expected_tool: visual_monitor__status
+
+- name: instrument-watch-status-with-reading-language
+  query: Are you still tracking the instrument readings?
+  expected_tool: lab_instruments__status
+
+# Held-out routing matrix: paraphrases, domain collisions, and negative intent.
+- name: holdout-current-view-deictic
+  query: What am I pointing at over there?
+  expected_tool: current_view
+
+- name: holdout-current-view-visible-writing
+  query: Read the writing on that box.
+  expected_tool: current_view
+
+- name: holdout-current-view-open-ended
+  query: Take a look around and tell me what is here.
+  expected_tool: current_view
+
+- name: holdout-history-arrival
+  query: Who arrived at the bench a moment ago?
+  expected_tool: recent_visual_history
+
+- name: holdout-history-disappearance
+  query: Did anything disappear from the work area recently?
+  expected_tool: recent_visual_history
+
+- name: holdout-start-ordinary-watch-paraphrase
+  query: Alert me if a package appears by the entrance.
+  expected_tool: visual_monitor__start
+
+- name: holdout-stop-ordinary-watch-paraphrase
+  query: End the doorway watch.
+  expected_tool: visual_monitor__stop
+
+- name: holdout-status-ordinary-watch-paraphrase
+  query: Is the package watch running?
+  expected_tool: visual_monitor__status
+
+- name: holdout-read-display-deictic
+  query: What number does this instrument display?
+  expected_tool: lab_instruments__read
+
+- name: holdout-read-gauge-with-visible-word
+  query: Read the visible pressure gauge in front of me.
+  expected_tool: lab_instruments__read
+
+- name: holdout-read-meter-question
+  query: Is the meter above or below twenty?
+  expected_tool: lab_instruments__read
+
+- name: holdout-start-instrument-watch-paraphrase
+  query: Track the pressure gauge continuously.
+  expected_tool: lab_instruments__start
+
+- name: holdout-stop-instrument-watch-paraphrase
+  query: End continuous gauge tracking.
+  expected_tool: lab_instruments__stop
+
+- name: holdout-status-instrument-watch-paraphrase
+  query: Is continuous meter tracking active?
+  expected_tool: lab_instruments__status
+
+- name: holdout-instrument-beats-ordinary-watch-language
+  query: Keep an eye on this gauge reading for me.
+  expected_tool: lab_instruments__start
+
+- name: holdout-ordinary-watch-with-lab-location
+  query: Watch the lab doorway for visitors.
+  expected_tool: visual_monitor__start
+
+- name: holdout-capability-question-no-tool
+  query: Can you monitor things in the background?
+  expected_tool: null
+
+- name: holdout-negated-monitor-command-no-tool
+  query: Do not start watching the doorway.
+  expected_tool: null
+
+- name: holdout-quoted-monitor-command-no-tool
+  query: The checklist says "monitor the gauge continuously."
+  expected_tool: null
+
+- name: holdout-general-knowledge-with-meter-word-no-tool
+  query: How many centimeters are in a meter?
+  expected_tool: null

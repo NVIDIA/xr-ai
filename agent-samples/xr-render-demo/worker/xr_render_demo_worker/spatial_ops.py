@@ -732,7 +732,9 @@ def make_object_tools(
         return RemovedObject(obj_id=target.id)
 
     return [
-        Tool("create_user_relative", "Create a new object at a point in a named direction from the user.",
+        Tool("create_user_relative",
+             "Create a new object at a point in a named direction from the user. The shape may be "
+             "a speech-to-text-mangled word; pass it verbatim because this tool repairs it.",
              _CreateUserRelativeRequest, CreatedObject, create_user_relative),
         Tool("create_object_relative",
              "Create a new object relative to one anchor object, or at the midpoint between two anchor objects "
@@ -743,7 +745,9 @@ def make_object_tools(
         Tool("change_shape",
              "Change an existing object into another primitive type, keeping position, color, and size.",
              _ChangeShapeRequest, MovedObject, change_shape),
-        Tool("resize_object", "Multiply an existing object's size by a factor, keeping everything else.",
+        Tool("resize_object",
+             "Required for every size change to an existing object. Multiply its size by factor 2 "
+             "for twice/double or 0.5 for half, keeping everything else unchanged.",
              _ResizeRequest, MovedObject, resize_object),
         Tool("remove_object", "Remove an existing object from the scene.",
              _ObjRequest, RemovedObject, remove_object),

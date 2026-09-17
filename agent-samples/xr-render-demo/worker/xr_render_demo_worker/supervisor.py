@@ -69,8 +69,72 @@ _RECENT_WINDOW_US = 10 * 60 * 1_000_000
 # the cube?"); unlike can/could/will, they cannot open a polite command.
 _STATUS_OPENERS = frozenset("did have has had was were".split())
 
+_HELP_QUESTION = re.compile(r"^(?:can|could|would|will)\s+you\s+help\b", re.IGNORECASE)
+
+_NEGATED_COMMAND = re.compile(r"\b(?:do not|don't|never)\b", re.IGNORECASE)
+
+_ACKNOWLEDGEMENTS = frozenset({"ok", "okay", "thanks", "thank you", "sounds good"})
+
+_PERCEPTION_WORDS = frozenset(
+    "camera see sees saw visible view viewing look looking stare staring hold holding wear wearing".split()
+)
+
+_HISTORY_MARKERS = frozenset("original originally first earlier previously before".split())
+
+_HISTORY_WORK_WORDS = frozenset(
+    "create created make made ask asked request requested change changed move moved "
+    "recolor recolored color shape".split()
+)
+
+_TRAILING_FUNCTION_WORDS = frozenset(
+    "a an the to on in inside above below behind beside between from with".split()
+)
+
+
+def _must_not_mutate(transcript: str) -> bool:
+    words = [word.strip(_EDGE_PUNCT) for word in transcript.lower().split()]
+    words = [word for word in words if word]
+    if not words:
+        return True
+    normalized = " ".join(words)
+    if normalized in _ACKNOWLEDGEMENTS:
+        return True
+    if _HELP_QUESTION.match(" ".join(words)):
+        return True
+    if _NEGATED_COMMAND.search(transcript) and any(
+        word in _ACTION_VERBS for word in words
+    ):
+        return True
+    if " if " in f" {normalized} " and words[0] in {"can", "could", "would", "will"}:
+        return True
+    if words[-1] in _TRAILING_FUNCTION_WORDS:
+        return True
+    return bool({"wrong", "incorrect"} & set(words)) and not any(
+        word in _ACTION_VERBS for word in words
+    )
+
+
+def _is_perception_request(transcript: str) -> bool:
+    words = {word.strip(_EDGE_PUNCT) for word in transcript.lower().split()}
+    return (
+        "yourself" not in words
+        and bool(words & _PERCEPTION_WORDS)
+        and not _wants_mutation(transcript)
+    )
+
+
+def _is_history_request(transcript: str) -> bool:
+    words = {word.strip(_EDGE_PUNCT) for word in transcript.lower().split()}
+    return (
+        bool(words & _HISTORY_MARKERS)
+        and bool(words & _HISTORY_WORK_WORDS)
+        and not _wants_mutation(transcript)
+    )
+
 
 def _wants_mutation(transcript: str) -> bool:
+    if _must_not_mutate(transcript):
+        return False
     words = [w.strip(_EDGE_PUNCT) for w in transcript.lower().split()]
     words = [w for w in words if w]
     # A wh- or status question is a query even when it contains an action
@@ -93,6 +157,18 @@ def _claims_completion(text: str) -> bool:
 
 def _is_question(text: str) -> bool:
     return text.rstrip().rstrip("\"'”’)").rstrip().endswith("?")
+
+
+def _prompt_with_tool_examples(prompt: str, toolset: ToolSet) -> str:
+    sections = [
+        f"{name}:\n" + "\n".join(f"- {example}" for example in tool.examples)
+        for name, tool in toolset.items()
+        if tool.examples
+    ]
+    if not sections:
+        return prompt
+    examples = "\n\n".join(sections)
+    return f"{prompt}\n\n<tool_examples>\n{examples}\n</tool_examples>"
 
 
 class SceneSupervisor:
@@ -222,26 +298,56 @@ class SceneSupervisor:
         evidence = MutationEvidence()
         current_mutation_evidence.set(evidence)
         before = await self._context.snapshot()
+        history_request = _is_history_request(transcript) and not _is_perception_request(
+            transcript
+        )
+        scene_context = (
+            ""
+            if history_request
+            else await self._context.describe(request.participant_id)
+        )
+        conversation_context = "" if history_request else conversation
 
         user_message = (
             f"Active participant: {request.participant_id}\n"
             f"Utterance timestamp: {request.timestamp_us}\n"
-            f"{await self._context.describe(request.participant_id)}\n\n"
-            f"{conversation}"
+            f"{scene_context}\n\n"
+            f"{conversation_context}"
             f"User request: {transcript}"
         )
+        toolset = self._toolset
+        if _must_not_mutate(transcript):
+            toolset = ToolSet([])
+        elif _is_perception_request(transcript):
+            toolset = ToolSet(
+                tool
+                for name, tool in self._toolset.items()
+                if name == "vision_agent"
+            )
+        elif history_request:
+            toolset = ToolSet(
+                tool
+                for name, tool in self._toolset.items()
+                if name == "memory_agent"
+            )
         messages = [
-            ChatMessage(role="system", content=self._prompt),
+            ChatMessage(
+                role="system",
+                content=_prompt_with_tool_examples(self._prompt, toolset),
+            ),
             ChatMessage(role="user", content=user_message),
         ]
 
         async def _call_model(model_transcript, definitions):
             return await self._llm.chat(
-                model_transcript, tools=list(definitions) or None, max_tokens=2048, temperature=0.0
+                model_transcript,
+                tools=list(definitions) or None,
+                max_tokens=2048,
+                temperature=0.0,
             )
 
         try:
-            result = await run_tool_loop(messages, self._toolset, _call_model, max_iterations=12)
+            result = await run_tool_loop(messages, toolset, _call_model, max_iterations=12)
         except ToolLoopError as exc:
             logger.warning("supervisor loop failed ({})", exc)
             reply = "I'm sorry — something went wrong. Please try again."
@@ -278,7 +384,7 @@ class SceneSupervisor:
             ]
             try:
                 result2 = await run_tool_loop(
-                    verification_messages, self._toolset, _call_model, max_iterations=6
+                    verification_messages, toolset, _call_model, max_iterations=6
                 )
             except ToolLoopError as exc:
                 logger.warning("supervisor verification failed ({})", exc)
