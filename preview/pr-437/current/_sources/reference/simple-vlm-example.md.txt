@@ -94,14 +94,15 @@ Capture is disabled by default. Run `uv run simple_vlm_example --capture` to
 start `device_io_capture` immediately after DeviceIOHub and record normalized
 hub media without joining the LiveKit room. Each participant connection then
 creates a bundle under
-`~/.local/share/xr-ai/captures/simple-vlm-example/` containing one captioned
-NVENC H.264 video in a fast-start `.mp4` with timestamp-aligned 48 kHz stereo
-AAC-LC device/agent audio, retained source H.264 and WAV tracks, exact raw audio
+`~/.local/share/xr-ai/captures/simple-vlm-example/` containing a canonical raw
+bundle plus one derived captioned NVENC H.264 video in a fast-start `.mp4` with
+timestamp-aligned 48 kHz stereo AAC-LC device/agent audio, retained source H.264 and WAV tracks, exact raw audio
 chunks, frame/audio timestamp indexes, a dedicated transcript, optional
 frame-linked observations, inbound and outbound data, and a manifest. Text
 returned on `vlm.response` appears in the scrolling data panel; final STT and
-text sent to TTS use the larger primary caption. This sample selects the shared
-recorder's `demo` profile and participant-lifetime session policy.
+text sent to TTS use the larger primary caption. This sample explicitly selects
+the `demo` profile, which invokes the separate capture renderer after the raw
+participant-lifetime bundle closes.
 
 Encoding and file writes run in the separate capture process behind bounded
 queues. If recording falls behind, it drops pending capture frames rather than

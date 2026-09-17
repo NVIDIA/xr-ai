@@ -150,7 +150,8 @@ the hub publisher. It never joins the LiveKit room.
 Each participant connection creates a timestamped directory under
 `~/.local/share/xr-ai/captures/xr-render-demo/` containing:
 
-- One fast-start `.mp4` under `video/`, with NVENC H.264 video and AAC-LC
+- A canonical raw H.264 stream plus one derived fast-start `.mp4` under
+  `video/`, with NVENC H.264 video and AAC-LC
   audio at 48 kHz stereo. Final STT and spoken TTS text use the large lower caption;
   all UTF-8 data-channel messages scroll in a smaller right-side panel. Both
   panels are outside the sensor image. The joined source `.264` stream is
