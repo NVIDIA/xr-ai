@@ -690,10 +690,6 @@ replaces named config selection. It deliberately has no fallback.</p>
 <dt class="sig sig-object py" id="xr_ai_launcher.load_deployment_profile">
 <span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">load_deployment_profile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">profile_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_launcher.ModelDeployment" title="xr_ai_launcher.ModelDeployment"><span class="pre">ModelDeployment</span></a></span></span><a class="headerlink" href="#xr_ai_launcher.load_deployment_profile" title="Link to this definition">#</a></dt>
 <dd><p>Load a JSON deployment profile directly (no worker YAML indirection).</p>
-<p>Entries require <code class="docutils literal notranslate"><span class="pre">adapter</span></code> and <code class="docutils literal notranslate"><span class="pre">endpoint</span></code> objects. Omitting
-<code class="docutils literal notranslate"><span class="pre">deployment</span></code> declares an existing endpoint without managing a process;
-endpoint API-key requirements are still collected. Explicit deployment
-metadata, including legacy <code class="docutils literal notranslate"><span class="pre">ownership:</span> <span class="pre">reused</span></code>, remains supported.</p>
 </dd></dl>
 
 <dl class="py function">

@@ -533,9 +533,9 @@ uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py
 </pre></div>
 </div>
-<p>Only DeviceIOHub and the worker start. Worker readiness includes a short
-1280x720 streaming VLM warmup, without separate STT, TTS, or VLM health polling.
-Wait for the shared model-server launcher to return before starting the sample.
+<p>Only DeviceIOHub and the worker start. For the worker’s startup warmup, refer
+to <a class="reference internal" href="../reference/simple-vlm-example.html"><span class="doc">Simple VLM example</span></a>. For readiness and required deployment
+order, refer to <a class="reference internal" href="../reference/migrations.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.
 The hub prints:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>[hub]   LiveKit URL : wss://localhost:8080
 [hub]   Room        : xr-room

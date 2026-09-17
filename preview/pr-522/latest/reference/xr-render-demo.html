@@ -617,7 +617,7 @@ overrides <code class="docutils literal notranslate"><span class="pre">lovr_bin<
 settings are independent and must be planned together. Keep
 <code class="docutils literal notranslate"><span class="pre">allow_sim_pose:</span> <span class="pre">false</span></code> outside the live eval harness.</p>
 <p>Each <code class="docutils literal notranslate"><span class="pre">models.json</span></code> entry maps a logical role (<code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>,
-or <code class="docutils literal notranslate"><span class="pre">vlm</span></code>) to an adapter, endpoint, and deployment. Editing it changes which
+or <code class="docutils literal notranslate"><span class="pre">vlm</span></code>) to an adapter and endpoint. Editing it changes which
 operator-owned endpoint the demo consumes; it does not reconfigure or restart
 the shared model. Refer to <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for
 server-side model, port, GPU, or memory changes, then restart the persistent

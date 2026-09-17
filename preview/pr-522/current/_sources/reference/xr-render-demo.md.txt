@@ -127,7 +127,7 @@ settings are independent and must be planned together. Keep
 `allow_sim_pose: false` outside the live eval harness.
 
 Each `models.json` entry maps a logical role (`llm`, `agent_llm`, `stt`, `tts`,
-or `vlm`) to an adapter, endpoint, and deployment. Editing it changes which
+or `vlm`) to an adapter and endpoint. Editing it changes which
 operator-owned endpoint the demo consumes; it does not reconfigure or restart
 the shared model. Refer to {doc}`/guides/customizing-model-servers` for
 server-side model, port, GPU, or memory changes, then restart the persistent

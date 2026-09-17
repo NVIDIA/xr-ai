@@ -13,23 +13,26 @@ and command to `device_io_hub`. Rename `xr_media_hub.yaml` to
 `device_io_hub.yaml` and `XR_MEDIA_HUB_NO_WEB_CLIENT` to
 `DEVICE_IO_HUB_NO_WEB_CLIENT`. The rename has no compatibility aliases.
 
-## Operator-visible runtime changes
+(consumer-model-readiness)=
+## Consumer model readiness
 
-- Consumer workers no longer poll model health at startup. `VoiceAgent` waits
-  only for explicitly supplied `probes`; it no longer adds STT and TTS probes.
-  Start the shared model-server stack and wait for its launcher to return first.
-  Simple VLM retains its streaming image warmup, and XR Render retains its LLM
-  inference warmup, including for hosted LLMs. Tea making retains its RAG
-  capability probe. Endpoint `readiness` and `health_path` settings still control
-  explicit `health()` calls, but do not enable automatic worker polling.
-  Out-of-tree applications that require the former behavior can explicitly pass
-  `probes={"stt": stt.health, "tts": tts.health}` to `VoiceAgent`.
-- HTTP model requests now retry connection failures and HTTP 502/503/504 up to
-  three total attempts, with 0.25 and 0.5 second backoffs and per-attempt
-  timeouts. Errors after response headers are accepted, including interrupted
-  streams, are not replayed. Other HTTP errors and read/write failures propagate
-  immediately. Explicit health probes and Riva gRPC calls retain their previous
-  behavior.
+Workers can report ready without STT, TTS, LLM, or VLM availability. Consumer
+workers no longer poll model health at startup. `VoiceAgent` waits only for
+explicitly supplied `probes`; it no longer adds STT and TTS probes. Start the
+shared model-server stack and wait for its launcher to return first. Server
+wrappers retain model startup and reuse checks.
+
+{doc}`Simple VLM </reference/simple-vlm-example>` retains its streaming image
+warmup, and {doc}`XR Render </reference/xr-render-demo>` retains its LLM warmup,
+including for hosted LLMs. Tea making retains its RAG capability probe and
+{ref}`embedding health checks <rag-embedding-health>`.
+
+Endpoint `readiness` and `health_path` settings still control explicit `health()`
+calls, but do not enable automatic worker polling. Out-of-tree applications
+that require the former behavior can explicitly pass
+`probes={"stt": stt.health, "tts": tts.health}` to `VoiceAgent`.
+
+## Operator-visible runtime changes
 
 - DeviceIOHub now waits for the hub to acknowledge shared-memory attachment
   before connecting the LiveKit room or creating its ready file. Missing

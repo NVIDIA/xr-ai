@@ -615,12 +615,9 @@ stack provides intentional replacements.</p></li>
 </pre></div>
 </div>
 <p>Sample launchers declare only their application processes; model endpoints
-are specified in the client profile. The worker constructs the client from its
-models JSON without polling model health endpoints. Explicit inference warmups
-can still gate startup. Starting or stopping the sample never changes the
-shared NIM container; wait for the model-server launcher to return first.</p>
-<p>The <code class="docutils literal notranslate"><span class="pre">nim_llm_server.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">nim_vlm_server.yaml</span></code> files repeat the copy and
-client-profile instructions beside each GPU-specific container configuration.</p>
+are specified in the client profile. Starting or stopping the sample never
+changes the shared NIM container. For startup ordering, refer to
+<a class="reference internal" href="../reference/migrations.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.</p>
 </section>
 <section id="use-an-endpoint-at-another-address">
 <h2>Use an endpoint at another address<a class="headerlink" href="#use-an-endpoint-at-another-address" title="Link to this heading">#</a></h2>

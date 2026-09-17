@@ -176,13 +176,9 @@ For example, a sample reusing the Cosmos3-Nano Reasoner NIM uses:
 ```
 
 Sample launchers declare only their application processes; model endpoints
-are specified in the client profile. The worker constructs the client from its
-models JSON without polling model health endpoints. Explicit inference warmups
-can still gate startup. Starting or stopping the sample never changes the
-shared NIM container; wait for the model-server launcher to return first.
-
-The `nim_llm_server.yaml` and `nim_vlm_server.yaml` files repeat the copy and
-client-profile instructions beside each GPU-specific container configuration.
+are specified in the client profile. Starting or stopping the sample never
+changes the shared NIM container. For startup ordering, refer to
+{ref}`consumer-model-readiness`.
 
 ## Use an endpoint at another address
 

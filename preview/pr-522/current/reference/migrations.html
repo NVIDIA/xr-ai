@@ -431,24 +431,25 @@ and command to <code class="docutils literal notranslate"><span class="pre">devi
 <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">XR_MEDIA_HUB_NO_WEB_CLIENT</span></code> to
 <code class="docutils literal notranslate"><span class="pre">DEVICE_IO_HUB_NO_WEB_CLIENT</span></code>. The rename has no compatibility aliases.</p>
 </section>
+<section id="consumer-model-readiness">
+<span id="id1"></span><h2>Consumer model readiness<a class="headerlink" href="#consumer-model-readiness" title="Link to this heading">#</a></h2>
+<p>Workers can report ready without STT, TTS, LLM, or VLM availability. Consumer
+workers no longer poll model health at startup. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> waits only for
+explicitly supplied <code class="docutils literal notranslate"><span class="pre">probes</span></code>; it no longer adds STT and TTS probes. Start the
+shared model-server stack and wait for its launcher to return first. Server
+wrappers retain model startup and reuse checks.</p>
+<p><a class="reference internal" href="simple-vlm-example.html"><span class="doc">Simple VLM</span></a> retains its streaming image
+warmup, and <a class="reference internal" href="xr-render-demo.html"><span class="doc">XR Render</span></a> retains its LLM warmup,
+including for hosted LLMs. Tea making retains its RAG capability probe and
+<a class="reference internal" href="../guides/customizing-model-servers.html#rag-embedding-health"><span class="std std-ref">embedding health checks</span></a>.</p>
+<p>Endpoint <code class="docutils literal notranslate"><span class="pre">readiness</span></code> and <code class="docutils literal notranslate"><span class="pre">health_path</span></code> settings still control explicit <code class="docutils literal notranslate"><span class="pre">health()</span></code>
+calls, but do not enable automatic worker polling. Out-of-tree applications
+that require the former behavior can explicitly pass
+<code class="docutils literal notranslate"><span class="pre">probes={&quot;stt&quot;:</span> <span class="pre">stt.health,</span> <span class="pre">&quot;tts&quot;:</span> <span class="pre">tts.health}</span></code> to <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>.</p>
+</section>
 <section id="operator-visible-runtime-changes">
 <h2>Operator-visible runtime changes<a class="headerlink" href="#operator-visible-runtime-changes" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p>Consumer workers no longer poll model health at startup. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> waits
-only for explicitly supplied <code class="docutils literal notranslate"><span class="pre">probes</span></code>; it no longer adds STT and TTS probes.
-Start the shared model-server stack and wait for its launcher to return first.
-Simple VLM retains its streaming image warmup, and XR Render retains its LLM
-inference warmup, including for hosted LLMs. Tea making retains its RAG
-capability probe. Endpoint <code class="docutils literal notranslate"><span class="pre">readiness</span></code> and <code class="docutils literal notranslate"><span class="pre">health_path</span></code> settings still control
-explicit <code class="docutils literal notranslate"><span class="pre">health()</span></code> calls, but do not enable automatic worker polling.
-Out-of-tree applications that require the former behavior can explicitly pass
-<code class="docutils literal notranslate"><span class="pre">probes={&quot;stt&quot;:</span> <span class="pre">stt.health,</span> <span class="pre">&quot;tts&quot;:</span> <span class="pre">tts.health}</span></code> to <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>.</p></li>
-<li><p>HTTP model requests now retry connection failures and HTTP 502/503/504 up to
-three total attempts, with 0.25 and 0.5 second backoffs and per-attempt
-timeouts. Errors after response headers are accepted, including interrupted
-streams, are not replayed. Other HTTP errors and read/write failures propagate
-immediately. Explicit health probes and Riva gRPC calls retain their previous
-behavior.</p></li>
 <li><p>DeviceIOHub now waits for the hub to acknowledge shared-memory attachment
 before connecting the LiveKit room or creating its ready file. Missing
 segments trigger bounded recreation; incompatible layouts and acknowledgement
@@ -632,6 +633,7 @@ reuse the ignored caches rather than downloading them again.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deviceiohub-rename">DeviceIOHub rename</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#consumer-model-readiness">Consumer model readiness</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#operator-visible-runtime-changes">Operator-visible runtime changes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#local-speech-service">Local speech service</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#removed-sdk-compatibility-surfaces">Removed SDK compatibility surfaces</a></li>
